@@ -38,6 +38,23 @@
 //! written as "automatic" (Linux `dpu95_lb_pec_clken(lb, CLKEN_AUTOMATIC)`),
 //! where `fsl_dpu.c` keeps the reset value, which no source states.
 //!
+//! Where `fsl_dpu.c` and Linux's running configuration differ (the
+//! Verdin iMX95's X12 LVDS panel under Toradex's BSP, read on the board on
+//! 2026-11-25, driver/docs/imx95-display-dump-linux.txt), [`Form`] names
+//! both: [`Form::Hal`] is `fsl_dpu.c`'s and the default (the permissive
+//! source, and what Zephyr runs on this SoC's DSI panel), [`Form::Linux`]
+//! the dump's. They differ in the primary kick point (hal: row = vtotal,
+//! column = htotal; the dump: row 800 = vactive, column 1281 = hactive +
+//! 1, for the one mode read), the secondary kick (hal: enabled at the same
+//! point; the dump: disabled, the register left as found), the panic mode
+//! and its colour (hal: white with test pattern, white; the dump: constant
+//! colour, green 0x000FFC00), FetchLayer0's burst word (hal: the whole word
+//! 16 buffers, burst 16, so `SetMaxBurstLength` and `CombinerTimeout` 0;
+//! the dump: 0x1FE7F010, those two at 63 and 255, the value the unused
+//! FetchYUV0 reads too) and `LAYERPROPERTY0.AlphaConstEnable0` (hal:
+//! untouched; the dump: set). Which of them matter is a cold run's
+//! question (design note, U22).
+//!
 //! Only the units on this path are touched: the other endpoints (ExtDst1/4/5,
 //! Store9) and units are left at their power-on state, which is what a cold
 //! DISPLAY domain gives. An image that adopts a running display needs
@@ -124,10 +141,19 @@ pub struct Timing {
     pub htcfg2: u32,
     pub vtcfg1: u32,
     pub vtcfg2: u32,
-    /// `PKICKCONFIG` and `SKICKCONFIG`.
+    /// `PKICKCONFIG`.
     pub kick: u32,
+    /// `SKICKCONFIG`, or not written.
+    pub skick: Option<u32>,
     /// `POLARITYCTRL0` of Dither0's configuration block.
     pub polarity: u32,
+    /// `FGINCTRLPANIC` and `FGCCR`.
+    pub panic: u32,
+    pub ccr: u32,
+    /// FetchLayer0's `BURSTBUFFERMANAGEMENT`.
+    pub burst: u32,
+    /// `LAYERPROPERTY0.AlphaConstEnable0` set.
+    pub alpha_const: bool,
 }
 
 /// Where stream 0 goes after the display engine.
@@ -135,6 +161,45 @@ pub struct Timing {
 pub enum Route {
     /// Pixel interleaver channel 0 in bypass, pixel link 0, the DSI host.
     Dsi,
+    /// Pixel interleaver channel 0 in bypass, the LDB's display input 0,
+    /// LVDS channel 0; `pixel_link`: pixel link 0 valid and enabled too, as
+    /// Linux runs it on the board (display CSR + 0x8 = 0x3 under the LVDS
+    /// panel, design note U5), or left off (NXP's Liu Ying: the pixel link
+    /// belongs to the DSI path only).
+    Lvds { pixel_link: bool },
+}
+
+impl Route {
+    /// Pixel link 0 carries the stream.
+    pub const fn pixel_link(self) -> bool {
+        match self {
+            Route::Dsi => true,
+            Route::Lvds { pixel_link } => pixel_link,
+        }
+    }
+}
+
+/// Which source's values for the words they disagree on (module
+/// documentation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Form {
+    /// hal_nxp's `fsl_dpu.c` (the default).
+    Hal,
+    /// Linux's dpu95 as the board's dump shows it.
+    Linux,
+}
+
+/// `SetMaxBurstLength` and `CombinerTimeout` as the dump reads them.
+const LINUX_MAX_BURST: u32 = 63;
+const LINUX_COMBINER_TIMEOUT: u32 = 0xff;
+/// The dump's panic mode (constant colour) and colour (green).
+const FGDM_CONST: u32 = 0b001;
+const LINUX_PANIC_CCR: u32 = 0x000f_fc00;
+
+/// The FrameGen words for `mode` on `route` (`DPU_InitDisplayTiming`), in
+/// [`Form::Hal`].
+pub fn timing(mode: &VideoMode, route: Route) -> Result<Timing, Refusal> {
+    timing_form(mode, route, Form::Hal)
 }
 
 /// The FrameGen words for `mode` on `route` (`DPU_InitDisplayTiming`).
@@ -146,17 +211,41 @@ pub enum Route {
 /// low and DE active high whatever the panel's (Linux `dpu95_crtc_mode_set_nofb`
 /// for a DSI encoder): the panel's polarities are the DSI host's and the
 /// bridge's business.
-pub fn timing(mode: &VideoMode, route: Route) -> Result<Timing, Refusal> {
+///
+/// For LVDS the panel's timing goes in as it is (Linux's quirk is for DSI
+/// only; the dump's FrameGen0 holds the LVDS panel's mode unchanged).
+pub fn timing_form(mode: &VideoMode, route: Route, form: Form) -> Result<Timing, Refusal> {
     let (vfront, vback) = match route {
         Route::Dsi => (mode.vfront.wrapping_sub(1), mode.vback + 1),
+        Route::Lvds { .. } => (mode.vfront, mode.vback),
     };
     if mode.check().is_err() || vfront == 0 || mode.htotal() > MAX_TIMING + 1 || mode.vtotal() > MAX_TIMING {
         return Err(Refusal::Mode);
     }
     let htotal = mode.htotal();
     let vtotal = mode.vactive + vfront + mode.vsync + vback - 1;
-    let polarity = match route {
-        Route::Dsi => r::diseng_dither0cfg_polarityctrl0::POLEN0_MASK,
+    // DE active high, syncs active low on both routes: the interleaver
+    // takes active-low syncs (its CTRL reads 0x600 under Linux's LVDS
+    // panel) and the LDB is told so (DI0 HSYNC/VSYNC polarity "active low"
+    // in the dump's pixel mapper word). Linux's POLARITYCTRL0 under the
+    // LVDS panel was not read (U23).
+    let polarity = r::diseng_dither0cfg_polarityctrl0::POLEN0_MASK;
+    let hal_kick = field(r::diseng_framegen0_pkickconfig::PKICKROW_MASK, vtotal + 1)
+        | field(r::diseng_framegen0_pkickconfig::PKICKCOL_MASK, htotal)
+        | r::diseng_framegen0_pkickconfig::PKICKEN_MASK;
+    let (kick, skick, panic, ccr, burst) = match form {
+        Form::Hal => (hal_kick, Some(hal_kick), FGDM_TEST, HAL_CCR, HAL_BURST),
+        Form::Linux => (
+            field(r::diseng_framegen0_pkickconfig::PKICKROW_MASK, mode.vactive)
+                | field(r::diseng_framegen0_pkickconfig::PKICKCOL_MASK, mode.hactive + 1)
+                | r::diseng_framegen0_pkickconfig::PKICKEN_MASK,
+            None,
+            FGDM_CONST,
+            LINUX_PANIC_CCR,
+            HAL_BURST
+                | field(r::pixeng_fetchlayer0_burstbuffermanagement::SETMAXBURSTLENGTH_MASK, LINUX_MAX_BURST)
+                | field(r::pixeng_fetchlayer0_burstbuffermanagement::COMBINERTIMEOUT_MASK, LINUX_COMBINER_TIMEOUT),
+        ),
     };
     Ok(Timing {
         htcfg1: field(r::diseng_framegen0_htcfg1::HTOTAL_MASK, htotal - 1)
@@ -169,12 +258,24 @@ pub fn timing(mode: &VideoMode, route: Route) -> Result<Timing, Refusal> {
         vtcfg2: field(r::diseng_framegen0_vtcfg2::VSYNC_MASK, mode.vsync - 1)
             | field(r::diseng_framegen0_vtcfg2::VSBP_MASK, vback + mode.vsync - 1)
             | r::diseng_framegen0_vtcfg2::VSEN_MASK,
-        kick: field(r::diseng_framegen0_pkickconfig::PKICKROW_MASK, vtotal + 1)
-            | field(r::diseng_framegen0_pkickconfig::PKICKCOL_MASK, htotal)
-            | r::diseng_framegen0_pkickconfig::PKICKEN_MASK,
+        kick,
+        skick,
         polarity,
+        panic,
+        ccr,
+        burst,
+        alpha_const: form == Form::Linux,
     })
 }
+
+/// `fsl_dpu.c`'s constant colour (`DPU_DisplayGetDefaultConfig`: white,
+/// alpha 1).
+const HAL_CCR: u32 = r::diseng_framegen0_fgccr::CCRED_MASK
+    | r::diseng_framegen0_fgccr::CCGREEN_MASK
+    | r::diseng_framegen0_fgccr::CCBLUE_MASK
+    | (1 << 30);
+/// `DPU_InitFetchUnit`'s burst word: 16 buffers, burst length 16.
+const HAL_BURST: u32 = NUM_BUFFERS | (BURST_LENGTH << 8);
 
 /// The buffer checks.
 pub fn check_fb(mode: &VideoMode, fb: &Framebuffer) -> Result<(), Refusal> {
@@ -314,13 +415,7 @@ pub fn configure(m: &impl Mmio, base: usize, mode: &VideoMode, t: &Timing, fb: &
     w(m, base, r::PIXENG_CONSTFRAME0_CONSTANTCOLOR, 0);
     // DPU_InitFetchUnit(FetchLayer0).
     w(m, base, r::PIXENG_FETCHLAYER0_STATICCONTROL, r::pixeng_fetchlayer0_staticcontrol::SHDEN_MASK);
-    w(
-        m,
-        base,
-        r::PIXENG_FETCHLAYER0_BURSTBUFFERMANAGEMENT,
-        field(r::pixeng_fetchlayer0_burstbuffermanagement::SETNUMBUFFERS_MASK, NUM_BUFFERS)
-            | field(r::pixeng_fetchlayer0_burstbuffermanagement::SETBURSTLENGTH_MASK, BURST_LENGTH),
-    );
+    w(m, base, r::PIXENG_FETCHLAYER0_BURSTBUFFERMANAGEMENT, t.burst);
     w(m, base, r::PIXENG_FETCHLAYER0_FRAMEDIMENSIONS, dim(wd, ht));
     modify(m, base, r::PIXENG_FETCHLAYER0_CONTROL, r::pixeng_fetchlayer0_control::RAWPIXEL_MASK, 0);
     w(
@@ -366,12 +461,13 @@ pub fn configure(m: &impl Mmio, base: usize, mode: &VideoMode, t: &Timing, fb: &
     w(m, base, r::PIXENG_FETCHLAYER0_CONSTANTCOLOR0, r::pixeng_fetchlayer0_constantcolor0::CONSTANTALPHA0_MASK);
     // DPU_SetFetchUnitOffset, DPU_EnableFetchUnitSrcBuffer.
     w(m, base, r::PIXENG_FETCHLAYER0_LAYEROFFSET0, 0);
+    let alpha = if t.alpha_const { r::pixeng_fetchlayer0_layerproperty0::ALPHACONSTENABLE0_MASK } else { 0 };
     modify(
         m,
         base,
         r::PIXENG_FETCHLAYER0_LAYERPROPERTY0,
-        r::pixeng_fetchlayer0_layerproperty0::SOURCEBUFFERENABLE0_MASK,
-        r::pixeng_fetchlayer0_layerproperty0::SOURCEBUFFERENABLE0_MASK,
+        r::pixeng_fetchlayer0_layerproperty0::SOURCEBUFFERENABLE0_MASK | alpha,
+        r::pixeng_fetchlayer0_layerproperty0::SOURCEBUFFERENABLE0_MASK | alpha,
     );
     // The content stream's and DomainBlend0's shadow loads
     // (DPU_TriggerPipelineShadowLoad, DPU_TriggerDisplayDbShadowLoad).
@@ -395,23 +491,17 @@ pub fn configure(m: &impl Mmio, base: usize, mode: &VideoMode, t: &Timing, fb: &
     w(m, base, r::DISENG_FRAMEGEN0_VTCFG1, t.vtcfg1);
     w(m, base, r::DISENG_FRAMEGEN0_VTCFG2, t.vtcfg2);
     w(m, base, r::DISENG_FRAMEGEN0_PKICKCONFIG, t.kick);
-    w(m, base, r::DISENG_FRAMEGEN0_SKICKCONFIG, t.kick);
+    if let Some(s) = t.skick {
+        w(m, base, r::DISENG_FRAMEGEN0_SKICKCONFIG, s);
+    }
     // DPU_SetDisplayConfig(0): the areas at (1, 1) as Zephyr passes them,
     // the primary input only, the default panic mode and constant colour.
     let start = field(r::diseng_framegen0_pacfg::PSTARTX_MASK, 1) | field(r::diseng_framegen0_pacfg::PSTARTY_MASK, 1);
     w(m, base, r::DISENG_FRAMEGEN0_PACFG, start);
     w(m, base, r::DISENG_FRAMEGEN0_SACFG, start);
     w(m, base, r::DISENG_FRAMEGEN0_FGINCTRL, FGDM_PRIM);
-    w(m, base, r::DISENG_FRAMEGEN0_FGINCTRLPANIC, FGDM_TEST);
-    w(
-        m,
-        base,
-        r::DISENG_FRAMEGEN0_FGCCR,
-        r::diseng_framegen0_fgccr::CCRED_MASK
-            | r::diseng_framegen0_fgccr::CCGREEN_MASK
-            | r::diseng_framegen0_fgccr::CCBLUE_MASK
-            | field(r::diseng_framegen0_fgccr::CCALPHA_MASK, 1),
-    );
+    w(m, base, r::DISENG_FRAMEGEN0_FGINCTRLPANIC, t.panic);
+    w(m, base, r::DISENG_FRAMEGEN0_FGCCR, t.ccr);
     // DPU_TriggerDisplayShadowLoad(0).
     w(m, base, r::DISENG_FRAMEGEN0_FGSLR, r::diseng_framegen0_fgslr::SHDTOKGEN_MASK);
 }

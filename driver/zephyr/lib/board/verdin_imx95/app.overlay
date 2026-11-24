@@ -1,11 +1,21 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * The Verdin iMX95 on the Mallow with the Toradex Capacitive Touch Display
- * 10.1" DSI on X4 (driver/docs/imx95-display.md section 4(b)): the picture's
- * blocks and the bridge, for the board layer's screen (verdin_imx95_display.c,
- * CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY). The examples get it with app.conf
- * (examples/zephyr.cmake).
+ * The Verdin iMX95 on the Mallow: the two display outputs the board layer's
+ * screen can use (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_OUTPUT). The examples
+ * get it with app.conf (examples/zephyr.cmake).
+ *
+ * - x12_display: the owner's board (since 2026-11-24), the Toradex
+ *   Capacitive Touch Display 10.1" LVDS on X12 (driver/docs/imx95-display.md
+ *   section 4(b'); verdin_imx95_lvds.c, CONFIG_..._DISPLAY_X12_LVDS, the
+ *   default): the LVDS CSR, the DPU, the display CSR, the pixel
+ *   interleaver, TPM5 (Linux's tpm5: pwm@42500000, the backlight on its
+ *   channel 0) and GPIO5 (the backlight's enable, GPIO5_IO04); the
+ *   backlight's pads. Its unit address is the LVDS CSR's, so it does not
+ *   share one with x4_display.
+ *
+ * The X4 DSI display (section 4(b); verdin_imx95_display.c,
+ * CONFIG_..._DISPLAY_X4_DSI):
  *
  * - x4_display: the blocks at the addresses of NXP's MIMX9596 headers and
  *   Linux's imx95.dtsi (the note's section 1 table): the DPU, the display
@@ -20,6 +30,16 @@
  */
 
 / {
+	x12_display: display@4b0c0000 {
+		compatible = "yakogl,imx95-lvds-display";
+		reg = <0x4b0c0000 0x10000>, <0x4b400000 0x400000>, <0x4b010000 0x10000>,
+		      <0x4b0d0000 0x20000>, <0x42500000 0x1000>, <0x43850000 0x1000>;
+		reg-names = "ldb", "dpu", "csr", "interleaver", "tpm", "gpio";
+		pinctrl-0 = <&x12_backlight_default>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+
 	x4_display: display@4b400000 {
 		compatible = "yakogl,imx95-dsi-display";
 		reg = <0x4b400000 0x400000>, <0x4b010000 0x10000>, <0x4b0d0000 0x20000>,

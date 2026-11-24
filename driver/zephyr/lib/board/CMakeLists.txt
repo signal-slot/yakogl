@@ -70,7 +70,8 @@ add_subdirectory_ifdef(CONFIG_YAKOGL_STM32MP2 stm32mp2)
 
 # The Verdin iMX95's A55 glue (verdin_imx95/verdin_imx95.c: the PSCI reset, the
 # lifetime timer; verdin_imx95_wdog.c: WDOG3 over ip::wdog32 of the
-# yakogl-drivers crate), its board layer (the windows, and the X4 display:
+# yakogl-drivers crate), its board layer (the windows, and the screen: the
+# X12 LVDS display, verdin_imx95_lvds.c, by default, or the X4 DSI display,
 # verdin_imx95_display.c; the record in the BBNSM GPRs: verdin_imx95_record.c),
 # the raw SCMI channel (verdin_imx95_scmi.c), and in
 # a Mali image the OSAL's board half (verdin_imx95_mali.c: the GPU's power-on
@@ -99,7 +100,8 @@ if(CONFIG_YAKOGL_VERDIN_IMX95)
   endif()
   if(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
     get_filename_component(_vi95_drv "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
-    zephyr_library_sources(verdin_imx95/verdin_imx95_display.c)
+    zephyr_library_sources_ifdef(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS verdin_imx95/verdin_imx95_lvds.c)
+    zephyr_library_sources_ifdef(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI verdin_imx95/verdin_imx95_display.c)
     zephyr_library_include_directories("${_vi95_drv}/include")
   endif()
   # tools/check.sh builds the board's images with -DYAKOGL_WERROR=ON.

@@ -166,6 +166,10 @@ IMX95_BLOCKS = {
         "COMBO_PHY_MODE_CONTROL", "COMBO_PHY_FREQ_CONTROL", "COMBO_PHY_TEST_MODE_CONTROL",
         "COMBO_PHY_TEST_MODE_STATUS",
     ],
+    # The LVDS output (soc::imx95::ldb, driver/docs/imx95-display.md section
+    # 4(b')): the LVDS CSR's PHY clock control (divider and the four clock
+    # gates), the pixel mapper and the two LVDS PHYs.
+    "LDB": None,
 }
 
 IMX95_PINNED = {
@@ -175,6 +179,7 @@ IMX95_PINNED = {
     "PERI_CAMERA_DSI_STREAM_CSR.h": "707569eed5c914c316377a55063f9b8b5997a9cf221e2382a3e60415f72c4c7c",
     "PERI_CAMERA_DSI_MASTER_CSR.h": "68f7fd4cacac4e032a325d0dc888b6ab30c45bc8fae7b4cf686ad821bb82ac43",
     "PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h": "0e187f5fabdd0e7c48d1d81a71b8ffe0f7165e04c3a0443301404f680ab7f179",
+    "PERI_LDB.h": "5f2a51cf992144a617b0a370572becf41407dd21feeabeede606636f4f2a028b",
 }
 
 # soc -> (name in the output's header, periph dir, blocks, pins, strip the

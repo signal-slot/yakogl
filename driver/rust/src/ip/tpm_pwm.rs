@@ -35,6 +35,13 @@
 //! pwm-backlight scales it (a fact of the board's devicetree,
 //! `brightness-levels`).
 //!
+//! Low-true pulses ([`Pwm::low_true`], Linux's `PWM_POLARITY_INVERSED`,
+//! which the Verdin iMX95's X12 backlight uses): ELSB:ELSA = 01
+//! ([`CNSC_EPWM_LOW_TRUE`]): hal's `kTPM_LowTrue` is 1 shifted to ELSA on
+//! both kinds of TPM (fsl_tpm.h:90-100; fsl_tpm.c:320-322 puts the level in
+//! ELSA and the pause level in ELSB, here 0: the pin low while paused). The
+//! duty count is the same: the output is low for level / max of the period.
+//!
 //! Every read-back loop is bounded ([`READBACK_TRIES`]); a register that
 //! never takes its value is `-ETIMEDOUT`.
 
@@ -71,6 +78,8 @@ use regs as r;
 
 /// Edge-aligned PWM, high-true (module text).
 pub const CNSC_EPWM_HIGH_TRUE: u32 = r::CNSC_MSB | r::CNSC_ELSB;
+/// Edge-aligned PWM, low-true (module text).
+pub const CNSC_EPWM_LOW_TRUE: u32 = r::CNSC_MSB | r::CNSC_ELSA;
 /// The i.MX 95 TPM's channels.
 pub const CHANNELS: u32 = 4;
 /// Writes of a read-back loop before it gives up.
@@ -85,6 +94,19 @@ pub struct Pwm {
     /// Duty = level / max of the period.
     pub level: u32,
     pub max: u32,
+    /// Low-true pulses (Linux's inversed polarity), else high-true.
+    pub low_true: bool,
+}
+
+impl Pwm {
+    /// The channel's mode and level bits.
+    pub const fn cnsc(&self) -> u32 {
+        if self.low_true {
+            CNSC_EPWM_LOW_TRUE
+        } else {
+            CNSC_EPWM_HIGH_TRUE
+        }
+    }
 }
 
 /// The register values for a [`Pwm`] at a TPM clock.
@@ -151,7 +173,7 @@ pub fn start(m: &impl Mmio, base: usize, pwm: &Pwm, clock_hz: u64) -> Result<Pla
     write_until(m, at(r::MOD), p.modulo, u32::MAX)?;
     // TPM_SetupSinglePwmChannel
     write_until(m, at(r::cnsc(pwm.channel)), 0, r::CNSC_MODE_MASK)?;
-    write_until(m, at(r::cnsc(pwm.channel)), CNSC_EPWM_HIGH_TRUE, r::CNSC_MODE_MASK)?;
+    write_until(m, at(r::cnsc(pwm.channel)), pwm.cnsc(), r::CNSC_MODE_MASK)?;
     write_until(m, at(r::cnv(pwm.channel)), p.cnv, u32::MAX)?;
     // TPM_StartTimer
     let sc = m.read32(at(r::SC));
@@ -209,7 +231,7 @@ mod tests {
 
     /// The Verdin iMX95 DSI backlight: `pwms = <&tpm6 2 6666667 0>`,
     /// default level 4 of <0 45 63 88 119 158 203 255>: 119 / 255.
-    const BACKLIGHT: Pwm = Pwm { channel: 2, period_ns: 6_666_667, level: 119, max: 255 };
+    const BACKLIGHT: Pwm = Pwm { channel: 2, period_ns: 6_666_667, level: 119, max: 255, low_true: false };
 
     #[test]
     fn the_backlight_at_24_mhz_is_150_hz_and_119_of_255() {
@@ -234,6 +256,23 @@ mod tests {
             ]
         );
         assert_eq!((r::cnsc(2), r::cnv(2)), (0x30, 0x34));
+    }
+
+    #[test]
+    fn the_x12_backlight_is_tpm5_channel_0_low_true_at_119_of_255() {
+        // Linux on the board (2026-11-25): platform/42500000.pwm channel 0,
+        // period 6,666,667 ns, duty 3,111,111 ns, polarity inverse: 119 /
+        // 255 of the period (3,111,111 / 6,666,667 = 0.4667), low-true
+        let pwm = Pwm { channel: 0, low_true: true, ..BACKLIGHT };
+        let t = Tpm { width: 32, ..Default::default() };
+        let p = start(&t, BASE, &pwm, 24_000_000).unwrap();
+        assert_eq!(p, Plan { ps: 0, modulo: 159_999, cnv: 74_666 });
+        // MSB | ELSA: edge-aligned, low-true pulses (kTPM_LowTrue = 1 << ELSA)
+        assert_eq!(pwm.cnsc(), 0x24);
+        assert!(t.writes.borrow().contains(&(r::cnsc(0), 0x24)));
+        assert!(t.writes.borrow().contains(&(r::cnv(0), 74_666)));
+        // 74,666 / 24 MHz = 3,111.08 µs: Linux's duty to the count
+        assert_eq!(74_666u64 * 1_000_000_000 / 24_000_000, 3_111_083);
     }
 
     #[test]

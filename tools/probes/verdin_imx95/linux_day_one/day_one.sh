@@ -16,16 +16,24 @@
 # --no-m4     skip M4 even when its gates hold.
 # --root      prefix of /proc, /sys, /etc, /boot (the host selftest's fake
 #             tree); the commands are taken from PATH.
-# --reader    how M4 reads a word: auto (python3's mmap of /dev/mem
-#             O_RDONLY/PROT_READ, else busybox `devmem ADDR 32`), python3,
-#             devmem, or file:PATH (a fixture "0xADDR 0xVALUE" per line, the
-#             selftest's).
+# --reader    how M4 reads a word: auto (the first of python3, devmem2 and
+#             devmem that reads the first gated word of the list: a reader
+#             is chosen only once it has read), python3 (mmap of /dev/mem
+#             O_RDONLY/PROT_READ; needs python3's mmap module, which the
+#             board's Toradex image of 2026-11-25 lacks), devmem2 (`devmem2
+#             ADDR w`: it opens /dev/mem read-write but writes nothing
+#             without a value argument, and none is ever given), devmem
+#             (busybox `devmem ADDR 32`), or file:PATH (a fixture
+#             "0xADDR 0xVALUE" per line, the selftest's).
 #
 # M4 reads a register only when the read list names it and its gate holds:
-# gate "display" needs a DSI connector of /sys/class/drm connected and
+# gate "lvds" needs an LVDS connector of /sys/class/drm connected and
 # enabled (M2) and the DISPLAY power domain on in pm_genpd_summary (M3);
-# gate "camera" needs that and the CAMERA domain on. A read of the DPU with
-# DISPLAY off is the unknown U6 of the note: never tried.
+# "dsi" a DSI connector and DISPLAY; "display" either connector and
+# DISPLAY; "camera" a DSI connector, DISPLAY and the CAMERA domain. A read
+# of the DPU with DISPLAY off is the unknown U6 of the note: never tried.
+# An address of a "#@noread" line is never read, whatever the list says
+# (the words whose read faulted on the board, or changes state).
 set -u
 
 ROOT=
@@ -96,9 +104,10 @@ for d in "$ROOT"/sys/bus/nvmem/devices/*; do
 	[ -e "$d" ] && echo "nvmem: ${d##*/}"
 done
 
-# ---- M2: does Linux drive the X4 display? ------------------------------
+# ---- M2: which display does Linux drive (X12 LVDS, X4 DSI)? -------------
 section m2
 dsi_live=0
+lvds_live=0
 for c in "$ROOT"/sys/class/drm/card*-*; do
 	[ -d "$c" ] || continue
 	n=${c##*/}
@@ -112,10 +121,22 @@ for c in "$ROOT"/sys/class/drm/card*-*; do
 	fi
 	case $n in
 	*DSI*) [ "$st" = connected ] && [ "$en" = enabled ] && dsi_live=1 ;;
+	*LVDS*) [ "$st" = connected ] && [ "$en" = enabled ] && lvds_live=1 ;;
 	esac
 done
 echo "dsi connector connected and enabled: $dsi_live"
-dmesg_all | grep -iE 'dpu95|imx95-mipi-dsi|Pixel Link|sn65dsi8|panel|ili2132|dw-mipi-dsi' | sed 's/^/display dmesg: /'
+echo "lvds connector connected and enabled: $lvds_live"
+dmesg_all | grep -iE 'dpu95|imx95-mipi-dsi|imx95-ldb|ldb|lvds|Pixel Link|sn65dsi8|panel|ili2132|dw-mipi-dsi' | sed 's/^/display dmesg: /'
+# the backlight as Linux runs it (the PWM's period, duty and polarity)
+for d in "$ROOT"/sys/class/backlight/*; do
+	[ -d "$d" ] || continue
+	echo "backlight ${d##*/}: brightness $(cat "$d/brightness" 2>/dev/null) of $(cat "$d/max_brightness" 2>/dev/null)"
+done
+if [ -r "$ROOT/sys/kernel/debug/pwm" ]; then
+	sed 's/^/pwm: /' "$ROOT/sys/kernel/debug/pwm"
+else
+	echo "pwm: # /sys/kernel/debug/pwm not readable"
+fi
 # the I2C_2_DSI bus: LPI2C3, i2c@42530000
 bus=
 for a in "$ROOT"/sys/bus/i2c/devices/i2c-*; do
@@ -151,7 +172,7 @@ done
 clk=$ROOT/sys/kernel/debug/clk/clk_summary
 if [ -r "$clk" ]; then
 	head -n 3 "$clk" | sed 's/^/clk: /'
-	grep -E '^[[:space:]]*(dispapb|dispaxi|dispocram|disp1pix|videopll1|videopll1_vco|mipiphycfg|mipiphypllref|mipiphypllbypass|camapb|gpu|gpuapb|gpu_cgc|lpi2c2|lpi2c3|tpm6)[[:space:]]' "$clk" |
+	grep -E '^[[:space:]]*(dispapb|dispaxi|dispocram|disp1pix|videopll1|videopll1_vco|ldbpll_vco|ldbpll|ldb_phy_div|ldb_pll_div7|lvds_ch[01]_gate|lvds_di[01]_gate|mipiphycfg|mipiphypllref|mipiphypllbypass|camapb|gpu|gpuapb|gpu_cgc|lpi2c2|lpi2c3|tpm5|tpm6)[[:space:]]' "$clk" |
 		sed 's/^/clk: /'
 else
 	echo "clk: # clk_summary not readable (debugfs not mounted?)"
@@ -188,6 +209,11 @@ read_word() { # $1 address (0x...): prints 0x%08x or ERR
 	devmem)
 		v=$(devmem "$1" 32 2>/dev/null) && printf '0x%08x\n' "$v" || echo ERR
 		;;
+	devmem2)
+		# "Value at address 0x4B0C0000 (0xffff8...): 0x14": the last field
+		v=$(devmem2 "$1" w 2>/dev/null | sed -n 's/^Value at address .*: \(0x[0-9a-fA-F]*\)$/\1/p') &&
+			[ -n "$v" ] && printf '0x%08x\n' "$v" || echo ERR
+		;;
 	python3)
 		# a child per word: a bus error costs that word, not the record
 		python3 -I -c '
@@ -200,13 +226,11 @@ print("0x%08x" % memoryview(m).cast("I")[(a - base) // 4])
 		;;
 	esac
 }
-if [ "$READER" = auto ]; then
-	if have python3; then READER=python3; elif have devmem; then READER=devmem; else READER=none; fi
-fi
-echo "reader: $READER"
 m4_gate() { # $1 gate: 0 when it holds
 	case $1 in
-	display) [ "$dsi_live" = 1 ] && [ "$display_on" = 1 ] ;;
+	display) { [ "$dsi_live" = 1 ] || [ "$lvds_live" = 1 ]; } && [ "$display_on" = 1 ] ;;
+	lvds) [ "$lvds_live" = 1 ] && [ "$display_on" = 1 ] ;;
+	dsi) [ "$dsi_live" = 1 ] && [ "$display_on" = 1 ] ;;
 	camera) [ "$dsi_live" = 1 ] && [ "$display_on" = 1 ] && [ "$camera_on" = 1 ] ;;
 	*) return 1 ;;
 	esac
@@ -215,20 +239,54 @@ if [ "$M4" = 0 ]; then
 	echo "# M4 skipped (--no-m4)"
 elif [ -z "$READLIST" ]; then
 	echo "# M4 skipped: no --readlist"
-elif [ "$READER" = none ]; then
-	echo "# M4 skipped: neither python3 nor devmem"
 else
 	if [ "$READLIST" = - ]; then rl=$(cat); else rl=$(cat "$READLIST"); fi
+	noread=$(echo "$rl" | awk '$1 == "#@noread" { print tolower($2) }')
+	# the reader: the first candidate that reads the first gated word
+	first=$(echo "$rl" | while read -r tag addr n name gate _; do
+		[ "$tag" = "#@read" ] && m4_gate "$gate" && { printf '0x%08x\n' $((addr)); break; }
+	done)
+	if [ "$READER" = auto ]; then
+		READER=none
+		if [ -z "$first" ]; then
+			echo "# reader: no gate holds, no reader tried"
+		else
+			for k in python3 devmem2 devmem; do
+				if ! have "$k"; then
+					echo "# reader $k: not installed"
+					continue
+				fi
+				v=$(READER=$k read_word "$first")
+				if [ "$v" = ERR ]; then
+					echo "# reader $k: could not read $first"
+					continue
+				fi
+				echo "# reader $k: read $first = $v"
+				READER=$k
+				break
+			done
+		fi
+	fi
+	echo "reader: $READER"
+	if [ "$READER" = none ]; then
+		[ -n "$first" ] && echo "# M4 skipped: no reader could read $first"
+		READER=
+	fi
 	echo "$rl" | while read -r tag addr n name gate _; do
 		[ "$tag" = "#@read" ] || continue
 		if ! m4_gate "$gate"; then
 			echo "# $name: gate $gate does not hold, not read"
 			continue
 		fi
+		[ -n "$READER" ] || continue
 		i=0
 		while [ "$i" -lt "$n" ]; do
 			a=$(printf '0x%08x' $((addr + 4 * i)))
-			echo "$a $(read_word "$a") $name+$(printf '0x%x' $((4 * i)))"
+			if echo "$noread" | grep -qx "$a"; then
+				echo "# $a: #@noread, not read ($name+$(printf '0x%x' $((4 * i))))"
+			else
+				echo "$a $(read_word "$a") $name+$(printf '0x%x' $((4 * i)))"
+			fi
 			i=$((i + 1))
 		done
 	done

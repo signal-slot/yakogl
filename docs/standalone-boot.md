@@ -627,8 +627,16 @@ The board is not a farm resource yet; the first run is day one of
 ## Toradex Verdin iMX95
 
 The Verdin iMX95 (NXP i.MX 95, six Cortex-A55, Mali-G310) on the Mallow
-carrier. **Nothing in this section has been run by us**: there is no board
-yet. What exists is a build. `tools/check.sh` builds `examples/triangle` for
+carrier, with the owner's Toradex Capacitive Touch Display 10.1" LVDS on
+X12. The board arrived on 2026-11-24. **What has run on it** (the owner's
+session, 2026-11-25, images of main `bd6cd44938a7`): the probes
+`imx95_wdog`, `imx95_scmi`, `imx95_ident`, `imx95_fw` and `gl_test` on
+read-back, through the U-Boot route below typed at U-Boot's prompt (not
+through `tools/board.sh imx95`, not from the boot command); all ran to their
+end and the board came back to Linux each time (results:
+`docs/notes/pre-study-imx95.md` section 6, `tools/cts/RESULTS.md`). **The
+display has not run**: no image of ours has driven the X12 panel. What is
+built: `tools/check.sh` builds `examples/triangle` for
 `verdin_imx95/mimx9596/a55` (row `zephyr  verdin_imx95 examples/triangle
 image (Mali-G310, built only), -Werror on our C files`), from the board
 `driver/boards/toradex/verdin_imx95`, which is derived from Zephyr's
@@ -636,12 +644,13 @@ image (Mali-G310, built only), -Werror on our C files`), from the board
 `driver/zephyr/lib/board/verdin_imx95`. The image arms WDOG3 (below),
 brings the GPU up over SCMI behind `eglInitialize`, renders the triangle
 into a window in the Mali carve-out, and shows it on the Toradex Capacitive
-Touch Display 10.1" DSI on the Mallow's X4 (`board_show()`: the window,
+Touch Display 10.1" LVDS on the Mallow's X12 (`board_show()`: the window,
 1024x600, is copied into a 1280x800 screen buffer at the panel's top left,
 and the first show brings the display up cold,
-`driver/docs/imx95-display.md` section 4(b)). The route below is the
-documented one, and the open questions at the end are what a first session
-must answer.
+`driver/docs/imx95-display.md` section 4(b'); the X4 DSI display of section
+4(b) with `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI=y`). The route below is
+the one that ran, and the open questions at the end say what the first
+session answered.
 
 ### The boot chain
 
@@ -679,6 +688,11 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
   (`ramdisk_addr_r`) for its loads; it relocates itself below 4 GiB. 0xd0000000
   to 0xdfffffff is clear of those and below 4 GiB on every module size (U-Boot
   probes 2, 4, 8 or 16 GiB; its doc shows an 8 GB module).
+- **What ran on 2026-11-25**: Linux staged the image as a file under
+  `/var/yakogl` on the eMMC's root file system (partition 2, ext4); at
+  U-Boot's prompt, on the UART_3 console: `ext4load mmc 0:2 0xd0000000
+  <file>` (md5 compared), then `dcache off; icache flush; go 0xd0000000`.
+  No boot partition was written.
 - The product form is then the other Verdins' (above): `ext4load mmc <dev>:<part>
   0xd0000000 /zephyr.bin && dcache off && icache off && go 0xd0000000`, and
   the test form `BOARD_BOOT=uboot-mmc`: the one-shot hook of
@@ -697,7 +711,8 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
   Linux has a CMA pool that may cover that address (`linux,cma`: 960 MiB
   allocated from 0x80000000 to 0xff000000, `imx95-verdin.dtsi`); a
   `crashkernel=` reservation there, as the iMX8M Plus's
-  `crashkernel=64M@0x60000000`, would be the clean form. Not tried.
+  `crashkernel=64M@0x60000000`, would be the clean form. Not tried, and not
+  possible on the board's image (2026-11-25: `CONFIG_KEXEC` not set).
 - At the end of a run the image resets through PSCI `SYSTEM_RESET` (TF-A,
   which asks the System Manager), the way back to U-Boot and Linux. A
   software timer takes that reset after `CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S`
@@ -791,7 +806,10 @@ writes them only on request).
 ### Open questions for sign-off
 
 1. **Can U-Boot start our image with the System Manager still serving
-   SCMI?** The System Manager runs on the M33 on its own, so it is still
+   SCMI?** Answered on 2026-11-25: yes. `imx95_scmi` after `go` read 146
+   facts (agent 2 "AP-NS", implementation 0x23e, power domains 14, 13 and 3
+   off at entry), and `imx95_ident`, `imx95_fw` and `gl_test` powered the GPU
+   over the same channel. The System Manager runs on the M33 on its own, so it is still
    there after `go`; the image's first SCMI messages (the LPUART1 pins and
    clock, at `PRE_KERNEL`) go through the same channel U-Boot used (MU2,
    shared memory at 0x445b1000; the same channel in Linux's `imx95.dtsi`).
@@ -800,24 +818,34 @@ writes them only on request).
    (`imx-sm-toradex`, `verdin-imx95`) gives the A55 non-secure agent the
    LPUART1 pins and clock and, for the GPU later, power domain 14 and the
    GPU clocks.
-2. **The watchdog.** The image arms WDOG3 itself (above), so it does not
-   depend on U-Boot's (`CONFIG_WDT`, `CONFIG_ULP_WATCHDOG`, 30 s), which is
-   probably still counting at `go`. To check on the board: the armed line's
+2. **The watchdog.** Answered on 2026-11-25: U-Boot leaves WDOG3
+   **stopped** at `go` (`imx95_wdog`: "wdog found CS 0x00002900 TOVAL
+   0x00000400 (stopped); armed rc 0 CS 0x000035e3 TOVAL 0x00001d4c timeout
+   60000 ms"); unfed, it reset the whole board after the 60 s (U-Boot SPL's
+   banner, then "LM Boot reason: fccu, origin: -1, errid: 19"); the PSCI
+   reset returns to U-Boot ("LM Boot reason: sw, origin: 0, errid: 0").
+   Toradex's U-Boot has no `wdt` command. The image arms WDOG3 itself
+   (above), so it does not depend on U-Boot's. What was to be checked: the armed line's
    `CS`/`TOVAL` found (running with `TOVAL` 0xea6 if U-Boot left it so), the
    poll counts and time of the arming, and a proof run that arms and never
    feeds: WDOG3's timeout must reach the System Manager's fault (with
    `CS.INT` set) and reset the board through `WDOG_ANY` back into Linux.
-3. **Caches at `go`.** The pin's EVK route uses `dcache off; icache flush`,
-   the other Verdins' `dcache off; icache off`. Either must leave the MMU off
-   at entry; which one this U-Boot needs is unmeasured.
-4. **The eMMC device and partition U-Boot reads**, and where Linux can stage
-   the file (Torizon's `/var` on the other Verdins). U-Boot's `mmc 0` is the
-   eMMC (`update_uboot`); the rest is unknown.
+3. **Caches at `go`.** Answered on 2026-11-25: `dcache off; icache flush`
+   (the pin's EVK route) works on this U-Boot; `icache off` was not tried.
+4. **The eMMC device and partition U-Boot reads**: answered on 2026-11-25:
+   the eMMC is `mmc 0`, partition 1 FAT (the boot files), partition 2 ext4
+   (Linux's root, where `/var` is); Linux stages the file under
+   `/var/yakogl`, U-Boot reads it with `ext4load mmc 0:2`. The boot areas
+   are 31.5 MiB each and not write-protected. `tools/board.sh imx95`'s
+   `NB_MMC=0:1` / `MMC_PART=/dev/mmcblk0p1` (the AM62P's) do not match this
+   layout and were not used.
 5. **The SoC package.** The board takes the 19x19 package's pin list
    (`mimx9596avzxn-pinctrl.dtsi`, as `imx95_evk`); every pad the module's
    Linux uses is in it and in the 15x15 one, so the console does not depend
    on it, but the module's part is not confirmed.
-6. **The Mali-G310's bring-up** is in the image, not run: the CSF firmware
+6. **The Mali-G310's bring-up** ran on 2026-11-25 (`imx95_ident`: `GPU_ID
+   0xac740001`, one shader core; `imx95_fw`: GLB 1.5.0; `gl_test`: 50 of 50
+   on read-back): the CSF firmware
    is the T6's file (`MALI_CSFFW`; panthor loads
    `arm/mali/arch<major>.<minor>/mali_csffw.bin` by the GPU_ID's
    architecture, and linux-firmware's `arch10.12` file, the G310's, is the
@@ -828,7 +856,22 @@ writes them only on request).
    `yd_imx95_osal_up`). What the board answers on day one: the SM's
    replies over the channel after U-Boot's `go`, the G310's identity words,
    the firmware's GLB version.
-7. **The X4 display** is in the image, not run: the board layer's first
+7. **The X12 LVDS display** is in the image, not run: the board layer's
+   first `board_show()` puts the backlight's pads (GPIO_IO06 as TPM5 channel
+   0, XSPI1_DATA4 as GPIO5_IO04) through the System Manager's pin control
+   and runs `yd_imx95_lvds_up`: DISPLAY and the LDB PLL over SCMI, the
+   display CSR, the interleaver, the DPU, the LDB and LVDS PHY 0, FrameGen0,
+   then the backlight (`driver/docs/imx95-display.md` section 4(b'),
+   `driver/zephyr/lib/board/verdin_imx95/verdin_imx95_lvds.c`). The console
+   then has `verdin_imx95: display: X12 LVDS, ...` and one `verdin_imx95:
+   display up: ...` line (the pixel clock, the LVDS CSR's words, TPM5's
+   rate) or `verdin_imx95: display stopped: ...` after the line that names
+   the step; the note's section 6 has the expected lines. What the board
+   answers: those lines, then whether the panel shows the triangle at its
+   top left on black. Before it, the probe `imx95_lvds_ids` (read only)
+   reads the X12 path's identity.
+8. **The X4 display** (with `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI=y`;
+   not this board's setup) is in the image, not run: the board layer's first
    `board_show()` turns the LPI2C2 and LPI2C3 clocks on over SCMI,
    initialises Zephyr's `nxp,lpi2c` buses and the module's PCAL6416A
    (`nxp,pcal6416`; all three are `zephyr,deferred-init` in the board's
@@ -908,7 +951,13 @@ In order; stop at the first step that prints something else.
 
 ### Verdin iMX95
 
-Not run yet; the order the first session takes (pre-study B1, B2, B3):
+The first session (2026-11-25) did not use `board.sh`: it typed the route
+of "Toradex Verdin iMX95" above at U-Boot's prompt (the file staged by
+Linux under `/var/yakogl`, `ext4load mmc 0:2`, `dcache off; icache flush;
+go 0xd0000000`). The board's kernel has no SCMI raw interface, so step 1
+below reports `no SCMI raw interface` and the console is the only record;
+`NB_MMC`/`MMC_PART` (now `0:1`, `/dev/mmcblk0p1`) would have to name partition 2 for
+this layout. The order with `board.sh`, not yet run:
 
 1. `tools/board.sh imx95 status`: the hook variables and `install: absent`,
    the staging directory's mount (`/dev/mmcblk0p1` expected), then

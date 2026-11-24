@@ -27,7 +27,7 @@ use crate::firmware::scmi::Transport;
 use crate::mmio::Mmio;
 use crate::soc::imx95::display::{self, Stream0, StreamConfig};
 use crate::soc::imx95::display_power;
-use crate::soc::imx95::dpu::{Framebuffer, Route};
+use crate::soc::imx95::dpu::{Form, Framebuffer, Route};
 use crate::video::VideoMode;
 
 /// Both halves' configuration.
@@ -48,6 +48,7 @@ impl Config {
                 route: Route::Dsi,
                 fb,
                 power: display_power::Config::VERDIN_DSI_10INCH,
+                form: Form::Hal,
             },
             dsi: dsi::Config::VERDIN,
         }

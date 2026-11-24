@@ -1292,6 +1292,70 @@ int yd_imx95_display_down(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t 
 			  const struct yd_imx95_display_bases *bases, const struct yd_env *env,
 			  struct yd_imx95_display *d);
 
+/* yd_imx95_lvds_*: the Verdin iMX95's picture on X12, the Toradex 10.1"
+ * LVDS display on the Mallow's native LVDS connector (ffi::imx95_lvds over
+ * board::verdin_imx95_lvds, the steps of driver/docs/imx95-display.md
+ * section 4(b'); feature imx95). `scmi`, `fb`, `stride` and the states are
+ * yd_imx95_display_*'s (YD_IMX95_DISPLAY_NEW .. _DOWN, the same
+ * YD_IMX95_DISPLAY_WIDTH x _HEIGHT panel size). `bases` holds the DPU, the
+ * display CSR and the interleaver as yd_imx95_display_bases does, the LVDS
+ * CSR, TPM5 (the backlight PWM) and GPIO5 (its enable, GPIO5_IO04), each at
+ * least YD_IMX95_*_SIZE bytes from YD_IMX95_*_PHYS (Device memory). `env`
+ * serves only the waits and the log: no I2C, no env GPIO.
+ *   up    0, -EBUSY, -EINVAL (nothing sent or written), -EIO (`stop` names
+ *         the side; one log line; final), -ENODEV
+ *   flip  as yd_imx95_display_flip
+ *   down  backlight (enable low, PWM, TPM5's clock), the LDB, then stream
+ *         0, the LDB PLL and DISPLAY: 0, -EIO (logged), -ENODEV
+ * One thread only. */
+#define YD_IMX95_LDB_PHYS            0x4b0c0000 /* soc::imx95::ldb::LDB_BASE */
+#define YD_IMX95_LDB_SIZE            0x10000
+#define YD_IMX95_TPM5_PHYS           0x42500000 /* board::verdin_imx95_lvds::TPM5_BASE */
+#define YD_IMX95_TPM5_SIZE           0x1000
+#define YD_IMX95_GPIO5_PHYS          0x43850000 /* board::verdin_imx95_lvds::GPIO5_BASE */
+#define YD_IMX95_GPIO5_SIZE          0x1000
+/* struct yd_imx95_lvds's stop */
+#define YD_IMX95_LVDS_STOP_DPU       1 /* soc::imx95::display: power, LDB PLL, DPU, flip */
+#define YD_IMX95_LVDS_STOP_BACKLIGHT 2 /* TPM5's clock or the PWM; the picture runs, dark */
+
+struct yd_imx95_lvds_bases {
+	uintptr_t dpu, csr, interleaver; /* DPU, display CSR, interleaver */
+	uintptr_t ldb;                   /* LVDS CSR */
+	uintptr_t tpm, gpio;             /* TPM5 and GPIO5: the backlight */
+};
+
+/* All zero before the first up; the caller keeps it. */
+struct yd_imx95_lvds {
+	uint64_t fb;            /* the buffer the DPU scans */
+	uint32_t stride;        /* every buffer's */
+	uint32_t state;         /* YD_IMX95_DISPLAY_NEW .. _DOWN */
+	uint32_t width, height; /* the mode shown */
+	uint32_t pix_hz[2];     /* LDBPLL / 7 as the System Manager made it, lo first */
+	uint32_t level;         /* the DISP performance level */
+	uint32_t sync_us;       /* FrameGen0's wait for sync */
+	uint32_t ldb[4];        /* the LVDS CSR's four words read back after the start */
+	uint32_t tpm_hz;        /* TPM5's clock */
+	uint32_t backlight;     /* level of 255 */
+	uint32_t flips;         /* flips that changed the address */
+	uint32_t flip_us;       /* the last flip's wait */
+	uint32_t stop;          /* 0, YD_IMX95_LVDS_STOP_DPU or _BACKLIGHT */
+	uint32_t reserved;
+};
+_Static_assert(sizeof(struct yd_imx95_lvds_bases) == 48, "ffi::imx95_lvds YdImx95LvdsBases");
+_Static_assert(offsetof(struct yd_imx95_lvds_bases, gpio) == 40, "ffi::imx95_lvds YdImx95LvdsBases");
+_Static_assert(sizeof(struct yd_imx95_lvds) == 80, "ffi::imx95_lvds YdImx95Lvds");
+_Static_assert(offsetof(struct yd_imx95_lvds, ldb) == 40, "ffi::imx95_lvds YdImx95Lvds");
+_Static_assert(offsetof(struct yd_imx95_lvds, stop) == 72, "ffi::imx95_lvds YdImx95Lvds");
+
+int yd_imx95_lvds_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		     const struct yd_imx95_lvds_bases *bases, const struct yd_env *env, uint64_t fb,
+		     uint32_t stride, struct yd_imx95_lvds *d);
+int yd_imx95_lvds_flip(const struct yd_imx95_lvds_bases *bases, const struct yd_env *env, uint64_t fb,
+		       struct yd_imx95_lvds *d);
+int yd_imx95_lvds_down(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		       const struct yd_imx95_lvds_bases *bases, const struct yd_env *env,
+		       struct yd_imx95_lvds *d);
+
 /* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
  * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
  * (PD_VOP usable, its CRU gates open, VERSION_INFO, VP0 running in

@@ -20,12 +20,23 @@
 //! an enable or rate request on them is DENIED. None of the three is ever
 //! sent.
 //!
-//! The pixel clock is the DSI route's (Toradex's
-//! `imx95-verdin-panel-cap-touch-10inch-dsi.dtso`, `&dpu`): DISP1PIX from
-//! VIDEOPLL1, VIDEOPLL1_VCO 3,360 MHz, VIDEOPLL1 420 MHz, DISP1PIX the
-//! mode's pixel clock (70 MHz, the root divider 6). The display block's
-//! engine clock select then takes the CCM's clock (`dpu::EngineClock::Ccm`;
-//! the LVDS route's LDB PLL is not handled here).
+//! The pixel clock has two sources ([`PixelSource`]):
+//! - [`PixelSource::VideoPll1`], the DSI route's (Toradex's
+//!   `imx95-verdin-panel-cap-touch-10inch-dsi.dtso`, `&dpu`): DISP1PIX from
+//!   VIDEOPLL1, VIDEOPLL1_VCO 3,360 MHz, VIDEOPLL1 420 MHz, DISP1PIX the
+//!   mode's pixel clock (70 MHz, the root divider 6); the display block's
+//!   engine clock select takes the CCM's clock.
+//! - [`PixelSource::LdbPll`], the LVDS route's (Toradex's
+//!   `imx95-verdin-panel-cap-touch-10inch-lvds.dtso` `&dpu` and Linux on the
+//!   board, 2026-11-25: `ldbpll_vco` 2,986,200,000, `ldbpll` 497,700,000,
+//!   `ldb_pll_div7` 71,100,000, `disp1pix` 24 MHz with no user): LDBPLL_VCO
+//!   [`CLK_LDBPLL_VCO`] 37 and LDBPLL [`CLK_LDBPLL`] 38 over SCMI; the
+//!   pixel clock is LDBPLL / 7, a fixed divider in the display block that
+//!   its engine clock select takes (`DSIP_CLK0_SEL` 2), so DISP1PIX is not
+//!   sent at all. [`ldb_rates`] is the arithmetic: LDBPLL = 7 x the pixel
+//!   clock (the LVDS serial clock), its VCO 6 x LDBPLL (the overlay's
+//!   "LDBPLL_VCO = 6 * 7 * pixelclk"), inside the PLL VCO's 2.52..4.992 GHz
+//!   (MIMX95_elec_spec.h `ES_MIN_HZ_PLLVCO`, `ES_MAX_HZ_PLLVCO`).
 //!
 //! The DISP performance level: Toradex's SM starts every performance domain
 //! without a local PLL at overdrive (`BOARD_PERF_LEVEL` = ODV,
@@ -44,21 +55,23 @@
 //! 2. POWER_STATE_SET domain 13 on, POWER_STATE_GET reads on.
 //! 3. PERFORMANCE_LEVEL_GET domain 12; or, with a level asked for,
 //!    PERFORMANCE_LEVEL_SET and PERFORMANCE_LEVEL_GET reading it back.
-//! 4. CLOCK_PARENT_SET clock 80 to 19 (CLOCK_PARENT_GET reads 19), then
-//!    CLOCK_RATE_SET 18, 19, 80 (flags 0: synchronous, rounded down), in
-//!    that order: the parent before the rates and the VCO before its
-//!    output, as Linux applies `assigned-clocks` (parents first, then
-//!    rates). Both need EXCLUSIVE; AP-NS has ALL.
-//! 5. CLOCK_CONFIG_SET 18, 19, 80 enabled, parents first, then
-//!    CLOCK_RATE_GET 80: the pixel clock the SM made, kept as it reads; more
-//!    than [`RATE_TOLERANCE_PPM`] from the rate asked for is
-//!    [`Error::Rate`].
+//! 4. VideoPll1: CLOCK_PARENT_SET clock 80 to 19 (CLOCK_PARENT_GET reads
+//!    19), then CLOCK_RATE_SET 18, 19, 80 (flags 0: synchronous, rounded
+//!    down), in that order: the parent before the rates and the VCO before
+//!    its output, as Linux applies `assigned-clocks` (parents first, then
+//!    rates). Both need EXCLUSIVE; AP-NS has ALL. LdbPll: CLOCK_RATE_SET 37,
+//!    38 (no parent is set: Toradex's overlay assigns none).
+//! 5. CLOCK_CONFIG_SET of the chain enabled, parents first (18, 19, 80 or
+//!    37, 38), then CLOCK_RATE_GET of its last clock (80, or 38 divided by
+//!    7): the pixel clock the SM made, kept as it reads; more than
+//!    [`RATE_TOLERANCE_PPM`] from the rate asked for is [`Error::Rate`].
 //!
 //! Power-off (after the stream is stopped, [`super::display::stop`]):
-//! CLOCK_CONFIG_SET 80, 19, 18 disabled, POWER_STATE_SET 13 off and read
-//! back off. The level is left. VIDEOPLL1 also feeds the DSI PHY's PLL
-//! bypass clock (`mipi_dsi` `assigned-clock-parents`) and the vote is the
-//! agent's, not the module's: the DSI side is stopped first.
+//! CLOCK_CONFIG_SET of the chain disabled backwards (80, 19, 18 or 38, 37),
+//! POWER_STATE_SET 13 off and read back off. The level is left. VIDEOPLL1
+//! also feeds the DSI PHY's PLL bypass clock (`mipi_dsi`
+//! `assigned-clock-parents`) and the vote is the agent's, not the module's:
+//! the DSI side is stopped first.
 //!
 //! A non-zero status stops the sequence at once, named in the error with
 //! the clock it concerns (`CLOCK_PARENT_SET (0x14/0x0d) clock 80: SCMI
@@ -77,6 +90,20 @@ pub const CLK_VIDEOPLL1_VCO: u32 = 18;
 pub const CLK_VIDEOPLL1: u32 = 19;
 /// `DEV_SM_CLK_DISP1PIX` (41 + 39), `IMX95_CLK_DISP1PIX`: the DPU's `pix`.
 pub const CLK_DISP1PIX: u32 = 80;
+/// `DEV_SM_CLK_LDBPLL_VCO`, `IMX95_CLK_LDBPLL_VCO` (imx95_clock.h:46).
+pub const CLK_LDBPLL_VCO: u32 = 37;
+/// `DEV_SM_CLK_LDBPLL`, `IMX95_CLK_LDBPLL` (imx95_clock.h:47): the LVDS
+/// serial clock; the display block divides it by 7 for the pixel clock.
+pub const CLK_LDBPLL: u32 = 38;
+/// The display block's fixed divider of LDBPLL (`ldb_pll_div7`).
+pub const LDB_DIV: u64 = 7;
+/// LDBPLL_VCO over LDBPLL for a single LVDS channel (the overlay's
+/// "LDBPLL_VCO = 6 * 7 * pixelclk").
+pub const LDB_VCO_DIV: u64 = 6;
+/// The PLL VCO's range (MIMX95_elec_spec.h `ES_MIN_HZ_PLLVCO`,
+/// `ES_MAX_HZ_PLLVCO`, as the mock SM restates them), Hz.
+pub const PLL_VCO_MIN_HZ: u64 = 2_520_000_000;
+pub const PLL_VCO_MAX_HZ: u64 = 4_992_000_000;
 /// `DEV_SM_CLK_DISPAPB` (41 + 34): SM-owned, never sent.
 pub const CLK_DISPAPB: u32 = 75;
 /// `DEV_SM_CLK_DISPAXI` (41 + 35): SM-owned, never sent.
@@ -95,7 +122,8 @@ pub const RATE_TOLERANCE_PPM: u64 = 5000;
 /// The level Toradex's SM starts the DISP domain at (ODV, index 3).
 pub const BOOT_LEVEL: u32 = 3;
 
-/// The pixel clock's chain: VIDEOPLL1's VCO, its output, DISP1PIX.
+/// The pixel clock's chain: a PLL's VCO, its output, the pixel clock
+/// (DISP1PIX, or LDBPLL / 7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PixelClock {
     pub vco_hz: u64,
@@ -103,12 +131,46 @@ pub struct PixelClock {
     pub pix_hz: u64,
 }
 
+/// Where the pixel clock comes from (module documentation).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PixelSource {
+    /// VIDEOPLL1 (18, 19) into DISP1PIX (80): the DSI route.
+    VideoPll1,
+    /// LDBPLL_VCO (37), LDBPLL (38), divided by 7 in the display block: the
+    /// LVDS route.
+    LdbPll,
+}
+
+impl PixelSource {
+    /// The chain's clocks, parents first.
+    pub const fn chain(self) -> &'static [u32] {
+        match self {
+            PixelSource::VideoPll1 => &[CLK_VIDEOPLL1_VCO, CLK_VIDEOPLL1, CLK_DISP1PIX],
+            PixelSource::LdbPll => &[CLK_LDBPLL_VCO, CLK_LDBPLL],
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
     /// The DISPAXI rate asked for, Hz, rounded down to a DISP level; `None`
     /// leaves the level as the SM has it (read and reported only).
     pub axi_hz: Option<u64>,
+    pub source: PixelSource,
     pub pixel: PixelClock,
+}
+
+/// The LDB PLL's rates for a single-channel LVDS pixel clock: LDBPLL = 7 x
+/// `pix_hz`, LDBPLL_VCO = 6 x LDBPLL. `None` when the VCO falls outside
+/// [`PLL_VCO_MIN_HZ`]..=[`PLL_VCO_MAX_HZ`] (pixel clocks from 60 MHz to
+/// 118.857 MHz fit).
+pub const fn ldb_rates(pix_hz: u64) -> Option<PixelClock> {
+    let pll_hz = pix_hz * LDB_DIV;
+    let vco_hz = pll_hz * LDB_VCO_DIV;
+    if vco_hz < PLL_VCO_MIN_HZ || vco_hz > PLL_VCO_MAX_HZ {
+        return None;
+    }
+    Some(PixelClock { vco_hz, pll_hz, pix_hz })
 }
 
 impl Config {
@@ -116,8 +178,21 @@ impl Config {
     /// DSI_1 (`imx95-verdin-panel-cap-touch-10inch-dsi.dtso`: `&dpu`
     /// assigned-clock-rates 3,360 MHz and 420 MHz; panel-timing
     /// clock-frequency 70 MHz).
-    pub const VERDIN_DSI_10INCH: Config =
-        Config { axi_hz: None, pixel: PixelClock { vco_hz: 3_360_000_000, pll_hz: 420_000_000, pix_hz: 70_000_000 } };
+    pub const VERDIN_DSI_10INCH: Config = Config {
+        axi_hz: None,
+        source: PixelSource::VideoPll1,
+        pixel: PixelClock { vco_hz: 3_360_000_000, pll_hz: 420_000_000, pix_hz: 70_000_000 },
+    };
+
+    /// The Toradex Capacitive Touch Display 10.1" LVDS on the Mallow's X12
+    /// (`imx95-verdin-panel-cap-touch-10inch-lvds.dtso` `&dpu`; Linux's
+    /// clk_summary on the board, 2026-11-25): 71.1 MHz, LDBPLL 497.7 MHz,
+    /// LDBPLL_VCO 2,986.2 MHz ([`ldb_rates`] of 71.1 MHz).
+    pub const VERDIN_LVDS_10INCH: Config = Config {
+        axi_hz: None,
+        source: PixelSource::LdbPll,
+        pixel: PixelClock { vco_hz: 2_986_200_000, pll_hz: 497_700_000, pix_hz: 71_100_000 },
+    };
 }
 
 /// The message a failure happened in; the clock's id where it has one.
@@ -215,6 +290,9 @@ pub enum Error {
     /// The pixel clock reads further than [`RATE_TOLERANCE_PPM`] from the
     /// rate asked for, or 0.
     Rate { want_hz: u64, got_hz: u64 },
+    /// An LDB PLL chain that is not 6 x 7 x the pixel clock, or whose VCO
+    /// is out of range ([`ldb_rates`]); nothing was sent.
+    LdbChain(PixelClock),
 }
 
 impl Error {
@@ -268,6 +346,11 @@ impl core::fmt::Display for Error {
             }
             Error::NoLevel { rate_hz } => write!(f, "no display level at or below {} Hz", rate_hz),
             Error::Rate { want_hz, got_hz } => write!(f, "pixel clock reads {} Hz, asked {} Hz", got_hz, want_hz),
+            Error::LdbChain(p) => write!(
+                f,
+                "LDB PLL chain VCO {} Hz, PLL {} Hz for {} Hz: not 6 x 7 x the pixel clock in the VCO's range",
+                p.vco_hz, p.pll_hz, p.pix_hz
+            ),
         }
     }
 }
@@ -305,13 +388,12 @@ pub fn rate_ok(want: u64, got: u64) -> bool {
     got != 0 && got.abs_diff(want) * 1_000_000 <= want * RATE_TOLERANCE_PPM
 }
 
-/// The order the pixel clock's chain is enabled in (parents first) and
-/// disabled in (the reverse).
-const CHAIN: [u32; 3] = [CLK_VIDEOPLL1_VCO, CLK_VIDEOPLL1, CLK_DISP1PIX];
-
 /// Power the display on: domain, level, pixel clock (the module
 /// documentation has the order and the messages).
 pub fn power_on<T: Transport>(t: &mut T, cfg: &Config) -> Result<Up, Error> {
+    if cfg.source == PixelSource::LdbPll && ldb_rates(cfg.pixel.pix_hz) != Some(cfg.pixel) {
+        return Err(Error::LdbChain(cfg.pixel));
+    }
     check_version(t, Step::PowerVersion, POWER_MAJOR)?;
     check_version(t, Step::PerfVersion, PERF_MAJOR)?;
     let chosen = match cfg.axi_hz {
@@ -345,29 +427,42 @@ pub fn power_on<T: Transport>(t: &mut T, cfg: &Config) -> Result<Up, Error> {
         }
     };
 
-    call(t, Step::ParentSet(CLK_DISP1PIX), &[CLK_DISP1PIX, CLK_VIDEOPLL1], 0)?;
-    let got = call(t, Step::ParentCheck(CLK_DISP1PIX), &[CLK_DISP1PIX], 1)?.get(0);
-    if got != CLK_VIDEOPLL1 {
-        return Err(Error::Readback { step: Step::ParentCheck(CLK_DISP1PIX), want: CLK_VIDEOPLL1, got });
+    let chain = cfg.source.chain();
+    match cfg.source {
+        PixelSource::VideoPll1 => {
+            call(t, Step::ParentSet(CLK_DISP1PIX), &[CLK_DISP1PIX, CLK_VIDEOPLL1], 0)?;
+            let got = call(t, Step::ParentCheck(CLK_DISP1PIX), &[CLK_DISP1PIX], 1)?.get(0);
+            if got != CLK_VIDEOPLL1 {
+                return Err(Error::Readback { step: Step::ParentCheck(CLK_DISP1PIX), want: CLK_VIDEOPLL1, got });
+            }
+            rate_set(t, CLK_VIDEOPLL1_VCO, cfg.pixel.vco_hz)?;
+            rate_set(t, CLK_VIDEOPLL1, cfg.pixel.pll_hz)?;
+            rate_set(t, CLK_DISP1PIX, cfg.pixel.pix_hz)?;
+        }
+        PixelSource::LdbPll => {
+            rate_set(t, CLK_LDBPLL_VCO, cfg.pixel.vco_hz)?;
+            rate_set(t, CLK_LDBPLL, cfg.pixel.pll_hz)?;
+        }
     }
-    rate_set(t, CLK_VIDEOPLL1_VCO, cfg.pixel.vco_hz)?;
-    rate_set(t, CLK_VIDEOPLL1, cfg.pixel.pll_hz)?;
-    rate_set(t, CLK_DISP1PIX, cfg.pixel.pix_hz)?;
-    for c in CHAIN {
+    for &c in chain {
         call(t, Step::Enable(c), &[c, scmi::CLOCK_ENABLE, 0], 0)?;
     }
-    let r = call(t, Step::RateCheck(CLK_DISP1PIX), &[CLK_DISP1PIX], 2)?;
-    let pix_hz = r.get(0) as u64 | (r.get(1) as u64) << 32;
+    let last = chain[chain.len() - 1];
+    let r = call(t, Step::RateCheck(last), &[last], 2)?;
+    let mut pix_hz = r.get(0) as u64 | (r.get(1) as u64) << 32;
+    if cfg.source == PixelSource::LdbPll {
+        pix_hz /= LDB_DIV;
+    }
     if !rate_ok(cfg.pixel.pix_hz, pix_hz) {
         return Err(Error::Rate { want_hz: cfg.pixel.pix_hz, got_hz: pix_hz });
     }
     Ok(Up { level, chosen, pix_hz })
 }
 
-/// Power the display off: the pixel clock's chain, then the domain, read
-/// back off. The level is left as it is.
-pub fn power_off<T: Transport>(t: &mut T) -> Result<(), Error> {
-    for c in CHAIN.iter().rev() {
+/// Power the display off: the pixel clock's chain of `source`, then the
+/// domain, read back off. The level is left as it is.
+pub fn power_off<T: Transport>(t: &mut T, source: PixelSource) -> Result<(), Error> {
+    for c in source.chain().iter().rev() {
         call(t, Step::Disable(*c), &[*c, scmi::CLOCK_DISABLE, 0], 0)?;
     }
     call(t, Step::PowerOff, &[0, PD_DISPLAY, scmi::POWER_OFF], 0)?;

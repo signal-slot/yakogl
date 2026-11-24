@@ -10,6 +10,7 @@
 //   PERI_CAMERA_DSI_STREAM_CSR.h  sha256 707569eed5c914c316377a55063f9b8b5997a9cf221e2382a3e60415f72c4c7c
 //   PERI_CAMERA_DSI_MASTER_CSR.h  sha256 68f7fd4cacac4e032a325d0dc888b6ab30c45bc8fae7b4cf686ad821bb82ac43
 //   PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h  sha256 0e187f5fabdd0e7c48d1d81a71b8ffe0f7165e04c3a0443301404f680ab7f179
+//   PERI_LDB.h  sha256 5f2a51cf992144a617b0a370572becf41407dd21feeabeede606636f4f2a028b
 // Copyright 1997-2016 Freescale Semiconductor, Inc.; Copyright 2016-2026 NXP.
 // The field value lists are NXP's text from the same headers.
 
@@ -1719,5 +1720,242 @@ pub mod camera_dsi_or_csi_phy_csr {
         /// 0b1..BIST test is OK
         pub const BISTOK_MASK: u32 = 0x2000;
         pub const BISTOK_SHIFT: u32 = 13;
+    }
+}
+
+/// `LDB_Type` (PERI_LDB.h): offsets from the block's base address.
+pub mod ldb {
+    pub const LVDS_PHY_CLOCK_CONTROL: u32 = 0x0;
+    /// Fields of `LVDS_PHY_CLOCK_CONTROL`.
+    pub mod lvds_phy_clock_control {
+        /// 0b0..PHY clock frequency is equal to PLL clock frequency
+        /// 0b1..PHY clock frequency is equal to PLL clock frequency / 2
+        pub const LVDS_PHY_DIV_MASK: u32 = 0x1;
+        pub const LVDS_PHY_DIV_SHIFT: u32 = 0;
+        /// 0b0..LVDS serializer channel 0 are clocked
+        /// 0b1..LVDS serializer channel 0 are not clocked
+        pub const SERIALIZER_CH0_CLOCK_CTRL_MASK: u32 = 0x2;
+        pub const SERIALIZER_CH0_CLOCK_CTRL_SHIFT: u32 = 1;
+        /// 0b0..LVDS serializer channel 1 are clocked
+        /// 0b1..LVDS serializer channel 1 are not clocked
+        pub const SERIALIZER_CH1_CLOCK_CTRL_MASK: u32 = 0x4;
+        pub const SERIALIZER_CH1_CLOCK_CTRL_SHIFT: u32 = 2;
+        /// 0b0..LVDS pixel mapper Di0 are clocked
+        /// 0b1..LVDS pixel mapper Di0 are not clocked
+        pub const PIXELMAPPER_DI0_CLOCK_CTRL_MASK: u32 = 0x8;
+        pub const PIXELMAPPER_DI0_CLOCK_CTRL_SHIFT: u32 = 3;
+        /// 0b0..LVDS pixel mapper Di1 are clocked
+        /// 0b1..LVDS pixel mapper Di1 are not clocked
+        pub const PIXELMAPPER_DI1_CLOCK_CTRL_MASK: u32 = 0x10;
+        pub const PIXELMAPPER_DI1_CLOCK_CTRL_SHIFT: u32 = 4;
+    }
+
+    pub const PIXEL_MAPPER_CONTROL: u32 = 0x4;
+    /// Fields of `PIXEL_MAPPER_CONTROL`.
+    pub mod pixel_mapper_control {
+        /// 0b00..Channel disabled
+        /// 0b01..Channel enabled, routed to DI0
+        /// 0b10..Channel disabled
+        /// 0b11..Channel enabled, routed to DI1
+        pub const CH0_MODE_MASK: u32 = 0x3;
+        pub const CH0_MODE_SHIFT: u32 = 0;
+        /// 0b00..Channel disabled
+        /// 0b01..Channel enabled, routed to DI0
+        /// 0b10..Channel disabled
+        /// 0b11..Channel enabled, routed to DI1
+        pub const CH1_MODE_MASK: u32 = 0xc;
+        pub const CH1_MODE_SHIFT: u32 = 2;
+        /// 0b0..Split mode is disabled.
+        /// 0b1..Split mode is enabled. In this mode both channels should be enabled and working with the same DI.
+        pub const SPLIT_MODE_MASK: u32 = 0x10;
+        pub const SPLIT_MODE_SHIFT: u32 = 4;
+        /// 0b0..Data width is 18 bits wide
+        /// 0b1..Data width is 24 bits wide
+        pub const CH0_DATA_WIDTH_MASK: u32 = 0x20;
+        pub const CH0_DATA_WIDTH_SHIFT: u32 = 5;
+        /// 0b0..Use SPWG standard
+        /// 0b1..Use JEIDA standard
+        pub const CH0_BIT_MAPPING_MASK: u32 = 0x40;
+        pub const CH0_BIT_MAPPING_SHIFT: u32 = 6;
+        /// 0b0..Data width is 18 bits wide
+        /// 0b1..Data width is 24 bits wide
+        pub const CH1_DATA_WIDTH_MASK: u32 = 0x80;
+        pub const CH1_DATA_WIDTH_SHIFT: u32 = 7;
+        /// 0b0..Use SPWG standard
+        /// 0b1..Use JEIDA standard
+        pub const CH1_BIT_MAPPING_MASK: u32 = 0x100;
+        pub const CH1_BIT_MAPPING_SHIFT: u32 = 8;
+        /// 0b0..VSYNC is active high
+        /// 0b1..VSYNC is active low
+        pub const DI0_VSYNC_POLARITY_MASK: u32 = 0x200;
+        pub const DI0_VSYNC_POLARITY_SHIFT: u32 = 9;
+        /// 0b0..VSYNC is active high
+        /// 0b1..VSYNC is active low
+        pub const DI1_VSYNC_POLARITY_MASK: u32 = 0x400;
+        pub const DI1_VSYNC_POLARITY_SHIFT: u32 = 10;
+        /// 0b0..No action
+        /// 0b1..Software reset
+        pub const CH0_ASYNC_FIFO_RESET_MASK: u32 = 0x800;
+        pub const CH0_ASYNC_FIFO_RESET_SHIFT: u32 = 11;
+        /// 0b0..No action
+        /// 0b1..Software reset
+        pub const CH1_ASYNC_FIFO_RESET_MASK: u32 = 0x1000;
+        pub const CH1_ASYNC_FIFO_RESET_SHIFT: u32 = 12;
+        /// 0b0..HSYNC is active high
+        /// 0b1..HSYNC is active low
+        pub const DI0_HSYNC_POLARITY_MASK: u32 = 0x2000;
+        pub const DI0_HSYNC_POLARITY_SHIFT: u32 = 13;
+        /// 0b0..HSYNC is active high
+        /// 0b1..HSYNC is active low
+        pub const DI1_HSYNC_POLARITY_MASK: u32 = 0x4000;
+        pub const DI1_HSYNC_POLARITY_SHIFT: u32 = 14;
+        /// 0b0..External resistor of 29kOhm is selected
+        /// 0b1..Internal resistor is selected
+        pub const BGREF_RRMODE_MASK: u32 = 0x8000;
+        pub const BGREF_RRMODE_SHIFT: u32 = 15;
+        /// 0b0..disable
+        /// 0b1..enable
+        pub const VSYNC_ADJ_EN_MASK: u32 = 0x80000;
+        pub const VSYNC_ADJ_EN_SHIFT: u32 = 19;
+        /// 0b0..Disable
+        /// 0b1..Enable async FIFO to buffer RGB data
+        pub const ASYNC_FIFO_ENABLE_MASK: u32 = 0x1000000;
+        pub const ASYNC_FIFO_ENABLE_SHIFT: u32 = 24;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const ASYNC_FIFO_THRESHOLD_MASK: u32 = 0xe000000;
+        pub const ASYNC_FIFO_THRESHOLD_SHIFT: u32 = 25;
+    }
+
+    pub const LVDS0_CONTROL: u32 = 0x8;
+    /// Fields of `LVDS0_CONTROL`.
+    pub mod lvds0_control {
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CH0_EN_MASK: u32 = 0x1;
+        pub const CH0_EN_SHIFT: u32 = 0;
+        /// 0b0..Enable. LVDS function is normal.
+        /// 0b1..Disable
+        pub const LVDS_EN_MASK: u32 = 0x2;
+        pub const LVDS_EN_SHIFT: u32 = 1;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const BG_EN_MASK: u32 = 0x4;
+        pub const BG_EN_SHIFT: u32 = 2;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const HS_EN_MASK: u32 = 0x8;
+        pub const HS_EN_SHIFT: u32 = 3;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const PRE_EMPH_EN_MASK: u32 = 0x10;
+        pub const PRE_EMPH_EN_SHIFT: u32 = 4;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const PRE_EMPH_ADJ_MASK: u32 = 0xe0;
+        pub const PRE_EMPH_ADJ_SHIFT: u32 = 5;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CM_ADJ_MASK: u32 = 0x700;
+        pub const CM_ADJ_SHIFT: u32 = 8;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CC_ADJ_MASK: u32 = 0x3800;
+        pub const CC_ADJ_SHIFT: u32 = 11;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const SLEW_ADJ_MASK: u32 = 0x1c000;
+        pub const SLEW_ADJ_SHIFT: u32 = 14;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const VBG_ADJ_MASK: u32 = 0xe0000;
+        pub const VBG_ADJ_SHIFT: u32 = 17;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_DIV4_MASK: u32 = 0x100000;
+        pub const TEST_DIV4_SHIFT: u32 = 20;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_EN_MASK: u32 = 0x200000;
+        pub const TEST_EN_SHIFT: u32 = 21;
+        /// 0b00..LVDS0_D0_P/N
+        /// 0b01..LVDS0_D1_P/N
+        /// 0b10..LVDS0_D2_P/N
+        /// 0b11..LVDS0_D3_P/N
+        pub const TEST_MUX_SRC_MASK: u32 = 0xc00000;
+        pub const TEST_MUX_SRC_SHIFT: u32 = 22;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_RANDOM_NUM_EN_MASK: u32 = 0x1000000;
+        pub const TEST_RANDOM_NUM_EN_SHIFT: u32 = 24;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const SPARE_IN_MASK: u32 = 0xe000000;
+        pub const SPARE_IN_SHIFT: u32 = 25;
+    }
+
+    pub const LVDS1_CONTROL: u32 = 0xc;
+    /// Fields of `LVDS1_CONTROL`.
+    pub mod lvds1_control {
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CH0_EN_MASK: u32 = 0x1;
+        pub const CH0_EN_SHIFT: u32 = 0;
+        /// 0b0..Enable. LVDS function is normal.
+        /// 0b1..Disable
+        pub const LVDS_EN_MASK: u32 = 0x2;
+        pub const LVDS_EN_SHIFT: u32 = 1;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const BG_EN_MASK: u32 = 0x4;
+        pub const BG_EN_SHIFT: u32 = 2;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const HS_EN_MASK: u32 = 0x8;
+        pub const HS_EN_SHIFT: u32 = 3;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const PRE_EMPH_EN_MASK: u32 = 0x10;
+        pub const PRE_EMPH_EN_SHIFT: u32 = 4;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const PRE_EMPH_ADJ_MASK: u32 = 0xe0;
+        pub const PRE_EMPH_ADJ_SHIFT: u32 = 5;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CM_ADJ_MASK: u32 = 0x700;
+        pub const CM_ADJ_SHIFT: u32 = 8;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const CC_ADJ_MASK: u32 = 0x3800;
+        pub const CC_ADJ_SHIFT: u32 = 11;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const SLEW_ADJ_MASK: u32 = 0x1c000;
+        pub const SLEW_ADJ_SHIFT: u32 = 14;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const VBG_ADJ_MASK: u32 = 0xe0000;
+        pub const VBG_ADJ_SHIFT: u32 = 17;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_DIV4_MASK: u32 = 0x100000;
+        pub const TEST_DIV4_SHIFT: u32 = 20;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_EN_MASK: u32 = 0x200000;
+        pub const TEST_EN_SHIFT: u32 = 21;
+        /// 0b00..LVDS1_D0_P/N
+        /// 0b01..LVDS1_D1_P/N
+        /// 0b10..LVDS1_D2_P/N
+        /// 0b11..LVDS1_D3_P/N
+        pub const TEST_MUX_SRC_MASK: u32 = 0xc00000;
+        pub const TEST_MUX_SRC_SHIFT: u32 = 22;
+        /// 0b0..Disable
+        /// 0b1..Enable
+        pub const TEST_RANDOM_NUM_EN_MASK: u32 = 0x1000000;
+        pub const TEST_RANDOM_NUM_EN_SHIFT: u32 = 24;
+        pub const SPARE_IN_MASK: u32 = 0xe000000;
+        pub const SPARE_IN_SHIFT: u32 = 25;
     }
 }

@@ -95,7 +95,7 @@ pub const BRIDGE: sn65dsi8x::Board = sn65dsi8x::Board {
 /// TPM6 (`imx95.dtsi:835-841`).
 pub const TPM6_BASE: usize = 0x4251_0000;
 /// The backlight at its default level (module text).
-pub const BACKLIGHT: Pwm = Pwm { channel: 2, period_ns: 6_666_667, level: 119, max: 255 };
+pub const BACKLIGHT: Pwm = Pwm { channel: 2, period_ns: 6_666_667, level: 119, max: 255, low_true: false };
 
 /// Where the blocks are and what to ask for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

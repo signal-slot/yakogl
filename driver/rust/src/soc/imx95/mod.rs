@@ -44,3 +44,9 @@ pub(crate) mod dsi_model;
 pub mod dsi_power;
 #[cfg(test)]
 mod dsi_power_tests;
+
+// The LVDS output (X12): the LDB and LVDS PHY 0 (ldb);
+// board::verdin_imx95_lvds drives it with display and display_power.
+pub mod ldb;
+#[cfg(test)]
+mod lvds_tests;

@@ -9,16 +9,26 @@ line; `examples/triangle` does everything at once and answers none of them
 alone. Run them in this order: each assumes the facts the ones before it
 established. The plans they serve are `docs/notes/pre-study-imx95.md`
 (section 6, B1 to B3; section 7, U1 to U6) and `driver/docs/imx95-display.md`
-(section 6, M1 to M4 and Z0 to Z2; section 7, U1 to U21).
+(section 6, M1 to M4 and Z0 to Z2; section 7, U1 to U27).
+
+The board is the owner's Verdin iMX95 on a Mallow with the Toradex 10.1"
+LVDS display on X12 (since 2026-11-24). On 2026-11-25 the owner's session
+read the board's Linux (`linux_day_one`'s M1-M4 by hand: the display note's
+section 6) and ran `imx95_wdog`, `imx95_scmi`, `imx95_ident` and `imx95_fw`
+(and `gl_test`) through the U-Boot route of `docs/standalone-boot.md`: each
+gave its verdict and the board came back to Linux (the values:
+`docs/notes/pre-study-imx95.md` section 6). `imx95_lvds_ids` and
+`imx95_dsi_ids` have not run.
 
 | Probe | Question | Verdict line | Settles |
 |---|---|---|---|
-| `linux_day_one/` (not an image) | what the module's own Linux shows: board, kernel, memory, the display it drives, the bridge's registers, the SM's clocks and domains, the golden registers | the record's `# end`; no verdict | B1 (Linux half), M1 to M4; pre-study U1 (the SM's version, if Linux shows it); display note U3, U8, U10, U13, U16, U18, U20 |
+| `linux_day_one/` (not an image) | what the module's own Linux shows: board, kernel, memory, the display it drives (LVDS or DSI), the backlight, the SM's clocks and domains, the golden registers | the record's `# end`; no verdict | B1 (Linux half), M1 to M4; pre-study U1; display note U3, U8, U23 (the X12 path's dump); U13, U16, U18, U20 on a DSI display |
 | `imx95_wdog` | does WDOG3 reset the board, and what did U-Boot leave in it? | `imx95_wdog: not fed: reset expected within 60000 ms ...`, then U-Boot's banner; `imx95_wdog: FAIL no reset ...` if it did not | the watchdog (pre-study section 1.6): the reset every later probe relies on |
 | `imx95_scmi` | what the System Manager tells AP-NS, read only | `imx95_scmi: PASS N facts, ...` / `FAIL`; `imx95_scmi/check.sh` against `expected.txt` | B2 (SCMI half), Z0; pre-study U1 (the agent); display note U2 |
 | `imx95_ident` | what the GPU is, after the port's own power-on over SCMI | `imx95_ident: PASS GPU_ID 0x..., SHADER_PRESENT 0x..., N of 9 mock.rs words differ` / `FAIL` | B2 (GPU half); pre-study U5, U6; `gpu/mali/mock.rs` `G310_ASSUMED` |
 | `imx95_fw` | does the CSF firmware boot from our side, and what does it answer | `imx95_fw: PASS GLB 1.5.0, N groups, CS features 0x..., suspend A/B` / `FAIL step N (...)` | B3 |
-| `imx95_dsi_ids` | is the X4 path there: DSI host, PHY CSR, expander, bridge | `imx95_dsi_ids: PASS dsi version 0x..., expander answers, bridge SN65DSI83 after N ms` / `FAIL` | display note U13, U16, U18, U19 (the expander's answer), U21 |
+| `imx95_lvds_ids` | is the X12 path there, and what do its parts hold before the cold run: the LDB PLL's and TPM5's SCMI state and permissions, the LVDS CSR, the display CSR and the DPU words the options concern, at reset | `imx95_lvds_ids: PASS lvds csr 0x... 0x... 0x... 0x..., dpu id 0x21260400 (the dump's), LDB PLL and TPM5 permitted` / `FAIL` | display note U22 (the reset burst word), U23 (POLARITYCTRL0's reset value), U26, U27 |
+| `imx95_dsi_ids` | is the X4 path there: DSI host, PHY CSR, expander, bridge (a DSI display only; this board has none) | `imx95_dsi_ids: PASS dsi version 0x..., expander answers, bridge SN65DSI83 after N ms` / `FAIL` | display note U13, U16, U18, U19 (the expander's answer), U21 |
 
 ## Rules every Verdin iMX95 probe follows
 
