@@ -99,6 +99,12 @@ pub enum State {
     ShadowNewer(u32),
     /// The linear storage is the newer copy.
     StorageNewer,
+    /// A 32-bit shadow is the newer copy and no stream holds its RS write-back
+    /// (W10's lazy entry, last rendered by the kick named): only the RS tiled
+    /// to linear copy of [`super::storage::gc_storage_current`] makes the
+    /// storage current. [`retire`] leaves it alone, and no slot is taken from
+    /// it. No path marks one yet ([`mark_rs_newer`]).
+    RsNewer(u32),
 }
 
 struct Entry {
@@ -563,6 +569,27 @@ pub fn mark_storage_newer(gpu: u64) -> bool {
 /// being recorded: [`retire`] leaves it alone. False when it has no shadow.
 pub fn mark_in_step(gpu: u64) -> bool {
     entry_at(gpu).map(|e| e.state = State::InStep).is_some()
+}
+
+/// The 32-bit shadow at `gpu` is the newer copy, last rendered by `kick`,
+/// and the stream left out its RS write-back (W10's lazy entry, [`State::RsNewer`]).
+/// False, and nothing marked, when it has no shadow, or one that is not
+/// 4 bytes a pixel or not RS-sized (width a multiple of 16, height of 4).
+pub fn mark_rs_newer(gpu: u64, kick: u32) -> bool {
+    entry_at(gpu)
+        .filter(|e| e.bpp == BPP32 && e.key.w % 16 == 0 && e.key.h % 4 == 0)
+        .map(|e| e.state = State::RsNewer(kick))
+        .is_some()
+}
+
+/// The shadow [`super::storage`] resolves for the storage at `gpu`: its
+/// target as a [`super::tiled_rt::Spec`] and its GPU address, when it is in
+/// [`State::RsNewer`].
+pub fn rs_newer(gpu: u64) -> Option<(super::tiled_rt::Spec, u64)> {
+    let e = entry_at(gpu)?;
+    let State::RsNewer(_) = e.state else { return None };
+    let Key { gpu, w, h, pitch, .. } = e.key;
+    Some((super::tiled_rt::Spec { gpu, w, h, pitch }, e.gpu))
 }
 
 /// Does the target at `gpu` have a shadow that is in-step?
@@ -1310,5 +1337,46 @@ mod tests {
         gl.target_pitch = 4;
         gl.target_format = GLES_SURF_RGBA8888;
         assert!(!wanted(&gl, true, true));
+    }
+
+    #[test]
+    fn a_4_byte_entry_marked_rs_newer_is_resolved_by_one_untile_and_kept_by_retire() {
+        /* W10 groundwork: nothing marks an entry RsNewer outside this test */
+        let _rig = Rig::new();
+        let mut buf = std::vec![0x22u8; 16 * 4 * 4];
+        let t = target(&mut buf, 0x4500_0000, (16, 4), 64, 4);
+        assert!(!mark_rs_newer(t.gpu, 3), "no shadow yet");
+        assert_eq!(rs_newer(t.gpu), None);
+        assert_eq!(prepare_targets(&[t], || panic!("no finish")), 0);
+        let b = bind_targets(&[t], 3).expect("bound")[0];
+        assert_eq!(rs_newer(t.gpu), None, "ShadowNewer is not a lazy entry");
+        assert!(mark_rs_newer(t.gpu, 3));
+        assert_eq!(state_of(t.gpu), Some(State::RsNewer(3)));
+        let (spec, shadow) = rs_newer(t.gpu).expect("lazy");
+        assert_eq!(spec, super::super::tiled_rt::Spec { gpu: t.gpu, w: 16, h: 4, pitch: 64 });
+        assert_eq!(shadow, b.gpu);
+        /* its kick completing hands nothing back: the RS copy is still due */
+        let untiled = counts().1;
+        retire(|_| false);
+        assert_eq!(state_of(t.gpu), Some(State::RsNewer(3)));
+        assert_eq!(counts().1, untiled);
+        assert!(buf.iter().all(|&x| x == 0x22));
+        assert!(mark_storage_newer(t.gpu));
+        assert_eq!(rs_newer(t.gpu), None);
+    }
+
+    #[test]
+    fn only_rs_sized_4_byte_entries_are_marked_rs_newer() {
+        let _rig = Rig::new();
+        let mut wide = std::vec![0u8; 16 * 4 * 8];
+        let t8 = target(&mut wide, 0x4600_0000, (16, 4), 128, 8);
+        let mut odd = std::vec![0u8; 8 * 4 * 4];
+        let t4 = target(&mut odd, 0x4700_0000, (8, 4), 32, 4);
+        assert_eq!(prepare_targets(&[t8], || panic!("no finish")), 0);
+        assert_eq!(prepare_targets(&[t4], || panic!("no finish")), 0);
+        assert!(!mark_rs_newer(t8.gpu, 1), "a 64-bit shadow retires by untiling on the CPU");
+        assert!(!mark_rs_newer(t4.gpu, 1), "8 wide is not an RS width");
+        assert_eq!(state_of(t8.gpu), Some(State::StorageNewer));
+        assert_eq!(state_of(t4.gpu), Some(State::StorageNewer));
     }
 }
