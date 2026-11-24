@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 aborts2 fixture, the tryboot cycles of A1 and B2 (README.md)
+== cycles
+A1 sha256=0000000000000000000000000000000000000000000000000000000000000000 t_reboot=1795000000 back_after=300s cleanup=staged image removed, tryboot.txt put back (read back)
+   3 cases in 300 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 1234abcd DONE: 3 cases, P 2 F 1 R 0 N 0 other 0
+B2 sha256=1111111111111111111111111111111111111111111111111111111111111111 t_reboot=1795000400 back_after=299s cleanup=staged image removed, tryboot.txt put back (read back)
+   1 cases in 100 ms, record at 0 s after boot, reset at ~250 s
+   v3d_deqp: build 1234abcd DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
