@@ -1112,42 +1112,6 @@ int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, 
 			 uint64_t (*now_us)(void), void (*delay_us)(uint32_t us),
 			 struct yd_t6_display_status *out);
 
-/* Step D3, the screen a window surface is shown on: what yd_t6_screen_show and
- * yd_t6_screen_busy keep between calls. All zero before the first show, then
- * only theirs; one thread calls both. */
-#define YD_T6_SCREEN_NEW     0 /* no show yet */
-#define YD_T6_SCREEN_SHOWN   1 /* the first show's adopt ran to its end */
-#define YD_T6_SCREEN_STOPPED 2 /* the first show's adopt stopped: final */
-
-struct yd_t6_screen {
-	uint64_t last;    /* the buffer of the last show that reached the VOP */
-	uint64_t held[2]; /* shown before it, maybe still scanned: the first n_held */
-	uint32_t state;   /* YD_T6_SCREEN_* */
-	uint32_t n_held;  /* 3: more than held[] keeps; every buffer counts as busy */
-	uint32_t width;   /* the first show's size and stride in bytes */
-	uint32_t height;
-	uint32_t stride;
-	uint32_t flips;   /* shows that changed the address since the first (wraps) */
-};
-
-/* Show the width x height XRGB8888 buffer at physical phys (rows stride_bytes
- * apart, top row first) at the screen's origin. The first call is the adopt
- * with this buffer (record in *adopt); a later call with another address is a
- * flip, which never waits and leaves *adopt alone. 0; -ENOTSUP for a window the
- * VOP cannot scan or one that is not the first show's size and stride (nothing
- * read or written); -ENODEV when the adopt stopped, now or at the first show (a
- * stopped screen is not tried again); -EINVAL for a null argument. */
-int yd_t6_screen_show(const struct yd_t6_display_bases *b, struct yd_t6_screen *s, uint64_t phys,
-		      uint32_t width, uint32_t height, uint32_t stride_bytes,
-		      void (*delay_us)(uint32_t us), struct yd_t6_display_adopt *adopt);
-
-/* Which of the n buffers at phys[] the screen may still scan: bit k for
- * phys[k], of the first 32. Too large is possible (a buffer is freed up to one
- * frame late), too small never. Never waits, writes no register. Every bit for
- * a null argument with n not 0. */
-uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_screen *s,
-			   const uint64_t *phys, size_t n);
-
 /* D8, the display brought up from cold after a normal kexec
  * (board::nanopc_t6_display_cold over soc::rk3588_display_chain with the
  * T6's configuration; feature rk3588): power, clocks and resets, the GRF
@@ -1231,6 +1195,58 @@ struct yd_t6_display_cold {
 int yd_t6_display_cold(const struct yd_t6_display_cold_bases *b, const struct yd_env *env,
 		       uint32_t flags, uint32_t stop_after, uint64_t fb_pa,
 		       struct yd_t6_display_cold *out);
+
+/* Step D3, the screen a window surface is shown on: what yd_t6_screen_show and
+ * yd_t6_screen_busy keep between calls. All zero before the first show, then
+ * only theirs; one thread calls both. */
+#define YD_T6_SCREEN_NEW     0 /* no show yet */
+#define YD_T6_SCREEN_SHOWN   1 /* the first show ran to its end: adopted, or started from cold */
+#define YD_T6_SCREEN_STOPPED 2 /* the first show stopped: final */
+
+struct yd_t6_screen {
+	uint64_t last;    /* the buffer of the last show that reached the VOP */
+	uint64_t held[2]; /* shown before it, maybe still scanned: the first n_held */
+	uint32_t state;   /* YD_T6_SCREEN_* */
+	uint32_t n_held;  /* 3: more than held[] keeps; every buffer counts as busy */
+	uint32_t width;   /* the first show's size and stride in bytes */
+	uint32_t height;
+	uint32_t stride;
+	uint32_t flips;   /* shows that changed the address since the first (wraps) */
+};
+
+/* Which way a screen's first show went. */
+#define YD_T6_SCREEN_ROUTE_NONE  0 /* not a first show: a flip, a show after a stop, a window refused */
+#define YD_T6_SCREEN_ROUTE_ADOPT 1 /* the adopt ran, to its end or to a stop that is final */
+#define YD_T6_SCREEN_ROUTE_COLD  2 /* the adopt found no picture and the chain ran from cold */
+
+struct yd_t6_screen_start {
+	uint32_t route;                 /* YD_T6_SCREEN_ROUTE_* */
+	struct yd_t6_display_cold cold; /* _ROUTE_COLD: what stopped the chain; else all 0 */
+};
+
+/* Show the width x height XRGB8888 buffer at physical phys (rows stride_bytes
+ * apart, top row first) at the screen's origin. The first call reads what was
+ * left (record in *adopt): a picture that runs is adopted with this buffer; no
+ * picture (YD_T6_DISPLAY_STOP_VOP_DOMAIN, _VOP_CLOCK or _STANDBY, which write
+ * nothing) starts the chain from cold on this buffer, in the mode `mode` names
+ * (0: 1024x768 at 60 Hz, YD_T6_DISPLAY_COLD_MODE_1920X1080), every line of it
+ * in env's log; any other stop is final. *start says which of the two ran. A
+ * later call with another address is a flip, which never waits and leaves
+ * *adopt alone. 0; -ENOTSUP for a window the VOP cannot scan or one that is not
+ * the first show's size and stride (nothing read or written); -ENODEV when the
+ * first show stopped, now or earlier (a stopped screen is not tried again);
+ * -EINVAL for a null argument or another mode (nothing read). */
+int yd_t6_screen_show(const struct yd_t6_display_cold_bases *b, const struct yd_env *env,
+		      uint32_t mode, struct yd_t6_screen *s, uint64_t phys, uint32_t width,
+		      uint32_t height, uint32_t stride_bytes, struct yd_t6_display_adopt *adopt,
+		      struct yd_t6_screen_start *start);
+
+/* Which of the n buffers at phys[] the screen may still scan: bit k for
+ * phys[k], of the first 32. Too large is possible (a buffer is freed up to one
+ * frame late), too small never. Never waits, writes no register. Every bit for
+ * a null argument with n not 0. b is the display of the bases the show takes. */
+uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_screen *s,
+			   const uint64_t *phys, size_t n);
 
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
@@ -2399,6 +2415,9 @@ _Static_assert(offsetof(struct yd_t6_display_cold, error) == 4, "yd_t6_display_c
 _Static_assert(offsetof(struct yd_t6_display_cold, refusal) == 8, "yd_t6_display_cold.refusal");
 _Static_assert(offsetof(struct yd_t6_display_cold, index) == 12, "yd_t6_display_cold.index");
 _Static_assert(offsetof(struct yd_t6_display_cold, detail) == 16, "yd_t6_display_cold.detail");
+_Static_assert(sizeof(struct yd_t6_screen_start) == 24, "struct yd_t6_screen_start");
+_Static_assert(offsetof(struct yd_t6_screen_start, route) == 0, "yd_t6_screen_start.route");
+_Static_assert(offsetof(struct yd_t6_screen_start, cold) == 4, "yd_t6_screen_start.cold");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");

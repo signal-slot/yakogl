@@ -2521,36 +2521,43 @@ pub unsafe extern "C" fn yd_t6_display_status(
 }
 
 /// Show the buffer at physical `phys` on the screen `s`
-/// ([`crate::board::nanopc_t6_display::show`]): the first call is the adopt
-/// with this buffer as its window (record in `adopt`), a later call with
-/// another address a flip that never waits. 0; `-ENOTSUP` for a window the
-/// VOP cannot scan or one that is not the first show's size and stride
-/// (nothing read or written); `-ENODEV` when the adopt stopped, now or at
-/// the first show (`adopt.stop` names the step of this call's adopt);
-/// `-EINVAL` for a null argument.
+/// ([`crate::board::nanopc_t6_display_cold::show`]). The first call reads
+/// what was left: a picture that runs is adopted with this buffer as its
+/// window; no picture (PD_VOP off, a clock of it gated or VP0 in STANDBY)
+/// starts the chain from cold on this buffer, in the mode `mode` names (0
+/// for 1024x768, `YD_T6_DISPLAY_COLD_MODE_1920X1080`), every line of it in
+/// `env`'s log. `adopt` is that call's adopt record and `start` says which
+/// route it took (`YD_T6_SCREEN_ROUTE_*`). A later call with another
+/// address is a flip that never waits. 0; `-ENOTSUP` for a window the VOP
+/// cannot scan or one that is not the first show's size and stride (nothing
+/// read or written); `-ENODEV` when the first show stopped, now or earlier
+/// (`adopt.stop` or `start.cold` names where, for this call's); `-EINVAL`
+/// for a null argument or another `mode` (nothing read).
 ///
 /// # Safety
-/// As [`yd_t6_display_adopt`]; `s` is valid, all zero before the first
-/// call and then only this module's; `adopt` is valid. One thread calls
-/// this and [`yd_t6_screen_busy`] for one `s`.
+/// As [`yd_t6_display_cold`] for `b` and `env`; `s` is valid, all zero
+/// before the first call and then only this module's; `adopt` and `start`
+/// are valid. One thread calls this and [`yd_t6_screen_busy`] for one `s`.
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn yd_t6_screen_show(
-    b: *const YdT6DisplayBases,
+    b: *const YdT6DisplayColdBases,
+    env: *const crate::env::YdEnv,
+    mode: u32,
     s: *mut YdT6Screen,
     phys: u64,
     width: u32,
     height: u32,
     stride_bytes: u32,
-    delay_us: Option<extern "C" fn(u32)>,
     adopt: *mut YdT6DisplayAdopt,
+    start: *mut YdT6ScreenStart,
 ) -> i32 {
-    let Some(delay_us) = delay_us else { return -EINVAL };
-    if b.is_null() || s.is_null() || adopt.is_null() {
+    if b.is_null() || env.is_null() || s.is_null() || adopt.is_null() || start.is_null() {
         return -EINVAL;
     }
     // SAFETY: the caller's contract.
-    let (hw, b, s, adopt) = unsafe { (Hw::new(), &*b, &mut *s, &mut *adopt) };
-    crate::board::nanopc_t6_display::show(&hw, b, s, phys, width, height, stride_bytes, &mut |us| delay_us(us), adopt)
+    let (hw, b, env, s, adopt, start) = unsafe { (Hw::new(), &*b, &*env, &mut *s, &mut *adopt, &mut *start) };
+    crate::board::nanopc_t6_display_cold::show(&hw, b, env, mode, s, phys, width, height, stride_bytes, adopt, start)
 }
 
 /// Which of the `n` buffers at `phys[]` the screen `s` may still scan
@@ -2560,7 +2567,9 @@ pub unsafe extern "C" fn yd_t6_screen_show(
 /// call cannot name a buffer free.
 ///
 /// # Safety
-/// As [`yd_t6_screen_show`]; `phys` is valid for `n` reads.
+/// As [`yd_t6_display_adopt`] for `b` (the `display` of the bases
+/// [`yd_t6_screen_show`] takes) and as [`yd_t6_screen_show`] for `s`;
+/// `phys` is valid for `n` reads.
 #[no_mangle]
 pub unsafe extern "C" fn yd_t6_screen_busy(
     b: *const YdT6DisplayBases,
@@ -2582,8 +2591,11 @@ pub unsafe extern "C" fn yd_t6_screen_busy(
 /// Step D8, the display brought up from cold
 /// ([`crate::board::nanopc_t6_display_cold`]): `struct
 /// yd_t6_display_cold_bases` and `struct yd_t6_display_cold` are the board
-/// module's own `#[repr(C)]` records.
-pub use crate::board::nanopc_t6_display_cold::{Cold as YdT6DisplayCold, ColdBases as YdT6DisplayColdBases};
+/// module's own `#[repr(C)]` records, and so is `struct yd_t6_screen_start`,
+/// the route of a screen's first show.
+pub use crate::board::nanopc_t6_display_cold::{
+    Cold as YdT6DisplayCold, ColdBases as YdT6DisplayColdBases, Start as YdT6ScreenStart,
+};
 
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(size_of::<YdT6DisplayColdBases>() == 88);
@@ -2594,6 +2606,8 @@ const _: () = assert!(offset_of!(YdT6DisplayColdBases, phy) == 80);
 const _: () = assert!(size_of::<YdT6DisplayCold>() == 4 * 5);
 const _: () = assert!(offset_of!(YdT6DisplayCold, error) == 4);
 const _: () = assert!(offset_of!(YdT6DisplayCold, detail) == 16);
+const _: () = assert!(size_of::<YdT6ScreenStart>() == 4 * 6);
+const _: () = assert!(offset_of!(YdT6ScreenStart, cold) == 4);
 
 /// The display chain from cold ([`crate::board::nanopc_t6_display_cold::cold`])
 /// on the blocks of `b`, showing the buffer at physical `fb_pa` (1024x768
@@ -2772,6 +2786,12 @@ mod display_tests {
         ] {
             assert_eq!(def(&format!("YD_T6_DISPLAY_COLD_ERROR_{name}")), v as u32, "{name}");
         }
+        {
+            use crate::board::nanopc_t6_display_cold::route;
+            for (name, v) in [("NONE", route::NONE), ("ADOPT", route::ADOPT), ("COLD", route::COLD)] {
+                assert_eq!(def(&format!("YD_T6_SCREEN_ROUTE_{name}")), v, "{name}");
+            }
+        }
         let pins = [
             ("sizeof(struct yd_t6_display_cold_bases)", size_of::<YdT6DisplayColdBases>()),
             ("offsetof(struct yd_t6_display_cold_bases, vop_grf)", offset_of!(YdT6DisplayColdBases, vop_grf)),
@@ -2782,6 +2802,9 @@ mod display_tests {
             ("offsetof(struct yd_t6_display_cold, refusal)", offset_of!(YdT6DisplayCold, refusal)),
             ("offsetof(struct yd_t6_display_cold, index)", offset_of!(YdT6DisplayCold, index)),
             ("offsetof(struct yd_t6_display_cold, detail)", offset_of!(YdT6DisplayCold, detail)),
+            ("sizeof(struct yd_t6_screen_start)", size_of::<YdT6ScreenStart>()),
+            ("offsetof(struct yd_t6_screen_start, route)", offset_of!(YdT6ScreenStart, route)),
+            ("offsetof(struct yd_t6_screen_start, cold)", offset_of!(YdT6ScreenStart, cold)),
         ];
         for (what, v) in pins {
             let pin = format!("_Static_assert({what} == {v},");
@@ -2818,28 +2841,28 @@ mod display_tests {
             assert_eq!(yd_t6_display_status(b, 0, 0, Some(no_clock), Some(no_delay), &mut s), -EINVAL);
             assert_eq!(yd_t6_display_pattern(core::ptr::null_mut(), 4, 4, 16), -EINVAL);
         }
-        // the screen: nothing is touched without the bases, the screen and
-        // the adopt's record; no buffer is named free without them
+        // the screen: nothing is touched without the bases, the env, the
+        // screen and both records; no buffer is named free without them
         let mut sc = YdT6Screen::default();
+        let mut st = YdT6ScreenStart { route: 7, ..YdT6ScreenStart::default() };
         let live = core::ptr::NonNull::<YdT6DisplayBases>::dangling().as_ptr().cast_const();
+        let live_b = core::ptr::NonNull::<YdT6DisplayColdBases>::dangling().as_ptr().cast_const();
+        let env = core::ptr::NonNull::<crate::env::YdEnv>::dangling().as_ptr().cast_const();
         let addrs = [0x1000u64, 0x2000];
         // SAFETY: each call is refused before it dereferences anything.
         unsafe {
-            assert_eq!(yd_t6_screen_show(b, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), &mut a), -EINVAL);
-            assert_eq!(
-                yd_t6_screen_show(live, core::ptr::null_mut(), 0x1000, 1024, 768, 4096, Some(no_delay), &mut a),
-                -EINVAL
-            );
-            assert_eq!(yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, None, &mut a), -EINVAL);
-            assert_eq!(
-                yd_t6_screen_show(live, &mut sc, 0x1000, 1024, 768, 4096, Some(no_delay), core::ptr::null_mut()),
-                -EINVAL
-            );
+            let show = |b, env, s, a, st| yd_t6_screen_show(b, env, 0, s, 0x1000, 1024, 768, 4096, a, st);
+            assert_eq!(show(core::ptr::null(), env, &raw mut sc, &raw mut a, &raw mut st), -EINVAL);
+            assert_eq!(show(live_b, core::ptr::null(), &raw mut sc, &raw mut a, &raw mut st), -EINVAL);
+            assert_eq!(show(live_b, env, core::ptr::null_mut(), &raw mut a, &raw mut st), -EINVAL);
+            assert_eq!(show(live_b, env, &raw mut sc, core::ptr::null_mut(), &raw mut st), -EINVAL);
+            assert_eq!(show(live_b, env, &raw mut sc, &raw mut a, core::ptr::null_mut()), -EINVAL);
             assert_eq!(yd_t6_screen_busy(b, &mut sc, addrs.as_ptr(), 2), u32::MAX);
             assert_eq!(yd_t6_screen_busy(live, core::ptr::null_mut(), addrs.as_ptr(), 2), u32::MAX);
             assert_eq!(yd_t6_screen_busy(live, &mut sc, core::ptr::null(), 2), u32::MAX);
             assert_eq!(yd_t6_screen_busy(b, core::ptr::null_mut(), core::ptr::null(), 0), 0);
         }
+        assert_eq!(st.route, 7, "the start record is not written");
         assert_eq!((sc, a), (YdT6Screen::default(), YdT6DisplayAdopt::default()));
         let mut fb = [7u32; 16];
         // SAFETY: fb holds 4 rows of 16 bytes.
