@@ -568,3 +568,35 @@ already was (`guarded16`); what it adds (`nir_fs.rs`):
   `ifoutput2` NIR equal to `ifoutput`'s, are classified by shape only: `tri_if`
   and `cond_sequence` were not drawn, and `frontfacing` is the
   `gl_FrontFacing` of `mali-builtin-inputs.md` plus a select.
+
+## Vertex `if`s nested under a folded condition (plan #367 lower-ideas)
+
+The fragment flattening above came first. The vertex walk (`nir.rs`
+`vs_steps`) flattened one `if` of straight code at a time; an `if` in a
+side was CONTROL_FLOW. glmark2 ideas' vs 51b2 inlines a function with three
+early returns as three nested `if`s, and its constant second argument folds
+two of them away (docs/notes/mali-ideas.md section 2, reference
+`gm2_cf_earlyret_vs`). The walk now:
+
+- takes sides that hold `if`s, at most `VS_IF_DEPTH` (4) deep (`vs_side`,
+  `vs_put_side`). A side of straight code keeps the static count of at most
+  `PEEPHOLE_LIMIT_GL` (8) IR ALU instructions, refused at the `if`'s place
+  as before. An `if` of a constant condition (`vs_const_cond`, b5ed279e) is
+  its taken side inline there and counts in that side;
+- walks a stack of `VsIf` frames. A folded condition is the side it picks
+  (`nir_opt_dead_cf`), and its operations count in the enclosing side. A
+  kept condition is joined by selects (`vs_join`, `nir_opt_peephole_select`)
+  when each side walked at most `PEEPHOLE_LIMIT_GL` operations and no
+  enclosing `if` was kept. Its selects count in the enclosing side;
+- joins two negations as the negation of one select. A dot product of two
+  negated vectors drops both negations, so `normalize` reads the select
+  (gm2_cf_earlyret_vs: `CSEL.u32.eq` of the operands, `FADD.f32 r0,
+  r0^.neg, 0x0.neg` at each store).
+
+Byte-equal: gm2_cf_earlyret_vs's position and varying programs
+(`tests/mali_ideas.rs`); `deqp_ctrlflow_vs_nested` (an `if (false)`
+under a kept `if`, `tests/mali_deqp_ctrlflow.rs`) stays byte-equal through
+`vs_const_cond`. Still refused: two kept
+`if`s nested (Mesa flattens the inner first, then the outer when the count
+allows; no reference), a side over the limit after its folds, and every
+other `deqp_ctrlflow_vs_*` reference, at its own first refusal.
