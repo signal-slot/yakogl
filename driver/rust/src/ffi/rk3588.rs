@@ -180,6 +180,85 @@ pub extern "C" fn yd_t6_feed_verdict(
     crate::board::nanopc_t6::feed_verdict(now_ms, alive_at_ms, released, deadline_ms, alive_ms) as u32
 }
 
+/// The words a [`YdT6Pins`] holds.
+pub const YD_T6_PINS_WORDS: usize = crate::board::nanopc_t6_pins::RECORD_WORDS;
+
+/// `struct yd_t6_pins`: what [`yd_t6_usb_vbus_on`] or [`yd_t6_hdmi0_pins`]
+/// found and left ([`crate::board::nanopc_t6_pins::Record`]).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdT6Pins {
+    /// The words written, each once.
+    pub count: u32,
+    /// Bit i: a field written to word i reads back other than written.
+    pub differ: u32,
+    /// [`yd_t6_usb_vbus_on`]: GPIO4_B0's level in `EXT_PORT` after the
+    /// writes; 0 from [`yd_t6_hdmi0_pins`].
+    pub level: u32,
+    pub phys: [u32; YD_T6_PINS_WORDS],
+    pub found: [u32; YD_T6_PINS_WORDS],
+    pub now: [u32; YD_T6_PINS_WORDS],
+}
+
+const _: () = assert!(size_of::<YdT6Pins>() == 132);
+const _: () = assert!(offset_of!(YdT6Pins, phys) == 12);
+const _: () = assert!(offset_of!(YdT6Pins, found) == 52);
+const _: () = assert!(offset_of!(YdT6Pins, now) == 92);
+
+impl YdT6Pins {
+    fn from_record(r: &crate::board::nanopc_t6_pins::Record, level: u32) -> YdT6Pins {
+        YdT6Pins { count: r.count as u32, differ: r.differ, level, phys: r.phys, found: r.found, now: r.now }
+    }
+}
+
+/// Switch the USB Type-A ports' 5 V on (`vbus5v0_usb`, GPIO4_B0;
+/// [`crate::board::nanopc_t6_pins::usb_vbus_on`]) through the IOC mapped at
+/// `ioc` and GPIO bank 4 at `gpio4`. 0; `-EIO` when a field reads back other
+/// than written or the pin's level is not high; `-EINVAL` for a null `out`.
+///
+/// # Safety
+/// `ioc` maps 0xfd5f0000 for 0x10000 bytes and `gpio4` 0xfec50000 for 0x100,
+/// both as device memory; `out` is null or valid for writes.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_usb_vbus_on(ioc: usize, gpio4: usize, out: *mut YdT6Pins) -> i32 {
+    if out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let hw = unsafe { Hw::new() };
+    let (r, level) = crate::board::nanopc_t6_pins::usb_vbus_on(&hw, ioc, gpio4);
+    // SAFETY: the caller's contract.
+    unsafe { out.write(YdT6Pins::from_record(&r, level)) };
+    if r.differ != 0 || level != 1 {
+        return -EIO;
+    }
+    0
+}
+
+/// Give the HDMI0 pins (hot-plug, CEC, SCL, SDA) their functions and
+/// settings ([`crate::board::nanopc_t6_pins::hdmi0_pins`]) through the IOC
+/// mapped at `ioc`. 0; `-EIO` when a field reads back other than written;
+/// `-EINVAL` for a null `out`.
+///
+/// # Safety
+/// `ioc` maps 0xfd5f0000 for 0x10000 bytes as device memory; `out` is null
+/// or valid for writes.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_hdmi0_pins(ioc: usize, out: *mut YdT6Pins) -> i32 {
+    if out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let hw = unsafe { Hw::new() };
+    let r = crate::board::nanopc_t6_pins::hdmi0_pins(&hw, ioc);
+    // SAFETY: the caller's contract.
+    unsafe { out.write(YdT6Pins::from_record(&r, 0)) };
+    if r.differ != 0 {
+        return -EIO;
+    }
+    0
+}
+
 /// `flags` of [`YdGicCpuifReset`].
 pub const YD_GIC_CPUIF_RESET: u32 = 1 << 0;
 pub const YD_GIC_EOIMODE_CLEARED: u32 = 1 << 1;
@@ -2988,6 +3067,23 @@ mod tests {
     }
     fn board(con15: u32) -> Board {
         Board { wdt: Wdt::t6(), con15: RefCell::new(con15), cru_writes: RefCell::new(vec![]) }
+    }
+
+    #[test]
+    fn the_pins_entries_refuse_a_null_record_and_the_header_has_the_layout() {
+        // SAFETY: a null `out` is refused before any access.
+        unsafe {
+            assert_eq!(yd_t6_usb_vbus_on(0, 0, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(yd_t6_hdmi0_pins(0, core::ptr::null_mut()), -EINVAL);
+        }
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        for line in [
+            format!("#define YD_T6_PINS_WORDS {YD_T6_PINS_WORDS} "),
+            format!("_Static_assert(sizeof(struct yd_t6_pins) == {}, ", size_of::<YdT6Pins>()),
+            format!("_Static_assert(offsetof(struct yd_t6_pins, now) == {}, ", offset_of!(YdT6Pins, now)),
+        ] {
+            assert!(H.lines().any(|l| l.starts_with(&line)), "yakogl_drivers.h has no line starting {line:?}");
+        }
     }
 
     #[test]

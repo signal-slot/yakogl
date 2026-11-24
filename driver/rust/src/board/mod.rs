@@ -16,7 +16,9 @@
 //! the Zephyr Mali OSAL's logic over the same group ([`nanopc_t6_osal`]),
 //! and the display a crash kexec left running, adopted and then shown on
 //! ([`nanopc_t6_display`]), or brought up from cold after a normal kexec
-//! ([`nanopc_t6_display_cold`]).
+//! ([`nanopc_t6_display_cold`]); the pins and the supply its start sets
+//! up itself on every route, HDMI0's pin functions and the USB Type-A ports'
+//! 5 V ([`nanopc_t6_pins`]).
 //! The record screen, the console's last lines drawn over the picture when a
 //! run ends, is any board's ([`record_screen`]); the glmark2 sample's
 //! one line per scene at a run's end is worded by [`glmark2_list`].
@@ -45,6 +47,8 @@ mod nanopc_t6_gpu_stops;
 pub mod nanopc_t6_mmu;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_osal;
+#[cfg(any(feature = "rk3588", test))]
+pub mod nanopc_t6_pins;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_sections;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]

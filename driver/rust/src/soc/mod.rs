@@ -21,6 +21,9 @@ pub mod rk3588_display_chain;
 #[cfg(test)]
 mod rk3588_display_golden;
 
+#[cfg(any(feature = "rk3588", test))]
+pub mod rk3588_pinctrl;
+
 #[cfg(test)]
 mod rk3588_clock_exhaustive;
 
