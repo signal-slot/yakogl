@@ -51,7 +51,7 @@ int main(void)
 	t6_picture_map(&b, 0x1000, 0x1000);
 	t6_watchdog_feed();
 
-	rc = yd_t6_display_adopt(&b, fb_pa, t6_picture_delay_us, &a);
+	rc = yd_t6_display_adopt(&b, fb_pa, t6_delay_us, &a);
 	t6_watchdog_feed();
 	if (rc == -EINVAL) {
 		printk("t6_display: FAIL: yd_t6_display_adopt refused its arguments\n");
@@ -64,7 +64,7 @@ int main(void)
 	}
 
 	t6_picture_hold("t6_display");
-	rc = t6_picture_status("t6_display", &b, &s);
+	rc = t6_display_read_back("t6_display", &b, &s);
 	t6_picture_verdict("t6_display", rc, &s, a.fb);
 	t6_reset_to_linux("t6_display done");
 }
