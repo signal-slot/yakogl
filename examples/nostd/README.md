@@ -40,21 +40,30 @@ What the patches do:
 ## Recreating the workspaces
 
 ```sh
+# 0. the variables the steps use: $WORK is any empty directory, $REPO this
+#    repository's checkout
+export WORK=$HOME/work REPO=$HOME/yakogl
+N=$REPO/examples/nostd
+
 # 1. Slint: upstream at the commit above, then the patch
 git clone https://github.com/slint-ui/slint.git $WORK/slint-nostd/slint
 (cd $WORK/slint-nostd/slint && git checkout 1007c032ca1573e60dce2113e802e0ccb91c2641 &&
- patch -p1 < <repo>/examples/nostd/slint-nostd.patch)
+ patch -p1 < $N/slint-nostd.patch)
 
-# 2. femtovg / glow: the crates.io sources are in the cargo registry
+# 2. femtovg / glow: the crates.io sources are in the cargo registry once a
+#    build has fetched them; if `ls ~/.cargo/registry/src/*/femtovg-0.26.0`
+#    finds nothing, unpack https://static.crates.io/crates/femtovg/femtovg-0.26.0.crate
+#    (and .../glow/glow-0.18.0.crate) and copy those directories instead
 mkdir -p $WORK/nostd && cd $WORK/nostd
-cp -r ~/.cargo/registry/src/*/femtovg-0.26.0 femtovg && (cd femtovg && patch -p1 < .../femtovg-0.26.0-nostd.patch)
-cp -r ~/.cargo/registry/src/*/glow-0.18.0 glow && (cd glow && patch -p1 < .../glow-0.18.0-nostd.patch)
-cp .../nostd-workspace.Cargo.toml Cargo.toml       # the directory's workspace root
+cp -r ~/.cargo/registry/src/*/femtovg-0.26.0 femtovg && (cd femtovg && patch -p1 < $N/femtovg-0.26.0-nostd.patch)
+cp -r ~/.cargo/registry/src/*/glow-0.18.0 glow && (cd glow && patch -p1 < $N/glow-0.18.0-nostd.patch)
+cp $N/nostd-workspace.Cargo.toml Cargo.toml        # the directory's workspace root
 
-# 3. build the samples
-west build -b verdin_am62p/am62p54/a53 -d build/slint examples/slint -- \
+# 3. build the samples, from the west workspace that has this repository
+#    (as `yakogl`) as its manifest (`docs/es3/zephyr-env.md`)
+west build -b verdin_am62p/am62p54/a53 -d build/slint yakogl/examples/slint -- \
     -DSLINT_NOSTD_DIR=$WORK/slint-nostd/slint -DNOSTD_PATCH_DIR=$WORK/nostd   # or -b rpi_4b, verdin_imx8mp/mimx8ml8/a53
-west build -b verdin_am62p/am62p54/a53 -d build/femtovg examples/femtovg -- \
+west build -b verdin_am62p/am62p54/a53 -d build/femtovg yakogl/examples/femtovg -- \
     -DNOSTD_PATCH_DIR=$WORK/nostd                                             # or -b rpi_4b, verdin_imx8mp/mimx8ml8/a53
 ```
 
