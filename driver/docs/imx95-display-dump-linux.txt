@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The Verdin iMX95's display registers under its own Linux, read by the
+# owner's session on 2026-11-25 with devmem2 (one 32-bit read each, nothing
+# written) while the Toradex Capacitive Touch Display 10.1" LVDS on the
+# Mallow's X12 showed Toradex's Qt demo.
+#
+# Module "Toradex Verdin iMX95 WB", 8 GB; Toradex Reference Multimedia Image
+# "TDX Wayland with XWayland 7.8.0+build.17 (scarthgap)", kernel
+# 6.6.157-7.8.0; overlays verdin-imx95_panel-cap-touch-10inch-lvds_overlay.dtbo
+# and verdin-imx95_spidev_overlay.dtbo.
+# Connector card0-LVDS-1 connected and enabled, 1280x800.
+# Clocks (clk_summary): ldbpll_vco 2986200000, ldbpll 497700000,
+# ldb_phy_div 497700000, lvds_ch0_gate on, lvds_ch1_gate off,
+# ldb_pll_div7 71100000, lvds_di0_gate on, lvds_di1_gate off, disp1pix
+# 24000000 (no user), dispapb 133333333, dispocram 400000000, dispaxi
+# 800000000. Power domains display and camera on.
+# Backlight: platform/42500000.pwm channel 0 "backlight-lvds-native", period
+# 6666667 ns, duty 3111111 ns, polarity inverse, brightness 4 of 7.
+#
+# Format: ADDRESS WIDTH VALUE (hex, 32, hex), in the order the words were
+# read. A word whose single read killed the reading process (SIGBUS; the
+# board went on running) is a "# ADDRESS FAULT" line: each is a write-only
+# register or a reserved word of hal_nxp's PERI_DISPLAY_SEERIS.h, and the
+# read list (imx95-display-allow.txt) leaves it out.
+# The decode is driver/docs/imx95-display.md, section 6 ("What the board
+# showed").
+#
+# LVDS CSR (LDB)
+0x4b0c0000 32 0x00000014
+0x4b0c0004 32 0x00082221
+0x4b0c0008 32 0x00001075
+0x4b0c000c 32 0x00000000
+# display CSR
+0x4b010000 32 0x00000002
+0x4b010004 32 0x00000000
+0x4b010008 32 0x00000003
+0x4b01000c 32 0x00000000
+0x4b010010 32 0x00000000
+0x4b010014 32 0x1a150a00
+0x4b010018 32 0x00330303
+0x4b01001c 32 0x00000033
+0x4b010020 32 0x00000000
+# pixel interleaver, channel 0
+0x4b0d0000 32 0x00000600
+0x4b0d0020 32 0x00000000
+0x4b0d0050 32 0x00000000
+# DPU
+0x4b400000 32 0x21260400
+# FetchLayer0
+0x4b5d0008 32 0x00000001
+0x4b5d000c 32 0x000000ff
+0x4b5d0010 32 0x1fe7f010
+# 0x4b5d0014 FAULT
+0x4b5d0018 32 0xa2700000
+0x4b5d001c 32 0x00000000
+0x4b5d0020 32 0x00000000
+0x4b5d0024 32 0x00000000
+0x4b5d0028 32 0x002013ff
+0x4b5d002c 32 0x031f04ff
+0x4b5d0030 32 0x08080800
+0x4b5d0034 32 0x10080000
+0x4b5d0038 32 0x00000000
+0x4b5d003c 32 0x00000000
+0x4b5d0040 32 0x00000000
+0x4b5d0044 32 0x000000ff
+0x4b5d0048 32 0x80000200
+# 0x4b5d004c FAULT
+# FetchYUV0
+0x4b600008 32 0x00000001
+0x4b60000c 32 0x1fe7f010
+0x4b600010 32 0x00000000
+0x4b600014 32 0x00000000
+0x4b600018 32 0x00000000
+0x4b60001c 32 0x00000000
+0x4b600020 32 0x00000000
+# 0x4b600024 FAULT
+0x4b600028 32 0x00000000
+0x4b60002c 32 0x00000000
+0x4b600030 32 0x00000000
+0x4b600034 32 0x00000000
+0x4b600038 32 0x002004ff
+0x4b60003c 32 0x3fff3fff
+0x4b600040 32 0x08080808
+0x4b600044 32 0x18100800
+0x4b600048 32 0x00000000
+0x4b60004c 32 0x00000000
+# ExtDst0
+0x4b510008 32 0x00000101
+0x4b51000c 32 0x00000000
+# 0x4b510010 FAULT
+0x4b510014 32 0x00000000
+# FrameGen0
+0x4b6b0008 32 0x00000001
+0x4b6b000c 32 0x059f0500
+0x4b6b0010 32 0x80630027
+0x4b6b0014 32 0x03360320
+0x4b6b0018 32 0x800f0008
+0x4b6b001c 32 0x00000000
+0x4b6b0020 32 0x00000000
+0x4b6b0024 32 0x00000000
+0x4b6b0028 32 0x00000000
+0x4b6b002c 32 0x83200501
+0x4b6b0030 32 0x00f00140
+0x4b6b0034 32 0x00000112
+0x4b6b0038 32 0x00000000
+0x4b6b003c 32 0x01b70188
+0x4b6b0040 32 0x011500fb
+0x4b6b0044 32 0x000000c8
+0x4b6b0048 32 0x00000000
+0x4b6b004c 32 0x00000190
+0x4b6b0050 32 0x08000000
+0x4b6b0054 32 0x00000000
+0x4b6b0058 32 0x00064000
+0x4b6b005c 32 0x00064000
+0x4b6b0060 32 0x000c8000
+0x4b6b0064 32 0x01000000
+0x4b6b0068 32 0x00000070
+0x4b6b006c 32 0x00004400
+0x4b6b0070 32 0x00000000
+0x4b6b0074 32 0x00020002
+0x4b6b0078 32 0x00010001
+0x4b6b007c 32 0x00010001
+0x4b6b0080 32 0x00000002
+0x4b6b0084 32 0x00000001
+0x4b6b0088 32 0x000ffc00
+0x4b6b008c 32 0x00000001
+# 0x4b6b0090 FAULT
+0x4b6b0094 32 0x00000001
+0x4b6b0098 32 0x5344408e
+0x4b6b009c 32 0x00000100
+# 0x4b6b00a0 FAULT
+# Signature0
+0x4b6d0008 32 0x00000000
+0x4b6d000c 32 0x00080000
+0x4b6d0010 32 0x00080000
+0x4b6d0014 32 0x00000000
+0x4b6d0018 32 0x00000000
+0x4b6d001c 32 0x00000000
+# 0x4b6d0020 FAULT
+0x4b6d0024 32 0x00000000
+0x4b6d0028 32 0x00000000
+0x4b6d0400 32 0xffffffff
+0x4b6d0404 32 0xffffffff
+0x4b6d0408 32 0xffffffff

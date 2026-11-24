@@ -8,8 +8,8 @@
 //! comments), not computed by the code under test.
 
 use super::display::{self, Bases, Error, StreamConfig, VERDIN_DSI_10INCH};
-use super::display_power::{self, Config, Step, CLK_DISPAPB, CLK_DISPAXI, CLK_DISPOCRAM};
-use super::dpu::{self, Framebuffer, Refusal, Route};
+use super::display_power::{self, Config, PixelSource, Step, CLK_DISPAPB, CLK_DISPAXI, CLK_DISPOCRAM};
+use super::dpu::{self, Form, Framebuffer, Refusal, Route};
 use super::sm::Status;
 use super::sm_mock::{req, writes, Req, Sm, C, F, P, PERM_SET};
 use crate::firmware::scmi::{self, Transport};
@@ -34,7 +34,13 @@ fn rig() -> (Port, Display) {
 const FB: Framebuffer = Framebuffer { addr: 0x9000_0000, stride: 1280 * 4 };
 
 fn cfg() -> StreamConfig {
-    StreamConfig { mode: VERDIN_DSI_10INCH, route: Route::Dsi, fb: FB, power: Config::VERDIN_DSI_10INCH }
+    StreamConfig {
+        mode: VERDIN_DSI_10INCH,
+        route: Route::Dsi,
+        fb: FB,
+        power: Config::VERDIN_DSI_10INCH,
+        form: Form::Hal,
+    }
 }
 
 fn nodelay() -> impl FnMut(u32) {
@@ -248,7 +254,7 @@ fn power_off_disables_the_chain_backwards_then_the_domain() {
     let (mut t, _) = rig();
     display_power::power_on(&mut t, &Config::VERDIN_DSI_10INCH).unwrap();
     t.0.borrow_mut().log.clear();
-    display_power::power_off(&mut t).unwrap();
+    display_power::power_off(&mut t, PixelSource::VideoPll1).unwrap();
     let sm = t.0.borrow();
     assert_eq!(sm.log, power_off_reqs());
     assert!(!sm.on(13) && !sm.enabled(80));

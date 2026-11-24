@@ -4731,9 +4731,10 @@ zephyr_nanopc_t6_mali_image() {
 # U-Boot route would load: the RAM footprint (the AArch64 header's
 # image_size) inside zephyr,sram; the GPU's bring-up in it (the firmware's
 # line and the SCMI power-on's lines, once each; no "STUB:" line about the
-# GPU); the X4 display's screen in it (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY,
-# the board layer's display lines once each, verdin_imx95_display.c, and no
-# "no display yet" refusal); and WDOG3's
+# GPU); the screen in it on its default output, the X12 LVDS display
+# (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY and _DISPLAY_X12_LVDS, the board
+# layer's display lines once each and the X12 line, verdin_imx95_lvds.c,
+# yd_imx95_lvds_up linked, and no "no display yet" refusal); and WDOG3's
 # (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c): its armed line
 # and the board layer's "board: watchdog armed" once each, its arming entry
 # (ip::wdog32's yd_wdog32_arm) linked, and no "STUB:" line about the watchdog;
@@ -4748,7 +4749,9 @@ zephyr_verdin_imx95_triangle_image() {
   bin="$dir/zephyr/zephyr.bin"
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
   grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
-    { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
+    { echo "the image has no display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS=y$' "$dir/zephyr/.config" ||
+    { echo "the image's screen is not the X12 LVDS display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS)"; return 1; }
   grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM=y$' "$dir/zephyr/.config" ||
     { echo "the image keeps no record in the BBM GPRs (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM)"; return 1; }
   footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
@@ -4761,6 +4764,7 @@ zephyr_verdin_imx95_triangle_image() {
     'verdin_imx95: CSF firmware %u bytes embedded' \
     'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: ' \
     'verdin_imx95: display up: ' 'verdin_imx95: display stopped: ' \
+    'verdin_imx95: display: X12 LVDS' \
     'verdin_imx95: record sink: BBM GPR4..7 over SCMI (%s)'; do
     n=$(strings -n 20 "$bin" | grep -cF "$line") || true
     [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
@@ -4773,10 +4777,13 @@ zephyr_verdin_imx95_triangle_image() {
     { echo "zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
   nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
     { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_lvds_up$' ||
+    { echo "zephyr.elf does not link yd_imx95_lvds_up (the X12 picture)"; return 1; }
 }
 # Every Zephyr image under tools/probes/verdin_imx95/ (a directory with a
 # CMakeLists.txt and a prj.conf: imx95_wdog, imx95_scmi, imx95_ident,
-# imx95_fw, imx95_dsi_ids as present; tools/probes/verdin_imx95/README.md),
+# imx95_fw, imx95_dsi_ids, imx95_lvds_ids as present;
+# tools/probes/verdin_imx95/README.md),
 # built for the Verdin iMX95's A55 with -Werror on our C files: built only,
 # the board is not in the farm. One row for all of them, so a new probe needs
 # no new row. imx95_fw embeds the CSF firmware ($1, made into the header as
@@ -4815,7 +4822,7 @@ zephyr_verdin_imx95_probe_images() {
 # verdin_imx95.cmake; src/main_mali.c, the T6's main): built only, no board
 # yet (docs/notes/pre-study-imx95.md, B5). It builds with the firmware
 # embedded ($1, as the triangle row), and the image is a read-back image the
-# U-Boot route would load: the board layer on, the X4 display off
+# U-Boot route would load: the board layer on, the display off
 # (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY not y, no display line in the file), the
 # RAM footprint (the AArch64 header's image_size) inside zephyr,sram, the file
 # smaller than the carve-out (the OSAL's memory is .noinit, not in zephyr.bin),
@@ -4836,7 +4843,7 @@ zephyr_verdin_imx95_gltest_image() {
   nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
     { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
   if grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config"; then
-    echo "the read-back image brings the X4 display up (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y)"
+    echo "the read-back image brings the display up (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y)"
     return 1
   fi
   footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')

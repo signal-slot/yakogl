@@ -1,39 +1,63 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Bits of the Verdin iMX95's X4 display registers (the DPU, the display CSR,
-# the pixel interleaver, the DSI side) that may differ between the Zephyr
-# cold path (board::verdin_imx95_display) and the Linux dump M4 of
-# driver/docs/imx95-display.md section 6, each with its reason.
+# Bits of the Verdin iMX95's display registers (the DPU, the display CSR,
+# the pixel interleaver, the LVDS CSR; the DSI side) that may differ between
+# the Zephyr cold path and the Linux dump of driver/docs/imx95-display.md
+# section 6, each with its reason.
 # Format: ADDRESS MASK REASON (hex, hex, text), as
 # nanopc-t6-display-allow.txt and stm32mp257f-dk-display-allow.txt. MASK is
 # the set of bits allowed to differ.
 #
-# Seeded before the dump exists: the entries below follow from what the
-# registers are (status, time stamps, CRCs of the picture, the frame
-# buffer's address), not from a comparison. Entries the first comparison
-# finds are added below them with their reason, or the driver changes.
+# The dump: imx95-display-dump-linux.txt, read on 2026-11-25 under the
+# board's Linux with the Toradex 10.1" LVDS panel on X12 (the owner's
+# setup). The X12 cold path (board::verdin_imx95_lvds) is compared with it
+# by the host test soc::imx95::lvds_tests
+# (with_the_defaults_the_words_that_differ_are_the_named_options_and_the_allow_list_covers_them):
+# every dumped word the path writes equals the dump outside the masks
+# below. The X4 DSI path has no dump (no DSI display on this board).
 #
 # --- The read list (M4; read by tools/probes/verdin_imx95/linux_day_one/
 # day_one.sh, read only) ---
 # One line per block:
 #   #@read ADDRESS WORDS NAME GATE   WORDS consecutive 32-bit words from ADDRESS
-# GATE display: read only when M2 shows the DSI connector connected and
-# enabled and M3 the DISPLAY domain on; camera: also the CAMERA domain on.
-# The addresses are section 6's M4 list (the note's section 1 for the
-# blocks: hal_nxp PERI_DISPLAY_SEERIS.h, Linux imx95.dtsi).
-# Left out on purpose, because a read changes hardware state (the DW MIPI
-# DSI host's documented behaviour; dw-mipi-dsi.c reads GEN_PLD_DATA only in
-# its read and INT_ST0/1 only to clear the flags): DW host GEN_PLD_DATA
-# 0x4acf0070 (a read pops the receive FIFO), INT_ST0 0x4acf00bc and INT_ST1
-# 0x4acf00c0 (read-to-clear). No I2C register is read here; the bridge is
-# M2's regmap or i2cdump.
+# GATE display: read only when M2 shows a display connector (LVDS or DSI)
+# connected and enabled and M3 the DISPLAY domain on; lvds: an LVDS
+# connector; dsi: a DSI connector; camera: a DSI connector and also the
+# CAMERA domain on. The addresses are section 6's M4 list (the note's
+# section 1 for the blocks: hal_nxp PERI_DISPLAY_SEERIS.h, PERI_LDB.h,
+# Linux imx95.dtsi).
+# Never read (#@noread ADDRESS REASON; the read list must not cover them):
+# a read changes hardware state, or a single read killed the reading
+# process on the board (2026-11-25; hal_nxp's header has a write-only
+# register or a reserved word there). day_one_selftest.sh checks the list
+# against them. The DW MIPI DSI host's documented behaviour (dw-mipi-dsi.c
+# reads GEN_PLD_DATA only in its read and INT_ST0/1 only to clear the
+# flags): GEN_PLD_DATA pops the receive FIFO, INT_ST0/1 are read-to-clear.
+# No I2C register is read here; the DSI bridge is M2's regmap or i2cdump.
+#@noread 0x4acf0070 DW DSI GEN_PLD_DATA: a read pops the receive FIFO
+#@noread 0x4acf00bc DW DSI INT_ST0: read-to-clear
+#@noread 0x4acf00c0 DW DSI INT_ST1: read-to-clear
+#@noread 0x4b5d0014 FetchLayer0 +0x14: RESERVED_74 in the header; the read faulted on the board
+#@noread 0x4b5d004c FetchLayer0 +0x4C: RESERVED_75 in the header; the read faulted on the board
+#@noread 0x4b600024 FetchYUV0 +0x24: reserved in the header; the read faulted on the board
+#@noread 0x4b510010 ExtDst0 SOFTWAREKICK: write-only (__O); the read faulted on the board
+#@noread 0x4b6b0090 FrameGen0 FGSLR: write-only (__O); the read faulted on the board
+#@noread 0x4b6b00a0 FrameGen0 FGCHSTATCLR: write-only (__O); the read faulted on the board
+#@noread 0x4b6d0020 Signature0 SOFTWAREKICK: write-only (__O); the read faulted on the board
+#@read 0x4b0c0000 4 lvds_csr lvds
 #@read 0x4b400000 1 dpu_COMCTRL_IPIDENTIFIER display
-#@read 0x4b5d0008 18 dpu_FetchLayer0 display
-#@read 0x4b600008 18 dpu_FetchYUV0 display
-#@read 0x4b510008 4 dpu_ExtDst0 display
-#@read 0x4b6b0008 39 dpu_FrameGen0 display
-#@read 0x4b6d0008 9 dpu_Signature0 display
+#@read 0x4b5d0008 3 dpu_FetchLayer0 display
+#@read 0x4b5d0018 13 dpu_FetchLayer0_18 display
+#@read 0x4b600008 7 dpu_FetchYUV0 display
+#@read 0x4b600028 10 dpu_FetchYUV0_28 display
+#@read 0x4b510008 2 dpu_ExtDst0 display
+#@read 0x4b510014 1 dpu_ExtDst0_14 display
+#@read 0x4b6b0008 34 dpu_FrameGen0 display
+#@read 0x4b6b0094 3 dpu_FrameGen0_94 display
+#@read 0x4b6d0008 6 dpu_Signature0 display
+#@read 0x4b6d0024 2 dpu_Signature0_24 display
 #@read 0x4b6d0400 3 dpu_Signature0_CRC display
+#@read 0x4b711008 1 dpu_Dither0_POLARITYCTRL0 display
 #@read 0x4b010000 9 display_csr display
 #@read 0x4b0d0000 1 interleaver display
 #@read 0x4b0d0020 1 interleaver_20 display
@@ -50,9 +74,18 @@
 0x4b5d001c 0xffffffff FetchLayer0 BASEADDRESSMSB0: likewise
 0x4b6b0098 0xffffffff FrameGen0 FGTIMESTAMP: the line and frame counters, sampled at an arbitrary time
 0x4b6b009c 0xffffffff FrameGen0 FGCHSTAT: status, sampled at an arbitrary time
-0x4b6d0400 0xffffffff Signature0 CRC_R_WINDOW0: the CRC of the picture, which differs
+0x4b6d0400 0xffffffff Signature0 CRC_R_WINDOW0: the CRC of the picture, which differs (Linux does not run the unit: 0xFFFFFFFF)
 0x4b6d0404 0xffffffff Signature0 CRC_G_WINDOW0: likewise
 0x4b6d0408 0xffffffff Signature0 CRC_B_WINDOW0: likewise
+
+# DPU: fsl_dpu.c's values (dpu::Form::Hal, the default) where the dump has
+# Linux's (dpu::Form::Linux reproduces the dump; which matters is U22)
+0x4b5d0010 0x1fffe000 FetchLayer0 BURSTBUFFERMANAGEMENT SetMaxBurstLength and CombinerTimeout: fsl_dpu.c writes the whole word (16 buffers, burst 16, the two fields 0); the dump has 63 and 255
+0x4b5d0048 0x00000200 FetchLayer0 LAYERPROPERTY0 AlphaConstEnable0: fsl_dpu.c leaves it; Linux sets it
+0x4b6b002c 0x3fff3fff FrameGen0 PKICKCONFIG row and column: fsl_dpu.c kicks at (vtotal, htotal) = (823, 1440); the dump at (800, 1281)
+0x4b6b0030 0xbfff3fff FrameGen0 SKICKCONFIG: fsl_dpu.c enables the secondary kick at the primary's point; the dump has it disabled (0x00F00140, the register as Linux left it)
+0x4b6b0084 0x00000007 FrameGen0 FGINCTRLPANIC FgDmPanic: fsl_dpu.c white with test pattern (6); the dump constant colour (1)
+0x4b6b0088 0x7fffffff FrameGen0 FGCCR: fsl_dpu.c white, alpha 1; the dump green (0x000FFC00), only shown in panic mode
 
 # DW MIPI DSI host
 0x4acf00b0 0xffffffff PHY_STATUS: lane states, sampled at an arbitrary time

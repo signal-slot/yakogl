@@ -72,6 +72,10 @@ mod imx95_bbm;
 /// halves share: src/ffi/imx95_display.rs.
 #[cfg(any(feature = "imx95", test))]
 mod imx95_display;
+/// The Verdin iMX95's picture on X12, `yd_imx95_lvds_up` / `_flip` /
+/// `_down` (board::verdin_imx95_lvds): src/ffi/imx95_lvds.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_lvds;
 /// The Verdin iMX95's WDOG3 (ip::wdog32; the glue is
 /// driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c):
 /// src/ffi/imx95_wdog.rs.

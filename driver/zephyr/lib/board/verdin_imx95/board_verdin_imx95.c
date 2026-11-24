@@ -10,8 +10,11 @@
  *            map_phys): the windows from its start, up to
  *            CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB, then one panel-sized screen
  *            buffer
- *   screen   with CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY the Toradex 10.1" DSI
- *            display on X4 (verdin_imx95_display.c): a window of the
+ *   screen   with CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY the Toradex 10.1"
+ *            LVDS display on X12 (verdin_imx95_lvds.c, the default and the
+ *            owner's board) or the 10.1" DSI display on X4
+ *            (verdin_imx95_display.c, CONFIG_..._DISPLAY_X4_DSI), the same
+ *            verdin_imx95_display.h either way: a window of the
  *            panel's size (1280x800, stride 5120) is scanned in place, the
  *            first show bringing the picture up and every later one a flip
  *            that returns once the DPU has taken the buffer (so no

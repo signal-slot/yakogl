@@ -22,6 +22,15 @@
 //!   [`Stream0`] says stream 0 is running with this mode, routed to DSI;
 //!   the DSI side then turns its host to video mode (step 10).
 //!
+//! The LVDS route ([`Route::Lvds`], the X12 panel, design note section
+//! 4(b')) shares all of it: [`prepare`] then sets the engine clock select
+//! to the LDB PLL / 7 ([`CLK_SEL_LDB`]) after DISPLAY and the LDB PLL are
+//! on ([`super::display_power::PixelSource::LdbPll`]), the interleaver the
+//! same way, the DPU with the panel's timing unchanged, and pixel link 0
+//! only when the route asks for it (Linux has it on under its LVDS panel,
+//! U5). The LDB and the LVDS PHY are the LVDS side's (`super::ldb`), between
+//! [`prepare`] and [`start`], as the DSI side's steps are.
+//!
 //! [`flip`] puts another buffer on screen at the next frame; [`proof`]
 //! reads what the hardware says it does; [`stop`] undoes it (after the DSI
 //! side stopped).
@@ -33,8 +42,8 @@
 //! then enable; disabled the other way round) and `imx95-pixel-interleaver.c`
 //! (channel reset 10-20 µs, then the polarities; bypass is control 0).
 
-use super::display_power::{self, Up};
-use super::dpu::{self, Crc, FgStatus, Framebuffer, ReadBack, Refusal, Route, Window};
+use super::display_power::{self, PixelSource, Up};
+use super::dpu::{self, Crc, FgStatus, Form, Framebuffer, ReadBack, Refusal, Route, Window};
 use super::regs::{display_blk_ctrl_displaymix as csr, display_interleaver as il};
 use crate::firmware::scmi::Transport;
 use crate::mmio::{field, Mmio};
@@ -47,6 +56,9 @@ pub const INTERLEAVER_BASE: usize = 0x4B0D_0000;
 
 /// `DSIP_CLK0_SEL` 0: "CCM.video_pll_clk", that is DISP1PIX.
 pub const CLK_SEL_CCM: u32 = 0;
+/// `DSIP_CLK0_SEL` 2: "LVDS PLL Div/7 clock" (the dump's display CSR + 0x0
+/// = 0x2 under Linux's LVDS panel).
+pub const CLK_SEL_LDB: u32 = 2;
 /// The interleaver channel of display stream 0.
 pub const CHANNEL: u32 = 0;
 /// The interleaver's reset pulse, µs (Linux holds it 10-20 µs).
@@ -87,6 +99,32 @@ pub const VERDIN_DSI_10INCH: VideoMode = VideoMode {
     de_high: true,
 };
 
+/// The Toradex Capacitive Touch Display 10.1" LVDS on the Mallow's X12, as
+/// Linux's FrameGen0 runs it on the board (2026-11-25, the dump's HTCFG1
+/// 0x059F0500, HTCFG2 0x80630027, VTCFG1 0x03360320, VTCFG2 0x800F0008;
+/// `fsl_dpu.c`'s field meanings, no quirk on LVDS): 71.1 MHz, H 1280 + front
+/// 60 + sync 40 + back 60 = 1440, V 800 + front 7 + sync 9 + back 7 = 823,
+/// 59.99 Hz; syncs active low and DE active high as the interleaver and the
+/// LDB are told (CTRL 0x600; pixel mapper DI0 polarities). Only the totals
+/// and the sync-plus-back-porch sums are fixed by the words; the split of
+/// each blanking into front porch, sync and back porch is the reading of
+/// the `Hsync`/`Vsync` and `Hsbp`/`Vsbp` fields, and Toradex's overlay's
+/// panel-timing was not re-read to confirm it (U24).
+pub const VERDIN_LVDS_10INCH: VideoMode = VideoMode {
+    pixel_clock_hz: 71_100_000,
+    hactive: 1280,
+    hfront: 60,
+    hsync: 40,
+    hback: 60,
+    vactive: 800,
+    vfront: 7,
+    vsync: 9,
+    vback: 7,
+    hsync_high: false,
+    vsync_high: false,
+    de_high: true,
+};
+
 /// What stream 0 is to show and how.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StreamConfig {
@@ -94,6 +132,8 @@ pub struct StreamConfig {
     pub route: Route,
     pub fb: Framebuffer,
     pub power: display_power::Config,
+    /// The DPU words `fsl_dpu.c` and Linux disagree on ([`dpu::Form`]).
+    pub form: Form,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,6 +167,8 @@ pub struct Prepared {
     pub mode: VideoMode,
     pub route: Route,
     pub fb: Framebuffer,
+    /// Where the pixel clock comes from (what [`stop`] turns off).
+    pub source: PixelSource,
     /// The DISP level read (set first when one was asked for).
     pub level: u32,
     /// DISP1PIX as the System Manager made it.
@@ -153,32 +195,34 @@ fn w(m: &impl Mmio, base: usize, off: u32, v: u32) {
     m.write32(base + off as usize, v);
 }
 
-/// Display engine 0's clock and the interleaver's mode (step 3).
-fn route_clock(m: &impl Mmio, b: &Bases, route: Route) {
+/// The engine clock select a route takes.
+pub const fn clock_select(route: Route) -> u32 {
     match route {
-        Route::Dsi => {
-            m.modify32(
-                b.csr + csr::DISPLAY_ENGINES_CLOCK_CONTROL as usize,
-                csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK,
-                field(csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK, CLK_SEL_CCM),
-            );
-            // Bypass: no split, stream 0 not interleaved.
-            w(m, b.csr, csr::PIXEL_INTERLEAVER_CONTROL, 0);
-        }
+        Route::Dsi => CLK_SEL_CCM,
+        Route::Lvds { .. } => CLK_SEL_LDB,
     }
 }
 
+/// Display engine 0's clock and the interleaver's mode (step 3).
+fn route_clock(m: &impl Mmio, b: &Bases, route: Route) {
+    m.modify32(
+        b.csr + csr::DISPLAY_ENGINES_CLOCK_CONTROL as usize,
+        csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK,
+        field(csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK, clock_select(route)),
+    );
+    // Bypass: no split, stream 0 not interleaved.
+    w(m, b.csr, csr::PIXEL_INTERLEAVER_CONTROL, 0);
+}
+
 /// Interleaver channel 0: reset, then the polarities of what the DPU sends
-/// it (step 4). On the DSI route the DPU sends active-low syncs and an
+/// it (step 4). On both routes the DPU sends active-low syncs and an
 /// active-high DE ([`dpu::timing`]); the interleaver's bits are 1 for
-/// active low.
-fn interleaver_channel(m: &impl Mmio, b: &Bases, route: Route, delay_us: &mut impl FnMut(u32)) {
+/// active low: 0x600, which is the dump's CTRL under Linux's LVDS panel.
+fn interleaver_channel(m: &impl Mmio, b: &Bases, delay_us: &mut impl FnMut(u32)) {
     w(m, b.interleaver, il::swrst(CHANNEL), il::swrst::SW_RST_MASK);
     delay_us(RESET_US);
     w(m, b.interleaver, il::swrst(CHANNEL), 0);
-    let ctrl = match route {
-        Route::Dsi => il::ctrl::HSYNC_POLARITY_MASK | il::ctrl::VSYNC_POLARITY_MASK,
-    };
+    let ctrl = il::ctrl::HSYNC_POLARITY_MASK | il::ctrl::VSYNC_POLARITY_MASK;
     w(m, b.interleaver, il::ctrl(CHANNEL), ctrl);
 }
 
@@ -206,19 +250,19 @@ pub fn prepare<T: Transport>(
     cfg: &StreamConfig,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<Prepared, Error> {
-    let timing = dpu::timing(&cfg.mode, cfg.route).map_err(Error::Refused)?;
+    let timing = dpu::timing_form(&cfg.mode, cfg.route, cfg.form).map_err(Error::Refused)?;
     dpu::check_fb(&cfg.mode, &cfg.fb).map_err(Error::Refused)?;
     if cfg.power.pixel.pix_hz != u64::from(cfg.mode.pixel_clock_hz) {
         return Err(Error::Clock { mode_hz: cfg.mode.pixel_clock_hz, pix_hz: cfg.power.pixel.pix_hz });
     }
     let Up { level, pix_hz, .. } = display_power::power_on(t, &cfg.power)?;
     route_clock(m, b, cfg.route);
-    interleaver_channel(m, b, cfg.route, delay_us);
+    interleaver_channel(m, b, delay_us);
     dpu::configure(m, b.dpu, &cfg.mode, &timing, &cfg.fb);
-    match cfg.route {
-        Route::Dsi => pixel_link_on(m, b),
+    if cfg.route.pixel_link() {
+        pixel_link_on(m, b);
     }
-    Ok(Prepared { mode: cfg.mode, route: cfg.route, fb: cfg.fb, level, pix_hz })
+    Ok(Prepared { mode: cfg.mode, route: cfg.route, fb: cfg.fb, source: cfg.power.source, level, pix_hz })
 }
 
 /// Start FrameGen0 and wait until its primary channel is in sync.
@@ -263,12 +307,14 @@ pub struct Proof {
 impl Proof {
     /// Everything [`prepare`] and [`start`] set reads back, and frames move.
     pub fn consistent(&self, s: &Stream0) -> bool {
+        let pl = csr::pixel_link_ctrl::PL0_VALID_MASK | csr::pixel_link_ctrl::PL0_ENABLE_MASK;
+        let route = s.prepared.route;
+        let pl_want = if route.pixel_link() { pl } else { 0 };
         self.dpu.fg.in_sync()
             && self.dpu.frames_advance()
             && self.dpu.fetch_addr == s.fb.addr
-            && self.pixel_link & (csr::pixel_link_ctrl::PL0_VALID_MASK | csr::pixel_link_ctrl::PL0_ENABLE_MASK)
-                == csr::pixel_link_ctrl::PL0_VALID_MASK | csr::pixel_link_ctrl::PL0_ENABLE_MASK
-            && self.clock_control & csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK == CLK_SEL_CCM
+            && self.pixel_link & pl == pl_want
+            && self.clock_control & csr::display_engines_clock_control::DSIP_CLK0_SEL_MASK == clock_select(route)
     }
 }
 
@@ -291,9 +337,10 @@ pub fn proof(m: &impl Mmio, b: &Bases, s: &Stream0, delay_us: &mut impl FnMut(u3
     }
 }
 
-/// Stop stream 0 and power the display off (the DSI side stopped first):
-/// pixel link off, FrameGen0 off and read stopped, then
-/// [`display_power::power_off`].
+/// Stop stream 0 and power the display off (the DSI or LVDS side stopped
+/// first): pixel link off (when the route had it on), FrameGen0 off and
+/// read stopped, then [`display_power::power_off`] of the stream's pixel
+/// clock source.
 pub fn stop<T: Transport>(
     t: &mut T,
     m: &impl Mmio,
@@ -301,10 +348,12 @@ pub fn stop<T: Transport>(
     s: &Stream0,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<(), Error> {
-    pixel_link_off(m, b);
+    if s.prepared.route.pixel_link() {
+        pixel_link_off(m, b);
+    }
     dpu::stop(m, b.dpu);
     let budget = 2 * frame_us(&s.prepared.mode, s.prepared.pix_hz);
     dpu::wait_stopped(m, b.dpu, budget, delay_us).map_err(Error::NotStopped)?;
-    display_power::power_off(t)?;
+    display_power::power_off(t, s.prepared.source)?;
     Ok(())
 }

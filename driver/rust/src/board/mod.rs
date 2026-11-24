@@ -67,6 +67,10 @@ pub(crate) mod verdin_imx95_display_tests;
 pub mod verdin_imx95_dsi;
 #[cfg(test)]
 mod verdin_imx95_dsi_tests;
+#[cfg(any(feature = "imx95", test))]
+pub mod verdin_imx95_lvds;
+#[cfg(test)]
+pub(crate) mod verdin_imx95_lvds_tests;
 
 #[cfg(test)]
 mod tests {

@@ -2,27 +2,53 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX95 on Mallow: the picture from Zephyr
 
-Status: design (2026-11-20; the display fixed 2026-11-21), implemented
-for route (b) and host-tested, not run on a board. The cold X4 path of
-section 4(b) is `soc::imx95::{display_power, display, dpu, dsi_power,
-combo_phy, dsi}` and `board::verdin_imx95_{dsi, display}` in
-`driver/rust` (host tests against a mock System Manager, a display model, a
-DSI model and the bridge model, the twelve steps in their order), behind
-`yd_imx95_display_up` / `_flip` / `_down` (`ffi::imx95_display`); the
-Verdin's Zephyr board layer shows `examples/triangle`'s window with it
-(`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_display.c`, the I2C and
-the expander through Zephyr's drivers, U19), built by the gate's Verdin
-iMX95 row. Nothing here was run on a board.
-The board is fixed by the owner: a Toradex Verdin iMX95 module on a Toradex
-Mallow carrier, with a **Toradex Capacitive Touch Display 10.1" DSI on the
-Mallow's X4 (MIPI DSI) connector** and no LVDS panel on X12 (owner,
-2026-11-21; U1). The goal is the
-other boards' screen path on it: a Zephyr image puts a GPU-rendered picture
-on a display, with the console beside it, in the product form (U-Boot starts
-Zephyr, no Linux before it). This note names the display hardware, what the
-Mallow puts behind it, three routes in the order the house method takes them
-(adopt, cold, none), the cold DSI path in enough detail to implement it
-(section 4(b)), the board checks, and what is still open.
+Status: design (2026-11-20), the board's display fixed by the owner on
+2026-11-24, the board's own Linux read on 2026-11-25. Both cold paths are
+implemented and host-tested; **nothing of ours has run the display on the
+board.**
+
+**The board** (owner, 2026-11-24; this replaces the statement of
+2026-11-21 the X4 work was built on): a Toradex Verdin iMX95 module ("Toradex
+Verdin iMX95 WB", 8 GB) on a Toradex Mallow carrier with a **Toradex
+Capacitive Touch Display 10.1" LVDS on the Mallow's X12 (native LVDS)
+connector**; nothing on X4. The board's Linux confirms it (section 6, "What
+the board showed": `card0-LVDS-1` connected and enabled, 1280x800, the LVDS
+panel overlay applied).
+
+- **X12 LVDS, this board's path** (section 4(b')): `soc::imx95::ldb` (the
+  LDB and LVDS PHY 0) with the shared `soc::imx95::{display_power, display,
+  dpu}` (the LDB PLL over SCMI, the engine clock select, the interleaver, the
+  DPU's one plane), and `board::verdin_imx95_lvds` (the order, the backlight
+  on TPM5 channel 0 with its enable on GPIO5_IO04), behind `yd_imx95_lvds_up`
+  / `_flip` / `_down` (`ffi::imx95_lvds`). Host tests: the steps in their
+  order against the mock System Manager and the display model, the
+  refusals, the LDB PLL arithmetic, and the register state after the
+  bring-up against the board's Linux dump through the allow list
+  (`soc::imx95::lvds_tests`, `board::verdin_imx95_lvds_tests`). The Verdin's
+  board layer shows `examples/triangle`'s window with it by default
+  (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_lvds.c`,
+  `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS`), built by the gate's Verdin
+  iMX95 row.
+- **X4 DSI, kept** (section 4(b)): `soc::imx95::{dsi_power, combo_phy, dsi}`
+  and `board::verdin_imx95_{dsi, display}` behind `yd_imx95_display_*`,
+  selectable with `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI`, its tests
+  unchanged. Not this board's setup.
+
+What was read on the board (2026-11-25, the owner's session, under the
+module's own Linux, read only): the day-one checks M1-M4 (section 6) and
+the golden dump of the running LVDS panel
+(`driver/docs/imx95-display-dump-linux.txt`). Our Zephyr images ran on the
+board the same week (the SCMI, GPU identity, firmware, watchdog probes and
+`gl_test` on read-back, `docs/standalone-boot.md`), none of them with the
+display.
+
+The goal is the other boards' screen path on it: a Zephyr image puts a
+GPU-rendered picture on a display, with the console beside it, in the
+product form (U-Boot starts Zephyr, no Linux before it). This note names the
+display hardware, what the Mallow puts behind it, three routes in the order
+the house method takes them (adopt, cold, none), both cold paths in enough
+detail to implement them (sections 4(b) and 4(b')), the board checks with
+what they returned, and what is still open.
 The overall i.MX 95 pre-study is a separate note; this one is the display
 only.
 
@@ -242,30 +268,34 @@ What the Verdin iMX95 brings to the Verdin edge connector:
 
 | Mallow connector | Signals | What sits between the SoC and it | I2C | What the SoC must drive | Source |
 |---|---|---|---|---|---|
-| X12 LVDS, Hirose DF13 40-pin; X13 touch (FFC 10-pin). **Not this board's setup** (nothing on X12) | `LVDS_1_A` = Verdin pins 88-114 = **LVDS0**; `LVDS_1_B` = pins 118-144 = LVDS1; backlight PWM pin 35 (Verdin 16, `PWM_2`), enable pin 37 (Verdin 46); +12 V backlight through jumper JP1 | **nothing**: native LVDS, no bridge | touch only (the panel needs none) | DPU, interleaver, LDB, LVDS PHY 0, LDB PLL; TPM5 PWM and one GPIO for the backlight | `MAL:` 2.9.3, Tables 16-17, pages 24-25; `V95:` Table 23 |
-| X4 MIPI DSI, Würth 687134149022 34-pin FFC (Toradex "Simple MIPI DSI"). **This board: the Toradex Capacitive Touch Display 10.1" DSI** | `DSI_1` clock and 4 lanes (pins 2-15), `GPIO_10_DSI` (pin 17, "display is OFF when the signal is Low", pull-up on the display), `PWM_3_DSI` (18, 10K to GND), `GPIO_9_DSI` (19, from the display), `I2C_DSI` (20/21 = Verdin 55/53, 1.8K to 1.8 V), `DSI_RESET_CON#` (22 = Verdin 42), 1.8/3.3/5 V | the display carries a **TI SN65DSI83** DSI-to-LVDS bridge and a Riverdi RVT101HVDNWC00-B LVDS panel (Toradex's 7" DSI display the same bridge with an RVT70HSLNWCA0) | SN65DSI83 at 0x2C and the touch controller (Ilitek ILI2132) at 0x41, both on `I2C_2_DSI` (LPI2C3) | DPU, interleaver, pixel link, DW MIPI DSI, combo PHY, then the bridge over I2C; `GPIO_10_DSI` and `GPIO_9_DSI` sit on the module's I/O expander (section 4(b)) | `MAL:` 2.9.1, Table 14, pages 22-23; `tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso:32-60,86-125`, `tdx:imx95-verdin-panel-cap-touch-7inch-dsi.dtso:33` |
+| X12 LVDS, Hirose DF13 40-pin; X13 touch (FFC 10-pin). **This board: the Toradex Capacitive Touch Display 10.1" LVDS** (owner, 2026-11-24; Linux's `card0-LVDS-1`) | `LVDS_1_A` = Verdin pins 88-114 = **LVDS0**; `LVDS_1_B` = pins 118-144 = LVDS1; backlight PWM pin 35 (Verdin 16, `PWM_2` = pad GPIO_IO06, TPM5 channel 0), enable pin 37 (Verdin 46, `I2S_2_D_OUT` = pad XSPI1_DATA4, GPIO5_IO04); +12 V backlight through jumper JP1 | **nothing**: native LVDS, no bridge | touch only (the panel needs none; X13, out of scope) | DPU, interleaver, LDB, LVDS PHY 0, LDB PLL; TPM5 PWM and one GPIO for the backlight | `MAL:` 2.9.3, Tables 16-17, pages 24-25; `V95:` Table 23; pads hal_nxp `fsl_iomuxc.h` (MIMX9596) `IOMUXC_PAD_GPIO_IO06__TPM5_CH0`, `IOMUXC_PAD_XSPI1_DATA4__GPIO5_IO_BIT4` |
+| X4 MIPI DSI, Würth 687134149022 34-pin FFC (Toradex "Simple MIPI DSI"). **Not this board's setup** since 2026-11-24 (the owner's statement of 2026-11-21 had the Toradex Capacitive Touch Display 10.1" DSI here; under Linux nothing answers on `I2C_2_DSI`) | `DSI_1` clock and 4 lanes (pins 2-15), `GPIO_10_DSI` (pin 17, "display is OFF when the signal is Low", pull-up on the display), `PWM_3_DSI` (18, 10K to GND), `GPIO_9_DSI` (19, from the display), `I2C_DSI` (20/21 = Verdin 55/53, 1.8K to 1.8 V), `DSI_RESET_CON#` (22 = Verdin 42), 1.8/3.3/5 V | the display carries a **TI SN65DSI83** DSI-to-LVDS bridge and a Riverdi RVT101HVDNWC00-B LVDS panel (Toradex's 7" DSI display the same bridge with an RVT70HSLNWCA0) | SN65DSI83 at 0x2C and the touch controller (Ilitek ILI2132) at 0x41, both on `I2C_2_DSI` (LPI2C3) | DPU, interleaver, pixel link, DW MIPI DSI, combo PHY, then the bridge over I2C; `GPIO_10_DSI` and `GPIO_9_DSI` sit on the module's I/O expander (section 4(b)) | `MAL:` 2.9.1, Table 14, pages 22-23; `tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso:32-60,86-125`, `tdx:imx95-verdin-panel-cap-touch-7inch-dsi.dtso:33` |
 | X14 HDMI | fed from the Verdin `HDMI_1` pins | nothing, and the module leaves those pins unconnected | | **dead with this module** | `MAL:` 2.9.2, Table 15, pages 23-24; `V95:` Table 8 |
 
 So the Mallow has no HDMI with this module, and the owner's board takes its
-picture from **X4**: the Toradex 10.1" DSI display, whose chain Toradex's
-overlay `imx95-verdin-panel-cap-touch-10inch-dsi.dtso` names (DPU, pixel
-link, interleaver channel 0, DW MIPI DSI, SN65DSI83, panel-lvds; section
-4(b) takes it apart). X4 is a Toradex "Simple MIPI DSI" FFC, so the display
-plugs in directly; the "DSI Display Adapter" the overlay's header mentions is
-for the Development Board's and Dahlia's Samtec connector (`:5-8`).
+picture from **X12**: the Toradex 10.1" LVDS display, the shortest path to a
+picture, with no bridge, no I2C, no DSI PHY and one power domain (section
+4(b') takes it apart). The X4 path (the 10.1" DSI display through an
+SN65DSI83, Toradex's `imx95-verdin-panel-cap-touch-10inch-dsi.dtso`;
+section 4(b)) was built for the owner's statement of 2026-11-21 and is kept;
+X4 is a Toradex "Simple MIPI DSI" FFC, so such a display plugs in directly
+(the "DSI Display Adapter" the overlay's header mentions is for the
+Development Board's and Dahlia's Samtec connector, `:5-8`).
 
-X12, for the record (not this board's setup): it would have been the
-shortest path to a picture, with no bridge, no I2C, no DSI PHY and one power
-domain. Toradex's overlay for it (`imx95-verdin-panel-cap-touch-10inch-lvds.dtso`,
+X12, this board: Toradex's overlay for it (`imx95-verdin-panel-cap-touch-10inch-lvds.dtso`,
 "carrier boards with a Toradex standard LVDS display connector (e.g.,
 Mallow)", `:3-6`) names the whole chain: panel 1280x800 at 71.1 MHz, VESA
 24-bit (`:34-62`); DPU, pixel link, interleaver channel 0, LDB channel 0,
 LVDS PHY 0 (`:65-106,126-137`); LDBPLL_VCO 2,986.2 MHz and LDBPLL 497.7 MHz
 ("LDBPLL_VCO = 6 * 7 * pixelclk, LDBPLL = 7 * pixelclk", `:80-83`);
 backlight `PWM_2` on TPM5 and enable `I2S_2_D_OUT` (GPIO5_IO04) (`:22-32`).
-The pixel link enabled there is questioned upstream: Liu Ying (NXP) says the
-pixel link belongs only to the DSI path (dri-devel RFC thread, 2026-07-06);
-U5 below. On the DSI path the pixel link is certainly used (section 4(b)).
+The board's Linux runs exactly that (2026-11-25: the clocks, the LVDS CSR,
+FrameGen0 at 1440 x 823 total, `platform/42500000.pwm` channel 0 with
+inverse polarity; section 6). The pixel link enabled there is questioned
+upstream: Liu Ying (NXP) says the pixel link belongs only to the DSI path
+(dri-devel RFC thread, 2026-07-06); the board's Linux has it valid and
+enabled under the LVDS panel (U5). On the DSI path the pixel link is
+certainly used (section 4(b)).
 
 Mainline's Mallow file enables `I3C2`, `LPI2C3` and `LPI2C4` and puts only a
 temperature sensor (0x4F) and the carrier EEPROM (0x57) on `I2C_1`
@@ -298,7 +328,8 @@ needs no adapter; it is also the one path validated by the upstream port
 | LT8912B | none in the tree | only for the DSI-to-HDMI adapter, which does not fit the Mallow's X4 |
 | an LPI2C, a PCAL6416A and a TPM PWM driver | none in Rust (`ip::stm32_i2c`, `ip::imx_pwm` are other blocks) | LPI2C3 for the bridge, LPI2C2 for the module's I/O expander that holds the bridge enable, TPM6 for the backlight (section 4(b)). The bridge driver reaches I2C and GPIOs through `Env::i2c_write`, `i2c_write_read`, `gpio_set` (`driver/rust/src/env.rs:54-55`, served by the C side): Zephyr's `nxp,lpi2c` and PCA-series GPIO (`nxp,pcal6416`) drivers serve them on this A55 board (U19, answered by the build); the TPM PWM is ours (`ip::tpm_pwm`) |
 
-The X12 LVDS path would have needed no bridge code; the X4 path reuses the
+The X12 LVDS path needs no bridge code (new: `soc::imx95::ldb`, about 170
+lines, and the board module with the backlight); the X4 path reuses the
 bridge and the DSI host and adds the combo D-PHY.
 
 ## 3. What exists upstream, and what U-Boot leaves
@@ -345,6 +376,13 @@ Who could leave one on the Mallow:
 | Linux (Toradex's 6.18 BSP with the overlay `imx95-verdin-panel-cap-touch-10inch-dsi.dtbo`), then a crash kexec into Zephyr | yes, if the board runs that kernel with that overlay applied | the T6's development route (`driver/docs/nanopc-t6-display.md`, 2(a)); the crash path skips the drivers' shutdown, so the DPU keeps scanning; the logical machine is not reset (section 1). Needs kexec and a crash reservation in that kernel (U8) |
 | mainline Linux | no (no driver) | |
 
+**(a) cannot run on the board's image** (2026-11-25, M3): Toradex's
+Reference Multimedia Image 7.8.0 (kernel 6.6.157-7.8.0) has
+`# CONFIG_KEXEC is not set` and `# CONFIG_CRASH_DUMP is not set`, so there is
+no crash kexec to keep the panel running into Zephyr (U8). Its Linux does
+drive the X12 panel, so the golden dump, (a)'s main value, came from M4's
+reads instead (section 6). (a) would need a kernel of our own build: not proposed.
+
 Needs: a SCMI transport only to read the DISPLAY domain state first; no
 clock or power change. Size: small, as on the T6: a reader of a dozen
 registers, a pattern, a read-back. Value: it gives the golden dump (the
@@ -353,10 +391,13 @@ camera-side CSRs, DW host, and the bridge's I2C registers) that the cold path
 is checked against, and it settles the points where NXP's two sources
 disagree (U13-U16). It is development only; it is not the product.
 
-### (b) Cold: X4 DSI from Zephyr (the product form)
+### (b) Cold: X4 DSI from Zephyr (kept; not this board's setup since 2026-11-24)
 
-Everything below is for the owner's display: the Toradex Capacitive Touch
-Display 10.1" DSI on X4, as Toradex's overlay
+Implemented for the owner's statement of 2026-11-21 and kept, selectable
+(`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI`); its shared steps (SCMI, the
+display CSR, the interleaver, the DPU) are the X12 path's too. Everything
+below is for the Toradex Capacitive Touch Display 10.1" DSI on X4, as
+Toradex's overlay
 `tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso` (cited `dsi.dtso:N`)
 describes it. Register maps are hal_nxp's BSD headers; the sequences are
 hal_nxp's `fsl_mipi_dsi.c` (BSD-3, cited `fsl_mipi_dsi.c:N`), Zephyr's
@@ -551,41 +592,71 @@ the board layer for the bridge, the expander and the PWM (about 150), and
 host tests for the PLL search and the CSR values, with both sources' values
 as cases. The DW host and the bridge are already ours.
 
-### (b') Cold: X12 LVDS from Zephyr (not this board's setup)
+### (b') Cold: X12 LVDS from Zephyr (this board; the product form)
 
-Kept for a board with an LVDS panel on X12; nothing below is on the owner's
-path except steps shared with the DSI path (SCMI, display CSR, interleaver,
-DPU).
-
-The list, in the order U-Boot's and hal_nxp's sequences agree on
+The owner's display since 2026-11-24: the Toradex Capacitive Touch Display
+10.1" LVDS on X12. Implemented in Rust from hal_nxp's BSD headers (the
+`PERI_LDB.h` block is generated into `soc::imx95::regs::ldb` with the
+others, `tools/hal-nxp/gen_regs.py`) and `fsl_ldb.c` / `fsl_dpu.c`, its
+values checked against the board's Linux dump (section 6). The order, in
+the sequence U-Boot's and hal_nxp's agree on
 (`tub:drivers/video/nxp/imx/imx95_dpu.c:880-1006`;
 `hal:mcux/mcux-sdk-ng/drivers/ldb_1/fsl_ldb.c:33-95`;
-`z:drivers/display/display_socionext_dpu.c:256-327`):
+`z:drivers/display/display_socionext_dpu.c:256-327`), with the LDB placed
+where the DSI side's steps are (after the DPU is configured, before
+FrameGen0 starts), and what the code writes:
 
-| Step | Block | Registers (BSD header) | Permissive sequence | GPL cross-check (lines) |
+| Step | What | Values (the dump's, where it has the word) | Code |
+|---|---|---|---|
+| 1 | SCMI as AP-NS: DISPLAY (13) on and read back; the DISP level read (ODV, 3); LDBPLL_VCO (37) 2,986,200,000 Hz and LDBPLL (38) 497,700,000 Hz (CLOCK_RATE_SET, flags 0), both enabled, LDBPLL read back and divided by 7: 71,100,000 Hz. DISP1PIX (80) is not sent (Linux: 24 MHz, no user); DISPAPB/AXI/OCRAM never (section 1) | the dump's clocks | `display_power::power_on`, `PixelSource::LdbPll`, `ldb_rates` |
+| 2 | display CSR: `DSIP_CLK0_SEL` = 2 (LVDS PLL Div/7), interleaver control 0 (bypass) | +0x0 = 0x2, +0x4 = 0 | `display::prepare` (`CLK_SEL_LDB`) |
+| 4 | interleaver channel 0: `SW_RST` pulse (10 µs), CTRL 0x600 (HSYNC, VSYNC active low, DE high, RGB) | CTRL 0x600, SWRST 0, ICTRL 0 | `display::prepare` |
+| 5 | the DPU's one plane (FetchLayer0 into LayerBlend1 over ConstFrame0, ExtDst0, DomainBlend0, FrameGen0), configured, not started; the panel's timing as FrameGen0 holds it, no DSI quirk: H 1280 + 60 + 40 + 60 = 1440, V 800 + 7 + 9 + 7 = 823, 59.99 Hz (`display::VERDIN_LVDS_10INCH`, U24) | HTCFG1 0x059F0500, HTCFG2 0x80630027, VTCFG1 0x03360320, VTCFG2 0x800F0008, the fetch words | `dpu::configure` with `dpu::Form::Hal` (U22) |
+| 5' | pixel link 0 valid, then enable (as Linux has it; `Route::Lvds { pixel_link: false }` leaves it off, U5) | +0x8 = 0x3 | `display::prepare` |
+| 3 | the LDB: `LVDS_PHY_CLOCK_CONTROL` 0x14 (channel 1's serializer and DI1's mapper gated, U4), the pixel mapper 0x00082221 (channel 0 to DI0, 24 bit, SPWG, DI0 HSYNC and VSYNC active low, `VSYNC_ADJ_EN`), LVDS PHY 0 "disabled" (0x7) for 100 ms, then 0x1075 (`fsl_ldb.c`'s final word); PHY 1 not touched | 0x14, 0x00082221, 0x1075, 0 | `ldb::up` with `ldb::Form::Linux` |
+| 5'' | FrameGen0 enabled, `PrimSyncStat` waited for (100 ms) | FGENABLE 1, FGCHSTAT 0x100 | `display::start` |
+| 6 | the backlight: TPM5's clock (154) enabled and read over SCMI; TPM5 channel 0 edge-aligned **low-true** (CnSC 0x24), 150 Hz, 119/255 (Linux: period 6,666,667 ns, duty 3,111,111 ns, polarity inverse, brightness 4 of 7); then GPIO5_IO04 high (RGPIO PSOR, then PDDR); the pads GPIO_IO06 (TPM5_CH0) and XSPI1_DATA4 (GPIO5_IO04) from the board devicetree | Linux's pwm | `board::verdin_imx95_lvds::backlight_on`, `ip::tpm_pwm` (`Pwm::low_true`) |
+
+Down: the enable low, the PWM stopped, TPM5's clock off; the LDB's PHYs
+and mapper off, every gate set (0x1E); the pixel link off, FrameGen0 off and
+waited for; LDBPLL and LDBPLL_VCO off, DISPLAY off.
+
+**Where the sources disagree and what the code does** (the rule: the dump
+settles a value when it is a fact of this board's wiring or of what Linux
+runs that our path is meant to equal; where two values may both work and
+the dump shows only one, hal_nxp's is the default and the other is a named,
+tested option):
+
+| What | hal_nxp | the dump (Linux) | Code | Settled by |
 |---|---|---|---|---|
-| 1 | SCMI as agent AP-NS: DISPLAY (13) on, which runs DISPAPB, DISPAXI and DISPOCRAM (not ours to switch, section 1; perf DISP at ODV); LDBPLL_VCO (37) 2,986.2 MHz, LDBPLL (38) 497.7 MHz for 71.1 MHz, both enabled | (SCMI) | `repo:driver/rust/src/firmware/scmi.rs` codec; a new MU transport | `nxp:imx95.dtsi:2696-2703`; `tdx:...10inch-lvds.dtso:80-83`; permissions `tsm:` (section 1) |
-| 2 | display CSR: engine 0 clock select = LDB PLL / 7; interleaver control | `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h:408-415,430-468` | | `ml:clk-imx95-blk-ctl.c:226-251`; `tub:imx95_dpu.c:595-598` |
-| 3 | LVDS CSR: PHY clock divider, the four clock gates (U4), LDB control (channel 0 to DI0, 24 bit, SPWG or JEIDA, sync polarities, `VSYNC_ADJ_EN`), LVDS PHY 0 enable | `PERI_LDB.h:408-412` and its field masks | `fsl_ldb.c:33-95` (96 lines) | `nxp:imx95-ldb.c` (578), `phy-fsl-imx8mp-lvds.c` (317); `tub:imx95-ldb.c` (551) |
-| 4 | pixel interleaver channel 0: reset, polarities, format | `PERI_DISPLAY_INTERLEAVER.h:411-421` | | `nxp:imx95-pixel-interleaver.c:24-43,84-147` (402); `tub:` (283) |
-| 5 | DPU: one plane (FetchLayer0 or FetchYUV0), LayerBlend1 over ConstFrame0, ExtDst0, DomainBlend0, FrameGen0 timing and kick, shadow loads, FrameGen enable, wait for `PrimSyncStat` | `PERI_DISPLAY_SEERIS.h` | `fsl_dpu.c` (`dpu_1`, 4,918 lines for the whole DPU; the one-plane subset Zephyr uses is about 120 lines of calls, `display_socionext_dpu.c:256-327`) | `tub:imx95_dpu.c` (1,082); `nxp:dpu95/` (about 8,400 lines without the blitter, LD and other SoCs) |
-| 6 | backlight: TPM5 PWM on `PWM_2`, GPIO5_IO04 high | (TPM, GPIO) | | `tdx:...10inch-lvds.dtso:22-32` |
+| LDB channel 1, PHY 1, sync polarities, `VSYNC_ADJ_EN`, clock gates | `LDB_Init` routes channel 1 to DI0 too (mapper 0x2A5), enables PHY 1 (0x1075), sets only DI0's VSYNC polarity, never writes the gates | channel 0 only, PHY 1 off, both polarities, `VSYNC_ADJ_EN`, ch1/DI1 gated | **the dump's** (`ldb::Form::Linux`, the default); `ldb::Form::HalInit` is `LDB_Init` from reset, tested | the dump (one panel on channel 0 is this board's wiring) |
+| FrameGen0 primary kick | (vtotal, htotal) = (823, 1440) | (800, 1281) | **hal's** (`dpu::Form::Hal`); `dpu::Form::Linux` reproduces the dump | U22 |
+| FrameGen0 secondary kick | enabled at the primary's point | disabled (0x00F00140, not written) | hal's; Linux's in `Form::Linux` | U22 |
+| panic mode and colour | white with test pattern (6), white | constant colour (1), green 0x000FFC00 | hal's; Linux's in `Form::Linux` (only seen in a FIFO panic) | U22 |
+| FetchLayer0 `BURSTBUFFERMANAGEMENT` | the whole word 0x1010 (`SetMaxBurstLength`, `CombinerTimeout` 0) | 0x1FE7F010 (63 and 255; the unused FetchYUV0 reads the same, likely the reset value) | hal's; 0x1FE7F010 in `Form::Linux` | U22 (the probe `imx95_lvds_ids` reads the reset value) |
+| FetchLayer0 `LAYERPROPERTY0.AlphaConstEnable0` | not written | set (0x80000200) | hal's; set in `Form::Linux` | U22 |
+| pixel link 0 under LVDS | (no LVDS pixel-link code) | valid and enabled (0x3) | **the dump's** (on); `Route::Lvds { pixel_link: false }` tested | U5 |
+| display CSR +0x14..+0x1C | +0x14 is reserved in the header; AXCACHE and QOS are not written by `fsl_dpu.c` | 0x1A150A00, 0x00330303, 0x33 | not written | U27 |
 
-Not needed for X12: the pixel link (U5), the DSI host and combo PHY, the
-CAMERA domain, any I2C. Not needed for a first picture: the irqsteer (poll
-`FGCHSTAT`), the signature unit.
+Every word of the dump the path writes equals the dump with `Form::Linux`
+on both (the buffer's address aside), and with the defaults the words that
+differ are exactly the rows above (host test
+`with_the_defaults_the_words_that_differ_are_the_named_options_and_the_allow_list_covers_them`;
+the allow list `driver/docs/imx95-display-allow.txt` names their bits).
+The dumped words the path does not write at all are listed in the test
+`the_dumped_words_the_path_does_not_write_are_these` (reset values or
+Linux's own: the display CSR's +0xC..+0x20, FetchYUV0, the FrameGen0 skew
+regulation and interrupt words, Signature0, the status words).
 
-Expected size, on the AM62P and i.MX8MP precedents, shared with the DSI
-path: a register module generated from hal_nxp as `regs.rs` is today (new
-header list in the generator), about 600 lines of Rust for the DPU one-plane
-path, about 300 for the MU transport and the SCMI calls, a board layer, and
-host tests against the golden dump; LVDS only: about 200 for LDB, PHY and
-interleaver. One more open choice:
-vendoring `fsl_dpu.c`/`fsl_ldb.c` unmodified under `third_party/` and calling
-them, as the AM62P vendors TI's Zephyr DSI driver
-(`driver/docs/am62p-display-cold.md`, "Documents"), against writing the
-subset in Rust from the header. The house rule (`docs/source-form.md`)
-allows either; the Rust subset is smaller than the 4,918-line driver.
+Not needed for X12: the DSI host and combo PHY, the CAMERA domain, any I2C.
+Not needed for a first picture: the irqsteer (poll `FGCHSTAT`), the signature
+unit (the proof reads it, U7).
+
+Size, as built: `soc::imx95::ldb` 170 lines; the LVDS route in `display`,
+`display_power` and `dpu` about 150; `board::verdin_imx95_lvds` 220;
+`ffi::imx95_lvds` 400 with its tests; `verdin_imx95_lvds.c` 140; host tests
+about 750 lines. hal_nxp's `fsl_dpu.c`/`fsl_ldb.c` are not vendored: the
+Rust subset follows them (`docs/source-form.md` allows either).
 
 The same vendoring choice applies to hal_nxp's `fsl_mipi_dsi.c` (1,317
 lines) on the DSI path; there the Rust host already exists, so only the
@@ -620,7 +691,9 @@ From the BSD header, all readable by the image: `FGENABLE` and `FGENSTS`
 (the FrameGen runs), `FGCHSTAT.PrimSyncStat` (the primary channel is in
 sync), `FGTIMESTAMP` read twice (frames advance), FetchLayer0's address,
 stride and size read back equal to our buffer, the control words equal to
-the golden dump. On the DSI path also: `COMBO_PHY_TEST_MODE_STATUS.phy_lock`
+the golden dump. On the LVDS path also: the LVDS CSR's four words read
+back after the start (`Up::ldb`, the dump's 0x14, 0x00082221, 0x1075, 0). On
+the DSI path also: `COMBO_PHY_TEST_MODE_STATUS.phy_lock`
 and the DW host's `PHY_STATUS` (lock, lanes in stop state or HS), its
 `INT_ST0/1` and `VID_PKT_STATUS` (no FIFO errors), and the bridge's
 `PLL_EN_STAT` and `IRQ_STAT` (0xE5: no SoT, ECC, CRC or sync error once
@@ -638,38 +711,35 @@ capture device for this panel.
 ## 5. Recommendation
 
 1. **(c) from day one**: the GPU bring-up and its sign-off do not depend on
-   the display.
-2. **The day-one reads (section 6)**, which say whether the board's Linux
-   drives the X4 display and read the values NXP's two sources disagree on.
-3. **(a) by crash kexec, if M1-M2 show Toradex's kernel driving the DSI
-   display**: a few days, and it yields the golden dump (DPU, CSRs, DW host,
-   bridge) and a working reference link. Skip it otherwise; it is not worth
-   building a Linux setup for. The M4 reads alone already give most of the
-   dump.
-4. **(b) cold on X4** from hal_nxp's headers and drivers, with
-   `ip::dw_mipi_dsi`, a new combo D-PHY `Phy` and `ip::sn65dsi8x`, checked
-   against the dump: the product form, signed off with U-Boot starting the
-   image.
+   the display. Done on the board on 2026-11-25: `gl_test` 50 of 50 on
+   read-back, display off (`docs/standalone-boot.md`).
+2. **The day-one reads (section 6)**: done on 2026-11-25; Linux drives the
+   X12 LVDS panel, the golden dump is recorded, and (a) cannot run on this
+   image (no kexec).
+3. **(b') cold on X12**, implemented and host-tested against the dump: the
+   next board session runs the probe `imx95_lvds_ids` (the X12 path's
+   identity before the cold run, U22 and U26-U27), then `examples/triangle`
+   with the board layer's default output, X12. The product form is signed off
+   with U-Boot starting the image (the `go` route works on this board,
+   `docs/standalone-boot.md`).
+4. **(b) on X4** stays in the tree, selectable, for a DSI display.
 
-Why DSI on X4: it is the owner's display (2026-11-21); X12 is empty and X14
-is dead on this module. The DSI path costs more than LVDS would have (a
-second power domain, the combo D-PHY and its PLL, the bridge and the expander
-over two I2C buses), but the DW host and the bridge driver are ours already
-and the i.MX8MP runs the same panel through the same bridge family. Why cold
-rather than a U-Boot that lights the panel: Toradex's U-Boot does not, and
-carrying our own U-Boot build for it is the cost the T6 note refused.
-Toradex's System Manager configuration (section 1) leaves the order as it
-was: our agent holds every domain, clock and block the X4 path needs
-(DISPLAY and CAMERA, the video PLL, DISP1PIX, the MIPI PHY clocks, MIPI_DSI,
-MIPI_PHY, LPI2C2/3, LPTPM6, GPIO5 and their pins), and nothing between Linux
-and our image (a crash kexec) or between U-Boot and our image (`go`) turns
-the display off.
+Why LVDS on X12: it is the owner's display (2026-11-24) and the shortest
+path: one power domain, the LDB PLL, the LDB and one PHY, no bridge, no
+I2C. Why cold rather than a U-Boot that lights the panel: Toradex's U-Boot
+does not (its `dm tree` shows no video device, 2026-11-25), and carrying our
+own U-Boot build for it is the cost the T6 note refused. Toradex's System
+Manager configuration (section 1) leaves the order as it was: our agent
+holds DISPLAY, the LDB PLL, the LVDS block, TPM5 (as a resource) and GPIO5
+and their pins, and nothing between U-Boot and our image (`go`) turns the
+display off; at `go` from U-Boot the DISPLAY domain is off (our probe
+`imx95_scmi`, 2026-11-25), so the cold path starts from reset values.
 
 What would change it:
 
-- **An LVDS panel on X12 instead** (not the owner's setup): (b') without the
-  bridge, the expander, the D-PHY and the CAMERA domain.
-- **Toradex's 7" DSI display instead of the 10.1"**: the same path with its
+- **A DSI display on X4 instead**: (b), already built
+  (`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI`).
+- **Toradex's 7" DSI display instead of the 10.1"**: the X4 path with its
   mode (1024 x 600 at 60 MHz, 2 lanes, `tdx:...7inch-dsi.dtso:39-53,100`):
   720 Mbit/s a lane, a new PLL point and timing row.
 - **An HDMI monitor is required**: the Mallow cannot give it with this
@@ -691,18 +761,118 @@ Under the board's Linux, over ssh, nothing written:
 
 | Check | What is read | What it gives |
 |---|---|---|
-| M1 | `/proc/device-tree/model` and `compatible` (expected "Toradex Verdin iMX95 ... on Mallow Board"); `uname -r`; `/etc/os-release`; the applied overlays (Toradex's `overlays.txt`) | the carrier; whether the kernel is Toradex's BSP (has `dpu95`) or mainline (has no display) |
-| M2 | `/sys/class/drm/*/status` and `modes` (expected 1280x800); `dmesg` lines of `dpu95`, `imx95-mipi-dsi` ("Using Pixel Link0"), `sn65dsi83`, `panel`; `i2cdetect -r -y` on the `I2C_2_DSI` bus (LPI2C3): 0x2C (SN65DSI83) and 0x41 (ILI2132 touch); `i2cdump -y -r 0x00-0xff <bus> 0x2c b` (reads only) | **does Linux drive the X4 display?**, and the bridge's registers (U20) |
-| M3 | `dmesg` SCMI and System Manager lines (protocol versions, firmware build); `/sys/kernel/debug/clk/clk_summary` rows for `dispapb`, `dispaxi`, `dispocram`, `disp1pix`, `videopll1`, `videopll1_vco`, `mipiphycfg`, `mipiphypllref`, `mipiphypllbypass`, `camapb`; `/sys/kernel/debug/pm_genpd/pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
-| M4 | only if M2 shows a running panel and M3 the display domain on: one 32-bit read each of DPU `COMCTRL_IPIDENTIFIER` (0x4B400000); FetchLayer0 0x4B5D0008-0x4B5D004C and FetchYUV0's first block; ExtDst0 0x4B510008-0x4B510014; FrameGen0 0x4B6B0008-0x4B6B00A0; Signature0 0x4B6D0008-0x4B6D0028 and 0x4B6D0400-0x4B6D0408; display CSR 0x4B010000-0x4B010020; interleaver 0x4B0D0000, +0x20, +0x50; with CAMERA on: DSI stream CSR 0x4AD00000-0x4AD0000C, DSI master CSR 0x4AD10000-0x4AD10008, combo PHY CSR 0x4AD20100-0x4AD20110 (U13, U16), DW host 0x4ACF0000-0x4ACF0110 (`VERSION` for U18, the timing and PHY words) | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
+| M1 | `/proc/device-tree/model` and `compatible`; `uname -r`; `/etc/os-release`; the applied overlays (Toradex's `overlays.txt`) | the carrier; whether the kernel is Toradex's BSP (has the DPU driver) or mainline (has no display) |
+| M2 | `/sys/class/drm/*/status` and `modes` (expected 1280x800): which connector, LVDS or DSI; `dmesg` lines of the DPU, the LDB, `imx95-mipi-dsi`, `sn65dsi83`, `panel`; the backlight (`/sys/class/backlight`, `/sys/kernel/debug/pwm`); `i2cdetect -r -y` on the `I2C_2_DSI` bus (LPI2C3); the DSI bridge's registers (reads only) | **which display Linux drives**, the backlight as it runs, the DSI bridge (U20) |
+| M3 | `dmesg` SCMI and System Manager lines; `/sys/kernel/debug/clk/clk_summary` rows of the display's clocks (the LDB PLL, its dividers and gates, DISP1PIX, the video PLL, the bus clocks, the MIPI PHY clocks, TPM5/6); `pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`, `STRICT_DEVMEM`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
+| M4 | behind the gates (a display connector live and DISPLAY on; the LVDS CSR behind an LVDS connector, the DSI side behind a DSI connector and CAMERA): one 32-bit read each of the `#@read` blocks of the allow list (the LVDS CSR, the DPU's units, the display CSR, the interleaver, the DSI side), never a `#@noread` word | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
 
 M1 to M4 are one script, `tools/probes/verdin_imx95/linux_day_one/day_one.sh`
 (its README; M4's read list and gates are the `#@read` lines of
-`driver/docs/imx95-display-allow.txt`).
+`driver/docs/imx95-display-allow.txt`). Three defects of it showed on the
+board on 2026-11-25 and are fixed: the wrapper sent the whole script as one
+ssh argument, which the board's Dropbear (v2022.83) answered with a
+connection reset (it now copies the script and the list to a fresh
+directory under the board's `/tmp`, a tmpfs, runs them there and removes
+them); the reader was `python3`, whose `mmap` module the board's image
+lacks, and the image has no busybox `devmem` but `/usr/bin/devmem2` (the
+reader is now chosen by reading the first gated word with each of python3,
+devmem2 and devmem, and devmem2 is one of them); and M4's gate asked for a
+DSI connector, which the LVDS panel never gives, while seven words of the
+old list faulted on read (the gates now know LVDS, and those words are
+`#@noread`).
 
-Under U-Boot, at its prompt: `dm tree` (no `video` device expected),
-`bdinfo` (DRAM banks, where a buffer may live). No register reads: U-Boot
-has not powered the display domain.
+Under U-Boot, at its prompt: `dm tree` (no `video` device), `bdinfo` (DRAM
+banks, where a buffer may live). No register reads: U-Boot has not powered
+the display domain.
+
+### What the board showed (2026-11-25, under its own Linux, read only)
+
+Read by the owner's session with the board's tools (not yet with the fixed
+`day_one.sh`), the panel showing Toradex's Qt demo. **Nothing of ours ran
+the display.**
+
+| Check | Result |
+|---|---|
+| M1 | "Toradex Verdin iMX95 WB", 8 GB (MemTotal 7,884,200 kB), six cores; the device tree says "on Verdin Development Board" (`fdt_board=dev`, the default; the carrier is a Mallow); Toradex Reference Multimedia Image "TDX Wayland with XWayland 7.8.0+build.17 (scarthgap)", kernel 6.6.157-7.8.0, U-Boot 2024.04-7.8.0+git.b7c747d8c084, `bootcmd=bootflow scan -b`; overlays `verdin-imx95_panel-cap-touch-10inch-lvds_overlay.dtbo verdin-imx95_spidev_overlay.dtbo`; console `ttyLP2,115200` (Verdin UART_3); root `/dev/mmcblk0p2` |
+| M2 | `card0-LVDS-1` connected, enabled, 1280x800: **Linux drives the X12 LVDS panel**; nothing answers on `I2C_2_DSI` (no bridge, as expected); the backlight `platform/42500000.pwm` channel 0 "backlight-lvds-native", period 6,666,667 ns, duty 3,111,111 ns, polarity inverse, brightness 4 of 7 |
+| M3 | "SCMI Protocol v2.1 'NXP:IMX' Firmware version 0x23e", "NXP SM MISC Version 1.1", "NXP SM BBM Version 1.0"; clocks `ldbpll_vco` 2,986,200,000, `ldbpll` 497,700,000, `ldb_phy_div` 497,700,000, `lvds_ch0_gate` on, `lvds_ch1_gate` off, `ldb_pll_div7` 71,100,000, `lvds_di0_gate` on, `lvds_di1_gate` off, `disp1pix` 24,000,000 with no user, `dispapb` 133,333,333, `dispocram` 400,000,000, `dispaxi` 800,000,000; domains display and camera on; `CONFIG_KEXEC` not set, `CONFIG_CRASH_DUMP` not set, `CONFIG_STRICT_DEVMEM=y`, `CONFIG_IO_STRICT_DEVMEM` not set, `CONFIG_DRM_IMX95_DPU=m`: **(a) cannot run** |
+| M4 | the dump, `driver/docs/imx95-display-dump-linux.txt` (one `devmem2` read each); seven words faulted (below) |
+
+The GPU under the same Linux: Arm's `mali_kbase` r50p0 (no panthor), "GPU
+identified as 0x4 arch 10.12.7 r0p0 status 0", at 0x4d900000, interrupts
+GICv3 320 (gpu), 321 (job), 322 (mmu), OPPs 500/800/1000 MHz, running at
+500 MHz (`docs/notes/pre-study-imx95.md`).
+
+**The dump, decoded** against hal_nxp's BSD headers (`PERI_LDB.h`,
+`PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h`, `PERI_DISPLAY_INTERLEAVER.h`,
+`PERI_DISPLAY_SEERIS.h`, hal 1e91007b):
+
+| Word | Value | Decode | Our path |
+|---|---|---|---|
+| LVDS CSR +0x0 `LVDS_PHY_CLOCK_CONTROL` | 0x14 | `LVDS_PHY_DIV` 0 (PHY clock = PLL clock); `Serializer_Ch0_clock_Ctrl` 0, `Ch1` 1, `PixelMapper_Di0_clock_Ctrl` 0, `Di1` 1: "1: not clocked" in the header. With Linux's clk_summary (ch0 and DI0 gates on, ch1 and DI1 off) this answers U4: four set-to-gate clock gates in bits 1-4 | writes 0x14 |
+| +0x4 `PIXEL_MAPPER_CONTROL` | 0x00082221 | `CH0_MODE` 1 (enabled, to DI0), `CH1_MODE` 0, no split, `CH0_DATA_WIDTH` 1 (24 bit), `CH0_BIT_MAPPING` 0 (SPWG), `DI0_VSYNC_POLARITY` 1 and `DI0_HSYNC_POLARITY` 1 (active low), `VSYNC_ADJ_EN` 1; async FIFO off, external bandgap resistor | writes it (`ldb::Form::Linux`) |
+| +0x8 `LVDS0_CONTROL` | 0x1075 | `CH0_EN`, `LVDS_EN` 0 (= enabled: the header's "0: Enable"), `BG_EN`, `PRE_EMPH_EN`, `PRE_EMPH_ADJ` 3, `CM_ADJ` 0, `CC_ADJ` 2: `fsl_ldb.c`'s final word exactly | writes it after the 100 ms park |
+| +0xC `LVDS1_CONTROL` | 0 | PHY 1 off | not touched |
+| display CSR +0x0 | 0x2 | `DSIP_CLK0_SEL` 2: LVDS PLL Div/7; engine 1 select 0 | writes 2 |
+| +0x4 | 0 | interleaver bypass | writes 0 |
+| +0x8 `PIXEL_LINK_CTRL` | 0x3 | `PL0_enable`, `PL0_valid`: Linux has pixel link 0 on under LVDS (U5) | writes 0x2 then 0x3 (option off) |
+| +0xC, +0x10 | 0, 0 | reserved in the header | not written |
+| +0x14 | 0x1A150A00 | **reserved in the header** (`RESERVED_0` covers +0xC..+0x17): not decoded | not written (U27) |
+| +0x18 `AXCACHE_CONTROL` | 0x00330303 | ArCache 3, AwCache 3, CmdSeq ArCache 3, AwCache 3 | not written (U27) |
+| +0x1C `QOS_SETTING` | 0x33 | Display ArQoS 3, panic QoS 3 | not written (U27) |
+| +0x20 `DISPLAYENGINE_PLANE_ASSOCIATION` | 0 | every fetch unit on engine 0 | not written |
+| interleaver CTRL (ch 0) | 0x600 | HSYNC, VSYNC active low; DE high; RGB | writes 0x600 |
+| interleaver +0x20 SWRST, +0x50 ICTRL | 0, 0 | | pulses SWRST; ICTRL not written |
+| DPU `COMCTRL_IPIDENTIFIER` | 0x21260400 | the IP's identity (family 2, configuration 1, application 2, feature set 6, evolution 0, maturity 4) | read in the proof |
+| FetchLayer0 +0x8..+0x10 | 0x1, 0xFF, 0x1FE7F010 | ShdEn; the sublayers' sticky shadow-load requests; burst word: 16 buffers, burst 16, `SetMaxBurstLength` 63, `CombinerTimeout` 255 | 0x1, 0xFF, **0x1010** (hal; U22) |
+| FetchLayer0 +0x18..+0x48 | 0xA2700000, 0, 0, 0, 0x002013FF, 0x031F04FF, 0x08080800, 0x10080000, 0, 0, 0, 0xFF, 0x80000200 | Linux's buffer (below 4 GiB, U12), no auto-update address, 32 bpp, stride 5120, 1280x800, R8 G8 B8 A0 at 16/8/0, offset 0, no clip window, constant alpha 0xFF, `SourceBufferEnable0` and `AlphaConstEnable0` | the same but `AlphaConstEnable0` (hal; U22) |
+| FetchYUV0 | 0x1, 0x1FE7F010, ..., 0x002004FF, 0x3FFF3FFF, 0x08080808, 0x18100800 | unused by Linux: its reset or idle state (the same burst word as FetchLayer0's) | not touched |
+| ExtDst0 +0x8, +0xC, +0x14 | 0x101, 0, 0 | ShdEn, `KICK_MODE` external | writes 0x101 |
+| FrameGen0 +0x8..+0x18 | 0x1, 0x059F0500, 0x80630027, 0x03360320, 0x800F0008 | ShdEn; htotal 1440, hactive 1280; HsEn, hsync + hback 100, hsync 40; vtotal 823, vactive 800; VsEn, vsync + vback 16, vsync 9: the panel at 71.1 MHz, 59.99 Hz (U24) | the same words |
+| FrameGen0 +0x1C..+0x28 (INT0-3) | 0 | no interrupt points | not written |
+| FrameGen0 +0x2C `PKICKCONFIG` | 0x83200501 | enabled at row 800, column 1281 | **0x833705A0** (hal: row 823, column 1440; U22) |
+| FrameGen0 +0x30 `SKICKCONFIG` | 0x00F00140 | disabled (row 240, column 320 left in it) | **0x833705A0** (hal; U22) |
+| FrameGen0 +0x34..+0x74 | 0x112, then the skew regulation words (`FGSRCR1` 0: off) and `FGKSDR` 0x00020002 | not used by this path | not written |
+| FrameGen0 +0x78..+0x80 | 0x00010001, 0x00010001, 0x2 | areas at (1, 1); primary input only | the same |
+| FrameGen0 +0x84, +0x88 | 0x1, 0x000FFC00 | panic: constant colour, green | **0x6, 0x7FFFFFFF** (hal; U22) |
+| FrameGen0 +0x8C, +0x94, +0x98, +0x9C | 0x1, 0x1, (time stamp), 0x100 | enabled, running, `PrimSyncStat` | what `start` waits for |
+| Signature0 | 0 and the reset thresholds; CRCs 0xFFFFFFFF | Linux does not run it (U7 needs our image) | the proof starts window 0 |
+
+**The words that faulted** (one read killed the reader; the board went on
+running): FetchLayer0 +0x14 and +0x4C, FetchYUV0 +0x24 (reserved words in
+the header's typedef), ExtDst0 +0x10 `SOFTWAREKICK`, FrameGen0 +0x90
+`FGSLR` and +0xA0 `FGCHSTATCLR`, Signature0 +0x20 `SOFTWAREKICK`
+(write-only, `__O`). A read of a write-only or reserved DPU word is a bus
+fault on this SoC: the read list leaves them out (`#@noread`), the display
+model refuses them, and no code of ours reads them (the probes and the
+proof read only `__IO`/`__I` words).
+
+**Where the dump disagrees with what the note or the shared code assumed**,
+and what was done:
+
+- The note (U4) said hal_nxp's `PERI_LDB.h` names only the PHY divider bit
+  of the LVDS CSR's first word. At hal 1e91007b the header names all five
+  bits (the divider and the four gates, "1: not clocked"); the dump and
+  Linux's clk_summary agree with it. Corrected (U4); the path writes the
+  dump's 0x14.
+- The note's step 3 and `fsl_ldb.c` would enable channel 1 and PHY 1 too;
+  the board runs channel 0 and PHY 0 only. The path follows the dump;
+  `fsl_ldb.c`'s form is `ldb::Form::HalInit`.
+- The shared DPU code (`fsl_dpu.c`'s values, run on the X4 path) differs
+  from Linux's in five words (the table above). Kept as the default, named
+  `dpu::Form::Linux` for the alternative; U22.
+- The shared display model knew only engine clock select 0 (DISP1PIX); it
+  now runs FrameGen0 from select 2 with LDBPLL on, and refuses the seven
+  faulting words.
+- The DSI path's `timing` moves the vertical sync one line (Linux's DSI
+  quirk); on LVDS the dump holds the panel's timing unchanged, so the LVDS
+  route does not.
+- The backlight: the note said "TPM5 `PWM_2`"; the pad tables give channel
+  0 (GPIO_IO06's mux 1 is `TPM5_CH0`) and Linux runs channel 0 with inverse
+  polarity: `ip::tpm_pwm` gained low-true pulses (`Pwm::low_true`).
+- The display CSR's +0x14 word (0x1A150A00) sits in a reserved range of the
+  header and is not decoded; AXCACHE and QOS hold non-zero values our path
+  does not write. Whether Linux wrote them or they are reset values is U27.
 
 Under Zephyr (the first probe image, later):
 
@@ -710,35 +880,55 @@ Under Zephyr (the first probe image, later):
 |---|---|---|
 | Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP and CAM levels (expected 3, ODV); rate and state of clocks 75, 76, 78, 80, 18, 19, 62, 66, 67, 68; `CLOCK_GET_PERMISSIONS` on 18, 19, 66-68, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
 | Z1 | only if Z0 says DISPLAY is on: FrameGen0/1 enable and status, the fetch unit's address, stride and size | after a crash kexec: **a scanout to adopt?** |
-| Z2 | the cold X4 path of section 4(b), step by step (a stop-after per step, as the i.MX8MP's `STOP_AFTER`), with the read-backs of "Proof without a camera"; the bridge's test pattern first, then our stream | **our own picture** |
+| Z2 | the cold X12 path of section 4(b') (`examples/triangle` with the board layer's default output), with the read-backs of "Proof without a camera"; the X4 path of 4(b) for a DSI display | **our own picture** |
 
 Z0 is the probe `tools/probes/verdin_imx95/imx95_scmi` (read only, all
 three domains and the clocks the port uses; `check.sh` compares it with
-Toradex's configuration); the DSI side's identity before Z2 (U13, U16, U18,
-U19, U21) is `imx95_dsi_ids`.
+Toradex's configuration): run on 2026-11-25, PASS, agent 2 "AP-NS",
+implementation 0x23e, power domains 14 (GPU), 13 (DISPLAY) and 3 (CAMERA)
+**off** at entry from U-Boot. Z1 is moot on this board (no kexec; DISPLAY
+off after U-Boot). The X12 side's identity before Z2 (U22, U26, U27) is
+`imx95_lvds_ids`: the LDB PLL's and TPM5's SCMI state and permissions, then
+DISPLAY on and the LVDS CSR, the display CSR and the DPU words the options
+concern, as reset leaves them. The DSI side's (U13, U16, U18, U19, U21) is
+`imx95_dsi_ids`.
+
+**The first board run's expected lines** (X12, `examples/triangle`; the
+values the host tests give, the pixel clock as the SM makes it):
+
+```
+verdin_imx95: display: X12 LVDS, the Toradex 10.1" LVDS panel
+verdin-imx95 LVDS: 1280x800 at 71100 kHz (LDB PLL / 7), LDB 0x00000014 0x00082221 0x00001075 0x00000000, backlight 119/255 low-true
+verdin_imx95: display up: 1280x800 XRGB8888 at 0x... stride 5120, pixel clock 71100000 Hz (DISP level 3), FrameGen0 in sync after N us, LDB 0x00000014 0x00082221 0x00001075 0x00000000, backlight 119/255 (TPM5 at 24000000 Hz)
+```
+
+or `verdin_imx95: display stopped: rc -5, DPU side` (or `backlight side`)
+after the line `verdin-imx95 X12: the up stopped: ...` that names the step;
+then a person sees the triangle at the panel's top left on black, the
+backlight lit. TPM5's rate is the mock's 24 MHz assumption (U26).
 
 Which result picks which route:
 
-| M2: the X4 display driven by Linux | M3: kexec and crash reservation | Route |
+| M2: the display driven by Linux | M3: kexec and crash reservation | Route |
 |---|---|---|
-| yes | yes | (a) by crash kexec for the dump and the reference, then (b) |
-| yes | no | the dump from M4, then (b) directly |
-| no (mainline, or no overlay) | | (b) from the sources alone, Linux's values first |
+| yes | yes | (a) by crash kexec for the dump and the reference, then cold |
+| **yes (X12 LVDS, 2026-11-25)** | **no** | **the dump from M4, then (b') directly: this board** |
+| no (mainline, or no overlay) | | cold from the sources alone, Linux's values first |
 
 ## 7. Unknowns
 
 | # | Question | What answers it |
 |---|---|---|
-| U1 | Answered by the owner (2026-11-21): the Toradex Capacitive Touch Display 10.1" DSI on X4; no LVDS panel on X12 | (M2 confirms it under Linux) |
+| U1 | Answered by the owner on 2026-11-24, replacing the statement of 2026-11-21 (the 10.1" DSI on X4): the **Toradex Capacitive Touch Display 10.1" LVDS on X12**, nothing on X4. M2 confirmed it on 2026-11-25 (`card0-LVDS-1` connected, enabled, 1280x800; the LVDS overlay applied; nothing on `I2C_2_DSI`) | answered |
 | U2 | Answered from `tsm:` (section 1): AP-NS (agent 2) holds DISPLAY, CAMERA, perf DISP and CAM, DISP1PIX, the LDB and video PLLs and the MIPI PHY clocks with ALL, and owns the DPU, LVDS, DSI and the pins; DISPAPB/AXI/OCRAM are the System Manager's; only a reset of the AP machine clears the votes, so a `go` or a kexec keeps them. Still open: that the board runs this configuration | Z0 (agent id, permissions, domain state); the System Manager's build line in Linux's `dmesg` (M3) |
-| U3 | Which Linux does the board run: Toradex's BSP (with `dpu95` and the 10.1" DSI overlay) or mainline? | M1 |
-| U4 | LVDS only, not on this board's path. The LVDS CSR word at +0x0: Linux's clock driver has the PHY divider in bit 0 and four set-to-disable gates in bits 1-4 (`ml:clk-imx95-blk-ctl.c:163-218`); hal_nxp's `PERI_LDB.h` names only the divider bit. Which is right? | M4 value under a running panel |
-| U5 | LVDS only (on the DSI path the pixel link is used). Is the pixel link part of the LVDS path? Toradex's LVDS overlay enables it; NXP's Liu Ying says it is DSI only | M4 read of display CSR + 0x8 under a running LVDS panel; a cold run without it |
+| U3 | Answered by M1 (2026-11-25): Toradex's BSP, Reference Multimedia Image 7.8.0, kernel 6.6.157-7.8.0 with the DPU driver as a module (`CONFIG_DRM_IMX95_DPU=m`) and the 10.1" LVDS overlay; the GPU under Arm's `mali_kbase` r50p0, not panthor | answered |
+| U4 | Answered by M4 (2026-11-25): the LVDS CSR's +0x0 reads 0x14 under the running panel while Linux reports `lvds_ch0_gate` and `lvds_di0_gate` on, `lvds_ch1_gate` and `lvds_di1_gate` off: bits 1-4 are set-to-gate clock gates (serializer ch0, ch1, pixel mapper DI0, DI1), bit 0 the PHY divider, as Linux's clock driver has them. hal_nxp's `PERI_LDB.h` at 1e91007b names all five too (this note said it named only the divider: wrong). The path writes 0x14 | answered |
+| U5 | Half answered by M4 (2026-11-25): Linux runs the LVDS panel with pixel link 0 valid and enabled (display CSR + 0x8 = 0x3), as Toradex's overlay asks; NXP's Liu Ying says the link is DSI only. Whether the LVDS picture needs it is not settled by a read: the path turns it on as Linux has it (`Route::Lvds { pixel_link: true }`) | a cold run with `pixel_link: false` (`board::verdin_imx95_lvds::Config::stream.route`) showing the same picture |
 | U6 | What does a read of a DPU register do with the DISPLAY domain off: a bus error, a stall, zero? | do not try it; Z0 reads the domain first |
 | U7 | Is Signature0's CRC usable as a proof: stable over frames, sensitive to one pixel, equal to the value under Linux for the same pattern? Its CRC polynomial is not stated in the header | a board run of the signature unit in Z2, and the same windows under Linux |
-| U8 | Does Toradex's kernel support kexec with a crash reservation on the i.MX 95 (as Armbian's does on the T6)? | M3 |
+| U8 | Answered by M3 (2026-11-25): no. The board's image has `# CONFIG_KEXEC is not set` and `# CONFIG_CRASH_DUMP is not set` (and `CONFIG_STRICT_DEVMEM=y`, `CONFIG_IO_STRICT_DEVMEM` not set, which let `devmem2` read the display's registers): route (a) cannot run on this image | answered |
 | U9 | If a video U-Boot were ever used: does `go` or `booti` leave the FrameGen running, or does pre-boot device removal run the driver's `remove`? | not on the recommended path; a U-Boot run only if (a) through U-Boot is ever wanted |
-| U10 | For the X4 display, answered: the touch (ILI2132, 0x41) is on LPI2C3 with the bridge, X4's only I2C (`dsi.dtso:115-125`, `MAL:` Table 14). The open question was X12/X13's (LPI2C4 by the Mallow, LPI2C3 by Toradex's LVDS overlay) and no longer matters | M2 `i2cdetect` shows 0x41 |
+| U10 | Out of scope: the X12 panel's touch is on X13 and not part of the picture; under Linux nothing answers on `I2C_2_DSI` (M2, 2026-11-25), so the X4 display's bus is empty on this board. Which bus X13's touch uses (LPI2C4 by the Mallow's datasheet, LPI2C3 by Toradex's LVDS overlay) was not read | an `i2cdetect` of LPI2C3 and LPI2C4 under Linux, if touch is ever wanted |
 | U11 | Does the IMX95RM, with an NXP account, have the DPU chapter, and is it needed now that hal_nxp's header exists? | someone with an account reads its table of contents; until then the header is the documentation |
 | U12 | hal_nxp's `DPU_SetFetchUnitSrcBufferAddr` takes a 32-bit address (`fsl_dpu.c:2518`); the hardware has an MSB register. Is the A55's frame buffer below 4 GiB on this board? | the image's memory map (DRAM starts at 0x80000000; its first 16 MiB are reserved for the M7, `ml:imx95-verdin.dtsi:162-165`); `bdinfo` |
 | U13 | `Phy_hsfreqrange` for 420 Mbit/s: 0x16 (Linux and U-Boot, `glue:262-263`) or 0x05 (hal and Zephyr, `fsl_mipi_dsi.c:1078`)? The two tables put the 420 Mbit/s point on opposite sides of a range edge | M4: `COMBO_PHY_FREQ_CONTROL` (0x4AD20104) under Linux, a plain CSR read |
@@ -750,3 +940,9 @@ Which result picks which route:
 | U19 | Answered by the build at the workspace pin (zephyr af17c0c8aa2a): the A55's `nxp_mimx95_a55.dtsi` has LPI2C1-8 (`nxp,lpi2c`, clocks from the SCMI clock protocol) and the SCMI pin control (`nxp,imx95-pinctrl`), and `i2c_mcux_lpi2c.c`, `gpio_pca_series.c` (`nxp,pcal6416`, whose part table is the expander's register map) and `pinctrl_imx_scmi.c` build into the Verdin's image. Two gaps, handled in the board glue: the dtsi has no TPM node (the backlight is `ip::tpm_pwm`, only its pad is Zephyr's), and the LPI2C driver neither enables its SCMI clock nor waits for one, so the buses and the expander are `zephyr,deferred-init` and the first show turns LPI2C2/3 on over SCMI before it initialises them. Still open: that the SM leaves those clocks to AP-NS as read (`tsm:`), and the expander's answer on the board | Z2 (the first show's lines) |
 | U20 | Bridge `LVDS_FMT` (0x18): 0x18 (our plan; the i.MX8MP's Linux dump of the same panel) or 0x78 (NXP's driver from the panel's active-low syncs)? An LVDS panel with DE likely ignores it | M2 `i2cdump` of 0x2C |
 | U21 | The display's power-up after `GPIO_10_DSI` rises: how long until the bridge answers on I2C (the AM62P's adapter needed about 50 ms, `ip::sn65dsi8x` retries for a second) | Z2's ID retry count |
+| U22 | X12: which of the DPU words `fsl_dpu.c` and Linux disagree on matter: the primary kick point, the secondary kick, the panic mode and colour, FetchLayer0's burst word (`SetMaxBurstLength`, `CombinerTimeout`), `AlphaConstEnable0` (section 4(b')'s table). The path writes hal's (`dpu::Form::Hal`, also the X4 path's); `dpu::Form::Linux` writes the dump's | the probe `imx95_lvds_ids` reads the reset values (is 0x1FE7F010 FetchLayer0's reset burst word?); the first cold run with `Form::Hal` (`FGCHSTAT`, the picture), and with `Form::Linux` if it fails |
+| U23 | X12: Linux's Dither0 `POLARITYCTRL0` (0x4B711008) under the LVDS panel was not read. The path writes 0x4 (DE high, syncs low), consistent with the interleaver's 0x600 and the LDB's active-low DI0 syncs | the next `day_one.sh` run (the word is in the read list now); the probe `imx95_lvds_ids` reads its reset value |
+| U24 | X12: the panel's timing is FrameGen0's (H 60/40/60, V 7/9/7 around 1280x800); the totals and the sync-plus-back-porch sums are fixed by the words, the split into front porch, sync and back porch is the reading of the `Hsync`/`Vsync` fields (`fsl_dpu.c`'s: value = width - 1). Toradex's overlay's `panel-timing` (`tdx:...10inch-lvds.dtso:34-62`) was not re-read for this change (no network access) | read the overlay's panel-timing node, or `/sys/kernel/debug/dri/*/state` under Linux |
+| U25 | X12: the backlight pads' settings (GPIO_IO06, XSPI1_DATA4): the board devicetree uses TPM6's (FSEL "slightly fast", DSE x4); Linux's pinctrl words for them were not read | `/proc/device-tree` under Linux (the overlay's pinctrl group), or `ml:imx95-verdin.dtsi` |
+| U26 | X12: TPM5's SCMI clock (154): AP-NS's permission (Toradex's configuration gives AP-NS the LPTPM5 resource; the clock line was not found in `config_scmi.h` as read) and its rate (24 MHz assumed, as TPM6's); whether GPIO5's registers answer without a clock of ours (Linux drives the enable; our image does not turn any GPIO clock on) | `imx95_lvds_ids` (clock 154's state, rate, permissions); the first cold run (the backlight lights, the enable rises) |
+| U27 | X12: the display CSR's +0x14 (0x1A150A00, a reserved word in the header), `AXCACHE_CONTROL` 0x00330303 and `QOS_SETTING` 0x33 under Linux: written by Linux or reset values? The path writes none of them | `imx95_lvds_ids` reads them after DISPLAY comes on, before any write |

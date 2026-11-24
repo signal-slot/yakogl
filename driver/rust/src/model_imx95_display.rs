@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The host tests' model of the i.MX 95 display block (tests only), at the
-//! real addresses: the display CSR (0x4B010000), the pixel interleaver
-//! (0x4B0D0000) and the DPU (0x4B400000), joined to the mock System
-//! Manager (`soc::imx95::sm_mock`) for the power domain and the pixel clock.
+//! real addresses: the display CSR (0x4B010000), the LVDS CSR (0x4B0C0000,
+//! "ldb"), the pixel interleaver (0x4B0D0000) and the DPU (0x4B400000),
+//! joined to the mock System Manager (`soc::imx95::sm_mock`) for the power
+//! domain and the pixel clock.
 //!
 //! As the other display models do, it restates every offset and bit from
 //! the design note (driver/docs/imx95-display.md) and NXP's headers, never
@@ -14,9 +15,17 @@
 //! - Any access with the DISPLAY domain (13) off is refused (logged, a
 //!   write dropped, a read 0): what such a read does on the board is the
 //!   note's U6, the code must not try.
+//! - A read of a write-only register or of a reserved word refuses (logged
+//!   in `refused`, reads 0): the seven words whose single read killed the
+//!   reading process on the board under Linux (2026-11-25; the header's
+//!   `__O` registers and `RESERVED` holes: FetchLayer0 +0x14 and +0x4C,
+//!   FetchYUV0 +0x24, ExtDst0 SOFTWAREKICK, FrameGen0 FGSLR and
+//!   FGCHSTATCLR, Signature0 SOFTWAREKICK), [`FAULTS`].
 //! - FrameGen0 runs (`FGENSTS.EnSts`) while `FGENABLE.FgEn` is set and its
-//!   pixel clock arrives: DISP1PIX (80) enabled at a non-zero rate and
-//!   `DSIP_CLK0_SEL` = 0 (CCM). The other selects give no clock here.
+//!   pixel clock arrives: `DSIP_CLK0_SEL` = 0 (CCM) with DISP1PIX (80)
+//!   enabled at a non-zero rate, or `DSIP_CLK0_SEL` = 2 (LDB PLL / 7) with
+//!   LDBPLL (38) enabled at a non-zero rate. Select 1 (the DSI PLL) gives no
+//!   clock here.
 //! - Each read of `FGTIMESTAMP`, `FGCHSTAT`, `IRQ_INTERRUPTSTATUS0` or
 //!   `SIG0 STATUS` while running is a frame: the frame index moves, a
 //!   pending ExtDst0 shadow load is taken (the fetch address written
@@ -40,6 +49,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 pub const CSR: usize = 0x4B01_0000;
+pub const LDB: usize = 0x4B0C_0000;
 pub const IL: usize = 0x4B0D_0000;
 pub const DPU: usize = 0x4B40_0000;
 
@@ -80,6 +90,9 @@ mod o {
     pub const SIG_CRC_G0: u32 = 0x2d_0404;
     pub const SIG_CRC_B0: u32 = 0x2d_0408;
 }
+
+/// The DPU words (offsets) a read of faults on the board (module text).
+pub const FAULTS: [u32; 7] = [0x1d_0014, 0x1d_004c, 0x20_0024, 0x11_0010, 0x2b_0090, 0x2b_00a0, 0x2d_0020];
 
 #[derive(Default, Clone, Copy)]
 pub struct Faults {
@@ -123,6 +136,8 @@ impl Display {
     fn block(addr: usize) -> (&'static str, u32) {
         if (CSR..CSR + 0x1_0000).contains(&addr) {
             ("csr", (addr - CSR) as u32)
+        } else if (LDB..LDB + 0x1_0000).contains(&addr) {
+            ("ldb", (addr - LDB) as u32)
         } else if (IL..IL + 0x2_0000).contains(&addr) {
             ("il", (addr - IL) as u32)
         } else if (DPU..DPU + 0x40_0000).contains(&addr) {
@@ -150,6 +165,11 @@ impl Display {
             .collect()
     }
 
+    /// A register's value as the model holds it (no side effect, not logged).
+    pub fn peek(&self, block: &'static str, off: u32) -> u32 {
+        Self::reg(&self.st.borrow(), block, off)
+    }
+
     pub fn clear_log(&self) {
         self.st.borrow_mut().log.clear();
     }
@@ -169,10 +189,14 @@ impl Display {
 
     fn running(&self, st: &State) -> bool {
         let sm = self.sm.borrow();
-        let pix = sm.enabled(80) && sm.rate_of(80) > 0;
-        let sel = Self::reg(st, "csr", 0x0) & 0x3 == 0;
+        let clocked = |c| sm.enabled(c) && sm.rate_of(c) > 0;
+        let pix = match Self::reg(st, "csr", 0x0) & 0x3 {
+            0 => clocked(80),
+            2 => clocked(38),
+            _ => false,
+        };
         let fgen = Self::reg(st, "dpu", o::FG_ENABLE) & 1 != 0;
-        (fgen || self.faults.fg_stuck && st.frames_running > 0) && pix && sel
+        (fgen || self.faults.fg_stuck && st.frames_running > 0) && pix
     }
 
     fn path_complete(st: &State) -> bool {
@@ -228,7 +252,7 @@ impl Display {
     fn read(&self, addr: usize) -> u32 {
         let (b, off) = Self::block(addr);
         let mut st = self.st.borrow_mut();
-        if !self.powered() {
+        if !self.powered() || b == "dpu" && FAULTS.contains(&off) {
             st.refused.push(Access::R(b, off, 0));
             return 0;
         }

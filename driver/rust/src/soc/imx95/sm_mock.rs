@@ -9,7 +9,10 @@
 //! for a rate on a gate, dev_sm_clock.c `DEV_SM_ClockRateSet`) and the
 //! AP-NS agent's permissions of Toradex's verdin-imx95 configuration
 //! (`configs/verdin-imx95/config_scmi.h`: PD 3, 13 and 14, perf 9, 11
-//! and 12, clocks 18, 19, 66, 67, 68, 80, 155 and 174 at ALL; CAMAPB 62,
+//! and 12, clocks 18, 19, 37, 38, 66, 67, 68, 80, 155 and 174 at ALL;
+//! TPM5 154 at ALL too, which the configuration as the design note read it
+//! does not list: Linux runs the X12 backlight on TPM5, and the probe
+//! imx95_lvds_ids reads the grant on the board; CAMAPB 62,
 //! DISPAPB/DISPAXI/DISPOCRAM 75, 76, 78 and GPUAPB/GPU 83, 84 not
 //! granted), and NXP's BBM vendor protocol 0x81 for the record
 //! ([`super::bbm`]: rpc_scmi_bbm.c `BbmGprSet` EXCLUSIVE, `BbmGprGet` GET,
@@ -21,19 +24,19 @@
 //! fsl_clock.c), restated here and not taken from the code under test:
 //! - a gate (174) runs at its performance domain's level (`rate_offset`
 //!   models a PLL's rounding);
-//! - a PLL VCO (18) takes any rate in 2.52..4.992 GHz
+//! - a PLL VCO (18, 37) takes any rate in 2.52..4.992 GHz
 //!   (MIMX95_elec_spec.h `ES_MIN_HZ_PLLVCO`, `ES_MAX_HZ_PLLVCO`), else
 //!   OUT_OF_RANGE;
-//! - a PLL output (19) is its VCO divided by an integer, rounded down (the
-//!   SCMI default; flags 0);
+//! - a PLL output (19, 38) is its VCO divided by an integer, rounded down
+//!   (the SCMI default; flags 0);
 //! - a clock root (80) is its parent divided by an integer 1..=256,
 //!   rounded down, at most 350 MHz (`ES_MAX_HZ_DISP1PIX`); its parents are
 //!   OSC24M (2), AUDIOPLL1 (15) and VIDEOPLL1 (19) (fsl_clock.c
 //!   `CLOCK_ROOT_DISP1PIX` mux table), any other is INVALID_PARAMETERS;
 //! - the MIPI PHY roots (66, 67, 68) run at their parent's rate (divider
 //!   1), their parents OSC24M (2, the reset mux), AUDIOPLL1 (15) and
-//!   VIDEOPLL1 (19) (fsl_clock.c:264-277); TPM6 (155) at 24 MHz, its reset
-//!   parent the oscillator (:689).
+//!   VIDEOPLL1 (19) (fsl_clock.c:264-277); TPM6 (155) and TPM5 (154) at
+//!   24 MHz, their reset parent the oscillator (:689).
 
 use super::sm::TOKEN;
 use crate::firmware::scmi::{self, Transport};
@@ -72,6 +75,9 @@ const CLK_OSC24M: u32 = 2;
 const CLK_AUDIOPLL1: u32 = 15;
 const CLK_VIDEOPLL1_VCO: u32 = 18;
 const CLK_VIDEOPLL1: u32 = 19;
+const CLK_LDBPLL_VCO: u32 = 37;
+const CLK_LDBPLL: u32 = 38;
+const CLK_TPM5: u32 = 154;
 const CLK_DISP1PIX: u32 = 80;
 const CLK_GPU_CGC: u32 = 174;
 const PD_CAMERA: u32 = 3;
@@ -134,6 +140,9 @@ impl Sm {
                 (CLK_MIPIPHYPLLBYPASS, PERM_ALL),
                 (CLK_MIPIPHYPLLREF, PERM_ALL),
                 (CLK_TPM6, PERM_ALL),
+                (CLK_LDBPLL_VCO, PERM_ALL),
+                (CLK_LDBPLL, PERM_ALL),
+                (CLK_TPM5, PERM_ALL),
                 (CLK_CAMAPB, PERM_NONE),
             ]),
             pd_perm: BTreeMap::from([(PD_GPU, PERM_ALL), (PD_DISPLAY, PERM_ALL), (PD_CAMERA, PERM_ALL)]),
@@ -154,6 +163,9 @@ impl Sm {
                 (CLK_VIDEOPLL1, 0),
                 (CLK_DISP1PIX, 24_000_000),
                 (CLK_TPM6, 24_000_000),
+                (CLK_TPM5, 24_000_000),
+                (CLK_LDBPLL_VCO, 0),
+                (CLK_LDBPLL, 0),
             ]),
             parent: BTreeMap::from([
                 (CLK_DISP1PIX, CLK_OSC24M),
@@ -306,14 +318,14 @@ impl Sm {
                 }
                 assert_eq!(flags, 0, "a synchronous, round-down request");
                 match clk {
-                    CLK_VIDEOPLL1_VCO => {
+                    CLK_VIDEOPLL1_VCO | CLK_LDBPLL_VCO => {
                         if !(2_520_000_000..=4_992_000_000).contains(&hz) {
                             return (scmi::STATUS_OUT_OF_RANGE, vec![]);
                         }
                         self.rate.insert(clk, hz);
                     }
-                    CLK_VIDEOPLL1 => {
-                        let vco = self.rate[&CLK_VIDEOPLL1_VCO];
+                    CLK_VIDEOPLL1 | CLK_LDBPLL => {
+                        let vco = self.rate[&(clk - 1)];
                         if vco == 0 || hz == 0 {
                             return (scmi::STATUS_INVALID_PARAMETERS, vec![]);
                         }

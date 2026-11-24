@@ -4,7 +4,9 @@
 
 Date 2026-11-20, main `1d9022e7`. Host research only: no board was touched.
 The owner fixed the board on 2026-11-20: a Toradex Verdin iMX95 on a Mallow
-carrier. This note is the pre-study for that board. NXP's EVKs and FRDM and
+carrier; its display on 2026-11-24 (the 10.1" LVDS panel on X12). The
+board arrived on 2026-11-24; what its U-Boot, its Linux and our first images
+returned on 2026-11-25 is in section 6 ("What the board returned"). This note is the pre-study for that board. NXP's EVKs and FRDM and
 the other Verdin carriers appear only as a comparison.
 
 Five topics have their own documents, written in parallel. This note stays
@@ -61,10 +63,14 @@ item list with its ordering.
    the SNVS record is gone: the battery-backed block belongs to the SM. The
    AP-NS agent owns `GPR4`..`GPR7` of the BBSM mix through SCMI, the likely
    new record (U2).
-7. The display on Mallow is Verdin DSI: a DSI panel, or Toradex's
-   DSI-to-HDMI adapter (Lontium LT8912B). Mainline Linux has no i.MX 95
-   display driver or node at all. Toradex's 6.6 kernel and its overlays
-   carry it (survey: section 1.4; depth: `driver/docs/imx95-display.md`).
+7. The owner's display (2026-11-24) is the Toradex Capacitive Touch
+   Display 10.1" **LVDS on the Mallow's X12**, the SoC's native LVDS: no
+   bridge, no I2C. Mainline Linux has no i.MX 95 display driver or node at
+   all; the board's Toradex 6.6 BSP drives the panel (read on 2026-11-25:
+   `card0-LVDS-1`, 1280x800 at 71.1 MHz from the LDB PLL). Our cold path for
+   it is implemented and host-tested against that Linux's register dump, not
+   run (depth: `driver/docs/imx95-display.md` section 4(b'); the X4 DSI path
+   of the earlier statement stays, selectable).
 8. Zephyr, at the pin and on upstream main, has no Verdin iMX95. Our board
    is out of tree in `driver/boards/toradex/`, over the pin's i.MX 95 A55
    SoC support, as our other two Verdins are.
@@ -579,7 +585,7 @@ Day one, in order:
 
 | # | Try | Done when |
 | --- | --- | --- |
-| B1 | At Toradex's U-Boot prompt (a person or a bridge on X11): `version`, `fuse read 2 2 2` (GPU, DSI and LVDS presence, section 1.1), `printenv` (the env to back up before the hook, `bootcmd`, the watchdog state), `mmc list`, `bdinfo`. Then boot the stock Linux once and record `/proc/iomem`, `/proc/interrupts`, Panthor's probe lines and the firmware it loads, `findmnt -T /var` | the module's fuses, DRAM and env recorded in the board's issue; U-Boot's commands confirmed |
+| B1 | At Toradex's U-Boot prompt (a person or a bridge on X11): `version`, `fuse read 2 2 2` (GPU, DSI and LVDS presence, section 1.1), `printenv` (the env to back up before the hook, `bootcmd`, the watchdog state), `mmc list`, `bdinfo`. Then boot the stock Linux once and record `/proc/iomem`, `/proc/interrupts`, Panthor's probe lines and the firmware it loads, `findmnt -T /var` | the module's fuses, DRAM and env recorded in the board's issue; U-Boot's commands confirmed. **Done on 2026-11-25** (below) |
 | B2 | Our image through the hook (`BOARD_BOOT=uboot-mmc board.sh … run`): SCMI base protocol (agent name "AP-NS", protocol list), `PD_GPU` on, the GPU clocks, then **the GPU identity read by our code** (`mali::ident`) | `GPU_ID`, `CORE_FEATURES`, `SHADER_PRESENT`, `L2_FEATURES`, `TILER_FEATURES`, `MMU_FEATURES`, `COHERENCY_FEATURES` printed and stored in the record |
 | B3 | The firmware (the T6's Z3 path with the same file) | **the firmware's first answer**: the GLB version (1.5.0 expected, since the bytes are the T6's) and the CS features word |
 
@@ -588,13 +594,73 @@ are in `tools/probes/verdin_imx95/` (its README: `imx95_wdog` first, then
 `imx95_scmi`, `imx95_ident`, `imx95_fw`; `linux_day_one/` for B1's Linux
 half).
 
+**What the board returned (the owner's session, 2026-11-24/25).** The
+module: "Toradex Verdin iMX95 WB", "Model: Toradex 0089 Verdin iMX95 Hexa
+8GB WB IT V1.1A", "CPU: i.MX95 rev2.0 at 1800MHz", 8 GB (MemTotal 7,884,200
+kB; `bdinfo` DRAM 0x90000000 + 0x70000000 and 0x100000000 + 0x180000000),
+six cores.
+
+- **B1, U-Boot half**: U-Boot 2024.04-7.8.0+git.b7c747d8c084, `bootcmd=bootflow
+  scan -b`, `bootdelay` 1; "SM firmware Build 574, Commit cc7a8d2d", "ELE
+  firmware version 2.0.5-fe6641ef", TF-A "BL31: v2.10.0
+  (release):lf-6.6.52-2.2.1-dirty"; `fuse read 2 2 2` = `00000000 00000080`
+  (word 2, LVDS among it, all clear; word 3's GPU bit 17 and MIPI DSI bit 24
+  clear, its bit 7 set and not decoded here; the GPU and the LVDS panel both
+  run, so clear is present); the eMMC is `mmc 0`, partition 1 FAT (boot
+  files), partition 2 ext4 (root, with `/var`), boot areas 31.5 MiB each,
+  not write-protected; `dm tree` shows no video device; there is no `wdt`
+  command.
+- **B1, Linux half** (read only; `driver/docs/imx95-display.md` section 6
+  has the display's part): Toradex Reference Multimedia Image "TDX Wayland
+  with XWayland 7.8.0+build.17 (scarthgap)", kernel 6.6.157-7.8.0, overlays
+  `verdin-imx95_panel-cap-touch-10inch-lvds_overlay.dtbo
+  verdin-imx95_spidev_overlay.dtbo`, console `ttyLP2,115200` (Verdin
+  UART_3), root `/dev/mmcblk0p2`; the device tree says "on Verdin
+  Development Board" (`fdt_board=dev`, the default; the carrier is a
+  Mallow). SCMI: "SCMI Protocol v2.1 'NXP:IMX' Firmware version 0x23e",
+  "NXP SM MISC Version 1.1", "NXP SM BBM Version 1.0". **The GPU runs under
+  Arm's `mali_kbase` r50p0, not panthor**: "GPU identified as 0x4 arch
+  10.12.7 r0p0 status 0", at 0x4d900000, interrupts GICv3 320 (gpu), 321
+  (job), 322 (mmu), OPPs 500/800/1000 MHz, running at 500 MHz (so panthor's
+  probe lines and its firmware load, which B1 asked for, do not exist on
+  this image). `CONFIG_KEXEC` and `CONFIG_CRASH_DUMP` not set,
+  `CONFIG_STRICT_DEVMEM=y`; no SCMI raw interface
+  (`# CONFIG_ARM_SCMI_RAW_MODE_SUPPORT is not set`, no
+  `/sys/kernel/debug/scmi`: `tools/imx95_bbm_record.sh probe` says so).
+- **Our images**, staged by Linux under `/var/yakogl` on the eMMC's root,
+  loaded at U-Boot's prompt (`ext4load mmc 0:2 0xd0000000 <file>`, md5
+  compared) and entered with `dcache off; icache flush; go 0xd0000000`
+  (main `bd6cd44938a7`; the route is `docs/standalone-boot.md`'s): all ran to
+  their end and the board came back to Linux each time.
+  - `imx95_wdog`: WDOG3 found stopped (`CS 0x00002900 TOVAL 0x00000400`),
+    armed, alive to 50 s, then the System Manager's whole-board reset (U-Boot
+    SPL's banner, "LM Boot reason: fccu, origin: -1, errid: 19").
+  - `imx95_scmi` (B2, SCMI half): `PASS 146 facts, 2 answered with a status,
+    0 broken`, `check.sh` 24 of 24 match; agent 2 "AP-NS", implementation
+    0x23e; power domains 14 (GPU), 13 (DISPLAY) and 3 (CAMERA) off at entry
+    from U-Boot. The PSCI reset returns to U-Boot ("LM Boot reason: sw").
+  - `imx95_ident` (B2, GPU half): `GPU_ID 0xac740001`, **`SHADER_PRESENT
+    0x00000001`: one core** (the assumed 0x3 was wrong; one of the nine
+    `mock.rs` words differs); `L2_FEATURES 0x07110306`, `TILER_FEATURES
+    0x00000809`, `MMU_FEATURES 0x00002830`, `AS_PRESENT 0xff`,
+    `CORE_FEATURES 0x1`, `COHERENCY_FEATURES 0x0`, `TEXTURE_FEATURES_0
+    0xc3ffff9e`, `THREAD_FEATURES 0x04008000`.
+  - `imx95_fw` (B3): `PASS GLB 1.5.0, 8 groups, CS features 0x0007085f,
+    suspend 21120/21120`, booted in 21 µs.
+  - `gl_test` on read-back, display off (B5): 0 of 50 cases failed,
+    `yk-record: 594b0201 00000001 00000000 00000000`, "PSCI SYSTEM_RESET at
+    15677 ms". The board's results row is `tools/cts/RESULTS.md`'s.
+  The display was not part of any of these runs. The BBM record cannot be
+  read back under this Linux (no raw interface): runs are judged from the
+  console.
+
 Then the measurements that say the port is alive:
 
 - M1 the first submitted frame read back (the T6's Z4).
 - M2 the first `gl_test` case on read-back, then the 50 (the T6 reached
   50/50 on read-back with no display, repo: `tools/cts/STATUS.md:17`).
-- M3 the first clear on the Mallow's DSI panel (after
-  `driver/docs/imx95-display.md`).
+- M3 the first clear on the Mallow's X12 LVDS panel (after
+  `driver/docs/imx95-display.md`, section 4(b')).
 - M4 the first triangle on that panel.
 - M5 sign-off: the same image started by U-Boot from the eMMC as the
   product form (`default <image> N`), then the direct route (B6).
@@ -603,13 +669,13 @@ Then the measurements that say the port is alive:
 
 | # | Question | What answers it |
 | --- | --- | --- |
-| U1 | Is the SM on the lab's module built from Toradex's `verdin-imx95` configuration as read here (the Yocto pin `cc7a8d2d` or later; the configuration is the same at both), or an older build with other rights? | B1: the SM's version line on its console (UART_4), or SCMI base `DISCOVER_AGENT` from our image (B2) |
-| U2 | Is there a reset-surviving record for a console-less run? The BBSM GPRs 4..7 belong to AP-NS through SCMI; do they survive a WDOG3 system reset, and can Linux read them? | H4 (built): Linux reads them only through the SCMI raw debugfs interface, which neither `imx_v8_defconfig` nor `defconfig` of Toradex's kernel tree enables (`CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`; linux-toradex `toradex_6.18-2.1.x-imx` 851ac0f9; Torizon's own kernel fragments not read); B1 reads the board's kernel (`board.sh imx95 status`), B3 the survival. Until then a person or a bridge on X11 (`BOARD_UART`) |
-| U3 | Which i.MX 95 part does Toradex fit, and is any SKU fused without the GPU or the DSI? | Toradex's data sheet (not read); B1's `fuse read` on the lab's module |
+| U1 | Answered (2026-11-25): U-Boot prints "SM firmware Build 574, Commit cc7a8d2d" (the Yocto pin read here), Linux "SCMI ... Firmware version 0x23e", and our `imx95_scmi` finds agent 2 "AP-NS" with the rights `expected.txt` holds (24 of 24) | answered |
+| U2 | Is there a reset-surviving record for a console-less run? The BBSM GPRs 4..7 belong to AP-NS through SCMI; do they survive a WDOG3 system reset, and can Linux read them? | H4 (built): Linux reads them only through the SCMI raw debugfs interface, which neither `imx_v8_defconfig` nor `defconfig` of Toradex's kernel tree enables (`CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`; linux-toradex `toradex_6.18-2.1.x-imx` 851ac0f9; Torizon's own kernel fragments not read); B1 reads the board's kernel (`board.sh imx95 status`), B3 the survival. Until then a person or a bridge on X11 (`BOARD_UART`). Linux half read (2026-11-25): the board's kernel has no raw interface (`# CONFIG_ARM_SCMI_RAW_MODE_SUPPORT is not set`), so the record cannot be read back under this image; runs are judged from the console. The survival is still open |
+| U3 | Which i.MX 95 part does Toradex fit, and is any SKU fused without the GPU or the DSI? | Toradex's data sheet (not read); B1's `fuse read` on the lab's module: `00000000 00000080` (2026-11-25; the GPU, DSI and LVDS bits clear, and the GPU and the LVDS panel run). The part number is still not read |
 | U4 | What does an LM reset (WDOG4, or PSCI without Toradex's patch) do on this board: does the A55 side come back through U-Boot to Linux? | not needed if the image uses WDOG3 and PSCI full reset; else B-day test with a person |
-| U5 | Who releases `GPURESET` on the i.MX 95, given that the A55 cannot write the GPU blk-ctrl and the SM does not write it? | `docs/notes/imx95-gpu-power.md`; B2 |
-| U6 | The G310's configuration registers (variant, cores, tiler levels, coherency) | B2; their consequences are `docs/notes/mali-g310-vs-g610.md` |
-| U7 | Does the lab's Mallow have a serial bridge on X11, and is the 10-inch DSI panel free for this module? | the farm (`ask_farm`), not a document |
+| U5 | Who releases `GPURESET` on the i.MX 95, given that the A55 cannot write the GPU blk-ctrl and the SM does not write it? | `docs/notes/imx95-gpu-power.md`; B2: after our own power-on the GPU answered (`imx95_ident`, 2026-11-25) and its firmware booted (`imx95_fw`), so the reset is released on this board; by whom is still not read |
+| U6 | The G310's configuration registers (variant, cores, tiler levels, coherency) | Answered by B2 (`imx95_ident`, 2026-11-25): `GPU_ID 0xac740001`, `SHADER_PRESENT 0x1` (one core; the assumed 0x3 was wrong), `CORE_FEATURES 0x1`, `L2_FEATURES 0x07110306`, `TILER_FEATURES 0x00000809`, `MMU_FEATURES 0x00002830`, `COHERENCY_FEATURES 0x0`; their consequences are `docs/notes/mali-g310-vs-g610.md` |
+| U7 | Answered by the owner's session (2026-11-24/25): the console (Verdin UART_3) is reachable, U-Boot's prompt was typed on it; the panel is the owner's Toradex 10.1" **LVDS** display on X12 (not a DSI panel), free for this module. Which farm path reaches the console is the farm's (`ask_farm`), not a document | answered |
 
 ## 8. Proposed items, ordered
 
@@ -644,7 +710,7 @@ Board items:
 | B3 | Firmware boot; first record read back from Linux | S | B2, P7 | GLB answer and the record |
 | B4 | First frame (Z4 analogue) | M | B3, P2, P4 | read-back pixels as predicted |
 | B5 | `gl_test` on read-back to 50/50 (the image builds: `driver/samples/zephyr/gl_test` for `verdin_imx95/mimx9596/a55`, panel off, gate row `zephyr  verdin_imx95 gl_test image`) | M | B4 | row in `tools/cts/RESULTS.md` |
-| B6 | Display bring-up on the Mallow's DSI panel | L | P9, B2 | first clear, then the first triangle |
+| B6 | Display bring-up on the Mallow's X12 LVDS panel (`driver/docs/imx95-display.md` 4(b'), implemented and host-tested; the probe `imx95_lvds_ids` first) | L | P9, B2 | first clear, then the first triangle |
 | B7 | Sign-off: `default <image> N` from the eMMC, then the direct route (steps D1-D6 of `docs/notes/imx95-direct-boot.md`) | S | B5 | both routes recorded |
 | B8 | dEQP-GLES2 tree as on the T6 (the images build: the T6's `mali-gles2-tree.txt` rows by `tools/cts/imx95-deqp-images.sh`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`) | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
 

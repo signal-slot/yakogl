@@ -22,6 +22,14 @@
  *   SN65DSI83 (pinctrl_lpi2c3: GPIO_IO29 SCL, GPIO_IO28 SDA).
  * - tpm6_default: PWM_3_DSI (SODIMM 19), the backlight (pinctrl_tpm6:
  *   GPIO_IO19 as TPM6 channel 2).
+ *
+ * The X12 LVDS display's backlight (its LVDS pads are dedicated):
+ * - x12_backlight_default: PWM_2 (SODIMM 16, X12 pin 35) as TPM5 channel 0
+ *   (GPIO_IO06, mux 1, hal_nxp IOMUXC_PAD_GPIO_IO06__TPM5_CH0) and
+ *   I2S_2_D_OUT (SODIMM 46, X12 pin 37) as GPIO5_IO04 (XSPI1_DATA4, mux 5,
+ *   IOMUXC_PAD_XSPI1_DATA4__GPIO5_IO_BIT4). The pad settings are
+ *   tpm6_default's (FSEL "slightly fast", DSE x4); Linux's own pad words for
+ *   these two pads were not read (design note, U25).
  */
 
 #include <nxp/nxp_imx/mimx9596avzxn-pinctrl.dtsi>
@@ -59,6 +67,15 @@
 			input-schmitt-enable;
 			input-enable;
 			slew-rate = "fast";
+			drive-strength = "x4";
+		};
+	};
+
+	x12_backlight_default: x12_backlight_default {
+		group0 {
+			pinmux = <&iomuxc_gpio_io06_tpm_ch_tpm5_ch0>,
+				 <&iomuxc_xspi1_data4_gpio_io_bit_gpio5_io_bit4>;
+			slew-rate = "slightly_fast";
 			drive-strength = "x4";
 		};
 	};

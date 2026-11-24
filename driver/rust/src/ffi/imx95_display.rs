@@ -32,6 +32,7 @@ use crate::firmware::scmi::Transport;
 use crate::mmio::{Hw, Mmio};
 use crate::soc::imx95::combo_phy;
 use crate::soc::imx95::display::{self, Prepared, Stream0};
+use crate::soc::imx95::display_power::PixelSource;
 use crate::soc::imx95::dpu::{Framebuffer, Route};
 use crate::ylog;
 use core::mem::{offset_of, size_of};
@@ -151,7 +152,14 @@ fn stream(d: &YdImx95Display) -> Stream0 {
     let fb = Framebuffer { addr: d.fb, stride: d.stride };
     let pix_hz = u64::from(d.pix_hz[0]) | u64::from(d.pix_hz[1]) << 32;
     Stream0 {
-        prepared: Prepared { mode: PANEL, route: Route::Dsi, fb, level: d.level, pix_hz },
+        prepared: Prepared {
+            mode: PANEL,
+            route: Route::Dsi,
+            fb,
+            source: PixelSource::VideoPll1,
+            level: d.level,
+            pix_hz,
+        },
         fb,
         sync_us: d.sync_us,
     }

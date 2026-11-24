@@ -93,22 +93,50 @@ config YAKOGL_VERDIN_IMX95_RECORD_BBM
 	  four GPRs. Off: the console line is the only sink.
 
 config YAKOGL_VERDIN_IMX95_DISPLAY
-	bool "The Toradex 10.1\" DSI display on X4 is the board layer's screen"
+	bool "A Toradex 10.1\" display is the board layer's screen"
 	default y
 	depends on YAKOGL_BOARD_VERDIN_IMX95 && YAKOGL_GPU_MALI
-	depends on DT_HAS_YAKOGL_IMX95_DSI_DISPLAY_ENABLED
+	depends on DT_HAS_YAKOGL_IMX95_LVDS_DISPLAY_ENABLED || DT_HAS_YAKOGL_IMX95_DSI_DISPLAY_ENABLED
 	select YAKOGL_DRV_DISPLAY_RUST
-	select I2C
-	select GPIO
 	select PINCTRL
 	help
-	  verdin_imx95_display.c: board_show() puts the window on the
-	  Toradex Capacitive Touch Display 10.1" DSI (1280x800) on the
-	  Mallow's X4, cold, in the order of driver/docs/imx95-display.md
-	  section 4(b) (yd_imx95_display_up / _flip / _down of the drivers
-	  crate, feature imx95). The blocks and the bridge are the
-	  x4_display node (the board layer's app.overlay); the bridge's
-	  I2C is Zephyr's nxp,lpi2c driver on LPI2C3, its EN Zephyr's
-	  nxp,pcal6416 driver on the module's expander (LPI2C2, line 3),
-	  both buses and the expander initialised at the first show after
-	  their SCMI clocks are on. The SCMI channel is the GPU's.
+	  board_show() puts the window on the display the output choice
+	  below names (1280x800 XRGB8888, cold, the drivers crate's
+	  feature imx95). The SCMI channel is the GPU's.
+
+choice YAKOGL_VERDIN_IMX95_DISPLAY_OUTPUT
+	prompt "The connector the screen is on"
+	default YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS
+	depends on YAKOGL_VERDIN_IMX95_DISPLAY
+
+config YAKOGL_VERDIN_IMX95_DISPLAY_X12_LVDS
+	bool "X12: the Toradex 10.1\" LVDS display (the owner's board)"
+	depends on DT_HAS_YAKOGL_IMX95_LVDS_DISPLAY_ENABLED
+	help
+	  verdin_imx95_lvds.c: the Toradex Capacitive Touch Display 10.1"
+	  LVDS on the Mallow's X12, the native LVDS connector, cold, in the
+	  order of driver/docs/imx95-display.md section 4(b')
+	  (yd_imx95_lvds_up / _flip / _down): DISPLAY and the LDB PLL over
+	  SCMI, the display CSR, the interleaver, the DPU, the LDB and LVDS
+	  PHY 0, the backlight on TPM5 channel 0 with its enable on
+	  GPIO5_IO04. The blocks and the backlight's pins are the
+	  x12_display node (the board layer's app.overlay). No I2C, no
+	  bridge. The owner's board since 2026-11-24.
+
+config YAKOGL_VERDIN_IMX95_DISPLAY_X4_DSI
+	bool "X4: the Toradex 10.1\" DSI display"
+	depends on DT_HAS_YAKOGL_IMX95_DSI_DISPLAY_ENABLED
+	select I2C
+	select GPIO
+	help
+	  verdin_imx95_display.c: the Toradex Capacitive Touch Display 10.1"
+	  DSI on the Mallow's X4, cold, in the order of
+	  driver/docs/imx95-display.md section 4(b) (yd_imx95_display_up /
+	  _flip / _down). The blocks and the bridge are the x4_display node
+	  (the board layer's app.overlay); the bridge's I2C is Zephyr's
+	  nxp,lpi2c driver on LPI2C3, its EN Zephyr's nxp,pcal6416 driver on
+	  the module's expander (LPI2C2, line 3), both buses and the
+	  expander initialised at the first show after their SCMI clocks
+	  are on.
+
+endchoice
