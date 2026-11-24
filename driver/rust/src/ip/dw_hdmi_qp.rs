@@ -41,6 +41,21 @@
 //!    cleared for HDMI (qp.h:155-156, :177-179).
 //!    Both are read-modify-write of that one bit. HDMI also needs the AVI
 //!    InfoFrame (qp.c:720-755), which this module does not send.
+//!    The enable runs while the VOP's port runs: Linux enables the CRTC
+//!    (the VOP's port, started at vop2.c:1778-1780) before the bridge
+//!    (`drm_atomic_helper.c:1687-1689` in `commit_tail_rpm`,
+//!    `rockchip_drm_fb.c:28`), and the words the enable writes answer only
+//!    while the port's pixel clock reaches the controller. On the T6 (board,
+//!    2026-11-24, issue #11856), with nothing left running before, an
+//!    enable before the port started ended in a synchronous external abort
+//!    at its first access, `HDCP2LOGIC_CONFIG0` (FAR 0xfde808e0, ESR
+//!    0x96000010); after the port started it passed, and `CMU_STATUS` read
+//!    0x00000200 then (no clock reported off). So [`enable`] first reads
+//!    `CMU_STATUS` and waits, bounded, for `IPI_CLK_OFF` (bit 1) and
+//!    `VIDQPCLK_OFF` (bit 3) to read 0 (qp.h:48-49); still set, it refuses
+//!    with nothing written. Whether `CMU_STATUS` itself answers without the
+//!    video clock is not measured: the chain reads it only after the port
+//!    started.
 //! 4. The TMDS character rate is the mode's pixel clock for RGB at 8 bits
 //!    per component (glue:114-135 asks for 8 bpc RGB;
 //!    `drivers/gpu/drm/display/drm_hdmi_helper.c:211-257`: clock x bpc / 8),
@@ -156,6 +171,15 @@ pub const OPMODE_DVI: u32 = 1 << 4;
 /// `CMU_STATUS`: the clock monitor bits and their "locked" value (qp.h:43-44).
 pub const CMU_CLK_MONITOR: u32 = 0x3f;
 pub const CMU_CLK_LOCKED: u32 = 0x15;
+/// `CMU_STATUS`: the video clock off, as the controller's input
+/// (`IPI_CLK_OFF`) and as its QP clock (`VIDQPCLK_OFF`) (qp.h:48-49).
+pub const CMU_IPI_CLK_OFF: u32 = 1 << 1;
+pub const CMU_VIDQPCLK_OFF: u32 = 1 << 3;
+/// How long [`enable`] waits for the video clock, and its poll step. The
+/// port's pixel clock runs once the VOP's port is started; the board read
+/// it running at the first read (fact 3). One frame at 60 Hz bounds it.
+pub const VIDEO_CLOCK_WAIT_US: u32 = 20_000;
+pub const VIDEO_CLOCK_POLL_US: u32 = 100;
 /// The reference clock rate Linux writes to `TIMER_BASE_CONFIG0` (qp.c:1017).
 pub const LINUX_TIMER_BASE_HZ: u32 = 428_571_429;
 /// The largest TMDS character rate the controller takes (qp.c:36).
@@ -369,6 +393,11 @@ pub enum Refusal {
     /// `LINK_CONFIG0` or `HDCP2LOGIC_CONFIG0` read back without the bits
     /// just written.
     EnableReadBack = 4,
+    /// `CMU_STATUS` still reports the video clock off (`IPI_CLK_OFF` or
+    /// `VIDQPCLK_OFF`) after [`VIDEO_CLOCK_WAIT_US`]: the VOP's port gives
+    /// the controller no pixel clock. Nothing was written. The value is the
+    /// status word.
+    VideoClockOff = 5,
 }
 
 /// A refusal and the value it is about (the id found, the word read back,
@@ -437,9 +466,23 @@ pub const fn link_config0_for(found: u32, sink: Sink) -> u32 {
     }
 }
 
-/// Start the TMDS link for `sink` (fact 3): the HDCP2 bypass, then the
-/// operating mode, each one bit read-modify-written and read back. The PHY
-/// must already be powered at the mode's [`tmds_char_rate`] (D5).
+/// What [`enable`] found before it wrote.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Enabled {
+    /// `CMU_STATUS` when the video clock read running.
+    pub cmu_status: u32,
+    /// How long that took, in µs (a multiple of [`VIDEO_CLOCK_POLL_US`]).
+    pub waited_us: u32,
+}
+
+/// Start the TMDS link for `sink` (fact 3): first the video clock, waited
+/// for in `CMU_STATUS` (at most [`VIDEO_CLOCK_WAIT_US`], `delay_us` between
+/// reads; [`Refusal::VideoClockOff`] with nothing written when it does not
+/// come), then the HDCP2 bypass and the operating mode, each one bit
+/// read-modify-written and read back. The PHY must already be powered at
+/// the mode's [`tmds_char_rate`] (D5) and the VOP's port started on it:
+/// without the video clock the words written here do not answer (a bus
+/// error on the RK3588).
 ///
 /// The rate is not checked here (that would need the mode as a parameter):
 /// the caller runs [`tmds_char_rate`] first and does not enable a mode it
@@ -447,7 +490,19 @@ pub const fn link_config0_for(found: u32, sink: Sink) -> u32 {
 /// Both words are always written, also when the bit is already as wanted;
 /// Linux skips an unchanged write (qp.c:165-168), so the two differ only in
 /// a register trace, not in the hardware state.
-pub fn enable(m: &impl Mmio, ctrl: usize, sink: Sink) -> Result<(), Refused> {
+pub fn enable(m: &impl Mmio, ctrl: usize, sink: Sink, delay_us: &mut impl FnMut(u32)) -> Result<Enabled, Refused> {
+    let mut waited_us = 0;
+    let cmu_status = loop {
+        let st = m.read32(ctrl + reg::CMU_STATUS);
+        if st & (CMU_IPI_CLK_OFF | CMU_VIDQPCLK_OFF) == 0 {
+            break st;
+        }
+        if waited_us >= VIDEO_CLOCK_WAIT_US {
+            return Err(Refused { why: Refusal::VideoClockOff, found: st });
+        }
+        delay_us(VIDEO_CLOCK_POLL_US);
+        waited_us += VIDEO_CLOCK_POLL_US;
+    };
     m.modify32(ctrl + reg::HDCP2LOGIC_CONFIG0, HDCP2_BYPASS, HDCP2_BYPASS);
     let h = m.read32(ctrl + reg::HDCP2LOGIC_CONFIG0);
     if h & HDCP2_BYPASS == 0 {
@@ -460,7 +515,7 @@ pub fn enable(m: &impl Mmio, ctrl: usize, sink: Sink) -> Result<(), Refused> {
     if l & OPMODE_DVI != want & OPMODE_DVI {
         return Err(Refused { why: Refusal::EnableReadBack, found: l });
     }
-    Ok(())
+    Ok(Enabled { cmu_status, waited_us })
 }
 
 /// The hot-plug level of `port` (a cable and a powered sink).
@@ -515,7 +570,7 @@ pub fn status(m: &impl Mmio, ctrl: usize, sys_grf: usize, port: Port) -> Status 
 mod tests {
     use super::*;
     use crate::video::WUXGA_60_RB;
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
 
     // The model's own addresses and offsets, restated from the sources (not
@@ -547,6 +602,11 @@ mod tests {
         timer_dead: bool,
         /// `LINK_CONFIG0` bit 4 ignores writes.
         opmode_stuck: bool,
+        /// `CMU_STATUS` reports the video clock off for this many more
+        /// reads (`u32::MAX`: never on). While it is off, an access to
+        /// `HDCP2LOGIC_CONFIG0` or `LINK_CONFIG0` fails the test: on the
+        /// RK3588 it ends in a bus error (fact 3).
+        video_off_reads: Cell<u32>,
     }
 
     impl Soc {
@@ -556,6 +616,7 @@ mod tests {
                 ops: RefCell::new(Vec::new()),
                 timer_dead: false,
                 opmode_stuck: false,
+                video_off_reads: Cell::new(0),
             };
             s.set(CTRL, ID);
             s.set(CTRL1, ID);
@@ -582,6 +643,8 @@ mod tests {
             if let Some(o) = Soc::ctrl_off(a) {
                 assert!(o <= 0x482c, "past the last controller register: {o:#x}");
                 assert!(!(0xe0..=0x118).contains(&o), "I2C master register {o:#x} touched (D10)");
+                let video_off = self.video_off_reads.get() != 0;
+                assert!(!(video_off && [0x8e0, 0x968].contains(&o)), "{o:#x} touched without the video clock");
             } else {
                 assert!(
                     (SYS..SYS + 0x1000).contains(&a) || (VO1..VO1 + 0x4000).contains(&a),
@@ -597,7 +660,14 @@ mod tests {
             if let Some(o) = Soc::ctrl_off(a) {
                 assert!(![0x40, 0x974, 0xab0].contains(&o), "request word {o:#x} read");
             }
-            let v = self.get(a);
+            let mut v = self.get(a);
+            if Soc::ctrl_off(a) == Some(0xb0) {
+                let off = self.video_off_reads.get();
+                if off != 0 {
+                    v |= 0xa;
+                    self.video_off_reads.set(off.saturating_sub(u32::from(off != u32::MAX)));
+                }
+            }
             self.ops.borrow_mut().push(Op::R(a, v));
             v
         }
@@ -636,6 +706,7 @@ mod tests {
         assert_eq!((reg::TMDS_FIFO_CONTROL0, reg::PKTSCHED_PKT_SEND), (0x974, 0xab0));
         assert_eq!((reg::MAINUNIT_0_INT_MASK_N, reg::MAINUNIT_1_INT_MASK_N, reg::LAST), (0x3014, 0x3024, 0x482c));
         assert_eq!((HDCP2_BYPASS, OPMODE_DVI, CMU_CLK_MONITOR, CMU_CLK_LOCKED), (1, 0x10, 0x3f, 0x15));
+        assert_eq!((CMU_IPI_CLK_OFF, CMU_VIDQPCLK_OFF), (1 << 1, 1 << 3));
         assert_eq!((LINUX_TIMER_BASE_HZ, TMDS_MAX_HZ), (428_571_429, 340_000_000));
         // glue:64-83; vop2.h:400-401; dtsi
         assert_eq!((grf::SOC_CON2, grf::SOC_CON7, grf::SOC_STATUS1), (0x308, 0x31c, 0x384));
@@ -810,7 +881,7 @@ mod tests {
         let s = Soc::new();
         s.set(CTRL + 0x968, found);
         s.set(CTRL + 0x8e0, 0x0000_0100);
-        let r = enable(&s, CTRL, sink);
+        let r = enable(&s, CTRL, sink, &mut |_| {}).map(|_| ());
         (s, r)
     }
 
@@ -835,9 +906,52 @@ mod tests {
     #[test]
     fn an_opmode_that_does_not_take_is_refused() {
         let s = Soc { opmode_stuck: true, ..Soc::new() };
-        assert_eq!(enable(&s, CTRL, Sink::Dvi), Err(Refused { why: Refusal::EnableReadBack, found: 0 }));
+        assert_eq!(enable(&s, CTRL, Sink::Dvi, &mut |_| {}), Err(Refused { why: Refusal::EnableReadBack, found: 0 }));
         // stuck at the value asked for is not a refusal
-        assert_eq!(enable(&s, CTRL, Sink::Hdmi), Ok(()));
+        assert_eq!(enable(&s, CTRL, Sink::Hdmi, &mut |_| {}).map(|_| ()), Ok(()));
+    }
+
+    #[test]
+    fn the_enable_waits_for_the_video_clock_before_its_first_word() {
+        // reported off for 3 reads, then running: 3 polls, then the words
+        let s = Soc::new();
+        s.set(CTRL + 0xb0, 0x200); // the board's word right after the port started
+        s.video_off_reads.set(3);
+        let mut waits = Vec::new();
+        let e = enable(&s, CTRL, Sink::Dvi, &mut |us| waits.push(us)).unwrap();
+        assert_eq!(e, Enabled { cmu_status: 0x200, waited_us: 300 });
+        assert_eq!(waits, vec![100; 3]);
+        // CMU_STATUS read four times, before anything else of the enable
+        let first_word =
+            s.ops.borrow().iter().position(|o| matches!(o, Op::R(a, _) | Op::W(a, _) if *a != CTRL + 0xb0));
+        assert_eq!(first_word, Some(4));
+        // running at the first read: no wait
+        let s = Soc::new();
+        s.set(CTRL + 0xb0, 0x200);
+        assert_eq!(
+            enable(&s, CTRL, Sink::Dvi, &mut |_| panic!("waited")),
+            Ok(Enabled { cmu_status: 0x200, waited_us: 0 })
+        );
+    }
+
+    #[test]
+    fn a_video_clock_that_never_comes_is_refused_with_nothing_written() {
+        let s = Soc::new();
+        s.video_off_reads.set(u32::MAX);
+        let mut waited = 0;
+        let r = enable(&s, CTRL, Sink::Dvi, &mut |us| waited += us);
+        // the refusal carries the status word read
+        assert_eq!(r, Err(Refused { why: Refusal::VideoClockOff, found: 0xa }));
+        assert_eq!(waited, VIDEO_CLOCK_WAIT_US);
+        assert!(s.writes().is_empty());
+        assert!(s.reads().iter().all(|a| *a == CTRL + 0xb0));
+        // either bit alone is "off" (the board reads none of them set)
+        for (st, off) in [(0x2, true), (0x8, true), (0x200, false), (0x255, false), (0x15, false)] {
+            let s = Soc::new();
+            s.set(CTRL + 0xb0, st);
+            let r = enable(&s, CTRL, Sink::Dvi, &mut |_| {});
+            assert_eq!(r.is_err(), off, "{st:#x}");
+        }
     }
 
     #[test]
@@ -880,7 +994,7 @@ mod tests {
         // the model asserts on each access; this runs every step through it
         let s = Soc::new();
         bind(&s, &B, Port::Hdmi0, &P).unwrap();
-        enable(&s, CTRL, Sink::Dvi).unwrap();
+        enable(&s, CTRL, Sink::Dvi, &mut |_| {}).unwrap();
         status(&s, CTRL, SYS, Port::Hdmi0);
         ident(&s, CTRL);
         hpd(&s, SYS, Port::Hdmi0);

@@ -61,15 +61,27 @@
 //!    52/13 opened. Linux moves VP0 onto the PHY's clock for every HDMI0
 //!    mode up to 600 MHz (`rockchip_drm_vop2.c:1740-1774`).
 //! 6. CONTROLLER: [`dw::bind`] (identity, GRF glue words 1-4, interrupt
-//!    masks, timer base, glue word 5), then [`dw::enable`] for the sink.
+//!    masks, timer base, glue word 5). The controller is not enabled here:
+//!    its enable needs the video clock, which runs once VP0 is started.
 //! 7. VOP: [`vop2::init`], [`rk_iommu::paging_off`] on both `vop_mmu` sets
 //!    (the window's address is physical), every window off
 //!    ([`vop2::windows_off`]), VP0 routed to HDMI0, its timing, started;
-//!    Esmart0 made VP0's only layer ([`vop2::overlay_single`], which waits
-//!    for a frame: the pixel clock must run) and shown on the caller's
-//!    buffer ([`vop2::window_show`]) at the screen's top left; where the
-//!    window is smaller than the mode, the rest is the port's background,
-//!    which [`vop2::vp_start`] sets to black.
+//!    then the controller enabled for the sink ([`dw::enable`], which waits
+//!    for `CMU_STATUS` to report the video clock running and refuses when
+//!    it does not come); then Esmart0 made VP0's only layer
+//!    ([`vop2::overlay_single`], which waits for a frame: the pixel clock
+//!    must run) and shown on the caller's buffer ([`vop2::window_show`]) at
+//!    the screen's top left; where the window is smaller than the mode, the
+//!    rest is the port's background, which [`vop2::vp_start`] sets to
+//!    black. The enable comes after the port's start and before the window,
+//!    as in Linux: the CRTC's `atomic_enable` (VP0 started,
+//!    `rockchip_drm_vop2.c:1778-1780`), then the bridge's
+//!    (`dw-hdmi-qp.c:834-866`), both in `commit_modeset_enables`, before
+//!    the planes are committed (`drm_atomic_helper.c:1687-1689`, :1940-1943;
+//!    `rockchip_drm_fb.c:28`). The enable's words answer only with the
+//!    video clock: on the T6, an enable before VP0 started ended in a bus
+//!    error at `HDCP2LOGIC_CONFIG0` (`ip::dw_hdmi_qp` fact 3). A failure of
+//!    the enable is reported at this stage.
 //! 8. VIDEO: the section 5 read-backs: over two frames VP0 starts frames,
 //!    does not underflow and raises no bus error; Esmart0's
 //!    `REGION0_YRGB_MST` reads the buffer's address; the PHY reads locked,
@@ -81,12 +93,12 @@
 //!
 //! Where this differs from Linux's order: Linux binds the controller at
 //! probe, long before a mode is set, and runs the PHY's PLL (stages 1-3)
-//! when the VOP sets its pixel clock, the PHY's lanes (stage 4) and the
-//! controller's enable when the encoder is enabled (`ip::hdptx` facts 6, 7;
-//! `ip::dw_hdmi_qp` fact 3). Here the PHY comes up whole before the clock
-//! mux and the controller: the lanes and the lock do not depend on the VOP,
-//! and a stage that ends with the PHY locked is the one a bisection needs.
-//! The controller's bind needs nothing of the PHY.
+//! when the VOP sets its pixel clock and the PHY's lanes (stage 4) when the
+//! encoder is enabled (`ip::hdptx` facts 6, 7). Here the PHY comes up whole
+//! before the clock mux and the controller: the lanes and the lock do not
+//! depend on the VOP, and a stage that ends with the PHY locked is the one a
+//! bisection needs. The controller's bind needs nothing of the PHY. The
+//! controller's enable follows Linux: after the VOP's port starts (stage 7).
 
 use super::rk3588::{clkgate_con, clksel_con, gate_open, pd_on, Gate, PdRegs, PD_VOP};
 use super::rk3588_display::{
@@ -94,7 +106,7 @@ use super::rk3588_display::{
     Part, VOP,
 };
 use crate::env::Env;
-use crate::ip::dw_hdmi_qp::{self as dw, BindParams, Ident, Port, Sink};
+use crate::ip::dw_hdmi_qp::{self as dw, BindParams, Enabled, Ident, Port, Sink};
 use crate::ip::hdptx::{self, Host, Image, PhyReset, Plan, PowerOn};
 use crate::ip::rk_iommu::{self, Off};
 use crate::ip::vop2::{self, Esmart, FrameCheck, HdmiPort, Init, Overlay, ReadBack, Vp, Window};
@@ -115,9 +127,10 @@ pub mod stage {
     pub const PHY: u32 = 4;
     /// DCLK_VOP0 on the PHY's PLL.
     pub const DCLK: u32 = 5;
-    /// The HDMI controller bound and enabled.
+    /// The HDMI controller bound (its enable is the VOP stage's).
     pub const CONTROLLER: u32 = 6;
-    /// VP0 running with Esmart0 on the caller's buffer.
+    /// VP0 running, the HDMI controller enabled on its video clock, Esmart0
+    /// on the caller's buffer.
     pub const VOP: u32 = 7;
     /// The read-backs of the running picture.
     pub const VIDEO: u32 = 8;
@@ -284,6 +297,9 @@ pub struct Report {
     pub power: DisplayOn,
     pub phy: PowerOn,
     pub ident: Ident,
+    /// The controller's enable: `CMU_STATUS` when the video clock read
+    /// running, and the wait for it.
+    pub enabled: Enabled,
     pub vop: Init,
     pub iommu: Off,
     pub overlay: Overlay,
@@ -678,11 +694,10 @@ pub fn bring_up(
     gate_open(m, b.cru + clk::DCLK_VOP0.part.offset(), clk::DCLK_VOP0.gate).map_err(at(DCLK, Error::Gate))?;
     done(cfg, DCLK)?;
 
-    // 6: the controller
+    // 6: the controller bound; its enable waits for VP0's clock (stage 7)
     begin(env, CONTROLLER);
     let bases = dw::Bases { ctrl: b.hdmi, sys_grf: b.sys_grf, vo1_grf: b.vo1_grf };
     let ident = dw::bind(m, &bases, Port::Hdmi0, &cfg.bind).map_err(at(CONTROLLER, Error::Hdmi))?;
-    dw::enable(m, b.hdmi, cfg.sink).map_err(at(CONTROLLER, Error::Hdmi))?;
     done(cfg, CONTROLLER)?;
 
     // 7: VOP2
@@ -696,6 +711,10 @@ pub fn bring_up(
     vop2::hdmi_route(m, b.vop, Vp::Vp0, HdmiPort::Hdmi0);
     vop2::vp_set_timing(m, b.vop, &timing);
     vop2::vp_start(m, b.vop, &timing);
+    // Linux's order: the CRTC (VP0) enabled, then the bridge, then the
+    // planes (module text, stage 7). The enable's words answer only with
+    // the video clock VP0 now gives the controller.
+    let enabled = dw::enable(m, b.hdmi, cfg.sink, &mut delay).map_err(at(VOP, Error::Hdmi))?;
     let overlay = vop2::overlay_single(m, b.vop, Vp::Vp0, Esmart::E0, &mut delay).map_err(at(VOP, Error::Vop))?;
     vop2::window_show(m, b.vop, Vp::Vp0, Esmart::E0, &win, active).map_err(at(VOP, Error::Vop))?;
     done(cfg, VOP)?;
@@ -758,7 +777,7 @@ pub fn bring_up(
         phy.lock_us,
         hdmi_status.cmu_status
     );
-    Ok(Report { found, power, phy, ident, vop, iommu, overlay, frame, read_back, phy_status, hdmi_status })
+    Ok(Report { found, power, phy, ident, enabled, vop, iommu, overlay, frame, read_back, phy_status, hdmi_status })
 }
 
 /// Stop the picture and power the chain down, from any state: VOP2 made
