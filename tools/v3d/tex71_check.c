@@ -1,4 +1,8 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2014-2017 Broadcom
+ * SPDX-FileCopyrightText: 2012 Rob Clark
+ * SPDX-FileCopyrightText: 2021 Raspberry Pi Ltd
  *
  * tex71_check: driver/src/v3d/v3d_tex71.c, the V3D 7.1 texture shader state,
  * sampler state and TMU parameter 2, against Mesa 26.2.1's 7.1 packing of

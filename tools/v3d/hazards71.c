@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2016 Broadcom
+ * SPDX-FileCopyrightText: 2016-2017 Broadcom
  *
  * hazards71: Mesa's own verdicts for short V3D 7.1 instruction sequences, as an
  * oracle for the Rust verifier (src/shaderc/online/v3d/verify71.rs). Each

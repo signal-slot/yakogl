@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2014-2017 Broadcom
+ */
 /*
  * The byte offset of texel (x, y) inside a tiled V3D 4.2 level, from the
  * level's own start; image_h is the level's padded height. A checker's

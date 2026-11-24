@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2016 Broadcom
+ * SPDX-FileCopyrightText: 2016-2017 Broadcom
  *
  * tri_validate71: Mesa 26.2.1's own V3D 7.1 qpu_validate() over one program of
  * a tools/v3d/tri-shaders71 json file (the "code" array of its "fs", "vs" or
