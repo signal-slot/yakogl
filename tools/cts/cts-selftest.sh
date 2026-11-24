@@ -1058,6 +1058,12 @@ else
     printf '%s\n' "$mp_out" | tail -8 | sed 's/^/        | /'
 fi
 
+# 61: check-pi4-gles3-results.py on synthetic RESULTS/STATUS/ROADMAP entries:
+# a consistent set passes; a wrong sum, a wrong row count, a commit that
+# differs between documents and a TSV that disagrees each fail, named. The
+# live repository is not checked here (its entries change with the Pi 4 rerun).
+gl3check 61 check-pi4-gles3-results-selftest.sh "the Pi 4 ES 3.0 entries checked against tree, mustpass and TSV, four wrong sets named"
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else

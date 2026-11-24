@@ -1,0 +1,10 @@
+dEQP-GLES3.a.b.c1
+dEQP-GLES3.a.b.c2
+dEQP-GLES3.a.b.c3
+dEQP-GLES3.a.b.c4
+dEQP-GLES3.a.b.c5
+dEQP-GLES3.a.b.c6
+dEQP-GLES3.a.b.c7
+dEQP-GLES3.a.b.c8
+dEQP-GLES3.a.b.c9
+dEQP-GLES3.a.b.c10
