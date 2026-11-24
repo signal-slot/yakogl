@@ -98,13 +98,15 @@ if(CONFIG_YAKOGL)
   elseif(CONFIG_YAKOGL_GPU_V3D71)
     # The V3D 7.1 (Raspberry Pi 5): its own OSAL over the driver's hardware
     # steps (v3d_hw.c's BCM2712 path) and the board's clock switch
-    # (rpi5/rpi5_v3d.c), all at V3D_CL_VER 71 (below). The 7.1 job builder
-    # and its FFI pins join this list with the 7.1 table.
+    # (rpi5/rpi5_v3d.c), the 7.1 job builder the backend calls through FFI
+    # and the C pins of its structs (ffi71.rs), all at V3D_CL_VER 71 (below).
     set(YAKOGL_GPU "v3d")
     set(YAKOGL_GPU_DEF "YAKOGL_GPU_V3D")
     set(_yakogl_osal_c "${YAKOGL_SRC}/osal/zephyr_v3d71.c")
     set(_yakogl_gpu_c
       "${PVR_DRIVER_SRC}/v3d/v3d_hw.c"
+      "${PVR_DRIVER_SRC}/v3d/v3d_job71.c"
+      "${YAKOGL_SRC}/v3d/ffi71_layout_check.c"
       "${PVR_DRIVER_SRC}/../zephyr/lib/board/rpi5/rpi5_v3d.c")
     set_source_files_properties(${_yakogl_osal_c} ${_yakogl_gpu_c}
       PROPERTIES COMPILE_DEFINITIONS "V3D_CL_VER=71")
