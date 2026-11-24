@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! dEQP-GLES2 texture.vertex.2d on the PowerVR (AM62P): what the 45 cases
 //! hand the back end, replayed on the host
 //! (docs/notes/es2-pvr-vertex-texture.md).

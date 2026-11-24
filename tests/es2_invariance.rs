@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! dEQP-GLES2.functional.shaders.invariance.{lowp,mediump,highp}.
 //! common_subexpression_{1,2,3}: two vertex shaders that both declare
 //! `invariant gl_Position` and compute it with the same expression, one of

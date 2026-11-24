@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! dEQP-GLES2.functional.shaders.fragdata.*, replayed on the host.
 //!
 //! The cases (VK-GL-CTS modules/gles2/functional/es2fShaderFragDataTests.cpp

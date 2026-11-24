@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! GL_OES_texture_npot: the 18 dEQP-GLES2 cases that depend on it, replayed
 //! on the host (item es2-npot-cases; the case list and what the CTS source
 //! checks are in docs/es2-cts-failures.md, section H.2 and H.3).

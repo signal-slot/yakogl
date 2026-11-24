@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! GLSL ES 1.00 preprocessor against dEQP-GLES2 `preprocessor.test`: the
 //! expanded token stream of a case is compared with the expected one.
 //!
