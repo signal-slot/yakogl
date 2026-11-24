@@ -56,6 +56,7 @@ use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
     AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Range, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
 };
+use crate::shaderc::online::mesa_fold;
 use core::cell::Cell;
 
 /// A value's uses, by kind.
@@ -2380,6 +2381,9 @@ impl Tree<'_, '_> {
                         let (p, q) = (f32::from_bits(*p), f32::from_bits(*q));
                         return Lane::K(if op == AluOp::Fmul { (p * q).to_bits() } else { (p + q).to_bits() });
                     }
+                    if let ([Lane::K(x)], Some(f)) = (l, libm_of(op)) {
+                        return self.libm_lane(f, f32::from_bits(*x));
+                    }
                     let maybe_const = |x: &Lane| matches!(x, Lane::K(_) | Lane::Var { konst: true, .. });
                     let zero_k = |x: &Lane| matches!(x, Lane::K(k) if k & !F32_NEG_ZERO == 0);
                     let konst = l.iter().all(maybe_const) || cancel || (product && l.iter().any(zero_k));
@@ -2459,6 +2463,27 @@ impl Tree<'_, '_> {
             }
         }
         (v, reach)
+    }
+
+    /// A lane of built-in `f` on the constant `x`, as Mesa folds it
+    /// ([`mesa_fold::fold_glsl`]: `sqrt`, `inversesqrt`, `exp2`, `log2`,
+    /// `sin` and `cos` fold to the same bits in the GLSL IR folder
+    /// and in NIR's, docs/notes/mali-libm-fold.md 1.1 and 1.2). The bits
+    /// only decide the -0.0 rules; no word is made of them. A result that
+    /// is not finite, or one a mediump fragment shader's fp16 may round to
+    /// a zero or an infinity (Mesa folds it there in fp16, 1.3), stays a
+    /// constant of unknown sign. The `mainbuiltin` shape of
+    /// deqp_negzero_* (`log2(float(18.625))`, `sqrt(float(6))` beside a
+    /// compare: negzero N2).
+    fn libm_lane(&self, f: mesa_fold::Libm, x: f32) -> Lane {
+        let r = mesa_fold::fold_glsl(f, x, 0.0);
+        let fp16 = self.m.stage == crate::shaderc::SHC_STAGE_FRAGMENT && !self.highp_fragment;
+        /* fp16's smallest subnormal and largest finite value */
+        let a = r.abs();
+        if !r.is_finite() || (fp16 && (a < 5.960_464_5e-8 || a > 65504.0)) {
+            return Lane::Var { konst: true, neg0: true };
+        }
+        Lane::K(r.to_bits())
     }
 
     /// Value `s` reads an input, a uniform or a texel somewhere under it
@@ -2667,6 +2692,21 @@ fn never_neg0(op: AluOp) -> bool {
             | Bany
             | Ball
     )
+}
+
+/// The built-in Mesa folds with the host libm that unary `op` is
+/// ([`Tree::libm_lane`]); `None` for any other op.
+fn libm_of(op: AluOp) -> Option<mesa_fold::Libm> {
+    use mesa_fold::Libm;
+    Some(match op {
+        AluOp::Fsqrt => Libm::Sqrt,
+        AluOp::Frsq => Libm::Rsq,
+        AluOp::Fexp2 => Libm::Exp2,
+        AluOp::Flog2 => Libm::Log2,
+        AluOp::Fsin => Libm::Sin,
+        AluOp::Fcos => Libm::Cos,
+        _ => return None,
+    })
 }
 
 /// The locals [`Tree::fold`] is folding, each with what its stores make
