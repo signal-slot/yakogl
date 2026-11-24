@@ -415,6 +415,36 @@ int yd_psci_system_reset(void);
 uint32_t yd_t6_feed_verdict(int64_t now_ms, int64_t alive_at_ms, bool released, uint32_t deadline_ms,
 			    uint32_t alive_ms);
 
+/* What the board's start sets up itself on every route
+ * (board::nanopc_t6_pins over soc::rk3588_pinctrl; the tables cite Linux
+ * v6.18's device trees). ioc maps the IOC (0xfd5f0000, 0x10000 bytes),
+ * gpio4 GPIO bank 4 (0xfec50000, 0x100 bytes).
+ * yd_t6_usb_vbus_on: the USB Type-A ports' 5 V switch (vbus5v0_usb,
+ * GPIO4_B0): the pin a GPIO with no pull, output level high, then direction
+ * output; level is GPIO4_B0 read back from EXT_PORT.
+ * yd_t6_hdmi0_pins: the HDMI0 pins CEC (GPIO4_C1), hot-plug (GPIO1_A5), SCL
+ * (GPIO4_B7), SDA (GPIO4_C0) function 5 with no pull, SCL drive level 5 and
+ * SDA 1 with schmitt on; level is 0.
+ * Both: every word written once read before and once after the writes, in
+ * the order of its first write; 0, -EIO when a field reads back other than
+ * written (bit i of differ for word i) or the 5 V pin is not high, -EINVAL
+ * for a null out. Writing them again over Linux's state changes nothing. */
+#define YD_T6_PINS_WORDS 10 /* the words a struct yd_t6_pins holds */
+
+struct yd_t6_pins {
+	uint32_t count;  /* the words written */
+	uint32_t differ; /* bit i: a field of word i read back other than written */
+	uint32_t level;  /* yd_t6_usb_vbus_on: GPIO4_B0's level after the writes */
+	uint32_t phys[YD_T6_PINS_WORDS];  /* each word's physical address */
+	uint32_t found[YD_T6_PINS_WORDS]; /* the word before the writes */
+	uint32_t now[YD_T6_PINS_WORDS];   /* the word after them */
+};
+_Static_assert(sizeof(struct yd_t6_pins) == 132, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_t6_pins, now) == 92, "rk3588.rs pins it");
+
+int yd_t6_usb_vbus_on(uintptr_t ioc, uintptr_t gpio4, struct yd_t6_pins *out);
+int yd_t6_hdmi0_pins(uintptr_t ioc, struct yd_t6_pins *out);
+
 /* ---- STM32MP2 OP-TEE watchdog (soc::stm32mp2::smc_wdt; feature stm32mp2) --
  * The arm,smc-wdt service by SMC, func_id the board's arm,smc-id (0xbc000000
  * on the DK, lib/board/stm32mp2/stm32mp2_wdog.h). Each call returns 0, -EIO
