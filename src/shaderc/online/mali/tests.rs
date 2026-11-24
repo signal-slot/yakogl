@@ -9063,6 +9063,28 @@ fn glsl_leaves_the_probe_trees_mesa_s_but_the_walk_differs() {
     }
 }
 
+/// #12009: a value of no known class that no output reads asks no
+/// precision question. In `acos(atan(v))` of the mediump varying `v`,
+/// which holds a constant, `atan(v)` is not known to vary, so the front end
+/// records no class for acos's argument (lower.rs `full_width_args`). In
+/// prec_dead_unknown_vs the value goes to `b`, which `b = p` replaces
+/// before any read: Mesa's `nir_lower_vars_to_ssa` leaves the first store
+/// no use and `nir_opt_dce` drops it with both calls (the pair is Mesa's,
+/// drawn on the drm-shim with tools/mali/deqp_ref.sh), and the vertex walk
+/// builds nothing for it (nir.rs `vs_ir_live`). Where an output reads the
+/// value it stays refused: stored as it is, after a store of one lane, after
+/// a store in an `if`, or copied before the store that replaces it.
+#[test]
+fn a_dead_value_of_no_known_class_is_not_refused() {
+    let (_, vs, fs, json) = pair!("prec_dead_unknown_vs");
+    check_program(vs, fs, json);
+    let head = "attribute vec4 p; varying mediump vec4 v; void main(){ gl_Position = p; \
+                v = atan(vec4(0.0, 1.0, 0.0, 1.5)); vec4 b = acos(atan(v)); ";
+    for tail in ["v = b; }", "b.x = 0.5; v = b; }", "if (p.x > 0.0) b = p; v = b; }", "vec4 c = b; b = p; v = c; }"] {
+        assert_eq!(gap(SHC_STAGE_VERTEX, &format!("{head}{tail}")), MaliError::PrecisionUnknown, "{tail}");
+    }
+}
+
 /// The chain's program in NIR's order (docs/notes/mali-remaining-families.md
 /// F1, other_80_matdyn.expect.json words 42-51): `4 - z` first, then
 /// `s11`, `frcp(y)` and `ffma(2.0, rcp, ..)`, `- z`, `ffma(4.0, z, ..)` and
