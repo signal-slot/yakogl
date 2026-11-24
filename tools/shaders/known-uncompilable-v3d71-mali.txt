@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Pairs of tools/mali/testdata that the V3D 4.2 online back end compiles and
+# the 7.1 one (chain71::compile_program71) refuses.
+#
+# tests/shaderc71_mali_testdata.rs compares its run against this file: `<key>:
+# <exact message>`, the format of known-uncompilable-v3d71.txt. A key is the
+# pair's path under tools/mali/testdata without `.vert`/`.frag`. A refusal not
+# listed, a message that changed, and a listed entry that now compiles all fail
+# the test, so the list stays exact.
