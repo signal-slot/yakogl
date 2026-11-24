@@ -36,14 +36,25 @@ refuses an image of 255 MiB or more on the host before anything is staged,
 an image without the `gc_wdog_arm: armed` marker (unless
 `MP2_NO_WATCHDOG=1`), a bad CRC in `fw_printenv`, a `scriptaddr` unset or in
 the go window, a standalone default (`tools/mp2s_guard.py --for oneshot`),
-`/boot` on the eMMC and files of an earlier run. It records
+a `/boot` that is not on an SD disk and files of an earlier run. It records
 `fw_printenv` and the sha256 of every stock `/boot` file before and after,
 prints the UNDO before each change, and ends in one verdict line
 (`uboot-mp2-oneshot stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=<b> row
 ...`). A board that does not come back is `verdict=not_back`, rc 7, NEEDS A
 PERSON, and is never retried; what a cut-off run leaves is recorded beside
 the board lock and `disarm` removes it. It never writes the environment or
-`bootcmd`. `BOARD_HOST`, `BOARD_UART`, `NETBOOT_SERVER` and
+`bootcmd`.
+
+**Which device is the card.** The card is the disk `/boot` is mounted from,
+and only if `/sys/block/<disk>/device/type` says `SD` (the eMMC says `MMC`);
+any other `/boot` is refused. It is never found by an `mmcblkN` number (Linux
+numbers the disks differently from one boot to the next) and never
+by `/dev/disk/by-partlabel/`, which names the eMMC's partitions too. A
+partition label is looked up only in `lsblk` of the card's own disk, and the
+node is resolved again after every reboot. Nothing on the eMMC is ever read
+or written. The same rule is in section 1 of
+`docs/notes/stm32mp257f-dk-uboot-boot.md` ('The device rule').
+ `BOARD_HOST`, `BOARD_UART`, `NETBOOT_SERVER` and
 `NETBOOT_TFTP_ROOT` come from the environment only; the header of
 `oneshot.sh` lists the rest. It lives here and not under `tools/` so that a
 change to it reaches the `drivers` rows of `tools/check.sh` and not every row.

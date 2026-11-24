@@ -23,8 +23,26 @@ path is in any file. It is read only: `fw_printenv`, `findmnt`, `lsblk`,
 file, `ls -lR`, `find`, `sha256sum` and `df` on `/boot`. It never runs
 `fw_setenv`, never writes with `dd`, never mounts anything and never touches
 modules, tailscale or sshd; the selftest greps it for them. The
-`u-boot-env` partition is the one labelled so on the card `/boot` is on.
+`u-boot-env` partition is the one labelled so on the card `/boot` is on,
+looked up in `lsblk` of that disk only (never by `mmcblk` number or
+`/dev/disk/by-partlabel/`: the card is `mmcblk0` or `mmcblk2` from boot to
+boot, and the eMMC has a `u-boot-env` partition too).
 Exit 0 all read, 2 a refusal before any read, 3 a read failed.
+
+The refusal: `collect.sh` reads `/sys/block/<disk>/device/type` of the disk
+`/boot` is mounted from, and unless it says `SD` it exits 2 with "not SD:
+refusing (the eMMC is never read)" before any other read (the eMMC says
+`MMC`). Files written into OUTDIR besides the `/boot` records:
+
+- `disk-type.txt`: that device type (`SD` on a run that read anything).
+- `boot-mount.txt`: `/boot`'s source partition node and file system.
+- `partitions.txt`: `lsblk` of the card's disk, then `/proc/partitions`.
+- `u-boot-env.dev`: the resolved `u-boot-env` partition node on that disk.
+- `u-boot-env.bin`: the `dd` of that partition; `fw_printenv.txt` the
+  secondary record.
+
+The resolved nodes (`boot-mount.txt`, `u-boot-env.dev`) are what a later
+run compares: re-collect after every reboot, never reuse a node.
 
 `summarize.py` (Python 3, standard library; run it with `python3 -I`) checks
 the image with `tools/uboot_env.py` (`--redundant --size --offset --offset2`;
