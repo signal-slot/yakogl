@@ -33,7 +33,7 @@
 #    TERM (its exit removes the staged files) and by SIGKILL (disarm removes
 #    them and the record), and the live refusals: a bad CRC, scriptaddr unset
 #    or in the window, a standalone default set (tools/mp2s_guard.py --for
-#    oneshot), /boot on the eMMC, files of an earlier run, a busy
+#    oneshot), /boot on a type-MMC disk (the eMMC), files of an earlier run, a busy
 #    console. The command log never writes the environment or a device.
 # 6. The board's sessions (prechecks, tools/board-session-lib.sh): our own
 #    ssh seen from a forwarding address is ours, a third address is refused
@@ -46,7 +46,7 @@ set -uo pipefail
 export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 B="$HERE/oneshot.sh"
-WANT_CHECKS=75
+WANT_CHECKS=76
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -205,11 +205,15 @@ check "the go window and the size bound are the plan's (0xa0000000..0xb0000000, 
 
 echo "== 4. a fake board and a fake console"
 F=$S/board
-mkdir -p "$F/boot/mmc0_extlinux" "$F/bin" "$F/proc/sys/vm" "$F/sys/block/mmcblk1/device" "$F/state" "$S/fakebin" "$S/tftp"
+mkdir -p "$F/boot/mmc0_extlinux" "$F/bin" "$F/proc/sys/vm" "$F/sys/block/mmcblk0/device" "$F/sys/block/mmcblk1/device" "$F/sys/block/mmcblk2/device" "$F/state" "$S/fakebin" "$S/tftp"
 printf 'kernel\n' > "$F/boot/Image.gz"
 printf 'dtb\n' > "$F/boot/stm32mp257f-dk.dtb"
 printf 'label stock\n' > "$F/boot/mmc0_extlinux/stock.conf"
-printf 'SD\n' > "$F/sys/block/mmcblk1/device/type"
+# the board's real layout: the microSD is mmcblk0 (SD), the eMMC mmcblk1 (MMC);
+# mmcblk2 is the card after a renumbering (tools/board-stm32mp2.sh:147-153)
+printf 'SD\n' > "$F/sys/block/mmcblk0/device/type"
+printf 'MMC\n' > "$F/sys/block/mmcblk1/device/type"
+printf 'SD\n' > "$F/sys/block/mmcblk2/device/type"
 ENV0='arch=arm
 bootcmd=run bootcmd_stm32mp
 bootdelay=1
@@ -220,7 +224,7 @@ reset_board() {
     mkdir -p "$F/state"
     printf '%s\n' "$ENV0" > "$F/env.txt"
     printf '1000.00 1000.00\n' > "$F/proc/uptime"
-    printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+    printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
     : > "$F/ssh.log"
     : > "$F/typed.lines"
     rm -f "$S/board.mp2u-left"
@@ -307,7 +311,7 @@ live() { PATH="$S/fakebin:$PATH" BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2
 LEFTF=$S/board.mp2u-left
 staged_on_card() { ls "$F/boot/yakogl/" 2>/dev/null | grep -q '^mp2z-'; }
 log_clean() { # the board commands never write the environment or a device, nor touch modules or services
-    ! grep -qE "save""env|fw_set""env|dd |mmcblk0|modprobe|insmod|rmmod|tailscale|sshd|setenv" "$F/ssh.log"
+    ! grep -qE "save""env|fw_set""env|dd |of=/dev/mmcblk|>/dev/mmcblk|(mkfs|wipefs|sgdisk|sfdisk|parted|fdisk|blkdiscard)[^;]*mmcblk|modprobe|insmod|rmmod|tailscale|sshd|setenv" "$F/ssh.log"
 }
 vline() { grep '^uboot-mp2-oneshot stm32mp257f-dk ' <<<"$out" | tail -1; }
 
@@ -438,8 +442,11 @@ reset_board; printf '%s\n' "$ENV0" | sed 's/^scriptaddr=.*/scriptaddr=0xa8000000
 live_refused "scriptaddr inside the go window" "inside or next to the go window"
 reset_board; printf 'mp2s_left=3\n' >> "$F/env.txt"
 live_refused "a standalone default set (mp2s_guard.py --for oneshot)" "REFUSED: mp2s-guard: REFUSE: a standalone default is set (mp2s_left=3)"
-reset_board; printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
-live_refused "/boot on the eMMC" "eMMC"
+reset_board; printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+live_refused "/boot on a type-MMC disk (the eMMC, mmcblk1)" "not SD"
+reset_board; printf '/dev/mmcblk2p8 ext4\n' > "$F/state/findmnt"
+out=$(live run "$S/img/mp2_hello.bin" "$S/runs" renum 2>&1); rc=$?
+check "renumbered: the card on mmcblk2 (type SD) is accepted, not refused" eval '[ "$rc" = 0 ] && ! grep -q REFUSED <<<"$out"'
 reset_board; mkdir -p "$F/boot/yakogl"; : > "$F/boot/yakogl/mp2z-old.bin"
 live_refused "files of an earlier run on the card" "disarm' first"
 rm -rf "$F/boot/yakogl"
