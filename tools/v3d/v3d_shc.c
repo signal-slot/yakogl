@@ -1,4 +1,11 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2014-2017 Broadcom
+ * SPDX-FileCopyrightText: 2018 Intel Corporation
+ * SPDX-FileCopyrightText: 2015 Red Hat
+ * SPDX-FileCopyrightText: 2017 Advanced Micro Devices, Inc.
+ * SPDX-FileCopyrightText: 2007 VMware, Inc.
+ * SPDX-FileCopyrightText: 2012 Rob Clark
  *
  * v3d_shc: YakoGL's offline shader tool for the Broadcom V3D 4.2 (Raspberry Pi 4)
  * and 7.1 (Raspberry Pi 5).
