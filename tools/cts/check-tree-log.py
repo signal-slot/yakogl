@@ -24,8 +24,24 @@ verdict line per row 1..N from one commit, every verdict is "verdict=done" with
 "resets=0", and no file in a slice contains an IPv4 address, a host:port or a
 /dev/tty (or /dev/serial) path. Board addresses and UARTs belong in the
 environment only; redact them before committing.
+
+    tools/cts/check-tree-log.py --lossy [--tree TABLE] [--mustpass FILE] RECORD_DIR_OR_LOG...
+
+The lossy check for an AM62P dEQP-GLES2 tree record (records/am62p/<stamp>-deqp-<sha8>/,
+the 17 images of am62p-full-tree.txt, or the ms4 image of am62p-ms4-tree.txt). A
+record directory holds one run directory per image (<date>-<time>-<name>-<sha8>/
+console.txt) and the logs board.sh wrote; a plain file is a log of board.sh verdict
+lines. tools/board.sh marks an image whose console lost result lines "verdict=done_lossy
+... lost=<n>", yet board-stage.sh still ends "done" with exit 0. Here every image that has
+a done_lossy verdict, a lost=<n> above 0, or a console whose own counters say it lost
+cases gets one line naming it and its lost-line count. Exit 1 unless every case of
+the image's row in TABLE (matched against the mustpass list) still has a result line in
+its console ("lossy but complete" is exit 0). No lossy image: one ok line, exit 0.
+TABLE is am62p-ms4-tree.txt for a record directory whose name has "ms4", else
+am62p-full-tree.txt. Without --lossy nothing above applies.
 """
 import argparse
+import importlib.util
 import os
 import re
 import sys
@@ -60,11 +76,161 @@ def field(v, key):
     return m.group(1) if m else "absent"
 
 
+CTS = os.path.dirname(os.path.abspath(__file__))
+VERDICT = re.compile(r"\bboard\.sh \S+ (\S+) .*\bverdict=(\S+)")
+LOST_FIELD = re.compile(r" lost=(\d+)")
+RUNDIR = re.compile(r"^\d{8}-\d{4}-(.+)-(?:[0-9a-f]{8}|probe)$")
+IMGNAME = re.compile(r"^img(\d+)-")
+
+
+def load_tally():
+    spec = importlib.util.spec_from_file_location("deqp_uart_tally", os.path.join(CTS, "deqp-uart-tally.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def table_rows(path):
+    """[(label, [case pattern...])] per row of an image table, as board.sh's tree_rows names
+    them: the last '# image X:' comment, else img<N>-<tag> (the tag is not compared)"""
+    rows, label = [], None
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"^# image ([A-Za-z0-9]+):", line)
+            if m:
+                label = m.group(1)
+                continue
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            rows.append((label or "img%d" % (len(rows) + 1), line.strip().split(",")))
+            label = None
+    return rows
+
+
+def row_of(rows, name):
+    """index of the table row an image name belongs to, or None"""
+    for i, (lab, _) in enumerate(rows):
+        if name == lab:
+            return i
+    m = IMGNAME.match(name)
+    if m and 1 <= int(m.group(1)) <= len(rows):
+        return int(m.group(1)) - 1
+    return None
+
+
+def lossy_main(a):
+    tally = load_tally()
+    mustpass_path = a.mustpass or os.path.join(CTS, "gles2-mustpass.txt")
+    with open(mustpass_path, encoding="utf-8") as f:
+        mustpass = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+    images = {}  # name -> {"verdict": ..., "lost": n, "console": text or None}
+    unattributed = []
+    tables = set()
+
+    def image(name):
+        return images.setdefault(name, {"verdict": None, "lost": 0, "console": None})
+
+    def read_verdicts(text, where):
+        for line in text.splitlines():
+            m = VERDICT.search(line)
+            if m:
+                im = image(m.group(1))
+                im["verdict"] = m.group(2)
+                lf = LOST_FIELD.search(line)
+                if lf:
+                    im["lost"] = max(im["lost"], int(lf.group(1)))
+                continue
+            m = re.search(r"Lost in capture: (\d+) cases", line)
+            if m and int(m.group(1)) > 0:
+                unattributed.append("%s: 'Lost in capture: %s cases' names no image" % (where, m.group(1)))
+
+    def rd(p):
+        with open(p, "rb") as fh:
+            return fh.read().decode("utf-8", "replace")
+
+    for path in a.slices:
+        base = os.path.basename(os.path.normpath(path))
+        if os.path.isdir(path):
+            tables.add("am62p-ms4-tree.txt" if "ms4" in base else "am62p-full-tree.txt")
+            for entry in sorted(os.listdir(path)):
+                p = os.path.join(path, entry)
+                m = RUNDIR.match(entry)
+                if os.path.isdir(p) and m:
+                    con = os.path.join(p, "console.txt")
+                    if os.path.isfile(con):
+                        im = image(m.group(1))
+                        im["console"] = rd(con)
+                        loss = tally.scan(im["console"])["loss"]
+                        if loss:
+                            im["lost"] = max(im["lost"], loss["lost"])
+                    for f in sorted(os.listdir(p)):
+                        fp = os.path.join(p, f)
+                        if f != "console.txt" and f.endswith((".txt", ".log", ".out", ".md")) and os.path.isfile(fp):
+                            read_verdicts(rd(fp), fp)
+                elif os.path.isfile(p) and entry.endswith((".txt", ".log", ".out", ".md")):
+                    read_verdicts(rd(p), p)
+        elif os.path.isfile(path):
+            tables.add("am62p-full-tree.txt")
+            read_verdicts(rd(path), path)
+        else:
+            sys.stderr.write("check-tree-log: %s: no such file or directory\n" % path)
+            return 1
+    if a.tree:
+        tables = {a.tree}
+    if len(tables) != 1:
+        sys.stderr.write("check-tree-log: --lossy: the records need different tables (%s); pass --tree\n" % ", ".join(sorted(tables)))
+        return 1
+    table = tables.pop()
+    if not os.path.isfile(table):
+        table = os.path.join(CTS, table)
+    rows = table_rows(table)
+
+    bad = list(unattributed)
+    notes = []
+    lossy = [n for n, im in images.items() if im["verdict"] == "done_lossy" or im["lost"] > 0]
+    for name in sorted(lossy, key=lambda n: (row_of(rows, n) is None, row_of(rows, n) or 0, n)):
+        im = images[name]
+        idx = row_of(rows, name)
+        who = "image %s (%s)" % (idx + 1 if idx is not None else "?", name)
+        lost = im["lost"]
+        if idx is None:
+            bad.append("LOSSY: %s lost %d console line(s); it is not a row of %s, so its cases cannot be checked" % (who, lost, os.path.basename(table)))
+            continue
+        if im["console"] is None:
+            bad.append("LOSSY: %s lost %d console line(s); no console.txt in the record, so its cases cannot be checked" % (who, lost))
+            continue
+        rx = tally.filter_regex(rows[idx][1])
+        want = [c for c in mustpass if rx.match(c)]
+        got = tally.scan(im["console"])["got"]
+        gone = [c for c in want if c not in got]
+        if gone:
+            bad.append("LOSSY: %s lost %d console line(s) and %d of its %d expected cases have no result line (first: %s)"
+                       % (who, lost, len(gone), len(want), ", ".join(gone[:3])))
+        else:
+            notes.append("lossy but complete: %s lost %d console line(s), all %d expected cases still have a result line"
+                         % (who, lost, len(want)))
+    for n in notes:
+        print("check-tree-log: %s" % n)
+    if bad:
+        for e in bad:
+            sys.stderr.write("check-tree-log: %s\n" % e)
+        sys.stderr.write("check-tree-log: FAIL (%d problem(s))\n" % len(bad))
+        return 1
+    if not notes:
+        print("check-tree-log: ok, no done_lossy image and no lost console line in %d image(s)" % len(images))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("slices", nargs="+", metavar="SLICE_DIR")
     ap.add_argument("--rows", type=int, default=46)
+    ap.add_argument("--lossy", action="store_true", help="the lossy-image check of an AM62P dEQP-GLES2 record")
+    ap.add_argument("--tree", help="--lossy: the image table (default by the record name)")
+    ap.add_argument("--mustpass", help="--lossy: the mustpass list (default gles2-mustpass.txt)")
     a = ap.parse_args()
+    if a.lossy:
+        sys.exit(lossy_main(a))
 
     errs = []
     commits = set()
