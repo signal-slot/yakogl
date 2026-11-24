@@ -118,6 +118,25 @@ fout=$(python3 -I "$SCAN" -q "$D/finished.txt" 2>&1)
 frc=$?
 if [ "$frc" = 0 ] && ! grep -q 'NO FINISH' <<<"$fout"; then ok "all rows finished: exit 0"; else bad "finished log: exit $frc"; fi
 
+# dark captures: all NUL, empty, NUL+whitespace; text stays unmarked
+mkdir "$D/dark"
+printf '\0\0\0\0\0\0\0\0\n' > "$D/dark/nul.txt"
+: > "$D/dark/empty.txt"
+printf '\0\0\r\n \0\n' > "$D/dark/nulws.raw"
+dout=$(python3 -I "$SCAN" "$D/dark/nul.txt" 2>&1); drc=$?
+grep -qF -- '-- console dark: 9 bytes, all NUL/whitespace; recoveries and watchdog stops NOT observed' <<<"$dout" &&
+    [ "$drc" = 0 ] && ok "all-NUL: console dark line, exit 0 by default" || bad "all-NUL ($drc): $dout"
+eout=$(python3 -I "$SCAN" "$D/dark/empty.txt" 2>&1)
+grep -qF -- '-- console dark: 0 bytes' <<<"$eout" && ok "empty file: console dark" || bad "empty file: $eout"
+python3 -I "$SCAN" "$D/dark/nulws.raw" 2>&1 | grep -qF -- '-- console dark: 7 bytes' && ok "NUL+whitespace: console dark" || bad "NUL+whitespace"
+mout=$(python3 -I "$SCAN" "$D/dark/nul.txt" "$D/dark/empty.txt" "$D/finished.txt" 2>&1)
+grep -qF -- '-- 2 of 3 capture(s) console dark' <<<"$mout" && ok "summary count of dark captures" || bad "summary: $mout"
+python3 -I "$SCAN" --fail-dark "$D/dark/nul.txt" >/dev/null 2>&1
+[ "$?" = 3 ] && ok "--fail-dark: exit 3 on a dark capture" || bad "--fail-dark on dark"
+python3 -I "$SCAN" --fail-dark "$D/finished.txt" >/dev/null 2>&1
+[ "$?" = 0 ] && ok "--fail-dark: text capture exit 0" || bad "--fail-dark on text"
+if grep -qE 'console dark' <<<"$fout" || grep -qE 'console dark' <<<"$out"; then bad "text capture marked dark"; else ok "text capture: no dark line, no summary"; fi
+
 # bad input
 python3 -I "$SCAN" "$D/missing.txt" > /dev/null 2>&1
 [ "$?" = 2 ] && ok "missing file: exit 2" || bad "missing file"
