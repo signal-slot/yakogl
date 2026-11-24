@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2016 Broadcom
+//
+// The opcode tables below are transcribed from Mesa 26.2.1
+// src/broadcom/qpu/qpu_pack.c and src/broadcom/qpu/qpu_instr.c (MIT,
+// Copyright © 2016 Broadcom).
 //! Every entry of Mesa 26.2.1's V3D 7.1 add and mul opcode tables packs and
 //! unpacks in `codec71`, and every `AddOp71` / `MulOp71` variant corresponds
 //! to one Mesa entry.
