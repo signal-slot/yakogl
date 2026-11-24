@@ -154,7 +154,6 @@ MARKER='gc_wdog_arm: armed'
 STAGE_DIR=/boot/yakogl            # on bootfs; U-Boot sees it as /yakogl
 PREFIX=mp2z-                      # every staged file's name starts with it
 BOOT_LABEL=bootfs
-EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
 UB_DIR="$HERE"
 BOOT=${BOARD_BOOT:-uboot-mmc}
 case "$BOOT" in uboot-mmc | uboot-tftp) ;; *) echo "$NAME_TOOL: BOARD_BOOT must be uboot-mmc or uboot-tftp, got '$BOOT'" >&2; exit 2 ;; esac
@@ -453,8 +452,7 @@ prechecks() {
         '/dev/mmcblkDp8 ext4 /dev/mmcblkD SD bootfs' || die "cannot read the mount of /boot"
     read -r BOOT_DEV fstype CARD_DISK dtype label <<<"$m"
     [ "$fstype" = ext4 ] || die "/boot is '$fstype', not ext4 (U-Boot's ext4size/ext4load read bootfs)"
-    [[ $CARD_DISK =~ $EMMC_RE ]] && die "REFUSED: /boot is on the eMMC (mmcblk0): this runner stages on the microSD only"
-    [ "$dtype" = SD ] || die "REFUSED: /boot's disk says '${dtype:-unreadable}', not SD: this runner stages on the microSD only"
+    [ "$dtype" = SD ] || die "REFUSED: /boot's disk $CARD_DISK says '${dtype:-unreadable}', not SD (the eMMC says MMC): this runner stages on the microSD only; the card is found by device type, never by mmcblk number (tools/board-stm32mp2.sh:147-153)"
     [ "$label" = "$BOOT_LABEL" ] || die "REFUSED: /boot's partition is labelled '${label:-nothing}', not $BOOT_LABEL"
     [[ $BOOT_DEV =~ p([0-9]+)$ ]] || die "/boot's source is not a partition"
     BOOT_PART=${BASH_REMATCH[1]}
