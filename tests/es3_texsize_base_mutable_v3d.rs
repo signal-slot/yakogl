@@ -696,37 +696,37 @@ fn a_mutable_array_with_a_full_chain_and_base_level_0_hands_level_0() {
 
 /* ---- (a) a full chain, BASE_LEVEL 1 ---- */
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with levels 0..5 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 1, 1)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 1, 1) when the base level is
-/// applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` with
+/// levels 0..5 defined and BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1).
+/// `textureSize(s, 0)` is level 1's size, so the correct words are **(8, 8, 1, 1)** (width, height,
+/// depth, layers; layers never minify).
 #[test]
-fn a_mutable_2d_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_a_full_chain_and_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, None), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, None), Some((8, 8, 1, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with levels 0..4 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 4, 1)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 4, 1) when the base level is
-/// applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` with
+/// levels 0..4 defined and BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1).
+/// `textureSize(s, 0)` is level 1's size, so the correct words are **(8, 8, 4, 1)** (width, height,
+/// depth, layers; layers never minify).
 #[test]
-fn a_mutable_3d_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_a_full_chain_and_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, None), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, None), Some((8, 8, 4, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0..5 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 1, 5)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 1, 5) when the base level is
-/// applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers with levels 0..5 defined and BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1,
+/// 5). `textureSize(s, 0)` is level 1's size, so the correct words are **(8, 8, 1, 5)** (width,
+/// height, depth, layers; layers never minify).
 #[test]
-fn a_mutable_array_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_a_full_chain_and_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, None), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, None), Some((8, 8, 1, 5)));
 }
 
 /* ---- (b) only levels 1.. defined, BASE_LEVEL 1 ---- */
@@ -776,73 +776,71 @@ fn a_mutable_array_with_only_levels_1_up_cannot_be_specified_without_level_0() {
 
 /* ---- (c) BASE_LEVEL past the last defined level ---- */
 
-/// Case (c), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 1, 1). A mutable texture is
+/// Case (c): a 16x16 `GL_TEXTURE_2D` with levels 0 and 1 defined and
+/// BASE_LEVEL 5 draws and hands the incomplete stand-in (1, 1, 1, 1). A mutable texture is
 /// not clamped (unlike an immutable one) and level 5 is not defined, so it is
 /// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). The base level
+/// is applied (`draw::effective_base_level`): level 0, incomplete; not a clamp.
 #[test]
-fn a_mutable_2d_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_base_level_past_its_defined_levels_hands_the_incomplete_stand_in() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..2), 5, None), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
-/// Case (c), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 8, 1). A mutable texture is
+/// Case (c): a 16x16x8 `GL_TEXTURE_3D` with levels 0 and 1 defined and
+/// BASE_LEVEL 5 draws and hands the incomplete stand-in (1, 1, 1, 1). A mutable texture is
 /// not clamped (unlike an immutable one) and level 5 is not defined, so it is
 /// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). The base level
+/// is applied (`draw::effective_base_level`): level 0, incomplete; not a clamp.
 #[test]
-fn a_mutable_3d_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_base_level_past_its_defined_levels_hands_the_incomplete_stand_in() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..2), 5, None), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
-/// Case (c), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 1, 5). A mutable texture is
+/// Case (c): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0 and 1 defined and
+/// BASE_LEVEL 5 draws and hands the incomplete stand-in (1, 1, 1, 1). A mutable texture is
 /// not clamped (unlike an immutable one) and level 5 is not defined, so it is
 /// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). The base level
+/// is applied (`draw::effective_base_level`): level 0, incomplete; not a clamp.
 #[test]
-fn a_mutable_array_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_base_level_past_its_defined_levels_hands_the_incomplete_stand_in() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..2), 5, None), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
 /* ---- (d) BASE_LEVEL 1 with MAX_LEVEL 1 ---- */
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 1, 1)**. Flip
-/// the assert to (8, 8, 1, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` with its
+/// full chain, BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The
+/// texture is complete with the single level 1, so the correct words are **(8, 8, 1, 1)**.
 #[test]
-fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 4, 1)**. Flip
-/// the assert to (8, 8, 4, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` with its
+/// full chain, BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The
+/// texture is complete with the single level 1, so the correct words are **(8, 8, 4, 1)**.
 #[test]
-fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((8, 8, 4, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 1, 5)**. Flip
-/// the assert to (8, 8, 1, 5) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers with its full chain, BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16,
+/// 16, 1, 5). The texture is complete with the single level 1, so the correct words are **(8, 8, 1,
+/// 5)**.
 #[test]
-fn a_mutable_array_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 5)));
 }

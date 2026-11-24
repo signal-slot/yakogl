@@ -696,50 +696,56 @@ fn a_mutable_2d_with_base_level_0_and_max_level_1_hands_level_0() {
     assert_eq!(words(Kind::Tex2d, &lv(0..5), 0, Some(1)), Some((16, 16, 1, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 1, 1)**. Flip the assert to (8, 8, 1, 1).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` (its full
+/// chain), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The view
+/// is the single level 1 and complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d
+/// = max(size0 >> first_level, 1), array size never minified) the post-fix words are **(8, 8, 1,
+/// 1)**.
 #[test]
-fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 1)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 1). Post-fix the
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (b), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` (its full
+/// chain), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q =
+/// min(last level, MAX_LEVEL) = 0 is below the base level), yet the V3D draws it today and hands the
+/// LEVEL-0 words (16, 16, 1, 1). Post-fix the incomplete texture samples as the stand-in and the
+/// words are **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete
+/// texture; the GL core's completeness check must take MAX_LEVEL < BASE_LEVEL into account, which
+/// basecomp designs).
+#[test]
+fn a_mutable_2d_with_max_level_below_base_level_is_drawn_with_the_base_level() {
+    let _g = rig();
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(0)), Some((8, 8, 1, 1)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` (a
+/// `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0
+/// words (16, 16, 1, 1). The view is the single level 1 and complete, so per ES 3.0 3.8.13/3.8.14
+/// and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1), array size never minified) the
+/// post-fix words are **(8, 8, 1, 1)**.
+#[test]
+fn an_immutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
+    let _g = rig();
+    assert_eq!(immutable_words(Kind::Tex2d, 1, 1), Some((8, 8, 1, 1)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` (a
+/// `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is
+/// texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is below the base
+/// level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 1). Post-fix the
 /// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness
+/// check must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs).
 #[test]
-fn a_mutable_2d_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
+fn an_immutable_2d_with_max_level_below_base_level_is_drawn_with_the_base_level() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(0)), Some((16, 16, 1, 1)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 1, 1)**. Flip the assert to (8, 8, 1, 1).
-#[test]
-fn an_immutable_2d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex2d, 1, 1), Some((16, 16, 1, 1)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 1). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
-#[test]
-fn an_immutable_2d_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex2d, 1, 0), Some((16, 16, 1, 1)));
+    assert_eq!(immutable_words(Kind::Tex2d, 1, 0), Some((8, 8, 1, 1)));
 }
 
 /// Case (d), control (holds after the fix): a 16x16 `GL_TEXTURE_2D` from `glTexStorage*` with 3 levels, BASE_LEVEL 0 and
@@ -750,14 +756,16 @@ fn an_immutable_2d_with_base_level_0_and_max_level_past_its_levels_hands_level_0
     assert_eq!(immutable_words(Kind::Tex2d, 0, 7), Some((16, 16, 1, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` from `glTexStorage*` with 3 levels, BASE_LEVEL 2 and
-/// MAX_LEVEL 9 (the effective max is clamped to levels-1 = 2, so the view is the single level 2) draws and hands the
-/// LEVEL-0 words (16, 16, 1, 1). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level, 1), array
-/// size never minified) the words are **(4, 4, 1, 1)**. Flip the assert to (4, 4, 1, 1).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D` from
+/// `glTexStorage*` with 3 levels, BASE_LEVEL 2 and MAX_LEVEL 9 (the effective max is clamped to
+/// levels-1 = 2, so the view is the single level 2) draws and hands the LEVEL-0 words (16, 16, 1,
+/// 1). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level, 1), array size
+/// never minified) the words are **(4, 4, 1, 1)**.
 #[test]
-fn an_immutable_2d_with_base_level_2_and_max_level_past_its_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn an_immutable_2d_with_base_level_2_and_max_level_past_its_levels_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex2d, 2, 9), Some((16, 16, 1, 1)));
+    assert_eq!(immutable_words(Kind::Tex2d, 2, 9), Some((4, 4, 1, 1)));
 }
 
 /// Case (c), control (holds after the fix): a 16x16x8 `GL_TEXTURE_3D` with its full chain, BASE_LEVEL 0 and
@@ -768,50 +776,56 @@ fn a_mutable_3d_with_base_level_0_and_max_level_1_hands_level_0() {
     assert_eq!(words(Kind::Tex3d, &lv(0..4), 0, Some(1)), Some((16, 16, 8, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 4, 1)**. Flip the assert to (8, 8, 4, 1).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` (its
+/// full chain), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The
+/// view is the single level 1 and complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c
+/// (w/h/d = max(size0 >> first_level, 1), array size never minified) the post-fix words are **(8, 8,
+/// 4, 1)**.
 #[test]
-fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((8, 8, 4, 1)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 8, 1). Post-fix the
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (b), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` (its
+/// full chain), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q
+/// = min(last level, MAX_LEVEL) = 0 is below the base level), yet the V3D draws it today and hands
+/// the LEVEL-0 words (16, 16, 8, 1). Post-fix the incomplete texture samples as the stand-in and the
+/// words are **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete
+/// texture; the GL core's completeness check must take MAX_LEVEL < BASE_LEVEL into account, which
+/// basecomp designs).
+#[test]
+fn a_mutable_3d_with_max_level_below_base_level_is_drawn_with_the_base_level() {
+    let _g = rig();
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(0)), Some((8, 8, 4, 1)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` (a
+/// `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0
+/// words (16, 16, 8, 1). The view is the single level 1 and complete, so per ES 3.0 3.8.13/3.8.14
+/// and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1), array size never minified) the
+/// post-fix words are **(8, 8, 4, 1)**.
+#[test]
+fn an_immutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
+    let _g = rig();
+    assert_eq!(immutable_words(Kind::Tex3d, 1, 1), Some((8, 8, 4, 1)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` (a
+/// `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is
+/// texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is below the base
+/// level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 8, 1). Post-fix the
 /// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness
+/// check must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs).
 #[test]
-fn a_mutable_3d_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
+fn an_immutable_3d_with_max_level_below_base_level_is_drawn_with_the_base_level() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(0)), Some((16, 16, 8, 1)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 4, 1)**. Flip the assert to (8, 8, 4, 1).
-#[test]
-fn an_immutable_3d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex3d, 1, 1), Some((16, 16, 8, 1)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 8, 1). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
-#[test]
-fn an_immutable_3d_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex3d, 1, 0), Some((16, 16, 8, 1)));
+    assert_eq!(immutable_words(Kind::Tex3d, 1, 0), Some((8, 8, 4, 1)));
 }
 
 /// Case (d), control (holds after the fix): a 16x16x8 `GL_TEXTURE_3D` from `glTexStorage*` with 3 levels, BASE_LEVEL 0 and
@@ -822,14 +836,16 @@ fn an_immutable_3d_with_base_level_0_and_max_level_past_its_levels_hands_level_0
     assert_eq!(immutable_words(Kind::Tex3d, 0, 7), Some((16, 16, 8, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` from `glTexStorage*` with 3 levels, BASE_LEVEL 2 and
-/// MAX_LEVEL 9 (the effective max is clamped to levels-1 = 2, so the view is the single level 2) draws and hands the
-/// LEVEL-0 words (16, 16, 8, 1). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level, 1), array
-/// size never minified) the words are **(4, 4, 2, 1)**. Flip the assert to (4, 4, 2, 1).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16x8 `GL_TEXTURE_3D` from
+/// `glTexStorage*` with 3 levels, BASE_LEVEL 2 and MAX_LEVEL 9 (the effective max is clamped to
+/// levels-1 = 2, so the view is the single level 2) draws and hands the LEVEL-0 words (16, 16, 8,
+/// 1). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level, 1), array size
+/// never minified) the words are **(4, 4, 2, 1)**.
 #[test]
-fn an_immutable_3d_with_base_level_2_and_max_level_past_its_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn an_immutable_3d_with_base_level_2_and_max_level_past_its_levels_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(immutable_words(Kind::Tex3d, 2, 9), Some((16, 16, 8, 1)));
+    assert_eq!(immutable_words(Kind::Tex3d, 2, 9), Some((4, 4, 2, 1)));
 }
 
 /// Case (c), control (holds after the fix): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with its full chain, BASE_LEVEL 0 and
@@ -840,50 +856,56 @@ fn a_mutable_array_with_base_level_0_and_max_level_1_hands_level_0() {
     assert_eq!(words(Kind::Array, &lv(0..5), 0, Some(1)), Some((16, 16, 1, 5)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 1, 5)**. Flip the assert to (8, 8, 1, 5).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (a), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers (its full chain), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16,
+/// 1, 5). The view is the single level 1 and complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's
+/// v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1), array size never minified) the post-fix
+/// words are **(8, 8, 1, 5)**.
 #[test]
-fn a_mutable_array_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 5)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 5). Post-fix the
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (b), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers (its full chain), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES
+/// 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is below the base level), yet the V3D draws it
+/// today and hands the LEVEL-0 words (16, 16, 1, 5). Post-fix the incomplete texture samples as the
+/// stand-in and the words are **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs pins for an
+/// incomplete texture; the GL core's completeness check must take MAX_LEVEL < BASE_LEVEL into
+/// account, which basecomp designs).
+#[test]
+fn a_mutable_array_with_max_level_below_base_level_is_drawn_with_the_base_level() {
+    let _g = rig();
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(0)), Some((8, 8, 1, 5)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 1 draws and hands the
+/// LEVEL-0 words (16, 16, 1, 5). The view is the single level 1 and complete, so per ES 3.0
+/// 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1), array size never
+/// minified) the post-fix words are **(8, 8, 1, 5)**.
+#[test]
+fn an_immutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_size() {
+    let _g = rig();
+    assert_eq!(immutable_words(Kind::Array, 1, 1), Some((8, 8, 1, 5)));
+}
+
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and MAX_LEVEL 0 (MAX < BASE) is
+/// texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is below the base
+/// level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 5). Post-fix the
 /// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness
+/// check must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs).
 #[test]
-fn a_mutable_array_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
+fn an_immutable_array_with_max_level_below_base_level_is_drawn_with_the_base_level() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(0)), Some((16, 16, 1, 5)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). The view is the single level 1 and
-/// complete, so per ES 3.0 3.8.13/3.8.14 and Mesa's v3d_uniforms.c (w/h/d = max(size0 >> first_level, 1),
-/// array size never minified) the post-fix words are **(8, 8, 1, 5)**. Flip the assert to (8, 8, 1, 5).
-#[test]
-fn an_immutable_array_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Array, 1, 1), Some((16, 16, 1, 5)));
-}
-
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the LEVEL-0 words (16, 16, 1, 5). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
-#[test]
-fn an_immutable_array_with_max_level_below_base_level_is_drawn_with_level_0_flip_when_the_base_level_is_applied() {
-    let _g = rig();
-    assert_eq!(immutable_words(Kind::Array, 1, 0), Some((16, 16, 1, 5)));
+    assert_eq!(immutable_words(Kind::Array, 1, 0), Some((8, 8, 1, 5)));
 }
 
 /// Case (d), control (holds after the fix): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers from `glTexStorage*` with 3 levels, BASE_LEVEL 0 and
@@ -894,13 +916,14 @@ fn an_immutable_array_with_base_level_0_and_max_level_past_its_levels_hands_leve
     assert_eq!(immutable_words(Kind::Array, 0, 7), Some((16, 16, 1, 5)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers from `glTexStorage*` with 3 levels, BASE_LEVEL 2 and
-/// MAX_LEVEL 9 (the effective max is clamped to levels-1 = 2, so the view is the single level 2) draws and hands the
-/// LEVEL-0 words (16, 16, 1, 5). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level, 1), array
-/// size never minified) the words are **(4, 4, 1, 5)**. Flip the assert to (4, 4, 1, 5).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// Case (d), (was level 0 until the draw applied the base level): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5
+/// layers from `glTexStorage*` with 3 levels, BASE_LEVEL 2 and MAX_LEVEL 9 (the effective max is
+/// clamped to levels-1 = 2, so the view is the single level 2) draws and hands the LEVEL-0 words
+/// (16, 16, 1, 5). Post-fix (ES 3.0 3.8.13/3.8.14; Mesa v3d_uniforms.c: max(size0 >> first_level,
+/// 1), array size never minified) the words are **(4, 4, 1, 5)**.
 #[test]
-fn an_immutable_array_with_base_level_2_and_max_level_past_its_levels_hands_level_0_flip_when_the_base_level_is_applied(
-) {
+fn an_immutable_array_with_base_level_2_and_max_level_past_its_levels_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(immutable_words(Kind::Array, 2, 9), Some((16, 16, 1, 5)));
+    assert_eq!(immutable_words(Kind::Array, 2, 9), Some((4, 4, 1, 5)));
 }

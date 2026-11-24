@@ -649,41 +649,41 @@ fn an_integer_2d_texel_fetch_at_base_level_0_reads_the_level_0_state() {
     assert_eq!(unit0(Kind::Int2d, 0), ((0, 3), (8, 8, 1, 1)));
 }
 
-/* ---- BASE_LEVEL 1: today's state, pinned ---- */
+/* ---- BASE_LEVEL 1: the size words follow the base level (the draw applies it); the TMU state's base level is still 0, pinned ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU
+/// The size words are the base level's (the draw applies `draw::effective_base_level`); the TMU state's Base Level is still 0, pinned here. Before the draw applied it: with GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU
 /// state has Base Level 0 (Max Level 3) and the size words are level 0's
 /// (8, 8). Mesa's v3dx_state.c programs Base Level = the GL first level and
 /// v3d_uniforms.c writes the size of that level. After the fix: state
 /// (1, 3), words (4, 4, 1, 1).
 #[test]
-fn a_2d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_2d_texel_fetch_at_base_level_1_hands_the_base_level_words_flip_when_the_tmu_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Tex2d, 1), ((0, 3), (8, 8, 1, 1)));
+    assert_eq!(unit0(Kind::Tex2d, 1), ((0, 3), (4, 4, 1, 1)));
 }
 
-/// Pins today's behaviour: the 3D texture at BASE_LEVEL 1 has state (0, 3)
+/// The size words are the base level's (the draw applies `draw::effective_base_level`); the TMU state's Base Level is still 0, pinned here. Before the draw applied it: the 3D texture at BASE_LEVEL 1 has state (0, 3)
 /// and words (8, 8, 4, 1). After the fix: (1, 3) and (4, 4, 2, 1) (the
 /// depth word 46 is the base level's depth, v3d_uniforms.c).
 #[test]
-fn a_3d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_3d_texel_fetch_at_base_level_1_hands_the_base_level_words_flip_when_the_tmu_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Tex3d, 1), ((0, 3), (8, 8, 4, 1)));
+    assert_eq!(unit0(Kind::Tex3d, 1), ((0, 3), (4, 4, 2, 1)));
 }
 
-/// Pins today's behaviour: the 2D array at BASE_LEVEL 1 has state (0, 3)
+/// The size words are the base level's (the draw applies `draw::effective_base_level`); the TMU state's Base Level is still 0, pinned here. Before the draw applied it: the 2D array at BASE_LEVEL 1 has state (0, 3)
 /// and words (8, 8, 1, 5). After the fix: (1, 3) and (4, 4, 1, 5) (the layer
 /// count is not minified).
 #[test]
-fn a_2d_array_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_2d_array_texel_fetch_at_base_level_1_hands_the_base_level_words_flip_when_the_tmu_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Array, 1), ((0, 3), (8, 8, 1, 5)));
+    assert_eq!(unit0(Kind::Array, 1), ((0, 3), (4, 4, 1, 5)));
 }
 
-/// Pins today's behaviour: the isampler2D at BASE_LEVEL 1 has state (0, 3)
+/// The size words are the base level's (the draw applies `draw::effective_base_level`); the TMU state's Base Level is still 0, pinned here. Before the draw applied it: the isampler2D at BASE_LEVEL 1 has state (0, 3)
 /// and words (8, 8, 1, 1). After the fix: (1, 3) and (4, 4, 1, 1).
 #[test]
-fn an_integer_2d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn an_integer_2d_texel_fetch_at_base_level_1_hands_the_base_level_words_flip_when_the_tmu_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Int2d, 1), ((0, 3), (8, 8, 1, 1)));
+    assert_eq!(unit0(Kind::Int2d, 1), ((0, 3), (4, 4, 1, 1)));
 }
