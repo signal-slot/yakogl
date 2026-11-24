@@ -32,8 +32,8 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   crash kexec, it adopts the display Linux left running (board module
   `driver/rust/src/board/nanopc_t6_display.rs`, C entries
   `yd_t6_display_adopt` and `yd_t6_display_status`), shows a CPU-drawn
-  pattern in Esmart0, holds the picture 30 s, then prints the section 5
-  read-backs and resets. `driver/tools/kexec-zephyr/t6-verdict.sh t6_display`
+  pattern in Esmart0, holds the picture (30 s by default), then prints the
+  section 5 read-backs and resets. `driver/tools/kexec-zephyr/t6-verdict.sh t6_display`
   judges its record.
 - `nanopc_t6/t6_cold`: step D8 of the T6 display (section 2 route (c)):
   started by a normal kexec, which turns the display off, it brings the
@@ -41,7 +41,7 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   `driver/rust/src/board/nanopc_t6_display_cold.rs` over
   `soc::rk3588_display_chain`, C entry `yd_t6_display_cold`), prints a line
   before each stage, shows the same pattern in Esmart0, holds the picture
-  30 s, then prints the same read-backs and resets. The stage to stop after is a
+  (30 s by default), then prints the same read-backs and resets. The stage to stop after is a
   build option (`-DT6_COLD_STOP_AFTER=N`, 1..8; `-DT6_COLD_FORCE_COLD=ON`
   stops a port found running), and so is the mode (`-DT6_COLD_MODE=`,
   `1024x768` by default or `1920x1080`, both at 60 Hz; the pattern is
@@ -50,7 +50,13 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   the mode the record names.
 - `nanopc_t6/common/t6_picture.c`: the picture both display probes show and
   check: the frame buffer with the pattern, the mappings, the hold, the
-  read-backs and the PASS or FAIL line.
+  read-backs and the PASS or FAIL line. `common/t6_picture.cmake` adds it to
+  a probe and takes the hold as a build option of both
+  (`-DT6_PICTURE_HOLD_S=N`, a multiple of 10, 30 by default; a hold of N s
+  needs a watchdog lifetime above N + 10,
+  `-DCONFIG_YAKOGL_NANOPC_T6_LIFETIME_S`). A display that boots with the
+  board needs a longer one (`driver/docs/nanopc-t6-display.md`, section 3).
+  `t6-verdict.sh` takes the hold and the lifetime from the record.
 - `nanopc_t6/common/t6_z1.c`: Z1's record (the hand-over, the clock set,
   the supply, each step of the power-on), shared by the four probes that
   run Z1's power-on: `t6_gpu` prints it on every run, the others when the

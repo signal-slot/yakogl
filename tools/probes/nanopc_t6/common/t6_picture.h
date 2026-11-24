@@ -24,8 +24,13 @@
 #define T6_PICTURE_HEIGHT 768
 #define T6_PICTURE_STRIDE (T6_PICTURE_WIDTH * 4)
 
-/* The picture is held this long for the person at the display. */
-#define T6_PICTURE_HOLD_S 30
+/* The picture is held this long for the person at the display (or the
+ * capture unit): the seconds of the build option T6_PICTURE_HOLD_S,
+ * t6_picture.cmake, 30 by default. t6_picture.c checks it against the
+ * watchdog's lifetime. */
+#ifndef T6_PICTURE_HOLD_S
+#error "T6_PICTURE_HOLD_S is the build's (include common/t6_picture.cmake)"
+#endif
 /* The read-backs: the frame check's wait, the frames timed. */
 #define T6_PICTURE_CHECK_WAIT_US 100000
 #define T6_PICTURE_TIMED_FRAMES  60

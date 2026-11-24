@@ -12,12 +12,16 @@
 #     -- -DT6_COLD_STOP_AFTER=4
 #   west build -p always -b nanopc_t6 -d build/t6_cold-1080 yakogl/tools/probes/nanopc_t6/t6_cold \
 #     -- -DT6_COLD_MODE=1920x1080
+#   west build -p always -b nanopc_t6 -d build/t6_cold-1080-hold90 yakogl/tools/probes/nanopc_t6/t6_cold \
+#     -- -DT6_COLD_MODE=1920x1080 -DT6_PICTURE_HOLD_S=90 -DCONFIG_YAKOGL_NANOPC_T6_LIFETIME_S=130
 #
 # T6_COLD_STOP_AFTER: 0 runs to the end, 1..8 stops after that stage
 # (START, POWER, GRF, PHY, DCLK, CONTROLLER, VOP, VIDEO). T6_COLD_FORCE_COLD
 # ON also stops a port found running (the chain's force-cold). T6_COLD_MODE:
 # 1024x768 (the default) or 1920x1080, both at 60 Hz; the picture is
-# 1024x768 in both, at the top left of the larger mode.
+# 1024x768 in both, at the top left of the larger mode. T6_PICTURE_HOLD_S:
+# the picture's hold, 30 s by default (../common/t6_picture.cmake); a longer
+# hold needs the board's watchdog lifetime raised with it.
 cmake_minimum_required(VERSION 3.20.0)
 
 # driver/ is a Zephyr module (the board, the board glue, the Rust crate).
@@ -60,9 +64,10 @@ target_compile_definitions(app PRIVATE T6_COLD_STOP_AFTER=${T6_COLD_STOP_AFTER}
                                        T6_COLD_MODE_1920X1080=${_mode_1920x1080})
 message(STATUS "t6_cold: stop after ${T6_COLD_STOP_AFTER}, force-cold ${_force_cold}, mode ${T6_COLD_MODE}")
 
-# The picture, the hold and the read-backs, shared with t6_display.
-target_sources(app PRIVATE src/main.c ../common/t6_picture.c)
-target_include_directories(app PRIVATE ../common)
+# The picture, the hold (T6_PICTURE_HOLD_S) and the read-backs, shared
+# with t6_display.
+target_sources(app PRIVATE src/main.c)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../common/t6_picture.cmake)
 
 # Zero warnings in our C files: tools/check.sh builds this sample with
 # -DYAKOGL_WERROR=ON (the "zephyr" rows); off by default.

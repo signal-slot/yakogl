@@ -15,6 +15,12 @@
 
 #include <nanopc_t6.h>
 
+/* The hold's rules, which t6-verdict.sh checks on the record as well: a
+ * "held" line every 10 s up to the hold, at least the 30 s of the default,
+ * and the run ends well inside the watchdog's lifetime (a longer hold is
+ * built with CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S raised with it). */
+BUILD_ASSERT(T6_PICTURE_HOLD_S % 10 == 0 && T6_PICTURE_HOLD_S >= 30,
+	     "T6_PICTURE_HOLD_S: a multiple of 10, at least 30");
 BUILD_ASSERT(T6_PICTURE_HOLD_S + 10 < CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S,
 	     "the run ends well inside the watchdog's lifetime");
 
