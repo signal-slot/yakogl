@@ -290,7 +290,8 @@ def generate(hal):
     for name in BLOCKS:
         out.append(f"//   PERI_{name}.h  sha256 {PINNED['PERI_' + name + '.h']}")
     out += [
-        "// Copyright 1997-2016 Freescale Semiconductor, Inc.; Copyright 2016-2026 NXP.",
+        "// SPDX-FileCopyrightText: 1997-2016 Freescale Semiconductor, Inc.",
+        "// SPDX-FileCopyrightText: 2016-2026 NXP",
         "// The field value lists are NXP's text from the same headers.",
         "",
         "#![allow(clippy::identity_op)]",
