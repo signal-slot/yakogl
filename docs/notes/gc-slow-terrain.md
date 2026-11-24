@@ -410,6 +410,14 @@ image otherwise. Empty until a session runs.
 | row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
 |---|---|---|---:|---|---|
 | before | 72972ba4 | n/a (not built) | | | |
-| tip | | off | | | |
+| tip | ecd9743e (stop, not run) | off | | | |
 | tip | | on | | | |
 | D (on minus off) | | | | | |
+
+Stop, 2026-11-24 (item x2-before-now): still empty. The board answered
+from the leased worker, but no jump was made: an autostarting podman
+container (`slint-launcher`) makes `board.sh x2 run` refuse, and the
+board-side helpers (`kexec_zephyr`, `snvs_lpgpr`) could not be built
+there; the 72972ba4 terrain run stopped with
+`no verdict line, rc=3`. Details: `x2-glmark2-slow-scenes.md`, "Stop,
+2026-11-24".

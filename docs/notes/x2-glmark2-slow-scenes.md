@@ -164,3 +164,73 @@ no `gc_tiled_rt` knob in the older image):
 | c3122ede | off | terrain | - | - | verdict= stop: board turned off, no verdict line |
 | c3122ede | off | shadow | - | - | verdict= stop: board turned off, no verdict line |
 | c3122ede | off | refract | - | - | verdict= stop: board turned off, no verdict line |
+
+## Stop, 2026-11-24 (plan #355, item x2-before-now)
+
+**No X2 measurement was made. No jump, nothing was staged or copied to the
+board, the board was left as found, up on Linux.** The rows below are stop
+rows, not measurements.
+
+This session held `target:x2` only (no console, as `x2-glmark2-scenes.sh`
+needs none). Commits: before `72972ba4`, tip `ecd9743e` (`origin/main` as
+this task's clone shows it; `git fetch origin` failed here, access denied).
+
+What held:
+
+- Reachability, the cause of the 2026-11-11 stop, is cleared: from the
+  leased worker, ssh as root logs in, and `tools/board.sh x2 status` (with
+  `BOARD_HOST` from the lease) reads `board lease: none`, the runlevel
+  `default`, `kexec_loaded 0`, `kexec_crash_loaded 0`, crash window
+  `268435456`, uptime about 80 450 s.
+- The 72972ba4 terrain image built (`armadillo_x2/mimx8ml8/a53`, sha256
+  `0a20645a...`, the marker `gc_wdog_arm: armed` present, footprint
+  157057024 bytes).
+
+What stopped it, two causes, each enough on its own:
+
+1. **An application container runs on the board.** The same status read
+   counts one podman container: `slint-launcher` (image
+   `at-debian-image`), started at boot and up for 22 h. Its config on the
+   board sets `set_autostart yes`, so it comes back at every boot.
+   `board.sh x2 run`'s readiness check (`x2_kexec_ready`, "nobody's
+   application running": a crash-route jump ends a container without a
+   shutdown) refuses any jump with "something is running (containers 1)".
+   Stopping the container is not this item's to do (leave the board as
+   found), so the board is not usable for kexec-dev until its owner stops
+   the launcher for a session (or turns its autostart off).
+2. **The board-side helpers could not be built on this worker.** The first
+   run, `tools/cts/x2-glmark2-scenes.sh --commit 72972ba4
+   records/x2/20261124-1012-before-72972ba4 terrain shadow refract`, built the
+   terrain image and then exited 3 at its first `board.sh x2 run`, before any
+   ssh:
+   `board.sh x2: no driver/tools/kexec-zephyr/kexec_zephyr (build it: driver/tools/kexec-zephyr/README.md)`.
+   The README's freestanding aarch64 GCC build of `kexec_zephyr` and
+   `snvs_lpgpr` (with the Zephyr SDK's `aarch64-zephyr-elf-gcc`) was refused
+   by this worker's permissions. The script's table:
+
+```
+scene	commit	selector	verdict line	record words	decoded	ms/frame
+terrain	72972ba4	none	no verdict line, rc=3	-	-	-
+x2-glmark2-scenes: a run was refused, stopped (nothing was retried)
+```
+
+The tip run was not started (it would stop at the same two places).
+
+Stop rows (ms a frame `-`):
+
+| commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line |
+|---|---|---|---|---|---|
+| 72972ba4 | - | terrain | - | - | verdict= stop: no verdict line, rc=3 (no kexec_zephyr helper; a container runs) |
+| 72972ba4 | - | shadow | - | - | verdict= stop: not run (the command stopped at terrain) |
+| 72972ba4 | - | refract | - | - | verdict= stop: not run (the command stopped at terrain) |
+| ecd9743e | off | terrain | - | - | verdict= stop: not run |
+| ecd9743e | off | shadow | - | - | verdict= stop: not run |
+| ecd9743e | off | refract | - | - | verdict= stop: not run |
+
+To run it next time: the board with no container running. Every run ends
+with a reset and the launcher autostarts at each boot, so stopping it once
+is not enough: a session of 15 runs (3 scenes x 5 selectors) needs the
+launcher's autostart off for the session, an owner's decision; and
+`kexec_zephyr`/`snvs_lpgpr` built as the README says before the first
+`board.sh x2 run`. Then the commands of "What is left" above, without the
+console lease.
