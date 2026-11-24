@@ -4,7 +4,8 @@
  * The CPU picture on HDMI0 as the NanoPC-T6 display probes show and check
  * it (t6_picture.c; driver/docs/nanopc-t6-display.md, section 5): the
  * frame buffer with the pattern, the mappings, the hold, the read-backs and
- * the PASS or FAIL line. t6_display (step D2, the adopt) and t6_cold (step
+ * the PASS or FAIL line (the read-backs are the board glue's,
+ * t6_display_read_back). t6_display (step D2, the adopt) and t6_cold (step
  * D8, the cold bring-up) differ only in how the picture gets on the screen.
  * Each line starts with "<probe>: ".
  */
@@ -31,10 +32,6 @@
 #ifndef T6_PICTURE_HOLD_S
 #error "T6_PICTURE_HOLD_S is the build's (include common/t6_picture.cmake)"
 #endif
-/* The read-backs: the frame check's wait, the frames timed. */
-#define T6_PICTURE_CHECK_WAIT_US 100000
-#define T6_PICTURE_TIMED_FRAMES  60
-
 /* The VOP's registers below 0x2000 are the only ones the probes use. The
  * physical bases are yakogl_drivers.h's YD_T6_DISPLAY_*_PHYS: HDMI0's. */
 #define T6_PICTURE_VOP_MAP 0x2000
@@ -50,18 +47,9 @@ uint64_t t6_picture_prepare(const char *probe);
  * T6_PICTURE_VOP_MAP, the others a page each. */
 void t6_picture_map(struct yd_t6_display_bases *b, size_t cru_bytes, size_t hdmi_bytes);
 
-/* The callbacks the C entries take: k_busy_wait, and the uptime in us. */
-void t6_picture_delay_us(uint32_t us);
-uint64_t t6_picture_now_us(void);
-
 /* Hold the picture for T6_PICTURE_HOLD_S seconds, the watchdog fed, with a
  * line first and one every 10 s. */
 void t6_picture_hold(const char *probe);
-
-/* The section 5 read-backs (yd_t6_display_status) into *s, printed. Returns
- * yd_t6_display_status's rc. */
-int t6_picture_status(const char *probe, const struct yd_t6_display_bases *b,
-		      struct yd_t6_display_status *s);
 
 /* The PASS line when the read-backs show the picture (a frame start, no
  * underflow, no bus error, Esmart0 on fb), else the FAIL line. */

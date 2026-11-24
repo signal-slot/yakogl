@@ -64,4 +64,24 @@ struct yd_t6_display_cold;
 void t6_display_print_cold(const char *tag, int rc, long long ms,
 			   const struct yd_t6_display_cold *c);
 
+/* The callbacks the display's C entries take (yakogl_drivers.h): a busy
+ * wait of `us` microseconds, and the uptime in microseconds. */
+void t6_delay_us(uint32_t us);
+uint64_t t6_now_us(void);
+
+/* The read-backs of driver/docs/nanopc-t6-display.md, section 5, over a
+ * picture that is up: yd_t6_display_status with a frame check over
+ * T6_DISPLAY_CHECK_WAIT_US and T6_DISPLAY_TIMED_FRAMES frames timed (about
+ * 1.1 s at 60 Hz), the watchdog fed after it, then the values printed, every
+ * line "<tag>: " (the HPD line is the proof of a connected display;
+ * driver/tools/kexec-zephyr/t6-verdict.sh reads the lines of the display
+ * probes and of the board layer at the end of a run). Returns
+ * yd_t6_display_status's rc. Thread context. */
+#define T6_DISPLAY_CHECK_WAIT_US 100000
+#define T6_DISPLAY_TIMED_FRAMES  60
+struct yd_t6_display_bases;
+struct yd_t6_display_status;
+int t6_display_read_back(const char *tag, const struct yd_t6_display_bases *b,
+			 struct yd_t6_display_status *s);
+
 #endif /* YAKOGL_NANOPC_T6_H */
