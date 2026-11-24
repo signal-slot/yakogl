@@ -15,7 +15,7 @@
 # answers with the real `mp2s_console_watch.py scan` exit. The guard, image,
 # bootfs, FWU, comeback, record, env and manifest checks are the real
 # tools. Covers: PASS; FAIL record (no 'boots left 0'); FAIL env (not
-# restored); FAIL console (the watch timed out: no Linux); FAIL console before
+# restored); FAIL console (the watch timed out: no Linux; exit 3, NEEDS PERSON, no further runner or ssh call); FAIL comeback (same); FAIL console before
 # the runner (busy console); FAIL precheck; --dry-run touches nothing; the
 # skip line of every missing helper; no BOARD_HOST. shellcheck when installed.
 # KEEP=1 keeps the scratch directory (each scenario's output under dbg/).
@@ -103,6 +103,7 @@ SH
 cat > "$T/ssh" <<'SH'
 #!/bin/bash
 echo "${*: -1}" >> "$STATE/ssh-calls"
+[ -e "$STATE/rebooted" ] && echo "${*: -1}" >> "$STATE/ssh-after"
 "$FB/bin/ssh" "$@"
 rc=$?
 case "${*: -1}" in *"systemctl reboot"*) : > "$STATE/rebooted" ;; esac
@@ -205,10 +206,43 @@ check "env not restored: names boot_prefixes" "$(t in_out '^mp2s-env: NOT restor
 
 scenario "$T/tools" cut.log ok
 rc=$?
-check "watch timeout (no Linux): exit 1, FAIL console" "$([ "$rc" = 1 ] && last_is 'mp2s-session: FAIL console'; echo $?)"
-check "watch timeout: NEEDS A PERSON, supply first, card undo" \
-    "$(in_out 'NEEDS A PERSON' && in_out 'USB-C supply' && in_out 'mp2s_card_undo.sh'; echo $?)"
-check "watch timeout: the board is left alone (no nodefault)" "$(! called '^runner nodefault'; echo $?)"
+check "watch timeout (no Linux): exit 3, FAIL console" "$([ "$rc" = 3 ] && last_is 'mp2s-session: FAIL console'; echo $?)"
+needs_ok() { # one NEEDS PERSON line on the terminal and in session.txt
+    count_is '^mp2s-session: NEEDS PERSON: ' "$T/out" 1 && count_is '^mp2s-session: NEEDS PERSON: ' "$T"/rec/*/session.txt 1
+}
+stopped() { # runner: install and default only; one reboot; no driver ssh after it
+    [ "$(grep '^runner' "$STATE/calls" | grep -vc '^runner printenv')" = 2 ] && ! called '^runner nodefault' && ! called '^runner uninstall' &&
+        count_is 'systemctl reboot' "$STATE/ssh-calls" 1 && [ "$(grep -cx reboot "$T/fb/writes.log")" = 1 ] &&
+        [ ! -s "$STATE/ssh-after" ]
+}
+check "watch timeout: one NEEDS PERSON line, in the record too" "$(t needs_ok)"
+check "watch timeout: supply first, card undo named" "$(in_out 'USB-C supply' && in_out 'mp2s_card_undo.sh'; echo $?)"
+check "watch timeout: no further runner, reset or ssh call" "$(t stopped)"
+
+# the comeback check fails: after the reboot the fake never answers ssh
+rm -rf "$T/fb" "$T/rec" "$STATE" "$T/away-bin"
+mkdir -p "$STATE" "$T/away-bin"
+: > "$STATE/calls"
+# stands in for ssh on PATH (tools/mp2s_comeback.sh): silent once rebooted
+cat > "$T/away-bin/ssh" <<'SH'
+#!/bin/bash
+if [ -e "$STATE/rebooted" ]; then echo try >> "$STATE/ssh-comeback"; exit 255; fi
+exec "$FB/bin/ssh" "$@"
+SH
+chmod 755 "$T/away-bin/ssh"
+"$HERE/mp2s_fakeboard.sh" init "$T/fb" > /dev/null
+echo 00000000-0000-4000-8000-0000000000b1 > "$T/fb/proc/sys/kernel/random/boot_id"
+env FB="$T/fb" PATH="$T/away-bin:$T/fb/bin:$BASE_PATH" MP2S_FAKE_ROOT="$T/fb" MP2S_SSH="$T/ssh" \
+    FAKE_LOG="$T/good.log" FAKE_WATCH=ok MP2S_RECORDS="$T/rec" MP2S_BACK=0 "$SESSION" "$T/image" > "$T/out" 2>&1
+rc=$?
+OUT_SHOWN=
+check "comeback fails: exit 3, FAIL comeback" "$([ "$rc" = 3 ] && last_is 'mp2s-session: FAIL comeback'; echo $?)"
+check "comeback fails: one NEEDS PERSON line, in the record too" "$(t needs_ok)"
+check "comeback fails: supply first, card undo named" "$(in_out 'USB-C supply' && in_out 'mp2s_card_undo.sh'; echo $?)"
+check "comeback fails: no further runner, reset or ssh call" "$(t stopped)"
+check "comeback fails: the check made exactly one try, no retry" "$(count_is '^try$' "$STATE/ssh-comeback" 1; echo $?)"
+check "comeback fails: record, undo, env and manifest not run" \
+    "$(step_is record 'not run' && step_is undo 'not run' && step_is env 'not run' && step_is manifest 'not run'; echo $?)"
 
 # the busy watch must be seen gone within the settle time, also on a loaded
 # host: the session sees it end at once, so a long settle costs nothing here
