@@ -31,6 +31,10 @@
 #   code of the login seen when ssh finds a new boot_id, and stays when it
 #   finds none (issue #11874); other codes are as before; the two runners
 #   call it with their codes.
+# - prompt-lib.sh's reboot_and_wait_tool with a fake board() and a process
+#   in the tool's place: the file that ends the tool's wait on a silent UART
+#   is made on a new boot_id only, and both runners hand that file to their
+#   tool (issue #11943).
 #
 # The last line: "uboot-t6 selftest: N checks run, F failed", with ", check
 # lines not run: ..." when a check line of this file did not run.
@@ -297,6 +301,57 @@ check "prompt-go.sh and prompt-reads.sh call exit_when_back with their no-login 
 	"$(grep -qx 'exit_when_back 6:8 10:$seen' "$here/prompt-go.sh" &&
 		grep -qxF '[ "$(tail -n 1 "$REC/verdict.txt" 2>/dev/null)" != "VERDICT $PROBE PASS" ] || seen=0' "$here/prompt-go.sh" &&
 		grep -qx 'exit_when_back 6:0' "$here/prompt-reads.sh"; echo $?)"
+
+# prompt-lib.sh's reboot_and_wait_tool (issue #11943). While the tool
+# listens, the runner asks the board over ssh for its boot_id, and makes
+# $tmp/linux-back, the tool's sign to end a wait on a silent UART, on a new
+# one only. A subshell stands in for the runner again. board() answers the
+# questions from a list, one line each and the last line for the rest:
+# "old" the boot_id before the reboot, "new" another, "none" no answer. A
+# process is the tool: it ends with 6 when the file is there, and with 0
+# after <tenths> tenths of a second without it.
+told() { # <tenths> <answer> ...
+	local life=$1
+	shift
+	rm -rf "$tmp/told"
+	mkdir "$tmp/told"
+	printf '%s\n' "$@" >"$tmp/told/answers"
+	(
+		# shellcheck disable=SC2034  # read by prompt-lib.sh
+		REC=$tmp/told TOOL=prompt-go old_boot=old-boot BACK_POLL_S=1 tmp=$tmp/told
+		rec() { printf '%s\n' "$*" >>"$REC/record.txt"; }
+		# shellcheck source=prompt-lib.sh
+		. "$here/prompt-lib.sh"
+		board() {
+			local a
+			case "$1" in *boot_id*) ;; *) return 0 ;; esac
+			a=$(head -n 1 "$tmp/answers")
+			[ "$(wc -l <"$tmp/answers")" -le 1 ] || sed -i 1d "$tmp/answers"
+			case "$a" in old) echo old-boot ;; new) echo new-boot ;; *) return 1 ;; esac
+		}
+		: >"$tmp/py.out"
+		bash -c 'for ((i = 0; i < $1; i++)); do [ ! -e "$0" ] || exit 6; sleep 0.1; done' "$tmp/linux-back" "$life" &
+		py_pid=$!
+		reboot_and_wait_tool
+		exit "$py_rc"
+	) >/dev/null 2>&1
+}
+is_told='Armbian answers over ssh with a new boot_id'
+told 25 old
+rc=$?
+check "reboot_and_wait_tool: the old boot_id over ssh: the tool is not told, its own exit (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ ! -e "$tmp/told/linux-back" ] && ! grep -qF "$is_told" "$tmp/told/record.txt"; echo $?)"
+told 25 none
+rc=$?
+check "reboot_and_wait_tool: no answer over ssh: the tool is not told (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ ! -e "$tmp/told/linux-back" ] && ! grep -qF "$is_told" "$tmp/told/record.txt"; echo $?)"
+told 300 old none new
+rc=$?
+check "reboot_and_wait_tool: the old boot_id, no answer, then a new one: the file is made, said in the record, the tool ends on it (rc $rc)" \
+	"$([ "$rc" = 6 ] && [ -e "$tmp/told/linux-back" ] && [ "$(grep -cF "$is_told" "$tmp/told/record.txt")" = 1 ]; echo $?)"
+check "prompt-go.sh and prompt-reads.sh hand \$tmp/linux-back to their tool as its last argument" \
+	"$(grep -qF '"$PROBE" "$image_wait" "$tmp/linux-back" >"$tmp/py.out" 2>&1 &' "$here/prompt-go.sh" &&
+		grep -qF 'run "$T6_UART" "$REC" "$tmp/linux-back" >"$tmp/py.out" 2>&1 &' "$here/prompt-reads.sh"; echo $?)"
 
 # A stock file changed behind the fingerprint's back: check fails, naming it.
 cp "$root/boot/boot.scr" "$tmp/boot.scr.keep"

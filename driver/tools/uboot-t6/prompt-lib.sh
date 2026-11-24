@@ -8,8 +8,9 @@
 # The caller defines, before it calls these: BOARD_HOST, SSH_OPTS (array),
 # refuse() and die(); for the run also T6_UART, T6_HAND, tmp, REC, rec(),
 # old_boot, and starts its tool in the background with its output in
-# $tmp/py.out and its pid in py_pid. TOOL is the caller's name for its
-# messages (prompt-reads or prompt-go).
+# $tmp/py.out and its pid in py_pid, and with $tmp/linux-back as the tool's
+# last argument (the file reboot_and_wait_tool makes when Armbian is back).
+# TOOL is the caller's name for its messages (prompt-reads or prompt-go).
 
 # One ssh command to the board, 30 s at most, no stdin.
 board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@" </dev/null; }
@@ -80,11 +81,29 @@ wait_listening() {
 # Reboot the board over ssh and wait for the tool: sets t0 and py_rc, and
 # copies the tool's lines into the record.
 reboot_and_wait_tool() {
-	local line
+	local line now i
 	t0=$(date +%s)
 	rec "rebooting the board over ssh (systemctl reboot)"
 	# The connection may drop before the command's status comes back.
 	board 'systemctl reboot' >/dev/null 2>&1 || true
+	# While the tool listens, ask the other witness of Linux every
+	# BACK_POLL_S seconds (issue #11943). The UART's stream can stop in the
+	# kernel's boot output (issue #11874); the tool would then wait its
+	# whole time for a login it cannot read, minutes after Armbian is up.
+	# A new boot_id over ssh makes $tmp/linux-back, and the tool ends such
+	# a wait once the UART has also been silent for a while.
+	while kill -0 "$py_pid" 2>/dev/null; do
+		now=$(board 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
+		if [ -n "$now" ] && [ "$now" != "$old_boot" ]; then
+			: >"$tmp/linux-back"
+			rec "Armbian answers over ssh with a new boot_id $(($(date +%s) - t0)) s after the reboot command; $TOOL.py is told, and ends a wait for the UART once that is silent"
+			break
+		fi
+		for ((i = 0; i < ${BACK_POLL_S:-5}; i++)); do
+			kill -0 "$py_pid" 2>/dev/null || break
+			sleep 1
+		done
+	done
 	py_rc=0
 	wait "$py_pid" || py_rc=$?
 	py_pid=
