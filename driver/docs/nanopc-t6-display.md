@@ -165,7 +165,12 @@ What Linux writes (`dw-hdmi-qp.c:1013-1032`, `:834-866`):
   (HDCP2 bypass) set and `LINK_CONFIG0` 0x968 bit 4 (OPMODE_DVI) set for a
   DVI sink or cleared for HDMI (`dw-hdmi-qp.h:156`, `:177-179`); for HDMI
   also the AVI InfoFrame (`PKT_AVI_CONTENTS*`, `PKTSCHED_PKT_EN` 0xaa8
-  bits 13 and 3, `dw-hdmi-qp.c:720-755`).
+  bits 13 and 3, `dw-hdmi-qp.c:720-755`). The enable runs after the VOP's
+  port is started: Linux enables the CRTC, then the bridge
+  (`drm_atomic_helper.c:1687-1689`), and the enable's words answer only
+  while the port's pixel clock reaches the controller (section 2 (c)).
+  `CMU_STATUS` 0xb0 tells it: bit 1 `IPI_CLK_OFF` and bit 3 `VIDQPCLK_OFF`
+  (`dw-hdmi-qp.h:48-49`) read 0 once the video clock runs.
 
 The RK3588 glue (`dw_hdmi_qp-rockchip.c`), all GRF writes with the
 write-enable mask in bits 31:16:
@@ -566,8 +571,27 @@ may switch off before it jumps. **Route (b) does not exist for the product.**
 
 Zephyr powers PD_VOP and PD_VO1, opens the clocks, sets the GRF bits,
 brings up the PHY PLL at the mode's TMDS rate, moves DCLK_VOP0 onto it,
-configures the controller (DVI), programs VP0 and Esmart0, and starts the
-VP. Section 7 has the steps. It is developed through the **normal** kexec
+binds the controller, programs and starts VP0, enables the controller (DVI)
+once VP0's video clock reaches it, then shows Esmart0. Section 7 has the
+steps.
+
+The controller is enabled after VP0 starts, as Linux does it: the CRTC's
+`atomic_enable` (VP0 started, `rockchip_drm_vop2.c:1778-1780`), then the
+bridge's (`dw-hdmi-qp.c:834-866`), then the planes
+(`drm_atomic_helper.c:1687-1689`, `:1940-1943`; `rockchip_drm_fb.c:28`).
+The words the enable writes answer only with the video clock. Measured on
+the board (2026-11-24, issue #11856): started by U-Boot's `go`, an enable
+before VP0 started ends in a synchronous external abort at its first
+access, `HDCP2LOGIC_CONFIG0` (FAR 0xfde808e0, ESR 0x96000010), seven runs
+of seven; by kexec the same order passes only on what Linux left running,
+and aborts the same way with 0.8 s waited between the bind and the enable.
+With the enable after VP0's start the chain passes by `go`, four runs of
+four (frame start 1, underflow 0, bus error 0, `CMU_STATUS` 0x00000255 at
+the video check), and by kexec; `CMU_STATUS` read right after VP0's start
+is 0x00000200 (no clock reported off). The enable reads `CMU_STATUS` first,
+waits at most 20 ms for bits 1 and 3 to read 0 and refuses with the word
+read (`VideoClockOff`) when they do not, so a port that gives no clock
+ends in a readable line, not a bus error. It is developed through the **normal** kexec
 (which leaves the display off, so any picture is ours, and forces the
 full sequence) with a `power-cycle` option that first puts every block into
 reset and its domain off, as the X2 HDMI design does
@@ -1153,10 +1177,10 @@ answers polls, takes injected failures and records the order.
 | D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen. The flip, the same day: glmark2's build and shading scenes, 2400 flips for 2402 swaps at two per frame, score 119, the image's verdict PASS. The first show from cold (no picture left by Linux): on the board by normal kexec on 2026-11-24, row D8 | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
-| D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
-| D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
+| D6 | `ip::dw_hdmi_qp`: bind values, DVI enable (on the video clock: it waits for `CMU_STATUS` to report it running and refuses without it, section 2 (c)), HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks; no enable word touched while the video clock reads off | none alone | 250 lines + tests | no |
+| D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, the controller bound, VOP2 with VP0 started, then the controller enabled, then the window, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model, the controller's enable after VP0's start and before the window (the model refuses the enable's words while VP0 does not run); every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
 | D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection; `-DT6_COLD_MODE=1920x1080` builds it for the second mode, section 3), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4. On the board on 2026-11-24 (development runs): the CPU pattern at both modes, verdict PASS, seen on the capture unit at 1920x1080 (section 3); the triangle image the same day, its first show the cold chain at 1920x1080 on the GL window: the adopt stopped at stop 1 (PD_VOP off), the chain through in 63 ms, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), `t6-verdict.sh triangle` PASS on the UART record, the triangle seen on the capture unit, the board's own reset at the end. Still to run: the GL image at 1024x768 from cold | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
-| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; it takes the `t6_cold` and `triangle` probes beside t6_hello..t6_submit; `t6-verdict.sh` has the table for `triangle`, judged on a kexec record so far, and none for `gl_slint`, which the tool therefore does not take), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
+| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; nothing is left running there, so every order the chain needs is its own: the controller's enable after VP0's start, section 2 (c); it takes the `t6_cold` and `triangle` probes beside t6_hello..t6_submit; `t6-verdict.sh` has the table for `triangle`, judged on a kexec record so far, and none for `gl_slint`, which the tool therefore does not take), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
 Order and parallel work: D0 first (the lead; nothing else needs the board
@@ -1201,4 +1225,7 @@ formula checks (the integer fallback modes of section 3 remove that risk for a
 first cold picture); the VOP bus and pixel clocks come from CRU PLLs that the
 boot firmware sets (GPLL, CPLL, V0PLL): on the U-Boot boot nobody but U-Boot
 sets them, so D9 reads their rates before trusting them, as the Z1 power-on
-does for the GPU's PLL.
+does for the GPU's PLL; a block whose registers answer only with a clock
+another block gives (the controller's enable needs VP0's video clock,
+section 2 (c)) passes after a kexec on what Linux left running, so only a
+start with nothing running (U-Boot's `go`, D9) proves the chain's order.
