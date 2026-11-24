@@ -328,3 +328,39 @@ that image. It does not mean a row is known to move.
   cause is possible.
 - S03a, S07, T05ca, T05cb, T05cc, T17a: nothing is left on the V3D side
   for the abort. Their cases now produce results on the board.
+
+## F. The four causes behind the eleven stopped images of the aborts session
+
+Session `tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/` (plan #398, issue
+#2): eleven of its 14 images stopped again, each at one refused case. Section
+E has one row per image; this section groups them by cause and says, for each,
+the error kind and whether the limit is the V3D 4.2 hardware or a missing
+driver path. Code is read at `35e03a2e` (`git log 89d3e1c3..35e03a2e` has no
+commit in `src/v3d`, `driver/src/v3d` or `src/backend.rs`, so E's lines hold).
+The console strings are the `draw refused:` lines of the console files;
+`b1b5b845` answered every one with `-EINVAL`, which the GL core turns into
+GL_OUT_OF_MEMORY (`src/gl/draw.rs:683`), dEQP's ResourceError, and the image
+ends. At the tip `-ENOTSUP` fails one case instead; `-E2BIG` still aborts.
+
+| Cause | Refusing cases (`dEQP-GLES3.functional.`) | Refusal string | Where at `35e03a2e` | Kind at the tip | Hardware or driver | Issue |
+| --- | --- | --- | --- | --- | --- | --- |
+| (a) target past the tile memory | S03a `shaders.builtin_functions.precision.abs.highp_fragment.vec2` | a target larger than the tile memory is sized for (2048x2048), or empty (the tip's text: `(4096x4096)`) | `backend.rs:6826-6827` against `MAX_TARGET` = 4096 (`backend.rs:447`) | `-ENOTSUP` (was `-EINVAL`). The shader executor's 4096 x 2-6 targets are no longer refused | driver: the 2048 cap was the init sizing of the tile memory, not a V3D limit (`docs/notes/v3d-large-targets.md`) | #2 |
+| (b) ETC2 not sampled | T05ca `texture.format.compressed.etc2_eac_rgba8_cube_pot`; T05cb `...etc2_rgb8_cube_npot`; T05cc `...etc2_rgb8_cube_pot`; T17a `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | `texture.rs:390` (`NOT_SAMPLED`), `:439-440`; `GAPS` `texture.rs:404`, answered at `backend.rs:4497-4499`; the set is `V3D_SAMPLED_TEXFMTS`, `src/backend.rs:290-309` | `-ENOTSUP` for a format outside the set. The four ETC2 classes are in the set, so these cases are no longer refused | driver: the TMU has the types (below) | drafted: "V3D: ETC2/EAC texture formats outside the four GL-core classes (ETC2 RGB8 A1, EAC R11/RG11) are not sampled" |
+| (c) no GPU memory for an empty job | T14a `texture.units.8_units.only_cube.2` | no empty job holds the draw (its lists, or its client data with no memory of its own), after `osal(v3d): out of GPU memory` for 2,117,632, 3,149,824 and 4,206,592 bytes | `backend.rs:6214-6217` (`count_refusal` then `-E2BIG`); the kept copy finds no memory at `backend.rs:4878-4892`; the arena fallback `Attempt::Full` at `backend.rs:4768` | `-E2BIG`, **still aborts** (GL_OUT_OF_MEMORY). Not changed by any commit since `b1b5b845` | driver and board config: eight cube units of 2-4 MiB kept copies against a 48 MiB carve-out with 9.5 MiB live (`tiled_budget`, `backend.rs:1401`, `:4849`); V3D 4.2 itself addresses 32 bits | drafted: "V3D: eight cube units (texture.units.8_units.only_cube.2) lose the draw for lack of GPU memory and abort the image" |
+| (d) job builder catch-all | TF1a `transform_feedback.array.interleaved.lines.highp_mat3`; TF1b `...array.separate.lines.highp_mat3`; TF2a `...basic_types.interleaved.lines.lowp_mat4`; TF2b `...basic_types.separate.lines.highp_mat4`; TF2c `...random_full_array_capture.interleaved.lines.1` | the job builder refused the draw (a uniform, program or primitive it does not write) | `backend.rs:3988-3990` (`Attempt::Unsupported`) over `v3d_job_draw`'s one `V3D_JOB_REFUSED` (`driver/src/v3d/v3d_job.c:1077-1078`, `:1093`); `draw_is_supported`, `:868`, with the fragment-input cap `num_inputs > 64` at `:876` | `-ENOTSUP` at the tip (one Fail, no abort). `b1b5b845` capped inputs at 24 | driver for the 24-input cap (Mesa's `V3D_MAX_FS_INPUTS` is 64, `third_party/mesa-26.2.1/src/broadcom/common/v3d_limits.h:32`). TF2a's `lowp_mat4` (16 inputs) and TF2c are not explained by the cap: cause unknown | drafted: "V3D: split V3D_JOB_REFUSED so a refused draw names its cause" (first step); TF2a/TF2c cause after it |
+
+Hardware side of (b), read in the vendored Mesa (read only): the v3d format
+table maps `ETC2_RGB8`, `ETC2_SRGB8` to `RGB8_ETC2`, `ETC2_RGBA8` and
+`ETC2_SRGBA8` to `RGBA8_ETC2_EAC`, and the EAC R11/RG11 types, as sampler
+formats (`third_party/mesa-26.2.1/src/gallium/drivers/v3d/v3dx_format_table.c:159-168`),
+and `v3d_packet.xml` lists the texture data formats `RGB8_ETC2` (32),
+`R11_EAC` (34), `RG11_EAC` (36-37) and `RGBA8_ETC2_EAC` (38)
+(`third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml:371-379`). So the V3D 4.2
+TMU does have an ETC2 RGBA8 type. The refusal was a missing driver path, and
+the tip removes it for the four classes (455c3bb5).
+
+Which causes can still end an image on the board: only (c). (a), (b) and (d)
+cannot abort at the tip by their return codes; whether their cases pass or
+fail as one case each is for the board. Board sessions `board1` and `board2` of
+plan #398 confirm or move each entry: a case that still refuses there stays on
+its issue draft, not reported as fixed.
