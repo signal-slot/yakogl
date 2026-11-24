@@ -6,7 +6,9 @@
  * ip::dw_wdt and soc::rk3588 behind yd_dw_wdt_arm() / yd_dw_wdt_feed(), and
  * aarch64 behind yd_gic_active_reset() / yd_gic_cpuif_reset() /
  * yd_psci_system_reset(), and the
- * feeder's decision behind yd_t6_feed_verdict() (board::nanopc_t6). This file
+ * feeder's decision behind yd_t6_feed_verdict() (board::nanopc_t6), and the
+ * board's own pins and supply behind yd_t6_usb_vbus_on() / yd_t6_hdmi0_pins()
+ * (board::nanopc_t6_pins). This file
  * is registration only: the init hooks, the mappings, a timer, the prints.
  *
  * Order (the T6:<tag> lines are the early banner, board::nanopc_t6_early;
@@ -69,6 +71,17 @@
  *     reset the SoC through PSCI at once: an image without its watchdog must
  *     not run. If PSCI returns, arm once more with TOP 15 and wait for it; if
  *     that refuses too, the board stays halted until its power is cut.
+ *   PRE_KERNEL_2 0: what the board's start sets up itself, so that every
+ *     route (U-Boot's `go`, kexec, the adopt of Linux's picture) ends in the
+ *     state Linux leaves (board::nanopc_t6_pins; driver/docs/
+ *     nanopc-t6-display.md, "What the start sets up itself"): the USB
+ *     Type-A ports' 5 V switch on (yd_t6_usb_vbus_on, first: a sink powered
+ *     from those ports takes seconds to come up), then the HDMI0 pins'
+ *     functions (yd_t6_hdmi0_pins: without them the controller sees no
+ *     hot-plug). After Linux the same words are there and nothing changes.
+ *     One line with every word as found and as left. Not a Kconfig choice:
+ *     Linux leaves both on, and an image that left them off after a reset
+ *     would differ by its route.
  *   POST_KERNEL 0: a 1 s timer feeds WDT0 while yd_t6_feed_verdict() says
  *     so: before CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S of uptime, and while the
  *     sample's t6_watchdog_feed() calls come at most
@@ -105,6 +118,10 @@
 #define WDT0_PHYS 0xfeaf0000u /* Linux rk3588-base.dtsi:2463 */
 #define CRU_PHYS  0xfd7c0000u /* Linux rk3588-base.dtsi:744 */
 #define CRU_MAP   0x1000u     /* CLKGATE_CON(15) is CRU + 0x83c */
+#define IOC_PHYS   0xfd5f0000u /* Linux rk3588-base.dtsi:729-731 */
+#define IOC_MAP    0x10000u
+#define GPIO4_PHYS 0xfec50000u /* Linux rk3588-base.dtsi:3308-3310 */
+#define GPIO4_MAP  0x1000u
 #define UART2_NODE DT_NODELABEL(uart2)
 #define UART2_PHYS 0xfeb50000u /* board::nanopc_t6_early::UART2_PHYS */
 /* The GICv3 (Zephyr's rk3588.dtsi): reg 0 the distributor, reg 1 the one
@@ -371,6 +388,36 @@ static int t6_wdt_report(void)
 	return 0;
 }
 SYS_INIT(t6_wdt_report, PRE_KERNEL_1, 99);
+
+/* Each word a pins call wrote: its address, as found -> as left. */
+static void pins_words(const struct yd_t6_pins *p)
+{
+	for (uint32_t i = 0; i < MIN(p->count, (uint32_t)YD_T6_PINS_WORDS); i++) {
+		printk(" 0x%08x 0x%08x -> 0x%08x%s", p->phys[i], p->found[i], p->now[i],
+		       (p->differ & BIT(i)) ? " (differs)" : "");
+	}
+}
+
+/* The board's own pins and supply ("Order" above). The mappings stay: the
+ * IOC and GPIO4 are mapped once per boot. */
+static int t6_board_pins(void)
+{
+	struct yd_t6_pins vbus, hdmi;
+	mm_reg_t ioc, gpio4;
+	int vrc, hrc;
+
+	device_map(&ioc, IOC_PHYS, IOC_MAP, K_MEM_CACHE_NONE);
+	device_map(&gpio4, GPIO4_PHYS, GPIO4_MAP, K_MEM_CACHE_NONE);
+	vrc = yd_t6_usb_vbus_on(ioc, gpio4, &vbus);
+	hrc = yd_t6_hdmi0_pins(ioc, &hdmi);
+	printk("t6: vbus5v0_usb rc %d, GPIO4_B0 level %u:", vrc, vbus.level);
+	pins_words(&vbus);
+	printk("; HDMI0 pins rc %d:", hrc);
+	pins_words(&hdmi);
+	printk("\n");
+	return 0;
+}
+SYS_INIT(t6_board_pins, PRE_KERNEL_2, 0);
 
 #ifdef CONFIG_YAKOGL_NANOPC_T6_WDT_PROOF
 static void proof_backstop(struct k_timer *t)

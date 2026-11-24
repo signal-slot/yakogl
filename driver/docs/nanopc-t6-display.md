@@ -597,6 +597,61 @@ the full rules) and two notes on them:
   released by the chain; Linux drives none of them and the D0 dump reads
   them released.
 
+### What the start sets up itself: HDMI0's pins and the Type-A ports' 5 V
+
+Two things the display needs are not display blocks, and Linux sets them up
+before any of the chain runs: the HDMI0 pins' functions and the USB Type-A
+ports' 5 V. After a reset U-Boot's `go` leaves both as the reset does, and
+a picture started by the chain alone then has no hot-plug (issue #11859:
+with `go`, GPIO1_A's function word 0x00000000, its pull word 0x0000d555,
+GPIO4 `DR_L`/`DDR_L` 0x0/0x20, and `HPD 0`; after Linux 0x00000550,
+0x0000c155, 0x4934/0x49f4, and `HPD 1`). So the board's start sets both
+itself, on every route, and the image does not depend on what ran before it.
+
+| What | Pin | Setting | Device tree (Linux v6.18) |
+|---|---|---|---|
+| HDMI0 CEC | GPIO4_C1 | function 5, no pull | `rk3588-base-pinctrl.dtsi:564-568` |
+| HDMI0 hot-plug | GPIO1_A5 | function 5, no pull | `rk3588-base-pinctrl.dtsi:571-575` |
+| HDMI0 SCL | GPIO4_B7 | function 5, no pull, drive level 5, schmitt | `rk3588-base-pinctrl.dtsi:578-582`, `rockchip-pinconf.dtsi:364-368` |
+| HDMI0 SDA | GPIO4_C0 | function 5, no pull, drive level 1, schmitt | `rk3588-base-pinctrl.dtsi:585-589`, `rockchip-pinconf.dtsi:336-340` |
+| `vbus5v0_usb` | GPIO4_B0 | GPIO, no pull, output high | `rk3588-nanopc-t6.dtsi:183-193`, `:693-695` |
+
+The four HDMI0 groups are `pinctrl-0` of `hdmi@fde80000`
+(`rk3588-base.dtsi:1624-1625`). `vbus5v0_usb` is a fixed regulator, active
+high, the supply of `usbdp_phy1` (`rk3588-nanopc-t6.dtsi:1144-1147`). The
+register layout (the IOC's function, pull, drive and schmitt words, the
+GPIO bank's `DR`/`DDR`, all with the write mask in bits 31:16) is
+`pinctrl-rockchip.c` and `gpio-rockchip.c`, cited line by line in
+`soc::rk3588_pinctrl`; the table and the writes are
+`board::nanopc_t6_pins`.
+
+Where it runs: the board glue (`nanopc_t6.c`), at `PRE_KERNEL_2`, in every
+NanoPC-T6 image (the probes and the board layer alike), after the WDT0
+report and before any thread: the 5 V first, since a sink powered from those
+ports takes seconds to raise its hot-plug (3 s for the capture unit), then
+the HDMI0 pins. Every word is read before and after; a field that reads back
+other than written, or a 5 V pin that does not read high, makes the call
+return `-EIO` and the line says which word. The writes change only their
+fields, so after Linux (kexec, or the adopt of a running picture) they write
+the values that are there and nothing changes.
+
+The 5 V is a board supply, not part of the display: a panel or a touch
+screen powered from the ports needs it whatever the image shows. It is
+switched on unconditionally, not by a Kconfig choice: Linux leaves it on,
+and an image that left it off after a reset but found it on after Linux
+would end in a state that depends on its route.
+
+The line (one per boot):
+
+```
+t6: vbus5v0_usb rc 0, GPIO4_B0 level 1: 0xfd5f8088 <found> -> <now> ... ; HDMI0 pins rc 0: 0xfd5f8090 <found> -> <now> ...
+```
+
+Four words for the 5 V (the function and pull words of GPIO4_B, GPIO4
+`DR_L`, `DDR_L`) and ten for HDMI0, each its address, as found and as left,
+` (differs)` after a word whose field did not take the write. On the kexec
+route the "found" values are Linux's own words for these pins.
+
 ### Which first, which signs off, what is shared
 
 - First picture: **(a) by crash kexec** (two small steps), because it needs

@@ -15,7 +15,11 @@ config YAKOGL_NANOPC_T6
 	  for a bounded time; at EARLY, every interrupt left Active at the
 	  GICv3 distributor and at the boot CPU's redistributor deactivated,
 	  and the GICv3 CPU interface put back into its reset EOI mode, with
-	  no active priority and ICC_BPR1_EL1 0; and
+	  no active priority and ICC_BPR1_EL1 0; at PRE_KERNEL_2, on every
+	  route, the USB Type-A ports' 5 V switched on and the HDMI0 pins
+	  given their functions, as Linux leaves them
+	  (driver/docs/nanopc-t6-display.md, "What the start sets up
+	  itself"); and
 	  t6_reset_to_linux() (nanopc_t6.h), the end of a run: PSCI
 	  SYSTEM_RESET, with WDT0 behind it. YAKOGL_DRV_DISPLAY_RUST is the switch
 	  that builds the yakogl-drivers crate (driver/zephyr/CMakeLists.txt,
