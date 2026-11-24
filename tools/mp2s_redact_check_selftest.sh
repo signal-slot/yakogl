@@ -48,6 +48,24 @@ pos password  secret  "login password=hunter2" hunter2
 pos passwd    secret  "passwd: s3cret" s3cret
 pos token     secret  "curl -d token=abcdef0123" abcdef
 
+# ST's stock env text passes; masked values pass; real addresses in the
+# same position (and the stock address elsewhere) still fail
+neg() {
+  printf '%s\n' "$2" > "$T/n.txt"
+  local out rc=0
+  out=$(run "$T/n.txt") || rc=$?
+  if [ "$rc" != 0 ] || [ -n "$out" ]; then fail "$1: flagged: $out"; fi
+}
+neg st-stock   "serverip=192.168"".1.1"
+neg masked-ip  "serverip=1***"
+neg masked-ip2 "ipv4:1***"
+pos serverip-doc  ipv4 "serverip=192.0.2.10" 192.0.2.10
+pos serverip-doc2 ipv4 "ipaddr=198.51.100.7" 198.51.100.7
+pos stock-else    ipv4 "gw 192.168"".1.1" 192.168"".1.1
+pos stock-other   ipv4 "serverip=192.168"".1.2" 192.168"".1.2
+st=$here/../driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt
+if [ -f "$st" ] && [ -n "$(run "$st")" ]; then fail "ST stock env fixture flagged"; fi
+
 printf 'addr 192.0.2.44 gw 198.51.100.1\n' > "$T/p.txt"
 [ "$(run "$T/p.txt" | wc -l)" = 2 ] || fail "two ipv4 on one line"
 
