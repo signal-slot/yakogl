@@ -1026,6 +1026,16 @@ pub const DRAWS_WITHOUT_COLOUR: bool = true;
 /// ([`super::profile::ACTIVE`]); the ST part's row sets it too.
 pub const NON_POWER_OF_TWO: bool = super::profile::ACTIVE.non_power_of_two;
 
+/// `GL_ALIASED_LINE_WIDTH_RANGE` of a part (its profile's `line_width_range`).
+pub const fn line_width_range_of(p: &super::profile::ChipProfile) -> [f32; 2] {
+    p.line_width_range
+}
+
+/// The built part's `GL_ALIASED_LINE_WIDTH_RANGE` ([`super::profile::ACTIVE`]):
+/// [1.0, 16.0] on the i.MX8MP's GC7000UL, as the GL core reported before the
+/// profile carried it.
+pub const LINE_WIDTH_RANGE: [f32; 2] = line_width_range_of(super::profile::ACTIVE);
+
 /// Bytes of the surface a draw with no colour target names: Mesa's etnaviv
 /// dummy render target, 64x64 RGBA8 (etnaviv_screen.c:1144-1151, Mesa 26.2.1).
 const NO_COLOUR_SURFACE_BYTES: usize = 64 * 64 * 4;
