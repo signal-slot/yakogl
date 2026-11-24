@@ -1,5 +1,14 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 Connor Abbott
+// SPDX-FileCopyrightText: 2014 Intel Corporation
+// SPDX-FileCopyrightText: 2015 Intel Corporation
+// SPDX-FileCopyrightText: 2018 Red Hat Inc.
+// Ported in part from Mesa 26.2.1 src/compiler/nir/nir_builtin_builder.c
+// (nir_atan, nir_atan2, build_asin), src/compiler/nir/nir_opcodes.py and
+// src/compiler/glsl/ir_expression_operation.py (MIT).
+// The upstream part stays under its licence (LICENSES/MIT.txt); our
+// changes are Apache-2.0. See NOTICE.
 //! The constant fold of GLSL built-ins with Mesa 26.2.1's bits
 //! (`docs/notes/mali-libm-fold.md` section 4). Mesa folds a built-in on
 //! constants with the host's C library: the GLSL IR folder

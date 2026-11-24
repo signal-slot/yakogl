@@ -1,5 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2013 Intel Corporation
+// SPDX-FileCopyrightText: 2015 Intel Corporation
+// Ported in part from Mesa 26.2.1 src/compiler/glsl/builtin_functions.cpp
+// (_inverse_mat2/3/4) and src/compiler/spirv/vtn_glsl450.c (build_det,
+// build_mat_subdet) (MIT).
+// The upstream part stays under its licence (LICENSES/MIT.txt); our
+// changes are Apache-2.0. See NOTICE.
 //! The syntax tree to [`ir::Module`]: the front end's output side.
 //!
 //! [`compile_to_ir`] is the whole front end behind one call -- text in, IR and
