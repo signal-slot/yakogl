@@ -2343,6 +2343,9 @@ step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
 # accepted (GL_NO_ERROR, no refused draw), through the report-es2 GL core.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_refusals
+# 4a7b5174: gl_FragData[0] read back is held in a slot; same compile/link answers.
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_fragdata.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_fragdata
 # glCopyTex* answers (0658692a) in the ES 2.0 context, every source x destination.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_copytex.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_copytex
@@ -2397,6 +2400,8 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_d
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_texstore
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_msaa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_msaa
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_fragdata.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_fragdata
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_clears
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_mipmap.rs)" \
