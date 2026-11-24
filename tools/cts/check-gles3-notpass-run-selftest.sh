@@ -94,6 +94,17 @@ grep -q "line 5: empty outcome" <<<"$out" || fail "empty outcome not named: $out
 grep -q "line 6: bad outcome" <<<"$out" || fail "bad outcome not named: $out"
 [ "$(grep -c '^c2:' <<<"$out")" = 3 ] || fail "want one line per failed row: $out"
 
+BODY=$good
+tsv "$tmp/nr.tsv" "# rows 0-2: build $a, run 2026-11-22"
+run "$tmp/nr.tsv" --no-noresult; expect "--no-noresult refuses a NoResult row" 1 "c2: line 4: NoResult: dEQP-GLES3.c.1"
+run "$tmp/nr.tsv"; expect "NoResult is accepted without --no-noresult" 0 "^ok:"
+
+# Four row sessions of one build, one date each: header ranges of one sha8 pass (c1).
+BODY='Fail\tdEQP-GLES3.a.1\tmsg\tf\n'
+tsv "$tmp/four.tsv" "# rows 0-0: build $m, run 2026-11-25" "# rows 1-1: build $m, run 2026-11-26" \
+  "# rows 2-2: build $m, run 2026-11-27"
+run "$tmp/four.tsv" --no-noresult; expect "several ranges of one build" 0 "^ok:"
+
 BODY='Fail\tdEQP-GLES3.a.1\tmsg\nNoResult\tdEQP-GLES3.c.1\n'
 tsv "$tmp/nofam.tsv" "# rows 0-2: build $s, run 2026-11-22"
 run "$tmp/nofam.tsv"; expect "no family column" 2 "no cause-family column yet"
