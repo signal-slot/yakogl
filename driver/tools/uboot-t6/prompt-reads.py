@@ -12,6 +12,9 @@
         command is `reset`: the board boots Armbian as after a power-on.
         RECORD_DIR gets uart.log (every byte read), typed.log (every byte
         written, with its time) and answers.txt (each command's output).
+        A wait for Linux's login that ends without it closes uart.log with
+        one line that starts with "####" and says where the stream went
+        silent: what the board printed after that point is not recorded.
     prompt-reads.py plan
         Prints the commands, nothing else.
     prompt-reads.py --self-test
@@ -54,7 +57,8 @@ prompt-reads.sh keeps for "refused before the reboot"). 4 the autoboot was
 missed (one space written, Linux booted). 5 stopped at the prompt (an echo
 that never matched, or a command without an answer): the board stays at the
 U-Boot prompt until someone resets it. 6 `reset` entered but no Linux login
-in time. 7 U-Boot left the prompt during a command (a fault resets the
+on the UART in time (the UART alone cannot say Linux is not back:
+prompt-reads.sh asks the board over ssh). 7 U-Boot left the prompt during a command (a fault resets the
 board) and started Linux; nothing was written after that command. 2 usage.
 """
 
@@ -209,12 +213,14 @@ class Stop(Exception):
 class Console:
     """The UART: every byte read goes to uart.log, every write to typed.log."""
 
-    def __init__(self, fd, raw, typed, gap=0.003):
-        self.fd, self.raw, self.typed, self.gap = fd, raw, typed, gap
+    def __init__(self, fd, raw, typed, gap=0.003, tool="prompt-reads"):
+        self.fd, self.raw, self.typed, self.gap, self.tool = fd, raw, typed, gap, tool
         self.buf = b""
         self.kernel = False       # "Starting kernel" was read: never write again
         self.armed = False        # the autoboot line was read
         self.t0 = time.monotonic()
+        self.nread = 0            # the bytes in uart.log
+        self.last = self.t0       # when the last of them was read
 
     def log(self, what):
         self.typed.write("%8.3f %s\n" % (time.monotonic() - self.t0, what))
@@ -231,6 +237,8 @@ class Console:
         if b:
             self.raw.write(b)
             self.raw.flush()
+            self.nread += len(b)
+            self.last = time.monotonic()
             self.buf += b
             if KERNEL in self.buf:
                 self.kernel = True
@@ -258,6 +266,28 @@ class Console:
                 return False
             self.read(min(left, 0.2))
         return True
+
+    def wait_login(self, timeout):
+        """Reads until Linux's login, writing nothing; True when it came.
+
+        The UART is not the only witness of Linux: the network serial
+        adapter can stop its stream for good in the middle of the kernel's
+        boot output (issue #11874), and a login printed then is never read.
+        So a wait that ends without the login closes uart.log with one line
+        that starts with "####" and says where the stream went silent (the
+        hole in the record), and says the same in typed.log. Whether Linux
+        is back is decided by the shell runner around the tool, over ssh
+        (prompt-lib.sh, exit_when_back: a new boot_id)."""
+        if self.wait_for(LOGIN, timeout):
+            return True
+        now = time.monotonic()
+        hole = ("no byte was read after %.3f s (byte %d of uart.log); the wait for Linux's login ended at %.3f s, "
+                "%.1f s later: the UART stream stopped or the board printed nothing, and what it printed after this "
+                "point is not in this record" % (self.last - self.t0, self.nread, now - self.t0, now - self.last))
+        self.raw.write(b"\r\n#### %s: %s\r\n" % (self.tool.encode(), hole.encode()))
+        self.raw.flush()
+        self.log("no Linux login on the UART: " + hole)
+        return False
 
     def wait_prompt(self, timeout, quiet=0.15):
         """True when the stream ends in a prompt and stays silent for quiet."""
@@ -361,15 +391,15 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30):
             con.armed = False
             con.buf = b""
             t = time.monotonic()
-            if not con.wait_for(LOGIN, login_wait):
-                raise Stop(6, "reset entered, no Linux login in %d s" % login_wait)
+            if not con.wait_login(login_wait):
+                raise Stop(6, "reset entered, no Linux login on the UART in %d s" % login_wait)
             say("done: %d commands, the Linux login %d s after reset" % (len(answers) - 1, time.monotonic() - t))
             return 0
         except Stop as s:
             con.armed = False
             if s.code in (4, 7):
                 # Read on, written nothing more, so the record shows the boot.
-                con.wait_for(LOGIN, login_wait)
+                con.wait_login(login_wait)
             say("STOP (%d): %s" % (s.code, s.why))
             return s.code
 
@@ -406,9 +436,12 @@ DM_UNPROBED = DM_PROBED.replace("0  [ + ]   rockchip_rk8xx", "0  [   ]   rockchi
 class FakeBoard(threading.Thread):
     """Plays a boot on the pty master and answers like U-Boot's prompt."""
 
-    def __init__(self, master, mode="ok", words=None, dm=DM_PROBED, garble=0):
+    def __init__(self, master, mode="ok", words=None, dm=DM_PROBED, garble=0, kernel_stop=False):
         super().__init__(daemon=True)
         self.m, self.mode, self.dm = master, mode, dm
+        # The network adapter's stream stops in the kernel's boot output: the
+        # login after it never reaches the tool (issue #11874).
+        self.kernel_stop = kernel_stop
         self.words = dict(PMU_OFF if words is None else words)
         self.garble = garble          # how many typed lines lose a byte
         self.got = b""                # every byte the tool wrote
@@ -428,7 +461,10 @@ class FakeBoard(threading.Thread):
         return b
 
     def linux(self):
-        self.out("Starting kernel ...\r\n\r\nboard login: root (automatic login)\r\n# ")
+        if self.kernel_stop:
+            self.out("Starting kernel ...\r\n\r\n[    0.000000] Booting Linux on physical CPU 0x0000000000\r\n[    0.0")
+        else:
+            self.out("Starting kernel ...\r\n\r\nboard login: root (automatic login)\r\n# ")
         end = time.monotonic() + 0.6
         while time.monotonic() < end:
             self.shell += self.key(0.1)
@@ -583,6 +619,22 @@ def self_test():
           "ok: an answer that holds the prompt's text is kept whole")
     check(b"Hit any key" in files["uart.log"] and b"wrote b' '" in files["typed.log"],
           "ok: uart.log and typed.log hold the read and the written bytes")
+    check(b"####" not in files["uart.log"], "ok: the login came, uart.log has no line about a hole")
+
+    # 1b. The UART stream stops in the kernel's output after reset: exit 6,
+    # nothing written after reset, uart.log closed with one line that says
+    # where the hole starts (its byte offset is the end of what was read).
+    rc, f, files = case(kernel_stop=True)
+    log = files["uart.log"]
+    at = log.find(b"\r\n#### prompt-reads: no byte was read after ")
+    m = re.search(rb"\(byte (\d+) of uart\.log\)", log[at:])
+    check(rc == 6 and f.entered == want and f.shell == b"",
+          "kernel stop: exit 6, the plan entered, nothing written after reset (rc %d, %r)" % (rc, f.shell))
+    check(at > 0 and log.endswith(b"not in this record\r\n") and log.count(b"####") == 1
+          and m is not None and int(m.group(1)) == at and log[:at].endswith(b"[    0.0"),
+          "kernel stop: uart.log ends with one '####' line at the hole's byte (%r)" % log[-160:])
+    check(b"no Linux login on the UART: no byte was read after" in files["typed.log"],
+          "kernel stop: typed.log says the same")
 
     # 2. PD_GPU on: the four QoS blocks are read, five words each.
     rc, f, _ = case(words=PMU_ON)

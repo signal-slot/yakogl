@@ -93,17 +93,35 @@ reboot_and_wait_tool() {
 
 # Whatever the tool's result, the board is looked for: a command that made
 # U-Boot reset the board, or an image that reset it, ends in Armbian too.
-# Exits with the tool's code when Armbian is back with a new boot_id; 5 when
-# the tool stopped at the prompt and Armbian did not come; otherwise 1.
+#
+# exit_when_back [<code>:<code when back> ...]: the tool's codes that say
+# "no Linux login on the UART" (prompt-go 6 and 10, prompt-reads 6), each
+# with the code the tool gives when the login came. The UART is not the
+# only witness of Linux: the network serial adapter can stop its stream for
+# good in the kernel's boot output, and a login printed then is never read
+# (issue #11874). So Armbian with a new boot_id over ssh is Linux back all
+# the same, and the exit is the second code; the record says so, and the
+# tool's last line in uart.log says where its stream went silent.
+#
+# Exits with the tool's code (or the second code above) when Armbian is
+# back with a new boot_id. When it is not back within BACK_WAIT_S (default
+# 180; the self-test sets 0): 5 when the tool stopped at the prompt; the
+# tool's own code when that is one of the codes given (neither the UART nor
+# ssh shows Linux: the board needs T6_HAND); otherwise 1.
 exit_when_back() {
-	local deadline now_boot=
-	deadline=$(( $(date +%s) + 180 ))
+	local deadline now_boot= code=$py_rc pair
+	deadline=$(( $(date +%s) + ${BACK_WAIT_S:-180} ))
 	while [ "$(date +%s)" -lt "$deadline" ]; do
 		now_boot=$(board 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
 		if [ -n "$now_boot" ] && [ "$now_boot" != "$old_boot" ]; then
 			rec "back in Armbian $(( $(date +%s) - t0 )) s after the reboot command (boot_id $now_boot, up $(board 'cut -d" " -f1 /proc/uptime') s)"
+			for pair in "$@"; do
+				[ "${pair%%:*}" = "$py_rc" ] || continue
+				code=${pair#*:}
+				rec "$TOOL.py saw no Linux login on the UART (exit $py_rc), but Armbian answers over ssh with a new boot_id: Linux is back; exit $code, as with the login seen (uart.log's last line says where the UART went silent)"
+			done
 			echo "$TOOL.sh: record $REC"
-			exit "$py_rc"
+			exit "$code"
 		fi
 		sleep 5
 	done
@@ -114,6 +132,12 @@ exit_when_back() {
 		echo "$TOOL.sh: record $REC"
 		exit 5
 	else
+		for pair in "$@"; do
+			[ "${pair%%:*}" = "$py_rc" ] || continue
+			rec "no Linux login on the UART (exit $py_rc) and no Armbian over ssh $(( $(date +%s) - t0 )) s after the reboot command: no sign of Linux; the board needs $T6_HAND at its power switch" >&2
+			echo "$TOOL.sh: record $REC"
+			exit "$py_rc"
+		done
 		rec "no Armbian $(( $(date +%s) - t0 )) s after the reboot command: the board needs $T6_HAND at its power switch" >&2
 	fi
 	echo "$TOOL.sh: record $REC"

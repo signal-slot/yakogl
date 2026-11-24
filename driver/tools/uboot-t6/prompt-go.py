@@ -26,7 +26,9 @@
         entered and the board boots Armbian.
         SIZE is decimal bytes, CRC eight hex digits (zlib's CRC-32, the one
         U-Boot's crc32 prints). RECORD_DIR also gets uart.log, typed.log and
-        answers.txt, as prompt-reads.py's.
+        answers.txt, as prompt-reads.py's (a wait for Linux's login that
+        ends without it closes uart.log with a "####" line that says where
+        the stream went silent; image.log keeps only the bytes read).
     prompt-go.py plan NAME SIZE CRC
         Prints the commands and what each answer must be, nothing else.
     prompt-go.py --self-test
@@ -43,18 +45,26 @@ this NAME and SIZE, and `reset`. NAME is a file name of letters, digits,
 address is the image's link address, 0x10000000 (nanopc_t6.dts zephyr,sram;
 board_lock_selftest.sh compares LOAD with it).
 
+The UART alone cannot say that Linux is not back: the network serial adapter
+can stop its stream for good in the middle of the kernel's boot output
+(issue #11874), and a login printed after that is never read. So 6 and 10
+below mean "no Linux login on the UART"; prompt-go.sh then asks the board
+over ssh, and only when that finds no new boot either does a 6 or a 10 stay
+its exit (prompt-lib.sh, exit_when_back).
+
 Exit: 0 the image ran, its verdict is PASS and Linux's login came back. 2
 usage. 12 no autoboot line in time (nothing written; not 3, which
 prompt-go.sh keeps for "refused before the reboot"). 4 the autoboot was
 missed (one space written, Linux booted). 5 stopped at the prompt (an echo
 that never matched, a command without an answer, the prompt lost): the board
 stays at the U-Boot prompt until its power is cut. 6 an answer differed,
-`reset` entered, no Linux login in time. 7 U-Boot left the prompt during a
-command and started Linux. 8 an answer differed (size, load, magic, CRC):
-`go` was not entered, `reset` was, and Linux's login came back. 9 `go`
+`reset` entered, no Linux login on the UART in time. 7 U-Boot left the
+prompt during a command and started Linux. 8 an answer differed (size,
+load, magic, CRC): `go` was not entered, `reset` was, and Linux's login
+came back. 9 `go`
 entered and U-Boot did not answer it ("## Starting application" never
-came): nothing more was written. 10 the image started, no Linux login in
-time: the board needs a hand at its power switch. 11 Linux's login came back
+came): nothing more was written. 10 the image started, its verdict was
+taken, no Linux login on the UART in time. 11 Linux's login came back
 and the verdict is FAIL (verdict.txt names the lines).
 """
 
@@ -161,7 +171,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
     with open(os.path.join(rec, "uart.log"), "wb") as raw, \
             open(os.path.join(rec, "typed.log"), "w") as typed, \
             open(os.path.join(rec, "answers.txt"), "w") as ans:
-        con = P.Console(fd, raw, typed, gap)
+        con = P.Console(fd, raw, typed, gap, tool="prompt-go")
 
         def say(msg):
             con.log(msg)
@@ -194,8 +204,8 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
                 P.enter(con, "reset", 0, ok=ok)
                 con.armed = False
                 con.buf = b""
-                if not con.wait_for(P.LOGIN, login_wait):
-                    raise P.Stop(6, "reset entered after the refusal, no Linux login in %d s" % login_wait)
+                if not con.wait_login(login_wait):
+                    raise P.Stop(6, "reset entered after the refusal, no Linux login on the UART in %d s" % login_wait)
                 say("STOP (8): refused before go, reset entered, Linux's login came back")
                 return 8
             go = commands(name, size)[-1]
@@ -206,7 +216,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
             say("%s entered: nothing is written from here on" % go)
             con.buf = b""
             started = con.wait_for(STARTED, 10 * scale)
-            back = con.wait_for(P.LOGIN, image_wait + login_wait)
+            back = con.wait_login(image_wait + login_wait)
             log = os.path.join(rec, "image.log")
             with open(log, "wb") as f:
                 f.write(con.buf)
@@ -216,8 +226,10 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
             vrc, vline = judge(probe, log, os.path.join(rec, "verdict.txt"))
             say("verdict: %s" % vline)
             if not back:
-                say("STOP (10): the image started, no Linux login in %d s: the board needs a hand"
-                    % (image_wait + login_wait))
+                # Not "the board needs a hand": the UART may have stopped in
+                # the kernel's output; prompt-go.sh asks the board over ssh.
+                say("STOP (10): the image started, no Linux login on the UART in %d s (uart.log's last line "
+                    "says where the stream went silent)" % (image_wait + login_wait))
                 return 10
             if vrc != 0:
                 say("STOP (11): Linux's login came back, the verdict is not PASS (verdict.txt)")
@@ -227,7 +239,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
         except P.Stop as s:
             con.armed = False
             if s.code in (4, 7):
-                con.wait_for(P.LOGIN, login_wait)
+                con.wait_login(login_wait)
             say("STOP (%d): %s" % (s.code, s.why))
             return s.code
 
@@ -258,13 +270,17 @@ def image_lines():
 
 
 class FakeGo(P.FakeBoard):
-    """U-Boot that answers the go route's commands, then plays the image."""
+    """U-Boot that answers the go route's commands, then plays the image.
+    A how that ends in "-kstop" plays the UART's stream stopping in the
+    kernel's output after the reset that follows (FakeBoard.kernel_stop)."""
 
     def __init__(self, master, name, size, crc, how="ok", lines=None):
+        kstop = how.endswith("-kstop")
+        how = how[:-len("-kstop")] if kstop else how
         words = dict(P.PMU_OFF)
         words[LOAD + MAGIC_OFF] = 0x12345678 if how == "magic" else IMAGE_MAGIC
         mode = "noautoboot" if how == "noautoboot" else "ok"
-        super().__init__(master, mode=mode, words=words)
+        super().__init__(master, mode=mode, words=words, kernel_stop=kstop)
         self.name, self.size, self.crc, self.how = name, size, crc, how
         self.lines = image_lines() if lines is None else lines
 
@@ -353,6 +369,17 @@ def self_test():
           "ok: nothing was written after go's Enter (%r)" % f.shell)
     check(b"T6:G go: SCTLR_EL2" in files.get("image.log", b""), "ok: image.log holds the image's lines")
     check(files.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS"), "ok: verdict.txt says PASS")
+    check(b"####" not in files.get("uart.log", b"####"), "ok: the login came, uart.log has no line about a hole")
+
+    def hole(files):
+        """True when uart.log ends with one '####' line whose byte offset is
+        where it starts, after the kernel's cut line, and image.log has none."""
+        log = files.get("uart.log", b"")
+        at = log.find(b"\r\n#### prompt-go: no byte was read after ")
+        m = re.search(rb"\(byte (\d+) of uart\.log\)", log[at:])
+        return (at > 0 and log.endswith(b"not in this record\r\n") and log.count(b"####") == 1
+                and m is not None and int(m.group(1)) == at and log[:at].endswith(b"[    0.0")
+                and b"####" not in files.get("image.log", b""))
 
     # 2. Each answer that differs: refused before go, reset entered, Linux back.
     for how, at in (("missing", 0), ("size-text", 0), ("size", 1), ("load", 2), ("load-n", 2), ("magic", 3),
@@ -362,6 +389,12 @@ def self_test():
               "%s: exit 8, %s refused, reset entered, no go (rc %d, %r)" % (how, cmds[at], rc, f.entered))
         check(f.shell == b"" and b"REFUSED before go" in files.get("typed.log", b""),
               "%s: the refusal is in typed.log, nothing reached Linux" % how)
+
+    # 2a. A refusal, reset, and the UART stream stops in the kernel's output:
+    # exit 6 (prompt-go.sh asks over ssh), nothing reached Linux, the hole said.
+    rc, f, files = case("missing-kstop")
+    check(rc == 6 and f.entered == cmds[:1] + ["reset"] and f.shell == b"" and hole(files),
+          "refused, kernel stop: exit 6, nothing written after reset, uart.log says where the hole is (rc %d)" % rc)
 
     # 2b. No autoboot line after the reboot: nothing written, its own code.
     rc, f, _ = case("noautoboot")
@@ -386,6 +419,23 @@ def self_test():
     rc, f, files = case("nologin")
     check(rc == 10 and f.shell == b"" and files.get("verdict.txt", b"").rstrip().endswith(b"PASS"),
           "no login: exit 10, the verdict still taken, nothing written (rc %d)" % rc)
+    check(files.get("uart.log", b"").count(b"####") == 1 and files["uart.log"].endswith(b"not in this record\r\n"),
+          "no login: uart.log ends with the line that says where the stream went silent")
+
+    # 6b. The image ran and reset the board, U-Boot booted Linux, and the
+    # UART stream stopped in the kernel's output (issue #11874): exit 10
+    # with the verdict PASS taken, nothing written after go, the hole said in
+    # uart.log and typed.log, and no "needs a hand" (that is prompt-go.sh's to
+    # say, after ssh finds no new boot either).
+    rc, f, files = case("ok-kstop")
+    typed = files.get("typed.log", b"")
+    check(rc == 10 and f.entered == cmds and f.got.endswith(go.encode() + b"\r") and f.shell == b"",
+          "kernel stop: exit 10, nothing written after go (rc %d, %r)" % (rc, f.shell))
+    check(files.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS") and hole(files),
+          "kernel stop: the verdict PASS taken, uart.log says where the hole is, image.log has only bytes read")
+    check(b"STOP (10): the image started, no Linux login on the UART" in typed and b"needs a hand" not in typed
+          and b"no Linux login on the UART: no byte was read after" in typed,
+          "kernel stop: typed.log says no login on the UART and where it went silent, not 'needs a hand'")
 
     # 7. What may be typed.
     ok = go_allowed(name, size)
