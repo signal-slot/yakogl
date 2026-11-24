@@ -383,6 +383,10 @@ struct Sel<'a> {
     /// (`abi::vs_id_regs`), of the same module.
     id_regs: (Option<u16>, Option<u16>),
     arena: &'a Arena<'a>,
+    /// The slot lanes each kept loop carries
+    /// ([`crate::shaderc::online::local_live`]), of those [`Sel::loop_`]
+    /// finds the body writes.
+    live: crate::shaderc::online::local_live::LocalLive<'a>,
     /// The register each local slot's components currently live in.
     ///
     /// Four per slot. `if_convert` redirects them while it selects an arm --
@@ -2458,7 +2462,9 @@ impl<'a> Sel<'a> {
     /// [`SelOp::LoopBegin`] and the back edge.
     ///
     /// ```text
-    ///   h[l] = <local l>        every local lane the body stores, carried
+    ///   h[l] = <local l>        every lane the body stores and that is live
+    ///                           at the head or after the loop
+    ///                           (`local_live`), carried
     ///   c = 0                   the loop's counter
     ///   LoopBegin
     ///   <body>                  reads h[l], stores fresh registers
@@ -2487,6 +2493,15 @@ impl<'a> Sel<'a> {
         let n = self.locals_in.len();
         let carried = self.arena.alloc_filled(n, false)?;
         self.mark_carried(body, carried);
+        /* Only a lane live at the head or after the loop needs a home: one
+         * the body writes before any read that matters, and that nothing
+         * after the loop reads, is a temporary of one pass. Carrying every
+         * written lane kept each temporary of an inlined function live over
+         * the whole body (Qt Quick 3D's PrincipledMaterial: 497 temporaries
+         * of 252, #7104). */
+        for (idx, c) in carried.iter_mut().enumerate() {
+            *c = *c && self.live.carried_by_loop(body.first, idx);
+        }
         let homes = self.arena.alloc_filled(n, VReg(u32::MAX))?;
         let plain = |v: VReg| Some(SelSrc::Virtual { v, mods: Mods::default() });
         for idx in 0..n {
@@ -2616,7 +2631,8 @@ impl<'a> Sel<'a> {
     }
 
     /// Mark every local lane `r` stores (the discard flag's four for a
-    /// `discard`).
+    /// `discard`): the lanes [`Sel::loop_`] may carry, of which it keeps the
+    /// ones live at the loop's head.
     fn mark_carried(&self, r: ir::Range, carried: &mut [bool]) {
         for n in self.m.nodes_of(r) {
             match *n {
@@ -5655,6 +5671,11 @@ pub fn select_in<'a>(
         Ok(None) => (m, &[][..]),
         Err(e) => return Err(SelectError::Unsupported(e.message())),
     };
+    /* The slots each kept loop must carry: those live at its head, the exit
+     * flag `loop_` tests at the back edge counted as a read there. */
+    let live = crate::shaderc::online::local_live::analyse(m, arena, |first| {
+        trips.iter().find(|t| t.first == first).and_then(|t| t.exit)
+    })?;
     let locals_in = arena.alloc_filled(Sel::slots(m) as usize * LANES as usize, VReg(0))?;
     for (i, e) in locals_in.iter_mut().enumerate() {
         *e = Sel::local_home(m, i as u32 / LANES, i as u32 % LANES);
@@ -5668,6 +5689,7 @@ pub fn select_in<'a>(
         attribs_read,
         id_regs,
         arena,
+        live,
         locals_in,
         loaded,
         next_vreg,

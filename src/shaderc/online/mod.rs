@@ -117,6 +117,8 @@ pub(crate) mod fold;
 /// The contract between the front end and the code generator.
 pub mod ir;
 pub mod lexer;
+/// Which local lanes are live where (the slots a kept loop carries).
+pub mod local_live;
 /// Sampler-state variants in the IR: the look-ups whose code depends on the
 /// bound sampler's filters, and the c = 0.5 remap of an explicit level.
 pub mod lodkey;

@@ -1807,11 +1807,17 @@ mod tests {
          * 0xd705_1e75_32ff_19e7, 21_006 words (measured by skipping those
          * five pairs): no word of an existing program changed.
          * 2026-11-16 (v3d-shout4): a one- or two-component float output writes
-         * its own size and one word, 16 words fewer (21_345 to 21_329; report-es2 18_702 to 18_686). */
+         * its own size and one word, 16 words fewer (21_345 to 21_329; report-es2 18_702 to 18_686).
+         * 2026-11-16 (#7104): a counted loop makes a phi only of the lanes
+         * live at its head or after it, not of every lane its body writes;
+         * four fragment programs got shorter (es300/divnest 131 -> 107 words,
+         * es100/databreak 63 -> 57, deadloop 28 -> 27, loopcarry 28 -> 27)
+         * and no word of any other program changed (21_329 to 21_297 words;
+         * the report-es2 build, without the ES 3.00 divnest, 18_686 to 18_678). */
         let want: (usize, u64) = if cfg!(feature = "report-es2") {
-            (18_686, 0x0d56_9f4e_cfea_e68c)
+            (18_678, 0x5e2c_058f_eaa3_1931)
         } else {
-            (21_329, 0xe054_93bb_c039_a267)
+            (21_297, 0x7f33_d296_d41f_41b3)
         };
         assert_eq!((words, h), want, "the words the compiler emits changed");
     }

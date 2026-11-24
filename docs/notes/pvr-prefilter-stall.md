@@ -135,3 +135,22 @@ cube with a 10-level chain, outside any `if`, so the guard does not apply:
   and the guarded prefilter should render;
 - the draw completes: H1 is not the cause, and H2 comes next.
 
+## H2's pressure is gone (#7104)
+
+The "about 100 locals carried round the loop and joined at every flattened
+`if`" came from `select::Sel::loop_` giving every lane the body writes a
+home register, not only the lanes live at the loop's head or after it. With
+the liveness of `online/local_live.rs` deciding (#7104), the prefilter
+program compiled from Qt 6.12's source declares 72 temporaries and is 1,120
+USC dwords, against 250 and 2,344 before (host, 2026-11-16). No program of
+this shader now reaches past Mesa's 248, so H2 cannot apply to it. On the
+board, the main build of 2026-11-16 (the H1 guard in, 250 temporaries) still
+stopped the first cube-face draw, which points at H2.
+
+With #7104 the draw completes. A development run on the Verdin AM62P
+(`tools/board.sh am62p run`, `BOARD_BOOT=kexec-dev`, 2026-11-16; a local
+merge of main 64104c9c with #7116 and #7135, Qt 6.12 with the online shader
+compiler) drew Qt Quick 3D's `principledmaterial` example (IBL): the first
+cube-face prefilter draw completed, with three 20 ms fence re-posts in the
+first two beats, no HWR and no stop. It is not a result row: the build was
+kexec-dev and not from main (record: the board-check comment on #7116).
