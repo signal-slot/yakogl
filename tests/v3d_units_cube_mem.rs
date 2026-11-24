@@ -972,13 +972,14 @@ static POS: [f32; 16] = [-1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 0
 static TEXC: [f32; 8] = [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
 static QUAD: [u16; 6] = [0, 1, 2, 2, 1, 3];
 
+/// s_cubeFaceTargets: uploadCubeTexture gives each face's levels in this order.
 const CUBE_FACES: [GLenum; 6] = [
-    GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
     GL_TEXTURE_CUBE_MAP_POSITIVE_X,
-    GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+    GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
     GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
-    GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
+    GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
     GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
+    GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
 ];
 
 /// Every level (and face) of one texture, bound to the active unit.
@@ -1070,7 +1071,7 @@ fn run_case(name: &str, max_units: usize) -> CaseUse {
         let prog = program(&p);
         glViewport(0, 0, VIEWPORT, VIEWPORT);
         glClearColor(0.125, 0.25, 0.5, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         glUseProgram(prog);
         for u in 0..p.units.len() {
             let n = CString::new(format!("u_sampler{u}")).unwrap();
@@ -1082,9 +1083,11 @@ fn run_case(name: &str, max_units: usize) -> CaseUse {
         glEnableVertexAttribArray(1);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, QUAD.as_ptr() as *const c_void);
         let e = if e == GL_NO_ERROR { err() } else { e };
+        /* render() deletes the textures; the case then reads the frame
+         * back, and sglr::GLContext's destructor deletes the program */
+        glDeleteTextures(names.len() as GLsizei, names.as_ptr());
         glReadPixels(0, 0, VIEWPORT, VIEWPORT, GL_RGBA, GL_UNSIGNED_BYTE, pixels.as_mut_ptr() as *mut c_void);
         let e = if e == GL_NO_ERROR { err() } else { e };
-        glDeleteTextures(names.len() as GLsizei, names.as_ptr());
         glUseProgram(0);
         glDeleteProgram(prog);
         glFinish();
