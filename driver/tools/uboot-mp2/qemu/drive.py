@@ -186,6 +186,14 @@ def typed(q, line):
 # meaningful; the cut waits at most a quarter of the measured window.
 MIN_WINDOW = 3.0
 THROTTLE = 4 << 20   # SD read bytes per second in the window and cut boots
+# The net route's floor in the same boots: QEMU holds every packet of the user
+# network and releases them once per NET_TICK_US (filter-buffer). tftpboot is
+# lock-step, one TFTP_BLOCK-byte block per ACK (CONFIG_TFTP_BLOCKSIZE=1468,
+# CONFIG_TFTP_WINDOWSIZE=1 in build-uboot.sh's U-Boot): each ACK waits for a
+# release and releases are at least one tick apart, so a block takes at least
+# one tick whatever the host: long.bin's 182,143 blocks take 6.0 s or more.
+NET_TICK_US = 33
+TFTP_BLOCK = 1468
 
 
 def cutoff_cases(big_tftp):
@@ -258,10 +266,13 @@ def main():
         ap.add_argument("--" + a, required=True)
     ap.add_argument("--big-tftp", action="store_true")
     a = ap.parse_args()
-    def qemu_argv(throttle=0):
+    def qemu_argv(throttle=0, net_tick_us=0):
         sd = "if=none,id=sd0,format=raw,file=" + a.disk
         if throttle:
             sd += ",throttling.bps-read=%d" % throttle
+        net = []
+        if net_tick_us:
+            net = ["-object", "filter-buffer,id=f0,netdev=n0,queue=all,interval=%d" % net_tick_us]
         return [a.qemu, "-machine", "virt", "-cpu", "cortex-a57", "-m", a.mem,
             "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot",
             "-bios", a.uboot,
@@ -270,12 +281,14 @@ def main():
             "-drive", sd,
             "-device", "sd-card,drive=sd0",
             "-netdev", "user,id=n0,tftp=" + a.tftp,
-            "-device", "e1000,netdev=n0"]
+            "-device", "e1000,netdev=n0"] + net
     argv = qemu_argv()
-    # The SD card read rate for the load-window and power-cut boots: long.bin
-    # is real data (not holes) in the image, so a 255 MiB load takes at least
-    # 255 MiB / THROTTLE seconds whatever the host: the window has a floor.
-    cut_argv = qemu_argv(THROTTLE)
+    # The load-window and power-cut boots, where each route's window has a
+    # floor whatever the host. The SD card is read at THROTTLE: long.bin is
+    # 32 MiB of real data (not holes) in the image, at least 8 s. The user
+    # network releases packets once per NET_TICK_US: at least net_floor s.
+    cut_argv = qemu_argv(THROTTLE, NET_TICK_US)
+    net_floor = os.path.getsize(os.path.join(a.tftp, "long.bin")) // TFTP_BLOCK * NET_TICK_US / 1e6
     res = {"ok": 0, "failed": 0}
 
     def check(name, cond, detail=""):
@@ -401,6 +414,11 @@ def main():
             print("load window %s: %.1f s (%d MiB file)" % (route, w, LONG_MIB[route]), flush=True)
             check("window-" + route + ": load window at least %.0f s" % MIN_WINDOW, w >= MIN_WINDOW,
                   "%.2f s" % w)
+            if route == "net":
+                # Under the floor: the packet tick did not hold the transfer
+                # (another block size, a windowed transfer, no filter).
+                check("window-net: load window at least its floor, %.1f s" % net_floor,
+                      w >= net_floor >= 2 * MIN_WINDOW, "%.2f s" % w)
     # Power cuts: the stored environment must come out of each unchanged.
     for name, line, pat, wait, route in cutoff_cases(a.big_tftp):
         if route:
