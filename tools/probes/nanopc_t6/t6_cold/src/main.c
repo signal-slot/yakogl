@@ -136,7 +136,7 @@ int main(void)
 	up = rc == 0 || c.stage >= YD_T6_DISPLAY_COLD_STAGE_VOP;
 	if (up) {
 		t6_picture_hold("t6_cold");
-		rc = t6_picture_status("t6_cold", &b.display, &s);
+		rc = t6_display_read_back("t6_cold", &b.display, &s);
 		if (c.error == YD_T6_DISPLAY_COLD_ERROR_NONE) {
 			t6_picture_verdict("t6_cold", rc, &s, (uint32_t)fb_pa);
 			t6_reset_to_linux("t6_cold done");
