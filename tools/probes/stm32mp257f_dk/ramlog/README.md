@@ -60,3 +60,14 @@ with `testdata/*.want`; it also wraps the verdict tool's
 `return-trial.pass.log` into a ring behind junk, decodes it and checks that
 `dk_verdict.py --expect return-trial` gives the original line, and checks the
 snippet. `--regen` rewrites the `.want` files.
+
+## Host cross-check of the writer
+
+`bash crosscheck/run.sh` compiles the board lib's `ramlog.c`
+(`driver/zephyr/lib/board/common/`) unchanged with the host gcc against stub
+Zephyr headers (`crosscheck/stubs/`: the printk hook, `SYS_INIT`, the barrier,
+`device_map` onto a host buffer). `harness.c` writes known text through the
+writer's hook and dumps the buffer; `ramlog_decode.py` decodes it and the
+output is diffed against `crosscheck/expected/`. Cases: short, wrap (more than
+five times round), empty, garbage, torn (data byte stored, head not yet
+updated). Ends "N checks, 0 failed"; `--regen` rewrites `expected/`.
