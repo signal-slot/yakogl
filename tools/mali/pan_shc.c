@@ -1,6 +1,19 @@
 /* SPDX-License-Identifier: MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2018 Alyssa Rosenzweig
+ * SPDX-FileCopyrightText: 2019-2025 Collabora, Ltd.
+ * SPDX-FileCopyrightText: 2025 Arm Ltd.
+ * SPDX-FileCopyrightText: 2018 Intel Corporation
+ * SPDX-FileCopyrightText: 2015 Red Hat
+ * SPDX-FileCopyrightText: 2017 Advanced Micro Devices, Inc.
+ * SPDX-FileCopyrightText: 2007 VMware, Inc.
+ * SPDX-FileCopyrightText: 1999-2008 Brian Paul
+ * SPDX-FileCopyrightText: 2014 Broadcom
+ * SPDX-FileCopyrightText: 2012 Rob Clark
+ * SPDX-FileCopyrightText: 2022 Amazon.com, Inc. or its affiliates
+ * SPDX-FileCopyrightText: 2019 Red Hat Inc.
  *
- * pan_shc: YakoGL's reference shader tool for the Arm Mali-G610 (Valhall v10,
+ * pan_shc:YakoGL's reference shader tool for the Arm Mali-G610 (Valhall v10,
  * RK3588 / NanoPC-T6). It is an instrument, not a product path: YakoGL's own
  * compiler (src/shaderc/online/) is compared with what Mesa makes for the same
  * GL program. It is C only because it is built inside Mesa's tree and calls

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2018 Alyssa Rosenzweig
  *
  * pan_shc's stand-in for the gallium panfrost driver's pan_context.h.
  *
@@ -7,7 +9,7 @@
  * pan_nir_remove_fragcolor_stores.c). Their `#include "pan_context.h"` then
  * finds this file instead of the driver's, which pulls in the whole pipe
  * context. Everything below is transcribed from Mesa 26.2.1 (MIT, Copyright
- * Collabora, Ltd. and others), src/gallium/drivers/panfrost/pan_context.h
+ * Alyssa Rosenzweig), src/gallium/drivers/panfrost/pan_context.h
  * lines 277-345 (the system value infrastructure and the Valhall resource
  * tables), and the prototypes of the three passes from the same header.
  */
