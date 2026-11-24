@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0 AND MIT
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# SPDX-FileCopyrightText: 2026 Arm Ltd.
+# SPDX-FileCopyrightText: 2021, 2026 Collabora, Ltd.
+#
+# The MIT part is the logic this script transcribes from Mesa 26.2.1 (MIT):
+# the print template and OpBucket of src/panfrost/compiler/bifrost/valhall/disasm.py
+# and the encoder semantics of src/panfrost/compiler/kraid/proc/isa/.
 """Generate the Mali-G610 (Valhall, arch 10) instruction table in Rust.
 
     tools/mali/gen_isa_rs.py <isa-v9-v14.xml> <valhall dir> > src/shaderc/online/mali/isa/v10.rs
