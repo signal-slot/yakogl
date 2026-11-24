@@ -2,11 +2,13 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-**The campaign commit is `05769bf2`** (`05769bf2c24a00a8c69c608c2310c0edab3f807c`). The next slices are named
-`2026-11-16-imx8mp-gles3-05769bf2-rowsAA-BB` and each README fixes that commit. The three `9bc82915` slices
-below stay on `main` until they are retired; they are measured history and evidence for this recipe, not part of
-the new campaign (`merge.py --check` fails when two slices name different commits, so they are never merged with
-it). Where this file quotes `9bc82915` figures, they are what that campaign measured.
+**The campaign commit is `9bc82915`** (`9bc82915e06367b46e3a62b644dbf2bb659d72ad`), the commit of the three
+recorded slices. The remaining slices (plan #316 items s02, s05-s14) run the image built at that commit with
+the integration tip's scripts, `HEAD8=9bc82915` ("Running a GLES3 slice session", step 1), so that all 133 entries
+merge as one campaign. A restart at `05769bf2` (`05769bf2c24a00a8c69c608c2310c0edab3f807c`) was named on
+2026-11-17 and built on the host (section 2), but no slice was recorded at it; its figures below are host
+figures only (`merge.py --check` fails when two slices name different commits, so a slice of it would never
+merge with the `9bc82915` ones).
 
 This recipe has run on the board. Three slices of it (plan #316 items s01, s03, s04) came from the one
 campaign commit `9bc82915e06367b46e3a62b644dbf2bb659d72ad` and are recorded as
@@ -532,7 +534,7 @@ Never, in any step of a session:
 One ordered procedure for a board session that runs a row range of the 133-entry table and commits it as a
 slice. Every command below exists in the tree with the flags shown, and the output described is what its script
 prints (read from the script). Steps 1-13 have been run three times on the board, from the one commit
-`9bc82915` (the earlier campaign; the current one is `05769bf2`), as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
+`9bc82915` (the campaign commit; the remaining slices use it too, step 1), as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
 prints is what those runs recorded. The open board-side unknown is the console's **content** (the bridge
 delivered no text in all three sessions, nor in the probe of 2026-11-15), not the verdict lines, the records or the tallies.
 
@@ -558,6 +560,27 @@ Rules that hold for every step:
   until the console delivers bytes, what a clean row rests on is `rc=0 verdict=done`, `resets=absent`, a complete
   record with counts that fit the entry, and `meta.txt`'s boot boundaries (`uptime` below the time since the
   reboot, the board's uptime matching the last return).
+- **`RUN_BOUND=800` on every `tree` command.** On the imx8mp, `board.sh` defaults to `RUN_BOUND=600`
+  (`tools/board.sh`, the non-AM62P branch of the run: `RUN_BOUND=${RUN_BOUND:-600}`), which is the WDOG1 window
+  itself, and it counts the bound from the reboot to the first ssh answer of a new boot (`el -gt RUN_BOUND` →
+  rc 5). A row that ends by the watchdog comes back after 600 s plus the Linux boot, so with the default it
+  would be judged rc 5 (`the board did not come back`, the chain stops) instead of a watchdog end that step 11
+  can read. 800 is the AM62P dEQP rule (600 + 60 + boot). All three slices ran with it; no row came near
+  either bound (longest `back_after` 338 s, e26).
+- **A dark console is "recoveries not observed", never `recoveries 0`.** The three slices ran with
+  `BOARD_UART` set and the console delivered only NUL bytes (`\x00`, one per board reset) in every capture.
+  The remaining sessions therefore run with `BOARD_UART` **unset** (step 2): `board.sh` then captures nothing
+  and step 10's scan has no input. The README says for every row of such a slice that GPU recoveries were not
+  observable, as the three READMEs do; a capture of NULs, an empty capture and no capture all mean
+  the same and none of them is 0 recoveries.
+- **A failure-name page costs a full boot.** Each `e<NN>-p<k>` page reruns the whole entry before it records
+  six CRCs (`main.cpp` masks the selector `& 0xff`). Measured from `back_after` in the three `verdicts.txt`
+  files (each distinct line counted once; a line can repeat in these files): 157 pages, mean
+  **91.8 s** a page (median 70 s, 44-299 s; 73.5 s over rows01-13's 76, 112.1 s over rows17-34's 74, 75.1 s
+  over rows35-51's 7), on average 1.0 s more than the row's own `back_after`; 14,405 s (4.0 h) in all,
+  against 4,287 s for the 48 rows themselves. Budget a row at its own time once more per page: one page per
+  six fails (pages run until six per page cover the fail count in the page's w0), at least one when the row
+  has a fail, another status or a case without a result, and at most 40 (`name_pages` in `tools/board.sh`).
 - **Board times.** Record each row's time: `back_after=<n>s` of its verdict line and the scan's elapsed time.
 - **Before the first slice of a session, the boot route check** (previous section, read-only). After a hold of
   the board it comes before step 9 and before anything is staged.
@@ -574,6 +597,24 @@ Rules that hold for every step:
    The first slice sets `COMMIT` for the campaign. Later sessions use the same value even if `origin/main` has
    moved (pass it as `--commit` in step 7). A new campaign is needed only when the table or the image code
    changed. If `git fetch` fails, say so; do not take a stale ref for the current one.
+
+   **The remaining slices of this campaign** do not take `origin/main`: they fix the commit of the three
+   recorded slices and split the two roles. The image is built at the campaign commit (steps 3-4 in a
+   worktree of it); every script (`board.sh`, the wrapper, preflight, merge, slice) runs from the integration
+   tip's checkout, against the same `$IMX8MP_OUT`. That is what the three slices did (their READMEs: "the
+   image is the campaign commit's, the runner the current one").
+   ```sh
+   COMMIT=9bc82915e06367b46e3a62b644dbf2bb659d72ad; HEAD8=9bc82915
+   git worktree add --detach ../yakogl-9bc82915 "$COMMIT"     # build steps 3-4 from here
+   ```
+   Before the session, run the host selftests of the merge and the record pipeline from the integration
+   tip with `bash` (both files are not executable, so `./` does not run them; `cts-selftest.sh` calls every
+   selftest as `bash <file>` too):
+   ```sh
+   TMPDIR=<dir> bash tools/cts/imx8mp-gles3-merge-selftest.sh
+   TMPDIR=<dir> bash tools/cts/imx8mp-gles3-pipeline-selftest.sh
+   ```
+   Both refuse to run without `TMPDIR` and write nothing outside it; exit 0 when the chain agrees.
 
 2. **Environment** (names only; the values come from the shell environment): `IMX8MP_OUT`, `DEQP_STAGE1`
    (the gles3 stage 1 directory; `$IMX8MP_OUT/deqp-stage1-gles3` is the default of the `gles3` arguments),
@@ -634,9 +675,9 @@ Rules that hold for every step:
    linker's indented `Memory region`/`RAM:`/`FLASH:` rows (the linker right-aligns the region names; earlier
    versions anchored the grep at the line start and printed the header with no `RAM:` row, seen in slice
    rows17-34). The dry run's `footprint <bytes>` line is the fallback when the build log is absent. That fix
-   (`aaaaab0f`) is **not in the campaign commit `05769bf2`**: a worktree of `05769bf2` runs the old script, which
-   printed the header and no `RAM:` row for the `05769bf2` image. Run the script of a `main` that has the fix
-   against the same `$IMX8MP_OUT` (it reads only the build's files; measured: the same five lines, then `FLASH:` and
+   (`aaaaab0f`) is **not in the campaign commit `9bc82915`** (nor in `05769bf2`): a worktree of either runs the
+   old script, which printed the header and no `RAM:` row for the `05769bf2` image. Run the integration tip's
+   script (step 1) against the same `$IMX8MP_OUT` (it reads only the build's files; measured: the same five lines, then `FLASH:` and
    `RAM: 233860 KB 256 MB 89.21%`), or quote the `RAM:` row of `$IMX8MP_OUT/es3-$HEAD8.log`.
 
 6. **Plan the slices** (host only):
@@ -781,16 +822,32 @@ Rules that hold for every step:
     flags is not written (exit 1). The artefact lines, the commands, the session window and the "Resets and
     reboots outside the rows" and "Console" sections are still added by hand.
 
-    What the three slices on `origin/main` look like: `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34`,
-    `-rows35-51` — `<YYYY-MM>`, the name shape the Pi 4 gles3 slices of the same shape use, while
-    `tools/cts/log/README.md`'s rule asks for the run day. Each holds `README.md`, `results.tsv` and `rows.md`
-    with their REUSE `.license` sidecars (the tool's output carries no header of its own), `verdicts.txt` (every
-    row and page verdict line of the run log), one `e<NN>.console.txt` per row and `console-scan.txt`. The
-    README's verdict lines are step 11's lines in a fenced block, verbatim, which is what `merge.py` reads; the
-    per-entry numbers go in a table beside `merge.py --totals`'s rows (`back_after`, `uptime` at the return, page
-    count), with a "Resets and reboots outside the rows" section quoting `meta.txt` (the board's uptime at the
-    end of the session against the last boot's `t_back` minus its `uptime`), and a "Console" section saying what
-    the capture held.
+    **The slice record layout**, as the three slices on `origin/main` have it
+    (`2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34`, `-rows35-51`). The name is
+    `2026-11-imx8mp-gles3-9bc82915-rowsAA-BB` — `<YYYY-MM>`, the name shape the Pi 4 gles3 slices of the same
+    shape use, while `tools/cts/log/README.md`'s rule asks for the run day; the remaining slices keep the
+    three's shape (`rowsAA-BB` from 1: entries 51-56 are `rows52-57`). One directory holds:
+    - `README.md`: SPDX comment lines, the title `# i.MX8MP dEQP-GLES3 table image es3-9bc82915, rows AA-BB
+      (entries A-B)`, a `commit <40-hex>` line, the run window in the board's clock (UTC) and the plan item,
+      then the sections `## What ran` (build host and worktree, the step 5 artefact lines, preflight and dry run,
+      the exact commands with the knob names, `RUN_BOUND=800` and `NAMES=0` explained), `## Verdict lines` (one
+      fenced block, one line per entry, verbatim: what `merge.py` reads), `## Result` (the per-entry table:
+      tally, `back_after`, `uptime`, page count; the failing names and any finding as `###` subsections),
+      `## Console: what the bridge delivered`, `## Resets and reboots outside the rows` (`meta.txt`: the board's
+      uptime at the end against the last boot's `t_back` minus its `uptime`, refusals, retries, lease and
+      `yako_once` at the end) and `## Files`;
+    - `results.tsv` and `rows.md` from `board.sh tally` (every table entry, `-` for the rows not run), each with
+      a REUSE `.license` sidecar (the tool's output carries no header of its own);
+    - `verdicts.txt`: three `#` lines (SPDX and what it is), then every `board.sh imx8mp e<NN>` and
+      `e<NN>-p<k>` verdict line of the run logs, verbatim (the same line can appear more than once); `merge.py`
+      does not read this file;
+    - with `BOARD_UART` set only: one `e<NN>.console.txt` per row (three `#` lines, a `# capture: <n> bytes in
+      console.raw, <n> line(s) in console.ts` line, then the capture) and `console-scan.txt` (three `#` lines naming the
+      command and the run, then the scan over the row directories, pages left out).
+    A session with `BOARD_UART` unset (the remaining ones) has no capture, so it commits no `*.console.txt` and
+    no `console-scan.txt`; its `## Console` section says the console was not captured and recoveries were not
+    observed (rule "A dark console"). No run directory, `console.raw` or `console.ts` is committed: they stay
+    under `records/` (gitignored).
 
     What the campaign tools enforce on a committed slice (read from `merge.py`, `imx8mp-gles3-acceptance.sh`
     and `imx8mp-gles3-redact.py` as they are on `main`; the acceptance script is the campaign's c1-c8 run
@@ -946,8 +1003,8 @@ Rules that hold for every step:
     and changes the table image: slices already recorded stay evidence for the old table, and the campaign
     restarts from step 1 on the new commit.
 
-`tools/cts/cts-selftest.sh` runs the selftests of the merge, pipeline, gen, wrap and triage tools; the preflight
-and report selftests (`imx8mp-gles3-preflight-selftest.sh`, `imx8mp-gles3-report-selftest.sh`) are not part of it.
+`tools/cts/cts-selftest.sh` runs the selftests of the merge, pipeline, gen, wrap, triage, preflight, report and
+sessions tools (its rows 32-39), each as `bash <selftest>` with `TMPDIR` set.
 
 ## RGBA32 two-plane sampling run (one session)
 
