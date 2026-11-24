@@ -1,4 +1,4 @@
-# host-gles3-part commit=bee6896d gpu=powervr module=gles3 cases=42810
+# host-gles3-part commit=fa19cbb9 gpu=powervr module=gles3 cases=42810
 # section tip
 powervr	functional.attribute_location	274	0	0	0	0
 powervr	functional.buffer	168	527	0	0	0
@@ -10,31 +10,31 @@ powervr	functional.depth_stencil_clear	0	10	0	0	0
 powervr	functional.dither	0	20	0	0	0
 powervr	functional.draw	2	320	0	0	0
 powervr	functional.draw_buffers_indexed	0	0	76	0	0
-powervr	functional.fbo	573	1200	255	0	0
+powervr	functional.fbo	580	1201	247	0	0
 powervr	functional.fence_sync	10	0	0	0	0
 powervr	functional.fragment_ops	91	3079	0	0	0
 powervr	functional.fragment_out	0	825	115	0	0
 powervr	functional.implementation_limits	46	3	0	0	0
 powervr	functional.instanced	0	45	0	0	0
 powervr	functional.lifetime	56	0	0	0	0
-powervr	functional.multisample	9	7	48	0	0
-powervr	functional.negative_api	306	2	4	0	0
+powervr	functional.multisample	18	14	32	0	0
+powervr	functional.negative_api	308	0	4	0	0
 powervr	functional.occlusion_query	62	0	0	0	0
 powervr	functional.pbo	43	0	6	0	0
 powervr	functional.polygon_offset	0	20	0	0	0
 powervr	functional.prerequisite	2	1	0	0	0
 powervr	functional.primitive_restart	504	0	0	0	0
-powervr	functional.rasterization	34	54	12	0	0
+powervr	functional.rasterization	39	57	0	0	4
 powervr	functional.rasterizer_discard	0	51	0	0	0
 powervr	functional.read_pixels	0	48	0	0	0
 powervr	functional.samplers	42	0	0	0	0
 powervr	functional.shader_api	52	0	0	0	0
-powervr	functional.shaders	2498	17163	0	0	955
-powervr	functional.state_query	928	9	9	0	0
+powervr	functional.shaders	2499	17162	0	0	955
+powervr	functional.state_query	930	7	9	0	0
 powervr	functional.texture	22	3745	1338	0	0
 powervr	functional.transform_feedback	882	0	0	0	0
 powervr	functional.ubo	0	2355	0	0	0
-powervr	functional.uniform_api	1605	576	0	0	0
+powervr	functional.uniform_api	1606	575	0	0	0
 powervr	functional.vertex_array_objects	10	0	0	0	0
 powervr	functional.vertex_arrays	40	965	0	0	0
 powervr	info.extensions	1	0	0	0	0
@@ -299,61 +299,31 @@ powervr	dEQP-GLES3.functional.fbo.color.texcube.r11f_g11f_b10f	NotSupported	refu
 powervr	dEQP-GLES3.functional.fbo.color.texcube.r32f	NotSupported	refusal	Format not supported		
 powervr	dEQP-GLES3.functional.fbo.color.texcube.rg32f	NotSupported	refusal	Format not supported		
 powervr	dEQP-GLES3.functional.fbo.color.texcube.rgba32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo1_rbo2_rbo0	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo1_rbo2_rbo4	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_none_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo1_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo2_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_rbo2_rbo0	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
-powervr	dEQP-GLES3.functional.fbo.completeness.samples.rbo2_tex_none	NotSupported	gl-error	Unsupported number of samples: 'builder.getError() != GL_INVALID_OPERATION' at es3fFboCompletenessTests.cpp:421		
 powervr	dEQP-GLES3.functional.fbo.invalidate.format.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
 powervr	dEQP-GLES3.functional.fbo.invalidate.format.r32f	NotSupported	refusal	Format not supported		
 powervr	dEQP-GLES3.functional.fbo.invalidate.format.rg32f	NotSupported	refusal	Format not supported		
 powervr	dEQP-GLES3.functional.fbo.invalidate.format.rgba32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth24_stencil8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth32f_stencil8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component24	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component32f	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
 powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.r16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
 powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.r32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.r8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rg16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
 powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rg32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rg8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb10_a2	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb565	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb5_a1	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgb8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
 powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f	NotSupported	refusal	Sample count not supported		
 powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba4	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.srgb8_alpha8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+powervr	dEQP-GLES3.functional.fbo.msaa.2_samples.stencil_index8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth24_stencil8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth32f_stencil8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component24	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component32f	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
 powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.r11f_g11f_b10f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.r16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
 powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.r32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.r8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rg16f	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
 powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rg32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rg8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb10_a2	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb565	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgb8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba16f	NotSupported	refusal	Sample count not supported		
 powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba32f	NotSupported	refusal	Format not supported		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba4	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.rgba8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.srgb8_alpha8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
-powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8	Fail	gl-error	Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154		
+powervr	dEQP-GLES3.functional.fbo.msaa.4_samples.stencil_index8	Fail	gl-error	GL_INVALID_OPERATION at es3fFboTestCase.cpp:90		
 powervr	dEQP-GLES3.functional.fbo.msaa.8_samples.depth24_stencil8	NotSupported	refusal	Sample count not supported		
 powervr	dEQP-GLES3.functional.fbo.msaa.8_samples.depth32f_stencil8	NotSupported	refusal	Sample count not supported		
 powervr	dEQP-GLES3.functional.fbo.msaa.8_samples.depth_component16	NotSupported	refusal	Sample count not supported		
@@ -505,64 +475,65 @@ powervr	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_float	Not
 powervr	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec2	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec3	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.basic.float.rgba32f_mediump_vec4	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.0	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.0	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.1	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.11	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.17	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.17	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.18	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.21	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.24	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.25	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.21	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.24	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.25	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.26	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.28	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.29	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.29	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.31	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.32	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.33	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.33	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.37	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.39	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.40	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.41	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.45	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.41	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.45	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.46	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.48	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.5	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.50	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.51	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.53	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.55	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.56	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.55	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.56	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.59	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.62	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.63	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.64	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.66	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.67	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.65	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
+powervr	dEQP-GLES3.functional.fragment_out.random.66	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.67	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.69	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.7	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.70	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.71	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.72	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.70	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.71	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.72	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.73	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.74	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.75	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.75	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.76	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.78	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.79	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.8	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.78	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.79	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.8	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.80	NotSupported	refusal	Unsupported attachment format		
 powervr	dEQP-GLES3.functional.fragment_out.random.81	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.82	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.82	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.85	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.86	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
-powervr	dEQP-GLES3.functional.fragment_out.random.88	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.86	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
+powervr	dEQP-GLES3.functional.fragment_out.random.88	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.89	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.fragment_out.random.9	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.90	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.90	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.92	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
-powervr	dEQP-GLES3.functional.fragment_out.random.94	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.94	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.95	NotSupported	refusal	Unsupported attachment format		
-powervr	dEQP-GLES3.functional.fragment_out.random.96	Fail	gl-error	After framebuffer setup: glGetError() returned GL_INVALID_ENUM at es3fFragmentOutputTests.cpp:286		
+powervr	dEQP-GLES3.functional.fragment_out.random.96	Fail	compile	Compile failed at es3fFragmentOutputTests.cpp:256		
 powervr	dEQP-GLES3.functional.fragment_out.random.97	Fail	gl-error	glDrawElements: glGetError() returned GL_INVALID_OPERATION at es3fFragmentOutputTests.cpp:810		
 powervr	dEQP-GLES3.functional.multisample.default_framebuffer.common_edge_big_quad	NotSupported	refusal	No multisample buffers		
 powervr	dEQP-GLES3.functional.multisample.default_framebuffer.common_edge_small_quads	NotSupported	refusal	No multisample buffers		
@@ -580,40 +551,22 @@ powervr	dEQP-GLES3.functional.multisample.default_framebuffer.proportionality_sa
 powervr	dEQP-GLES3.functional.multisample.default_framebuffer.proportionality_sample_coverage_inverted	NotSupported	refusal	No multisample buffers		
 powervr	dEQP-GLES3.functional.multisample.default_framebuffer.sample_coverage_invert	NotSupported	refusal	No multisample buffers		
 powervr	dEQP-GLES3.functional.multisample.default_framebuffer.stencil	NotSupported	refusal	No multisample buffers		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_big_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_small_quads	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.common_edge_viewport_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_both	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_both_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.constancy_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.depth	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.num_samples_line	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.num_samples_polygon	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.sample_coverage_invert	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_4_samples.stencil	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_big_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_small_quads	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_viewport_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.depth	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_line	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_polygon	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.sample_coverage_invert	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.stencil	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 1		
-powervr	dEQP-GLES3.functional.negative_api.buffer.blit_framebuffer_multisample	Fail	gl-error	Got invalid error		
-powervr	dEQP-GLES3.functional.negative_api.buffer.read_pixels_fbo_format_mismatch	Fail	gl-error	Got invalid error		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_big_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_small_quads	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.common_edge_viewport_quad	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_both_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.constancy_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.depth	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_line	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.num_samples_polygon	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_alpha_to_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.proportionality_sample_coverage_inverted	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.sample_coverage_invert	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
+powervr	dEQP-GLES3.functional.multisample.fbo_8_samples.stencil	NotSupported	refusal	Maximum sample count returned by glGetInternalformativ() for GL_RGBA8 is only 4		
 powervr	dEQP-GLES3.functional.negative_api.fragment.blend_equation_separatei	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:209		
 powervr	dEQP-GLES3.functional.negative_api.fragment.blend_equationi	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:191		
 powervr	dEQP-GLES3.functional.negative_api.fragment.blend_func_separatei	NotSupported	refusal	GL_EXT_draw_buffers_indexed is not supported at es3fNegativeFragmentApiTests.cpp:252		
@@ -624,72 +577,6 @@ powervr	dEQP-GLES3.functional.pbo.renderbuffer.rg32f_clears	NotSupported	refusal
 powervr	dEQP-GLES3.functional.pbo.renderbuffer.rg32f_triangles	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
 powervr	dEQP-GLES3.functional.pbo.renderbuffer.rgba32f_clears	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
 powervr	dEQP-GLES3.functional.pbo.renderbuffer.rgba32f_triangles	NotSupported	refusal	Renderbuffer format not supported: '' at es3fPixelBufferObjectTests.cpp:200		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad_reverse	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_full	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_partly	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.projected	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines_wide	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.triangles	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines_wide	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.points	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.triangles	NotSupported	refusal	Test requires 4x msaa rbo		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x2	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
-powervr	dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x3	Fail	gl-error	Failed to set up framebuffer object: glGetError() returned GL_INVALID_ENUM at glsShaderExecUtil.cpp:670		
 powervr	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
 powervr	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getintegeri_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
 powervr	dEQP-GLES3.functional.state_query.indexed.blend_equation_getinteger64i_v	NotSupported	refusal	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530		
@@ -2037,4 +1924,3 @@ powervr	dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_di
 powervr	dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_not_divisible	NotSupported	refusal	ASTC not supported		
 powervr	dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_divisible	NotSupported	refusal	ASTC not supported		
 powervr	dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_not_divisible	NotSupported	refusal	ASTC not supported		
-powervr	dEQP-GLES3.functional.uniform_api.random.83	Fail	compile	Compile failed		
