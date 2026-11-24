@@ -74,7 +74,13 @@
 # pickup ok and at least one restore-lact line, all ok. A probe stops at the
 # first failed swap: when the last of fewer than MIN_SWAPS swap lines failed
 # its pickup, or the only swap line is followed by swap 1's restore-lact
-# FAIL, the log is judged (FAIL, q4 no), not incomplete.
+# FAIL, the log is judged (FAIL, q4 no), not incomplete. So is a stop at a
+# swap that failed another way: the last of fewer than MIN_SWAPS swap lines
+# has a 'dlswap swap<k> FAIL <error name> ...' line (FRCNT, a read-back,
+# swap 1's restore), or the only swap line comes with a 'dlswap
+# restore-frcnt|restore-lptrs|restore-words FAIL' line of swap 1's restore.
+# A stop with no failed swap or restore line (slot B refused) stays
+# incomplete.
 #
 # Vblank landing (swap-lact-probe; hvs6_dlist_swap.h, swap-vblank-lib). Each
 # swap writes LPTRS just after an FRCNT step of channel 0's STATUS found by
@@ -250,10 +256,21 @@ if [ "$NSW" -ge 1 ] && [ "$NSW" -lt "$MIN_SWAPS" ]; then
         STOPPED=$kl STOP_WHY="swap $kl's vblank wait ($ERR_VBLANK)"
     elif [ "$PU" = FAIL ]; then
         STOPPED=$kl STOP_WHY="swap $kl's failed DL.LACT pickup"
-    elif [ "$NSW" -eq 1 ] && [ "$PU" = ok ]; then
-        case "${RL[0]:-}" in
-        "dlswap restore-lact FAIL "*) STOPPED=1 STOP_WHY="swap 1's restore: DL.LACT not back on the firmware's head" ;;
+    elif [ "$NSW" -eq 1 ] && [ "$PU" = ok ] && [[ "${RL[0]:-}" == "dlswap restore-lact FAIL "* ]]; then
+        STOPPED=1 STOP_WHY="swap 1's restore: DL.LACT not back on the firmware's head"
+    elif l=$(grep -m 1 -E "^dlswap swap$kl FAIL " "$TMP"); then
+        # (gap 3) the swap failed another way (FRCNT, a read-back, swap 1's
+        # restore): its dlswap swap<k> line names the error
+        n=$(sed -E "s/^dlswap swap$kl FAIL (.*) lptrs-readback .*/\1/; s/^dlswap swap$kl FAIL //" <<< "$l")
+        case "$n" in
+        "restore: "*) STOPPED=$kl STOP_WHY="swap $kl's $n" ;;
+        *) STOPPED=$kl STOP_WHY="swap $kl's failure ($n)" ;;
         esac
+    elif [ "$NSW" -eq 1 ] && l=$(grep -m 1 -E '^dlswap restore-(frcnt|lptrs|words) FAIL' "$TMP"); then
+        # (gap 3) swap 1's own restore failed other than DL.LACT, with no
+        # dlswap swap1 line naming it
+        n=$(sed -E 's/^dlswap (restore-[a-z]+) FAIL.*/\1/' <<< "$l")
+        STOPPED=1 STOP_WHY="swap 1's restore: dlswap $n FAIL"
     fi
     [ "$STOPPED" -ne 0 ] && SEEN[4]=${SW[0]}
 fi

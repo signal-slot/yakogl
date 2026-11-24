@@ -59,6 +59,11 @@
 #              values decide nothing; no vblank found at swap 1 or swap 3
 #              (LPTRS not written, the probe stops) -> judged FAIL, q4 no
 #              naming the vblank wait, not the pickup
+#   stop*      (gap 3) a stop at a swap that failed another way: swap 3's
+#              FRCNT did not advance (dlswap swap3 FAIL), or swap 1's own
+#              restore left a list word different (dlswap swap1 FAIL
+#              restore: ..., or only dlswap restore-words FAIL) -> judged
+#              FAIL, q4 no naming the stop, not incomplete
 # `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
@@ -227,6 +232,26 @@ mk "$T/swap1ok.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$S1" "$VB1" \
     'u3 swap 2: skipped (slot B refused: place: target range holds a non-zero word)' "$NM" \
     'u3 restore: PASS byte-equal list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef hwskip=none' \
     'rpi5_scanout32: FAIL (slot B was refused: its words are not known free)'
+# (gap 3) swaps 1, 2 landed, swap 3 picked up but FRCNT did not advance: the
+# probe stops after swap 3 (judged, not incomplete)
+mk "$T/stopfrcnt.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" \
+    'dlswap swap3 FAIL FRCNT did not advance lptrs-readback ok frcnt-advance FAIL settle skip' "$LPOK" \
+    'u3 swap 3: buf A list-ptr=0x00000020 frcnt 12 -> 12 judge=frcnt-stalled slot=32' "$VB3" \
+    'u3 swap 4: skipped (swap 3 failed)' "$RLOK" \
+    'u3 restore: PASS byte-equal list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef hwskip=none' \
+    'rpi5_scanout32: FAIL (swap 3: frcnt-stalled)'
+# (gap 3) swap-1-only, picked up and DL.LACT back, but swap 1's restore left
+# a list word different: the probe stops after swap 1 (judged); once with
+# the dlswap swap1 line naming it, once with only the restore-words line
+RW='dlswap restore-words FAIL word 690 want=0x00000000 got=0x12345678 hwskip=none'
+RSW='u3 restore: FAIL restore: list word differs list-ptr=0x00000000 want 0x00000000 (word 690) hash=0xdeadbeef hwskip=none undeclared=1'
+mk "$T/stoprestore.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
+    'dlswap swap1 FAIL restore: list word differs lptrs-readback ok frcnt-advance ok settle ok' \
+    'u3 swap 2: skipped (swap 1: the run'\''s restore was not byte-equal)' "$NM" "$RSW" \
+    'rpi5_scanout32: FAIL (restore: list word differs)'
+mk "$T/stoprestore2.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
+    'u3 swap 2: skipped (swap 1: the run'\''s restore was not byte-equal)' "$NM" "$RSW" \
+    'rpi5_scanout32: FAIL (restore: list word differs)'
 
 # vblank landing (swap-lact-probe)
 SW4=("$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4")
@@ -524,6 +549,24 @@ want_rc 3 "no vblank found at swap 3"
 check "q4: no (swap 3: no vblank found (no FRCNT step (vblank) within the read bound), LPTRS not written)" "no step at 3: q4 names swap 3's vblank wait"
 check "3 of 4 swaps made: the probe stopped at swap 3's vblank wait" "no step at 3: the stop at swap 3"
 nope "DL.LACT did not reach the new head at swap 3" "no step at 3: the pickup FAIL line is not the reason"
+run "$T/stopfrcnt.log"
+want_rc 3 "gap 3: stop at swap 3's FRCNT failure: FAIL, not incomplete"
+check "verdicts: FAIL (" "gap 3 swap: FAIL"
+nope "verdicts: incomplete" "gap 3 swap: not incomplete"
+check "q4: no (FRCNT stalled at swap 3 (12 -> 12))" "gap 3 swap: q4 names the failed swap"
+check "3 of 4 swaps made: the probe stopped at swap 3's failure (FRCNT did not advance)" "gap 3 swap: the stop is named"
+run "$T/stoprestore.log"
+want_rc 3 "gap 3: stop at swap 1's restore (list word differs): FAIL, not incomplete"
+check "verdicts: FAIL (" "gap 3 restore: FAIL"
+nope "verdicts: incomplete" "gap 3 restore: not incomplete"
+check "q4: no (swap 1's restore: list word differs; the probe stopped after swap 1)" "gap 3 restore: q4 no names swap 1's restore"
+check "1 of 4 swaps made: the probe stopped at swap 1's restore: list word differs" "gap 3 restore: the stop is named"
+check "restore FAIL" "gap 3 restore: the restore FAIL is named"
+run "$T/stoprestore2.log"
+want_rc 3 "gap 3: swap 1's restore-words FAIL without a dlswap swap1 line"
+check "the probe stopped at swap 1's restore: dlswap restore-words FAIL" "gap 3 restore: the restore-words line names the stop"
+run "$T/swap1ok.log"
+want_rc 1 "gap 3: swap-1-only with no failed swap or restore line stays incomplete"
 
 if [ $fail -eq 0 ]; then
     echo "verdicts_selftest: all $nok checks passed"
