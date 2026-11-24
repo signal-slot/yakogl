@@ -335,8 +335,10 @@ Session `tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/` (plan #398, issue
 #2): eleven of its 14 images stopped again, each at one refused case. Section
 E has one row per image; this section groups them by cause and says, for each,
 the error kind and whether the limit is the V3D 4.2 hardware or a missing
-driver path. Code is read at `35e03a2e` (`git log 89d3e1c3..35e03a2e` has no
-commit in `src/v3d`, `driver/src/v3d` or `src/backend.rs`, so E's lines hold).
+driver path. Code is read at `35e03a2e`. Four V3D 7.1 commits (1ee37fe7,
+7f791cde, 96ade25d, b066d160) lie between `89d3e1c3` and it in `src/v3d` and
+`driver/src/v3d`; `git diff 89d3e1c3 35e03a2e` is empty for `backend.rs`,
+`texture.rs`, `src/backend.rs`, `v3d_job.c` and `src/gl/draw.rs`, so E's lines hold.
 The console strings are the `draw refused:` lines of the console files;
 `b1b5b845` answered every one with `-EINVAL`, which the GL core turns into
 GL_OUT_OF_MEMORY (`src/gl/draw.rs:683`), dEQP's ResourceError, and the image
