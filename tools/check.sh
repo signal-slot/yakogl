@@ -2426,6 +2426,8 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_t
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_tiled_ts
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_buffer_rename.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_link_with.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_link_with
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_incomplete_fb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_incomplete_fb
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_uniform_names.rs)" \
@@ -2460,6 +2462,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_msaa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_msaa
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_buffer_rename.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_buffer_rename
+step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_link_with.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_link_with
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_incomplete_fb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_incomplete_fb
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_uniform_names.rs)" \
