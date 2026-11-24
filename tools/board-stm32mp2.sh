@@ -251,6 +251,20 @@
 # file names it. "disarm" and "uninstall" remove the ramlog preboot, the
 # yako_ramlog* variables and ramlog.bin; "install" over a ramlog preboot left
 # behind puts preboot=run yako_hook back.
+# THE LIMIT (measured 2026-11-24 with U-Boot's console, item ramlog-fix;
+# tools/probes/stm32mp257f_dk/ramlog/README.md "Limit"): on the DK's boot
+# chain (TF-A v2.10-stm32mp2-r2.0, U-Boot 2023.10-stm32mp-r3.1) DDR does not
+# keep its content across a warm reset. BL2 brings the DDR up again on both
+# kinds of reset a run ends with, PSCI SYSTEM_RESET ("Reset reason: System
+# reset (SYSRST)") and the watchdog's ("IWDG system reset"). Values planted
+# from U-Boot at 14 addresses from 0x84000100 to 0xf0000040 (0xb0100000
+# among them) all read back as uniform 0x00000000 or 0xffffffff regions,
+# and the snippet prints "yakogl-mp2: ramlog no ring at <addr>". The ring
+# never comes back. So a run with MP2_RAMLOG=1 says so before the arm (a
+# WARNING) and in meta.txt (ramlog_limit=$RAMLOG_LIMIT). A run whose ring is
+# missing then has "ramlog=missing:$RAMLOG_LIMIT" at the end of its verdict
+# line and a NOTE naming the limit. A ring that does come back (another boot
+# chain) is decoded as above, with a NOTE that the limit did not hold.
 #
 # The verdict line:
 #   board-stm32mp2.sh stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=uboot-sd <row|blind>
@@ -398,6 +412,9 @@ RAMLOG_DIR=$HERE/probes/stm32mp257f_dk/ramlog
 RAMLOG=${MP2_RAMLOG:-0}
 RAMLOG_SET=0        # 1 while the environment carries the ring save (arm .. its removal)
 RAMLOG_DONE=0       # 1 once ramlog.bin was dealt with after the cycle
+# the limit above: the DK's warm resets do not keep DDR (meta ramlog_limit)
+RAMLOG_LIMIT=ddr_lost_in_warm_reset
+RAMLOG_LIMIT_WHY="the DK's warm reset does not keep DDR: BL2 brings the DDR up again after PSCI SYSTEM_RESET and after the IWDG reset alike (measured with U-Boot's console 2026-11-24, tools/probes/stm32mp257f_dk/ramlog/README.md 'Limit'), so the ring cannot come back; the serial console is the only console text of a run"
 OUR_VARS="yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file $RAMLOG_VARS"
 
 TMP=$(mktemp -d)
@@ -954,6 +971,7 @@ check_ramlog() {
     want='ext4write mmc ${boot_instance}:${yako_part} ${yako_ramlog_addr} /yakogl/ramlog.bin ${yako_ramlog_size}'
     { [ "$(grep -c . <<<"$RAMLOG_SNIPPET")" = 1 ] && grep -qF "$want" <<<"$RAMLOG_SNIPPET"; } ||
         die "REFUSED: $RAMLOG_DIR/uboot_snippet.txt is not one command line with '$want'"
+    echo "$TAG: WARNING: MP2_RAMLOG=1: $RAMLOG_LIMIT_WHY" | scrub >&2
 }
 # ramlog_off: the ring save out of the environment (preboot=run yako_hook,
 # yako_ramlog* unset), read back; in a subshell: a refusal ends it, not the caller
@@ -1015,7 +1033,11 @@ ramlog_collect() {
         echo "DRY host\$ python3 -I tools/probes/stm32mp257f_dk/ramlog/ramlog_decode.py <rundir>/ramlog.bin > <rundir>/ramlog.txt$why"
         return 0
     fi
-    if [ "$has" = no ]; then meta ramlog missing; return 0; fi
+    if [ "$has" = no ]; then
+        meta ramlog missing
+        note "NOTE: no ring came back (ramlog=missing), as documented: $RAMLOG_LIMIT_WHY" >&2
+        return 0
+    fi
     if [ "$has" != yes ]; then meta ramlog unreadable; return 0; fi
     [ -s "$RD/ramlog.bin" ] || { meta ramlog unreadable; return 0; }
     meta ramlog_sha256 "$(sha256sum < "$RD/ramlog.bin" | cut -d' ' -f1)"
@@ -1024,6 +1046,7 @@ ramlog_collect() {
     rm -f "$RD/ramlog.bin"
     if [ "$r" = 0 ]; then
         meta ramlog decoded
+        note "NOTE: the ring came back: the documented limit ($RAMLOG_LIMIT) did not hold on this boot chain; tell tools/probes/stm32mp257f_dk/ramlog/README.md" >&2
         lost=$(sed -n -E 's/^\[ramlog: ([0-9]+) bytes lost\]$/\1/p' "$TMP/ramlog.err")
         [ -z "$lost" ] || meta ramlog_lost "$lost"
         if [ "$BLIND" = 1 ]; then cp "$RD/ramlog.txt" "$RD/console.txt"; meta console_source ramlog; fi
@@ -1123,6 +1146,10 @@ verdict_line() {
     res=none
     if [ "$blind" = 1 ] && [ -n "$ramlog" ]; then
         bv=unknown   # MP2_RAMLOG=1 and no ring came back (ramlog= says why)
+        # the documented limit, on the line itself: missing is what it predicts
+        if [ "$ramlog" = missing ] && [ -n "$(mget ramlog_limit "$dir")" ]; then
+            ext=" ramlog=missing:$(mget ramlog_limit "$dir")"
+        fi
     elif [ "$blind" = 1 ]; then
         bv=no_console
     elif [ ! -s "$con" ]; then
@@ -1633,7 +1660,7 @@ cmd_run() {
     meta board "$BOARD"; meta boot "$BOOT"; meta name "$NAME"; meta probe "$PROBE"; meta blind "$BLIND"
     [ "$BLIND" = 1 ] && meta no_console_why "MP2_NO_CONSOLE=1"
     [ "$BLIND" = 1 ] && meta row_eligible no
-    if [ "$RAMLOG" = 1 ]; then meta ramlog_addr "$RAMLOG_ADDR"; meta ramlog_size "$RAMLOG_SIZE"; fi
+    if [ "$RAMLOG" = 1 ]; then meta ramlog_addr "$RAMLOG_ADDR"; meta ramlog_size "$RAMLOG_SIZE"; meta ramlog_limit "$RAMLOG_LIMIT"; fi
     meta image "${IMG:+$(basename "$IMG")}"; meta image_sha256 "$IMG_SHA"; meta image_size "$IMG_SIZE"
     meta footprint "${footprint:-none}"; meta image_zephyr "$IMG_ZEPHYR"
     meta started "$(date '+%F %T')"
