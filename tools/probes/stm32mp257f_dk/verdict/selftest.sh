@@ -56,6 +56,16 @@ for log in "$data"/*.log; do
     fi
 done
 
+# The one-case gl_test tally ("gl_test: all: N of 1 cases failed"): 0 of 1 passes,
+# 1 of 1 fails, a missing line is FAIL:absent (and the whole check fails).
+for t in "pass:tally=PASS:0/1" "fail:tally=FAIL:1/1" "tally-absent-fail:tally=FAIL:absent"; do
+    case_=${t%%:*}
+    want_tally=${t#*:}
+    got=$(python3 -I "$tool" --only gl-case1 "$data/gl-case1.$case_.log")
+    if grep -q " $want_tally " <<<"$got"; then ok "gl-case1 one-case $want_tally"
+    else bad "gl-case1 one-case $want_tally: $got"; fi
+done
+
 # stdin, and no --expect: the checks are chosen from the log.
 got=$(python3 -I "$tool" <"$data/gc-clear.pass.log"); rc=$?
 if [ "$rc" = 0 ] && grep -q '^verdict gc-clear ' <<<"$got" && ! grep -q '^verdict gc-fence ' <<<"$got"; then
