@@ -29,7 +29,7 @@ E2E=$HERE/testdata/mali-deqp-e2e
 FIX=$HERE/testdata/mali-deqp/runner-percase
 RUN=$HERE/mali-deqp-run.sh
 TALLY=$HERE/mali-deqp-tally.py
-EXPECT=19
+EXPECT=25
 base=${TMPDIR:-$REPO/build}
 mkdir -p "$base"
 tmp=$(mktemp -d "$base/mali-deqp-run-selftest-XXXXXX")
@@ -147,6 +147,33 @@ rm -rf "$tmp/nofile" && cp -r "$S" "$tmp/nofile" && rm -r "$tmp/nofile/refusals"
 tally --tally --per-case "$tmp/nofile" > "$tmp/nofile.txt" 2> /dev/null
 check "without refusals/E1.txt --per-case finds no refusal (the check above needs the file)" \
   bash -c "! grep -q 'refused:NOT_BUILT' '$tmp/nofile.txt'"
+
+echo "mali-deqp-run-selftest: refusals.tsv records the library's link refusals, not other info logs"
+mkdir -p "$tmp/lk"
+printf '%s\n' dEQP-GLES2.lk.link dEQP-GLES2.lk.defect dEQP-GLES2.lk.compile dEQP-GLES2.lk.plain > "$tmp/lk/mustpass.txt"
+printf '# image L1: 4\ndEQP-GLES2.lk.*\n' > "$tmp/lk/tree.txt"
+{
+  printf 'dEQP-GLES2.lk.link\tinfo\tonline shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet (%sv_b%s)\n' "'" "'"
+  printf 'dEQP-GLES2.lk.defect\tinfo\tonline shaderc: Mali link: a vertex output the record lists has no slot in the record%ss layout (a back-end defect) (%sv%s)\n' "'" "'" "'"
+  printf 'dEQP-GLES2.lk.compile\tinfo\tonline shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop in a vertex shader is not lowered yet)\n'
+  printf 'dEQP-GLES2.lk.plain\tinfo\tERROR: 0:1: %sx%s : undeclared identifier; the shader is not lowered to anything\n' "'" "'"
+} > "$tmp/lk/scenario.tsv"
+runner_env env FAKE_SCENARIO="$tmp/lk/scenario.tsv" MALI_DEQP_MUSTPASS="$tmp/lk/mustpass.txt" RAW_DIR="$tmp/raw-lk" \
+  bash "$RUN" --build "$tmp/build" --rows 1-1 --tree "$tmp/lk/tree.txt" --session smoke --out "$tmp/slices/lk" > "$tmp/out-lk.txt" 2>&1
+check "link refusals: the runner exits 0" bash -c "tail -3 '$tmp/out-lk.txt'; [ -s '$tmp/slices/lk/refusals.tsv' ]"
+LK=$tmp/slices/lk/refusals.tsv
+check "a link refusal without the word 'refused' is recorded" \
+  grep -qP "^dEQP-GLES2\.lk\.link\tonline shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet \('v_b'\)$" "$LK"
+check "a link refusal ending in '(a back-end defect)' is recorded" \
+  grep -qP "^dEQP-GLES2\.lk\.defect\tonline shaderc: Mali link: .*\(a back-end defect\)" "$LK"
+check "a compile refusal with the word 'refused' is recorded as before" \
+  grep -qP "^dEQP-GLES2\.lk\.compile\tonline shaderc: the code generator refused this fragment shader: Mali\(" "$LK"
+check "an ordinary info log is not recorded (even one with 'not lowered' inside)" \
+  bash -c "! grep -q 'lk.plain' '$LK' && [ \$(wc -l < '$LK') = 4 ]"
+tally --tally "$tmp/slices/lk" > "$tmp/lk.txt" 2> /dev/null
+check "the tally gives the link refusals the cause 'refused, link: <why>', the varying's name left out" \
+  bash -c "grep -qE '^cause Fail +1  refused, link: a Mali link whose stages place a varying at different offsets is not lowered yet\$' '$tmp/lk.txt' &&
+    grep -qE '^cause Fail +1  refused, link: Mali link: .*\(a back-end defect\)\$' '$tmp/lk.txt'"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then

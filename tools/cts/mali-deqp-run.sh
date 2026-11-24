@@ -84,6 +84,11 @@
 #   refusals.tsv case refusal: for each case whose log holds one, the first
 #                shader or program info log in which the library refuses
 #                ("... refused this vertex shader: ..."), whitespace folded.
+#                A link refusal of the library has no such word ("online
+#                shaderc: a Mali link whose stages place a varying at different
+#                offsets is not lowered yet ('v')"): it is recorded too, by the
+#                forms of MaliError and of the link in src/shaderc/online/mali
+#                (qpa_refusal's LINK_REFUSAL). Other info log text is not.
 #                The exit line of chunks.tsv names only the chunk's first
 #                refusal; this file names each case's own.
 #   refusals/<label>.txt  the chunk's stdout and stderr merged in print order
@@ -239,6 +244,20 @@ def plan(tree, mustpass, a, b, casedir):
         print('%d\t%s\t%d' % (i, lab, len(cases)))
 
 
+# The library's refusals that do not say "refused": a link's ("<who>: <why>
+# ('<varying>')", mali/link.rs MALI_* and the pairing's own) and a bare
+# MaliError, always after "online shaderc: ". MaliError gaps and the link's
+# end "is not lowered yet"; the others are MALI_NO_VERTEX_SLOT ("(a back-end
+# defect)"), Defect, OutOfScratch, TooManyUniforms and the pairing's
+# "not compiled by the in-process compiler". mali-deqp-tally.py has the same
+# pattern (LINK_REFUSAL); keep them equal.
+LINK_REFUSAL = re.compile(
+    r"\bonline shaderc: [^\n]*?(?:\bis not lowered yet\b|\(a back-end defect\)"
+    r"|\bValhall back end defect\b|\bValhall: the scratch arena ran out\b"
+    r"|\bValhall: a shader with more than 65535 uniform rows\b"
+    r"|\bnot compiled by the in-process compiler\b)")
+
+
 def qpa_refusal(body):
     """The first info log of a case's log in which the library refuses a
     shader or a program, or ''. dEQP writes an info log in two forms:
@@ -247,7 +266,7 @@ def qpa_refusal(body):
     for m in re.finditer(r'<InfoLog>(.*?)</InfoLog>'
                          r'|<Section Name="Info Log"[^>]*>\s*<Text>(.*?)</Text>', body, re.S):
         text = html.unescape(m.group(1) if m.group(1) is not None else m.group(2))
-        if re.search(r'\brefused\b', text):
+        if re.search(r'\brefused\b', text) or LINK_REFUSAL.search(text):
             return text
     return ''
 

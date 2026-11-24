@@ -8,7 +8,9 @@
 # per-draw line on stderr, interleaved as the real pair prints them:
 #   refuse  yakogl-mali-refusal: -95 NOT_BUILT_BLEND_SHADER ...
 #   errno   yakogl-mali-refusal: -12 errno
-# and any other case prints none. It writes a minimal .qpa with every case
+# and any other case prints none. A third column of the scenario ("info"
+# text) is written as the case's shader program <InfoLog> in the .qpa, with
+# the status Fail (the extractor's input: refusals.tsv). It writes a minimal .qpa with every case
 # as its action says (Pass, Fail for refuse, ResourceError for errno), and
 # the "yakogl-mali: loaded" and "yakogl-mali-exit" stderr lines the runner
 # looks for. Each line is followed by a pause: the runner merges stdout and
@@ -22,6 +24,7 @@ for a; do
 done
 [ -n "$list" ] && [ -n "$log" ] || { echo "fake deqp-gles2: no case list or log" >&2; exit 2; }
 action() { awk -F'\t' -v c="$1" '$1 == c { print $2; exit }' "${FAKE_SCENARIO:-/dev/null}"; }
+infolog() { awk -F'\t' -v c="$1" '$1 == c { print $3; exit }' "${FAKE_SCENARIO:-/dev/null}"; }
 echo "yakogl-mali: loaded libGLESv2.so.2 (fixture build)" >&2
 sleep 0.2
 printf '#sessionInfo releaseName fixture\n#beginSession\n' > "$log"
@@ -33,12 +36,17 @@ while read -r c; do
   case $(action "$c") in
     refuse) echo "yakogl-mali-refusal: -95 NOT_BUILT_BLEND_SHADER: a blend shader other than a constant colour's is not built yet" >&2; st=Fail ;;
     errno) echo "yakogl-mali-refusal: -12 errno" >&2; st=ResourceError ;;
+    info) st=Fail ;;
   esac
   sleep 0.2
   echo "  $st ($st)"
   sleep 0.2
   {
     echo "#beginTestCaseResult $c"
+    if [ "$(action "$c")" = info ]; then
+      printf '<ShaderProgram LinkStatus="false"><InfoLog>%s</InfoLog></ShaderProgram>\n' \
+        "$(infolog "$c" | sed 's/&/\&amp;/g; s/</\&lt;/g')"
+    fi
     echo "<TestCaseResult Version=\"0.3.4\" CasePath=\"$c\" CaseType=\"SelfValidate\">"
     echo "<Result StatusCode=\"$st\">$st</Result>"
     echo "</TestCaseResult>"
