@@ -143,19 +143,17 @@ fn vs16ref_uapi_bvec4_mix() {
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4"]
 fn vs16ref_uapi_int() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_int");
 }
 
 #[test]
-#[ignore = "refused: a vertex shader uniform that is not highp (Mesa's fp16 uniform)"]
 fn vs16ref_uapi_ivec3() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_ivec3");
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4"]
+#[ignore = "refused: an integer or boolean value (the five words' umax chain, which Mesa rebalances into a tree)"]
 fn vs16ref_uapi_struct_int_ivec4() {
     mali_ref::assert_matches("deqp_vs16ref_uapi_struct_int_ivec4");
 }
@@ -167,8 +165,7 @@ fn vs16ref_xor_bool() {
 }
 
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
-const UNIFORM: &str = "a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet";
-const VS_UNIFORM: &str = "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
+const INT: &str = "an integer or boolean value is not lowered yet";
 
 /// Every reference the compiler refuses and the text it gives now.
 const REFUSALS: &[(&str, &str)] = &[
@@ -181,9 +178,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_vs16ref_eq_mediump_vec4", ARITH),
     ("deqp_vs16ref_uapi_bvec3_mix", ARITH),
     ("deqp_vs16ref_uapi_bvec4_mix", ARITH),
-    ("deqp_vs16ref_uapi_int", UNIFORM),
-    ("deqp_vs16ref_uapi_struct_int_ivec4", UNIFORM),
-    ("deqp_vs16ref_uapi_ivec3", VS_UNIFORM),
+    ("deqp_vs16ref_uapi_struct_int_ivec4", INT),
 ];
 
 /// References that compile at the tip, to other words than Mesa's (the
@@ -203,7 +198,15 @@ const DIFFERS: &[&str] = &[
 /// intval-vs16 step vs16-1, the mediump compares of an attribute against a
 /// constant at 16 bits, the `fmax` rule of `||` and the width-three
 /// `bvec` `==` / `!=` chain.
-const MATCHED: &[&str] = &["deqp_vs16ref_bcmp_eq_bvec3", "deqp_vs16ref_bcmp_ne_bvec3", "deqp_vs16ref_or_bool"];
+const MATCHED: &[&str] = &[
+    "deqp_vs16ref_bcmp_eq_bvec3",
+    "deqp_vs16ref_bcmp_ne_bvec3",
+    "deqp_vs16ref_or_bool",
+    /* vs16-2: an int / ivec uniform read as its words, `compare_ivec3`'s
+     * product the `CSEL.u32.gt` chain */
+    "deqp_vs16ref_uapi_int",
+    "deqp_vs16ref_uapi_ivec3",
+];
 
 #[test]
 fn refusals_pinned() {

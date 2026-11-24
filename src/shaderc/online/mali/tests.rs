@@ -1057,6 +1057,10 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              front end refuses gl_FragData[n > 0] (the test pins its verdict), and a vertex shader writes none",
         ),
         E::Interpolation => Some("ES 1.00 has no interpolation qualifier: every varying is smooth"),
+        E::UniformType => Some(
+            "every ES 1.00 uniform type a shader reads as a value has an arm in nir.rs `uniform_of` (an int or \
+             ivec read as its words since plan #387 intval-vs16, vs16-2); ES 3.00's non-square matrices meet it",
+        ),
         E::CompareForm => Some(
             "no raiser left: the highp `!=` of floats and ints is FCMP_OR/ICMP_OR .ne (deqp_misc_cmp_fne_hp, \
              deqp_misc_cmp_ine0_hp); a mediump `!=` refuses on its mediump arm before it",
@@ -1088,7 +1092,6 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::ControlFlow
         | E::Arithmetic
         | E::IntValue
-        | E::UniformType
         | E::UniformArray
         | E::UniformIndexed
         | E::UniformPrecision
@@ -1168,19 +1171,18 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec4 p; attribute float d; attribute float a; attribute float b; varying vec4 v; void main(){ gl_Position = p; v = vec4(0.5, d, 1.0, 1.0) * vec4(0.5, -0.0, b, a); }", MaliError::AttributeNumbering),
         /* a -0.0 local two compares read (negzero_const_vector) */
         (FS, "precision highp float; varying vec2 a2; void main() { const vec2 z = vec2(-0.0); gl_FragColor = vec4(z.x == a2.x ? 1.0 : 0.25, a2.y == z.y ? 1.0 : 0.5, 0.0, 1.0); }", MaliError::NegZeroShared),
-        /* an int uniform read as a value other than converted to a float
-         * (its conversion is deqp_uniarray_struct_member_vs's; a mat2 is
-         * deqp_unitype_vsmat2_highp's) */
-        (VS, "uniform int i; attribute vec4 p; void main(){ gl_Position = p * float(i + 1); }", MaliError::UniformType),
+        /* (an int uniform read as a value: its words since plan #387
+         * intval-vs16; a mat2 is deqp_unitype_vsmat2_highp's) */
         (VS, "uniform mat2 u[2]; void main(){ gl_Position = vec4(u[1][0], 0.0, 1.0); }", MaliError::UniformArray),
-        /* a mediump int index of an fp32 array read at a run-time index
-         * (a plain fp16 uniform is case 19's,
-         * the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1; an fp16
-         * array at constant indices deqp_uniarray_*_const_vs's, at a
-         * mediump int's run-time index deqp_uniarray_dyn_vec*_vs's) */
+        /* a mediump member of a struct array's nested struct array, whose
+         * precision `uniform_precision` does not find
+         * (deqp_unif2_arr_struct_array; a mediump int, once this probe, is
+         * read as its word since plan #387 intval-vs16; a plain fp16
+         * uniform is case 19's, an fp16 array deqp_uniarray_*_vs's) */
         (
             VS,
-            "uniform highp float u[2]; uniform mediump int i; void main(){ gl_Position = vec4(u[i]); }",
+            "struct T { mediump float a; mediump vec2 b[2]; }; struct S { mediump float a; T b[3]; }; uniform S s[2]; \
+             void main(){ gl_Position = vec4(s[0].b[1].b[0].x); }",
             MaliError::UniformPrecision,
         ),
         /* a zero w beside a lane that is not constant: Mesa drops the
@@ -2721,6 +2723,9 @@ fn vs_reference_sources() -> Vec<&'static str> {
     srcs.extend([td!("vsarith_86_anyall.vert"), td!("vsarith_182_fsat.vert"), td!("vsarith_182_fsatfolded.vert")]);
     /* vertex abs/floor and the flattened if (cases 181 and 188) */
     srcs.extend([td!("vsarith_181_fmactrl.vert"), td!("vsarith_188_predif.vert")]);
+    /* an ivec3 uniform's compare against zero, the `umax` chain (plan #387
+     * intval-vs16, vs16-2) */
+    srcs.push(td!("deqp_vs16ref_uapi_ivec3.vert"));
     srcs
 }
 
@@ -3191,7 +3196,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
         O::CubeSsel => "CUBE_SSEL",
         O::CubeTsel => "CUBE_TSEL",
         O::MuxV2i16 => "MUX_V2I16",
-        O::CselU32 => "CSEL_U32",
+        O::CselU32 | O::CselU32Gt => "CSEL_U32",
         O::CselS32 { .. } => "CSEL_S32",
         O::IabsS32 => "IABS_S32",
         O::ImulI32 => "IMUL_I32",
@@ -3261,7 +3266,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
 
 /// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
 /// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
-const ALL_OPS: [bir::Op; 101] = {
+const ALL_OPS: [bir::Op; 102] = {
     use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
     let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
     [
@@ -3300,6 +3305,7 @@ const ALL_OPS: [bir::Op; 101] = {
         O::CubeTsel,
         O::MuxV2i16,
         O::CselU32,
+        O::CselU32Gt,
         O::CselS32 { cmpf },
         O::IabsS32,
         O::ImulI32,
@@ -4060,9 +4066,10 @@ fn a_highp_float_array_read_at_int_uniforms_is_byte_equal_to_mesa_26_2_1() {
 /// An int uniform read as a value: a highp fragment shader reads its word
 /// raw, as an index's (intuni_ishr: `ARSHIFT_OR.i32 r0, u2.w0, ..`), here
 /// converted by `S32_TO_F32`; the vertex stage reads one as an array index,
-/// a loop bound or converted to a float (`S32_TO_F32` of its word,
-/// deqp_uniarray_struct_member_vs; nir.rs `int_float_only`), and refuses
-/// any other arithmetic on it at the uniform.
+/// a loop bound, converted to a float (`S32_TO_F32` of its word,
+/// deqp_uniarray_struct_member_vs) and, since plan #387 intval-vs16
+/// (vs16-2), in any integer arithmetic (the word read in place,
+/// `IADD_IMM.i32 r, u.w0, #0x1`).
 #[test]
 fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
     let vs = "attribute vec4 p; uniform int i; uniform float a[4]; varying vec4 v;
@@ -4071,7 +4078,8 @@ fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
     assert!(trim(&v.code).iter().any(|w| text(*w).starts_with("S32_TO_F32")));
     let vs = "attribute vec4 p; uniform int i; uniform float a[4]; varying vec4 v;
               void main(){ gl_Position = p; v = vec4(a[i] + float(i + 1)); }";
-    assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::UniformType);
+    let v = compile_alone(SHC_STAGE_VERTEX, vs).expect("compiles");
+    assert!(trim(&v.code).iter().any(|w| text(*w).starts_with("IADD_IMM.i32")));
     let fs = "precision highp float; uniform highp int i; uniform highp float a[4];
               void main(){ gl_FragColor = vec4(a[i] + float(i)); }";
     let f = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles");

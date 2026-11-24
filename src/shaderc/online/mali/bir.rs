@@ -444,6 +444,10 @@ pub enum Op {
     /// `CSEL.u32.eq dest, a, b, t, f`: `t` where `a == b`, else `f`
     /// (`bi_csel_from_mux`).
     CselU32,
+    /// `CSEL.u32.gt dest, a, b, a, b`: `umax` of two 32-bit words
+    /// (`bi_csel_to(.., nir_type_uint, ..)`, bifrost_compile.c:3061-3071;
+    /// deqp_vs16ref_uapi_ivec3's `CSEL.u32.gt r0, u5.w1, r0^, u5.w1, r0^`).
+    CselU32Gt,
     /// `CSEL.s32.cmpf dest, a, b, t, f`: `t` where `a cmpf b` (signed),
     /// else `f`; `imax` is `.gt a, b, a, b` and `imin` `.lt`
     /// (`bi_csel_to(.., nir_type_int, ..)`, bifrost_compile.c:3061-3071).
@@ -914,7 +918,9 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
             Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } | Op::IaddS32,
             0..=1,
         ) => info(false, false, true, false, 32),
-        (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselS32 { .. }, 0..=3) => info(false, false, false, false, 32),
+        (Op::MuxI32 | Op::MuxBitI32 | Op::CselU32 | Op::CselU32Gt | Op::CselS32 { .. }, 0..=3) => {
+            info(false, false, false, false, 32)
+        }
         /* IABS.s32 and IMUL.i32: integer sources that widen (valhall.c) */
         (Op::IabsS32, 0) | (Op::ImulI32, 0..=1) => info(false, false, true, false, 32),
         /* ISUB.s32 widens its sources as IADD.s32, and so do U32_TO_F32
@@ -1108,7 +1114,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         Op::FcmpAndF32 { .. } | Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } => 3,
         Op::FcmpOrV2f16 { .. } | Op::IcmpOrV2u16 { .. } => 3,
         Op::MuxBitI32 | Op::Cubeface1 | Op::Cubeface2 | Op::CubeSsel | Op::CubeTsel => 3,
-        Op::CselU32 | Op::CselS32 { .. } => 4,
+        Op::CselU32 | Op::CselU32Gt | Op::CselS32 { .. } => 4,
     }
 }
 

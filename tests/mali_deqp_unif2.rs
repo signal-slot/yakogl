@@ -25,7 +25,7 @@
 mod mali_ref;
 
 const ARRAY: &str = "Valhall: a uniform array is not lowered yet";
-const OTHER_VS: &str = "Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet";
+const LOOP_VS: &str = "Valhall: a loop in a vertex shader is not lowered yet";
 const FS_OTHER: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
 const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 /// A vertex shader uniform kept fp16 Mesa's way other than the plain ones:
@@ -50,10 +50,14 @@ const REFUSED: &[(&str, &str)] = &[
     ("fs_other", FS_OTHER),
     ("fs_struct_uniform", FS_OTHER),
     ("vs_bool_uniform", ARITH),
-    ("vs_int_uniform", OTHER_VS),
+    /* the int uniform read as its word since plan #387 intval-vs16
+     * (vs16-2); the loop it bounds is next */
+    ("vs_int_uniform", LOOP_VS),
     ("vs_mediump_array", LANE),
     ("vs_mediump_struct", LANE),
-    ("vs_struct_uniform", OTHER_VS),
+    /* the struct's int member read as its word (vs16-2); its compare
+     * product is next */
+    ("vs_struct_uniform", ARITH),
 ];
 
 #[test]

@@ -360,6 +360,14 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("cmpf", super::bir::Cmpf::Eq as u32)?;
             alu_dest(&mut f, i, "dest_width")?;
         }
+        Op::CselU32Gt => {
+            f = Fill::new(IsaOp::CselU32);
+            for s in 0..4 {
+                f.put(["src0", "src1", "src2", "src3"][s], src_byte(&i.src[s])?)?;
+            }
+            f.put("cmpf", super::bir::Cmpf::Gt as u32)?;
+            alu_dest(&mut f, i, "dest_width")?;
+        }
         Op::CselS32 { cmpf } => {
             f = Fill::new(IsaOp::CselS32);
             for s in 0..4 {

@@ -180,13 +180,14 @@ fn a_loop_storing_an_output_or_nested_stays_refused() {
     mali_ref::assert_refused_ref("intloop_loop_nested_vs", "a loop in a vertex shader");
 }
 
-/// An `int` uniform the walk reads as a word only where an integer compare
-/// reads it: one in arithmetic keeps the uniform-type refusal.
+/// An `int` uniform in arithmetic is read as its word since plan #387
+/// intval-vs16 (vs16-2: `IADD_IMM.i32 r, u.w0, #0x1` and `S32_TO_F32`, the
+/// fragment walk's reslib_int_vs form): the pair compiles.
 #[test]
-fn an_int_uniform_in_arithmetic_stays_refused() {
+fn an_int_uniform_in_arithmetic_compiles() {
     let vs = "attribute vec3 p; uniform int n; void main() {
         gl_Position = vec4(p * float(n + 1), 1.0); }";
-    mali_ref::assert_refused(vs, FS, "a uniform other than a float");
+    assert!(mali_ref::compile_pair(vs, FS).is_ok(), "the pair compiles");
 }
 
 /// The fragment half of the int-loop family is not this lowering's: glmark2
