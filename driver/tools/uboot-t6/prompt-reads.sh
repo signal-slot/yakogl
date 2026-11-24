@@ -27,8 +27,9 @@
 #
 # The record: one directory per --go run under $T6_RECORD_DIR, printed at
 # the start and at the end. record.txt (this script's lines), uart.log
-# (every byte read), typed.log (every byte written, with its time),
-# answers.txt (each command and its output). `printenv` prints the board's
+# (every byte read; when the login never came, a last "####" line says
+# where the stream went silent), typed.log (every byte written, with its
+# time), answers.txt (each command and its output). `printenv` prints the board's
 # MAC addresses and serial number: answers.txt and uart.log stay in the
 # record directory and are never copied into the tree, an issue or a pull
 # request as they are.
@@ -36,10 +37,14 @@
 # Exit: prompt-reads.py's code (0 done; 12 no autoboot line after the
 # reboot, nothing written;
 # 4 the autoboot was missed, Linux booted; 5 stopped at the U-Boot prompt,
-# the board stays there until its power is cut; 6 `reset` entered, no Linux
-# login; 7 a command made U-Boot reset the board, Linux booted), 1 when the
-# board did not come back into Armbian, 2 usage or a missing tool, 3 refused
-# before anything was changed (only that: the board was not rebooted).
+# the board stays there until its power is cut; 6 `reset` entered, and no
+# sign of Linux: no login on the UART and no new boot_id over ssh (when only
+# the UART shows none, its stream may have stopped in the kernel's output,
+# issue #11874: ssh finding Armbian with a new boot_id gives 0, and
+# record.txt says so); 7 a command made U-Boot reset the board, Linux
+# booted), 1 when the board did not come back into Armbian otherwise, 2
+# usage or a missing tool, 3 refused before anything was changed (only
+# that: the board was not rebooted).
 # With T6_UART=rfc2217://<host>:<port>: 40 when t6-uart-rfc2217.py could not
 # open the session or set the line (this script did not start), 41 when that
 # tool failed during the run.
@@ -169,4 +174,6 @@ py_pid=$!
 wait_listening
 reboot_and_wait_tool
 rec "prompt-reads.py exit $py_rc, $(( $(date +%s) - t0 )) s after the reboot command; answers.txt $(grep -c '^## ' "$REC/answers.txt" 2>/dev/null || echo 0) command(s)"
-exit_when_back
+# 6 says only that the UART showed no Linux login after reset; Armbian
+# back over ssh gives 0, the code of the login seen.
+exit_when_back 6:0

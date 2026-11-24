@@ -61,7 +61,9 @@ they are.
 
 Exit codes: 0 done and Armbian is back; 1 the board did not come back; 2
 usage; 3 refused before anything changed (the board was not rebooted); 12
-no autoboot line after the reboot, nothing written; 4 autoboot missed; 5 stopped at the prompt; 6 `reset` entered, no Linux login; 7 U-Boot
+no autoboot line after the reboot, nothing written; 4 autoboot missed; 5
+stopped at the prompt; 6 `reset` entered, and no sign of Linux (no login on
+the UART, no new boot_id over ssh: "When the UART stream stops"); 7 U-Boot
 left the prompt and started Linux.
 
 The run on 2026-11-12 (record `20261112-184729-t6-uboot-reads`): 27 commands
@@ -130,16 +132,18 @@ staged copy is not the same bytes. Its record is `record.txt`, `uart.log`,
 `typed.log`, `answers.txt`, `image.log` (the UART from `go` to Linux's
 login) and `verdict.txt` under `$T6_RECORD_DIR/<date>-t6-uboot-go`.
 
-Exit codes (`prompt-go.py`'s, passed on by `prompt-go.sh`): 0 the verdict
+Exit codes (`prompt-go.py`'s, passed on by `prompt-go.sh`, which first asks
+the board over ssh after a 6 or a 10): 0 the verdict
 PASS and Armbian back; 12 no autoboot line after the reboot, nothing
 written; 4 the autoboot missed, Linux booted; 5 stopped at the U-Boot prompt (an echo that never
 matched, no answer, the prompt lost), the board stays there until its power
-is cut; 6 an answer differed, `reset` entered, no Linux login; 7 a command
-made U-Boot reset the board; 8 an answer differed: no `go`, `reset`
+is cut; 6 an answer differed, `reset` entered, and no sign of Linux; 7 a
+command made U-Boot reset the board; 8 an answer differed: no `go`, `reset`
 entered, Armbian back; 9 `go` not answered (no "## Starting application");
-10 the image started, no Linux login: the board needs a hand; 11 the verdict
-FAIL, Armbian back. `prompt-go.sh` adds 1 the board did not come back into
-Armbian, 2 usage, 3 refused before anything changed (only that: the board
+10 the image started, and no sign of Linux: the board needs a hand; 11 the
+verdict FAIL, Armbian back. "No sign of Linux" is no login on the UART and
+no new boot_id over ssh ("When the UART stream stops"). `prompt-go.sh` adds
+1 the board did not come back into Armbian otherwise, 2 usage, 3 refused before anything changed (only that: the board
 was not rebooted), and with an RFC 2217 address 40 (the line could not be
 set, nothing done) or 41 (that tool failed during the run). The two runners share their ssh, board-fact, UART and
 reboot-and-wait code in `prompt-lib.sh`.
@@ -155,6 +159,38 @@ Link address and window:
 `WINDOW_BASE` and `WINDOW_SIZE`, `prompt-go.sh`'s `WINDOW_BASE` and
 `WINDOW_SIZE` and `prompt-go.py`'s `LOAD` hold the same values, and
 `driver/tools/kexec-zephyr/board_lock_selftest.sh` fails when one differs.
+
+### When the UART stream stops
+
+The network serial adapter on the debug UART can stop its stream to the
+host for good after a large burst, and the kernel's boot output is one; a
+new connection works again (issue #11874; the adapter's defect is
+signal-slot/serial-over-tailnet#2). A login Armbian prints after the stop is
+never read, although Linux is back. So the UART tools (`prompt-reads.py`,
+`prompt-go.py`) say only "no Linux login on the UART" (their 6 and 10), and
+the runner asks the board over ssh, as it does after every run
+(`prompt-lib.sh`, `exit_when_back`):
+
+- Armbian answers with a new boot_id: Linux is back. The exit is the code of
+  the login seen (`prompt-go.sh`: 6 becomes 8, and 10 becomes 0 or 11 by the
+  verdict; `prompt-reads.sh`: 6 becomes 0), and `record.txt` says so.
+- No answer within 180 s: no sign of Linux. 6 or 10 stays the exit, and the
+  board needs `T6_HAND`.
+
+The record shows the hole: when a wait for the login ends without it, the
+tool closes `uart.log` with one line that starts with `####` and gives the
+time and the byte offset of the last byte read (the times are those of
+`typed.log`, which says the same). `image.log`, the verdict's input, keeps
+only the bytes read. The Zephyr part of the record is read before the
+kernel starts, so the verdict does not depend on the stop.
+
+Nothing is written to the UART for this: after `go` or `reset` the tools
+never write again (Armbian logs root in on this console by itself), and the
+answer over ssh is a read of `/proc/sys/kernel/random/boot_id`. A second UART
+connection to look for the login again was not chosen: it cannot see a login
+printed before it opened, so ssh would still be needed to tell "no Linux"
+from "a login not read", and it would add a reconnect on silence, a
+heuristic, to `t6-uart-rfc2217.py` for a defect of the adapter.
 
 ## What the image does itself
 

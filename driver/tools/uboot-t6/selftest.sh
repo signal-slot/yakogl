@@ -26,6 +26,11 @@
 # - both with T6_UART=rfc2217://<host>:<port>: the dry runs say so without
 #   connecting, --go goes through t6-uart-rfc2217.py, and no output names
 #   the address.
+# - prompt-lib.sh's exit_when_back, the runners' last step, with a fake
+#   board(): a tool code that says "no Linux login on the UART" becomes the
+#   code of the login seen when ssh finds a new boot_id, and stays when it
+#   finds none (issue #11874); other codes are as before; the two runners
+#   call it with their codes.
 #
 # The last line: "uboot-t6 selftest: N checks run, F failed", with ", check
 # lines not run: ..." when a check line of this file did not run.
@@ -220,6 +225,67 @@ for r in reads go; do
 			grep -qF 't6-uart-rfc2217: REFUSED: the server closed the connection' <<<"$out" && no_address "$out"; echo $?)"
 done
 rm "$tmp/fakebin/python3"
+
+# prompt-lib.sh's exit_when_back (issue #11874). The UART's stream can stop
+# in the kernel's output; ssh is the other witness of Linux. A subshell
+# sources prompt-lib.sh and stands in for the runner around it: rec() to a
+# file, board() answering a new boot_id ("new") or nothing ("none", looked
+# for 0 s).
+back() { # <tool's code> <new|none> [<code>:<code when back> ...]
+	local code=$1 state=$2
+	shift 2
+	rm -rf "$tmp/back"
+	mkdir "$tmp/back"
+	(
+		# shellcheck disable=SC2034  # read by prompt-lib.sh
+		REC=$tmp/back TOOL=prompt-go T6_HAND=test old_boot=old-boot t0=$(date +%s) py_rc=$code
+		BACK_WAIT_S=0
+		[ "$state" = none ] || BACK_WAIT_S=30
+		rec() { printf '%s\n' "$*" >>"$REC/record.txt"; }
+		# shellcheck source=prompt-lib.sh
+		. "$here/prompt-lib.sh"
+		board() {
+			[ "$state" = new ] || return 1
+			case "$1" in *boot_id*) echo new-boot ;; *) echo 12.5 ;; esac
+		}
+		exit_when_back "$@"
+	) >/dev/null 2>&1
+}
+saw='saw no Linux login on the UART (exit'
+back 10 new 6:8 10:0
+rc=$?
+check "exit_when_back: no login on the UART after the image, a new boot_id over ssh, verdict PASS: exit 0, said in the record (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF "$saw 10), but Armbian answers over ssh with a new boot_id: Linux is back; exit 0" "$tmp/back/record.txt"; echo $?)"
+back 10 new 6:8 10:11
+rc=$?
+check "exit_when_back: the same with the verdict FAIL: exit 11 (rc $rc)" "$([ "$rc" = 11 ]; echo $?)"
+back 10 none 6:8 10:0
+rc=$?
+check "exit_when_back: no login on the UART and no Armbian over ssh: exit 10, no sign of Linux, a hand needed (rc $rc)" \
+	"$([ "$rc" = 10 ] && grep -qF 'no Linux login on the UART (exit 10) and no Armbian over ssh' "$tmp/back/record.txt" &&
+		grep -qF 'needs test at its power switch' "$tmp/back/record.txt" && ! grep -qF "$saw" "$tmp/back/record.txt"; echo $?)"
+back 0 new 6:8 10:0
+rc=$?
+check "exit_when_back: the login seen on the UART, Armbian back: exit 0 as before, no line about the UART (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'back in Armbian' "$tmp/back/record.txt" && ! grep -qF "$saw" "$tmp/back/record.txt"; echo $?)"
+back 6 new 6:8 10:0
+rc=$?
+check "exit_when_back: prompt-go's 6 (refused, reset, no login on the UART) with Armbian back: exit 8 (rc $rc)" "$([ "$rc" = 8 ]; echo $?)"
+back 6 new 6:0
+rc=$?
+check "exit_when_back: prompt-reads' 6 with Armbian back: exit 0 (rc $rc)" "$([ "$rc" = 0 ]; echo $?)"
+back 9 none 6:8 10:0
+rc=$?
+check "exit_when_back: a code not in the list, no Armbian: exit 1 as before (rc $rc)" "$([ "$rc" = 1 ]; echo $?)"
+back 5 none 6:8 10:0
+rc=$?
+check "exit_when_back: stopped at the prompt, no Armbian: exit 5 as before (rc $rc)" "$([ "$rc" = 5 ]; echo $?)"
+# The runners hand it their codes: prompt-go.sh 6:8 and 10:<0 when the
+# verdict's last line is PASS, else 11>, prompt-reads.sh 6:0.
+check "prompt-go.sh and prompt-reads.sh call exit_when_back with their no-login codes" \
+	"$(grep -qx 'exit_when_back 6:8 10:$seen' "$here/prompt-go.sh" &&
+		grep -qxF '[ "$(tail -n 1 "$REC/verdict.txt" 2>/dev/null)" != "VERDICT $PROBE PASS" ] || seen=0' "$here/prompt-go.sh" &&
+		grep -qx 'exit_when_back 6:0' "$here/prompt-reads.sh"; echo $?)"
 
 # A stock file changed behind the fingerprint's back: check fails, naming it.
 cp "$root/boot/boot.scr" "$tmp/boot.scr.keep"

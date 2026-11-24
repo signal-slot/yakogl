@@ -39,17 +39,24 @@
 # the start and at the end. record.txt (this script's lines), uart.log
 # (every byte read), typed.log (every byte written, with its time),
 # answers.txt (each command and its answer), image.log (the UART from `go`
-# to Linux's login), verdict.txt (t6-verdict.sh, T6_ROUTE=uboot).
+# to Linux's login), verdict.txt (t6-verdict.sh, T6_ROUTE=uboot). When the
+# login never came on the UART, uart.log ends with a "####" line that says
+# where the stream went silent.
 #
 # Exit: prompt-go.py's code (0 the verdict PASS and Armbian back; 12 no
 # autoboot line after the reboot, nothing written; 4 the autoboot was
 # missed, Linux booted;
 # 5 stopped at the U-Boot prompt, the board stays there until its power is
-# cut; 6 refused at the prompt, `reset` entered, no Linux login; 7 a
+# cut; 6 refused at the prompt, `reset` entered, and no sign of Linux; 7 a
 # command made U-Boot reset the board; 8 an answer differed: no `go`,
 # `reset` entered, Armbian back; 9 `go` not answered; 10 the image
-# started, no Linux login; 11 the verdict FAIL, Armbian back), 1 when the
-# board did not come back into Armbian, 2 usage or a missing tool, 3
+# started, and no sign of Linux: the board needs T6_HAND; 11 the verdict
+# FAIL, Armbian back). "No sign of Linux" is no login on the UART and no
+# new boot_id over ssh: when the UART shows no login (its stream can stop in
+# the kernel's output, issue #11874) but ssh finds Armbian with a new
+# boot_id, the exit is the code of the login seen (6 becomes 8; 10 becomes
+# 0 or 11 by the verdict) and record.txt says so. 1 when the board did
+# not come back into Armbian otherwise, 2 usage or a missing tool, 3
 # refused before anything was changed (the board was not rebooted: 3 has
 # only this meaning here). With T6_UART=rfc2217://<host>:<port>: 40 when
 # t6-uart-rfc2217.py could not open the session or set the line (this
@@ -232,4 +239,10 @@ wait_listening
 reboot_and_wait_tool
 rec "prompt-go.py exit $py_rc, $(( $(date +%s) - t0 )) s after the reboot command"
 [ ! -f "$REC/verdict.txt" ] || rec "verdict: $(tail -n 1 "$REC/verdict.txt")"
-exit_when_back
+# 6 and 10 say only that the UART showed no Linux login; Armbian back over
+# ssh gives the code of the login seen: 8 after a refusal, and after the
+# image 0 or 11 by its verdict (t6-verdict.sh's last line, "VERDICT <probe>
+# PASS" exactly when it exits 0).
+seen=11
+[ "$(tail -n 1 "$REC/verdict.txt" 2>/dev/null)" != "VERDICT $PROBE PASS" ] || seen=0
+exit_when_back 6:8 10:$seen
