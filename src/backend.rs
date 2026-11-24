@@ -2094,14 +2094,18 @@ pub fn defers_depth_storage() -> bool {
 /// describes on the CPU: a backend that left level 0 of a render target in
 /// its own image writes it into the storage first. The V3D's lazy raster
 /// store (`v3d_storage_current`, docs/notes/v3d-lazy-raster.md): its jobs
-/// store a sampled render target's render image alone. Not an entry of the
-/// table, as [`samples_rendered_depth`] is not: the one backend with work
-/// to do is named here, and it does nothing unless it is initialised (the
-/// mock tables of the host tests never initialise it).
+/// store a sampled render target's render image alone. The GC's lazy TILED
+/// shadow (`vivante::storage`, W10; nothing makes one yet) is written back
+/// by its resolve engine. Not an entry of the table, as
+/// [`samples_rendered_depth`] is not: the backends with work to do are named
+/// here, and each does nothing unless it is initialised and holds such an
+/// image (the mock tables of the host tests never initialise one).
 pub fn storage_current(b: &GlesTextureBind) {
     #[cfg(feature = "gpu-v3d")]
     crate::v3d::backend::v3d_storage_current(b);
-    #[cfg(not(feature = "gpu-v3d"))]
+    #[cfg(feature = "gpu-vivante")]
+    crate::vivante::storage::gc_storage_current(b);
+    #[cfg(not(any(feature = "gpu-v3d", feature = "gpu-vivante")))]
     let _ = b;
 }
 
