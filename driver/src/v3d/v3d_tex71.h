@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2014-2017 Broadcom */
 /*
  * V3D 7.1 (the Pi 5's V3D 7.1.10) texture records: the TEXTURE_SHADER_STATE
  * and SAMPLER_STATE the TMU reads through the P0/P1 uniforms, and the TMU

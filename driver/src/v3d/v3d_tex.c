@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2014-2017 Broadcom */
+/* SPDX-FileCopyrightText: 2012 Rob Clark <robclark@freedesktop.org> */
 /*
  * V3D 4.2 textures (v3d_tex.h): the level layout, the texel tiling and the
  * TMU's texture and sampler state records, transcribed from Mesa 26.2.1.

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2014-2017 Broadcom */
+/* SPDX-FileCopyrightText: 2012 Rob Clark <robclark@freedesktop.org> */
 /*
  * V3D 4.2 textures: the tiled level layout the TMU walks, the texel tiling,
  * and the texture and sampler state records the TMU reads through the P0/P1

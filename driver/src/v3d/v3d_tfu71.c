@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2021-2022 Raspberry Pi Ltd */
 /*
  * V3D 7.1 TFU job register values (v3d_tfu71.h), transcribed from Mesa
  * 26.2.2's v3dX(tfu) for V3D_VERSION >= 71

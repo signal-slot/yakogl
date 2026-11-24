@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2021-2022 Raspberry Pi Ltd */
 /*
  * V3D 7.1 (BCM2712, Raspberry Pi 5) texture formatting unit (TFU): the
  * register values of one TFU job, packed as Mesa 26.2.2's 7.1 fill does.

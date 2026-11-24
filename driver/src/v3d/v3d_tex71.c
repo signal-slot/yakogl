@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+/* SPDX-FileCopyrightText: 2014-2017 Broadcom */
 /*
  * V3D 7.1 texture records (v3d_tex71.h): the 7.1 translation unit. Its
  * packers are Mesa's generated 7.1 ones (v3d_cl.h at V3D_CL_VER 71); the
