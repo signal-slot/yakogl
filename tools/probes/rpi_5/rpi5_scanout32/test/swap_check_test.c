@@ -500,6 +500,94 @@ static void test_lact_restore(void)
 	CHECK(!swap_clear_ok(true, true, SWAP_UNCLOCKED, 672, 0xfff, 32, 20));
 }
 
+/* (v) Vblank landing (swap-lact-probe). */
+static struct swap_vblank vb_in(void)
+{
+	/* written right after the step at FRCNT 10, picked up at the next step,
+	 * 9 ms later, 1200 iterations of the tight loop at 120 ns a read */
+	struct swap_vblank v = {
+		.tried = true, .found = true, .swapped = true, .in_vblank = true,
+		.tight_pickup = true, .boundary = true, .timed = true,
+		.frcnt_write = 10, .frcnt_pickup = 11, .pickup_reads = 1200,
+		.dt_ns = 9000000u, .read_ns = 120,
+	};
+
+	return v;
+}
+
+static void test_vblank(void)
+{
+	struct swap_vblank v = vb_in(), seq[4];
+	enum swap_vb_reason why = SWAP_VB_NOT_TRIED;
+
+	/* in vblank: picked up at the next FRCNT step */
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED && swap_vb_steps(&v) == 1);
+	/* picked up before any step (LACT followed at once), no clock */
+	v = vb_in(); v.frcnt_pickup = 10; v.timed = false; v.dt_ns = 0;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED && swap_vb_steps(&v) == 0);
+	/* across the 6-bit wrap: 63 -> 0 is one step */
+	v = vb_in(); v.frcnt_write = 63; v.frcnt_pickup = 0;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED);
+	/* the boundary flag is a record only */
+	v = vb_in(); v.boundary = false;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED);
+
+	/* a missed frame: two steps to the pickup, also across the wrap */
+	v = vb_in(); v.frcnt_pickup = 12;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_MISSED_FRAME && swap_vb_steps(&v) == 2);
+	v = vb_in(); v.frcnt_write = 63; v.frcnt_pickup = 1;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_MISSED_FRAME);
+	/* one step by FRCNT, but 65 frames by the clock (an aliased count) */
+	v = vb_in(); v.dt_ns = 1083000000ull;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_MISSED_FRAME);
+	v = vb_in(); v.dt_ns = (uint64_t)SWAP_VB_DT_US_MAX * 1000u;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED); /* the bound itself is inside */
+	/* without a clock the time bound is not applied */
+	v = vb_in(); v.timed = false; v.dt_ns = 1083000000ull;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_LANDED);
+
+	/* a pickup timeout: the tight loop ran out, whatever FRCNT says */
+	v = vb_in(); v.tight_pickup = false; v.frcnt_pickup = 11;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_PICKUP_TIMEOUT);
+	v.frcnt_pickup = 30;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_PICKUP_TIMEOUT);
+
+	/* no step found: LPTRS not written */
+	v = vb_in(); v.found = false; v.swapped = false; v.tight_pickup = false;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_NO_VBLANK);
+	/* written late (outside the window) */
+	v = vb_in(); v.in_vblank = false;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_NOT_IN_VBLANK);
+	/* order: not in the vblank before the pickup */
+	v.tight_pickup = false;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_NOT_IN_VBLANK);
+	/* no wait made, or no record */
+	v = vb_in(); v.tried = false;
+	CHECK(swap_vblank_judge(&v) == SWAP_VB_NOT_TRIED);
+	CHECK(swap_vblank_judge(NULL) == SWAP_VB_NOT_TRIED);
+
+	/* the sequence: the first swap that did not land */
+	for (unsigned int i = 0; i < 4; i++)
+		seq[i] = vb_in();
+	CHECK(swap_vblank_first_miss(seq, 4, &why) == -1 && why == SWAP_VB_LANDED);
+	seq[2].frcnt_pickup = 13;
+	seq[3].tight_pickup = false;
+	CHECK(swap_vblank_first_miss(seq, 4, &why) == 2 && why == SWAP_VB_MISSED_FRAME);
+	CHECK(swap_vblank_first_miss(seq, 2, NULL) == -1); /* only the swaps made */
+	seq[2] = vb_in();
+	CHECK(swap_vblank_first_miss(seq, 4, &why) == 3 && why == SWAP_VB_PICKUP_TIMEOUT);
+	CHECK(swap_vblank_first_miss(NULL, 0, &why) == -1);
+	CHECK(swap_vblank_first_miss(NULL, 1, &why) == 0 && why == SWAP_VB_NOT_TRIED);
+
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_LANDED), "landed"));
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_NOT_TRIED), "not-tried"));
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_NO_VBLANK), "no-vblank"));
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_NOT_IN_VBLANK), "write-not-in-vblank"));
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_PICKUP_TIMEOUT), "pickup-timeout"));
+	CHECK(!strcmp(swap_vb_reason_name(SWAP_VB_MISSED_FRAME), "missed-frame"));
+	CHECK(!strcmp(swap_vb_reason_name((enum swap_vb_reason)99), "?"));
+}
+
 int main(void)
 {
 	test_judge();
@@ -513,6 +601,7 @@ int main(void)
 	test_lact_named();
 	test_lact_seq();
 	test_lact_restore();
+	test_vblank();
 	printf("swap_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;
 }

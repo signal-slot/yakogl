@@ -84,6 +84,28 @@
  * PASS with a non-empty set reads "byte-equal except hw words off <offs>".
  * A knob that does not parse refuses the run before anything is read or
  * written (the build refuses it first).
+ *
+ * Vblank-timed swap (swap-lact-probe, on swap-vblank-lib): every swap writes
+ * LPTRS with cfg.write_at = HVS6S_AT_VBLANK, just after an FRCNT step of
+ * channel 0's STATUS found by reads only (no pixel valve register is read
+ * or written for it; pv_wait_vblank, which writes PV_INTSTAT, is not used),
+ * and the DL.LACT pickup is timed by hvs6_dlist_swap.h's tight loop, with
+ * io.now_ns from the cycle counter. Each swap prints the library's two
+ * record lines
+ *   dlswap vblank ok|FAIL mode=vblank reads=N ... invblank=yes|no
+ *   dlswap lact-timing tight=ok|miss reads=K step=J ... boundary=yes|no
+ * (swap 1's inside hvs6s_run's record, the others after their at-write and
+ * after lines) and, after its 'u3 swap <k>' line, one summary line
+ *   u3 vblank <k>: landed=yes|no why=<reason> frcnt <w> -> <p> steps=<n>
+ *     invblank=yes|no tight=ok|miss pickup_reads=<n> pickup_us=<us|none>
+ *     read_us=<us|none> boundary=yes|no since_us=<us|none> yline <a> -> <b>
+ *     (yline record only)
+ * judged by swap_check.h's swap_vblank_judge: the write in the vblank, the
+ * pickup inside the tight loop, at most one FRCNT step from the write to
+ * the pickup and, with the clock, within SWAP_VB_DT_US_MAX. boundary= and
+ * YLINE are a record and decide nothing. The probe's own PASS and
+ * verdicts.sh's 'q4: yes' need every swap landed. A swap that found no
+ * FRCNT step does not write LPTRS (HVS6S_ERR_VBLANK) and stops the swaps.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/cache.h>
@@ -239,6 +261,13 @@ static void io_wait(void *ctx)
 	k_busy_wait(POLL_US);
 }
 
+/* The tight loop's clock (swap-vblank-lib): the system cycle counter in ns. */
+static uint64_t io_now_ns(void *ctx)
+{
+	ARG_UNUSED(ctx);
+	return k_cyc_to_ns_floor64(k_cycle_get_64());
+}
+
 static const struct hvs6s_io io = {
 	.read32 = io_read32,
 	.write32 = io_write32,
@@ -246,6 +275,7 @@ static const struct hvs6s_io io = {
 	.barrier = io_barrier,
 	.wait = io_wait,
 	.ctx = NULL,
+	.now_ns = io_now_ns,
 };
 
 static void emit_line(void *ctx, const char *text)
@@ -329,6 +359,7 @@ static uint64_t slot_read(uint32_t start, const struct hvs6w_plane *plane, unsig
 static struct hvs6s_snap plansnap, fwsnap;
 static struct swap_step steps[SWAPS];
 static bool pickups[SWAPS]; /* DL.LACT reached swap k's head (report.lact_pickup) */
+static struct swap_vblank vbs[SWAPS]; /* swap k's vblank record (swap_vblank_judge) */
 static struct swap_slot slots[SWAPS];
 static struct swap_diffs rdiffs;
 static uint32_t fw_rb[HVS6S_FW_MAX];
@@ -382,6 +413,44 @@ static void fill_step(struct swap_step *st, struct swap_slot *sl, unsigned int k
 	}
 }
 
+/* Swap k's vblank record for swap_check.h, from hvs6s_swap's report. */
+static void to_swap_vblank(const struct hvs6s_report *r, struct swap_vblank *v)
+{
+	*v = (struct swap_vblank){
+		.tried = r->vb_tried,
+		.found = r->vb_found,
+		.swapped = r->swapped,
+		.in_vblank = r->write_in_vblank,
+		.tight_pickup = r->tight_pickup,
+		.boundary = r->lact_boundary,
+		.timed = r->timed,
+		.frcnt_write = r->write_frcnt,
+		.frcnt_pickup = r->pickup_frcnt,
+		.pickup_reads = r->tight_reads,
+		.dt_ns = r->lact_dt_ns,
+		.read_ns = r->read_ns,
+	};
+}
+
+/* The u3 vblank line of swap k (verdicts.sh's header). */
+static void vblank_line(unsigned int k, const struct swap_vblank *v, const struct hvs6s_report *r)
+{
+	enum swap_vb_reason why = swap_vblank_judge(v);
+	char dt[32], rd[32], since[32];
+
+	printk("u3 vblank %u: landed=%s why=%s frcnt %u -> %u steps=%u invblank=%s tight=%s "
+	       "pickup_reads=%u pickup_us=%s read_us=%s boundary=%s since_us=%s yline %u -> %u "
+	       "(yline record only)\n",
+	       k + 1u, why == SWAP_VB_LANDED ? "yes" : "no", swap_vb_reason_name(why),
+	       v->frcnt_write, v->frcnt_pickup, swap_vb_steps(v), v->in_vblank ? "yes" : "no",
+	       v->tight_pickup ? "ok" : "miss", v->pickup_reads,
+	       hvs6s_us_text(v->timed && v->tight_pickup, v->dt_ns, dt, sizeof(dt)),
+	       hvs6s_us_text(v->timed && v->pickup_reads, v->read_ns, rd, sizeof(rd)),
+	       v->boundary ? "yes" : "no",
+	       hvs6s_us_text(v->timed && v->swapped, r->vb_since_ns, since, sizeof(since)),
+	       r->write_yline, r->pickup_yline);
+}
+
 /* The dlswap summary, DL.LACT pickup and u3 swap lines of swap k (and u3
  * named after swap 1); returns the judge's reason. Swap 1's pickup line is
  * in hvs6s_run's record (hvs6s_lines), so the k-th 'dlswap lact-pickup' line
@@ -407,6 +476,8 @@ static enum swap_reason swap_lines(unsigned int k, const struct swap_step *st,
 	       swap_frcnt(st->sample.status_before), swap_frcnt(st->sample.status_after),
 	       swap_reason_name(why), slot_word, (unsigned long long)st->plane_addr,
 	       st->sample.fw_start, st->sample.fw_words, st->sample.our_words);
+	to_swap_vblank(r, &vbs[k]);
+	vblank_line(k, &vbs[k], r);
 	if (k == 0) {
 		*named = swap_named(st->sample.ptr_after, slot_word, r->lact_pickup);
 		printk("u3 named: %s LPTRS 0x%08x after swap 1, our list at word %u, "
@@ -602,6 +673,10 @@ int main(void)
 	cfg.max_polls = MAX_POLLS;
 	cfg.lact_polls = 0; /* the pickup's poll bound: max_polls */
 	cfg.lact_frames = LACT_FRAMES;
+	/* LPTRS just after an FRCNT step found by reads, the pickup timed by the
+	 * tight loop; the read bounds and the vblank window are the library's
+	 * defaults (HVS6S_VBLANK_READS_DEF, HVS6S_TIGHT_READS_DEF, 667 us) */
+	cfg.write_at = HVS6S_AT_VBLANK;
 	hvs6s_report_init(&plan);
 	{
 		int hrc = hvs6s_hw_parse(RPI5_SCANOUT32_HW_WORDS, &cfg.hw);
@@ -875,6 +950,14 @@ int main(void)
 			e = hvs6s_swap(&io, &cfg, slot[b], &r);
 			hvs6s_regs_line(&emit, "at-write", &r.at_write);
 			hvs6s_regs_line(&emit, "after", &r.after);
+			if (r.vb_tried) {
+				/* the vblank wait and, once LPTRS was written, the tight
+				 * pickup loop, as hvs6s_lines prints them for swap 1 */
+				hvs6s_vblank_line(&emit, &r);
+				if (r.swapped) {
+					hvs6s_timing_line(&emit, &r);
+				}
+			}
 			if (r.ldiff.total != 0) {
 				/* hvs6s_swap's own read-back, before LPTRS */
 				(void)hvs6s_diff_lines(&emit, "readback", &r.ldiff, &cfg.hw);
@@ -922,6 +1005,24 @@ int main(void)
 					 swap_seq_reason_name(v.reason), swap_reason_name(v.swap));
 			}
 			fail = failbuf;
+		}
+		{
+			enum swap_vb_reason vw = SWAP_VB_LANDED;
+			int vi = swap_vblank_first_miss(vbs, nsteps, &vw);
+
+			if (vi < 0) {
+				printk("rpi5_scanout32: S8 vblank ok: every swap written in the "
+				       "vblank and picked up within one frame step\n");
+			} else {
+				printk("rpi5_scanout32: S8 vblank FAIL: swap %d %s\n", vi + 1,
+				       swap_vb_reason_name(vw));
+			}
+			if (vi >= 0 && fail == NULL) {
+				snprintk(failbuf, sizeof(failbuf),
+					 "swap %d did not land in vblank (%s)", vi + 1,
+					 swap_vb_reason_name(vw));
+				fail = failbuf;
+			}
 		}
 		if (nsteps < SWAPS && fail == NULL) {
 			snprintk(failbuf, sizeof(failbuf), "%u of %u swaps made (%s)", nsteps, SWAPS,
@@ -1104,7 +1205,8 @@ int main(void)
 		fail = hvs6s_err_name(first_err);
 	}
 	if (fail == NULL) {
-		printk("rpi5_scanout32: PASS (%u swaps alternating A/B, list at word %u, DL.LACT "
+		printk("rpi5_scanout32: PASS (%u swaps alternating A/B, list at word %u, each "
+		       "written in the vblank and picked up within one frame step, DL.LACT "
 		       "picked up each and came back, FRCNT advanced, buffers read back, firmware "
 		       "list restored byte-equal%s%s)\n",
 		       nsteps, pair, shw.n ? " except hw words off " : "", shw.n ? hwoffs : "");

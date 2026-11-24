@@ -8,7 +8,9 @@
 # "swap_check_selftest: N checks, 0 failed"; exit 0. No cc: a gap, exit 77.
 # Covers the DL.LACT pickup helpers too (lact-probe-a): swap_named,
 # swap_seq_judge_lact, swap_restore_lact (the swap-1-only path),
-# swap_restore_pass and swap_clear_ok.
+# swap_restore_pass and swap_clear_ok; and the vblank landing (swap-lact-probe):
+# swap_vblank_judge and swap_vblank_first_miss (in vblank, a missed frame, a
+# pickup timeout, no vblank found, a write outside it).
 cd "$(dirname "$0")/../../../.." || exit 1
 cc=${CC:-cc}
 out=build/rpi5_scanout32

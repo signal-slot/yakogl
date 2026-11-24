@@ -641,4 +641,115 @@ static inline bool swap_restore_pass(bool restore_ok, bool words_pass, bool clea
 	return restore_ok && words_pass && cleared && lact_ok && pickups_ok;
 }
 
+/* (v) Vblank landing (swap-lact-probe, on swap-vblank-lib). hvs6s_swap writes
+ * LPTRS just after an FRCNT step found by reads (cfg.write_at
+ * HVS6S_AT_VBLANK) and times the DL.LACT pickup with a tight loop. A swap
+ * landed in vblank when
+ *   - the vblank wait was made and found its FRCNT step (else NO_VBLANK:
+ *     HVS6S_ERR_VBLANK, LPTRS not written; NOT_TRIED for a swap made
+ *     without the wait),
+ *   - the write was in the vblank (report.write_in_vblank: right after the
+ *     step and, with a clock, within the vblank window; else NOT_IN_VBLANK),
+ *   - DL.LACT reached the new head inside the tight loop (tight_pickup; else
+ *     PICKUP_TIMEOUT: the loop ran out, whatever the slower poll found later),
+ *   - FRCNT stepped at most SWAP_VB_MAX_STEPS times from the write to the
+ *     pickup (6-bit, wrap aware) and, with a clock, the pickup came within
+ *     SWAP_VB_DT_US_MAX of the write (else MISSED_FRAME; the time bound also
+ *     catches a 6-bit FRCNT difference that aliased over 64 frames).
+ * The tight loop's frame-boundary flag (report.lact_boundary) and YLINE are
+ * printed as a record and decide nothing: the boundary depends on the
+ * assumed 667 us vblank and on where in the frame LACT changes, which the
+ * board has not shown yet; YLINE's range and direction are unproven. */
+#define SWAP_VB_MAX_STEPS 1u
+/* Two frames at 50 Hz (and so more than two at the firmware's 60 Hz): a
+ * write just after a step and a pickup at the next one stay well inside. */
+#define SWAP_VB_DT_US_MAX 40000u
+
+enum swap_vb_reason {
+	SWAP_VB_LANDED = 0,      /* in vblank, picked up within one frame step */
+	SWAP_VB_NOT_TRIED,       /* no vblank wait was made (HVS6S_AT_ONCE) */
+	SWAP_VB_NO_VBLANK,       /* no FRCNT step within the read bound; LPTRS not written */
+	SWAP_VB_NOT_IN_VBLANK,   /* the write was not right after the step */
+	SWAP_VB_PICKUP_TIMEOUT,  /* the tight loop ran out before DL.LACT reached the head */
+	SWAP_VB_MISSED_FRAME,    /* more than SWAP_VB_MAX_STEPS frames to the pickup */
+};
+
+/* One swap's vblank record, copied from hvs6s_swap's report. */
+struct swap_vblank {
+	bool tried;            /* report.vb_tried */
+	bool found;            /* report.vb_found */
+	bool swapped;          /* report.swapped: LPTRS was written */
+	bool in_vblank;        /* report.write_in_vblank */
+	bool tight_pickup;     /* report.tight_pickup */
+	bool boundary;         /* report.lact_boundary (record only) */
+	bool timed;            /* report.timed: the _ns fields are set */
+	uint32_t frcnt_write;  /* report.write_frcnt */
+	uint32_t frcnt_pickup; /* report.pickup_frcnt (at the pickup, or the last iteration) */
+	uint32_t pickup_reads; /* report.tight_reads (iterations, the pickup's index + 1) */
+	uint64_t dt_ns;        /* report.lact_dt_ns, write to pickup */
+	uint32_t read_ns;      /* report.read_ns, one register read in the tight loop */
+};
+
+static inline const char *swap_vb_reason_name(enum swap_vb_reason r)
+{
+	switch (r) {
+	case SWAP_VB_LANDED:
+		return "landed";
+	case SWAP_VB_NOT_TRIED:
+		return "not-tried";
+	case SWAP_VB_NO_VBLANK:
+		return "no-vblank";
+	case SWAP_VB_NOT_IN_VBLANK:
+		return "write-not-in-vblank";
+	case SWAP_VB_PICKUP_TIMEOUT:
+		return "pickup-timeout";
+	case SWAP_VB_MISSED_FRAME:
+		return "missed-frame";
+	}
+	return "?";
+}
+
+/* FRCNT steps from the write to the pickup, 6-bit. */
+static inline uint32_t swap_vb_steps(const struct swap_vblank *v)
+{
+	return (v->frcnt_pickup - v->frcnt_write) & SWAP_FRCNT_MASK;
+}
+
+/* In the order of the header: tried, found, in the vblank, picked up in the
+ * tight loop, within one frame step. */
+static inline enum swap_vb_reason swap_vblank_judge(const struct swap_vblank *v)
+{
+	if (!v || !v->tried)
+		return SWAP_VB_NOT_TRIED;
+	if (!v->found || !v->swapped)
+		return SWAP_VB_NO_VBLANK;
+	if (!v->in_vblank)
+		return SWAP_VB_NOT_IN_VBLANK;
+	if (!v->tight_pickup)
+		return SWAP_VB_PICKUP_TIMEOUT;
+	if (swap_vb_steps(v) > SWAP_VB_MAX_STEPS ||
+	    (v->timed && v->dt_ns > (uint64_t)SWAP_VB_DT_US_MAX * 1000u))
+		return SWAP_VB_MISSED_FRAME;
+	return SWAP_VB_LANDED;
+}
+
+/* The first of the n swaps made that did not land (its index), -1 when all
+ * landed (n 0: -1); *why its reason (why may be NULL). */
+static inline int swap_vblank_first_miss(const struct swap_vblank *v, unsigned int n,
+					 enum swap_vb_reason *why)
+{
+	for (unsigned int i = 0; i < n; i++) {
+		enum swap_vb_reason r = swap_vblank_judge(v ? &v[i] : NULL);
+
+		if (r != SWAP_VB_LANDED) {
+			if (why)
+				*why = r;
+			return (int)i;
+		}
+	}
+	if (why)
+		*why = SWAP_VB_LANDED;
+	return -1;
+}
+
 #endif /* RPI5_SCANOUT32_SWAP_CHECK_H */
