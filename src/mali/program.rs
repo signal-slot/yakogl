@@ -17,7 +17,7 @@ use super::genxml::v10::{ShaderRegisterAllocation, ShaderStage};
 use crate::shaderc::online::mali::fau::{FauWord, FAU_MAX_WORDS};
 use crate::shaderc::online::mali::select::MAX_UBO_ROWS;
 use crate::shaderc::online::mali::{bir, MaliShader, Secondary, Section};
-use crate::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
+use crate::shaderc::{ShcShader, ShcUniform, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_UNIFORM_NO_BLOCK};
 
 /// The record names another stage than the one it is used as, or its code
 /// is not the record's (a compiler or caller defect).
@@ -197,6 +197,58 @@ pub unsafe fn code_bytes(sh: &ShcShader) -> Result<&[u8], FrameError> {
     }
     // SAFETY: the caller's contract.
     Ok(unsafe { core::slice::from_raw_parts(sh.usc.cast::<u8>(), 4 * sh.usc_dw as usize) })
+}
+
+/// Room for a stage's uniform words as the GL core hands them: its block
+/// (`MAX_UNIFORM_DWORDS`) and a blend variant's constants.
+pub const UNIFORM_WORDS_MAX: usize = crate::gl::context::MAX_UNIFORM_DWORDS + crate::gl::context::BLEND_CONSTS_DWORDS;
+
+/// A stage's uniform words as Mesa's panfrost uploads them: the GL core
+/// stores a `bool` as 0 or 1 (every back end reads that), Mesa 26.2.1 stores
+/// a true one as `~0` and the compiled shader relies on it (a mediump
+/// compare is `ICMP_OR.v2u16.eq.m1 r, mask.h00, u.w.h00`, a 16-bit mask
+/// against the word's low half; docs/notes/mali-deqp-boolpix.md, cause BW).
+/// Every word of a `bool`, `bvecN`, array or struct member of them (the
+/// table's rows are the leaves) that is not 0 becomes `0xffffffff`, in
+/// `buf`; the other words, and the padding words (0), are as they were.
+/// Returns `words` itself when the table names no bool or `words` does not
+/// fit `buf`.
+pub fn mali_uniform_words<'a>(
+    table: &[ShcUniform],
+    words: &'a [u32],
+    buf: &'a mut [u32; UNIFORM_WORDS_MAX],
+) -> &'a [u32] {
+    use crate::gl::consts::{GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4};
+    let is_bool = |u: &ShcUniform| {
+        matches!(u32::from(u.gl_type), GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4)
+            && u.dword_off != SHC_UNIFORM_NO_BLOCK
+    };
+    if words.len() > buf.len() || !table.iter().any(is_bool) {
+        return words;
+    }
+    let out = &mut buf[..words.len()];
+    out.copy_from_slice(words);
+    for u in table.iter().filter(|u| is_bool(u)) {
+        let at = usize::from(u.dword_off);
+        let end = (at + usize::from(u.dwords.max(1))).min(out.len());
+        if at < end {
+            for w in &mut out[at..end] {
+                if *w != 0 {
+                    *w = !0;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The uniform table of a stage's shader, or none for a null record.
+///
+/// # Safety
+/// `sh` is null or a live shader record.
+pub unsafe fn uniform_table<'a>(sh: *const ShcShader) -> &'a [ShcUniform] {
+    // SAFETY: the caller's contract.
+    unsafe { sh.as_ref() }.map_or(&[], |s| s.uniform_table())
 }
 
 #[cfg(test)]

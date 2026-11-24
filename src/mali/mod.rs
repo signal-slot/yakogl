@@ -33,6 +33,8 @@ mod blend_choice_tests;
 #[cfg(test)]
 mod frame_blend_tests;
 #[cfg(test)]
+mod frame_boolunif_tests;
+#[cfg(test)]
 mod frame_cull_tests;
 #[cfg(test)]
 mod frame_depthonly_tests;

@@ -1857,6 +1857,15 @@ fn add_gl_draw(
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, vs.code, vs.meta)?,
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, fs.code, fs.meta)?,
     );
+    /* a true bool is ~0 in Mesa's upload (cause BW, mali-deqp-boolpix.md) */
+    let mut vs_buf = [0u32; program::UNIFORM_WORDS_MAX];
+    let mut fs_buf = [0u32; program::UNIFORM_WORDS_MAX];
+    // SAFETY: the GL core's contract: null or the program's live records.
+    let (vs_table, fs_table) = unsafe { (program::uniform_table(d.vs), program::uniform_table(d.fs)) };
+    let vs_words = uniform_words(d.vs_uniform_cpu, d.vs_uniform_dwords);
+    let fs_words = uniform_words(d.fs_uniform_cpu, d.fs_uniform_dwords);
+    let vs_uniforms = program::mali_uniform_words(vs_table, vs_words, &mut vs_buf);
+    let fs_uniforms = program::mali_uniform_words(fs_table, fs_words, &mut fs_buf);
     let draw = frame::DrawCall {
         vs: &programs.0,
         fs: &programs.1,
@@ -1881,8 +1890,8 @@ fn add_gl_draw(
         blend: d.blend.then(|| blending(d)).transpose()?,
         polygon_offset: d.polygon_offset.then_some([d.polygon_offset_factor, d.polygon_offset_units]),
         sample_mask: d.sample_mask,
-        vs_uniforms: uniform_words(d.vs_uniform_cpu, d.vs_uniform_dwords),
-        fs_uniforms: uniform_words(d.fs_uniform_cpu, d.fs_uniform_dwords),
+        vs_uniforms,
+        fs_uniforms,
         zs: depth_stencil_state(d),
         /* a frame with no colour surface writes no colour, whatever the
          * mask (the GL core already sends 0); a GL format without alpha
