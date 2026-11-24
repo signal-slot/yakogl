@@ -7,8 +7,8 @@
 # merge was cancelled by the next one before it ended and only held a
 # runner the pull requests needed (the owner, 2026-10-25: main once a day).
 #
-# A pull request runs the rows its diff reaches: `check.sh --changed
-# <merge base> --no-clippy`, where the merge base is that of the base branch
+# A pull request runs the rows its diff reaches: `check.sh --no-clippy
+# --changed <merge base>`, where the merge base is that of the base branch
 # and the commit checked out (the merge of the branch into the base branch,
 # refs/pull/N/merge). A pull request's run leaves out every clippy row (the
 # owner, 2026-11-13: clippy is a second type-check build of each feature set,
@@ -355,7 +355,7 @@ jobs:
           exit $rc
           EOS
           chmod +x "$RUNNER_TEMP/gate-run.sh"
-      - name: tools/check.sh --changed <merge base> --no-clippy (a pull request, the rows its diff reaches, clippy left to the nightly)
+      - name: tools/check.sh --no-clippy --changed <merge base> (a pull request, the rows its diff reaches, clippy left to the nightly)
         if: steps.seen.outputs.run == 'true' && github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
