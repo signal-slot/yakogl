@@ -40,6 +40,7 @@
 #include "../rpi5_scanout/hvs6_dlist_swap.h"
 #include "../rpi5_scanout/hvs6_dlist_write.h"
 #include "../rpi5_scanout/hvs6_fmt.h"
+#include "../rpi5_scanout/hvs6_vblank.h"
 #include "../rpi5_scanout/infoframe.h"
 #include "../rpi5_scanout/pan.h"
 #include "../rpi5_scanout/pattern.h"
@@ -73,6 +74,7 @@
 #include "../rpi5_scanout/hvs6_dlist_swap.h"
 #include "../rpi5_scanout/hvs6_dlist_write.h"
 #include "../rpi5_scanout/hvs6_fmt.h"
+#include "../rpi5_scanout/hvs6_vblank.h"
 #include "../rpi5_scanout/infoframe.h"
 #include "../rpi5_scanout/pan.h"
 #include "../rpi5_scanout/pattern.h"
@@ -109,6 +111,7 @@ int main(void)
 	touched = (intptr_t)&hvs6s_run; /* hvs6_dlist_swap.h */
 	touched = (intptr_t)&hvs6w_bpp; /* hvs6_dlist_write.h */
 	touched = (intptr_t)&hvs6_fmt_lookup; /* hvs6_fmt.h */
+	touched = (intptr_t)&hvs6v_wait_frame; /* hvs6_vblank.h */
 	touched = (intptr_t)&avi_infoframe_build; /* infoframe.h */
 	touched = (intptr_t)&pan_pointer; /* pan.h */
 	touched = (intptr_t)&pattern_hash; /* pattern.h */
