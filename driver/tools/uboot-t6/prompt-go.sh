@@ -10,6 +10,7 @@
 #   BOARD_HOST=root@<t6> driver/tools/uboot-t6/prompt-go.sh <zephyr.bin> <probe>          # dry run
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=<tty> \
 #     driver/tools/uboot-t6/prompt-go.sh <zephyr.bin> <probe> --go                      # the run
+#   ... T6_UART=rfc2217://<host>:<port> ... --go     # the UART on a network serial adapter
 #
 # probe: t6_hello, t6_gpu, t6_mmu, t6_fw or t6_submit (t6-verdict.sh's
 # table for the record).
@@ -50,7 +51,9 @@
 # started, no Linux login; 11 the verdict FAIL, Armbian back), 1 when the
 # board did not come back into Armbian, 2 usage or a missing tool, 3
 # refused before anything was changed (the board was not rebooted: 3 has
-# only this meaning here).
+# only this meaning here). With T6_UART=rfc2217://<host>:<port>: 40 when
+# t6-uart-rfc2217.py could not open the session or set the line (this
+# script did not start), 41 when that tool failed during the run.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -88,6 +91,16 @@ done
 case "$PROBE" in t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit) ;; *) die "probe $PROBE: not one of t6-verdict.sh's" ;; esac
 [ -f "$IMG" ] || die "$IMG: no such file"
 [ -n "${BOARD_HOST:-}" ] || die "set BOARD_HOST=root@<the T6>"
+# T6_UART=rfc2217://<host>:<port> (the debug UART on a network serial
+# adapter): --go runs again through ../kexec-zephyr/t6-uart-rfc2217.py,
+# which opens the session, sets 1500000 8N1 (the adapter's answers must say
+# so, else exit 40 and nothing is done) and hands this script a pty as
+# T6_UART (and T6_UART_RFC2217=1). Every check of T6_UART below then runs on
+# the pty. The address is never printed or recorded.
+if [[ ${T6_UART:-} == rfc2217://* ]] && [ "$GO" = 1 ]; then
+	[ -z "${T6_UART_RFC2217:-}" ] || die "T6_UART is still an rfc2217:// address inside t6-uart-rfc2217.py"
+	exec python3 -I "$K/t6-uart-rfc2217.py" run -- bash "$HERE/$(basename "$0")" "$@"
+fi
 # shellcheck disable=SC2206  # deliberately word-split
 SSH_OPTS=(${BOARD_SSH_OPTS:-})
 for t in ssh timeout python3 flock fuser stty sha256sum od strings; do
@@ -154,6 +167,7 @@ if [ "$GO" != 1 ]; then
 	echo "  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the"
 	echo "  commands above, go, record the image's output and its verdict ($PROBE, T6_ROUTE=uboot),"
 	echo "  then wait for Armbian with a new boot_id."
+	uart_dry
 	[ -z "$(fact gpu_users)" ] || echo "--go would REFUSE now: processes hold the GPU device: $(fact gpu_users)"
 	if [ -n "$(fact who_remote)" ] && [ "${T6_ALLOW_SESSIONS:-0}" != 1 ]; then
 		echo "--go would REFUSE now: remote sessions on the board: $(fact who_remote)"
@@ -210,6 +224,7 @@ rec "prompt-go.py sha256 $(sha256sum "$PY" | cut -d' ' -f1); $selftest"
 rec "image $IMG as $STAGE_DIR/$NAME, $size bytes, crc32 $crc, sha256 $sha: $markers"
 rec "probe $PROBE; the image ends by $image_wait s after go at the latest"
 rec "board boot_id $old_boot, up $(fresh_fact uptime) s; hand at the power switch: $T6_HAND"
+uart_record
 
 python3 -I "$PY" run "$T6_UART" "$REC" "$NAME" "$size" "$crc" "$PROBE" "$image_wait" >"$tmp/py.out" 2>&1 &
 py_pid=$!
