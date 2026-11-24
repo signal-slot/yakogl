@@ -11,8 +11,8 @@ use super::cmd::GcCmd;
 
 /* GPU limits of the i.MX8MP's GC7000UL, from the hardware database entry
  * (model 0x7000, revision 0x6204, product 0x70003). */
-pub const GC_MAX_VERTEX_ELEMENTS: usize = 16;
-pub const GC_MAX_VARYINGS: usize = 16;
+pub const GC_MAX_VERTEX_ELEMENTS: usize = super::profile::ACTIVE.streams as usize;
+pub const GC_MAX_VARYINGS: usize = super::profile::ACTIVE.varyings as usize;
 /// Per stage; the two stages share one array.
 pub const GC_MAX_SAMPLERS: usize = 16;
 /// The constant register file in dwords: 320 vec4 registers
