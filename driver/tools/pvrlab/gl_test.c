@@ -535,6 +535,11 @@
  *               ramp drawn, the surface read by the hook gc_debug_depth_dump
  *               and decoded (PERF pages 0xc0..0xcb). Modes 1 and 3 run, 0 and
  *               2 SKIP by name. As 246 for GPUs and options. Opt-in, by number
+ * 249 linewidth  the drawn width of an axis-aligned line per requested
+ *               glLineWidth (1..16): one horizontal and one vertical GL_LINES
+ *               segment each, the covered run read back and printed as
+ *               "gl_test: linewidth: req W h H v V". A measurement, PASS when
+ *               it ran. Every GPU. Opt-in, by number
  * 248 tearbars  moving bars and a frame counter at the window size (1024x600
  *               unless -DGL_TEST_TEAR_W/_H), 600 frames (-DGL_TEST_TEAR_FRAMES),
  *               eglSwapBuffers at the default interval: eight black bars on
@@ -8682,7 +8687,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout", [248] = "tearbars",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout", [248] = "tearbars", [249] = "linewidth",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -13857,6 +13862,89 @@ static int case_lines(void)
 	}
 	fit = line_fit(0, lw[0][0], lw[0][2], cov[0]) | line_fit(1, lw[1][0], lw[1][2], cov[1]) << 3;
 	return expect_int("lines fit (0-2 M0/M1/M2 horizontal, 3-5 diagonal)", (long)fit, 0x9) ? 0 : -1;
+}
+
+/* ---- case 249: the drawn width of an axis-aligned line per glLineWidth ------
+ *
+ * A measurement, not a check (Q11, docs/notes/stm32mp257f-dk-p9.md section 4):
+ * what a GPU draws for a programmed width above 1, the Vivante
+ * WIDELINE_TRIANGLE_EMU core included, the widths above the advertised
+ * GL_ALIASED_LINE_WIDTH_RANGE too. For each requested width one horizontal and
+ * one vertical GL_LINES segment is drawn solid red on a cleared frame, centred
+ * on a pixel centre, and the column across the horizontal line and the row
+ * across the vertical one are read back. The line printed is
+ *   gl_test: linewidth: req W h H v V
+ * with H and V the longest run of covered pixels in that column and row. PASS
+ * when it ran and read back; a width mismatch is printed, never failed.
+ * Opt-in, by number (not in SET_ORDER).
+ * ------------------------------------------------------------------------- */
+static int lw_run(bool vertical)
+{
+	int best = 0, run = 0;
+
+	for (int i = 0; i < (int)TW; i++) {
+		uint32_t px = vertical ? s_px[(TH / 2) * TW + (uint32_t)i] : s_px[(uint32_t)i * TW + TW / 2];
+
+		run = (px & 0xff) > 64 ? run + 1 : 0;
+		if (run > best)
+			best = run;
+	}
+	return best;
+}
+
+static int case_linewidth(void)
+{
+	static const float widths[] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 8.0f, 16.0f };
+	/* centre on a pixel centre; the ends stay clear of the frame edge */
+	const float c = ((float)(TW / 2) + 0.5f) / (float)TW * 2.0f - 1.0f;
+	const float a = 4.0f / (float)TW * 2.0f - 1.0f, b = 60.0f / (float)TW * 2.0f - 1.0f;
+	GLfloat range[2] = { 0.0f, 0.0f };
+	GLuint prog;
+
+	glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, range);
+	pr_info("gl_test: linewidth: GL_ALIASED_LINE_WIDTH_RANGE %.2f %.2f\n", (double)range[0], (double)range[1]);
+	prog = link_program(gl_test_passthrough_vs_src, gl_test_interp_fs_src);
+	if (!prog)
+		return -1;
+	glUseProgram(prog);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glDisable(GL_BLEND);
+	glViewport(0, 0, TW, TH);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	for (unsigned i = 0; i < sizeof(widths) / sizeof(widths[0]); i++) {
+		int ext[2];
+
+		for (int vert = 0; vert < 2; vert++) {
+			struct pc_vertex v[2];
+
+			for (int e = 0; e < 2; e++) {
+				float t = e ? b : a;
+
+				v[e].pos[0] = vert ? c : t;
+				v[e].pos[1] = vert ? t : c;
+				v[e].pos[2] = 0.0f;
+				v[e].pos[3] = 1.0f;
+				v[e].color[0] = 1.0f;
+				v[e].color[1] = 0.0f;
+				v[e].color[2] = 0.0f;
+				v[e].color[3] = 1.0f;
+			}
+			upload_vbo(v, sizeof(v));
+			glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(struct pc_vertex), (const void *)0);
+			glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(struct pc_vertex), (const void *)16);
+			glLineWidth(widths[i]);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDrawArrays(GL_LINES, 0, 2);
+			glFinish();
+			read_topdown();
+			ext[vert] = lw_run(vert);
+		}
+		pr_info("gl_test: linewidth: req %d h %d v %d%s\n", (int)widths[i], ext[0], ext[1],
+			(double)widths[i] > (double)range[1] ? " (above the advertised range)" : "");
+	}
+	glLineWidth(1.0f);
+	return check_gl_error("linewidth") ? 0 : -1;
 }
 
 /* ---- case 164: deleting the buffer an attribute reads (review R-24) --------
@@ -24363,6 +24451,7 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		if (rc == -3)
 			return -3; /* skipped by name: not the GC7000 with the knobs and CONFIG_GL_TEST_GC_TS_PROBE */
 		break;
+	case 249: rc = case_linewidth(); break;
 	case 248:
 		rc = case_tearbars();
 		if (rc == -3)
