@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Check that the AM62P dEQP-GLES3 not-pass TSV is one whole-tree run.
 
-  check-gles3-notpass-run.py [--ref REF] [--repo DIR] NOTPASS.tsv TREE.txt
+  check-gles3-notpass-run.py [--ref REF] [--repo DIR] [--no-noresult] NOTPASS.tsv TREE.txt
 
 c1  The header names the build per row range ('# rows AA-BB: build X, run Y',
     or the one-line 'build X, run Y:' form, which covers every row), the ranges
@@ -93,12 +93,14 @@ def check_c1(head, nrows, ref, repo):
     return out
 
 
-def check_c2(rows):
+def check_c2(rows, no_noresult=False):
     out = []
     for k, p in rows:
         outcome = p[0].strip()
         if outcome not in NP.COUNTED[1:]:
             out.append("c2: line %d: %s outcome %r" % (k, "empty" if not outcome else "bad", p[0]))
+        if no_noresult and outcome == "NoResult":
+            out.append("c2: line %d: NoResult: %s" % (k, p[1] if len(p) > 1 else "?"))
         if len(p) < 4 or not p[3].strip():
             out.append("c2: line %d: empty cause family: %s" % (k, p[1] if len(p) > 1 else "?"))
     return out
@@ -108,6 +110,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("tsv")
     ap.add_argument("tree")
+    ap.add_argument("--no-noresult", action="store_true",
+                    help="a NoResult row fails c2 (the whole-tree acceptance)")
     ap.add_argument("--ref", default="origin/main")
     ap.add_argument("--repo", default=os.path.join(HERE, "..", ".."),
                     help="the git repository (default: this one)")
@@ -127,7 +131,7 @@ def main():
             print(p)
         print("c2: %s has no cause-family column yet (run gles3-triage.py to add it)" % a.tsv)
         return 2
-    problems += check_c2(rows)
+    problems += check_c2(rows, a.no_noresult)
     for p in problems:
         print(p)
     if not problems:
