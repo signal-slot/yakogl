@@ -558,6 +558,43 @@ TRI=$(bash "$V" triangle "$D/triangle-cold-pass.uart" | grep -c '^ok ' || true)
 TRIA=$(bash "$V" triangle "$D/triangle-adopt-pass.uart" | grep -c '^ok ' || true)
 check triangle-cold-pass 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$D/triangle-cold-pass.uart"
 check triangle-adopt-pass 0 'VERDICT triangle PASS' "$TRIA 0 0" triangle "$D/triangle-adopt-pass.uart"
+# the U-Boot route (T6_ROUTE=uboot): the chain's VIDEO line may read HPD 0,
+# since a display powered from the board's 5 V has not raised hot-plug when
+# the chain ends; the HPD 1 after the hold stays required. as_uboot <in>
+# <out> makes a go record of a kexec one: T6:A and T6:G as the predicted go
+# record of t6_hello has them, no GICv3 EOImode line.
+as_uboot() {
+	local a g
+	a=$(grep '^T6:A EL2 ' "$D/t6_hello-uboot-pass.uart")
+	g=$(grep '^T6:G go: ' "$D/t6_hello-uboot-pass.uart")
+	awk -v a="$a" -v g="$g" '/^T6:A EL2 /{print a; print g; next} /^t6: GICv3 CPU interface: ICC_CTLR_EL1 /{next} {print}' "$1" >"$2"
+}
+as_uboot "$WORK/c1080h90.log" "$WORK/u1080h90.log"
+check t6_cold-uboot-1920x1080-hold90 0 'VERDICT t6_cold PASS' "$((COLD + 7)) 0 0" t6_cold "$WORK/u1080h90.log" T6_ROUTE=uboot
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$WORK/u1080h90.log" >"$WORK/uhpd0.log"
+check t6_cold-uboot-video-hpd0 0 'VERDICT t6_cold PASS' "$((COLD + 7)) 0 0" t6_cold "$WORK/uhpd0.log" T6_ROUTE=uboot
+# the same chain line on the kexec route differs (and so do the go lines)
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$WORK/c1080h90.log" >"$WORK/khpd0.log"
+check t6_cold-kexec-video-hpd0 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/khpd0.log"
+check t6_cold-uboot-video-hpd0-as-kexec 1 "VERDICT t6_cold FAIL (3 of $((COLD + 7)))" "$((COLD + 5)) 1 2" t6_cold "$WORK/uhpd0.log"
+# a value that is not a bit differs on both routes
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 2/' "$WORK/u1080h90.log" >"$WORK/uhpd2.log"
+check t6_cold-uboot-video-hpd2 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/uhpd2.log" T6_ROUTE=uboot
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 2/' "$WORK/c1080h90.log" >"$WORK/khpd2.log"
+check t6_cold-kexec-video-hpd2 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/khpd2.log"
+# HPD 0 after the hold differs on the U-Boot route too
+sed '/^t6_cold: HPD 1 /s/^t6_cold: HPD 1 /t6_cold: HPD 0 /' "$WORK/uhpd0.log" >"$WORK/uhold0.log"
+check t6_cold-uboot-held-hpd0 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/uhold0.log" T6_ROUTE=uboot
+# the triangle's chain line keeps HPD 1 on both routes (its U-Boot route's
+# proof of a connected display is still to come)
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$D/triangle-cold-pass.uart" >"$WORK/thpd0.log"
+check triangle-video-hpd0 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/thpd0.log"
+# Still to come (issue #11873): the board record of the U-Boot route's
+# picture proof as a fixture (t6_cold-uboot-hold90-pass.uart: t6_cold at
+# 1920x1080, a 90 s hold, a 130 s lifetime, started by U-Boot's go), from a
+# run of a clean build. Until then the cases above are made from kexec
+# records.
+
 # the progress records are not judged
 sed '/^yk-record: 594b05/d' "$D/triangle-cold-pass.uart" >"$WORK/tnoprog.log"
 check triangle-no-progress-records 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$WORK/tnoprog.log"
