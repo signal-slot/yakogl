@@ -168,6 +168,13 @@ table_boot() {
 		't6: WDT0 arm'
 	e 'T6:C WDT0 armed, period 22369 ms'
 	e 'board: watchdog armed'
+	# the board's own pins and supply (nanopc_t6.c, t6_board_pins: one line
+	# at every boot of an image built with it, issue #11859). Its words are
+	# recorded; an rc below 0 (a field that did not take its value, or the
+	# 5 V switch's pin not high) fails the record. A record of an older
+	# image has no such line and is judged as before.
+	never '^t6: vbus5v0_usb rc -'
+	never '^t6: vbus5v0_usb rc [0-9]+, .*; HDMI0 pins rc -'
 }
 
 # SCTLR_EL2's M (bit 0), C (bit 2) and I (bit 12): the entry turns them off.

@@ -57,6 +57,16 @@ check t6_mmu-pass 0 'VERDICT t6_mmu PASS' "$MMU 0 0" t6_mmu "$D/t6_mmu-pass.uart
 check t6_mmu-missing 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$((MMU - 1)) 1 0" t6_mmu "$D/t6_mmu-missing.uart"
 check t6_mmu-differs 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$((MMU - 1)) 0 1" t6_mmu "$D/t6_mmu-differs.uart"
 
+# the board's pins line (issue #11859): its words are recorded, an rc below
+# 0 for the 5 V switch or for the HDMI0 pins fails the record
+PINS='t6: vbus5v0_usb rc 0, GPIO4_B0 level 1: 0xfd5f8088 0x00000000 -> 0x00000000 0xfd5fc144 0x0000d7fd -> 0x0000d7fc 0xfec50000 0x00000000 -> 0x00000100 0xfec50008 0x00000020 -> 0x00000120; HDMI0 pins rc 0: 0xfd5f8090 0x00000000 -> 0x00000055 0xfd5fc148 0x00001557 -> 0x00001550'
+sed "/^board: watchdog armed\$/i $PINS" "$D/t6_mmu-pass.uart" >"$WORK/pins.log"
+check t6_mmu-pins 0 'VERDICT t6_mmu PASS' "$MMU 0 0" t6_mmu "$WORK/pins.log"
+sed 's/^t6: vbus5v0_usb rc 0, GPIO4_B0 level 1: /t6: vbus5v0_usb rc -5, GPIO4_B0 level 0: /; s/-> 0x00000100 /-> 0x00000000 (differs) /' "$WORK/pins.log" >"$WORK/pins-vbus.log"
+check t6_mmu-pins-vbus 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$MMU 0 1" t6_mmu "$WORK/pins-vbus.log"
+sed 's/; HDMI0 pins rc 0: /; HDMI0 pins rc -5: /; s/-> 0x00000055 /-> 0x00000000 (differs) /' "$WORK/pins.log" >"$WORK/pins-hdmi.log"
+check t6_mmu-pins-hdmi 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$MMU 0 1" t6_mmu "$WORK/pins-hdmi.log"
+
 # the UART's CR LF, and NULs around the jump
 sed 's/$/\r/' "$D/t6_mmu-pass.uart" | sed '1s/^/\x00\x00/' >"$WORK/crlf.log"
 check t6_mmu-crlf 0 'VERDICT t6_mmu PASS' "$MMU 0 0" t6_mmu "$WORK/crlf.log"

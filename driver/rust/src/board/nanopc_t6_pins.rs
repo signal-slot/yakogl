@@ -25,9 +25,9 @@
 //!   active high, its pin `usb5v_pwren` a GPIO with no pull
 //!   (rk3588-nanopc-t6.dtsi:183-193, :693-695), the supply of `usbdp_phy1`
 //!   (:1144-1147). Linux switches it on when that PHY starts, and under
-//!   Armbian it is on (the kexec route's GPIO4 words, issue #11859). It is a board supply, not a part of the display: a sink
-//!   or a touch panel powered from those ports needs it whatever the image
-//!   shows.
+//!   Armbian it is on (the kexec route's GPIO4 words, issue #11859). It is
+//!   a board supply, not a part of the display: a sink or a touch panel
+//!   powered from those ports needs it whatever the image shows.
 
 use crate::mmio::Mmio;
 use crate::soc::rk3588_pinctrl::{self as pc, Field, Pin};
