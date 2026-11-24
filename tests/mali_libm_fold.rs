@@ -11,16 +11,14 @@
 //! the plain `cargo test --test mali_libm_fold` does not (the default
 //! features select no GPU). Use the Mali tests' set:
 //! `cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_libm_fold`.
-//! The module is not yet declared in `src/shaderc/online/mod.rs`, so this
-//! file includes it and `fmath.rs` by path (`fmath.rs`'s own unit tests run
-//! here too); its first caller declares it (note section 5).
+//! The module is `pub(crate)` in `src/shaderc/online/mod.rs` (a `gpu-mali`
+//! build), out of an integration test's reach, so this file includes it and
+//! `fmath.rs` by path (`fmath.rs`'s own unit tests run here too).
 //!
 //! The counts compare with `std`, which is the host's glibc: they were
 //! measured on glibc 2.43 (x86-64). Another libm can move them; a count
 //! above its bound means the helper drifted or the host differs (section
 //! 4.3, level 3).
-
-#![allow(dead_code)]
 
 #[path = "../src/shaderc/online/fmath.rs"]
 mod fmath;
