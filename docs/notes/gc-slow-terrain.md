@@ -416,8 +416,7 @@ image otherwise. Empty until a session runs.
 
 Stop, 2026-11-24 (item x2-before-now): still empty. The board answered
 from the leased worker, but no jump was made: an autostarting podman
-container (`slint-launcher`) makes `board.sh x2 run` refuse, and the
-board-side helpers (`kexec_zephyr`, `snvs_lpgpr`) could not be built
-there; the 72972ba4 terrain run stopped with
+container (`slint-launcher`) makes `board.sh x2 run` refuse
+(`something is running (containers 1)`); the 72972ba4 terrain run stopped with
 `no verdict line, rc=3`. Details: `x2-glmark2-slow-scenes.md`, "Stop,
 2026-11-24".
