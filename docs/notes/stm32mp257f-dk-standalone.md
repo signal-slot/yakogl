@@ -599,8 +599,10 @@ copies' flags would then go backwards.
   build has a 120 s lifetime, so a counted default of it ends every boot in a
   reset. **The `LIFETIME_S=0` build may only go with `forever`**: under a
   counted default it never resets, the count never runs out and the board is
-  stranded. Neither the runner nor `tools/mp2s_image_check.py` refuses that
-  case yet (new work, reported).
+  stranded. The runner refuses it by the text of its boot message;
+  `tools/mp2s_image_check.py IMAGE --require-bounded` refuses it by the
+  image's lifetime marker `yakogl-lifetime-s=<N>` (N = 0, or two markers that
+  disagree). An image without the marker is only a `skip:` line.
 
 ## 7. The interface contract
 
