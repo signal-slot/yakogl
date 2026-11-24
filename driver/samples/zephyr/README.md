@@ -60,7 +60,9 @@ board configurations, not samples of their own).
 
 `boot_stage2` is not a sample either: it is the second-stage loader of the
 Verdin direct boot, which unpacks a direct image and jumps to it
-(`docs/notes/am62p-direct-boot.md`, "The second stage").
+(`docs/notes/am62p-direct-boot.md`, "The second stage"). On the Verdin iMX95
+it also keeps the boot count in eMMC boot1 and selects boot0 again when the
+count is spent (`docs/notes/imx95-direct-boot.md`, section 5).
 
 Probes are not samples: the NanoPC-T6 bring-up images are in
 `tools/probes/`, and the host replay of recorded runs is `tools/host-replay/`.

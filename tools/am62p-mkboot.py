@@ -116,6 +116,7 @@ FDT_BEGIN_NODE, FDT_END_NODE, FDT_PROP, FDT_NOP, FDT_END = 1, 2, 3, 4, 9
 
 ZEPHYR_LOAD = 0x82000000      # the a53 board's zephyr,sram (U-Boot "go" and kexec use it too)
 GPU_CARVEOUT = 0x97800000     # the first byte this image must not reach
+IMX95_WINDOW = 0xC0000000     # at or above: the Verdin iMX95's images (0xd0000000), not the AM62P's map
 SPL_STACK_TOP = 0x82000000    # CONFIG_SPL_STACK_R_ADDR (verdin-am62p_a53_defconfig): stack and
                               # the simple malloc pool grow down from here, so a load at or
                               # above it does not overwrite the running SPL
@@ -349,9 +350,11 @@ def check_zephyr(zephyr, load):
                          "build with CONFIG_AARCH64_IMAGE_HEADER=y")
     image_size = struct.unpack_from("<Q", zephyr, 16)[0]
     footprint = max(image_size, len(zephyr))
-    if load < 0x80000000:
-        # Not the AM62P's DDR (it starts at 0x80000000): the i.MX8MP's map,
-        # whose loader's Kconfig and BUILD_ASSERTs check the addresses.
+    if load < 0x80000000 or load >= IMX95_WINDOW:
+        # Not the AM62P's map (DDR from 0x80000000, the GPU carveout at
+        # 0x97800000): the i.MX8MP's (image at 0x48000000) or the Verdin
+        # iMX95's (image at 0xd0000000), whose loaders' Kconfig and
+        # BUILD_ASSERTs check the addresses.
         return image_size
     if load < SPL_STACK_TOP:
         # Only U-Boot proper's own slot, for a small image (the second-stage
@@ -1435,6 +1438,11 @@ def self_test():
            and f["segments"][0]["image_bytes"] == 16384 + 2 * 28672)
     expect("refused: .bss into the GPU carveout",
            refused(lambda: build(base, zimage(4096, GPU_CARVEOUT - ZEPHYR_LOAD + 1), ZEPHYR_LOAD, "Z")))
+    # The Verdin iMX95's payload (boot_stage2 for verdin_imx95, image at
+    # 0xd0000000, 256 MiB): not the AM62P's map, so not its carveout.
+    im95 = stage2img(zimage(4096, 0x5000000), 0xD0000000, COMP_DEFLATE, "imx95", staging=0xDC000000)
+    expect("stage2img: an i.MX 95 image at 0xd0000000 with 80 MiB of RAM is not held to the AM62P's carveout",
+           im95[:8] == b"YKSTAGE2" and struct.unpack_from("<Q", im95, 24)[0] == 0xD0000000)
     rp = build(base, None, None, None)
     _, _, rimages = parse_fit(rp)
     expect("repack: payloads and load addresses unchanged",

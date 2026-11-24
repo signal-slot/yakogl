@@ -27,9 +27,21 @@ containers 0 and 1 are copied byte for byte.
   imx95-mkboot.py build   [--base IMAGE] (--bl33 FILE | --image zephyr.bin
                           [--load ADDR]) -o OUT --limit BYTES
                           [--bl31 FILE] [--tee FILE | --no-tee]
+  imx95-mkboot.py count   --remaining N [--initial N] -o OUT
+  imx95-mkboot.py count-info FILE
 
 `--bl33 FILE`: FILE takes U-Boot's slot at 0x90200000 (a loader linked
-there, such as driver/samples/zephyr/boot_stage2 with its payload).
+there, such as driver/samples/zephyr/boot_stage2 with its payload). If FILE
+has an AArch64 Image header, its image_size (the loader's RAM, .bss
+included) must end below SPL's heap at 0x93200000.
+`--limit` takes a number or `boot1` (0x1F7DC00: the board's 31.5 MiB boot
+partition up to the count sector, for an image installed in boot1) or
+`boot0` (0x1F7DE00: up to U-Boot's environment).
+`count`: the boot count record of the counted way back (one 512-byte sector,
+written to boot1's sector 64494; docs/notes/imx95-direct-boot.md, section 5):
+the loader starts its payload `remaining` more times, then selects boot0 and
+resets. `count-info FILE`: the record in FILE (one sector, or a dump of the
+whole of boot1).
 `--image zephyr.bin`: the image goes into container 2 as a fourth image at its
 link address (default 0xd0000000, the Verdin iMX95 board's), and U-Boot's slot
 holds a 16-byte trampoline (`ldr x16, #8; br x16; .quad ADDR`): SPL copies
@@ -49,6 +61,7 @@ import hashlib
 import os
 import struct
 import sys
+import zlib
 
 TAGS = (0x87, 0x82)          # container header tag (0x82: an appended V2X/ELE form)
 SIG_TAG = 0x90               # signature block header tag
@@ -76,6 +89,19 @@ DEFAULT_LOAD = 0xD0000000    # driver/boards/toradex/verdin_imx95 zephyr,sram (P
 ARM64_MAGIC = 0x644D5241     # "ARM\x64" at 0x38 of an AArch64 Image header
 TRAMPOLINE_WORDS = (0x58000050, 0xD61F0200)   # ldr x16, #8 ; br x16
 
+# The board's eMMC boot partitions (Verdin iMX95, read on 2026-11-25:
+# BOOT_SIZE_MULT 0xfc, /sys/block/mmcblk0boot{0,1}/size 64512 sectors) and
+# U-Boot's environment, boot0's last 0x2200 bytes (CONFIG_ENV_OFFSET=0xFFFFDE00).
+BOOT_PART_BYTES = 64512 * 512            # 0x1F80000
+ENV_BYTES = 0x2200
+# The count record: the highest sector outside the environment's range in
+# either partition (boot_stage2 Kconfig BOOT_STAGE2_COUNT_SECTOR, loader/src/emmc.rs).
+COUNT_SECTOR = 64494
+COUNT_OFFSET = COUNT_SECTOR * 512        # 0x1F7DC00
+LIMITS = {"boot1": COUNT_OFFSET, "boot0": BOOT_PART_BYTES - ENV_BYTES}
+COUNT_MAGIC = b"YKBOOTCT"
+COUNT_VERSION = 1
+
 TYPES = {0x3: "exec", 0x4: "data", 0x5: "oei/ddr", 0x6: "ele", 0x7: "prov", 0x8: "dek/fcb",
          0xB: "v2x-pri", 0xC: "v2x-sec", 0xD: "ddr-dummy", 0xE: "v2x-dummy"}
 CORES = {0x1: "m33", 0x2: "a55", 0x4: "upower", 0x6: "ele", 0xB: "m7", 0xD: "m33s"}
@@ -92,6 +118,10 @@ def align(x, a):
 
 def u(s):
     return int(s, 0)
+
+
+def limit_arg(s):
+    return LIMITS[s] if s in LIMITS else int(s, 0)
 
 
 class Container:
@@ -287,6 +317,15 @@ def problems(blob, limit=None):
                 hit = [x for x in ims if x["dst"] == target]
                 if not hit:
                     out.append("bl33 trampoline branches to 0x%x, where no image is loaded" % target)
+        if role(im) == "bl33" and im["size"] >= 64:
+            data = image_bytes(blob, c2, im)
+            if struct.unpack_from("<I", data, 0x38)[0] == ARM64_MAGIC:
+                # A loader in the slot: its RAM (image_size, .bss included)
+                # must end below SPL's heap and OP-TEE's overlay.
+                footprint = max(struct.unpack_from("<Q", data, 16)[0], im["size"])
+                if im["dst"] + footprint > SPL_HEAP[0]:
+                    out.append("bl33: its image_size runs to 0x%x, past 0x%x (SPL's heap, OP-TEE's overlay)"
+                               % (im["dst"] + footprint, SPL_HEAP[0]))
     if c2.signed():
         out.append("container 2 has a signature: this tool's containers are unsigned")
     if limit is not None and lay.end > limit:
@@ -415,6 +454,66 @@ def cmd_build(args):
     return 0
 
 
+def count_record(remaining, initial, sector=COUNT_SECTOR):
+    """The loader's count record (loader/src/emmc.rs record_bytes)."""
+    s = bytearray(512)
+    s[0:8] = COUNT_MAGIC
+    struct.pack_into("<IIII", s, 8, COUNT_VERSION, remaining, initial, sector)
+    struct.pack_into("<I", s, 508, zlib.crc32(bytes(s[:508])))
+    return bytes(s)
+
+
+def count_parse(s, sector=COUNT_SECTOR):
+    """(remaining, initial), or the reason the loader would refuse the record
+    (loader/src/emmc.rs record_parse, in its order)."""
+    if s[:8] != COUNT_MAGIC:
+        return "no record (magic)"
+    if zlib.crc32(s[:508]) != struct.unpack_from("<I", s, 508)[0]:
+        return "CRC"
+    version, remaining, initial, at = struct.unpack_from("<IIII", s, 8)
+    if version != COUNT_VERSION:
+        return "version %d" % version
+    if at != sector:
+        return "written for sector %d" % at
+    if any(s[24:508]):
+        return "reserved bytes"
+    if remaining > initial:
+        return "count above initial"
+    return remaining, initial
+
+
+def cmd_count(args):
+    initial = args.remaining if args.initial is None else args.initial
+    if not 0 <= args.remaining <= initial <= 0xFFFFFFFF:
+        raise Fail("count: 0 <= --remaining <= --initial < 2^32")
+    rec = count_record(args.remaining, initial)
+    with open(args.output, "wb") as f:
+        f.write(rec)
+    print("count: %s: %d of %d starts, boot1 sector %d (offset 0x%x), CRC-32 %08x"
+          % (args.output, args.remaining, initial, COUNT_SECTOR, COUNT_OFFSET, struct.unpack_from("<I", rec, 508)[0]))
+    print("count: write: echo 0 > /sys/block/mmcblk0boot1/force_ro; "
+          "dd if=%s of=/dev/mmcblk0boot1 bs=512 seek=%d count=1 conv=fsync" % (os.path.basename(args.output), COUNT_SECTOR))
+    return 0
+
+
+def cmd_count_info(args):
+    blob = sys.stdin.buffer.read() if args.file == "-" else read(args.file)
+    if len(blob) >= COUNT_OFFSET + 512:
+        blob, where = blob[COUNT_OFFSET:COUNT_OFFSET + 512], "boot1 dump at 0x%x" % COUNT_OFFSET
+    elif len(blob) == 512:
+        where = "one sector"
+    else:
+        raise Fail("count-info: %d bytes: one 512-byte sector or a whole boot1 dump (%d bytes)"
+                   % (len(blob), BOOT_PART_BYTES))
+    r = count_parse(blob)
+    if isinstance(r, str):
+        print("count-info: %s: not a record (%s): the loader takes the way back to boot0" % (where, r))
+        return 1
+    print("count-info: %s: %d of %d starts left%s" % (where, r[0], r[1],
+                                                      ": the next start takes the way back" if r[0] == 0 else ""))
+    return 0
+
+
 def read(path):
     with open(path, "rb") as f:
         return f.read()
@@ -427,7 +526,7 @@ def main():
     p.add_argument("image")
     p = sub.add_parser("check", help="check a boot image field by field")
     p.add_argument("image")
-    p.add_argument("--limit", type=u)
+    p.add_argument("--limit", type=limit_arg)
     p = sub.add_parser("extract", help="write container 2's images to a directory")
     p.add_argument("image")
     p.add_argument("dir")
@@ -442,10 +541,18 @@ def main():
     t.add_argument("--tee")
     t.add_argument("--no-tee", action="store_true")
     p.add_argument("-o", "--output", required=True)
-    p.add_argument("--limit", type=u, required=True)
+    p.add_argument("--limit", type=limit_arg, required=True,
+                   help="bytes, or boot1 (0x%x) or boot0 (0x%x)" % (LIMITS["boot1"], LIMITS["boot0"]))
+    p = sub.add_parser("count", help="write the loader's boot count record (one sector of boot1)")
+    p.add_argument("--remaining", type=u, required=True, help="starts of the payload before the way back")
+    p.add_argument("--initial", type=u, help="the count it started from (default: --remaining)")
+    p.add_argument("-o", "--output", required=True)
+    p = sub.add_parser("count-info", help="read a count record (a sector, or a boot1 dump; - for stdin)")
+    p.add_argument("file")
     args = ap.parse_args()
     try:
-        return {"info": cmd_info, "check": cmd_check, "extract": cmd_extract, "build": cmd_build}[args.cmd](args)
+        return {"info": cmd_info, "check": cmd_check, "extract": cmd_extract, "build": cmd_build,
+                "count": cmd_count, "count-info": cmd_count_info}[args.cmd](args)
     except Fail as e:
         print("imx95-mkboot.py: %s" % e, file=sys.stderr)
         return 1

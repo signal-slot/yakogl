@@ -7,7 +7,10 @@
 # disk API, the log, the cache flush.
 #
 # No dependencies (no_std, no allocator, no floating point: the target is
-# aarch64-unknown-none-softfloat, as the drivers crate's). Built by the
+# aarch64-unknown-none-softfloat, as the drivers crate's). On the Verdin
+# iMX95 it is also the boot count and the way back to eMMC boot0 (src/emmc.rs,
+# over the polled uSDHC of src/usdhc.rs; docs/notes/imx95-direct-boot.md,
+# section 5), host-tested against a card model (src/emmc_tests.rs). Built by the
 # sample's CMakeLists.txt through capi/yakogl_capi.cmake
 # (yakogl_add_rust_archive); host tests are `cargo test -p yakogl-boot-stage2`,
 # and with BS2_VECTORS=<dir> they also decode the images that

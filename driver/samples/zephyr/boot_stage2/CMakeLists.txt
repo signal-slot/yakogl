@@ -2,9 +2,12 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 # The second-stage loader (docs/notes/am62p-direct-boot.md, "The second
-# stage"; docs/notes/imx8mp-direct-boot.md). Built for verdin_am62p/am62p54/a53
-# or verdin_imx8mp/mimx8ml8/a53 with the board's overlay in boards/; the eMMC
-# source adds emmc.conf and boards/<board>_emmc.overlay.
+# stage"; docs/notes/imx8mp-direct-boot.md; docs/notes/imx95-direct-boot.md).
+# Built for verdin_am62p/am62p54/a53, verdin_imx8mp/mimx8ml8/a53 or
+# verdin_imx95/mimx9596/a55 with the board's overlay in boards/; the eMMC
+# source adds emmc.conf and boards/<board>_emmc.overlay. On the Verdin iMX95
+# the boot count (BOOT_STAGE2_COUNT) is the crate's loader/src/emmc.rs and
+# usdhc.rs.
 # The board support is in driver/ (a Zephyr module); the loader's logic is the
 # Rust crate in loader/ (yakogl-boot-stage2), built as a staticlib through
 # capi/yakogl_capi.cmake like the drivers archive.
@@ -15,7 +18,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(boot_stage2)
 
 if(NOT CONFIG_ARM64)
-  message(FATAL_ERROR "boot_stage2: an aarch64 loader (verdin_am62p/am62p54/a53, verdin_imx8mp/mimx8ml8/a53)")
+  message(FATAL_ERROR "boot_stage2: an aarch64 loader (verdin_am62p/am62p54/a53, verdin_imx8mp/mimx8ml8/a53, verdin_imx95/mimx9596/a55)")
 endif()
 
 target_sources(app PRIVATE src/main.c)
