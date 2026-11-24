@@ -4,6 +4,7 @@
 """Host-side image check for the STM32MP257F-DK standalone default.
 
     tools/mp2s_image_check.py IMAGE [--free-bytes N] [--require-marker TEXT]
+                              [--require-bounded]
 
 The runner's `default <image>` (tools/board-stm32mp2-standalone.sh, plan
 #362) must refuse an image that the product script would refuse at boot
@@ -32,7 +33,17 @@ here on the host before the runner stages anything:
     the image. The watchdog-refresh marker
     (docs/notes/stm32mp257f-dk-standalone.md :446-459, checked for
     `forever` at :370-372) is defined by plan #362's iwdg-refresh item;
-    this tool only takes it as a parameter.
+    this tool only takes it as a parameter;
+  - last, not a check of mp2-mmc.cmd: the lifetime marker
+    "yakogl-lifetime-s=<N>" + NUL that mp2_product embeds
+    (tools/probes/stm32mp257f_dk/mp2_product/README.md; N decimal seconds,
+    0 = the image runs indefinitely). Always one line: "ok: lifetime <N> s",
+    "skip: lifetime (no marker)" (mp2_hello has none), or, for two or more
+    markers that disagree, "skip: lifetime (markers disagree: ...)". With
+    --require-bounded a marker saying 0, or markers that disagree, are
+    refused: a counted default must never get an image that runs forever
+    (it would live on BL2's IWDG and the count would not come back
+    cleanly). No marker is still only a skip, so mp2_hello passes.
 
 One difference, in the refusing direction: mp2-mmc.cmd:81 compares the
 low word of image_size with the window using `itest.l`, which is signed,
@@ -49,7 +60,9 @@ stdout. Exit 0 when every check passed or was skipped, exit 2 when the
 image is refused or the command line is wrong (then no "refused:" line).
 """
 import argparse
+import mmap
 import os
+import re
 import sys
 
 LOAD_ADDR = 0xA0000000  # mp2-mmc.cmd:19 (mp2z_load)
@@ -58,6 +71,8 @@ MIN_SIZE = 0x40  # mp2-mmc.cmd:21-22 (mp2z_min: the arm64 Image header)
 MAGIC_OFF = 0x38  # mp2-mmc.cmd:65-66 (byte 56)
 MAGIC = 0x644D5241  # mp2-mmc.cmd:67 ("ARM\\x64", little-endian)
 IMGSZ_OFF = 0x10  # mp2-mmc.cmd:71-72, :79 (byte 16, 64 bits)
+# The lifetime marker mp2_product embeds: decimal seconds, NUL-terminated.
+LIFETIME_RE = re.compile(rb"yakogl-lifetime-s=([0-9]+)\x00")
 
 
 def num(text):
@@ -96,6 +111,12 @@ def main(argv):
         help="refuse unless the bytes TEXT occur in the image (omitted: "
         "the check is skipped)",
     )
+    ap.add_argument(
+        "--require-bounded",
+        action="store_true",
+        help="refuse when the lifetime marker 'yakogl-lifetime-s=N' says 0 "
+        "(indefinite) or when two markers disagree; no marker: skipped",
+    )
     args = ap.parse_args(argv)
     if args.require_marker == "":
         ap.error("--require-marker TEXT is empty")
@@ -123,9 +144,13 @@ def main(argv):
 
     try:
         with open(path, "rb") as f:
-            data = f.read() if args.require_marker is not None else f.read(MIN_SIZE)
+            # The whole file (at most the window): the lifetime marker may
+            # be anywhere; mmap keeps a 256 MiB image out of memory.
+            data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
     except OSError as e:
         refuse(f"{path} is not a readable file ({e.strerror})")
+    except ValueError:  # mmap of something that is not a regular file
+        refuse(f"{path} is not a readable file (cannot be mapped)")
 
     magic = int.from_bytes(data[MAGIC_OFF : MAGIC_OFF + 4], "little")
     if magic != MAGIC:  # mp2-mmc.cmd:65-70
@@ -146,6 +171,20 @@ def main(argv):
         if at < 0:
             refuse(f"the image does not contain the marker {args.require_marker!r}")
         print(f"ok: marker {args.require_marker!r} first at byte {at}")
+
+    # Lifetime marker: one line always; --require-bounded may refuse.
+    seen = sorted({int(m.group(1)) for m in LIFETIME_RE.finditer(data)})
+    if not seen:
+        print("skip: lifetime (no marker)")
+    elif len(seen) > 1:
+        shown = ", ".join(str(v) for v in seen)
+        if args.require_bounded:
+            refuse(f"the image has lifetime markers that disagree ({shown} s)")
+        print(f"skip: lifetime (markers disagree: {shown} s)")
+    elif seen[0] == 0 and args.require_bounded:
+        refuse("the image's lifetime marker says 0 s (runs indefinitely)")
+    else:
+        print(f"ok: lifetime {seen[0]} s")
     return 0
 
 
