@@ -1475,9 +1475,9 @@ fn run_selected_from(
             }
             "iand" => a[0] & a[1],
             "ixor" => a[0] ^ a[1],
-            /* The sign bit decides, as pco\'s does: -0.0 gives -1.0. */
+            /* `tst gez f32`: -0.0 >= 0, so zero of either sign gives 0. */
             "fsign" => {
-                if (a[0] as i32) < 0 {
+                if f(0) < 0.0 || f(0).is_nan() {
                     (-1.0f32).to_bits()
                 } else if f(0) > 0.0 {
                     1.0f32.to_bits()
@@ -7024,8 +7024,16 @@ const UNSIGNED_OPS_ATTESTED: [&str; 3] = [
 /// of those operations -- Qt's IBL prefilter loops on a uint count, the u32
 /// compare -- is held to the same evidence as the operation's own test.
 fn attested(corpus: &BTreeSet<String>, k: &str) -> bool {
-    corpus.contains(k) || UNSIGNED_OPS_ATTESTED.contains(&k)
+    corpus.contains(k) || UNSIGNED_OPS_ATTESTED.contains(&k) || FSIGN_F32_DEVIATION.contains(&k)
 }
+
+/// The one group we build that pco does not: FSIGN (`sign()`) with its `tst
+/// gez` typed f32 (type=0) where pco types it s32. pco's sign gives -0.0 ->
+/// -1.0, GLSL and dEQP say 0 (item pvr-fsign). Same wiring as pco's group
+/// otherwise; the `tst` type is an ISA field the byte model executes.
+const FSIGN_F32_DEVIATION: [&str; 1] = [
+    "alu0 hdr oporg=5 olchk=0 w1p=0 w0p=1 cc=0 end=0 atom=0 rpt=1 | p0 fmul :fmul sat=1 s0neg=0 s0abs=0 s1abs=0 s0flr=0 | p1 mbyp :sngl_ext sngl_op=7 s0neg=1 s0abs=0 | p4 tst :tst_ext tst_op=2 pwen=0 type=0 p2end=1 elem=0 | p5 movc :movc_ext movw1=0 movw0=0 maskw0=15 aw=0 p2end=0 lo up iss is5=0 is4=1 is3=0 is2=0 is1=1 dst=true",
+];
 
 /// GLSL ES 3.00's unsigned and integer min/max operations, as pco builds
 /// them: udiv/umod (nir_lower_idiv's emit_udiv), ushr (`shr`), ult/ule (the
