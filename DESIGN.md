@@ -266,8 +266,8 @@ wait for the object's stamp while it is pending.
 ## The Rust crate (2026-09)
 
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from
-C to Rust: the crate `yakogl` at the repository root (`no_std`; `[dependencies]` in `Cargo.toml` is empty, so no runtime dependencies: the
-only dependency is the build-time `cc` of `build.rs`; an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
+C to Rust: the crate `yakogl` at the repository root (`no_std`; `[dependencies]` in `./Cargo.toml` is empty, so no runtime dependencies: the
+only dependency is the build-time `cc` of `./build.rs`; an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
 `gpu-v3d` | `gpu-mali` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
 compile-time default of `g_osal`, `host-test` for host tests only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
 panic handler. The C ABI is the product and did not
