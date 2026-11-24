@@ -27,7 +27,10 @@
 //!   level 0 and a max level below the full chain's 6).
 //! - a cube map, 16x16 faces, the chain of 5 levels, mipmap filter: 0, 4;
 //! - an NPOT 37x19 texture, CLAMP_TO_EDGE, NEAREST and LINEAR (ES 2.0 allows
-//!   no mipmaps for NPOT): 0, 0, width 37, height 19.
+//!   no mipmaps for NPOT): 0, 0, width 37, height 19;
+//! - GL_TEXTURE_BASE_LEVEL set on the full chain: GL_INVALID_ENUM (the
+//!   context is ES 2.0, which `the_context_is_es2` checks), and the state
+//!   stays 0, 6.
 //!
 //! Every state is read from the `V3dTexState` the real packer
 //! `v3d_tex_pack_state` is handed (recorded in `PACKED`), through the real GL
@@ -735,5 +738,40 @@ fn npot_clamp_nearest_and_linear() {
         let s = case_2d("npot 37x19", 37, 19, 1, min, mag);
         assert_eq!((s.width, s.height), (37, 19), "{s:?}");
         assert_eq!((s.base_level, s.max_level), (0, 0), "{s:?}");
+    }
+}
+
+/// The rig's context is an ES 2.0 one (`report-es2`): GL_MAJOR_VERSION, an
+/// ES 3.0 query, is GL_INVALID_ENUM and leaves the value untouched.
+#[test]
+fn the_context_is_es2() {
+    let _g = rig();
+    let mut major: GLint = 0;
+    // SAFETY: a plain GL call with room for one value.
+    unsafe { glGetIntegerv(GL_MAJOR_VERSION, &mut major) };
+    assert_eq!(err(), GL_INVALID_ENUM, "GL_MAJOR_VERSION is an ES 3.0 query");
+    assert_eq!(major, 0);
+}
+
+/// An application that sets GL_TEXTURE_BASE_LEVEL in ES 2.0 gets
+/// GL_INVALID_ENUM, and the packed state keeps base level 0 and the full
+/// chain's max level 6, not the (1, 6) or (2, 6) `state_at` would give for a
+/// first level of 1 or 2.
+#[test]
+fn texture_base_level_is_refused_and_the_state_keeps_base_0() {
+    for b in [1, 2] {
+        let _g = rig();
+        program(FS_2D);
+        let t = new_texture(GL_TEXTURE_2D);
+        fill(GL_TEXTURE_2D, 64, 64, 7);
+        param(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        param(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        assert_eq!(err(), GL_NO_ERROR, "setup");
+        // SAFETY: a plain GL call.
+        unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, b) };
+        assert_eq!(err(), GL_INVALID_ENUM, "GL_TEXTURE_BASE_LEVEL {b} in ES 2.0");
+        let s = sampled_state("base level refused");
+        delete_texture(t);
+        assert_eq!((s.base_level, s.max_level), (0, 6), "GL_TEXTURE_BASE_LEVEL {b}: {s:?}");
     }
 }
