@@ -20,7 +20,8 @@
 //   PERI_PHYCONFIGURATION.h  sha256 43f24f597ffb43a41f370f60de37b49f419da62c1e0e427634e2da11cccd14c3
 //   PERI_MAINCONTROLLER.h  sha256 0b47effe17391cb764cbb056fbfde19d292d7c2b1f17c217c91488eccac37884
 //   PERI_MIPI_DSI.h  sha256 94fceb991685e5a7607789ef28fb9e2f537bdd7287fbdb8b0f5e522c5db62c46
-// Copyright 1997-2016 Freescale Semiconductor, Inc.; Copyright 2016-2026 NXP.
+// SPDX-FileCopyrightText: 1997-2016 Freescale Semiconductor, Inc.
+// SPDX-FileCopyrightText: 2016-2026 NXP
 // The field value lists are NXP's text from the same headers.
 
 #![allow(clippy::identity_op)]
