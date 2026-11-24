@@ -12,8 +12,10 @@
 #     driver/tools/uboot-t6/prompt-go.sh <zephyr.bin> <probe> --go                      # the run
 #   ... T6_UART=rfc2217://<host>:<port> ... --go     # the UART on a network serial adapter
 #
-# probe: t6_hello, t6_gpu, t6_mmu, t6_fw or t6_submit (t6-verdict.sh's
-# table for the record).
+# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_cold or triangle
+# (t6-verdict.sh's table for the record). t6_display is not taken: it
+# adopts the picture Linux leaves after kexec --crash, and U-Boot leaves
+# none.
 #
 # Without --go it checks the image on this host, checks over ssh (reads
 # only) that the board runs Armbian and holds the same bytes as
@@ -88,7 +90,7 @@ for a in "$@"; do
 	esac
 done
 [ -n "$IMG" ] && [ -n "$PROBE" ] || die "usage: prompt-go.sh <zephyr.bin> <probe> [--go] (see the header)"
-case "$PROBE" in t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit) ;; *) die "probe $PROBE: not one of t6-verdict.sh's" ;; esac
+case "$PROBE" in t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_cold | triangle) ;; *) die "probe $PROBE: not one of t6-verdict.sh's" ;; esac
 [ -f "$IMG" ] || die "$IMG: no such file"
 [ -n "${BOARD_HOST:-}" ] || die "set BOARD_HOST=root@<the T6>"
 # T6_UART=rfc2217://<host>:<port> (the debug UART on a network serial

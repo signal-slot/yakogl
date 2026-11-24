@@ -82,7 +82,9 @@ MAGIC_OFF = 0x38                    # the arm64 Image header's magic, byte 56
 IMAGE_MAGIC = 0x644D5241            # "ARM\x64" read as a little-endian word
 STARTED = b"## Starting application at 0x%08X" % LOAD
 NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\.bin")
-TYPES = ("t6_hello", "t6_gpu", "t6_mmu", "t6_fw", "t6_submit")
+# The probes t6-verdict.sh judges that U-Boot can start (prompt-go.sh's
+# list; t6_display is not one: it adopts a picture only Linux leaves).
+TYPES = ("t6_hello", "t6_gpu", "t6_mmu", "t6_fw", "t6_submit", "t6_cold", "triangle")
 
 
 def commands(name, size):
@@ -400,7 +402,15 @@ def self_test():
     for n in ["../Image", "a/b.bin", "t6.img", ".bin", "a b.bin", "x.bin;reset", "-x.bin"]:
         check(NAME_RE.fullmatch(n) is None, "not a name: %r" % n)
 
-    # 8. The CRC is zlib's.
+    # 8. Every probe taken here is one t6-verdict.sh has a table for: an
+    # empty record FAILs (exit 1); a name it does not know is usage (2).
+    for t in TYPES + ("t6_nonesuch",):
+        r = subprocess.run(["bash", VERDICT, t, os.devnull], env=dict(os.environ, T6_ROUTE="uboot", LC_ALL="C"),
+                           capture_output=True)
+        want = 2 if t == "t6_nonesuch" else 1
+        check(r.returncode == want, "probe %s: t6-verdict.sh exits %d on an empty record (rc %d)" % (t, want, r.returncode))
+
+    # 9. The CRC is zlib's.
     check("%08x" % zlib.crc32(b"123456789") == "cbf43926", "crc: zlib's CRC-32 of '123456789' is cbf43926")
 
     return check.summary("prompt-go")

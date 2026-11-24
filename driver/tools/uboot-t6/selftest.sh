@@ -120,6 +120,17 @@ rc=$?
 check "prompt-go dry run: exit 0 and the plan (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qF 'ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_hello.bin' <<<"$out" &&
 		grep -qF 'go 0x10000000' <<<"$out" && grep -qF 'dry run: nothing was written' <<<"$out"; echo $?)"
+# the probes with a picture are taken too; t6_display is not (it adopts
+# what only Linux leaves)
+for p in t6_cold triangle; do
+	out=$(fake_go "$tmp/t6_hello.bin" "$p")
+	rc=$?
+	check "prompt-go dry run: probe $p is taken (rc $rc)" \
+		"$([ "$rc" = 0 ] && grep -qF "its verdict ($p, T6_ROUTE=uboot)" <<<"$out"; echo $?)"
+done
+out=$(fake_go "$tmp/t6_hello.bin" t6_display)
+rc=$?
+check "prompt-go: t6_display is not a probe of the go route (rc $rc)" "$([ "$rc" = 2 ]; echo $?)"
 mkdir "$tmp/nog"
 mkimg "$tmp/nog/t6_hello.bin"
 out=$(fake_go "$tmp/nog/t6_hello.bin" t6_hello)
