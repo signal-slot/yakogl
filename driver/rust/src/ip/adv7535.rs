@@ -1,7 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2012 Analog Devices Inc.
+// SPDX-FileCopyrightText: 2016, The Linux Foundation. All rights reserved.
 //! The ADV7535 HDMI transmitter, configured over I2C with a DSI input; follows
-//! Linux drm/bridge/adv7511/adv7511_drv.c and adv7533.c.
+//! Linux drm/bridge/adv7511/adv7511_drv.c and adv7533.c, which are
+//! GPL-2.0-only; this file is a port of them and carries the same licence
+//! (its fixed-register and lane tables are quoted from them, cited at the
+//! Linux line they come from).
 //!
 //! Source: ST's Linux, tag `v6.6-stm32mp-r3.1` (the DK's kernel), checked
 //! 2026-11-21 against
