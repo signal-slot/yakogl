@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* SPDX-FileCopyrightText: 2014 The Android Open Source Project */
 /*
  * tex_cubemip_case.h: a cube-map mipmap board test, as data and checks a
  * sample includes (docs/online-shaderc/v3d-backend.md, "Cube mipmaps on the
