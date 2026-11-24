@@ -20,7 +20,9 @@
  *            the chain on the UART at once. Either way the first show's
  *            record is printed. A later show of another buffer is a flip,
  *            which never waits. Nothing is copied. A first show that
- *            stopped is final
+ *            stopped is final. After the run's hold the section 5
+ *            read-backs (read_back below): the picture still runs and a
+ *            display is connected
  *   record   the yk-record line on the UART (common/record.c). With
  *            CONFIG_YAKOGL_BOARD_RECORD_SCREEN the console's last lines and
  *            that line are also drawn over the window on the screen when the
@@ -294,11 +296,31 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 }
 #endif
 
+/* The end of a run, after board_finish()'s hold: the section 5 read-backs
+ * over the picture that is still up (t6_display_read_back, the lines of the
+ * display probes under the tag "board"). Its HPD line is read the hold's
+ * length after the first show, so it proves a connected display also where
+ * the chain's own line could not: a display powered from the board's USB
+ * ports, which the start switched on only just before the chain ran (the
+ * U-Boot route, driver/docs/nanopc-t6-display.md, section 3). The frame check
+ * clears VP0's frame start flag: no show follows. */
+static void read_back(void)
+{
+	struct yd_t6_display_status s;
+
+	if (s_screen.state != YD_T6_SCREEN_SHOWN) {
+		printk("board: no read-backs after the hold: nothing is shown\n");
+		return;
+	}
+	(void)t6_display_read_back("board", &s_bases.display, &s);
+}
+
 FUNC_NORETURN void board_reset(void)
 {
 	/* A single-buffered sample shows one buffer and never flips; the count
 	 * says whether a double-buffered run reached the flip and the busy rule. */
 	printk("board: screen state %u, %u flips\n", s_screen.state, s_screen.flips);
+	read_back();
 #ifdef CONFIG_YAKOGL_BOARD_RECORD_SCREEN
 	/* The reset is a call, not a watchdog period: the record gets a hold of
 	 * its own, long enough for the capture unit (Kconfig). */
