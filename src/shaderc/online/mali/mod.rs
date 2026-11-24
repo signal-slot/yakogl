@@ -1491,9 +1491,14 @@ fn compile_stage<'s>(
              * index (deqp_uniarray_dyn_vec{2,3,4}_vs's `ui_zero`, the
              * `LSHIFT_OR.i32 r1, u5.w1, ..` of its pushed word) */
             let index = nir::index16_only(&vs, u.dword_off);
+            /* and as a value: a mediump int / ivec is the same raw word
+             * (deqp_loops_vs_for_uni's `uniform mediump int ui_three`,
+             * `u5.w1` read in place; plan #387 intval-vs16, vs16-2) */
+            let int = nir::int_type(u.gl_type as u32);
             if !member
                 && !bool
                 && !index
+                && !int
                 && !matches!(prec(u.name), Some(Precision::High))
                 && ubo.half(u.dword_off).is_none()
             {

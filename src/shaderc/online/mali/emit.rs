@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 99] = [
+pub const ROWS: [(Row, &str); 100] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -112,6 +112,7 @@ pub const ROWS: [(Row, &str); 99] = [
      * log2 b))` with `isign` lowered (gl_test's isamp, tools/mali/testdata/
      * fbload_isamp: `ivec2(gl_FragCoord.xy) / 32`) */
     (row(Alu::Imax, 32, 1), "nir_op_imax: CSEL.s32.gt a, b, a, b"),
+    (row(Alu::Umax, 32, 1), "nir_op_umax: CSEL.u32.gt a, b, a, b"),
     (row(Alu::Imin, 32, 1), "nir_op_imin: CSEL.s32.lt a, b, a, b"),
     (row(Alu::Iabs, 32, 1), "nir_op_iabs: IABS.s32"),
     (row(Alu::Ushr, 32, 1), "nir_op_ushr: RSHIFT_OR.i32 a, #0, b.b0"),
@@ -379,6 +380,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         /* `bi_csel_to(.., s0, s1, s0, s1, BI_CMPF_GT / _LT)`
          * (bifrost_compile.c:3061-3071) */
         (Alu::Imax, 32, 1) => ins(p, Op::CselS32 { cmpf: Cmpf::Gt }, &[s[0], s[1], s[0], s[1]])?,
+        (Alu::Umax, 32, 1) => ins(p, Op::CselU32Gt, &[s[0], s[1], s[0], s[1]])?,
         (Alu::Imin, 32, 1) => ins(p, Op::CselS32 { cmpf: Cmpf::Lt }, &[s[0], s[1], s[0], s[1]])?,
         (Alu::Iabs, 32, 1) => ins(p, Op::IabsS32, &s[..1])?,
         /* `bi_rshift_or_to(b, sz, dst, s0, bi_zero(), bi_byte(s1, 0), false)`

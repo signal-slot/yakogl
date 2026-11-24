@@ -192,6 +192,10 @@ pub enum Alu {
     /// `imin(imax(a, -1), 1)` (nir_opt_algebraic.py:2812, `lower_isign`).
     Imax,
     Imin,
+    /// `umax` of two 32-bit words (`CSEL.u32.gt a, b, a, b`): Mesa's
+    /// `iand(ieq(a, 0), ieq(b, 0))` -> `ieq(umax(a, b), 0)`
+    /// (deqp_vs16ref_uapi_ivec3).
+    Umax,
     /// `iabs` of a 32-bit signed integer (`IABS.s32`).
     Iabs,
     /// `ushr` of a 32-bit integer by a constant (`RSHIFT_OR.i32 a, #0,
@@ -349,6 +353,7 @@ impl Alu {
             | Alu::Ior
             | Alu::Imax
             | Alu::Imin
+            | Alu::Umax
             | Alu::Imul
             | Alu::Ixor => true,
             Alu::Fcmp(c) | Alu::Icmp(c) => matches!(c, Cmpf::Eq | Cmpf::Ne),
@@ -372,6 +377,7 @@ impl Alu {
                 | Alu::Ior
                 | Alu::Imax
                 | Alu::Imin
+                | Alu::Umax
                 | Alu::Iabs
                 | Alu::Ushr
                 | Alu::Imul
@@ -1187,75 +1193,14 @@ pub(super) fn fp16_uniform(u: &ir::UniformDecl<'_>, fp16: &dyn Fn(&str) -> bool)
     float && (u.array_len <= 1 || array_element(u).is_some()) && fp16(u.name)
 }
 
-/// Every read of IR value `v` is the index of a uniform array read
-/// (`LoadUniformIdx`): an int uniform the back end takes as raw bits for
-/// the element's byte offset only (uniarray_highp, uniarray_vs). Any other
-/// integer arithmetic has no reference ([`MaliError::UniformType`] at the
-/// uniform, as before).
-pub(super) fn index_only(m: &Module<'_>, v: ValueId) -> bool {
-    let mut uses = 0;
-    let mut other = false;
-    for op in m.instrs.iter() {
-        match op {
-            IrOp::LoadUniformIdx { index, .. } if index.val == v => uses += 1,
-            _ => op.for_each_src(|s| other |= s.val == v),
-        }
-    }
-    uses > 0 && !other
-}
-
-/// Every read of IR value `v` is its conversion to a float (`float(s.c)`,
-/// `i2f32`): an `int` uniform's word converted in place
-/// (deqp_uniarray_struct_member_vs's `S32_TO_F32 r2, u7.w0` of the struct's
-/// int member). Any other read keeps [`MaliError::UniformType`].
-pub(super) fn int_float_only(m: &Module<'_>, v: ValueId) -> bool {
-    let mut uses = 0;
-    let mut other = false;
-    for op in m.instrs.iter() {
-        match op {
-            IrOp::Alu(AluOp::I2f, s) if s[0].val == v => uses += 1,
-            _ => op.for_each_src(|s| other |= s.val == v),
-        }
-    }
-    uses > 0 && !other
-}
-
-/// Every read of IR value `v` is an operand of a signed integer compare
-/// (`<`, `<=`, `==`, `!=`) that is a loop's head test (`if (c) {} else
-/// break;`, `Lower::break_unless`): an `int` uniform a vertex loop's bound
-/// reads as it is, its word an FAU word the compare reads in place
-/// (gm2_cf_loop_uni_vs's `ICMP_OR.s32.ge.m1 r5, r4, u11.w0, 0x0`, glmark2
-/// loop's `i < VertexLoops`; docs/notes/mali-int-uniforms.md section 2: an
-/// int is one 32-bit word a component). Any other read (arithmetic, a
-/// compare an `if` or a select reads) has no reference and keeps
-/// [`MaliError::UniformType`] at the uniform.
-pub(super) fn int_compare_only(m: &Module<'_>, v: ValueId) -> bool {
-    /* the head tests of the loops of `nodes`, nested ones too */
-    fn head(m: &Module<'_>, nodes: &[IrNode], c: ValueId) -> bool {
-        nodes.iter().any(|n| match *n {
-            IrNode::Loop { body } => {
-                let first = m.nodes_of(body).iter().find(|n| !matches!(n, IrNode::Instr(_)));
-                matches!(first, Some(&IrNode::If { cond, then_, else_ })
-                    if cond.val == c && then_.is_empty() && m.nodes_of(else_) == [IrNode::Break])
-                    || head(m, m.nodes_of(body), c)
-            }
-            IrNode::If { then_, else_, .. } => head(m, m.nodes_of(then_), c) || head(m, m.nodes_of(else_), c),
-            _ => false,
-        })
-    }
-    let mut uses = 0;
-    let mut other = false;
-    for (i, op) in m.instrs.iter().enumerate() {
-        match op {
-            IrOp::Alu(AluOp::Ilt | AluOp::Ile | AluOp::Ieq | AluOp::Ine, s)
-                if s[..2].iter().any(|x| x.val == v) && head(m, m.nodes_of(m.body), ValueId(i as u32)) =>
-            {
-                uses += 1
-            }
-            _ => op.for_each_src(|s| other |= s.val == v),
-        }
-    }
-    uses > 0 && !other
+/// `gl_type` is an integer uniform's (`int`, `ivec2/3/4`): one raw 32-bit
+/// word a component whatever its precision (`caps->int16` is false,
+/// pan_screen.c:591, so lower_precision narrows no integer;
+/// docs/notes/mali-int-uniforms.md section 2), read by the walk's integer
+/// arms as it is (deqp_loops_vs_for_uni's `ICMP_OR.s32.ge.m1 r1, r2, u5.w1`
+/// of `uniform mediump int ui_three`).
+pub(super) fn int_type(gl_type: u32) -> bool {
+    matches!(gl_type, GL_INT | GL_INT_VEC2 | GL_INT_VEC3 | GL_INT_VEC4)
 }
 
 /// An fp32 read of a float array's element at an int uniform's index (the
@@ -2387,6 +2332,7 @@ impl<'s> Nir<'s> {
                 | Alu::Ior
                 | Alu::Imax
                 | Alu::Imin
+                | Alu::Umax
                 | Alu::Iabs
                 | Alu::Ushr
                 | Alu::Imul
@@ -3139,22 +3085,32 @@ pub(super) fn bool_type(gl_type: u32) -> bool {
 /// The value is a lane of a uniform load as loaded (a FAU word): a `bool`
 /// uniform's 0 / ~0 (`UniformBooleanTrue`, st_extensions.c:1356), which
 /// `i2b` leaves as it is.
-fn vs_is_uniform_word(vs: &Nir<'_>, v: Val) -> bool {
-    matches!(v, Val::Lane(n, _) if matches!(vs.nodes.get(n as usize), Some(NirNode { kind: Kind::Uniform { .. }, .. })))
+///
+/// Only a `bool` / `bvecN` uniform's word ([`bool_type`]): an int uniform's
+/// word is a number, whose `i2b` is `ine(w, 0)` and which `ieq(w, true)`
+/// must not take for a boolean (nir_fs.rs `bool_dword`'s rule).
+fn vs_is_uniform_word(vs: &Nir<'_>, m: &Module<'_>, v: Val) -> bool {
+    let Val::Lane(n, _) = v else { return false };
+    match vs.nodes.get(n as usize) {
+        Some(NirNode { kind: Kind::Uniform { dword, .. }, .. }) => {
+            uniform_of(m, *dword).is_ok_and(|(u, _)| bool_type(u.gl_type as u32))
+        }
+        _ => false,
+    }
 }
 
 /// The value is a boolean: a compare's mask, a logic operation or `inot`
 /// of booleans, `i2b`'s word of a bool uniform (what [`vs_is_uniform_word`]
 /// leaves as it is), or a constant 0 / ~0.
-fn vs_is_bool(vs: &Nir<'_>, v: Val) -> bool {
+fn vs_is_bool(vs: &Nir<'_>, m: &Module<'_>, v: Val) -> bool {
     if vs_is_mask16(vs, v) {
         return true;
     }
     match vs_alu_of(vs, v) {
         Some((Alu::Fcmp(_) | Alu::Icmp(_) | Alu::Ucmp(_) | Alu::Inot, _)) => true,
-        Some((Alu::Iand | Alu::Ior | Alu::Ixor, [a, b, _])) => vs_is_bool(vs, a) && vs_is_bool(vs, b),
-        Some((Alu::Bcsel, [_, a, b])) => vs_is_bool(vs, a) && vs_is_bool(vs, b),
-        _ => matches!(v, Val::Const(0 | u32::MAX)) || vs_is_uniform_word(vs, v),
+        Some((Alu::Iand | Alu::Ior | Alu::Ixor, [a, b, _])) => vs_is_bool(vs, m, a) && vs_is_bool(vs, m, b),
+        Some((Alu::Bcsel, [_, a, b])) => vs_is_bool(vs, m, a) && vs_is_bool(vs, m, b),
+        _ => matches!(v, Val::Const(0 | u32::MAX)) || vs_is_uniform_word(vs, m, v),
     }
 }
 
@@ -4371,6 +4327,53 @@ fn vs_cmp_side(vs: &Nir<'_>, v: Val) -> Option<(Val, bool, u16)> {
     }
 }
 
+/// The 32-bit word `x` of `b2f(ieq(x, 0))` (a lane `v` of the walk's
+/// `B2f` of a 32-bit `Icmp(Eq)` against the constant 0, the constant on
+/// either side), not a 16-bit mask's.
+fn vs_zero_test(vs: &Nir<'_>, v: Val) -> Option<Val> {
+    let (Alu::B2f, [c, ..]) = vs_alu_of(vs, v)? else { return None };
+    let Val::Lane(n, 0) = c else { return None };
+    match vs.nodes[n as usize] {
+        NirNode { kind: Kind::Alu(Alu::Icmp(Cmpf::Eq)), src: [x, Val::Const(0), _], bits: 32, width: 1 }
+        | NirNode { kind: Kind::Alu(Alu::Icmp(Cmpf::Eq)), src: [Val::Const(0), x, _], bits: 32, width: 1 }
+            if !matches!(x, Val::Const(_)) =>
+        {
+            Some(x)
+        }
+        _ => None,
+    }
+}
+
+/// `fmul(b2f(ieq(x, 0)), b2f(ieq(y, 0)))` of [`vs_zero_test`]s:
+/// `b2f(iand(..))` (nir_opt_algebraic.py:1679) and `iand(ieq(x, 0), ieq(y,
+/// 0))` is `ieq(umax(x, y), 0)`, one `CSEL.u32.gt` per further word and one
+/// `ICMP_OR.u32.eq.m1` (deqp_vs16ref_uapi_ivec3: `compare_ivec3(u_var,
+/// ivec3(0))` is `CSEL.u32.gt r0, u5.w1, r0^, u5.w1, r0^` of x and y, then
+/// of z, `ICMP_OR.u32.eq.m1 r0, r0^, 0x0` and the colour's `CSEL.u32.eq`).
+fn vs_zero_and(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    let (Some(x), Some(y)) = (vs_zero_test(vs, p), vs_zero_test(vs, q)) else {
+        return Err(MaliError::Defect(Defect::IrIndex));
+    };
+    /* a fourth word: Mesa's passes rebalance the chain into a tree
+     * (deqp_vs16ref_uapi_struct_int_ivec4: `umax(umax(a, b.x), umax(b.y,
+     * b.z))`, then `b.w`), which this left-to-right chain does not build */
+    let deep = |v: Val| {
+        matches!(vs_alu_of(vs, v), Some((Alu::Umax, [a, b, _]))
+        if [a, b].iter().any(|&s| matches!(vs_alu_of(vs, s), Some((Alu::Umax, _)))))
+    };
+    if deep(x) || deep(y) {
+        return Err(MaliError::IntValue);
+    }
+    /* a uniform's word before a computed one (the second `CSEL.u32.gt r0,
+     * u6.w1, r0^` of the reference: z, then the max so far) */
+    let word = |v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
+    let (x, y) = if !word(x) && word(y) { (y, x) } else { (x, y) };
+    let mx = vs.alu(Alu::Umax, x, y, u)?;
+    let c = vs.alu(Alu::Icmp(Cmpf::Eq), mx, Val::Const(0), u)?;
+    vs.alu(Alu::B2f, c, u, u)
+}
+
 /// The node a lane `v` is of.
 fn lane_node(v: Val) -> Option<u16> {
     match v {
@@ -4509,7 +4512,7 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
             let j = s.swizzle[i] as usize;
             *x = match (lane(w, cs[0], j), lane(w, cs[1], j)) {
                 (p, Val::Const(0)) | (Val::Const(0), p)
-                    if vs_is_bool(vs, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
+                    if vs_is_bool(vs, m, p) && !matches!(p, Val::Const(_)) && !vs_is_mask16(vs, p) =>
                 {
                     p
                 }
@@ -5167,6 +5170,20 @@ fn vs_kept_begin(
             _ => {}
         }
     }
+    /* a mediump float local the body stores: Mesa carries it at fp16
+     * across the loop (`MKVEC.v2i16` in the body, the narrowing before it;
+     * deqp_loops_vs_dowhile_uni's `res = res.yzwx`), which this fp32 phi
+     * does not; a mediump int is 32 bits and is carried as it is */
+    for (l, &mask) in masks.iter().enumerate() {
+        let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
+        /* entering with a run-time value (an attribute's): a loop that
+         * starts from constants meets the link's refusals of its varyings
+         * first (deqp_varylink2_loop_*, deqp_posvary_loop_phi_array) */
+        let runtime = (0..4).any(|c| mask & (1 << c) != 0 && matches!(locals[l][c], Val::Lane(..)));
+        if mask != 0 && float && runtime && m.local_prec_of(ir::LocalId(l as u32)) == Prec::Medium {
+            return Err(MaliError::LoopVertex);
+        }
+    }
     let init = |l: ir::LocalId, _float: bool| match locals.get(l.0 as usize).map(|v| v[0]) {
         Some(Val::Const(bits)) => Some(bits),
         _ => None,
@@ -5606,13 +5623,6 @@ fn walk<'s>(
             IrOp::LoadInput { .. } => return Err(MaliError::SpecialInput),
             IrOp::LoadUniform { dword_off, comps } => {
                 let (u, total) = uniform_of(m, dword_off)?;
-                if u.gl_type as u32 == GL_INT
-                    && !index_only(m, ValueId(id.0))
-                    && !int_compare_only(m, ValueId(id.0))
-                    && !int_float_only(m, ValueId(id.0))
-                {
-                    return Err(MaliError::UniformType);
-                }
                 /* the load Mesa makes: the whole vector, or one column, or
                  * one element of a vec4 array */
                 let (base, size) = if let Some((_, rows, stride)) = matrix_cols(u.gl_type) {
@@ -5901,6 +5911,14 @@ fn walk<'s>(
                                 None => vs_fmul(&mut vs, split, x(0), x(1))?,
                             }
                         }
+                        /* the product of two `b2f` of a 32-bit integer's
+                         * compare against 0 (dEQP's `compare_ivecN`, the
+                         * product of `compare_int`s of an int uniform's
+                         * words): `b2f(iand(a, b))` and `ieq(umax(x, y), 0)`
+                         * ([`vs_zero_and`]) */
+                        AluOp::Fmul if vs_zero_test(&vs, x(0)).is_some() && vs_zero_test(&vs, x(1)).is_some() => {
+                            vs_zero_and(&mut vs, x(0), x(1))?
+                        }
                         AluOp::Fmul if split == [false; 2] || !(is_zero(x(0)) || is_zero(x(1))) => {
                             match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {
                                 Some(v) => v,
@@ -6069,8 +6087,8 @@ fn walk<'s>(
                          * int_lane): dEQP's `compare_bool(u_var, true)`
                          * (deqp_intval_uniapi_bool_vs) */
                         AluOp::Ieq | AluOp::Ine
-                            if (matches!(x(1), Val::Const(0 | u32::MAX)) && vs_is_bool(&vs, x(0)))
-                                || (matches!(x(0), Val::Const(0 | u32::MAX)) && vs_is_bool(&vs, x(1))) =>
+                            if (matches!(x(1), Val::Const(0 | u32::MAX)) && vs_is_bool(&vs, m, x(0)))
+                                || (matches!(x(0), Val::Const(0 | u32::MAX)) && vs_is_bool(&vs, m, x(1))) =>
                         {
                             let (b, c) = if matches!(x(1), Val::Const(_)) { (x(0), x(1)) } else { (x(1), x(0)) };
                             if (c == Val::Const(u32::MAX)) == (a == AluOp::Ieq) {
@@ -6356,7 +6374,7 @@ fn walk<'s>(
                                      * itself (deqp_intval_uniapi_bool_vs's
                                      * `CSEL.u32.eq r0, u5.w1, 0x0, ..`); of
                                      * another integer the compare */
-                                    AluOp::I2b if vs_is_uniform_word(&vs, p) => p,
+                                    AluOp::I2b if vs_is_uniform_word(&vs, m, p) => p,
                                     AluOp::I2b => vs.alu(Alu::Icmp(Cmpf::Ne), p, Val::Const(0), Val::Undef)?,
                                     /* `!` of a run-time boolean; the walk's
                                      * users fold it (`bcsel(inot(a), b, c)`
