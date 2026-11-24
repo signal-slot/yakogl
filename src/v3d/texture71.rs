@@ -398,29 +398,8 @@ pub fn cpp_of(pipe: &'static str) -> Result<u32, Refusal> {
     if matches!(pipe, "Z32_FLOAT_S8X24_UINT" | "X32_S8X24_UINT" | "S8X24_UINT") {
         return Err(Refusal::SeparateStencil { pipe });
     }
-    // the bits of each channel, from the name: R8G8B8A8 -> 32
-    let name = pipe.split('_').next().unwrap_or("");
-    let mut bits = 0u32;
-    let mut num = String::new();
-    for c in name.chars().chain(std::iter::once('.')) {
-        if c.is_ascii_digit() {
-            num.push(c);
-        } else {
-            if let Ok(n) = num.parse::<u32>() {
-                bits += n;
-            }
-            num.clear();
-        }
-    }
-    // R9G9B9E5 = 32, X8Z24 = 32, R11G11B10 = 32, S8 Z24 = 32 (S8_UINT_Z24):
-    // the depth-stencil rows name the stencil after an underscore
-    if pipe == "S8_UINT_Z24_UNORM" {
-        bits = 32;
-    }
-    match bits {
-        8 | 16 | 32 | 64 | 128 => Ok(bits / 8),
-        _ => Err(Refusal::TexelSize { pipe }),
-    }
+    // an explicit table (format71::texel_bytes), not the digits of the name
+    format71::texel_bytes(pipe).ok_or(Refusal::TexelSize { pipe })
 }
 
 /// The record's swizzle: format71's (the format's own) composed with GL's.
@@ -522,4 +501,13 @@ pub fn compose(t: &GlTex71) -> Result<Tex71, Refusal> {
         cube_face_stride: if cube { l.layer_stride } else { 0 },
         layout: l,
     })
+}
+
+/// [`compose`] for a depth-stencil texture sampled for its depth: the
+/// Z32F+S8 pair's texture half is the Z32F buffer (Mesa keeps the stencil in
+/// a separate resource, v3dx_format_table.c:155-156), so GL_DEPTH32F_STENCIL8
+/// composes as GL_DEPTH_COMPONENT32F. [`compose`] itself still refuses it by
+/// name ([`Refusal::SeparateStencil`]).
+pub fn compose_depth_half(t: &GlTex71) -> Result<Tex71, Refusal> {
+    compose(&GlTex71 { internal_format: format71::depth_texture_half(t.internal_format), ..*t })
 }

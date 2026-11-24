@@ -474,3 +474,76 @@ pub fn tmu_format71(internal: u32, ty: u32) -> Result<Row71, Refusal71> {
         },
     }
 }
+
+// ---- stage71: storage and per-revision channel order ---------------------
+
+/// Bytes per texel of an uncompressed Mesa row (`util_format_get_blocksize`
+/// of the pipe format), from an explicit table instead of the digits of the
+/// name: the packed formats (R10G10B10A2, R11G11B10, R9G9B9E5, A4B4G4R4,
+/// A1B5G5R5, B5G6R5) and the depth rows (Z16, X8Z24, S8_UINT_Z24, Z32F) are
+/// one word each, whatever their channel digits add up to. The depth half of
+/// Z32_FLOAT_S8X24_UINT is 4 bytes (its stencil is a separate S8 resource,
+/// v3dx_format_table.c:155-156); the stencil-only rows (S8X24_UINT,
+/// X32_S8X24_UINT) are 1 byte of stencil in a separate buffer and have no
+/// texture size here. `None` for compressed rows and unknown names.
+pub fn texel_bytes(pipe: &str) -> Option<u32> {
+    Some(match pipe {
+        // packed, 16 bits
+        "A4B4G4R4_UNORM" | "A1B5G5R5_UNORM" | "X1B5G5R5_UNORM" | "B5G6R5_UNORM" => 2,
+        // packed, 32 bits
+        "R10G10B10A2_UNORM" | "B10G10R10A2_UNORM" | "R10G10B10X2_UNORM" | "B10G10R10X2_UNORM" | "R10G10B10A2_UINT"
+        | "R11G11B10_FLOAT" | "R9G9B9E5_FLOAT" => 4,
+        // depth
+        "Z16_UNORM" => 2,
+        "S8_UINT_Z24_UNORM" | "X8Z24_UNORM" | "Z32_FLOAT" | "Z32_FLOAT_S8X24_UINT" => 4,
+        "S8X24_UINT" | "X32_S8X24_UINT" => return None,
+        p if p.starts_with("ETC2_") || p.starts_with("DXT") || p.starts_with("ASTC_") => return None,
+        _ => {
+            // the rest is array formats: the channel digits are the bits
+            let name = pipe.split('_').next()?;
+            mesa_row(pipe)?;
+            let mut bits = 0u32;
+            let mut num = 0u32;
+            for c in name.chars().chain(std::iter::once('.')) {
+                if let Some(d) = c.to_digit(10) {
+                    num = num * 10 + d;
+                } else {
+                    bits += num;
+                    num = 0;
+                }
+            }
+            match bits {
+                8 | 16 | 32 | 64 | 128 => bits / 8,
+                _ => return None,
+            }
+        }
+    })
+}
+
+/// The format that stores the *texture half* of a depth-stencil format: the
+/// Z32F+S8 pair is a Z32F depth buffer plus a separate S8 one in Mesa
+/// (v3dx_format_table.c:155-156), so sampling its depth reads the Z32F row.
+/// Every other internal format is its own half.
+pub fn depth_texture_half(internal: u32) -> u32 {
+    match internal {
+        0x8CAD => 0x8CAC, // GL_DEPTH32F_STENCIL8 -> GL_DEPTH_COMPONENT32F
+        other => other,
+    }
+}
+
+/// The Vulkan-style form of a row on a revision that has the R/B swap bit
+/// (7.1.5 and later: v3d_packet.xml:1681-1688): a ZYXW or ZYX1 swizzle with
+/// the bit set and the swizzle straightened (XYZW / XYZ1). `None` for a row
+/// whose swizzle is not a pure R/B exchange, and for 7.1.2 (no bit). Gallium
+/// never uses this form (module comment): [`row71`] stays the answer for the
+/// GL path.
+pub fn rb_swap_form(row: &Row71, iprev: u32) -> Option<Row71> {
+    if iprev < 5 {
+        return None;
+    }
+    let [r, g, b, a] = row.swizzle;
+    if r != SWIZZLE_BLUE || g != SWIZZLE_GREEN || b != SWIZZLE_RED || !(a == SWIZZLE_ALPHA || a == SWIZZLE_ONE) {
+        return None;
+    }
+    Some(Row71 { swizzle: [SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_BLUE, a], r_b_swap: true, ..*row })
+}
