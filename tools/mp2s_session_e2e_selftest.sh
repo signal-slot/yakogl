@@ -171,11 +171,9 @@ check "pass: mp2s_record_check passes" $?
 python3 -I "$HERE/mp2s_report.py" "$REC" > "$T/report.md" 2> "$T/out"
 check "pass: mp2s_report exits 0 (complete)" $?
 check "pass: the report quotes boots left 0" "$(t grep -q 'boots left 0' "$T/report.md")"
-# the quoted parts: the console logs, the verdicts and the session summary (the
-# env dumps hold ST's stock "ipv4:1***" text, which the check flags: see report)
-python3 -I "$HERE/mp2s_redact_check.py" "$REC/raw.log" "$REC/console.log" "$REC/console-verdict.txt" \
-    "$REC/record-verdict.txt" "$REC/session.txt" > "$T/out" 2>&1
-check "pass: mp2s_redact_check is clean on the quoted record files" $?
+# the whole record directory, env dumps included (ST's stock env text is allowed)
+python3 -I "$HERE/mp2s_redact_check.py" "$REC" > "$T/out" 2>&1
+check "pass: mp2s_redact_check is clean on the whole record directory" $?
 python3 -I "$HERE/mp2s_redact_check.py" "$T/report.md" > "$T/out" 2>&1
 check "pass: mp2s_redact_check is clean on the report" $?
 
