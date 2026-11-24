@@ -212,6 +212,21 @@ With `--go` a runner runs itself again through `t6-uart-rfc2217.py`
 - doubles 0xff (telnet IAC) both ways;
 - opens a lost connection again, sets the line again, and prints one
   line with the time and the length of the gap (the gap's bytes are lost);
+- tells a silent link from a silent board (issue #11686). The adapter's
+  stream can stop for good while the TCP connection stays open. After 5 s
+  with no byte (`T6_UART_SILENT_S`), the tool asks the adapter for its
+  baud rate (RFC 2217 SET-BAUDRATE with the value 0). This is a telnet
+  command to the adapter, not data: no byte of it reaches the board. If
+  there is no answer within 3 s (`T6_UART_ANSWER_S`), or the answer is not
+  1500000, the tool drops the connection, opens it again and sets the line
+  exactly as the first time. The answer 1500000 only shows that the adapter
+  and the connection work: the board may be silent, or the adapter may have
+  stopped reading the board, and the answer cannot tell these apart. Such
+  answers print nothing during the run; one line at the end counts them;
+- writes each line about the connection (lost, dropped, set again) to
+  stderr and also into the runner's stream, as a line of its own that
+  starts with `#### t6-uart-rfc2217:`. So `uart.log` shows where its hole
+  is, and the line cannot be read as the board's output;
 - passes SIGTERM and SIGHUP to the runner, SIGINT to its process group, and
   waits for it: a runner is never killed between the steps of a jump;
 - exits with the runner's status and leaves no process or file behind.
