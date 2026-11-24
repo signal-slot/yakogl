@@ -17,7 +17,10 @@
 # STATUS reads only (FRCNT step; no step within the read bound fails as
 # HVS6S_ERR_VBLANK), the pickup timed by a tight bounded loop (line, FRCNT,
 # dt_us, read period, frame boundary), one forced mid-frame write recorded
-# off the boundary, and a tight bound that runs out with no pickup
+# off the boundary, and a tight bound that runs out with no pickup, and the
+# restore's LPTRS write after a vblank found the same way, its pickup timed
+# (in the vblank, at the next step, a tight miss, untimed), and with no step
+# within the read bound still written back, marked not in vblank, passing
 # (driver/zephyr/lib/board/test/hvs6_dlist_swap_mock.c), with -std=c11
 # -Wall -Wextra -Werror and AddressSanitizer + UBSan; the header also
 # compiles alone under -std=c11 -pedantic.
