@@ -505,14 +505,22 @@ pattern generator (`VID_MODE_VPG_ENABLE`, L:`dw-mipi-dsi.c:575-582`, behind
    file lists sixteen RIMU entries without names (O:`...-rif.dtsi:625-640`);
    entries 11, 12 and 13 are the only masters without a peripheral pairing in
    OP-TEE's table (O:`stm32_rifsc.c:146-211`) and are CID0, non-secure,
-   privileged, CID taken from the master (O:`...-rif.dtsi:636-638`). RISAF4
-   regions 9 (Linux memory) and 10 (GPU carveout, 0xfa800000) are non-secure,
-   read/write for CID0 and CID1 (O:`...-rif.dtsi:980-986`, `:1001`), so a
-   master presenting CID0 or CID1 reaches both. The LTDC master passing RISAF4
-   is therefore *likely [D]* (by elimination to 11-13) but not shown; the
-   board read of `RISC_RIMC_ATTR0..15` (probe `mp2_display_state`) or RM0457's
-   RIMU table decides. This session could not fetch ST's trees (no network
-   approval), so no new file:line was added.
+   privileged, CID taken from the master (O:`...-rif.dtsi:636-638`). Read
+   again from the r3.1 file (`stm32mp257f-dk-ca35tdcid-rif.dtsi`): RIMU 0 is
+   CID1 with `RIF_CIDSEL_M` (:625); 1-10, 14 and 15 are `RIF_CIDSEL_P` (CID
+   from the paired peripheral, :626-635, :639-640); 11-13 are CID0 with
+   `RIF_CIDSEL_M` (:636-638). The LTDC's four peripheral entries (80, 119,
+   120, 121) are non-secure, non-privileged, `RIF_CFDIS`, CID filter off
+   (:82-85). RISAF4 regions 9 and 10 (:981, :985) and the LTDC's regions 13
+   and 14 (:989, :993) are non-secure, read/write for CID0 and CID1, and
+   `risaf4` lists them (:1001). So: if the LTDC is one of RIMU 11-13 it
+   presents CID0 and passes all four; if it is a `CIDSEL_P` entry its CID
+   follows the LTDC's peripheral CID configuration, which this file leaves
+   disabled (:82-85), and what the master then presents is not settled by the
+   file. The pairing table (O:`stm32_rifsc.c:146-211`) would decide and was
+   not re-read. The board read of `RISC_RIMC_ATTR0..15` (probe
+   `mp2_display_state`), RM0457's RIMU table, or simply whether the LTDC
+   scans out a buffer in region 9 or 10, decides.
 3. **The HDMI +5 V.** Is `LDO5` off at hand-over, and does the ADV7535 need it
    (HPD/DDC pull-ups on the connector) to read an EDID? The first
    board session reads the SCMI voltage state.
