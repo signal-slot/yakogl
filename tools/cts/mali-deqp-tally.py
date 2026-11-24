@@ -126,6 +126,15 @@ REFUSED = re.compile(r"\brefus(?:ed|al)\b[\s:=]+([A-Za-z_][A-Za-z0-9_.:-]*)")
 # A refusals.tsv text: "... refused this <stage> shader: <why>", where <why>
 # is the compiler's error, "Mali(<text>)" for this back end.
 SHADER_REFUSAL = re.compile(r"\brefused this (\w+) shader: (.*)$")
+# A link refusal of the library, which does not say "refused": "online shaderc:
+# <why> ('<varying>')". The same forms as LINK_REFUSAL in mali-deqp-run.sh
+# (MaliError's gaps and the link's end "is not lowered yet"; the others are
+# listed there); keep them equal.
+LINK_REFUSAL = re.compile(
+    r"\bonline shaderc: ([^\n]*?(?:\bis not lowered yet\b|\(a back-end defect\)"
+    r"|\bValhall back end defect\b|\bValhall: the scratch arena ran out\b"
+    r"|\bValhall: a shader with more than 65535 uniform rows\b"
+    r"|\bnot compiled by the in-process compiler\b).*)$")
 CASE_LINE = re.compile(r"Test case '([^']+)'")
 MALI_REFUSAL = re.compile(r"yakogl-mali-refusal:\s+(-?\d+)\s*(.*\S)?")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -474,6 +483,10 @@ def refusal_cause(text):
     compiler's own words, without the "Mali(...)" around them."""
     m = SHADER_REFUSAL.search(text)
     if not m:
+        link = LINK_REFUSAL.search(text)
+        if link:
+            # the cause groups by reason: the varying's name is the case's own
+            return "refused, link: " + re.sub(r" \('[^']*'\)$", "", link.group(1))
         return "refused: " + text
     why = m.group(2)
     if why.startswith("Mali("):
@@ -652,6 +665,23 @@ def self_test():
         re.search(r"^cause NotSupported +1  refused, vertex shader: Valhall: "
                   r"a loop in a vertex shader is not lowered yet$", o, re.M)
         is not None)
+    chk("refusals.tsv: a link refusal without the word 'refused' is "
+        "'refused, link: <why>', the varying's name left out",
+        re.search(r"^cause InternalError +1  refused, link: a Mali link whose "
+                  r"stages place a varying at different offsets is not lowered "
+                  r"yet$", o, re.M) is not None)
+    chk("refusal_cause: a back-end defect link refusal reads the same way",
+        refusal_cause("online shaderc: Mali link: a vertex output the record "
+                      "lists has no slot in the record's layout (a back-end "
+                      "defect) ('v')")
+        == "refused, link: Mali link: a vertex output the record lists has "
+           "no slot in the record's layout (a back-end defect)")
+    chk("refusal_cause: a compile refusal keeps its stage form",
+        refusal_cause("online shaderc: the code generator refused this "
+                      "fragment shader: Mali(Valhall: a loop in a vertex "
+                      "shader is not lowered yet)")
+        == "refused, fragment shader: Valhall: a loop in a vertex shader is "
+           "not lowered yet")
     chk("refusals.tsv: a case it does not name keeps dEQP's text, not the "
         "chunk's first refusal",
         re.search(r"^cause Fail +1  Image comparison failed$", o, re.M)
