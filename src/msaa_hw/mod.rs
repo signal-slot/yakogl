@@ -11,7 +11,11 @@
 //! resolve words and the measured arm-19 state ((c3), (f3)).
 //! `pvr` is the PowerVR's (AM62P, `src/pvr`): the ISP 4x mode, tiles in
 //! flight, the PBE downscale resolve and the sample-store geometry ((c1), (f2)).
+//! `v3d` is the V3D 4.2's (Pi 4, `src/v3d`): the 4x tile size, internal bpp,
+//! per-RT sample-buffer layout and the resolve, per-sample and sample-0 store
+//! words ((c2), (f1)).
 
 pub mod gc;
 pub mod mali;
 pub mod pvr;
+pub mod v3d;
