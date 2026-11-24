@@ -28,8 +28,10 @@ committed reference draws. They are pinned by `tests/mali_deqp_fsint.rs`.
   `constant_expressions.trivial.int_vertex`).
 - **No dEQP re-measure.** `tools/mali/deqp-host-measure.sh` needs a
   VK-GL-CTS checkout at `93bca01` with its external sources. Neither
-  `DEQP_WORK` nor `$CONNECTED_DEPS_DIR/VK-GL-CTS` was on this host, and the
-  fetch (git and HTTPS) was refused here. Only the sparse
+  `DEQP_WORK` nor `$CONNECTED_DEPS_DIR/VK-GL-CTS` was on this host. A
+  shallow `git fetch` of `93bca01` went through, but checking out its tree
+  and running `external/fetch_sources.py` (HTTPS) were not permitted here,
+  so no `deqp-gles2` could be built. Only the sparse
   `VK-GL-CTS-gles3` (`data/gles3/shaders`) is present. So the cases were
   **not** re-run through `deqp-gles2` at the tip. In its place:
   - Each case was mapped by its group and name to the sub-form table of
