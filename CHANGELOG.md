@@ -86,8 +86,22 @@ records at the tip.
   and the first frame on the firmware's HDMI plane reads back byte for
   byte (`2b88a9f6`, 2026-11-21; registers and bytes only, no camera). No
   GLES result on the Pi 5: `gpu-v3d` still selects the V3D 4.2 back end.
-- STM32MP257F-DK: no board result yet (`tools/cts/RESULTS.md` has no DK
-  row); what exists is host-tested code and probes, under Added.
+- STM32MP257F-DK (GC8000, Zephyr, one-shot off the card's U-Boot): a
+  bring-up result, not the sign-off (the "Vivante: STM32MP257F-DK" section
+  of `tools/cts/RESULTS.md`). Eight steps PASS from 2026-11-21 and
+  2026-11-23: the return trials and the OP-TEE watchdog, the GPU identity
+  (model 0x8000, revision 0x6205), a fence that retires with its
+  interrupt, a clear read back, the first triangle (`gc_triangle`, 0
+  failing checks) and `gl_test` case 1 only. Not yet run: the `gl_test`
+  regression set, dEQP-GLES2, glmark2, the display and the boot from the
+  DK's own storage.
+- NanoPC-T6 on Zephyr, HDMI (a development result, kexec-started; the
+  "Mali: NanoPC-T6 on Zephyr" rows of `tools/cts/RESULTS.md`, 2026-11-23,
+  #7016, #11130): `examples/triangle` PASS with 0 of 614,400 pixels
+  wrong; `driver/samples/zephyr/glmark2` PASS on two scenes (score 119,
+  the display's flip rule, not the GPU's speed; 0 GL errors); and
+  `examples/slint` PASS, the cluster within 1 per channel of the AM62P's,
+  252 frames in 10,017 ms.
 - dEQP-GLES2 on the NanoPC-T6 (Mali-G610, panthor, the board's own
   Armbian): the whole mustpass tree at main `8ff01055`, 2026-11-24, one
   boot, four slices under `tools/cts/log/2026-11-24-t6-gles2-S<n>-8ff01055/`:
@@ -369,8 +383,8 @@ records at the tip.
   `tools/probes/stm32mp257f_dk/`, and the notes
   `docs/notes/pre-study-stm32mp257f-dk.md`,
   `docs/notes/stm32mp257f-dk-uboot-boot.md` and
-  `docs/notes/stm32mp257f-dk-standalone-boot.md`. Nothing of it has a
-  board result in `tools/cts/RESULTS.md` yet.
+  `docs/notes/stm32mp257f-dk-standalone-boot.md`. Its first board
+  results (steps up to `gl_test` case 1) are under Results.
 
 ### Changed
 
