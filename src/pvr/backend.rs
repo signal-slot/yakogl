@@ -71,6 +71,7 @@ use core::mem::size_of;
 use super::csbgen as csb;
 use super::ffi::*;
 use super::internal::*;
+use super::texture::{self as tex_lod, TexLod};
 use crate::backend::*;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::gl::context::{one_wide_level_pitch, pot_level_side, CAP_MIP_LEVELS};
@@ -6160,9 +6161,15 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
 /// debug option off), for the host tests that pin the state words of a
 /// texture kind against their design (tests/es3_pvr_2darray.rs).
 pub fn texture_descriptor(t: &GlesTextureBind) -> [u32; TEX_DESC_DWORDS as usize] {
+    texture_descriptor_lod(t, &TexLod::DEFAULT)
+}
+
+/// [`texture_descriptor`] with GL_TEXTURE_BASE_LEVEL, MAX_LEVEL, MIN_LOD and
+/// MAX_LOD (`lod`, [`super::texture`]), for tests/pvr_tex_lod_words.rs.
+pub fn texture_descriptor_lod(t: &GlesTextureBind, lod: &TexLod) -> [u32; TEX_DESC_DWORDS as usize] {
     let mut w = [0u32; TEX_DESC_DWORDS as usize];
     let mut warned = u32::MAX; /* no address warning on a test's address */
-    build_tex_desc(&mut w, t, &mut warned);
+    build_tex_desc_lod(&mut w, t, &mut warned, lod);
     w
 }
 
@@ -6182,6 +6189,16 @@ fn compose_tex_swizzle(fmt: [csb::ROGUE_TEXSTATE_SWIZ; 4], bind: &[u8; 4]) -> [c
 }
 
 fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
+    build_tex_desc_lod(w, t, warned, &TexLod::DEFAULT);
+}
+
+/// [`build_tex_desc`] with the texture's level and LOD parameters (`lod`,
+/// [`super::texture`]): the base level in TEXSTATE_IMAGE_WORD1.baselevel of
+/// a twiddled image, or a linear one's address, extent and stride moved to
+/// it; GL_TEXTURE_MAX_LEVEL capping the levels walked; MIN_LOD and MAX_LOD
+/// in SAMPLER_WORD0 minlod and maxlod. [`TexLod::DEFAULT`] packs the words
+/// [`build_tex_desc`] always packed.
+fn build_tex_desc_lod(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, lod: &TexLod) {
     let mut fmt: TexFormat;
 
     /* An image address outside the heaps is a texture fetch the TCU will
@@ -6204,7 +6221,27 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
      * laid out as its power-of-two extent's (gl::texture pot_chain_layout):
      * the stride is that width, word 0 keeps the API extent, as Mesa's
      * image view states them. */
-    let mut levels: u32 = if t.mip_filter != 0 && t.mip_levels > 1 { t.mip_levels as u32 } else { 1 };
+    /* The base level is these words' for a 2D image and the native cube
+     * and array. The emulated cube and the stacked array and volume are
+     * tall images the shader addresses, and the native volume's copy starts
+     * at its base level (gl::native_vol::View): theirs is the GL core's, and
+     * they are described from level 0 here. The native volume's copy is
+     * capped by MAX_LEVEL too (View::levels), which `levels` must not do
+     * again below (its one-level-format check). */
+    let max_level = if t.type_ == GLES_TEXTYPE_3D_TWIDDLED { TexLod::DEFAULT.max_level } else { lod.max_level };
+    let lod_from_base = TexLod { base_level: 0, max_level, ..*lod };
+    let lod = if matches!(t.type_, GLES_TEXTYPE_2D | GLES_TEXTYPE_CUBE_TWIDDLED_PROBE | GLES_TEXTYPE_2D_ARRAY_TWIDDLED)
+    {
+        lod
+    } else {
+        &lod_from_base
+    };
+    let mut levels: u32 = tex_lod::sampled_levels(t, lod);
+    /* the base level: TEXSTATE_IMAGE_WORD1.baselevel of a twiddled word, a
+     * linear image's address moved to it (below) */
+    let base = tex_lod::base_level(t, lod);
+    /* a format whose chain the sampler never walks keeps level 0 */
+    let mut one_level_format = false;
 
     if t.format == GLES_TEXFMT_RGBA8 {
         fmt = if t.bgra != 0 { TEXF_BGRA8 } else { TEXF_RGBA8 };
@@ -6219,6 +6256,7 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
     } else if t.format == GLES_TEXFMT_RGB565 {
         fmt = TEXF_RGB565;
         levels = 1;
+        one_level_format = true;
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(2);
         w[7] = TEX_PCK_INFO_COMPRESSED_UNORM; /* no pack conversion: the TPU hands back unorm */
     } else if matches!(t.format, GLES_TEXFMT_L8 | GLES_TEXFMT_A8 | GLES_TEXFMT_LA8) {
@@ -6253,12 +6291,14 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
          * aligned width the binding carries as its stride */
         fmt = if t.depth_luminance != 0 { TEXF_X8U24_LUMINANCE } else { TEXF_X8U24 };
         levels = 1;
+        one_level_format = true;
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(4);
         w[7] = TEX_PCK_INFO_X8U24;
     } else if let Some((f, bytes)) = raw_tex_format(t.format) {
         /* an integer target's frame load: its pixels as raw unsigned bits */
         fmt = f;
         levels = 1;
+        one_level_format = true;
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(bytes);
         w[7] = PVR_PCK_FORMAT_INVALID;
     } else {
@@ -6332,7 +6372,14 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         w[4] = t.bytes / 6; /* one face, 4 KiB aligned (gl::native_cube) */
         w[0..2].copy_from_slice(&iw0);
         w[2..4].copy_from_slice(&iw1);
-        tex_desc_sampler(w, t, levels);
+        /* GL_TEXTURE_BASE_LEVEL in IMAGE_WORD1.baselevel (texstate.xml:293,
+         * Mesa's view base_mip_level) when the copy holds the chain: a
+         * one-level copy is level 0 alone. num_mip_levels stays the copy's
+         * chain, which the face stride is derived from (above). */
+        if !single {
+            tex_lod::set_image_word1_baselevel(&mut w[2..4], base);
+        }
+        tex_desc_sampler_lod(w, t, levels, Some((lod.min_lod, lod.max_lod)));
         /* GL ES 2.0 cube maps are not seamless: each face filters and wraps
          * by its own address modes (dEQP's ES 2.0 reference,
          * seamlessCubeMap false), which SAMPLER_WORD1.cemedge_dontfilter
@@ -6391,9 +6438,14 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         w[4] = t.bytes / layers; /* one layer, its full chain, 4 KiB aligned (gl::native_array) */
         w[5] = t.base_gpu as u32;
         w[6] = (t.base_gpu >> 32) as u32;
+        /* the base level as the cube's: IMAGE_WORD1.baselevel over a copy
+         * of the whole chain */
+        if !single {
+            tex_lod::set_image_word1_baselevel(&mut w[2..4], base);
+        }
         /* the sampler's w axis is not used: the layer is an address, not a
          * coordinate (section 3.4) */
-        tex_desc_sampler(w, t, levels);
+        tex_desc_sampler_lod(w, t, levels, Some((lod.min_lod, lod.max_lod)));
         return;
     }
     if t.type_ == GLES_TEXTYPE_3D_TWIDDLED {
@@ -6422,7 +6474,8 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
          * recorded (a test's) is described as the bind says. */
         let view = crate::gl::native_vol::bound_view(t.base_gpu);
         let mut vt = *t;
-        let mut lod = None;
+        /* without a recorded copy, the bind's own MIN_LOD and MAX_LOD */
+        let mut lod = Some((lod.min_lod, lod.max_lod));
         if let Some(v) = view {
             (vt.width, vt.height, vt.layers) = (v.extent.0, v.extent.1, v.extent.2.min(u32::from(u16::MAX)) as u16);
             /* a format that walks no chain (`levels` 1 above) stays one */
@@ -6448,41 +6501,54 @@ fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
         tex_desc_sampler_lod(w, t, levels, lod);
         return;
     }
-    let iw0 = tex_image_word0(fmt, fmt.textype, t.width, t.height);
     /* the STRIDE word for a linear image; the ETC formats' twiddled word,
-     * where [60:63] is baselevel (0) and the level count is [0:3] */
+     * where [60:63] is baselevel and the level count is [0:3] */
     let twiddled = is_etc2(t.format);
+    /* A linear 2D image at GL_TEXTURE_BASE_LEVEL > 0: the STRIDE word has
+     * no baselevel, so the image is stated from the base level on (its
+     * address, extent and stride; super::texture::rebase_stride_bind). A
+     * format whose chain is never walked (`one_level_format`) is level 0
+     * alone. The other types here have base 0 (`lod_from_base` above). */
+    let rebased;
+    let mut lod = *lod;
+    let mut t = t;
+    if base > 0 && !twiddled && !one_level_format && t.type_ == GLES_TEXTYPE_2D {
+        rebased = tex_lod::rebase_stride_bind(t, &lod);
+        lod = tex_lod::rebased_lod(t, &lod);
+        t = &rebased;
+        levels = tex_lod::sampled_levels(t, &lod);
+        w[4] = t.bytes;
+    }
+    let iw0 = tex_image_word0(fmt, fmt.textype, t.width, t.height);
     let iw1 = if twiddled {
-        tex_twiddled_image_word1(true, levels & 0xf, 0, levels > 1, t.base_gpu)
+        /* Mesa: baselevel the view's base level, num_mip_levels its level
+         * count from there, mipmaps_present whether the image holds a chain
+         * (pvr_arch_image.c `image->vk.mip_levels > 1`), which a base level
+         * past 0 says it does */
+        let mut iw1 = tex_twiddled_image_word1(true, levels & 0xf, 0, levels > 1 || base > 0, t.base_gpu);
+        tex_lod::set_image_word1_baselevel(&mut iw1, base);
+        iw1
     } else {
         tex_stride_image_word1(t.stride_texels, levels, t.base_gpu, fmt.alpha_msb)
     };
 
     w[0..2].copy_from_slice(&iw0);
     w[2..4].copy_from_slice(&iw1);
-    tex_desc_sampler(w, t, levels);
+    tex_desc_sampler_lod(w, t, levels, Some((lod.min_lod, lod.max_lod)));
+}
+
+/// A LOD in the sampler's u4.6 CLAMP ([`tex_lod::lod_clamp`]).
+fn tex_lod_clamp(lod: f32) -> u32 {
+    tex_lod::lod_clamp(lod).min(TEX_SAMPLER_MAXLOD_MAX)
 }
 
 /// Sampler words 8 and 9 of a descriptor: address modes, filters and the LOD
 /// range over `levels` levels; and sampler meta word 0 (dword 12), the depth
 /// compare a shadow look-up reads when it runs (Mesa's
 /// PCO_SAMPLER_META_COMPARE_OP; the online compiler's shadow_compare).
-fn tex_desc_sampler(w: &mut [u32], t: &GlesTextureBind, levels: u32) {
-    tex_desc_sampler_lod(w, t, levels, None);
-}
-
-/// A LOD in the sampler's u4.6 CLAMP (texstate.xml): 64 per level, at
-/// least 0 (a NaN too), at most CLAMP MAX.
-fn tex_lod_clamp(lod: f32) -> u32 {
-    if lod > 0.0 {
-        ((lod.min(15.0) * 64.0) as u32).min(TEX_SAMPLER_MAXLOD_MAX)
-    } else {
-        0
-    }
-}
-
-/// [`tex_desc_sampler`] with GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD
-/// (`lod`, the native 3D texture's alone): the LOD the TPU computes is
+///
+/// With GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD (`lod`; GL's defaults
+/// -1000 and 1000 pack the words `None` packs) the LOD the TPU computes is
 /// clamped to them as GL clamps it (ES 3.0 3.8.10, before the choice
 /// between the min and mag filters and of the level), inside the range
 /// the levels allow. A negative bound is LOD 0, which GL's choice reads
