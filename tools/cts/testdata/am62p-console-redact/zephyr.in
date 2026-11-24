@@ -1,0 +1,7 @@
+*** Booting Zephyr OS build v4.1.0-3-g0123abc ***
+[00:00:00.010,000] <inf> board: AM62P standalone, 4 GiB at 0x80000000
+[00:00:00.120,000] <inf> eth: MAC 02:aa:bb:cc:dd:01 link up 1000M
+[00:00:00.131,000] <inf> net_config: IPv4 address: 192.0.2.17
+[00:00:00.200,000] <inf> pvr: BVNC 36.53.104.796 fw ready
+rti_arm: armed
+rti_arm: fed for 150 s
