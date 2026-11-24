@@ -1,4 +1,10 @@
-/* SPDX-License-Identifier: MIT
+/* SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2012-2015 Etnaviv Project
+ *
+ * Derived in part from Mesa 26.2.1 src/gallium/drivers/etnaviv (MIT): the
+ * screen set-up and the NIR hand-off follow etnaviv_screen.c and the GL
+ * state tracker.
  *
  * etna_shc: YakoGL's offline shader tool for the Vivante GC7000 (i.MX8MP).
  * Reads an OpenGL-flavoured SPIR-V module (glslangValidator -G), turns it into
