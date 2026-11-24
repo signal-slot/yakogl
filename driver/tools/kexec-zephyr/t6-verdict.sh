@@ -49,7 +49,12 @@
 # no T6:G line (a T6:G there differs); uboot does not judge the GICv3 line:
 # U-Boot does not touch the CPU interface. On both routes T6:A's SCTLR_EL2
 # must have M, C and I clear: the image runs its early code with the MMU and
-# caches off.
+# caches off. A third line depends on it for t6_cold: the hot-plug value on
+# the chain's VIDEO line, 1 on kexec (Linux left the display up), 0 or 1 on
+# uboot (a display powered from the board's 5 V, which the image switches
+# on, has not raised hot-plug yet when the chain ends; the chain does not
+# wait for it). There the "HPD 1" line after the hold is the proof of a
+# connected display.
 #
 # The probes' own tables (t6_gpu and after) predict the GPU hand-over Linux
 # leaves (PD_GPU off with vdd_gpu_s0 on, the clock at CPLL / 5). With
@@ -560,9 +565,13 @@ table_cold_stages() {
 	never '^t6 display: stage [0-9]+ [A-Z_]+ failed: '
 }
 
-# table_cold_report: the lines of a chain that ran to the end, in the mode
-# M_NAME (cold_mode) on the picture at FB (fb_forms).
+# table_cold_report [hpd-any]: the lines of a chain that ran to the end, in
+# the mode M_NAME (cold_mode) on the picture at FB (fb_forms). The VIDEO
+# line's hot-plug value is 1; with hpd-any (t6_cold on the U-Boot route) 0
+# or 1 (hook cold_hpd).
 table_cold_report() {
+	local hpd=1 hook=
+	if [ "${1:-}" = hpd-any ]; then hpd='{@VHPD}' hook=cold_hpd; fi
 	e "t6 display: up, $M_NAME at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}" '^t6 display: up, '
 	e 't6 display: START: running 0x{x}, stopped 0x{x}, no pixel clock 0x{x}, PHY powered off {d}'
 	e 't6 display: POWER: ACLK_VOP set {d}, PD_VOP was on {d} waited {d}/{d}/{d} us, PD_VO1 was on {d} waited {d}/{d}/{d} us'
@@ -570,8 +579,12 @@ table_cold_report() {
 	e 't6 display: CONTROLLER: CORE_ID 0x48515458 VER_NUMBER 0x{x8} VER_TYPE 0x{x8} CONFIG 0x{x8}'
 	e 't6 display: VOP: VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} -> 0x{x8}, vop_mmu STATUS 0x{x8} 0x{x8} -> 0x{x8} 0x{x8}'
 	e 't6 display: VOP: overlay OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS}, in force after {d} us'
-	e 't6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD 1'
+	e "t6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD $hpd" \
+		'' "$hook"
 }
+
+# the chain's hot-plug value is a bit: 0 or 1
+cold_hpd() { [[ ${V[VHPD]} =~ ^[01]$ ]]; }
 
 # picture_timing <probe>: the hold the record names (HOLD_S, from the
 # probe's "holding the picture for N s" line; 30 without one) and the
@@ -676,6 +689,12 @@ table_t6_display() {
 # timing words, the pixel clock and the controller's monitor words are that
 # mode's, so a build that says one mode and programs the other differs. The
 # picture is 1024x768 in both modes (the frame buffer line, REGION0_VIR).
+# The chain's VIDEO line has HPD 1 on the kexec route and HPD 0 or 1 on the
+# U-Boot route (T6_ROUTE=uboot): there the display of the rig takes its
+# power from the board's 5 V, which the image switches on only some 60 ms
+# before the chain ends, and the chain does not wait for hot-plug (a fixed
+# mode needs no EDID). The read-backs after the hold require HPD 1 on both
+# routes: that line proves a connected display.
 # A record without the chain's rc line ends in a hang or a reset: an
 # "ends" line names where, the last stage line printed or, before the
 # first one, the reads before the chain (and the last of them). A run to
@@ -714,7 +733,7 @@ table_t6_cold() {
 	e 't6_cold: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
 	table_cold_stages "$last"
 	if [ "$n" = 0 ]; then
-		table_cold_report
+		if [ "$ROUTE" = uboot ]; then table_cold_report hpd-any; else table_cold_report; fi
 		e 't6_cold: chain rc 0 in {d} ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000' 't6_cold: chain rc'
 		table_picture_status t6_cold
 		e 't6_cold: PASS: Esmart0 of VP0 shows 0x{=FB8}, frames run, no underflow, no bus error' 't6_cold: (PASS|FAIL|STOPPED)'
