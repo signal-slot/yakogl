@@ -5456,6 +5456,117 @@ fn invariant_values<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s mut [
     }
 }
 
+/// The IR instructions of vertex module `m` Mesa's `nir_opt_dce` keeps,
+/// one flag per value: the output stores and the `if` conditions (a loop's
+/// head test among them), and to a fixed point what they read, through
+/// values and locals ([`super::mark_reads`]), as the fragment walk's
+/// `nir_fs::ir_live`. A store to a local that a later store overwrites
+/// whole before any read ([`overwritten_stores`]) reads nothing: Mesa's
+/// `nir_lower_vars_to_ssa` leaves it no use, and `nir_opt_dce` drops it and
+/// what only it reads (deqp_constrnd_atan_zero_lanes_vs: `vec4 b =
+/// acos(atan(v_color)); b = ...;`). What this drops no output depends on.
+fn vs_ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliError> {
+    let oom = |_| MaliError::OutOfScratch;
+    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    let overwritten = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    overwritten_stores(m, m.nodes_of(m.body), scratch, overwritten)?;
+    for (l, op) in live.iter_mut().zip(m.instrs) {
+        *l = matches!(op, IrOp::StoreOutput { .. } | IrOp::Discard);
+    }
+    for n in m.nodes {
+        if let IrNode::If { cond, .. } = n {
+            if let Some(l) = live.get_mut(cond.val.0 as usize) {
+                *l = true;
+            }
+        }
+    }
+    super::mark_reads(m, live, live_local, |i| overwritten[i]);
+    /* an overwritten store is marked with its local's other stores, and
+     * read nothing (the `folded` closure above): it is no store at all */
+    for (l, o) in live.iter_mut().zip(overwritten.iter()) {
+        *l &= !*o;
+    }
+    Ok(live)
+}
+
+/// Marks in `overwritten` each store of node list `nodes` that a later
+/// store of the same list replaces whole (no index, every lane of a local
+/// that is no array) before anything reads that local. `pending` holds,
+/// per local, the last such store of the list not read since; each list
+/// has its own, from `scratch`. A read
+/// anywhere in a nested `if` or loop, and any jump, ends every pending
+/// store; a store in a nested `if` or loop ends none (it may not run) and
+/// replaces none. Each nested list is scanned on its own.
+fn overwritten_stores(
+    m: &Module<'_>,
+    nodes: &[IrNode],
+    scratch: &Arena<'_>,
+    overwritten: &mut [bool],
+) -> Result<(), MaliError> {
+    let pending = scratch.alloc_filled(m.locals.len(), None::<u32>).map_err(|_| MaliError::OutOfScratch)?;
+    for n in nodes {
+        match *n {
+            IrNode::Instr(id) => match m.instr(id) {
+                Some(&IrOp::LoadLocal { local, .. }) => {
+                    if let Some(p) = pending.get_mut(local.0 as usize) {
+                        *p = None;
+                    }
+                }
+                Some(&IrOp::StoreLocal { local, index, write_mask, .. }) => {
+                    let whole = m.locals.get(local.0 as usize).is_some_and(|d| {
+                        let all = (1u8 << d.ty.comps.min(4)) - 1;
+                        index.is_none() && d.array_len == 1 && write_mask & all == all
+                    });
+                    if let Some(p) = pending.get_mut(local.0 as usize) {
+                        if let (true, Some(s)) = (whole, *p) {
+                            if let Some(o) = overwritten.get_mut(s as usize) {
+                                *o = true;
+                            }
+                        }
+                        *p = if whole { Some(id.0) } else { None };
+                    }
+                }
+                _ => {}
+            },
+            IrNode::If { then_, else_, .. } => {
+                for r in [then_, else_] {
+                    overwritten_stores(m, m.nodes_of(r), scratch, overwritten)?;
+                    end_read_locals(m, m.nodes_of(r), pending);
+                }
+            }
+            IrNode::Loop { body } => {
+                overwritten_stores(m, m.nodes_of(body), scratch, overwritten)?;
+                end_read_locals(m, m.nodes_of(body), pending);
+            }
+            IrNode::Break | IrNode::Continue | IrNode::Return => pending.fill(None),
+        }
+    }
+    Ok(())
+}
+
+/// Ends the pending store ([`overwritten_stores`]) of each local that node
+/// list `nodes` reads anywhere, and every one when it holds a jump.
+fn end_read_locals(m: &Module<'_>, nodes: &[IrNode], pending: &mut [Option<u32>]) {
+    for n in nodes {
+        match *n {
+            IrNode::Instr(id) => {
+                if let Some(&IrOp::LoadLocal { local, .. }) = m.instr(id) {
+                    if let Some(p) = pending.get_mut(local.0 as usize) {
+                        *p = None;
+                    }
+                }
+            }
+            IrNode::If { then_, else_, .. } => {
+                end_read_locals(m, m.nodes_of(then_), pending);
+                end_read_locals(m, m.nodes_of(else_), pending);
+            }
+            IrNode::Loop { body } => end_read_locals(m, m.nodes_of(body), pending),
+            IrNode::Break | IrNode::Continue | IrNode::Return => pending.fill(None),
+        }
+    }
+}
+
 /// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
 /// numbers the attribute locations ([`Nir::numbering_walk`]).
 fn walk<'s>(
@@ -5506,6 +5617,7 @@ fn walk<'s>(
     let mut kept_loop: Option<KeptLoop> = None;
     let steps = vs_steps(m, scratch)?;
     let exact_values = invariant_values(m, scratch)?;
+    let live = vs_ir_live(m, scratch)?;
     let mut k = 0;
     while k < steps.len() {
         let step = steps[k];
@@ -5652,6 +5764,11 @@ fn walk<'s>(
                 continue;
             }
         };
+        /* a value no output or condition reads: `nir_opt_dce` removed it
+         * before Mesa asks any width or form question ([`vs_ir_live`]) */
+        if live.get(id.0 as usize) == Some(&false) {
+            continue;
+        }
         if let (Some(IrOp::Alu(..)), Some(o)) = (m.instr(id), nifs.checked_sub(1).and_then(|i| ifs[i].as_mut())) {
             o.alu[usize::from(o.then.is_some())] += 1;
         }
