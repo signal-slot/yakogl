@@ -958,8 +958,10 @@ pub fn lower_blend(p: &mut Prog<'_>) -> Result<(), MaliError> {
                 Ins::new(Op::IaddImmI32(8), &[i.dest[0]], &[Src::of(Idx::Special(Special::ProgramCounter, false))])
             };
             let call = Ins::new(Op::BranchzI { eq: true }, &[], &[Src::of(Idx::Lut(0)), i.src[3]]);
-            p.insert(k + 1, link)?;
-            p.insert(k + 2, call)?;
+            /* bi_after_instr(I) (va_pack.c:1182): in the BLEND's own
+             * block, also when the BLEND ends it */
+            p.insert_after(k, link)?;
+            p.insert_after(k + 1, call)?;
             k += 2;
         }
         k += 1;
@@ -1040,6 +1042,25 @@ mod tests {
 
     fn pack(op: Op, dest: u8, srcs: &[Src]) -> u64 {
         pack_one(&Ins::new(op, &[Dest { idx: Idx::Reg(dest), swz: Swz::H01 }], srcs), 0).unwrap()
+    }
+
+    /// The link and the call go after the BLEND in its block
+    /// (`bi_after_instr(I)`, va_pack.c:1182), not into the block that
+    /// follows.
+    #[test]
+    fn a_blend_ending_a_block_keeps_its_link_and_call_in_that_block() {
+        let mut buf = vec![Ins::NOP; 8];
+        let mut p = Prog::new(&mut buf);
+        let blend = Op::Blend { sr_count: 4, f32: false, u32: false };
+        p.push(Ins::new(blend, &[Dest { idx: Idx::Reg(48), swz: Swz::H01 }], &[r(0), r(60), lut(0), lut(1)]))
+            .expect("room");
+        p.cur = p.new_block().expect("room");
+        p.push(Ins::new(Op::MovI32, &[Dest { idx: Idx::Reg(1), swz: Swz::H01 }], &[r(2)])).expect("room");
+        lower_blend(&mut p).expect("lowers");
+        let ops: Vec<Op> = p.as_slice().iter().map(|i| i.op).collect();
+        assert_eq!(ops, [blend, Op::IaddImmI32(8), Op::BranchzI { eq: true }, Op::MovI32]);
+        assert_eq!((p.block_start(0), p.block_end(0)), (0, 3));
+        assert_eq!((p.block_start(1), p.block_end(1)), (3, 4));
     }
 
     /// The words are `fsarith_77_transc.expect.json`'s (docs/notes/
