@@ -22,6 +22,14 @@ The console lines start `rpi5_dtb:`: the build, x0 / EL / entry, the mapped
 range, the walk result, then one `node`/`compatible`/`reg` group per match and
 `done`. A line starting `FAIL` says what went wrong.
 
+## Verdicts
+
+`verdicts.sh <console.log>` prints one `rpi5_dtb verdict:` line each for the
+boot record, the walk, the node count, the GPU (v3d) node and the end line,
+then `PASS` or `FAIL (<reason>)`. Exit 0 done, 1 no end line, 2 usage, 3 FAIL.
+`verdicts_selftest.sh` checks it against inline logs (good, FAIL, truncated,
+no GPU node); the gate runs it.
+
 ## Limits
 
 - Zephyr's rpi_5 MMU map covers only the image RAM and the device MMIO, and
