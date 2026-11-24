@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+T6:A EL2 HCR_EL2 0x0000000000000022 -> 0x0000000080000002 SCTLR_EL2 0x0000000030c50830 VBAR_EL2 0x00000000efec3800 -> 0x0000000010001000
+T6:G go: SCTLR_EL2 0x0000000030c51835 -> 0x0000000030c50830 (MMU, D-cache, I-cache off); 0x10000000-0x20000000 cleaned and invalidated to PoC, TLB and I-cache invalidated
+T6:A1 EL1 init done, MMU off
+T6:A2 EL1, MMU off: arming WDT0
+T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369
+T6:B console up (uart2 through the ns16550 driver)
+yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 300; alive_s 20; proof 0; load 0x10000000
+t6: GICv3 CPU interface: ICC_AP1R0_EL1 0x00000000 ICC_BPR1_EL1 0x3 as found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0
+t6: GIC active state: GICD_TYPER 0x007b040f GICR_TYPER 0x0000000000000021 GICR_ISACTIVER0 0x00000000 as found, 0 INTID(s) active (none), 16 word(s) written ICACTIVER, 0 still active
+t6: WDT0 armed: CR 0x00000008 -> 0x00000009 (was stopped), TORR 0x00000000 -> 0x0000000d, CCVR 0x1ffffff3, PARAM_1 0x10000ac0, version 0x3131302a, flags 0x0: period 22369 ms (TOP 13), fed until 300 s of uptime, alive window 20 s
+T6:C WDT0 armed, period 22369 ms
+board: watchdog armed
+t6: vbus5v0_usb rc 0, GPIO4_B0 level 1: 0xfd5f8088 0x00000000 -> 0x00000000 0xfd5fc144 0x0000d7fd -> 0x0000d7fc 0xfec50000 0x00000000 -> 0x00000100 0xfec50008 0x00000020 -> 0x00000120; HDMI0 pins rc 0: 0xfd5f8090 0x00000000 -> 0x00000055 0xfd5fc148 0x00001557 -> 0x00001550 0xfd5f8024 0x00000000 -> 0x00000050 0xfd5f9110 0x0000d555 -> 0x0000d155 0xfd5f808c 0x00000000 -> 0x00005000 0xfd5fc144 0x0000d7fc -> 0x000017fc 0xfd5fc08c 0x00006666 -> 0x00005666 0xfd5fc244 0x00000000 -> 0x00000080 0xfd5fc090 0x00000066 -> 0x00000061 0xfd5fc248 0x00000000 -> 0x00000001
+sample: build tree=v0.1.0-3200-g0123456789 table=6c5b8a70
+*** Booting Zephyr OS build af17c0c8aa2a ***
+t6: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+triangle: OpenGL ES 2.0 through YakoGL, 1024x600 window
+yk-record: 594b0501 00000201 00000008 00000001
+triangle: window 1024x600 at phys 0x147b4000, format 0x2, 8 guard rows
+yk-record: 594b0502 00000202 0000008b 00000002
+osal(mali): ready: gpu_id 0xa8670005, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 32768 KiB at 0x4000000000 (2432 KiB of it the board window), csg ack 47 us
+mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+triangle: GL_RENDERER Arm Mali-G610 (YakoGL), GL_VERSION OpenGL ES 2.0 YakoGL
+yk-record: 594b0503 00000203 000000e7 00000003
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+triangle: compile + link 42 ms; a_pos at 0, a_color at 1
+yk-record: 594b0504 00000204 00000112 00000004
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 424 of 393216 bytes
+triangle: frame 3 ms
+yk-record: 594b0505 00000205 00000115 00000005
+t6 display: first show: no picture to adopt (stop 4), cold start
+t6 display: before: PD_VOP PWR 0x00000011 STATUS 0x0011fff8 IDLE_REQ 0x00000000 IDLE_ACK 0x00021ffe IDLE_ST 0x00021ffe REPAIR 0xfff70003
+t6 display: before: PD_VOP powered 1 usable 1, PD_VO1 powered 1 usable 1 (IDLE_REQ 0x00000000)
+t6 display: before: vop readable
+t6 display: before: hdmi-tx0 readable
+t6 display: before: hdptx0 readable
+t6 display: before: CLKSEL_CON(112) 0x00000001 (DCLK_VOP0 mux 0), PHY GRF STATUS 0x00000000
+t6 display: stage 1 START
+t6 display: found VOP on DSP_CTRL 0x8000000f 0x8000000f 0x8000000f 0x8000000f, PHY STATUS 0x0
+t6 display: stage 2 POWER
+t6 display: stage 3 GRF
+t6 display: stage 4 PHY
+t6 display: stage 5 DCLK
+t6 display: stage 6 CONTROLLER
+t6 display: stage 7 VOP
+t6 display: stage 8 VIDEO
+t6 display: no hot-plug level: no cable or no powered sink
+t6 display: up, 1920x1080 at 0x147b4000, PHY lock 100 us, CMU 0x255
+t6 display: START: running 0x0, stopped 0x0, no pixel clock 0x0, PHY powered off 0
+t6 display: POWER: ACLK_VOP set 0, PD_VOP was on 0 waited 9/1/0 us, PD_VO1 was on 0 waited 8/1/0 us
+t6 display: PHY: locked after 100 us, CON0 0x000000e0 STATUS 0x0000000e
+t6 display: CONTROLLER: CORE_ID 0x48515458 VER_NUMBER 0x30313030 VER_TYPE 0x6c753030 CONFIG 0x11e0d501
+t6 display: VOP: VERSION_INFO 0x40176786 SYS_PD_CTRL 0x000000ff -> 0x00000070, vop_mmu STATUS 0x00000018 0x00000018 -> 0x00000018 0x00000018
+t6 display: VOP: controller enabled after VP0 started, CMU_STATUS 0x00000200 after 0 us
+t6 display: VOP: overlay OVL_LAYER_SEL 0x76543012 OVL_PORT_SEL 0xa0507880, in force after 16700 us
+t6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x147b4000, REG_CFG_DONE 0x00008000, CMU_STATUS 0x00000255, HPD 0
+board: found PD_VOP PWR 0x00000011 STATUS 0x0011fff8 IDLE_REQ 0x00000000 IDLE_ACK 0x00021ffe IDLE_ST 0x00021ffe REPAIR 0xfff70003 CLKGATE_CON(52) 0x00000000
+board: found VERSION_INFO 0x40176786 DSP_CTRL 0x8000000f 0x8000000f 0x8000000f 0x8000000f DSP_IF_EN 0x00000000 SYS_PD_CTRL 0x000000ff
+board: found VP0 timing 0x032000c8 0x01900258 0x00fa000a 0x000a00fa OVL_LAYER_SEL 0x76543210 OVL_PORT_SEL 0xa0507753
+board: found Cluster0 0x00000000 0x00000000 Esmart0 0x00000000 vop_mmu STATUS 0x00000018 0x00000018 DTE_ADDR 0x00000000 0x00000000
+board: adopt rc -19 stop 4 (VP0 is in STANDBY: no picture to adopt), refusal 0, index 0, detail 0x8000000f
+board: first show: no picture was left running: cold start at 1920x1080, rc 0
+board: chain rc 0 in 64 ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000
+triangle: window 1024x600: 614400 pixels = 194526 inside + 415700 outside + 4174 edge (band 1 px)
+triangle:   inside wrong 0 (largest channel diff 1, tolerance 3)
+triangle:   outside wrong 0, edge wrong 0 (edge drawn 2080)
+triangle:   guard rows: 0 of 8192 pixels changed
+triangle:   glReadPixels against memory: 0 of 23 points differ
+triangle: picture: centre 0xff403f80, column crc 0x35706c4e (19 samples), size 0x04000258
+triangle: check PASS (every pixel read back)
+yk-record: 594b0506 00000206 00000213 00000006
+yk-record: 594b0407 ff403f80 35706c4e 04000258
+shaderc: keep high-water 12352 of 1048576 bytes (12352 held now)
+yakogl: draws refused 0
+triangle: PASS
+board: holding 90 s, then the reset
+board: screen state 1, 0 flips
+board: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x000002ef
+board: 60 frames in 1000071 us: 59995 mHz, pixel clock 148489 kHz
+board: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x00000070 REG_CFG_DONE 0x00008000 DSP_IF_EN 0x00000008 DSP_CTRL 0x0000000f HTOTAL_HS_END 0x0898002c VTOTAL_VS_END 0x04650005
+board: VOP OVL_PORT_SEL 0xa0507880 OVL_LAYER_SEL 0x76543012 Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x147b4000 VIR 0x00000400 INT_RAW_STATUS 0x000002ef SYS0 0x00000000 SYS1 0x00000000
+board: HPD 1 (SOC_STATUS1 0x001f2240), PHY0 GRF STATUS 0x0000000e
+board: HDMI0 CMU_STATUS 0x00000255 VIDQPCLK_FREQ 37125 LINKQPCLK_FREQ 37125
+board: HDMI0 VIDEO_MONITOR_STATUS0-6 0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438 0x00000000
+board: the record screen stays 20 s
+t6: board: run over: PSCI SYSTEM_RESET at 111662 ms (111 feeds)
