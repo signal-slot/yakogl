@@ -1,0 +1,8 @@
+# synthetic tree: three rows
+# image A1: first
+dEQP-GLES3.a.*
+# image B1: second
+dEQP-GLES3.b.*
+
+# image C1: third
+dEQP-GLES3.c.*
