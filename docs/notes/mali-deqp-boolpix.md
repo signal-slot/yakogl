@@ -179,6 +179,38 @@ Shape dimensions, by section 4 of docs/notes/mali-deqp-families.md:
   design is needed for this family as it stands, not only for the `.not`
   forms. A 32-bit form, `ICMP_OR.u32.eq.m1 r0, r0^, u2.w0`
   (`bw_fn_out_bool_fs`), is wrong with 1 in the same way.
+- **Fix (commit `gpu-mali: a true bool uniform is pushed as ~0, as Mesa
+  does`).** The word is chosen in the Mali back end only; the GL core still
+  stores 0/1, so PowerVR, Vivante and V3D receive what they did
+  (`tests/reference`, `src/pvr/internal.rs`, `src/vivante/internal.rs` are
+  unchanged).
+  - `add_gl_draw` (`src/mali/backend.rs`) passes each stage's uniform words
+    through `program::mali_uniform_words` (`src/mali/program.rs`) before
+    the frame builder sees them. For every table row (`ShcShader::uniform_table`,
+    one row per leaf: a struct member and an array are rows of their own) of
+    type `bool`, `bvec2`, `bvec3` or `bvec4`, each non-zero word of its
+    `dword_off .. dword_off + dwords` becomes `0xffffffff`; zero (false and
+    the padding of an array or vector) stays 0. `glUniform1i`..`4i` and
+    `glUniform1f`..`4f` already agree on truth in the GL core
+    (`Values::truth`), so any non-zero value of either entry point is
+    true. The copy is made only when the table names a bool.
+  - Width: a bool and a bvec lane is a 32-bit word, never an fp16 half (the
+    layout of `UboLayout::fs16` keeps `GL_BOOL*` at `(n, false)`); the
+    16-bit compare reads the low half of the `~0` word (`0xffff`), the
+    32-bit compare reads all of it. Push words and UBO rows both read the
+    converted words, as Mesa's one uniform storage does.
+  - Test: `src/mali/frame_boolunif_tests.rs` (feature set
+    `host-test,gpu-mali,shaderc-online,no-shader-table`) draws programs with
+    a `bool` (`glUniform1i` 1, 5, 0; `glUniform1f` 1.0, -0.25, 0.0), a
+    `bvec2`, a `bvec3` and a `bvec4` (`glUniform2i`, `3i`, `4i`) on the OSAL
+    mock and reads the push block; it fails without the `add_gl_draw` call.
+    A bool array and a struct's bool member do not link yet (the online
+    compiler refuses a uniform array and a bool struct member), so they are
+    pinned on `mali_uniform_words` over hand-made rows, the function the
+    draw calls.
+  - Board: not yet confirmed. The NanoPC-T6 dEQP-GLES2 rerun
+    (`board-rerun-1` of plan 387) must show the 277 BW cases pass; until
+    then the BW count is a forecast from the words (section 0).
 
 ### 3.2 LK: a mediump struct member pushed as fp16 halves, read as fp32 (12 cases)
 
