@@ -516,11 +516,18 @@ pattern generator (`VID_MODE_VPG_ENABLE`, L:`dw-mipi-dsi.c:575-582`, behind
    `risaf4` lists them (:1001). So: if the LTDC is one of RIMU 11-13 it
    presents CID0 and passes all four; if it is a `CIDSEL_P` entry its CID
    follows the LTDC's peripheral CID configuration, which this file leaves
-   disabled (:82-85), and what the master then presents is not settled by the
-   file. The pairing table (O:`stm32_rifsc.c:146-211`) would decide and was
-   not re-read. The board read of `RISC_RIMC_ATTR0..15` (probe
-   `mp2_display_state`), RM0457's RIMU table, or simply whether the LTDC
-   scans out a buffer in region 9 or 10, decides.
+   disabled (:82-85). The pairing table settles which case holds: OP-TEE's
+   `rimu_risup[]` (O:`core/drivers/firewall/stm32_rifsc.c:146-211`) pairs RIMU
+   1-10, 14, 15 with SDMMC1-3, USB3DR, USBH, ETH1, ETH2, PCIE, GPU, DCMIPP,
+   VDEC and VENC (`:151-210`, GPU = RIMU 9, `:183-186`), RIMU 0 with 0
+   (`:147-150`) and RIMU 11, 12, 13 with 0 (`:191-202`). **The LTDC is in no
+   pair**, so its master is not a `CIDSEL_P` entry; the unpaired static ones
+   are RIMU 11-13, CID0 (:636-638), which pass RISAF4 regions 9, 10, 13 and 14.
+   **[D]** This answers the RISAF4 half (the LTDC's DMA reaches regions 9 and
+   10) by elimination; it does not say whether the LTDC is RIMU 11, 12 or 13
+   (or which of the three other unpaired masters, e.g. rotation or a second
+   LTDC layer set, takes the others). The mapping stays open for RM0457 or a
+   board read of `RISC_RIMC_ATTR0..15` (probe `mp2_display_state`).
 3. **The HDMI +5 V.** Is `LDO5` off at hand-over, and does the ADV7535 need it
    (HPD/DDC pull-ups on the connector) to read an EDID? The first
    board session reads the SCMI voltage state.
