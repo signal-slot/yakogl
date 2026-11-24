@@ -479,6 +479,79 @@ check t6_cold-says-1920x1080 1 "VERDICT t6_cold FAIL (4 of $((COLD + 1)))" "$((C
 sed '/^t6_cold: options: /a t6_cold: mode 1280x720' "$D/t6_cold-pass.uart" >"$WORK/cother.log"
 check t6_cold-other-mode 1 "VERDICT t6_cold FAIL (1 of $((COLD + 1)))" "$COLD 0 1" t6_cold "$WORK/cother.log"
 
+# the hold (T6_PICTURE_HOLD_S, a build option of both display probes) and
+# the watchdog's lifetime (CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S) are the
+# record's own. hold90 <in> <out> [lifetime s] makes the record of a build
+# with a 90 s hold and a lifetime of 130 s (or the one given) from a 30 s
+# one: the lifetime on the yakogl-wdt line, the arming line and the probe's
+# "fed until" line, the holding line, and six "held" lines after "held 30 s".
+# A record of the 30 s default with a lifetime of 60 s stays judged as
+# above.
+hold90() {
+	local life=${3:-130}
+	sed -e "s/; lifetime_s 60; /; lifetime_s $life; /" \
+		-e "s/, fed until 60 s of uptime, /, fed until $life s of uptime, /" \
+		-e "s/^\(t6_[a-z]*\): WDT0 period 22369 ms, fed until 60000 ms of uptime\$/\1: WDT0 period 22369 ms, fed until $((life * 1000)) ms of uptime/" \
+		-e 's/^\(t6_[a-z]*\): holding the picture for 30 s: /\1: holding the picture for 90 s: /' \
+		-e 's/^\(t6_[a-z]*\): held 30 s$/&\n\1: held 40 s\n\1: held 50 s\n\1: held 60 s\n\1: held 70 s\n\1: held 80 s\n\1: held 90 s/' \
+		"$1" >"$2"
+}
+hold90 "$D/t6_cold-pass.uart" "$WORK/h90.log"
+runs=$((runs + 1))
+if [ "$(diff "$D/t6_cold-pass.uart" "$WORK/h90.log" | grep -c '^>')" = 10 ]; then
+	echo "ok   t6_cold-hold90: 4 lines of the pass record changed, 6 added"
+else
+	echo "FAIL t6_cold-hold90: not 10 lines of the pass record changed or added (a sed of hold90 no longer matches)"
+	fails=$((fails + 1))
+fi
+check t6_cold-hold90 0 'VERDICT t6_cold PASS' "$((COLD + 6)) 0 0" t6_cold "$WORK/h90.log"
+hold90 "$D/t6_display-pass.uart" "$WORK/dh90.log"
+check t6_display-hold90 0 'VERDICT t6_display PASS' "$((DISP + 6)) 0 0" t6_display "$WORK/dh90.log"
+# the form of the U-Boot route's picture proof (1920x1080, a 90 s hold), as
+# a kexec record; a stop after VOP holds the picture as well
+hold90 "$WORK/c1080.log" "$WORK/c1080h90.log"
+check t6_cold-1920x1080-hold90 0 'VERDICT t6_cold PASS' "$((COLD + 7)) 0 0" t6_cold "$WORK/c1080h90.log"
+hold90 "$WORK/cold7.log" "$WORK/cold7h90.log"
+check t6_cold-stop7-hold90 0 'VERDICT t6_cold PASS' "$((COLD - 8 + 6)) 0 0" t6_cold "$WORK/cold7h90.log"
+# the hold must end 10 s before the lifetime: 90 s in 60 s or in 100 s
+# differs on the holding line; 101 s is the shortest that fits
+hold90 "$D/t6_cold-pass.uart" "$WORK/h90l60.log" 60
+check t6_cold-hold90-life60 1 "VERDICT t6_cold FAIL (1 of $((COLD + 6)))" "$((COLD + 5)) 0 1" t6_cold "$WORK/h90l60.log"
+hold90 "$D/t6_display-pass.uart" "$WORK/dh90l60.log" 60
+check t6_display-hold90-life60 1 "VERDICT t6_display FAIL (1 of $((DISP + 6)))" "$((DISP + 5)) 0 1" t6_display "$WORK/dh90l60.log"
+hold90 "$D/t6_cold-pass.uart" "$WORK/h90l100.log" 100
+check t6_cold-hold90-life100 1 "VERDICT t6_cold FAIL (1 of $((COLD + 6)))" "$((COLD + 5)) 0 1" t6_cold "$WORK/h90l100.log"
+hold90 "$D/t6_cold-pass.uart" "$WORK/h90l101.log" 101
+check t6_cold-hold90-life101 0 'VERDICT t6_cold PASS' "$((COLD + 6)) 0 0" t6_cold "$WORK/h90l101.log"
+# a hold that is not a multiple of 10 (its "held" lines are still the 10 s
+# marks up to it), and one below 30, differ on the holding line
+sed 's/^t6_cold: holding the picture for 30 s: /t6_cold: holding the picture for 35 s: /' "$D/t6_cold-pass.uart" >"$WORK/h35.log"
+check t6_cold-hold35 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/h35.log"
+sed -e 's/^t6_cold: holding the picture for 30 s: /t6_cold: holding the picture for 20 s: /' -e '/^t6_cold: held 30 s$/d' \
+	"$D/t6_cold-pass.uart" >"$WORK/h20.log"
+check t6_cold-hold20 1 "VERDICT t6_cold FAIL (1 of $((COLD - 1)))" "$((COLD - 2)) 0 1" t6_cold "$WORK/h20.log"
+# the lifetime is the yakogl-wdt line's: a "fed until" line of another one
+# differs, on the probe's line and on the arming line
+sed 's/fed until 130000 ms of uptime/fed until 60000 ms of uptime/' "$WORK/h90.log" >"$WORK/h90fed.log"
+check t6_cold-hold90-fed-until 1 "VERDICT t6_cold FAIL (1 of $((COLD + 6)))" "$((COLD + 5)) 0 1" t6_cold "$WORK/h90fed.log"
+sed 's/, fed until 130 s of uptime, /, fed until 60 s of uptime, /' "$WORK/h90.log" >"$WORK/h90arm.log"
+check t6_cold-hold90-arming 1 "VERDICT t6_cold FAIL (1 of $((COLD + 6)))" "$((COLD + 5)) 0 1" t6_cold "$WORK/h90arm.log"
+# one "held" line per 10 s, in order: one missing makes the later ones
+# differ (each is looked for after the one before), one after the hold's
+# last differs
+sed '/^t6_cold: held 60 s$/d' "$WORK/h90.log" >"$WORK/h90no60.log"
+check t6_cold-hold90-no-held-60 1 "VERDICT t6_cold FAIL (4 of $((COLD + 6)))" "$((COLD + 2)) 1 3" t6_cold "$WORK/h90no60.log"
+sed '/^t6_cold: held 90 s$/a t6_cold: held 100 s' "$WORK/h90.log" >"$WORK/h90extra.log"
+check t6_cold-hold90-held-100 1 "VERDICT t6_cold FAIL (1 of $((COLD + 6)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/h90extra.log"
+sed '/^t6_cold: held 30 s$/a t6_cold: held 40 s' "$D/t6_cold-pass.uart" >"$WORK/h30extra.log"
+check t6_cold-held-40 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$COLD 0 1" t6_cold "$WORK/h30extra.log"
+# no holding line: judged for 30 s as before, so a 90 s record's later
+# "held" lines differ as well
+sed '/^t6_cold: holding the picture /d' "$D/t6_cold-pass.uart" >"$WORK/hnone.log"
+check t6_cold-no-holding-line 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 1 0" t6_cold "$WORK/hnone.log"
+sed '/^t6_cold: holding the picture /d' "$WORK/h90.log" >"$WORK/h90none.log"
+check t6_cold-hold90-no-holding-line 1 "VERDICT t6_cold FAIL (7 of $COLD)" "$((COLD - 1)) 1 6" t6_cold "$WORK/h90none.log"
+
 # triangle (examples/triangle on the board layer): the first show by the
 # cold chain (the kexec route) and by the adopt (kexec --crash)
 TRI=$(bash "$V" triangle "$D/triangle-cold-pass.uart" | grep -c '^ok ' || true)

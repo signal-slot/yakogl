@@ -69,6 +69,18 @@
 # not 0, the "Z3: rc" line's step 3), Z1's record (table_z1_stop) is
 # expected after the line that reports the stop; the verdict stays FAIL.
 #
+# t6_display, t6_cold: the picture's hold is a build option of the probes
+# (T6_PICTURE_HOLD_S, tools/probes/nanopc_t6/common/t6_picture.cmake; 30 s
+# by default) and the watchdog's lifetime a Kconfig option of the board
+# (CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S, 60 s by default). Both are taken from
+# the record (picture_timing): the hold N from the "holding the picture for
+# N s" line, the lifetime L from the "yakogl-wdt:" line. The record must
+# have N a multiple of 10 and at least 30, N + 10 < L (the build's own
+# rule; hook picture_hold_fits on the holding line), one "held K s" line for
+# each K = 10, 20, ... N in order and none after them, and L on the boot
+# lines and the probe's "fed until" line. A record without the holding line
+# is judged for 30 s, one without the yakogl-wdt line for 60 s.
+#
 # t6_fw: JOB_INT_RAWSTAT must have bit 31 set and the GLB req and ack words
 # agree on the acknowledged bits; hooks check both.
 #
@@ -111,6 +123,7 @@ PFX=()  # an ERE that marks the candidate line ('' = the template's leading text
 HOOK=() # a function run after the line was found ('' = none)
 NOT=()  # EREs no line of the record may match (anywhere)
 CHAIN_RC= # the start of the cold chain's rc line, when the record must have one
+HELD_PROBE= # the probe whose "held K s" lines the hold judges (table_picture_status)
 declare -A V=() # captured and derived values
 
 # e <template> [prefix ERE] [hook]
@@ -560,6 +573,32 @@ table_cold_report() {
 	e 't6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD 1'
 }
 
+# picture_timing <probe>: the hold the record names (HOLD_S, from the
+# probe's "holding the picture for N s" line; 30 without one) and the
+# watchdog's lifetime (LIFE_S, from the yakogl-wdt line; 60 without one).
+# Up to 4 digits each: the lifetime's Kconfig range ends at 3600 s, so a
+# longer number is not a build's, and the line it is on differs.
+picture_timing() {
+	local l hre="^$1: holding the picture for ([0-9]{1,4}) s: " lre='^yakogl-wdt: .*; lifetime_s ([0-9]{1,4});'
+	HOLD_S=30 LIFE_S=60
+	for l in "${LINES[@]}"; do
+		if [[ $l =~ $hre ]]; then
+			HOLD_S=$((10#${BASH_REMATCH[1]}))
+			break
+		fi
+	done
+	for l in "${LINES[@]}"; do
+		if [[ $l =~ $lre ]]; then
+			LIFE_S=$((10#${BASH_REMATCH[1]}))
+			break
+		fi
+	done
+}
+
+# the hold fits the build's rules (common/t6_picture.c): a multiple of 10,
+# at least 30, and ended 10 s before the watchdog's lifetime at least
+picture_hold_fits() { ((HOLD_S % 10 == 0 && HOLD_S >= 30 && HOLD_S + 10 < LIFE_S)); }
+
 # table_picture_status <probe> [any]: the hold and the read-backs after it,
 # as common/t6_picture.c prints them for both display probes. The status
 # must read back the buffer (FB8) and the overlay selects the probe wrote
@@ -569,11 +608,15 @@ table_cold_report() {
 table_picture_status() {
 	local p=$1 ops='{=OPS}' ols='{=OLS}'
 	if [ "${2:-}" = any ]; then ops='{x8}' ols='{x8}'; fi
-	e "$p: holding the picture for 30 s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border"
+	# the hold of picture_timing, a line every 10 s; one after them is
+	# judged after the table (HELD_PROBE)
+	e "$p: holding the picture for $HOLD_S s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border" \
+		'' picture_hold_fits
 	local i
-	for i in 10 20 30; do
+	for ((i = 10; i <= HOLD_S; i += 10)); do
 		e "$p: held $i s"
 	done
+	HELD_PROBE=$p
 	e "$p: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}"
 	e "$p: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz" "^$p: ([0-9]+ frames in|no frame timed) " display_pclk
 	local t
@@ -602,9 +645,10 @@ table_picture_status() {
 # are checked by hooks. What the display shows only a person can say.
 table_t6_display() {
 	display_mode t6_display
-	table_boot
+	picture_timing t6_display
+	table_boot "$LIFE_S"
 	e 't6_display: build {s}'
-	e 't6_display: WDT0 period 22369 ms, fed until 60000 ms of uptime'
+	e "t6_display: WDT0 period 22369 ms, fed until $((LIFE_S * 1000)) ms of uptime"
 	e 't6_display: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
 	e 't6_display: found PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8} CLKGATE_CON(52) 0x{x8}'
 	e 't6_display: found VERSION_INFO 0x40176786 DSP_CTRL 0x0000000f 0x{x8} 0x{x8} 0x{x8} DSP_IF_EN 0x{x8} SYS_PD_CTRL 0x{x8}'
@@ -644,7 +688,8 @@ table_t6_display() {
 # passes. What the display shows only a person can say.
 table_t6_cold() {
 	cold_mode "^t6_cold: mode ${MODE_1920X1080[0]}\$"
-	table_boot
+	picture_timing t6_cold
+	table_boot "$LIFE_S"
 	local n=0 l re='^t6_cold: options: power-cycle 1, force-cold [01], stop after ([0-8]) '
 	for l in "${LINES[@]}"; do
 		if [[ $l =~ $re ]]; then
@@ -656,7 +701,7 @@ table_t6_cold() {
 	[ "$n" != 0 ] || last=8
 	CHAIN_RC='t6_cold: chain rc'
 	e 't6_cold: build {s}'
-	e 't6_cold: WDT0 period 22369 ms, fed until 60000 ms of uptime'
+	e "t6_cold: WDT0 period 22369 ms, fed until $((LIFE_S * 1000)) ms of uptime"
 	if [ "$n" = 0 ]; then
 		e 't6_cold: options: power-cycle 1, force-cold {d}, stop after 0 (run to the end)'
 	else
@@ -955,6 +1000,23 @@ if [ "$PROBE" = t6_fw ] || [ "$PROBE" = t6_submit ]; then
 		if [[ ${LINES[j]} == "$PROBE: Z3: stop "* ]]; then
 			printf 'differs  expected no stop line; seen "%s" (line %d)\n' "${LINES[j]}" $((j + 1))
 			bad=$((bad + 1))
+		fi
+	done
+fi
+
+# the hold (table_picture_status): its "held K s" lines were looked for in
+# order, one per 10 s up to the hold; a held line after as many of them is
+# one the hold does not have
+if [ -n "$HELD_PROBE" ]; then
+	n=0
+	for ((j = 0; j < ${#LINES[@]}; j++)); do
+		if [[ ${LINES[j]} =~ ^$HELD_PROBE:\ held\ [0-9]+\ s$ ]]; then
+			n=$((n + 1))
+			if ((n > HOLD_S / 10)); then
+				printf 'differs  expected no "%s: held" line after %d of a %d s hold; seen "%s" (line %d)\n' \
+					"$HELD_PROBE" $((HOLD_S / 10)) "$HOLD_S" "${LINES[j]}" $((j + 1))
+				bad=$((bad + 1))
+			fi
 		fi
 	done
 fi
