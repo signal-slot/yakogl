@@ -1,0 +1,20 @@
+#sessionInfo releaseName vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c
+#sessionInfo logFormatVersion "0.3.4"
+
+#beginSession
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.highp_fragment.vec2
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.highp_fragment.vec2" Version="0.3.4" CaseType="Performance">
+ <Message MessageType="InfoMessage"><Text>QualityWarning sample:
+	in0 = vec2(0x1.000000p-130, -0x1.800000p1)
+	out0 = vec2(0.0, -0x1.000000p0)
+	Expected range: ([0x1.000000p0, 0x1.000000p0], [-0x1.000000p0, -0x1.000000p0])
+</Text></Message>
+ <Message MessageType="InfoMessage"><Text>1/64 inputs failed or had quality warnings.</Text></Message>
+ <Result StatusCode="QualityWarning">Low-quality shader precision</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#endSession

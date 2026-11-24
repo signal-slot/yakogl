@@ -1,0 +1,15 @@
+#sessionInfo releaseName vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c
+#sessionInfo logFormatVersion "0.3.4"
+
+#beginSession
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.scalar
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.scalar" Version="0.3.4" CaseType="Performance">
+ <Message MessageType="InfoMessage"><Text>All 64 inputs passed.</Text></Message>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#endSession
