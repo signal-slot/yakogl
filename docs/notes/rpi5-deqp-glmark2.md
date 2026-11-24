@@ -360,11 +360,46 @@ order, each from one commit.
   0x200000 free of firmware use on every board size? Not read in this tree
   (section 3.3). First check: the `rpi5_dtb` output of D1 and one boot of the
   gl_test image with the largest overlay.
-- **Pi 5 limits that change a Pi 4 figure**: `implementation_limits`,
-  `GL_MAX_DRAW_BUFFERS` (8 on 7.1 vs 4) and `state_query` values; whether the
-  table reports ES 2.0 limits or the 7.1 hardware's, so `dEQP-GLES2`
-  expectations stay the Pi 4's (the table must keep `YAKOGL_REPORT_ES2=y`,
-  `deqp/boards/rpi_4b.conf:4-7`).
+- **Pi 5 limits that change a Pi 4 figure** (answered at the tip; the Pi 4
+  comparison is still open): the limit queries do not read the GPU table, so
+  `YAKOGL_REPORT_ES2=y` is enough and the `dEQP-GLES2` expectations stay the
+  Pi 4's.
+  - Path of the setting: Kconfig `YAKOGL_REPORT_ES2` (`default y`,
+    `zephyr/Kconfig:712-714`) -> `zephyr/CMakeLists.txt:158-162` sets
+    `YAKOGL_REPORT_ES2` ON/OFF -> the crate feature `report-es2`
+    (`Cargo.toml:76`) -> `crate::REPORT_ES2` (`src/lib.rs:89`).
+  - `GL_MAX_DRAW_BUFFERS`: under `REPORT_ES2` the query is `GL_INVALID_ENUM`,
+    not a figure (`src/gl/state.rs:1330-1333`; ES 2.0 core has no such
+    query). Only an ES 3.0 build answers `context::max_draw_buffers()`
+    (`src/gl/state.rs:1334`, `src/gl/context.rs:236-238` ->
+    `backend::draw_targets()`, `src/backend.rs:930`), the back end's number.
+    So 8 on 7.1 against 4 does not show under ES 2.0.
+  - `GL_MAX_TEXTURE_SIZE`, `GL_MAX_RENDERBUFFER_SIZE` are the constant 4096
+    for every GPU (`src/gl/state.rs:1272,1274`); `GL_MAX_VERTEX_ATTRIBS` is
+    16 (`src/gl/state.rs:1266`, `src/gl/context.rs:78`);
+    `GL_MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS` are 384 each
+    (`src/gl/state.rs:1280-1281`, `src/gl/context.rs:84-90`). None depends on
+    the GPU feature or on `REPORT_ES2`.
+  - `GL_MAX_VARYING_VECTORS` (`src/gl/state.rs:1282`) is 8 for `gpu-v3d` under
+    `report-es2` and 15 without it (`src/gl/context.rs:212-215`), so the
+    figure is the Pi 4's as long as the 7.1 build also has `gpu-v3d`
+    (below).
+  - `rpi_5` deqp config: `CONFIG_YAKOGL_REPORT_ES2=y` as
+    `deqp/boards/rpi_4b.conf` has it (its header, lines 4-7), and no limit
+    override: there is none to set.
+  - The 7.1 table's own limits (`MAX_RENDER_TARGETS71` 8,
+    `MAX_FRAMEBUFFER_SIZE71` 7680, `src/v3d/limits71.rs:34-38`) feed its target
+    guard; `src/v3d/limits71.rs:28-31` says the GL core reports 4096 and the
+    guard changes no GL query value.
+  - `gpu-v3d71` must imply `gpu-v3d` (`zephyr/Kconfig:113` states it): the
+    varyings cfg above matches `feature = "gpu-v3d"` only. The feature is not
+    in `Cargo.toml` yet (feat71), so the implication is a requirement on that
+    item, not a fact of the tree.
+  - Hardware figures rest on `third_party/mesa-26.2.1/src/broadcom/common/v3d_limits.h`
+    and `limits71.rs`: Mesa's `v3d_screen.c` is not vendored.
+  - Open: no case-by-case comparison with a real Pi 4 `dEQP-GLES2` run
+    (`implementation_limits`, `state_query`) was made; it needs the board
+    runs.
 - **Seamless cube (U8)**: dEQP's `texture.filtering.cube.*` and
   `texture.wrap.*` cases exercise edges; if the 7.1 TMU is seamless only, the
   non-seamless requests are named refusals (`v3d71-gl-table.md:82`).
