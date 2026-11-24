@@ -365,10 +365,21 @@ vertex and the window the one above, except where the row says otherwise.
 | `gl_indexed` | 1 | `glDrawElements` of the quad's six vertices as `GL_TRIANGLES` with `GL_UNSIGNED_BYTE`, `GL_UNSIGNED_SHORT` (at byte offset 4) and `GL_UNSIGNED_INT` indices, and a `GL_TRIANGLE_STRIP` of u16 indices with an index restart (`GL_PRIMITIVE_RESTART_FIXED_INDEX`, 0xffff): four `INDEX_BUFFER_SETUP` and `INDEXED_PRIM_LIST`, the index type, and `Enable Primitive Restarts` 1 in the strip draw only |
 | `gl_instanced` | 1 | `glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 3)` with `a_pos` per vertex and `a_color` and `a_off` at `glVertexAttribDivisor` 1 from a second buffer: one `VERTEX_ARRAY_INSTANCED_PRIMS` and the attribute records' instance divisor |
 | `gl_prims` | 1 | `GL_POINTS` (4 vertices, `gl_PointSize` 8.0 in the vertex shader), `GL_LINES` (4 vertices, `glLineWidth(1.0)`) and `GL_TRIANGLE_STRIP` (4 vertices), as `VERTEX_ARRAY_PRIMS` of three primitive types with `POINT_SIZE` and `LINE_WIDTH` |
+| `gl_blendsub` | 1 | after a black clear, four quads with alpha 0.5, each with its own `BLEND_CFG`: `(SRC_ALPHA, ONE)` with `GL_FUNC_SUBTRACT` (`SUB`); `(ONE, ONE)` with `GL_FUNC_REVERSE_SUBTRACT` (`RSUB`); `(DST_COLOR, ZERO)` with `GL_FUNC_ADD` and `GL_MIN` alpha; `(SRC_ALPHA_SATURATE, ONE_MINUS_DST_ALPHA)` with `GL_FUNC_SUBTRACT` colour and `GL_FUNC_ADD` alpha. With `gl_blend` this covers ADD, SUBTRACT, REVERSE_SUBTRACT, MIN and MAX |
+| `gl_depthfuncs` | 1 | depth cleared to 0.5, depth writes on: one quad each under `GL_NEVER`, `EQUAL`, `LEQUAL`, `GREATER`, `NOTEQUAL`, `ALWAYS` (the `CFG_BITS` depth-test function; `GL_LESS` follows with writes off, and `GL_GEQUAL` is in `gl_depthfunc`): Z updates on, then off inside one job |
+| `gl_primswide` | 1 | `GL_POINTS` (`gl_PointSize` 16.0), `GL_LINES` with `glLineWidth(2.0)` and with `glLineWidth(4.0)`, and a `GL_LINE_STRIP` at 2.0: the `POINT_SIZE` and `LINE_WIDTH` packets at widths other than 1.0 |
+
+The three shapes after `gl_prims` (`DRAW2_SHAPES` of `gl_shapes.py`, new names;
+no earlier shape or file changed) fill what the first six leave out: the
+`SUB` blend mode, the remaining depth functions, a depth write mask change in
+a job and widths above 1.0. Made the same way on 2026-11-24 with a fresh
+build of the same tarball (`gl_prims` reproduced byte for byte from it before
+the new shapes were taken): `bash tools/v3d/drm_shim_ref.sh run <work dir>
+<shape> tools/v3d/pi5/gl_<shape> 7.1.10`.
 
 `bash tools/v3d/pi5/src/decode71.sh` covers them with the earlier files (one
-job each, `V3D 7.1.10.2`, `glGetError 0x0`): 18 files, 2799 packets in 88
-commands of the 7.1 spec, 0 failed. The divergences from the board are those
+job each, `V3D 7.1.10.2`, `glGetError 0x0`): 21 files, 3014 packets in 88
+commands of the 7.1 spec, 0 failed (the three shapes after `gl_prims` add 3 files, one job each). The divergences from the board are those
 above (D0 draw-index shader records read by the dump with the plain 7.1
 layout; 4 KiB buffer alignment on the shim). The run writes `.stderr` files
 next to the outputs; they are not kept.

@@ -112,6 +112,23 @@ draws of a job show what a state change emits:
                   GL_LINES (4 vertices, glLineWidth(1.0)) and GL_TRIANGLE_STRIP
                   (4 vertices) from one 12-vertex buffer.
 
+The refs71b-2 shapes (DRAW2_SHAPES) fill what the six above leave out; same
+window, one job each:
+
+  blendsub   -    GL_BLEND on, black clear, then four quads (alpha 0.5):
+                  (SRC_ALPHA, ONE) with GL_FUNC_SUBTRACT; (ONE, ONE) with
+                  GL_FUNC_REVERSE_SUBTRACT; (DST_COLOR, ZERO) with GL_FUNC_ADD
+                  and GL_MIN alpha; (SRC_ALPHA_SATURATE, ONE_MINUS_DST_ALPHA)
+                  with GL_FUNC_SUBTRACT colour and GL_FUNC_ADD alpha, all
+                  through glBlendFuncSeparate / glBlendEquationSeparate.
+  depthfuncs -    depth cleared to 0.5, depth writes ON; one quad per function
+                  in the order NEVER (z -0.5), EQUAL (z 0.0), LEQUAL (z 0.25),
+                  GREATER (z 0.5), NOTEQUAL (z 0.25), ALWAYS (z 0.75), then
+                  glDepthMask(GL_FALSE) and a LESS quad (z -0.25): the depth
+                  write mask changing inside a job.
+  primswide  -    gl_PointSize 16.0 GL_POINTS, GL_LINES with glLineWidth(2.0)
+                  then glLineWidth(4.0), and GL_LINE_STRIP with 2.0.
+
 The vertex data is fixed in this file so that the jobs' bytes are the same on
 every run. Prints the renderer and glGetError; exits non-zero on any EGL or GL
 failure.
@@ -156,6 +173,10 @@ GL_FRONT, GL_BACK = 0x0404, 0x0405
 GL_ELEMENT_ARRAY_BUFFER, GL_PRIMITIVE_RESTART_FIXED_INDEX = 0x8893, 0x8D69
 GL_UNSIGNED_SHORT, GL_UNSIGNED_INT = 0x1403, 0x1405
 GL_POINTS, GL_LINES, GL_TRIANGLE_STRIP = 0x0000, 0x0001, 0x0005
+GL_LINE_STRIP = 0x0003
+GL_FUNC_SUBTRACT, GL_MIN = 0x800A, 0x8007
+GL_DST_COLOR, GL_ONE_MINUS_DST_ALPHA, GL_SRC_ALPHA_SATURATE = 0x0306, 0x0305, 0x0308
+GL_NEVER, GL_GREATER, GL_ALWAYS = 0x0200, 0x0204, 0x0207
 T, F = 1, 0
 TW = TH = 64
 
@@ -206,6 +227,8 @@ void main() {
     v_uv = a_uv;
 }
 """
+# primswide: POINT_VS with gl_PointSize 16.0.
+POINT16_VS = POINT_VS.replace(b"8.0", b"16.0")
 # gl_test_uv_vs_src and gl_test_texture_fs_src (gl_test_shaders_es100.h),
 # comments left out: tex2d, texfmt, mipgen.
 UV_VS = b"""#version 100
@@ -258,6 +281,7 @@ LOWER_LEFT = ((-1, -1), (0, -1), (0, 0), (-1, -1), (0, 0), (-1, 0))
 SHAPES = ("scissor", "scisbox", "writemask", "viewport", "fbods", "colormask", "mrt4", "mrt8")
 TEX_SHAPES = ("tex2d", "texfmt", "mipgen", "cube")
 DRAW_SHAPES = ("blend", "depthfunc", "stencilops", "indexed", "instanced", "prims")
+DRAW2_SHAPES = ("blendsub", "depthfuncs", "primswide")
 
 
 class Gl:
@@ -886,6 +910,74 @@ class Case:
         gl.glDrawArrays(GL_TRIANGLE_STRIP, 8, 4)
         gl.glFinish()
 
+    # ---- the refs71b-2 draw shapes ----------------------------------------------
+
+    def blendsub(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        cols = ((1.0, 0.5, 0.0), (0.0, 1.0, 1.0), (0.5, 0.5, 1.0), (1.0, 0.0, 0.5))
+        self.upload(sum((quad(FULL, 0.0, c, 0.5) for c in cols), []))
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glEnable(GL_BLEND)
+        for first, (src, dst, asrc, adst, ceq, aeq) in enumerate((
+                (GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE, GL_FUNC_SUBTRACT, GL_FUNC_SUBTRACT),
+                (GL_ONE, GL_ONE, GL_ONE, GL_ONE, GL_FUNC_REVERSE_SUBTRACT, GL_FUNC_REVERSE_SUBTRACT),
+                (GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE, GL_FUNC_ADD, GL_MIN),
+                (GL_SRC_ALPHA_SATURATE, GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO,
+                 GL_FUNC_SUBTRACT, GL_FUNC_ADD))):
+            gl.glBlendFuncSeparate(src, dst, asrc, adst)
+            gl.glBlendEquationSeparate(ceq, aeq)
+            gl.glDrawArrays(GL_TRIANGLES, first * 6, 6)
+        gl.glFinish()
+        gl.glDisable(GL_BLEND)
+
+    def depthfuncs(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        zs = (-0.5, 0.0, 0.25, 0.5, 0.25, 0.75, -0.25)
+        cols = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0),
+                (0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0))
+        self.upload(sum((quad(FULL, z, c) for z, c in zip(zs, cols)), []))
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClearDepthf(0.5)
+        gl.glDepthMask(T)
+        gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        gl.glEnable(GL_DEPTH_TEST)
+        for i, fn in enumerate((GL_NEVER, GL_EQUAL, GL_LEQUAL, GL_GREATER, GL_NOTEQUAL, GL_ALWAYS)):
+            gl.glDepthFunc(fn)
+            gl.glDrawArrays(GL_TRIANGLES, i * 6, 6)
+        gl.glDepthMask(F)
+        gl.glDepthFunc(GL_LESS)
+        gl.glDrawArrays(GL_TRIANGLES, 36, 6)
+        gl.glFinish()
+        gl.glDisable(GL_DEPTH_TEST)
+        gl.glDepthMask(T)
+
+    def primswide(self):
+        gl = self.gl
+        self.window()
+        self.program(POINT16_VS, FS)
+        pts = ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))
+        lines = ((-0.9, -0.9), (0.9, -0.9), (0.9, 0.9), (-0.9, 0.9))
+        wide = ((-0.9, -0.5), (0.9, -0.5), (-0.9, 0.5), (0.9, 0.5))
+        strip = ((-0.8, 0.0), (0.0, 0.8), (0.8, 0.0), (0.0, -0.8))
+        self.upload(quad(pts, 0.0, (1.0, 1.0, 1.0)) + quad(lines, 0.0, (1.0, 1.0, 0.0))
+                    + quad(wide, 0.0, (0.0, 1.0, 1.0)) + quad(strip, 0.0, (1.0, 0.0, 1.0)))
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glDrawArrays(GL_POINTS, 0, 4)
+        gl.glLineWidth(2.0)
+        gl.glDrawArrays(GL_LINES, 4, 4)
+        gl.glLineWidth(4.0)
+        gl.glDrawArrays(GL_LINES, 8, 4)
+        gl.glLineWidth(2.0)
+        gl.glDrawArrays(GL_LINE_STRIP, 12, 4)
+        gl.glFinish()
+        gl.glLineWidth(1.0)
+
 
 def with_tfu_spy(libdir):
     """Run this program again with tfu_spy.c's ioctl() ahead of the drm-shim in
@@ -907,7 +999,7 @@ def with_tfu_spy(libdir):
 
 def main():
     args = sys.argv[1:]
-    if len(args) != 2 or args[1] not in SHAPES + TEX_SHAPES + DRAW_SHAPES:
+    if len(args) != 2 or args[1] not in SHAPES + TEX_SHAPES + DRAW_SHAPES + DRAW2_SHAPES:
         print(__doc__, file=sys.stderr)
         return 2
     libdir, shape = args
