@@ -1,0 +1,30 @@
+# host-gles3-part commit=05769bf2 gpu=vivante module=gles3 cases=1823
+# section tip
+vivante	functional.shaders	63	1760	0	0	0
+# section notpass
+vivante	dEQP-GLES3.functional.shaders.random.all_features.fragment.10	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.all_features.fragment.17	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.all_features.fragment.42	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.1	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.139	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.143	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.29	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.40	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.6	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.64	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.70	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.75	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.76	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.78	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.fragment.81	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.1	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.18	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.19	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.23	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.29	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.34	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.4	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.41	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.45	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.6	Fail	compile	Failed to compile shader		
+vivante	dEQP-GLES3.functional.shaders.random.texture.vertex.9	Fail	compile	Failed to compile shader		
