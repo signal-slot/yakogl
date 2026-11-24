@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
+// SPDX-FileCopyrightText: The Khronos Group Inc.
 //! GLSL ES 3.00 line continuation inside a token: the four dEQP-GLES3
 //! `shaders.preprocessor.line_continuation` cases that the coverage table once
 //! listed as refused (`preprocessing_token_*`, `token_*`).

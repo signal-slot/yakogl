@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
+// SPDX-FileCopyrightText: 2017 Alastair F. Donaldson and Hugues Evrard, Imperial College London
 //! The V3D compiler's scratch-arena refusal (plan #380, issue #1261; images
 //! S16 and UA1 of tools/cts/pi4-gles3-tree.txt). On the Pi 4 at b1b5b845
 //! dEQP-GLES3 `functional.shaders.metamorphic.synthetic.variant_3` (S16)

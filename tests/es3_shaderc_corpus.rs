@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
+// SPDX-FileCopyrightText: The Khronos Group Inc.
 //! How much of GLSL ES 3.00 the online shader compiler takes, measured over
 //! the dEQP `data/gles3/shaders/*.test` corpus (docs/es3/shaderc-coverage.md).
 //!

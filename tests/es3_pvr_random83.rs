@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! dEQP-GLES3 `functional.uniform_api.random.83` on the PowerVR online back
 //! end, through the GL API on the host. The case's vertex shader (13.8 KB:
 //! 50 active uniforms, struct arrays of matrices and samplers, each
