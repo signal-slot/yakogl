@@ -1,5 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2016 Etnaviv Project
+// SPDX-FileCopyrightText: 2012-2026 Wladimir J. van der Laan <laanwj@gmail.com>
+// SPDX-FileCopyrightText: 2012-2026 Christian Gmeiner <christian.gmeiner@gmail.com>
+// SPDX-FileCopyrightText: 2012-2026 Lucas Stach <l.stach@pengutronix.de>
+// SPDX-FileCopyrightText: 2012-2026 Russell King <rmk@arm.linux.org.uk>
+// MIT parts: Mesa 26.2.1 etnaviv_format.c (excerpt) and the rnndb header common_3d.xml.h names.
 //! GC7000UL (i.MX8MP): every texture-format constant of src/vivante/regs.rs
 //! (`GC_TEX_FORMAT_*`) is the word Mesa's etnaviv assigns to the pipe
 //! formats it stands for, read by pipe-format name out of Mesa 26.2.1
