@@ -1,5 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2010-2012 Linaro Limited
+// Derived from glmark2 (scene-terrain.cpp, terrain-noise.frag, terrain.vert), GPL-3.0-or-later
+// upstream; offered here under GPL-3.0-only until LICENSES/GPL-3.0-or-later.txt exists.
 //
 // Overdraw of glmark2 terrain's terrain draw (V3D job 3), counted exactly on
 // the host by a software rasteriser. See README.md.
