@@ -405,7 +405,7 @@ struct Varying {
     array: usize,
 }
 
-/// A transform feedback case: two varyings of one `highp` type, as the
+/// A transform feedback case: two varyings of one type at one precision, as the
 /// `basic_types` (neither an array) and `array` groups declare them.
 #[derive(Clone, Copy, Debug)]
 struct Case {
@@ -416,6 +416,8 @@ struct Case {
     mode: GLenum,
     /// An interpolation qualifier in place of `smooth` / `flat`.
     interp: Option<&'static str>,
+    /// The varyings' precision qualifier: `lowp`, `mediump` or `highp`.
+    prec: &'static str,
 }
 
 impl Case {
@@ -443,7 +445,7 @@ impl Case {
     /// dEQP's name below `functional.transform_feedback.`.
     fn name(&self) -> String {
         let group = match (self.interp, self.a) {
-            (Some(i), _) => return format!("interpolation.{i}.{}_{}", "highp_vec4", self.mode_prim()),
+            (Some(i), _) => return format!("interpolation.{i}.{}_{}", format!("{}_vec4", self.prec), self.mode_prim()),
             (_, 0) => "basic_types",
             _ => "array",
         };
@@ -453,7 +455,7 @@ impl Case {
             GL_LINES => "lines",
             _ => "triangles",
         };
-        format!("{group}.{mode}.{prim}.highp_{}", self.ty)
+        format!("{group}.{mode}.{prim}.{}_{}", self.prec, self.ty)
     }
 
     /// The `array` group's lengths for a type (`TransformFeedbackTests::init`):
@@ -461,11 +463,16 @@ impl Case {
     fn array_of(ty_name: &'static str, prim: GLenum, mode: GLenum) -> Case {
         let (_, _, cols, _) = ty(ty_name);
         let (a, b) = if cols > 1 || mode == GL_SEPARATE_ATTRIBS { (1, 2) } else { (3, 4) };
-        Case { ty: ty_name, a, b, prim, mode, interp: None }
+        Case { ty: ty_name, a, b, prim, mode, interp: None, prec: "highp" }
+    }
+
+    fn at(mut self, prec: &'static str) -> Case {
+        self.prec = prec;
+        self
     }
 
     fn basic(ty_name: &'static str, prim: GLenum, mode: GLenum) -> Case {
-        Case { ty: ty_name, a: 0, b: 0, prim, mode, interp: None }
+        Case { ty: ty_name, a: 0, b: 0, prim, mode, interp: None, prec: "highp" }
     }
 }
 
@@ -538,7 +545,7 @@ fn sources(c: &Case) -> (String, String) {
     for (dir, s) in [("out", &mut vs), ("in", &mut fs)] {
         for v in c.varyings() {
             let arr = if v.array != 0 { format!("[{}]", v.array) } else { String::new() };
-            s.push_str(&format!("{flat} {dir} highp {name} {}{arr};\n", v.name));
+            s.push_str(&format!("{flat} {dir} {} {name} {}{arr};\n", c.prec, v.name));
         }
     }
     vs += "\nvoid main (void)\n{\n\tgl_Position = a_position;\n";
@@ -897,4 +904,66 @@ fn the_cap_is_60_fragment_input_scalars() {
     let over = Case::array_of("vec4", GL_LINES, GL_INTERLEAVED_ATTRIBS);
     assert_eq!(over.fragment_inputs(), 28);
     assert_eq!(run(&over).errors, []);
+}
+
+const PRECISIONS: [&str; 3] = ["lowp", "mediump", "highp"];
+
+/// Every case of the two groups at every precision (dEQP declares each at
+/// lowp, mediump and highp): drawn with no error, captured right.
+#[test]
+fn cases_at_every_precision_draw_and_capture() {
+    let _g = rig();
+    let mut n = 0;
+    for p in PRECISIONS {
+        for c in cases() {
+            let c = c.at(p);
+            let o = run(&c);
+            assert_eq!(o.errors, [], "{} ({} inputs): {:?}", c.name(), c.fragment_inputs(), o.log);
+            assert_eq!(o.captured, o.expected, "{}: the capture", c.name());
+            n += 1;
+        }
+    }
+    assert_eq!(n, 3 * 252);
+}
+
+/// One of the four cases that ended the Pi 4's TF1a, TF1b, TF2a and TF2b at
+/// b1b5b845, at every precision: no GL error through the real job builder.
+/// `name` is dEQP's with the precision `highp`.
+fn aborting(c: Case, name: &str, inputs: usize) {
+    let _g = rig();
+    for p in PRECISIONS {
+        let c = c.at(p);
+        assert_eq!(c.name(), name.replace("highp", p), "the dEQP name");
+        assert_eq!(c.fragment_inputs(), inputs, "{}: the input count", c.name());
+        let o = run(&c);
+        assert_eq!(o.errors, [], "{}: {:?}", c.name(), o.log);
+        assert_eq!(o.captured, o.expected, "{}: the capture", c.name());
+    }
+}
+
+/// TF1a: `array.interleaved.lines.highp_mat3`: mat3 arrays of 1 and 2 = 27 inputs.
+#[test]
+fn tf1a_array_interleaved_lines_mat3() {
+    aborting(Case::array_of("mat3", GL_LINES, GL_INTERLEAVED_ATTRIBS), "array.interleaved.lines.highp_mat3", 27);
+}
+
+/// TF1b: `array.separate.lines.highp_mat3`.
+#[test]
+fn tf1b_array_separate_lines_mat3() {
+    aborting(Case::array_of("mat3", GL_LINES, GL_SEPARATE_ATTRIBS), "array.separate.lines.highp_mat3", 27);
+}
+
+/// TF2a: `basic_types.interleaved.lines.lowp_mat4` (and the other precisions).
+#[test]
+fn tf2a_basic_interleaved_lines_mat4() {
+    aborting(Case::basic("mat4", GL_LINES, GL_INTERLEAVED_ATTRIBS), "basic_types.interleaved.lines.highp_mat4", 32);
+    let c = Case::basic("mat4", GL_LINES, GL_INTERLEAVED_ATTRIBS).at("lowp");
+    assert_eq!(c.name(), "basic_types.interleaved.lines.lowp_mat4");
+    assert_eq!(c.fragment_inputs(), 32, "lowp mat4 interleaved lines: 2 x 16 = 32 fragment inputs");
+}
+
+/// TF2b: `basic_types.separate.lines.highp_mat4`.
+#[test]
+fn tf2b_basic_separate_lines_mat4() {
+    aborting(Case::basic("mat4", GL_LINES, GL_SEPARATE_ATTRIBS), "basic_types.separate.lines.highp_mat4", 32);
 }
