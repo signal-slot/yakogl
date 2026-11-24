@@ -6,8 +6,11 @@
 //! STANDBY, gated its pixel and bus clocks and turned the IOMMU off; PD_VO1
 //! stays on and PD_VOP may (section 2 (a)). Nothing of that is adopted:
 //! [`cold`] runs [`chain::bring_up`] with the T6's configuration
-//! ([`chain::t6::config`]: 1024x768 at 60 Hz, DVI, the D0 dump's PHY image)
-//! on the caller's buffer, which Esmart0 of VP0 then shows.
+//! ([`chain::t6::config`]: DVI, the D0 dump's PHY image, and one of two
+//! modes at 60 Hz, 1024x768 or with [`flags::MODE_1920X1080`] 1920x1080)
+//! on the caller's buffer, which Esmart0 of VP0 then shows. The buffer is
+//! 1024x768 in both modes; at 1920x1080 it is the screen's top left and the
+//! rest is VP0's background, black.
 //!
 //! What [`cold`] adds to the chain, all on the environment's log, so that a
 //! board run that hangs still says how far it came:
@@ -27,7 +30,7 @@
 //! The record crossing to C ([`Cold`]) holds only the stop: the stage, the
 //! kind of error and its numbers. The section 5 read-backs after the picture
 //! is up are the adopt's ([`super::nanopc_t6_display::status`]): the same
-//! port, window and mode.
+//! port, window and modes.
 //!
 //! The caller draws the buffer ([`super::nanopc_t6_display::draw_pattern`])
 //! and cleans it to the point of coherency first: the chain points Esmart0
@@ -80,7 +83,10 @@ pub mod flags {
     pub const POWER_CYCLE: u32 = 1 << 0;
     /// The chain's `force_cold`: stop a port found running.
     pub const FORCE_COLD: u32 = 1 << 1;
-    pub const ALL: u32 = POWER_CYCLE | FORCE_COLD;
+    /// 1920x1080 at 60 Hz in place of 1024x768 (`chain::t6::Mode`): for a
+    /// sink that shows no other mode.
+    pub const MODE_1920X1080: u32 = 1 << 2;
+    pub const ALL: u32 = POWER_CYCLE | FORCE_COLD | MODE_1920X1080;
 }
 
 /// The kind of [`chain::Error`] that stopped the chain. The value crosses
@@ -186,8 +192,9 @@ pub enum Refused {
     StopAfter(u32),
 }
 
-/// Bring the display up from cold on the buffer at physical `fb_pa` (the
-/// mode's size, stride [`display::FB_STRIDE`]): see the module text.
+/// Bring the display up from cold on the buffer at physical `fb_pa`
+/// ([`display::FB_WIDTH`] x [`display::FB_HEIGHT`], stride
+/// [`display::FB_STRIDE`]): see the module text.
 /// `Ok(Cold)` with `stage` 0 when the chain ran through, else the stage
 /// that stopped it (a `stop_after` is [`ColdError::Stopped`]).
 pub fn cold(
@@ -205,7 +212,9 @@ pub fn cold(
         return Err(Refused::StopAfter(stop_after));
     }
     before(m, b, env);
-    let cfg = chain::t6::config(flags & flags::FORCE_COLD != 0, flags & flags::POWER_CYCLE != 0, stop_after);
+    let mode =
+        if flags & flags::MODE_1920X1080 != 0 { chain::t6::Mode::M1920x1080 } else { chain::t6::Mode::M1024x768 };
+    let cfg = chain::t6::config(mode, flags & flags::FORCE_COLD != 0, flags & flags::POWER_CYCLE != 0, stop_after);
     match chain::bring_up(m, &b.chain(), env, &cfg, fb_pa, display::FB_STRIDE) {
         Ok(r) => {
             report(env, &r);

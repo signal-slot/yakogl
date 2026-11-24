@@ -1182,8 +1182,9 @@ uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_scr
 #define YD_T6_DISPLAY_HDPTX0_PHYS     0xfed60000u /* HDMI0's PHY */
 #define YD_T6_DISPLAY_HDPTX0_GRF_PHYS 0xfd5e0000u /* hdptxphy0_grf */
 
-#define YD_T6_DISPLAY_COLD_POWER_CYCLE (1u << 0) /* every block off and in reset first */
-#define YD_T6_DISPLAY_COLD_FORCE_COLD  (1u << 1) /* stop a port found running */
+#define YD_T6_DISPLAY_COLD_POWER_CYCLE    (1u << 0) /* every block off and in reset first */
+#define YD_T6_DISPLAY_COLD_FORCE_COLD     (1u << 1) /* stop a port found running */
+#define YD_T6_DISPLAY_COLD_MODE_1920X1080 (1u << 2) /* 1920x1080@60 in place of 1024x768@60 */
 
 #define YD_T6_DISPLAY_COLD_STAGE_START      1 /* the checks; what runs read (and stopped, powered off) */
 #define YD_T6_DISPLAY_COLD_STAGE_POWER      2 /* PD_VOP, PD_VO1, the gates and resets */

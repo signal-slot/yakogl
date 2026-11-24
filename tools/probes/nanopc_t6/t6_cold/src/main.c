@@ -10,10 +10,16 @@
  * yd_t6_display_cold (board::nanopc_t6_display_cold over
  * soc::rk3588_display_chain): with power-cycle every display block is put
  * off and in reset, then power, clocks and resets, the GRF words, the PHY
- * at 65 MHz, DCLK_VOP0 on the PHY, the HDMI controller in DVI, VP0 at
- * 1024x768@60 with Esmart0 on the buffer, and the video check. The chain
- * turns the VOP's IOMMU off itself and makes Esmart0 VP0's only layer, so
- * nothing of that is left to this file.
+ * at the mode's pixel clock, DCLK_VOP0 on the PHY, the HDMI controller in
+ * DVI, VP0 at the mode with Esmart0 on the buffer, and the video check. The
+ * chain turns the VOP's IOMMU off itself and makes Esmart0 VP0's only
+ * layer, so nothing of that is left to this file.
+ *
+ * The mode is the build's (T6_COLD_MODE): 1024x768@60 at 65 MHz, or
+ * 1920x1080@60 at 148.5 MHz for a sink that shows no other mode (the HDMI
+ * capture unit on the board's output). The buffer is 1024x768 in both: at
+ * 1920x1080 it is the screen's top left and the rest is VP0's background,
+ * black.
  *
  * Every line of the drivers crate goes to the UART at once (cold_log): what
  * the chain reads before it writes, one line per stage before the stage's
@@ -54,6 +60,8 @@
 BUILD_ASSERT(T6_COLD_STOP_AFTER >= 0 && T6_COLD_STOP_AFTER <= YD_T6_DISPLAY_COLD_STAGE_VIDEO,
 	     "T6_COLD_STOP_AFTER: 0 or a stage");
 BUILD_ASSERT(T6_COLD_FORCE_COLD == 0 || T6_COLD_FORCE_COLD == 1, "T6_COLD_FORCE_COLD: 0 or 1");
+BUILD_ASSERT(T6_COLD_MODE_1920X1080 == 0 || T6_COLD_MODE_1920X1080 == 1,
+	     "T6_COLD_MODE_1920X1080: 0 or 1");
 
 /* The CRU with the PMU1 CRU at +0x30000 (the PHY's reference clock and
  * resets), and the HDMI QP TX0 up to its interrupt words at 0x3000. */
@@ -108,7 +116,9 @@ static void cold_log(void *ctx, uint32_t level, const uint8_t *buf, size_t len)
 int main(void)
 {
 	const uint32_t flags =
-		YD_T6_DISPLAY_COLD_POWER_CYCLE | (T6_COLD_FORCE_COLD ? YD_T6_DISPLAY_COLD_FORCE_COLD : 0);
+		YD_T6_DISPLAY_COLD_POWER_CYCLE |
+		(T6_COLD_FORCE_COLD ? YD_T6_DISPLAY_COLD_FORCE_COLD : 0) |
+		(T6_COLD_MODE_1920X1080 ? YD_T6_DISPLAY_COLD_MODE_1920X1080 : 0);
 	struct yd_t6_display_cold_bases b;
 	struct yd_t6_display_status s;
 	struct yd_t6_display_cold c = { 0 };
@@ -125,6 +135,7 @@ int main(void)
 	printk("t6_cold: options: power-cycle 1, force-cold %d, stop after %d (%s)\n",
 	       T6_COLD_FORCE_COLD, T6_COLD_STOP_AFTER,
 	       T6_COLD_STOP_AFTER == 0 ? "run to the end" : stage_name[T6_COLD_STOP_AFTER]);
+	printk("t6_cold: mode %s\n", T6_COLD_MODE_1920X1080 ? "1920x1080" : "1024x768");
 
 	fb_pa = t6_picture_prepare("t6_cold");
 	if (fb_pa == 0) {

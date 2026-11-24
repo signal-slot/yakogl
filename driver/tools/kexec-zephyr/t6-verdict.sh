@@ -460,11 +460,12 @@ display_fb() {
 }
 
 # The modes the display probes may find on VP0 (board::nanopc_t6_display::
-# MODES; t6_cold programs the first): VP0's four timing words, the HDMI
+# MODES; t6_cold programs one of them): VP0's four timing words, the HDMI
 # controller's video monitor words 0-5 (the dumps of 2026-11-12 and
 # 2026-11-23) and the pixel clock in kHz. display_mode picks one by the
 # timing words the record's "found VP0 timing" line names (the first when
-# it names none of them); display_pclk then checks the clock against it.
+# it names none of them), cold_mode by t6_cold's "mode" line; display_pclk
+# then checks the clock against it.
 MODE_1024X768=(1024x768 '0x05400088 0x01280528 0x03260006 0x00230323'
 	'0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300' 65000)
 MODE_1920X1080=(1920x1080 '0x0898002c 0x00c00840 0x04650005 0x00290461'
@@ -477,6 +478,16 @@ display_mode() { # <probe>: sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
 			break
 		fi
 	done
+	M_NAME=${m[0]} M_TIMING=${m[1]} M_MONITOR=${m[2]} M_KHZ=${m[3]}
+}
+# t6_cold's mode is its build's (T6_COLD_MODE), printed on its "mode" line:
+# the second mode when the line names it, else the first. A record without
+# the line is of a build before the option, which had only the first mode.
+cold_mode() { # sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
+	local m=("${MODE_1024X768[@]}")
+	if seen_line "^t6_cold: mode ${MODE_1920X1080[0]}\$"; then
+		m=("${MODE_1920X1080[@]}")
+	fi
 	M_NAME=${m[0]} M_TIMING=${m[1]} M_MONITOR=${m[2]} M_KHZ=${m[3]}
 }
 
@@ -561,7 +572,12 @@ table_t6_display() {
 # chooses the lines: every run has the reads before the chain (form only:
 # what Linux's shutdown left is recorded, not predicted) and one line per
 # stage up to the stop, in order; each stage's line comes before its first
-# access. A record without the chain's rc line ends in a hang or a reset: an
+# access. The mode the image was built with (its "mode" line, T6_COLD_MODE;
+# cold_mode) chooses the values: the size on the chain's "up" line, VP0's
+# timing words, the pixel clock and the controller's monitor words are that
+# mode's, so a build that says one mode and programs the other differs. The
+# picture is 1024x768 in both modes (the frame buffer line, REGION0_VIR).
+# A record without the chain's rc line ends in a hang or a reset: an
 # "ends" line names where, the last stage line printed or, before the
 # first one, the reads before the chain (and the last of them). A run to
 # the end has the chain's
@@ -572,8 +588,7 @@ table_t6_display() {
 # read-backs, and STOPPED in place of PASS. A failed stage's line never
 # passes. What the display shows only a person can say.
 table_t6_cold() {
-	# the cold bring-up programs 1024x768 itself
-	display_mode t6_cold
+	cold_mode
 	table_boot
 	local n=0 l re='^t6_cold: options: power-cycle 1, force-cold [01], stop after ([0-8]) '
 	for l in "${LINES[@]}"; do
@@ -591,6 +606,10 @@ table_t6_cold() {
 	else
 		e "t6_cold: options: power-cycle 1, force-cold {d}, stop after $n ($name)"
 	fi
+	# a build before T6_COLD_MODE prints no mode line (cold_mode)
+	if seen_line '^t6_cold: mode '; then
+		e "t6_cold: mode $M_NAME" '^t6_cold: mode '
+	fi
 	e 't6_cold: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
 	e 't6 display: before: PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8}'
 	e 't6 display: before: PD_VOP powered {d} usable {d}, PD_VO1 powered {d} usable {d} (IDLE_REQ 0x{x8})'
@@ -606,7 +625,7 @@ table_t6_cold() {
 	done
 	never '^t6 display: stage [0-9]+ [A-Z_]+ failed: '
 	if [ "$n" = 0 ]; then
-		e 't6 display: up, 1024x768 at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}'
+		e "t6 display: up, $M_NAME at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}" '^t6 display: up, '
 		e 't6 display: START: running 0x{x}, stopped 0x{x}, no pixel clock 0x{x}, PHY powered off {d}'
 		e 't6 display: POWER: ACLK_VOP set {d}, PD_VOP was on {d} waited {d}/{d}/{d} us, PD_VO1 was on {d} waited {d}/{d}/{d} us'
 		e 't6 display: PHY: locked after {d} us, CON0 0x{x8} STATUS 0x{@PHY}' '' display_phy

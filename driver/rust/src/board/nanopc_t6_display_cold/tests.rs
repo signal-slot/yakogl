@@ -208,9 +208,28 @@ fn a_failure_is_recorded_with_its_stage_and_numbers() {
 }
 
 #[test]
+fn the_mode_flag_shows_the_same_buffer_at_1920x1080() {
+    let m = chip(Faults::default());
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE | flags::MODE_1920X1080, 0, FB), Ok(Cold::default()));
+    assert_eq!(m.refused(), Vec::<String>::new());
+    assert!(m.port_runs(0));
+    assert_eq!(m.fetching(), WIN_ESMART0);
+    // VP0 runs the second mode's timing (the words the 1920x1080 dump reads)
+    assert_eq!(m.peek(VOP + 0xc48), 0x0898_002c, "VP0 DSP_HTOTAL_HS_END");
+    assert_eq!(m.peek(VOP + 0xc50), 0x0465_0005, "VP0 DSP_VTOTAL_VS_END");
+    // Esmart0 shows the buffer as it is, 1024x768 from the active area's
+    // first pixel, and the rest of the screen is the background, black
+    assert_eq!(m.peek(VOP + 0x1814), FB as u32, "Esmart0's YRGB_MST");
+    assert_eq!(m.peek(VOP + 0x1820), 767 << 16 | 1023, "Esmart0's ACT_INFO");
+    assert_eq!(m.peek(VOP + 0x1824), 767 << 16 | 1023, "Esmart0's DSP_INFO");
+    assert_eq!(m.peek(VOP + 0xc2c), 0, "VP0 DSP_BG");
+    assert!(has(&m, "t6 display: up, 1920x1080 at 0x10012000"), "{:#?}", lines(&m));
+}
+
+#[test]
 fn bad_arguments_are_refused_before_anything_is_read() {
     let m = chip(Faults::default());
-    assert_eq!(cold(&Mapped(&m), &B, &m, 1 << 2, 0, FB), Err(Refused::Flags(1 << 2)));
+    assert_eq!(cold(&Mapped(&m), &B, &m, 1 << 3, 0, FB), Err(Refused::Flags(1 << 3)));
     assert_eq!(
         cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, stage::SHUT_DOWN, FB),
         Err(Refused::StopAfter(stage::SHUT_DOWN))

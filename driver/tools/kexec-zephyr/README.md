@@ -138,7 +138,9 @@ from cold, so it takes the normal route, which turns Linux's display off.
 Its record is judged with `t6-verdict.sh t6_cold` (fixtures
 `testdata/t6_cold-pass.uart` and `testdata/t6_cold-stop4.uart`, an image
 built to stop after stage 4): the stop the image was built with chooses the
-lines. Each stage prints its line before its first register access, so a
+lines, and its `t6_cold: mode` line the mode's values (1024x768 or
+1920x1080; a record without the line is of a build before the option and is
+judged as 1024x768). Each stage prints its line before its first register access, so a
 run that hangs ends with the stage it hung in; its record has no
 `t6_cold: chain rc` line, and the verdict's `ends` line names that stage
 (or the reads before the chain, when it hung there). `nanopc-t6.sh` has nothing per probe: a run's bound comes from the

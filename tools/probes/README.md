@@ -43,8 +43,11 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   before each stage, shows the same pattern in Esmart0, holds the picture
   30 s, then prints the same read-backs and resets. The stage to stop after is a
   build option (`-DT6_COLD_STOP_AFTER=N`, 1..8; `-DT6_COLD_FORCE_COLD=ON`
-  stops a port found running). `t6-verdict.sh t6_cold` judges its record,
-  a stopped one included.
+  stops a port found running), and so is the mode (`-DT6_COLD_MODE=`,
+  `1024x768` by default or `1920x1080`, both at 60 Hz; the pattern is
+  1024x768 in both, at the top left of the larger mode).
+  `t6-verdict.sh t6_cold` judges its record, a stopped one included, by
+  the mode the record names.
 - `nanopc_t6/common/t6_picture.c`: the picture both display probes show and
   check: the frame buffer with the pattern, the mappings, the hold, the
   read-backs and the PASS or FAIL line.

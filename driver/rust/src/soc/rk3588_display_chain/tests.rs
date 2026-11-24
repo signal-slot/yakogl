@@ -30,6 +30,7 @@ const STRIDE: u32 = 1024 * 4;
 fn cfg() -> Config<'static> {
     Config {
         mode: MODE_1024X768_60,
+        window: (1024, 768),
         plan: hdptx::plan(65_000_000).unwrap(),
         image: IMG,
         bind: BindParams { core_id: TEST_CORE_ID, timer_base_hz: dw::LINUX_TIMER_BASE_HZ },
@@ -343,6 +344,50 @@ fn shut_down_powers_the_chain_off() {
     // and it comes up again from there
     up(&m, &cfg()).unwrap();
     no_refusal(&m);
+}
+
+/// The second mode with the first one's window: what `t6::config` gives
+/// for `t6::Mode::M1920x1080`, with the tests' image and identity.
+fn cfg_1920x1080() -> Config<'static> {
+    Config { mode: MODE_1920X1080_60, plan: hdptx::plan(148_500_000).unwrap(), ..cfg() }
+}
+
+#[test]
+fn a_window_smaller_than_the_mode_is_shown_at_the_top_left() {
+    let m = Rk3588Display::cold();
+    up(&m, &cfg_1920x1080()).unwrap();
+    no_refusal(&m);
+    assert!(m.port_runs(0));
+    assert_eq!(m.peek(VOP_BASE + 0xc48), 0x0898_002c, "VP0 DSP_HTOTAL_HS_END");
+    assert_eq!(m.peek(VOP_BASE + 0xc50), 0x0465_0005, "VP0 DSP_VTOTAL_VS_END");
+    assert_eq!(m.peek(VOP_BASE + 0x1814), FB as u32, "Esmart0's YRGB_MST");
+    assert_eq!(m.peek(VOP_BASE + 0x1820), 767 << 16 | 1023, "Esmart0's ACT_INFO: the window, not the mode");
+    assert_eq!(m.peek(VOP_BASE + 0x1824), 767 << 16 | 1023, "Esmart0's DSP_INFO: unscaled");
+    assert_eq!(m.peek(VOP_BASE + 0xc2c), 0, "VP0 DSP_BG: black around the window");
+}
+
+#[test]
+fn the_chain_refuses_a_window_larger_than_the_mode() {
+    let m = Rk3588Display::cold();
+    let c = Config { window: (1920, 1080), ..cfg() };
+    let r = bring_up(&Mapped(&m), &B, &m, &c, FB, 1920 * 4);
+    assert_eq!(
+        r.err(),
+        Some(Failed {
+            stage: stage::START,
+            error: Error::Vop(vop2::Refused { why: VopRefusal::WindowOutside, read_back: 0 })
+        })
+    );
+    assert!(m.writes().is_empty(), "nothing written");
+}
+
+#[test]
+fn the_second_mode_is_the_measured_one() {
+    let m = MODE_1920X1080_60;
+    assert_eq!((m.hactive, m.hactive + m.hfront, m.hactive + m.hfront + m.hsync, m.htotal()), (1920, 2008, 2052, 2200));
+    assert_eq!((m.vactive, m.vactive + m.vfront, m.vactive + m.vfront + m.vsync, m.vtotal()), (1080, 1084, 1089, 1125));
+    assert!(m.hsync_high && m.vsync_high);
+    assert_eq!(frame_us(&m), 16_667, "2200 x 1125 / 148.5 MHz, rounded up");
 }
 
 #[test]

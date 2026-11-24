@@ -5,15 +5,19 @@
 # from cold with power-cycle, show a CPU-drawn pattern in Esmart0, hold
 # the picture, print the section 5 read-backs, then the reset back into
 # Armbian. The chain's stage to stop after is a build option, for a board
-# run that bisects:
+# run that bisects, and so is the mode:
 #
 #   west build -p always -b nanopc_t6 -d build/t6_cold yakogl/tools/probes/nanopc_t6/t6_cold
 #   west build -p always -b nanopc_t6 -d build/t6_cold-4 yakogl/tools/probes/nanopc_t6/t6_cold \
 #     -- -DT6_COLD_STOP_AFTER=4
+#   west build -p always -b nanopc_t6 -d build/t6_cold-1080 yakogl/tools/probes/nanopc_t6/t6_cold \
+#     -- -DT6_COLD_MODE=1920x1080
 #
 # T6_COLD_STOP_AFTER: 0 runs to the end, 1..8 stops after that stage
 # (START, POWER, GRF, PHY, DCLK, CONTROLLER, VOP, VIDEO). T6_COLD_FORCE_COLD
-# ON also stops a port found running (the chain's force-cold).
+# ON also stops a port found running (the chain's force-cold). T6_COLD_MODE:
+# 1024x768 (the default) or 1920x1080, both at 60 Hz; the picture is
+# 1024x768 in both, at the top left of the larger mode.
 cmake_minimum_required(VERSION 3.20.0)
 
 # driver/ is a Zephyr module (the board, the board glue, the Rust crate).
@@ -35,8 +39,16 @@ message(STATUS "t6_cold build: ${T6_COLD_BUILD}")
 
 set(T6_COLD_STOP_AFTER 0 CACHE STRING "The chain's stage to stop after: 0 none, 1..8")
 option(T6_COLD_FORCE_COLD "Stop a display port found running (the chain's force-cold)" OFF)
+set(T6_COLD_MODE 1024x768 CACHE STRING "The mode the chain programs: 1024x768 or 1920x1080 (60 Hz)")
 if(NOT T6_COLD_STOP_AFTER MATCHES "^[0-8]$")
   message(FATAL_ERROR "T6_COLD_STOP_AFTER='${T6_COLD_STOP_AFTER}': 0 (run to the end) or a stage, 1..8")
+endif()
+if(T6_COLD_MODE STREQUAL "1024x768")
+  set(_mode_1920x1080 0)
+elseif(T6_COLD_MODE STREQUAL "1920x1080")
+  set(_mode_1920x1080 1)
+else()
+  message(FATAL_ERROR "T6_COLD_MODE='${T6_COLD_MODE}': 1024x768 or 1920x1080")
 endif()
 if(T6_COLD_FORCE_COLD)
   set(_force_cold 1)
@@ -44,8 +56,9 @@ else()
   set(_force_cold 0)
 endif()
 target_compile_definitions(app PRIVATE T6_COLD_STOP_AFTER=${T6_COLD_STOP_AFTER}
-                                       T6_COLD_FORCE_COLD=${_force_cold})
-message(STATUS "t6_cold: stop after ${T6_COLD_STOP_AFTER}, force-cold ${_force_cold}")
+                                       T6_COLD_FORCE_COLD=${_force_cold}
+                                       T6_COLD_MODE_1920X1080=${_mode_1920x1080})
+message(STATUS "t6_cold: stop after ${T6_COLD_STOP_AFTER}, force-cold ${_force_cold}, mode ${T6_COLD_MODE}")
 
 # The picture, the hold and the read-backs, shared with t6_display.
 target_sources(app PRIVATE src/main.c ../common/t6_picture.c)

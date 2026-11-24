@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The RK3588 HDMI0 display chain brought up from cold: VOP2 VP0 with one
-//! Esmart0 window -> DW HDMI QP TX0 -> HDPTX PHY0, for one fixed mode in DVI
+//! Esmart0 window -> DW HDMI QP TX0 -> HDPTX PHY0, for the one mode of its
+//! [`Config`] in DVI
 //! (driver/docs/nanopc-t6-display.md, section 2 (c) and section 7 row D7).
 //! The policy and the order are this project's; the register work is the
 //! modules it calls: [`super::rk3588_display`] (power, clocks, resets, D4),
@@ -18,8 +19,9 @@
 //!
 //! 1. START: the configuration is checked before anything is written: the
 //!    mode against VP0 ([`vop2::vp_timing`]) and the controller
-//!    ([`dw::tmds_char_rate`]), the PHY plan and image, the caller's buffer
-//!    against the window ([`vop2::window_check`]). Then what runs is read,
+//!    ([`dw::tmds_char_rate`]), the PHY plan and image, the window (the
+//!    caller's buffer, [`Config::window`]) against the mode's active area
+//!    ([`vop2::window_check`]). Then what runs is read,
 //!    nothing written: the PMU and CRU say whether VOP2 can be read; if so,
 //!    `DSP_CTRL` of VP0-VP3 says which ports run (review R3-S1 of D1: read
 //!    before anything else touches the VOP). PD_VOP powered but VOP2 not
@@ -65,7 +67,9 @@
 //!    ([`vop2::windows_off`]), VP0 routed to HDMI0, its timing, started;
 //!    Esmart0 made VP0's only layer ([`vop2::overlay_single`], which waits
 //!    for a frame: the pixel clock must run) and shown on the caller's
-//!    buffer ([`vop2::window_show`]).
+//!    buffer ([`vop2::window_show`]) at the screen's top left; where the
+//!    window is smaller than the mode, the rest is the port's background,
+//!    which [`vop2::vp_start`] sets to black.
 //! 8. VIDEO: the section 5 read-backs: over two frames VP0 starts frames,
 //!    does not underflow and raises no bus error; Esmart0's
 //!    `REGION0_YRGB_MST` reads the buffer's address; the PHY reads locked,
@@ -137,8 +141,8 @@ pub mod stage {
     }
 }
 
-/// The build's fixed mode: what Linux runs the T6's display at, since the
-/// display gives no EDID (board, Linux 6.18, 2026-11-12, the DRM state's
+/// The first mode: what Linux runs the T6's display at when the display
+/// gives no EDID (board, Linux 6.18, 2026-11-12, the DRM state's
 /// mode line): 1024x768 at 60 Hz, pixel clock 65000 kHz, h 1024 1048 1184
 /// 1344, v 768 771 777 806, both syncs negative.
 pub const MODE_1024X768_60: VideoMode = VideoMode {
@@ -153,6 +157,26 @@ pub const MODE_1024X768_60: VideoMode = VideoMode {
     vback: 29,
     hsync_high: false,
     vsync_high: false,
+    de_high: true,
+};
+
+/// The second mode: what Linux runs on a sink whose EDID prefers it (the
+/// HDMI capture unit on the T6's output; board, Linux 6.18, 2026-11-23, the
+/// DRM state's mode line): 1920x1080 at 60 Hz, pixel clock 148500 kHz,
+/// h 1920 2008 2052 2200, v 1080 1084 1089 1125, both syncs positive
+/// (CEA-861 VIC 16).
+pub const MODE_1920X1080_60: VideoMode = VideoMode {
+    pixel_clock_hz: 148_500_000,
+    hactive: 1920,
+    hfront: 88,
+    hsync: 44,
+    hback: 148,
+    vactive: 1080,
+    vfront: 4,
+    vsync: 5,
+    vback: 36,
+    hsync_high: true,
+    vsync_high: true,
     de_high: true,
 };
 
@@ -208,6 +232,10 @@ pub const RK3588: Bases = Bases {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config<'a> {
     pub mode: VideoMode,
+    /// The window's size in pixels: the caller's buffer, shown at the
+    /// screen's top left. At most the mode's active area; what it leaves
+    /// free shows the port's background colour (black).
+    pub window: (u32, u32),
     /// The PHY's ROPLL dividers for the mode's TMDS rate (the board takes
     /// Linux's, read from its dump, `hdptx::PllWords::plan`).
     pub plan: Plan,
@@ -374,9 +402,10 @@ impl<M: Mmio, E: Env> Host for PhyHost<'_, M, E> {
     }
 }
 
-/// The window VP0 shows: the caller's buffer, filling the mode's active area.
-pub fn window(mode: &VideoMode, addr: u64, stride_bytes: u32) -> Window {
-    Window { addr, width: mode.hactive, height: mode.vactive, stride_bytes, x: 0, y: 0, format: vop2::Format::Xrgb8888 }
+/// The window VP0 shows: the caller's buffer of `size` pixels at the
+/// screen's top left.
+pub fn window(size: (u32, u32), addr: u64, stride_bytes: u32) -> Window {
+    Window { addr, width: size.0, height: size.1, stride_bytes, x: 0, y: 0, format: vop2::Format::Xrgb8888 }
 }
 
 /// One frame of `mode`, in µs, rounded up.
@@ -538,7 +567,7 @@ pub fn bring_up(
         let found = cfg.plan.rate_hz.min(u64::from(u32::MAX)) as u32;
         return Err(Failed { stage: START, error: Error::Phy(hdptx::Refused { why: hdptx::Refusal::Rate, found }) });
     }
-    let win = window(&cfg.mode, fb, stride_bytes);
+    let win = window(cfg.window, fb, stride_bytes);
     let active = (cfg.mode.hactive, cfg.mode.vactive);
     vop2::window_check(&win, active.0, active.1).map_err(at(START, Error::Vop))?;
     let mut found = find(m, b);

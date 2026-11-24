@@ -10,7 +10,11 @@ on HDMI at 1920x1080 and the image's check PASS, read from the record screen
 (section 4); and the flip, by glmark2's build and shading scenes the same
 day: 2400 flips at two per frame of the display, no GPU reset, the image's
 verdict PASS; and the Slint cluster (`examples/slint`), one window shown in
-place, its check PASS. The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
+place, its check PASS. D8's CPU pattern by normal kexec (2026-11-24,
+development runs): `t6_cold` with `power-cycle` at 1024x768 and at
+1920x1080, the chain through in 48 ms and 62 ms, 60 frames a second counted,
+the image's verdict PASS; at 1920x1080 the pattern is read from the capture
+unit's pictures (section 3). The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
 in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
 the mode, the hand-over from the GPU, the proofs, the dump the lead takes and
@@ -598,9 +602,10 @@ the full rules) and two notes on them:
 
 ## 3. Mode
 
-The cold route (c) programs one fixed mode, 1024x768. The adopt (route (a))
-programs no mode: it accepts the mode Linux runs when it is one of two,
-1024x768 or 1920x1080, and refuses any other by name.
+The cold route (c) programs the mode its build names, one of two: 1024x768
+or 1920x1080, both at 60 Hz. The adopt (route (a)) programs no mode: it
+accepts the mode Linux runs when it is one of the same two, and refuses any
+other by name.
 
 A fixed mode first, in DVI mode (no InfoFrames), RGB 8 bit: then the TMDS
 character rate equals the pixel clock and the controller needs only
@@ -612,7 +617,7 @@ has (`hdptx.c:427`); the T6's display has none (below).
 
 Measured (board, 2026-11-12): the T6's display gives no EDID, and Linux runs
 it at **1024x768 at 60 Hz, 65 MHz** (h 1024 1048 1184 1344, v 768 771 777
-806, both syncs negative), DVI. That is the build's fixed mode
+806, both syncs negative), DVI. That is the cold route's first mode
 (`soc::rk3588_display_chain::MODE_1024X768_60`); the PHY runs Linux's table
 row for 65 MHz (`hdptx.c:445-446`), read back from the dump.
 
@@ -620,9 +625,15 @@ The T6's HDMI goes to an HDMI capture unit with an EDID that prefers
 1920x1080 at 148.5 MHz (h 1920 2008 2052 2200, v 1080 1084 1089 1125, both
 syncs positive), and Linux runs that mode, RGB at 8 bits per colour
 (`driver/docs/nanopc-t6-display-dump-linux-1920x1080.txt`, 2026-11-23).
+That is the cold route's second mode
+(`soc::rk3588_display_chain::MODE_1920X1080_60`): the capture unit gives a
+picture of no other mode (measured 2026-11-23 and 2026-11-24), so a cold run
+is seen only at this one. The PHY runs Linux's table row for 148.5 MHz
+(`hdptx.c:427-428`), read back from this dump.
 
 The adopt's modes are `board::nanopc_t6_display::MODES`: 1024x768 at 65 MHz
-and 1920x1080 at 148.5 MHz, each its own constant, not the cold route's.
+and 1920x1080 at 148.5 MHz, the same two as the cold route's (a test holds
+them equal).
 Step 1 of the adopt reads VP0's four timing words and accepts them when they
 are one of the two; any other timing is `Stop::Mode`, with the first word
 that differs from the closest mode. The adopt changes no timing word, no
@@ -640,9 +651,33 @@ value (`Stop::VpState`, index 1). Esmart0 is VP0's only layer
 (`vop2::overlay_single`) with `HDR0_SRC_COLOR_CTRL` 0, so nothing else is
 mixed there.
 
-The cold route keeps 1024x768 (`soc::rk3588_display_chain::t6`). It programs
-the PHY itself, and 148.5 MHz needs the fractional PLL values below, which it
-does not have.
+The cold route's mode is a build option of its probe (`-DT6_COLD_MODE=`,
+`1024x768` by default; `soc::rk3588_display_chain::t6::Mode`, the flag
+`YD_T6_DISPLAY_COLD_MODE_1920X1080` of `yd_t6_display_cold`). Between the
+two modes the chain changes VP0's timing, the sync polarities in the GRF and
+the PHY's PLL dividers (`t6::PLAN`, `t6::PLAN_1920X1080`: 148.5 MHz runs the
+fractional PLL, below); the PHY's register image, the DVI link and the
+window (the 1024x768 buffer at the screen's origin) are the same. At
+1920x1080 the chain still sends DVI, where Linux sends HDMI with an AVI
+InfoFrame to this sink (step D10).
+
+Measured (board, 2026-11-24, `t6_cold` by normal kexec): the capture unit
+shows the DVI signal at 1920x1080. Its first picture of the pattern came 7 s
+after the jump: the four colours in the top left 1024x768, the rest dark.
+The controller's monitor words equal the 1920x1080 dump's. So this sink
+needs no InfoFrame to show the picture. Two facts about the unit's pictures,
+for whoever reads them:
+
+- The unit answers no picture request while its input changes size: a cold
+  run at 1920x1080 right after one at 1024x768 gave no picture for the whole
+  hold (connections refused, then timeouts). A run that starts with the unit
+  already at 1920x1080 is seen at once.
+- In the pictures of our signal black reads (16,16,16), red (221,0,15),
+  green (29,255,21), blue (18,1,230) and yellow (234,250,21). These are the
+  values BT.709 limited-range YCbCr of full-range 0 and 255 gives when the
+  JPEG is decoded as full range, so the signal carries 0 and 255. Linux's
+  console black reads (0,0,0) in the same unit's pictures; what the unit
+  does differently for Linux's HDMI signal is not known (U16).
 
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
@@ -961,10 +996,16 @@ The dump file is `driver/docs/nanopc-t6-display-dump-linux.txt`
 (`ADDRESS WIDTH VALUE`, as the X2's). The same read list at 1920x1080 (the
 capture unit, 2026-11-23) is
 `driver/docs/nanopc-t6-display-dump-linux-1920x1080.txt`; the adopt's host
-tests run on both. The allow list of the 1024x768 dump (the cold route's
-mode) is `driver/docs/nanopc-t6-display-allow.txt` (`ADDRESS MASK REASON`, as
-`x2-hdmi-allow.txt`): the bits that may differ between the Zephyr cold path
-and the dump, each with its reason. Interrupt status registers (VOP
+tests run on both, and the cold route's golden test
+(`soc::rk3588_display_golden`) compares the chain at each mode with that
+mode's dump. The allow list is `driver/docs/nanopc-t6-display-allow.txt`
+(`ADDRESS MASK REASON`, as `x2-hdmi-allow.txt`): the bits that may differ
+between the Zephyr cold path and either dump, each with its reason.
+`driver/docs/nanopc-t6-display-allow-1920x1080.txt` adds six registers for
+the 1920x1080 dump only: the DVI bit, the packet enables and the AVI
+InfoFrame's three words (Linux ran HDMI there, the chain sends DVI), and
+VP1's background word, which Linux had not written in that boot. Interrupt
+status registers (VOP
 0x88/0x98/0xA8/0xAC, controller 0x3010, 0x3020) are read-only status and not
 cleared by a read; they are sampled, so they are in the allow list.
 
@@ -1031,7 +1072,7 @@ answers polls, takes injected failures and records the order.
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
 | D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
-| D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4 | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
+| D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection; `-DT6_COLD_MODE=1920x1080` builds it for the second mode, section 3), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4. On the board on 2026-11-24 (development runs): the CPU pattern at both modes, verdict PASS, seen on the capture unit at 1920x1080 (section 3); `gl_triangle` on the cold chain is still to run | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
 | D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; it takes only the t6_hello..t6_submit probes today, so `gl_triangle` and `gl_slint` need adding to it and to `t6-verdict.sh`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
@@ -1058,9 +1099,9 @@ variant of it.
 | U1 | May the PHY's 212 analog init values be taken from the board dump (measurement) rather than from Linux's tables, as the design proposes? | owner decision (source form) |
 | U2 | Which window and format does Linux use for VP0's primary plane: Esmart or Cluster, AFBC or linear? | answered by D0: Cluster0, linear XRGB8888 (section 6) |
 | U3 | Does Linux run the PHY at the mode's rate with exactly the table values (`hdptx.c:427` for 148.5 MHz), or with its calculator (`:900-970`)? | D0: PHY register file CMN 0x51-0x86 |
-| U4 | After a normal kexec, is the PHY PLL still locked (a power-domain clock reference may hold it), and is PD_VOP on? | a GRF STATUS and PMU 0x290 read in the first D8 run before any write (`t6_cold`'s "before:" lines; the GRF only when the PHY's clocks and reset allow it) |
+| U4 | After a normal kexec, is the PHY PLL still locked (a power-domain clock reference may hold it), and is PD_VOP on? | a GRF STATUS and PMU 0x290 read in the first D8 run before any write (`t6_cold`'s "before:" lines; the GRF only when the PHY's clocks and reset allow it). Answered by D8 on 2026-11-24: PD_VOP is off, PD_VO1 is on with the controller readable, the PHY's clock gate (CRU 72/5) is closed, so nothing of the PLL is left and its GRF status is not read |
 | U5 | Does a read of a block whose domain is off hang the bus or return zeros? | not to be tested by reading; the code reads status only after power-on and repair status, so the answer is not needed |
-| U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back (`t6_cold`'s "VOP:" line and its read-backs) |
+| U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back (`t6_cold`'s "VOP:" line and its read-backs). Answered by D8 on 2026-11-24: 0x000000ff reads back 0x00000070 at once and the chain's writes that follow hold (the window and the timing read back, frames run), with no wait added |
 | U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | answered by D0: 4 kHz per count; the monitor words hold sync, porch, total and active (section 6) |
 | U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | answered by the triangle's adopt on 2026-11-23: 0x00008001 right after the write, 0x00008000 after the frame start (16600 us later), so VP0's bit clears itself at the frame boundary. D3's busy rule is safe with either answer (section 4, step D3) |
 | U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | the reservation: the runner reads it before each crash jump (0x10000000-0x1fffffff on Armbian with `crashkernel=`). The GPU: answered by the triangle on 2026-11-23, Z1's power-on and a Mali frame ran after the crash kexec |
@@ -1070,6 +1111,7 @@ variant of it.
 | U13 | Are the TX resets SRST_HDMITX0_REF and SRST_HDMIHDP0 needed for a cold start (no Linux driver pulses them)? | D8: the cold run first without, then with a pulse if the controller does not respond |
 | U14 | `TIMER_BASE_CONFIG0` = 428571429: is it the reference clock rate on this board (CLK_HDMITX0_REF from aclk_hdcp1_root)? | answered by D0: yes, `clk_hdmitx0_ref` is 428571429 Hz |
 | U15 | With the capture unit's EDID (an HDMI sink), does Linux drive RGB at 8 bits per colour, so VP0's `DSP_CTRL` is the value the adopt expects? Another depth or format changes `DSP_CTRL`, and the adopt then stops at its state check | answered for 1920x1080 by the dump of 2026-11-23: RGB, 8 bits, `DSP_CTRL` 0x0000000f (section 6). For a set 1024x768 on that sink: the record's "HDMI-A-1 output" line, then the adopt's own read |
+| U16 | The capture unit's pictures of the cold route's DVI signal at 1920x1080 are limited-range coded (black reads 16), those of Linux's HDMI signal are not (section 3). Does a display treat the DVI signal's range the same way, so that black is not black there? | D10: the AVI InfoFrame names the range; a picture of the same pattern with it |
 
 Risks: the PHY's fractional mode may need SDM values the dump gives but no
 formula checks (the integer fallback modes of section 3 remove that risk for a

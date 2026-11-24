@@ -652,13 +652,14 @@ fn each_mode_is_its_dumps() {
         assert!(dump.contains(&format!("# Mode (drm_mode line of the active CRTC): \"{}x{}\": {line}\n", h[0], v[0])));
         assert_eq!(mode.refresh_mhz(mode.pixel_clock_hz), refresh);
     }
-    // the probes' buffer fills the window area, and the cold bring-up's mode
-    // has the buffer's size (it shows the buffer at its mode's size)
+    // the probes' buffer fills the window area, and the cold bring-up
+    // programs the same two modes and shows the buffer at the same size
     assert_eq!((FB_WIDTH, FB_HEIGHT), WINDOW_AREA);
     assert_eq!(FB_BYTES, 1024 * 768 * 4);
     assert_eq!(FB_STRIDE % 64, 0);
-    let cold = crate::soc::rk3588_display_chain::MODE_1024X768_60;
-    assert_eq!((cold.hactive, cold.vactive), (FB_WIDTH, FB_HEIGHT));
+    use crate::soc::rk3588_display_chain as chain;
+    assert_eq!(MODES, [chain::MODE_1024X768_60, chain::MODE_1920X1080_60]);
+    assert_eq!(chain::t6::WINDOW, WINDOW_AREA);
     // the window area is the smallest active area of the modes
     assert_eq!(WINDOW_AREA, MODES.iter().map(|m| (m.hactive, m.vactive)).min().unwrap());
     assert!(MODES.iter().all(|m| m.hactive >= WINDOW_AREA.0 && m.vactive >= WINDOW_AREA.1));

@@ -103,8 +103,8 @@ pub const MODE_1920X1080: VideoMode = VideoMode {
 
 /// The modes the adopt accepts: VP0's timing must be one of them, else it
 /// stops at [`Stop::Mode`]. The adopt keeps the mode it finds and never
-/// writes a timing word. The cold bring-up (step D8) has its own mode
-/// (`soc::rk3588_display_chain::t6`), since it programs the PHY itself.
+/// writes a timing word. The cold bring-up (step D8) programs one of the
+/// same two itself (`soc::rk3588_display_chain::t6::Mode`).
 pub const MODES: [VideoMode; 2] = [MODE_1024X768, MODE_1920X1080];
 
 /// Where a window may lie: the screen's top left 1024x768, the smallest
@@ -123,7 +123,8 @@ pub const HDMI: HdmiPort = HdmiPort::Hdmi0;
 /// The probes' frame buffer (`t6_display`, `t6_cold`; tools/probes/
 /// nanopc_t6/common/t6_picture.h): 1024x768 XRGB8888. Its size is the
 /// probes', not the mode's: it fills [`WINDOW_AREA`], and the cold
-/// bring-up's mode has the same size.
+/// bring-up shows it at that size in both of its modes
+/// (`soc::rk3588_display_chain::t6::WINDOW`).
 pub const FB_WIDTH: u32 = 1024;
 pub const FB_HEIGHT: u32 = 768;
 /// The frame buffer's row stride in XRGB8888, a multiple of 64 bytes.
