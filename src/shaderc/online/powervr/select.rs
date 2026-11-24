@@ -1,5 +1,12 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2024 Imagination Technologies Ltd.
+// SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.
+// SPDX-FileCopyrightText: 2015 Red Hat
+// Derived from Mesa 26.2.1 src/imagination/pco/ and
+// src/compiler/nir/nir_lower_idiv.c (MIT).
+// The upstream part stays under its licence (LICENSES/MIT.txt); our
+// changes are Apache-2.0. See NOTICE.
 //! IR to USC instruction groups, in virtual registers.
 //!
 //! The PowerVR half of what `super::super::select` does for the GC7000, and
