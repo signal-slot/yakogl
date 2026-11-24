@@ -400,8 +400,14 @@ check "nanopc_t6: A1.built's build= is still T6_DEQP_BUILD's" "build=fake-t6" "$
 rm -f "$R/driver/src/fw/mali_csffw_blob.h"
 # the Pi 4 arm does not get the T6's arguments
 absent "rpi_4b cmake: no -DYAKOGL_WERROR" "YAKOGL_WERROR" "$(cat "$T/p2/A1/cmake.args" 2>&1)"
-out=$("$R/tools/cts/deqp-tree-images.sh" rpi_5 --dry-run "$T/pi4-es2.txt" "$T/t3" 2>&1); rc=$?
-[ "$rc" = 2 ] && ok "deqp-tree-images.sh: a board without an arm is refused (rc 2)" || bad "board rpi_5: rc=$rc: $out"
+out=$("$R/tools/cts/deqp-tree-images.sh" rpi_9 --dry-run "$T/pi4-es2.txt" "$T/t3" 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "deqp-tree-images.sh: a board without an arm is refused (rc 2)" || bad "board rpi_9: rc=$rc: $out"
+# the Pi 5 arm (rpi_5): pi5-full-tree.txt lists every image; the build is -Werror, unlike the Pi 4's
+out=$(env -u ZEPHYR_WS -u DEQP_WORK "$R/tools/cts/deqp-tree-images.sh" rpi_5 --dry-run "$HERE/pi5-full-tree.txt" "$T/t3" 2>&1); rc=$?
+n=$(printf '%s\n' "$out" | grep -c .); m=$(grep -c '^# image ' "$HERE/pi5-full-tree.txt")
+[ "$rc" = 0 ] && [ "$n" = "$m" ] && ok "pi5-full-tree.txt: one dry-run line per image ($n)" || bad "pi5-full-tree.txt: rc=$rc, $n lines for $m images"
+[ "$(printf '%s\n' "$out" | grep -c '\[-DEXTRA_CONF_FILE=texture-2048.conf\]$')" = 1 ] \
+    && ok "pi5-full-tree.txt: texture-2048.conf's argument on one image" || bad "pi5-full-tree.txt: texture-2048.conf lines: $out"
 
 echo
 echo "== 8. a rerun resumes: common-images.sh reuses a complete build, rebuilds an interrupted one; board-stage.sh clears a stale once-*.bin"

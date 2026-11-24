@@ -8,6 +8,8 @@
 # running and tallying the images is tools/board.sh <board> tree). The
 # per-board names call it with their board:
 #   tools/cts/pi4-deqp-images.sh   rpi_4b     (Raspberry Pi 4, V3D)
+#   tools/cts/pi5-deqp-images.sh   rpi_5       (Raspberry Pi 5, V3D 7.1;
+#                                  tools/cts/pi5-full-tree.txt)
 #   tools/cts/t6-deqp-images.sh    nanopc_t6  (NanoPC-T6, Mali-G610)
 #   tools/cts/imx95-deqp-images.sh verdin_imx95/mimx9596/a55  (Verdin iMX95,
 #                                  Mali-G310)
@@ -16,7 +18,7 @@
 #
 #   tools/cts/deqp-tree-images.sh <board> [--dry-run] <table> <img-dir> [LABEL...]
 #
-# <board>    rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, the Zephyr board
+# <board>    rpi_4b, rpi_5, nanopc_t6 or verdin_imx95/mimx9596/a55, the Zephyr board
 #            (the arms below)
 # <table>    tools/cts/pi4-full-tree.txt's form: each CONFIG_DEQP_CASE line is
 #            preceded by "# image <LABEL>: ..."; a marker saying
@@ -53,7 +55,7 @@
 #               the post-build conformance check runs with --gles3. gles2 adds
 #               no argument and checks for ES 2.0, as before.
 #   ZEPHYR_SDK_INSTALL_DIR as for any Zephyr sample; RUSTUP_TOOLCHAIN as for
-#               any V3D sample (rpi_4b)
+#               any V3D sample (rpi_4b, rpi_5)
 #   WEST_VENV   optional: a venv whose bin/ holds west (zephyr-modules.sh)
 # The Mali boards (nanopc_t6, verdin_imx95/mimx9596/a55) also need
 # driver/src/fw/mali_csffw_blob.h in this checkout (made from the board's CSF
@@ -77,9 +79,10 @@ ZBOARD=${1:-}
 # embeds the Mali's CSF firmware header.
 case "$ZBOARD" in
 rpi_4b) NAME=pi4-deqp-images BOARD_ARGS=() BUILD_DEF=V3D_BUILD MALI_FW=0 ;;
+rpi_5) NAME=pi5-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=V3D_BUILD MALI_FW=0 ;;
 nanopc_t6) NAME=t6-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=T6_DEQP_BUILD MALI_FW=1 ;;
 verdin_imx95/mimx9596/a55) NAME=imx95-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=VI95_DEQP_BUILD MALI_FW=1 ;;
-*) echo "deqp-tree-images: the board must be rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, not '$ZBOARD'" >&2; exit 2 ;;
+*) echo "deqp-tree-images: the board must be rpi_4b, rpi_5, nanopc_t6 or verdin_imx95/mimx9596/a55, not '$ZBOARD'" >&2; exit 2 ;;
 esac
 shift
 die() { echo "$NAME: $*" >&2; exit 2; }

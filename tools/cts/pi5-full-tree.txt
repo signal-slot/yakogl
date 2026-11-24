@@ -1,0 +1,84 @@
+# The whole dEQP-GLES2 tree for the Raspberry Pi 5 (driver/samples/zephyr/deqp,
+# board rpi_5, the 7.1 table) in 31 images, one CONFIG_DEQP_CASE per line, the
+# format of pi4-full-tree.txt (blank lines and '#' lines are skipped).
+# Each line is preceded by "# image <LABEL>: <mustpass names it selects>".
+# It starts as a copy of pi4-full-tree.txt's 29 images, and two blocks are
+# re-cut where docs/notes/rpi5-deqp-glmark2.md section 4 says the block mixes
+# cases whose 7.1 features arrive at different times:
+#   T1 (181) -> T1 (41: texture.completeness, format, wrap) and T1V (140:
+#       texture.vertex): vertex texture fetch is a separate open item of the
+#       7.1 table, so T1V can fail on it without hiding the 41 cases that
+#       need only the sampled-texture wiring.
+#   MISC (70) -> MISC (60: depth_stencil_clear, multisample, lifetime: Z/S
+#       clear and the multisample refusal, both already in the table) and PO
+#       (10: polygon_offset: the polygon-offset reference is open).
+# Blocks FB1/FB2 and F1 are kept as the Pi 4 has them: each mixes cases that
+# need the same open item (render targets below 8 alpha bits; blend and
+# depth/stencil references). Every one of the 17165 names of
+# gles2-mustpass.txt is selected by exactly one line.
+#
+# Image T5 needs driver/samples/zephyr/deqp/texture-2048.conf
+# (-DEXTRA_CONF_FILE=texture-2048.conf), as on the Pi 4. Every other image
+# uses boards/rpi_5.conf as it is.
+# image AL: 57
+dEQP-GLES2.functional.attribute_location.*
+# image D: 292
+dEQP-GLES2.functional.shaders.algorithm.*,dEQP-GLES2.functional.shaders.builtin_variable.*,dEQP-GLES2.functional.shaders.conditionals.*,dEQP-GLES2.functional.shaders.declarations.*,dEQP-GLES2.functional.shaders.discard.*,dEQP-GLES2.functional.shaders.fragdata.*,dEQP-GLES2.functional.shaders.function.*,dEQP-GLES2.functional.shaders.misc.*,dEQP-GLES2.functional.shaders.qualification_order.*,dEQP-GLES2.functional.shaders.reserved_operators.*,dEQP-GLES2.functional.shaders.return.*,dEQP-GLES2.functional.shaders.linkage.*,dEQP-GLES2.functional.shaders.invariance.*
+# image E: 352
+dEQP-GLES2.functional.shaders.constants.*,dEQP-GLES2.functional.shaders.keywords.*,dEQP-GLES2.functional.shaders.scoping.*,dEQP-GLES2.functional.shaders.struct.*
+# image F1: 1923
+dEQP-GLES2.functional.fragment_ops.*
+# image FB1: 390
+dEQP-GLES2.functional.fbo.api.*,dEQP-GLES2.functional.fbo.completeness.*
+# image FB2: 319
+dEQP-GLES2.functional.fbo.render.*
+# image FF: 5
+dEQP-GLES2.functional.flush_finish.*
+# image H: 654
+dEQP-GLES2.functional.rasterization.*,dEQP-GLES2.functional.clipping.*
+# image LA: 19
+dEQP-GLES2.functional.light_amount.*
+# image MISC: 60
+dEQP-GLES2.functional.depth_stencil_clear.*,dEQP-GLES2.functional.multisample.*,dEQP-GLES2.functional.lifetime.*
+# image PO: 10
+dEQP-GLES2.functional.polygon_offset.*
+# image NS: 642
+dEQP-GLES2.functional.negative_api.*,dEQP-GLES2.functional.state_query.*
+# image RT: 200
+dEQP-GLES2.functional.shaders.random.texture.*
+# image S1: 2949
+dEQP-GLES2.functional.shaders.operator.*
+# image S2: 1910
+dEQP-GLES2.functional.shaders.matrix.*,dEQP-GLES2.functional.shaders.swizzles.*,dEQP-GLES2.functional.shaders.conversions.*
+# image S3: 2171
+dEQP-GLES2.functional.shaders.loops.*,dEQP-GLES2.functional.shaders.indexing.*,dEQP-GLES2.functional.shaders.preprocessor.*,dEQP-GLES2.functional.shaders.constant_expressions.*
+# image S4: 2012
+dEQP-GLES2.functional.shaders.functions.*,dEQP-GLES2.functional.shaders.invalid_implicit_conversions.*,dEQP-GLES2.functional.shaders.random.basic_expression.*,dEQP-GLES2.functional.shaders.random.scalar_conversion.*,dEQP-GLES2.functional.shaders.random.swizzle.*,dEQP-GLES2.functional.shaders.random.comparison_ops.*,dEQP-GLES2.functional.shaders.random.conditionals.*,dEQP-GLES2.functional.shaders.random.trigonometric.*,dEQP-GLES2.functional.shaders.random.exponential.*
+# image S5f: 98
+dEQP-GLES2.functional.shaders.random.all_features.fragment.*
+# image S5v: 100
+dEQP-GLES2.functional.shaders.random.all_features.vertex.*
+# image SMALL: 227
+dEQP-GLES2.info.*,dEQP-GLES2.functional.prerequisite.*,dEQP-GLES2.functional.color_clear.*,dEQP-GLES2.functional.implementation_limits.*,dEQP-GLES2.functional.read_pixels.*,dEQP-GLES2.functional.depth_range.*,dEQP-GLES2.functional.dither.*,dEQP-GLES2.functional.default_vertex_attrib.*,dEQP-GLES2.functional.shader_api.*,dEQP-GLES2.functional.buffer.*
+# image T1: 41
+dEQP-GLES2.functional.texture.completeness.*,dEQP-GLES2.functional.texture.format.*,dEQP-GLES2.functional.texture.wrap.*
+# image T1V: 140
+dEQP-GLES2.functional.texture.vertex.*
+# image T2: 248
+dEQP-GLES2.functional.texture.filtering.*
+# image T3: 304
+dEQP-GLES2.functional.texture.mipmap.*,dEQP-GLES2.functional.texture.specification.*
+# image T4: 67
+dEQP-GLES2.functional.texture.size.2d.1024x1024_l8,dEQP-GLES2.functional.texture.size.2d.1024x1024_l8_mipmap,dEQP-GLES2.functional.texture.size.2d.1024x1024_rgb888,dEQP-GLES2.functional.texture.size.2d.1024x1024_rgb888_mipmap,dEQP-GLES2.functional.texture.size.2d.1024x1024_rgba4444_mipmap,dEQP-GLES2.functional.texture.size.2d.1024x1024_rgba8888,dEQP-GLES2.functional.texture.size.2d.1024x1024_rgba8888_mipmap,dEQP-GLES2.functional.texture.size.2d.512x512_l8,dEQP-GLES2.functional.texture.size.2d.512x512_l8_mipmap,dEQP-GLES2.functional.texture.size.2d.512x512_rgb888,dEQP-GLES2.functional.texture.size.2d.512x512_rgb888_mipmap,dEQP-GLES2.functional.texture.size.2d.512x512_rgba4444_mipmap,dEQP-GLES2.functional.texture.size.2d.512x512_rgba8888,dEQP-GLES2.functional.texture.size.2d.512x512_rgba8888_mipmap,dEQP-GLES2.functional.texture.size.2d.64x64_l8,dEQP-GLES2.functional.texture.size.2d.64x64_l8_mipmap,dEQP-GLES2.functional.texture.size.2d.64x64_rgb888,dEQP-GLES2.functional.texture.size.2d.64x64_rgb888_mipmap,dEQP-GLES2.functional.texture.size.2d.64x64_rgba4444,dEQP-GLES2.functional.texture.size.2d.64x64_rgba4444_mipmap,dEQP-GLES2.functional.texture.size.2d.64x64_rgba8888,dEQP-GLES2.functional.texture.size.2d.64x64_rgba8888_mipmap,dEQP-GLES2.functional.texture.size.2d.65x63_l8,dEQP-GLES2.functional.texture.size.2d.65x63_rgb888,dEQP-GLES2.functional.texture.size.2d.65x63_rgba8888,dEQP-GLES2.functional.texture.size.cube.*
+# image T5: 7 (with texture-2048.conf)
+dEQP-GLES2.functional.texture.size.2d.2048x2048_l8,dEQP-GLES2.functional.texture.size.2d.2048x2048_l8_mipmap,dEQP-GLES2.functional.texture.size.2d.2048x2048_rgb888,dEQP-GLES2.functional.texture.size.2d.2048x2048_rgb888_mipmap,dEQP-GLES2.functional.texture.size.2d.2048x2048_rgba4444_mipmap,dEQP-GLES2.functional.texture.size.2d.2048x2048_rgba8888,dEQP-GLES2.functional.texture.size.2d.2048x2048_rgba8888_mipmap
+# image TF: 17
+dEQP-GLES2.functional.shaders.texture_functions.*
+# image U1: 1267
+dEQP-GLES2.functional.uniform_api.*
+# image VA: 571
+dEQP-GLES2.functional.vertex_arrays.*
+# image DR: 101
+dEQP-GLES2.functional.draw.*
+# image XT: 12
+dEQP-GLES2.functional.clip_control.*,dEQP-GLES2.functional.debug_marker.*,dEQP-GLES2.functional.multisampled_render_to_texture.*
