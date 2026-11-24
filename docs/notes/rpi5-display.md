@@ -224,6 +224,59 @@ side, under ssh before the Zephyr run, supplies the references
 4. **Can channel 0's list pointer be changed under a running scanout without
    a visible glitch, and is the vblank the safe point?** Not read anywhere
    (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe now prints `heade=` in its snapshot line.
+   Still open: the answer comes from the first `rpi5_scanout32` board run.
+   *How stage 2 measures it* (the merged method, reads and one LPTRS write;
+   no board figure yet):
+   - *Frame edge, by reads only.* `hvs6v_wait_frame`
+     (`driver/zephyr/lib/board/rpi5_scanout/hvs6_vblank.h:124-166`) reads
+     channel 0's STATUS (`DISP0_STATUS`, `:54`) and polls until FRCNT (bits
+     21:16, six bits, `:56-57`) differs from the first read; that step is the
+     edge, with the poll interval's resolution. `struct hvs6v_io` has no
+     `write32` (`:59-65`), and `PV_INTSTAT` is not used because
+     `pv_wait_vblank` clears it, a write (`hvs6_vblank.h:17-19`). YLINE is
+     not used either (`:31-35`). `hvs6_dlist_swap.h` still carries its own
+     copy of the loop, `hvs6s_find_step` (`:1158`, called from `:1196`
+     and `:1203`), with the same FRCNT-step rule.
+   - *When LPTRS is written, and the pickup.* `hvs6s_swap` finds the edge
+     first (`hvs6s_wait_vblank_reads`, `hvs6_dlist_swap.h:1187`), samples,
+     then writes `LPTRS.HEADE` once (`:1356`). A tight loop with no
+     `io->wait` (`hvs6s_tight_loop`, `:1239`; the call at `:1370`) reads DL
+     then STATUS per iteration until `DISP0_DL.LACT` (bits 11:0,
+     `:263`) equals the new head, at most `tight_reads` iterations. This
+     times the pickup: the iteration of the first FRCNT step, and the
+     clock from write to pickup when one is given. Linux's own check is the
+     same read of LACT (`facts:497-503`); the facts say nothing of a latch bit
+     and do not assume a vblank-only latch (`facts:530-532`).
+   - *Which lines count a swap as landed.* The probe prints per swap
+     `u3 vblank <k>: landed=yes|no why=<reason> frcnt <w> -> <p> steps=<n>
+     invblank=yes|no tight=ok|miss ...` (`rpi5_scanout32/src/main.c:99`,
+     printed at `:441`) next to the library's `dlswap lact-pickup ok|FAIL`,
+     `dlswap vblank` and `dlswap lact-timing` lines
+     (`hvs6_dlist_swap.h:159-203`). `verdicts.sh` (header `:61-109`) counts
+     swap k as landed when its line says `landed=yes`, `invblank=yes`,
+     `tight=ok` and FRCNT stepped at most once from w to p, and its
+     `lact-pickup` line is ok. `q4: yes` needs every swap landed and
+     every pickup ok (`verdicts.sh:600-602`); a missing or non-ok line,
+     a missed frame, `tight=miss` or a write outside the vblank gives
+     `q4: no` naming the first. YLINE, `boundary=` and the times are printed
+     and decide nothing.
+   - *Restore.* `hvs6s_restore` (`hvs6_dlist_swap.h:1472`) finds a frame edge
+     by reads again, then writes the firmware's `LPTRS` and runs the same
+     tight loop until `DL.LACT` is back on the firmware's `HEADE`
+     (`dlswap restore-lact ok|FAIL`, `dlswap restore-vblank ...`, `:161`,
+     `:224`). A vblank not found still writes and fails nothing by itself
+     (`:1468-1470`). The compare is byte-equal over the firmware's span except
+     the declared hardware word: the probe builds with
+     `RPI5_SCANOUT32_HW_WORDS=4:skip` (`CMakeLists.txt:34`), which is Q2's
+     entry offset 4, and the lines carry `hwskip=4:skip`.
+   - *What this cannot prove.* Registers show that LPTRS was written right
+     after an FRCNT step, that `DL.LACT` reached the new head, and that FRCNT
+     went on advancing. They do not show a glitch on the screen (a torn or
+     one-frame-late picture): the edge is seen only to the poll interval,
+     the facts leave open whether a mid-frame write is latched at the next
+     line or frame (`facts:510-517`), and a camera or capture frame would be
+     a confirmation, never the proof. `landed=yes` is "no register shows a
+     problem", not "no glitch".
 5. **Do the disp (16) and HSM (13) clocks matter to HVS register reads?** The
    HSM rate was never answered, so HDMI registers were skipped
    (`dd:541-543`); the HVS ones were read with the disp clock unknown
