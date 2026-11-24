@@ -602,17 +602,34 @@ Splitting answers two different faults, and they split two different ways.
   transform feedback of line primitives; 439 and 426 without — the 15
   transform-feedback cases that ran before the refusals all passed).
   `2026-11-pi4-gles3-c/README.md`: "Until each is fixed, the image needs
-  splitting at that case to get results for the cases behind it." An
-  abort at *every* image's first case does not split — the six
+  splitting at that case to get results for the cases behind it." The
+  `b1b5b845` round keeps the aborted image in the record and **cuts** it
+  there: the label stays in the table with its cases up to and including the
+  refusing case (its tally stays, and the record checker, below, reads the
+  label as a cut, not a FAIL), and the never-begun cases behind the trigger
+  move to new labels sized as the table above, named by appending a letter
+  to the old label (`T14` -> `T14a`, `T14b`; `TF1` -> `TF1a`-`TF1c`; a label
+  already ending in a letter gets another letter: `T05c` -> `T05ca`-`T05cc`),
+  and run in a later session. A first-case refusal leaves the label with
+  that one case — `S03`: 1, read by the checker as
+  `refused (one-case image)` — with the rest of S03-S08 in `S03a`. S03-S08,
+  T05c, T14, T17, TF1 and TF2 at `b1b5b845` gave 14 such labels and took the
+  table from 100 to 114 images
+  (`tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/README.md`). A cut only
+  helps where the cases behind the trigger can pass; a refusal that stops
+  the first case of every image it reaches cannot be split away: the six
   `precision` images at `8990a5cc` all stopped at #0 on one refusal
   ("splitting the images does not help, every image fails at its first
-  case"): there the fix is the back end taking the target, not the table.
-  A session record cannot keep an aborted tally (the record checker,
-  section 4): re-split and rerun the aborted rows, or report the refusal
-  cause.
+  case"), and in the aborts round a cut's remainder aborted at its own first
+  case again (`S03a` at `precision.abs.highp_fragment.vec2`, `T05ca`-`T05cc`
+  at their ETC2 cube cases). There the fix is the back end taking the
+  target, not the table.
 
-To split: edit the table (two `# image` blocks in place of one, the counts in
-the notes), then
+To cut or to re-split: edit the table — a cut shrinks the aborted label's
+filter to its cases up to and including the trigger and adds the new labels
+for the never-begun rest (two `# image` blocks in place of one, more when
+the rest is large) —, update each block's `# image <LABEL>: N` count and the
+header comment's image count, then
 
 ```sh
 python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt
@@ -620,8 +637,34 @@ python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt
 
 must end with `check-gles3-tree: tools/cts/pi4-gles3-tree.txt: <N> images,
 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`
-(N the new image count; the header comment's image count, now "100", follows it), and
-`tools/cts/cts-selftest.sh` check 19 and `check-deqp-images.py` say the same.
+(N the new image count; `check-gles3-tree.py` pins each `# image` count to
+the mustpass names its filter selects, and the header comment's image count,
+now "114", follows it), and `tools/cts/cts-selftest.sh` check 19 and
+`check-deqp-images.py` say the same.
+
+After a cut both tools count each case once, under the label the current
+table gives it. The record checker (section 4) takes an aborted label as a
+cut — `info: <LABEL>: cut after abort trigger <case> (<n> begun, <m> moved
+to <labels>)`, not a FAIL — when (a) the `<LABEL>.console.txt` sits beside
+its tally, every case of the label as the table now lists them began there,
+and the last one begun is the trigger: a `ResourceError`, `InternalError`,
+`Crash` or `Timeout` line, and the label's last case; and (b) every case the
+console's `deqp: case filter` line (the pre-cut filter) selects but that
+never began belongs to another label of the table that has its own tally,
+the filter expanded against `tools/cts/gles3-mustpass.txt` (`--mustpass`).
+The checker's own directory list defaults to all
+`tools/cts/log/*-pi4-gles3-<sha8>-*`, so the session that runs the moved
+cases belongs to the same command; a tree case that never began, a moved
+case no label covers, and a missing console each keep the FAIL. A tally of
+a label the table dropped for a re-split is not a FAIL either:
+`info: superseded by re-split: <LABEL> -> <labels>`.
+`gles3-notpass.py --pi4` (section 5) writes the rows per tree label: the
+cut label yields its own cases from its console, the trigger with its abort
+status, and the moved cases come from the new labels' consoles, not as
+`NoResult` of the cut label — its never-begun `*` mark drops off and the
+header counts both labels as run. It takes the session directories on its
+command line: pass every one of the commit, for a label without a console
+is listed `not run` there and its cases get no rows.
 
 `tools/cts/pi4-gles3-resplit.py` does the split by program: it reads the tree and
 the aborted labels' tally files (`--tally <LABEL>.tally.txt`, only those that say
@@ -634,8 +677,13 @@ rest follows in `<LABEL>2`... of equal size, by the table above
 (`builtin_functions.precision` 200, `--size N` overrides). A label that ends in
 a digit gets a letter appended, one that ends in a letter a number (`S03a` ->
 `S03a1`, `S03a1` -> `S03a1a`). Other rows and the header text are kept, the
-header's image count is rewritten, and the check above must still pass;
-`tools/cts/pi4-gles3-resplit-selftest.sh` is its test.
+header's image count is rewritten, and the check above must still pass. It
+writes the *re-split* shape: the trigger stands alone in a one-case image
+and the label keeps only the cases before it, which the record checker
+reads as a cut only when the trigger was the label's first case — after a
+mid-image abort, fold the trigger back into the label's filter as the
+`b1b5b845` records have it. `tools/cts/pi4-gles3-resplit-selftest.sh` is
+its test.
 
 ## 7. Reading the first run against the AM62P's
 
