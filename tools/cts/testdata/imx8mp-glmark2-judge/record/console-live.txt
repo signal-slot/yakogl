@@ -1,0 +1,13 @@
+[    0.001] *** Booting Zephyr OS ***
+[00:00:01] uart bridge 192.0.2.7:4001 via /dev/ttyUSB3 host bridge.example serial SN12345678
+glmark2-fb: [build] use-vbo=false 16x8 begin
+glmark2-fb: 0 4765 AAAADAAJGAASJAAbMAAkPAAtSAA2VAA/YABIbABReABahABjkABsnAB1qAB+tACH
+glmark2-fb: 1 9c48 AxwADxwJGxwSJxwbMxwkPxwtSxw2Vxw/YxxIbxxRexxahxxjkxxsnxx1qxx+txyH
+glmark2-fb: 2 8783 BjgAEjgJHjgSKjgbNjgkQjgtTjg2Wjg/ZjhIcjhRfjhaijhjljhsojh1rjh+ujiH
+glmark2-fb: 3 7cde CVQAFVQJIVQSLVQbOVQkRVQtUVQ2XVQ/aVRIdVRRgVRajVRjmVRspVR1sVR+vVSH
+glmark2-fb: 4 1ebd DHAAGHAJJHASMHAbPHAkSHAtVHA2YHA/bHBIeHBRhHBakHBjnHBsqHB1tHB+wHCH
+glmark2-fb: 5 13e0 D4wAG4wJJ4wSM4wbP4wkS4wtV4w2Y4w/b4xIe4xRh4xak4xjn4xsq4x1t4x+w4yH
+glmark2-fb: 6 29ca EqgAHqgJKqgSNqgbQqgkTqgtWqg2Zqg/cqhIfqhRiqhalqhjoqhsrqh1uqh+xqiH
+glmark2-fb: 7 87b0 FcQAIcQJLcQSOcQbRcQkUcQtXcQ2acQ/dcRIgcRRjcRamcRjpcRsscR1vcR+ycSH
+glmark2-fb: end crc32 f4d7d547
+glmark2-picture: [build] use-vbo=false: 16x8; probes c 6c704800, tl 36382400, tr 96386c00, bl 42a82400, br a2a86c00; crc16 2b30, crc16q a492; mean 101 98 68; black no
