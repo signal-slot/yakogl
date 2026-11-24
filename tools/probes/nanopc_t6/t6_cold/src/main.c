@@ -10,8 +10,9 @@
  * yd_t6_display_cold (board::nanopc_t6_display_cold over
  * soc::rk3588_display_chain): with power-cycle every display block is put
  * off and in reset, then power, clocks and resets, the GRF words, the PHY
- * at the mode's pixel clock, DCLK_VOP0 on the PHY, the HDMI controller in
- * DVI, VP0 at the mode with Esmart0 on the buffer, and the video check. The
+ * at the mode's pixel clock, DCLK_VOP0 on the PHY, the HDMI controller
+ * bound, VP0 started at the mode, the controller enabled in DVI on VP0's
+ * video clock, Esmart0 on the buffer, and the video check. The
  * chain turns the VOP's IOMMU off itself and makes Esmart0 VP0's only
  * layer, so nothing of that is left to this file.
  *

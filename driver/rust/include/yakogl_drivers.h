@@ -1145,8 +1145,10 @@ int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, 
 /* D8, the display brought up from cold after a normal kexec
  * (board::nanopc_t6_display_cold over soc::rk3588_display_chain with the
  * T6's configuration; feature rk3588): power, clocks and resets, the GRF
- * words, the PHY at 65 MHz, DCLK_VOP0 on the PHY, the HDMI controller in
- * DVI, VP0 at 1024x768@60 with Esmart0 on the buffer at physical fb_pa
+ * words, the PHY at 65 MHz, DCLK_VOP0 on the PHY, the HDMI controller bound,
+ * VP0 at 1024x768@60 started, the controller enabled in DVI once VP0's
+ * video clock reaches it (Linux's order: the VOP, then the controller),
+ * Esmart0 on the buffer at physical fb_pa
  * (1024x768 XRGB8888, stride 4096, below 4 GiB, drawn and cleaned by the
  * caller), then the video check. Each stage logs a line on env before its
  * first access ("t6 display: stage N NAME"), so a hang names its stage.
@@ -1185,8 +1187,8 @@ int yd_t6_display_status(const struct yd_t6_display_bases *b, uint32_t wait_us, 
 #define YD_T6_DISPLAY_COLD_STAGE_GRF        3 /* vop_grf GRF_VOP_CON2, vo1_grf GRF_VO1_CON0 */
 #define YD_T6_DISPLAY_COLD_STAGE_PHY        4 /* the PHY's PLL locked, its lanes ready */
 #define YD_T6_DISPLAY_COLD_STAGE_DCLK       5 /* DCLK_VOP0 on the PHY's PLL */
-#define YD_T6_DISPLAY_COLD_STAGE_CONTROLLER 6 /* the HDMI controller bound and enabled */
-#define YD_T6_DISPLAY_COLD_STAGE_VOP        7 /* VP0 runs, Esmart0 on the buffer */
+#define YD_T6_DISPLAY_COLD_STAGE_CONTROLLER 6 /* the HDMI controller bound (enabled in stage 7) */
+#define YD_T6_DISPLAY_COLD_STAGE_VOP        7 /* VP0 started, the controller enabled, Esmart0 shown */
 #define YD_T6_DISPLAY_COLD_STAGE_VIDEO      8 /* the read-backs of the picture */
 
 #define YD_T6_DISPLAY_COLD_ERROR_NONE           0  /* ran through */
