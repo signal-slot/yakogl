@@ -26,11 +26,12 @@
 //! (x86-64 libm gives 0xffc00000 for some): callers refuse non-finite folds
 //! (section 1.5, 6.6).
 //!
-//! Not yet declared in `online/mod.rs`: its first caller (cfold step B / CF1
-//! in `mali/nir.rs`, or negzero-lower in `glsl.rs`) adds the `mod` line;
-//! until then `tests/mali_libm_fold.rs` builds it by `#[path]`, with
-//! `fmath.rs` as the root's `mod fmath` (hence `super::fmath`, which is
-//! `online::fmath` in the crate).
+//! Declared `pub(crate)` in `online/mod.rs` for a `gpu-mali` build; its
+//! first caller is negzero N2 in `mali/glsl.rs` ([`fold_glsl`] only; the
+//! NIR, fp16 and `fma` folds wait for cfold CF1 and constprod K4).
+//! `tests/mali_libm_fold.rs` builds it by `#[path]`, with `fmath.rs` as the
+//! root's `mod fmath` (hence `super::fmath`, which is `online::fmath` in the
+//! crate).
 
 use super::fmath;
 
