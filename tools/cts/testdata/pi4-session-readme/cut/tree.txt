@@ -1,0 +1,8 @@
+# Synthetic cut-shaped tree (no real cases): K was cut after its abort
+# trigger k.c, the three cases dEQP never began went to K2 (a later session).
+# image L1: 2
+dEQP-GLES3.l.*
+# image K: 3 (k up to k.c, where dEQP stopped; the rest in K2)
+dEQP-GLES3.k.a,dEQP-GLES3.k.b,dEQP-GLES3.k.c
+# image K2: 3 (the rest of k, never begun in K)
+dEQP-GLES3.k.d,dEQP-GLES3.k.e,dEQP-GLES3.k.f

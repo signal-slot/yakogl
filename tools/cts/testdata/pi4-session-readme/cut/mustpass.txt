@@ -1,0 +1,8 @@
+dEQP-GLES3.l.a
+dEQP-GLES3.l.b
+dEQP-GLES3.k.a
+dEQP-GLES3.k.b
+dEQP-GLES3.k.c
+dEQP-GLES3.k.d
+dEQP-GLES3.k.e
+dEQP-GLES3.k.f

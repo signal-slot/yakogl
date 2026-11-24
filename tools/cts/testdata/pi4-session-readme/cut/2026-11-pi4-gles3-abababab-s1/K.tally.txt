@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 image K: synthetic tally of the aborted image
+K.console.txt: deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 3 cases begun, 3 with a result, 0 without
+group                                       pass   fail    n/s  other
+k                                              2      0      0      1
+TOTAL                                          2      0      0      1
+ResourceError dEQP-GLES3.k.c

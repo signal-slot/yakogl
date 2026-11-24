@@ -22,8 +22,22 @@ image: LABEL, run time (e.g. 22.0 s), GPU recoveries, hangs. A label or a
 field that is missing is '-' (unknown); nothing is made up. Paths in the
 README are relative to SESSION_DIR; the text carries no home path, host
 name, address or tty device.
+
+A cut (docs/es3/board-recipe-pi4.md section 6): an image dEQP aborted whose
+label the tree has since cut after the abort trigger, the cases it never
+began moved to later labels with their own tallies. Those later tallies may
+be in other session directories of the same commit: the sibling directories
+'*-pi4-gles3-<sha8>-*' of SESSION_DIR, and each --with DIR. The cut is
+judged by check-pi4-gles3-log.py's own rule and named in its words: the
+image keeps its verdict, followed by '; cut after abort trigger <case>
+(<N> begun, <K> moved to <LABELS>)', and a line under the table names the
+tally each moved case went to, so the K never-begun cases read as moved,
+not lost. An aborted image that is not a cut, and every finished image,
+reads as before.
 """
 import argparse
+import glob
+import importlib.util
 import os
 import re
 import subprocess
@@ -91,7 +105,57 @@ def read_tally(path):
     return counts + (verdict,)
 
 
-def build(sessdir, commit, tree, times, notes):
+def logcheck():
+    """check-pi4-gles3-log.py as a module: its cut rule and wording."""
+    spec = importlib.util.spec_from_file_location(
+        "check_pi4_gles3_log", os.path.join(HERE, "check-pi4-gles3-log.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def cuts(sessdir, commit, tree, have, others, mustpass):
+    """{label: (why, [relative tally paths of the labels its cases moved to])}
+    for each image of the session that check-pi4-gles3-log.py counts as cut."""
+    lc = logcheck()
+    counts = {}
+    lc.labels_of(tree, counts)
+    aborted = []
+    for lab in have:
+        p = os.path.join(sessdir, lab + ".tally.txt")
+        if lc.complete(p) or (counts.get(lab) == 1 and lc.refused_one_case(p)):
+            continue
+        aborted.append(lab)
+    if not aborted:
+        return {}
+    own = os.path.realpath(sessdir)
+    dirs = [sessdir]
+    sib = os.path.join(os.path.dirname(own), "*-pi4-gles3-%s-*" % commit[:8])
+    for d in sorted(glob.glob(sib)) + list(others):
+        if os.path.isdir(d) and os.path.realpath(d) not in map(os.path.realpath, dirs):
+            dirs.append(d)
+    where = {}
+    for d in dirs:
+        for p in sorted(glob.glob(os.path.join(d, "*.tally.txt"))):
+            where.setdefault(os.path.basename(p)[: -len(".tally.txt")], []).append(p)
+    try:
+        mp = lc.read_mustpass(mustpass)
+    except OSError:
+        mp = []
+    exps = {k: lc.expand(v, mp) for k, v in lc.tree_cases(tree).items()}
+    out = {}
+    for lab in aborted:
+        ok, why = lc.cut_verdict(lab, where[lab], mp, exps, where)
+        if not ok:
+            continue
+        m = re.search(r"moved to (.*)\)$", why)
+        subs = m.group(1).split() if m else []
+        out[lab] = (why, [os.path.relpath(where[s][0], sessdir)
+                          for s in subs if where.get(s)])
+    return out
+
+
+def build(sessdir, commit, tree, times, notes, others=(), mustpass=None):
     labels = tree_labels(tree)
     if not labels:
         raise SystemExit("%s: no '# image <LABEL>:' lines" % tree)
@@ -122,11 +186,26 @@ def build(sessdir, commit, tree, times, notes):
         "| row | image | Pass | Fail | NotSupported | other | run | GPU recoveries | hangs | verdict |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
+    cut = cuts(sessdir, commit, tree, have, others,
+               mustpass or os.path.join(HERE, "gles3-mustpass.txt"))
     for lab in have:
         p, f, n, o, v = read_tally(os.path.join(sessdir, lab + ".tally.txt"))
+        if lab in cut:
+            v += "; " + cut[lab][0]
         run, rec, hang = times.get(lab, ("-", "-", "-"))
         out.append("| %d | %s | %s | %s | %s | %s | %s | %s | %s | %s |"
                    % (labels.index(lab) + 1, lab, p, f, n, o, run, rec, hang, v))
+    if cut:
+        out.append("")
+        out.append("Cut images (`docs/es3/board-recipe-pi4.md` section 6): the label keeps "
+                   "its cases up to the abort trigger; the cases dEQP never began after it "
+                   "moved to later labels and are counted there, not lost.")
+        for lab in have:
+            if lab in cut:
+                why, paths = cut[lab]
+                out.append("- %s: %s; %s %s." % (
+                    lab, why, "tallies" if len(paths) > 1 else "tally",
+                    ", ".join("`%s`" % p for p in paths) or "-"))
     if notes:
         out.append("")
         out.extend(notes)
@@ -188,6 +267,56 @@ def self_test():
         check("check-pi4-gles3-log.py accepts the commit and finds no private detail",
               "README.md has no" not in r.stdout and "private detail" not in r.stdout
               and "names commit" not in r.stdout)
+
+    # testdata/pi4-session-readme/cut/: K aborted at k.c (its filter k.*),
+    # the tree cut K after k.c, its 3 never-begun cases ran as K2 in a
+    # later session directory of the same commit.
+    cd = os.path.join(HERE, "testdata", "pi4-session-readme", "cut")
+    ctree, cmp = os.path.join(cd, "tree.txt"), os.path.join(cd, "mustpass.txt")
+    s1 = os.path.join(cd, "2026-11-pi4-gles3-abababab-s1")
+    s2 = os.path.join(cd, "2026-11-pi4-gles3-abababab-s2")
+    ctimes = read_times(os.path.join(cd, "times.tsv"))
+    why = "cut after abort trigger dEQP-GLES3.k.c (3 begun, 3 moved to K2)"
+    text = build(s1, sha, ctree, ctimes, [], (), cmp)
+    check("cut: finished image unchanged",
+          "| 1 | L1 | 2 | 0 | 0 | 0 | 1.2 s | 0 | none | DONE, all passed |\n" in text)
+    check("cut: aborted image keeps its verdict and counts, then the cut",
+          "| 2 | K | 2 | 0 | 0 | 1 | 0.9 s | 0 | none | "
+          "incomplete (no complete deqp summary); %s |\n" % why in text)
+    check("cut: the never-begun cases are moved to K2 (its tally named), not lost",
+          "- K: %s; tally `../2026-11-pi4-gles3-abababab-s2/K2.tally.txt`." % why in text
+          and "not lost" in text)
+    check("cut: K2 (another session) is not a row here", "| K2 |" not in text)
+    check("cut: no private detail", PRIVATE.search(text) is None)
+    with tempfile.TemporaryDirectory() as td:
+        # the same wording as check-pi4-gles3-log.py's info line
+        for s, lab in ((s1, "K"), (s1, "L1"), (s2, "K2")):
+            d = os.path.join(td, os.path.basename(s))
+            os.makedirs(d, exist_ok=True)
+            for ext in (".tally.txt", ".console.txt"):
+                if os.path.isfile(os.path.join(s, lab + ext)):
+                    with open(os.path.join(s, lab + ext)) as f, \
+                            open(os.path.join(d, lab + ext), "w") as g:
+                        g.write(f.read())
+        d1 = os.path.join(td, os.path.basename(s1))
+        d2 = os.path.join(td, os.path.basename(s2))
+        for d in (d1, d2):
+            with open(os.path.join(d, "README.md"), "w") as f:
+                f.write(build(d, sha, ctree, ctimes, [], (), cmp))
+        r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "check-pi4-gles3-log.py"),
+                            "--commit", sha, "--tree", ctree, "--mustpass", cmp, d1, d2],
+                           capture_output=True, text=True)
+        check("cut: check-pi4-gles3-log.py passes the record with the same words",
+              r.returncode == 0 and ("info: K: %s" % why) in r.stdout)
+        # alone (no K2 tally anywhere) K is an abort, not a cut: as before
+        os.rename(d2, os.path.join(td, "elsewhere"))
+        text = build(d1, sha, ctree, ctimes, [], (), cmp)
+        check("cut: without the remainder's tally K reads as before",
+              "| 2 | K | 2 | 0 | 0 | 1 | 0.9 s | 0 | none | "
+              "incomplete (no complete deqp summary) |\n" in text and "cut" not in text)
+        text = build(d1, sha, ctree, ctimes, [], [os.path.join(td, "elsewhere")], cmp)
+        check("cut: --with DIR finds the remainder outside the siblings",
+              "moved to K2" in text and "`../elsewhere/K2.tally.txt`" in text)
     print("pi4-session-readme self-test: %d failed" % len(fails))
     return 1 if fails else 0
 
@@ -199,6 +328,11 @@ def main():
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
     ap.add_argument("--times", help="TSV: LABEL, run time, GPU recoveries, hangs")
     ap.add_argument("--note", action="append", default=[], help="a line of text under the table")
+    ap.add_argument("--with", dest="others", action="append", default=[], metavar="DIR",
+                    help="another session directory of the commit (for cuts; the "
+                    "'*-pi4-gles3-<sha8>-*' siblings are read anyway)")
+    ap.add_argument("--mustpass", default=os.path.join(HERE, "gles3-mustpass.txt"),
+                    help="mustpass list the tree globs expand against (for cuts)")
     ap.add_argument("-o", "--output", help="README path (default SESSION_DIR/README.md; - = stdout)")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("dir", nargs="?")
@@ -210,7 +344,7 @@ def main():
     sha = a.commit.lower()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         ap.error("--commit needs a full 40-digit sha")
-    text = build(a.dir, sha, a.tree, read_times(a.times), a.note)
+    text = build(a.dir, sha, a.tree, read_times(a.times), a.note, a.others, a.mustpass)
     if a.output == "-":
         sys.stdout.write(text)
     else:
