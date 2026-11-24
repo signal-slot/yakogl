@@ -568,6 +568,49 @@ picture against the `mali` column):
 | 32 | `[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
 | 33 | `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5` | - | - | refused: VS arithmetic | absent | 0 |
 
+## Mali: Verdin iMX95 on Zephyr (started by U-Boot)
+
+The Toradex Verdin iMX95 (i.MX 95, Mali-G310; module 0089, 8 GB, V1.1A) on
+the Mallow carrier, first session, 2026-11-25. Each image was staged by the
+module's Linux as a file on the eMMC's root file system, loaded by the
+module's own U-Boot at its prompt (`ext4load mmc 0:2 0xd0000000 <file>`,
+the md5 of the loaded bytes compared with the host's) and entered with
+`dcache off; icache flush; go 0xd0000000`, a person's session on the UART_3
+console (Mallow X11): the U-Boot route of `docs/standalone-boot.md`, typed by
+hand, not through `tools/board.sh imx95` and not from the boot command. The
+module ran Toradex's Reference Multimedia Image 7.8.0 (U-Boot
+2024.04-7.8.0+git.b7c747d8c084, System Manager build 574, commit cc7a8d2d);
+nothing in the boot partitions was changed. The images are those of
+`tools/probes/verdin_imx95/` and `driver/samples/zephyr/gl_test`
+(`-DYAKOGL_WERROR=ON`, display off), built from main `bd6cd44938a7`
+(`v0.1.0-3407-gbd6cd44938a7`) with the pinned `MALI_CSFFW`. All five runs
+ended by themselves and the board came back to its Linux login each time.
+The display (the 10.1" LVDS panel on X12) is not part of these runs.
+
+| Step | Image | Result | Image sha256 | Run | Record |
+|---|---|---|---|---|---|
+| WDOG3 resets the board | `imx95_wdog` | **PASS**: found `CS 0x00002900 TOVAL 0x00000400 (stopped)`, armed `rc 0 CS 0x000035e3 TOVAL 0x00001d4c timeout 60000 ms`; alive lines to 50 s, then U-Boot SPL's banner; U-Boot reports `LM Boot reason: fccu, origin: -1, errid: 19` | `c290dd1f6eb13d28` | 2026-11-25 01:24 JST | `records/verdin-imx95/20261125-0124-imx95_wdog-c290dd1f` |
+| What the System Manager tells the A55 agent (read only) | `imx95_scmi` | **PASS**: `imx95_scmi: PASS 146 facts, 2 answered with a status, 0 broken`; `imx95_scmi/check.sh`: `24 expected, 24 match, 0 differ, 0 missing; verdict PASS`; agent `2 AP-NS`, vendor `NXP` `IMX`, implementation `0x0000023e`; the GPU, display and camera domains off at entry; the PSCI reset at the end returns to U-Boot (`LM Boot reason: sw`) | `aa8869715ea2774a` | 2026-11-25 01:26 JST | `records/verdin-imx95/20261125-0126-imx95_scmi-aa886971` |
+| The GPU's identity after our power-on over SCMI | `imx95_ident` | **PASS**: `imx95_ident: PASS GPU_ID 0xac740001, SHADER_PRESENT 0x00000001, 1 of 9 mock.rs words differ` (the assumed `SHADER_PRESENT` was 0x3; `L2_FEATURES 0x07110306`, `TILER_FEATURES 0x00000809`, `MMU_FEATURES 0x00002830`, `AS_PRESENT 0xff`, `CORE_FEATURES 0x1`, `COHERENCY_FEATURES 0x0`); domain 14 on at perf level 2 (800 MHz), off again at the end | `9734aab313e3dcba` | 2026-11-25 01:27 JST | `records/verdin-imx95/20261125-0127-imx95_ident-9734aab3` |
+| The CSF firmware boots from our side | `imx95_fw` | **PASS**: `imx95_fw: PASS GLB 1.5.0, 8 groups, CS features 0x0007085f, suspend 21120/21120`; `MCU_STATUS 0 before, 1 after, booted in 21 us`; the file is the T6's (sha256 `a27847ea…405b`) | `3b1c3a4f1c9fb6a9` | 2026-11-25 01:29 JST | `records/verdin-imx95/20261125-0129-imx95_fw-3b1c3a4f` |
+| gl_test, the regression set, on the GL back end over our kernel side (read-back) | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...; 0 skipped ...); precompiled hits 0, compiler runs 529`, `gl_test: PASS`, `yk-record: 594b0201 00000001 00000000 00000000`; 166 kicks, 0 restarts, 0 tiler OOMs; `run over: PSCI SYSTEM_RESET at 15677 ms` | `7b3fd24ec664bd07` | 2026-11-25 01:35 JST | `records/verdin-imx95/20261125-0135-gl_test-7b3fd24e` |
+
+What these runs do not show:
+
+- The record in the BBM GPRs was not read back (the image printed no
+  refusal line; the stock kernel's SCMI raw interface was not probed). The
+  verdicts above are the console's.
+- `tools/board.sh imx95` has not run, nor has U-Boot started an image from
+  its boot command; the direct route has not been tried.
+- No picture: the display path for the X12 LVDS panel is not in main.
+
+The module's own Linux and U-Boot, read the same night (read only): the
+stock Linux drives the G310 with `mali_kbase` r50p0 (`arch 10.12.7 r0p0`)
+and the LVDS panel at 1280x800 (71.1 MHz from `ldbpll` 497.7 MHz); its
+kernel has no kexec; `fuse read 2 2 2` gives `00000000 00000080`; DRAM is
+0x90000000 + 0x70000000 and 0x100000000 + 0x180000000; the eMMC's boot
+areas are 31.5 MiB each.
+
 ## Mali: NanoPC-T6 on Zephyr (by kexec)
 
 Zephyr images started out of the board's Armbian by kexec
