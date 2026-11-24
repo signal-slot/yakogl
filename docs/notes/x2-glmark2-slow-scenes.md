@@ -186,41 +186,51 @@ What held:
   `0a20645a...`, the marker `gc_wdog_arm: armed` present, footprint
   157057024 bytes).
 
-What stopped it, two causes, each enough on its own:
+What stopped it: **an application container runs on the board.** The
+status read counts one podman container: `slint-launcher` (image
+`at-debian-image`), started at boot and up for 22 h. Its config on the board
+sets `set_autostart yes`, so it comes back at every boot. `board.sh x2 run`'s
+readiness check (`x2_kexec_ready`, "nobody's application running": a
+crash-route jump ends a container without a shutdown) refuses the jump.
+Stopping the container or changing its autostart was not this item's to do
+(leave the board as found, persist nothing), so the board cannot take a
+kexec-dev run until its owner decides.
 
-1. **An application container runs on the board.** The same status read
-   counts one podman container: `slint-launcher` (image
-   `at-debian-image`), started at boot and up for 22 h. Its config on the
-   board sets `set_autostart yes`, so it comes back at every boot.
-   `board.sh x2 run`'s readiness check (`x2_kexec_ready`, "nobody's
-   application running": a crash-route jump ends a container without a
-   shutdown) refuses any jump with "something is running (containers 1)".
-   Stopping the container is not this item's to do (leave the board as
-   found), so the board is not usable for kexec-dev until its owner stops
-   the launcher for a session (or turns its autostart off).
-2. **The board-side helpers could not be built on this worker.** The first
-   run, `tools/cts/x2-glmark2-scenes.sh --commit 72972ba4
-   records/x2/20261124-1012-before-72972ba4 terrain shadow refract`, built the
-   terrain image and then exited 3 at its first `board.sh x2 run`, before any
-   ssh:
-   `board.sh x2: no driver/tools/kexec-zephyr/kexec_zephyr (build it: driver/tools/kexec-zephyr/README.md)`.
-   The README's freestanding aarch64 GCC build of `kexec_zephyr` and
-   `snvs_lpgpr` (with the Zephyr SDK's `aarch64-zephyr-elf-gcc`) was refused
-   by this worker's permissions. The script's table:
+The run, `tools/cts/x2-glmark2-scenes.sh --commit 72972ba4
+records/x2/20261124-1035-before-72972ba4 terrain shadow refract`, built the
+terrain image and stopped at its first `board.sh x2 run` (no selector), in
+the readiness read, before the tools, the record or the image were copied:
 
 ```
+board.sh x2: something is running (containers 1)
 scene	commit	selector	verdict line	record words	decoded	ms/frame
 terrain	72972ba4	none	no verdict line, rc=3	-	-	-
 x2-glmark2-scenes: a run was refused, stopped (nothing was retried)
 ```
 
-The tip run was not started (it would stop at the same two places).
+The run directory's `meta.txt` (redacted):
+`board_state=openrc settled uptime 82110s kexec=0 containers=1 crash_window=268435456 crash_loaded=0`,
+`refused_rc=3`, `refused=something is running (containers 1)`. After it,
+`board.sh x2 status` read `board lease: none`, runlevel `default`,
+`kexec_loaded 0`, `kexec_crash_loaded 0`, uptime 82118 s (no reboot): the
+board as found.
+
+On the way (not causes of the stop): `kexec_zephyr` and `snvs_lpgpr`, which
+`board.sh` refuses to run without, are gitignored and must be built on the
+worker first (README, "freestanding, so any aarch64 GCC works"). Here they
+were built with `clang --target=aarch64-none-elf -O2 -static -nostdlib
+-ffreestanding -fno-stack-protector` and the Zephyr SDK's `ld.bfd`.
+`board.sh`'s ssh must also be the connected ssh on `PATH`: a run with `PATH`
+reset to the system ssh got `rc 255` from the lease step and never reached
+the board. That run was stopped by hand before any lease.
+
+The tip run was not started: it would stop at the same readiness check.
 
 Stop rows (ms a frame `-`):
 
 | commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line |
 |---|---|---|---|---|---|
-| 72972ba4 | - | terrain | - | - | verdict= stop: no verdict line, rc=3 (no kexec_zephyr helper; a container runs) |
+| 72972ba4 | - | terrain | - | - | verdict= stop: no verdict line, rc=3 (`something is running (containers 1)`) |
 | 72972ba4 | - | shadow | - | - | verdict= stop: not run (the command stopped at terrain) |
 | 72972ba4 | - | refract | - | - | verdict= stop: not run (the command stopped at terrain) |
 | ecd9743e | off | terrain | - | - | verdict= stop: not run |
@@ -229,8 +239,7 @@ Stop rows (ms a frame `-`):
 
 To run it next time: the board with no container running. Every run ends
 with a reset and the launcher autostarts at each boot, so stopping it once
-is not enough: a session of 15 runs (3 scenes x 5 selectors) needs the
-launcher's autostart off for the session, an owner's decision; and
-`kexec_zephyr`/`snvs_lpgpr` built as the README says before the first
-`board.sh x2 run`. Then the commands of "What is left" above, without the
-console lease.
+is not enough. A session (4 or 5 runs a scene, 3 scenes, 2 commits) needs
+the launcher's autostart off for the session, the owner's decision. Then
+build the two helpers and run the commands of "What is left" above, without
+the console lease.
