@@ -1,4 +1,6 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2018 Alyssa Rosenzweig
+// SPDX-FileCopyrightText: 2019-2021 Collabora, Ltd.
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Whether a GLES2 blend state runs in the blend unit or in a blend shader:
 //! `blend.rs`'s choice against a direct transcription of Mesa 26.2.1's rule

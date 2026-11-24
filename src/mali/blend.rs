@@ -1,4 +1,6 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-FileCopyrightText: 2018 Alyssa Rosenzweig
+// SPDX-FileCopyrightText: 2019-2021 Collabora, Ltd.
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Fixed-function blending as Mesa decides and packs it for one colour
 //! target: whether an equation runs in the hardware's blend unit, its
