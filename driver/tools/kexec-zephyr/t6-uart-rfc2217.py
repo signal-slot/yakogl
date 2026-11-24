@@ -11,7 +11,8 @@
         until the command ends, and exits with the command's status. The
         three T6 runners (nanopc-t6.sh beside this, ../uboot-t6/prompt-reads.sh
         and prompt-go.sh) run themselves again through this when T6_UART is
-        an rfc2217:// address and the run is --go.
+        an rfc2217:// address and the run is --go. T6_UART_SILENT_S and
+        T6_UART_ANSWER_S (seconds) set the watch on a silent link (below).
     t6-uart-rfc2217.py --self-test
         The same code against a made-up adapter on 127.0.0.1 (a thread of
         this process) and commands that stand for the runners. No board.
@@ -56,7 +57,26 @@ What it guarantees:
   - IAC (0xff) is doubled towards the server and undoubled from it.
   - A lost connection is opened and set again; the bytes of the gap are
     lost both ways (what the command wrote during the gap is dropped, not
-    sent late), and one line on stderr gives the time and the gap's length.
+    sent late), and one line gives the time and the gap's length.
+  - A silent link is told from a silent board (issue #11686). The
+    adapter's stream can stop for good while the TCP connection stays
+    open. After T6_UART_SILENT_S (default 5) seconds with no byte from the
+    server, the tool asks the adapter for its baud rate: IAC SB 44
+    SET-BAUDRATE 00 00 00 00 IAC SE (RFC 2217: 0 asks for the rate in
+    force). That is a telnet command to the adapter, never data: no byte of
+    it goes to the board. No answer in T6_UART_ANSWER_S (default 3)
+    seconds, or an answer other than 1500000: the connection is dropped,
+    opened and set again exactly as the first one, and each step is one
+    line. The answer 1500000 says only that the adapter and the connection
+    work; the board may be silent, or the adapter's side towards the board
+    may have stopped, which no answer tells apart. Such answers write
+    nothing during the run; one line at its end counts them.
+  - Each line about the connection (a loss, a drop, the line set again)
+    goes to stderr and, when a process has the slave open, into the
+    command's stream as a line of its own that starts with
+    "#### t6-uart-rfc2217: ", so a record of the stream (uart.log) shows
+    where its hole is. The runners mark their own lines in uart.log the
+    same way ("#### prompt-go: ..."); the name says whose line it is.
   - The command runs in a process group of its own. SIGTERM and SIGHUP to
     this tool are passed to the command's process (as a `kill` of the
     runner without this tool), SIGINT to its process group (as a ctrl-c on
@@ -121,6 +141,17 @@ GROUP_WAIT_S = 35
 # How often the slave's state is read while it is closed or the session is
 # down (poll() cannot wait for the slave's open).
 TICK_S = 0.02
+# The silent link (issue #11686): after SILENT_S with no byte from the
+# server, the adapter is asked for its baud rate (QUESTION); no answer in
+# ANSWER_S drops the connection. The adapter answered within 0.3 s whenever
+# its stream ran. The environment can set both (seconds, above 0).
+SILENT_S = 5.0
+ANSWER_S = 3.0
+SILENT_ENV, ANSWER_ENV = "T6_UART_SILENT_S", "T6_UART_ANSWER_S"
+# Lines this tool puts into the command's stream are lines of their own
+# that start with MARK: they name this tool, as the runners' own lines in
+# uart.log name theirs.
+MARK = b"#### t6-uart-rfc2217: "
 
 # Telnet (RFC 854, 855) and the COM-PORT-OPTION (RFC 2217).
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
@@ -135,6 +166,11 @@ LINE = ((SET_BAUDRATE, struct.pack("!I", BAUD)), (SET_DATASIZE, b"\x08"),
         (SET_PARITY, b"\x01"), (SET_STOPSIZE, b"\x01"))
 NO_FLOW = (SET_CONTROL, b"\x01")
 PURGE_RX = (PURGE_DATA, b"\x01")
+# SET-BAUDRATE 0: in RFC 2217 a value of 0 asks for the current baud rate;
+# the server answers with the rate in force and changes nothing. It
+# goes on telnet's command channel (IAC SB ... IAC SE), so the adapter
+# puts no byte of it on the board's line.
+QUESTION = (SET_BAUDRATE, b"\x00\x00\x00\x00")
 # Options this end agrees to when the server asks; any other is refused.
 AGREED = (BINARY, SGA, COM_PORT)
 URL = re.compile(r"rfc2217://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\]):([0-9]{1,5})/?")
@@ -169,6 +205,21 @@ def parse_url(s):
     if not m or not 0 < int(m.group(2)) < 65536:
         raise ValueError("T6_UART is not rfc2217://<host>:<port>")
     return m.group(1).strip("[]"), int(m.group(2))
+
+
+def seconds(env, default):
+    """The environment's number of seconds for env (above 0, at most an
+    hour), the default when it is not set; ValueError otherwise."""
+    s = os.environ.get(env, "")
+    if not s:
+        return default
+    try:
+        v = float(s)
+    except ValueError:
+        v = 0.0
+    if not 0 < v <= 3600:
+        raise ValueError("%s is not a number of seconds above 0 and at most 3600" % env)
+    return v
 
 
 def escape(data):
@@ -418,20 +469,53 @@ def group_alive(pgid):
 
 
 class Relay:
-    def __init__(self, host, port, session, master, name, child, signals):
+    def __init__(self, host, port, session, master, name, child, signals, silent_s=SILENT_S, answer_s=ANSWER_S):
         self.host, self.port, self.session = host, port, session
         self.master, self.name, self.child = master, name, child
         self.is_open = False      # the slave, as last seen
         self.wrote = False        # bytes went into the slave since it was seen closed
+        self.at_line_start = True  # the last byte into the slave ended a line
         self.lost_at = None       # time.time() the connection was lost
+        self.dropped = None       # why this tool dropped it (None: the server or the path did)
         self.next_try = 0.0
         self.signals = signals    # filled by run()'s handlers
+        self.silent_s, self.answer_s = silent_s, answer_s
+        self.asks = self.answers = 0  # questions sent, right answers read
+        self.longest = 0.0        # the longest silence with every question answered
+        now = time.monotonic()
+        # The last byte of the board read (a reconnect does not move it).
+        self.data_at, self.data_wall = now, time.time()
+        self.listen()
+
+    def listen(self):
+        """A new session: the stream counts as heard now, nothing asked.
+        The negotiation's answer to SET-BAUDRATE is set aside: from here on
+        that answer comes only to the question."""
+        self.session.answers.pop(SET_BAUDRATE + SERVER, None)
+        self.heard_at = time.monotonic()  # the last byte of any kind from the server
+        self.set_wall = time.time()  # the line last known as set: the session's start, the last right answer
+        self.asked_at = None      # time.monotonic() of the question not answered yet
+
+    def note(self, msg):
+        """One line on stderr and the same line in the command's stream (a
+        line of its own that starts with MARK), so a record of that stream
+        says where its hole is."""
+        msg = "%s: %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg)
+        say(msg)
+        self.to_slave((b"" if self.at_line_start else b"\r\n") + MARK + msg.encode() + b"\r\n")
 
     def lose(self):
         self.session.sock.close()
         self.session = None
         self.lost_at = time.time()
         self.next_try = time.monotonic()
+
+    def drop(self, why):
+        """The connection carries nothing this tool can trust: closed here,
+        and opened again by the loop."""
+        self.note("%s; the connection is dropped and opened again" % why)
+        self.dropped = why
+        self.lose()
 
     def reconnect(self):
         try:
@@ -446,9 +530,64 @@ class Relay:
             flush_slave(self.name)
             self.wrote = False
         now = time.time()
-        say("%s: the connection was lost at %s and the line set again at %s: a gap of %.1f s (its bytes are lost both ways)"
-            % (time.strftime("%Y-%m-%d %H:%M:%S"), clock(self.lost_at), clock(now), now - self.lost_at))
-        self.lost_at = None
+        if self.dropped is None:
+            self.note("the connection was lost at %s and the line set again at %s: a gap of %.1f s "
+                      "(its bytes are lost both ways)"
+                      % (clock(self.lost_at), clock(now), now - self.lost_at))
+        else:
+            # The stream may have stopped at its last byte: what the board
+            # sent from then on, if anything, did not come.
+            self.note("the line set again at %s: the board's bytes from %s (the last one read) to %s are lost, "
+                      "if it sent any"
+                      % (clock(now), clock(self.data_wall), clock(now)))
+        self.lost_at, self.dropped = None, None
+        self.listen()
+
+    def heard(self, chunk):
+        """What the server sent: data proves the stream runs; an answer to
+        the question is the baud rate in force, which must be BAUD."""
+        now = time.monotonic()
+        self.heard_at = now
+        data = self.session.take(chunk)
+        if data:
+            self.data_at, self.data_wall, self.asked_at = now, time.time(), None
+        got = self.session.answers.pop(SET_BAUDRATE + SERVER, None)
+        if got is not None:
+            if got != LINE[0][1]:
+                self.drop("the adapter answers that its baud rate is %s, not %d: the line is not as this session set "
+                          "it, and what was read since %s (the line last known as set) may be garbled"
+                          % (shown(SET_BAUDRATE, got), BAUD, clock(self.set_wall)))
+                return b""
+            self.answers += 1
+            self.longest = max(self.longest, now - self.data_at)
+            self.set_wall = time.time()
+            self.asked_at = None
+        return data
+
+    def watch_link(self):
+        """Asks the question after silent_s with no byte, drops the
+        connection when it is not answered in answer_s. Returns the seconds
+        to the next of these, for the loop's wait."""
+        if self.session is None:
+            return None
+        now = time.monotonic()
+        if self.asked_at is None:
+            if now - self.heard_at < self.silent_s:
+                return self.heard_at + self.silent_s - now
+            try:
+                self.session.sb(*QUESTION)
+            except OSError:
+                self.lose()
+                return None
+            self.asks += 1
+            self.asked_at = now
+            return self.answer_s
+        if now - self.asked_at < self.answer_s:
+            return self.asked_at + self.answer_s - now
+        self.drop("no byte of the board since %s and no answer to the question for its baud rate (RFC 2217 "
+                  "SET-BAUDRATE 0) in %.1f s: the connection carried nothing for %.1f s"
+                  % (clock(self.data_wall), self.answer_s, now - self.heard_at))
+        return None
 
     def to_board(self, data):
         if not data or self.session is None:
@@ -464,8 +603,9 @@ class Relay:
         if not data or not slave_open(self.master):
             return
         try:
-            os.write(self.master, data)  # a full slave drops the rest, as a UART's overrun
+            n = os.write(self.master, data)  # a full slave drops the rest, as a UART's overrun
             self.wrote = True
+            self.at_line_start = data[n - 1:n] == b"\n" if n else self.at_line_start
         except (BlockingIOError, OSError):
             pass
 
@@ -512,8 +652,11 @@ class Relay:
             self.watch_slave()
             if self.session is None and time.monotonic() >= self.next_try:
                 self.reconnect()
+            link = self.watch_link()
             fds = [wake] + ([self.master] if self.is_open else []) + ([self.session.sock] if self.session else [])
             tick = None if self.is_open and self.session and rc is None else TICK_S
+            if link is not None:
+                tick = link if tick is None else min(tick, link)
             r, _, _ = select.select(fds, [], [], tick)
             if wake in r:
                 try:
@@ -528,11 +671,19 @@ class Relay:
                 except OSError:
                     chunk = b""
                 if chunk:
-                    self.to_slave(self.session.take(chunk))
+                    self.to_slave(self.heard(chunk))
                 else:
                     self.lose()
         if self.lost_at is not None:
             say("the connection lost at %s was not set again before the command ended" % clock(self.lost_at))
+        if self.asks:
+            # An answer comes from the adapter: it shows that the adapter
+            # and the connection work, not that the board's side of the
+            # adapter passes bytes.
+            say("while the stream was silent, the adapter was asked for its baud rate %d times (after each %.1f s "
+                "with no byte) and answered %d %d times; the longest silence with every question answered: %.1f s. "
+                "An answer shows that the adapter and the connection work, not that bytes from the board still "
+                "reach the adapter" % (self.asks, self.silent_s, BAUD, self.answers, self.longest))
         return 128 - rc if rc < 0 else rc
 
 
@@ -545,6 +696,7 @@ def run(cmd):
         return NOT_STARTED
     try:
         host, port = parse_url(os.environ.get("T6_UART", ""))
+        silent_s, answer_s = seconds(SILENT_ENV, SILENT_S), seconds(ANSWER_ENV, ANSWER_S)
         session = Session.open(host, port)
     except (ValueError, Refused) as e:
         say("REFUSED: %s; the command was not started" % e)
@@ -572,7 +724,7 @@ def run(cmd):
         except OSError as e:
             say("REFUSED: cannot run %s: %s; nothing was relayed" % (cmd[0], e.strerror))
             return NOT_STARTED
-        relay = Relay(host, port, session, master, name, child, pending)
+        relay = Relay(host, port, session, master, name, child, pending, silent_s, answer_s)
         try:
             return relay.loop(wake_r)
         except Exception as e:
@@ -605,7 +757,14 @@ class FakeAdapter(threading.Thread):
     1500000 8N1: board() drops them otherwise, and what the client
     sends at another line is kept apart (garbled). wrong = (code,
     value): the first such setting is answered with that value and not
-    taken. drop() closes the client's connection."""
+    taken. A setting of 0 asks for the value in force (RFC 2217): it is
+    answered with it and changes nothing. drop() closes the client's
+    connection. The stopped stream (issue #11686), on the client's
+    connection only, as the adapter measured (a new connection works):
+    mute() stops it, the connection open: no byte of the board passes and
+    no command is answered; on_question = ("answer", value) answers the
+    next question with value instead, ("reset",) resets the connection
+    (TCP RST) when the next question comes."""
 
     def __init__(self, wrong=None):
         super().__init__(daemon=True)
@@ -619,13 +778,14 @@ class FakeAdapter(threading.Thread):
         self.got, self.garbled, self.dropped = bytearray(), bytearray(), 0
         self.line = {}
         self.stop = False
+        self.muted, self.on_question, self.rst = None, None, None
 
     def line_ok(self):
         return [self.line.get(c) for c, _ in LINE] == [v for _, v in LINE]
 
     def board(self, data):
         with self.lock:
-            if self.conn is None or not self.line_ok():
+            if self.conn is None or self.conn is self.muted or not self.line_ok():
                 self.dropped += len(data)
                 return
             self.conn.sendall(escape(data))
@@ -634,6 +794,10 @@ class FakeAdapter(threading.Thread):
         with self.lock:
             if self.conn:
                 self.conn.shutdown(socket.SHUT_RDWR)
+
+    def mute(self):
+        with self.lock:
+            self.muted = self.conn
 
     def send(self, conn, data):
         with self.lock:
@@ -689,16 +853,32 @@ class FakeAdapter(threading.Thread):
                         code, value = part[1][1], part[1][2:]
                         cmds.append(("sb", code, value))
                         with self.lock:
-                            if self.wrong and self.wrong[0] == code:
+                            asks = code in self.line and not value.strip(b"\x00")
+                            if asks and self.on_question:
+                                what, self.on_question = self.on_question, None
+                                if what[0] == "reset":
+                                    self.rst = conn
+                                    break
+                                value = what[1]
+                            elif conn is self.muted:
+                                continue
+                            elif asks:
+                                value = self.line[code]
+                            elif self.wrong and self.wrong[0] == code:
                                 value, self.wrong = self.wrong[1], None
                             elif code in self.line:
                                 self.line[code] = value
                         self.send(conn, bytes((IAC, SB, COM_PORT, code + SERVER)) + escape(value)
                                   + bytes((IAC, SE)))
+                if self.rst is conn:
+                    break
         except OSError:
             pass
         with self.lock:
             self.conn = None
+            if self.rst is conn:
+                # SO_LINGER on, 0 s: the close sends a reset, not a FIN.
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
         conn.close()
 
     def drain(self, conn):
@@ -808,6 +988,9 @@ while args:
         d = tempfile.mkdtemp(dir=tmp)
         env = dict(os.environ, T6_UART=url or "rfc2217://127.0.0.1:%d" % server.port, T6_TEST_DIR=d)
         env.pop(VIA, None)
+        # The watch on a silent link stays out of the cases before 9, which
+        # count every command on the wire; 9 sets it short.
+        env[SILENT_ENV], env[ANSWER_ENV] = "60", "60"
         env.update(extra or {})
         p = subprocess.Popen([sys.executable, "-I", here, "run", "--", sys.executable, "-I", child_py] + steps,
                              env=env, stderr=subprocess.PIPE)
@@ -855,6 +1038,26 @@ while args:
                 except OSError:
                     pass
         return out
+
+    # The lines about the connection in the command's stream (Relay.note).
+    STAMP = rb"#### t6-uart-rfc2217: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d: "
+    T = rb"\d\d:\d\d:\d\d\.\d"
+    LOST = STAMP + rb"the connection was lost at " + T + rb" and the line set again at " + T + \
+        rb": a gap of \d+\.\d s \(its bytes are lost both ways\)"
+    AGAIN = STAMP + rb"the line set again at " + T + rb": the board's bytes from " + T + \
+        rb" \(the last one read\) to " + T + rb" are lost, if it sent any"
+    DROPPED = rb"; the connection is dropped and opened again"
+    # The question on the wire, and the negotiation's last command before it.
+    ASK = bytes((IAC, SB, COM_PORT)) + bytes((QUESTION[0],)) + QUESTION[1] + bytes((IAC, SE))
+    PURGED = bytes((IAC, SB, COM_PORT, PURGE_RX[0])) + PURGE_RX[1] + bytes((IAC, SE))
+
+    def asked_only(wire):
+        """The number of questions the client sent after the negotiation,
+        None when it sent anything else there."""
+        w = bytes(wire)
+        at = w.find(PURGED)
+        rest = w[at + len(PURGED):] if at >= 0 else b"?"
+        return len(rest) // len(ASK) if rest == ASK * (len(rest) // len(ASK)) else None
 
     try:
         # 0. The kernel queues what reaches a pty while its slave is closed,
@@ -968,8 +1171,9 @@ while args:
         out = read(d, "out") or b""
         gap = re.search(r"t6-uart-rfc2217: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d: the connection was lost at "
                         r"\d\d:\d\d:\d\d\.\d and the line set again at \d\d:\d\d:\d\d\.\d: a gap of \d+\.\d s", err)
-        check(rc == 0 and out == b"BEFORE AFTER" and srv.conns == 2,
-              "a dropped connection is opened again and the bytes after it reach the command (rc %d, %r)" % (rc, out))
+        check(rc == 0 and re.fullmatch(rb"BEFORE \r\n" + LOST + rb"\r\nAFTER", out) and srv.conns == 2,
+              "a dropped connection is opened again, the stream gets the gap as a line of its own, and the bytes "
+              "after it reach the command (rc %d, %r)" % (rc, out))
         check(gap is not None and err.count("connection was lost") == 1 and quiet(err, srv),
               "one stderr line gives the gap's time and length, no address (%r)" % err.strip())
         check([c for c in srv.cmds[1] if c[0] == "sb"] == want, "the second session sets the line again")
@@ -1059,7 +1263,117 @@ while args:
         hold.close()
         busy.close()
 
-        # 9. The parts.
+        # 9. The silent link (issue #11686). The board's stream stops while
+        # the connection stays open: after T6_UART_SILENT_S with no byte the
+        # tool asks the adapter for its baud rate. (a) No answer: dropped,
+        # opened again, both said in the stream. (b) The answer 1500000 (a
+        # silent board): nothing said while the run goes on, one line at its
+        # end. (c) Another rate: dropped and opened again. (d) The adapter
+        # resets the connection instead: a lost connection. In each, what
+        # the tool sent after the negotiation is the question alone, no byte
+        # reached the board, and a new session is the first one's bytes.
+        watch = {SILENT_ENV: "0.3", ANSWER_ENV: "0.5"}
+        steps = ["open", "mark", "opened", "read", "AFTER", "out", "sleep", "0.3", "exit", "0"]
+
+        def silent_run(srv, before, stop, silence=0.0):
+            """BEFORE, stop() on the fake, AFTER once the second session is
+            set (or after silence s when no second one is wanted)."""
+            p, d = start(srv, steps, extra=watch)
+            wait_file(d, "opened")
+            srv.board(before)
+            time.sleep(0.1)
+            stop()
+            end = time.monotonic() + (silence or 10)
+            while not (srv.conns == 2 and srv.conn and ("sb", PURGE_DATA, b"\x01") in srv.cmds[1]) \
+                    and time.monotonic() < end:
+                time.sleep(0.01)
+            time.sleep(0.1)
+            srv.board(b"AFTER")
+            rc, err = finish(p)
+            return rc, err, read(d, "out") or b""
+
+        def same_session(srv):
+            """The second session sent the first one's negotiation, byte for byte."""
+            first = bytes(srv.wire[0])
+            first = first[:first.find(PURGED) + len(PURGED)]
+            return len(first) > len(PURGED) and bytes(srv.wire[1]).startswith(first)
+
+        srv = FakeAdapter()
+        srv.start()
+        rc, err, out = silent_run(srv, b"BEFORE", srv.mute)
+        n = asked_only(srv.wire[0])
+        check(rc == 0 and srv.conns == 2 and re.fullmatch(
+            rb"BEFORE\r\n" + STAMP + rb"no byte of the board since " + T + rb" and no answer to the question "
+            rb"for its baud rate \(RFC 2217 SET-BAUDRATE 0\) in 0\.5 s: the connection carried nothing for "
+            rb"\d+\.\d s" + DROPPED
+            + rb"\r\n" + AGAIN + rb"\r\nAFTER", out),
+              "(a) no answer: dropped and opened again, the stream says both on lines of their own, then the bytes "
+              "after it (rc %d, %r)" % (rc, out))
+        check(err.count("no answer to the question") == 1 and err.count("the line set again") == 1
+              and "connection was lost" not in err and quiet(err, srv),
+              "(a) stderr has the same two lines, no address (%r)" % err.strip())
+        check(n == 1 and asked_only(srv.wire[1]) is not None and not srv.got and not srv.garbled and same_session(srv),
+              "(a) after the negotiation only the question went out (%r times), no byte reached the board, the new "
+              "session sent the first one's bytes" % n)
+        srv.close()
+
+        srv = FakeAdapter()
+        srv.start()
+        rc, err, out = silent_run(srv, b"BEFORE\r\n", lambda: None, silence=2.0)
+        n = asked_only(srv.wire[0])
+        said = re.search(r"asked for its baud rate (\d+) times \(after each 0\.3 s with no byte\) and answered "
+                         r"1500000 (\d+) times; the longest silence with every question answered: \d+\.\d s\. "
+                         r"An answer shows that the adapter and the connection work, not that bytes from the board "
+                         r"still reach the adapter", err)
+        check(rc == 0 and srv.conns == 1 and out == b"BEFORE\r\nAFTER",
+              "(b) the answer 1500000: the connection kept, the stream has the board's bytes only (rc %d, %r)"
+              % (rc, out))
+        check(n is not None and n >= 4 and said and int(said.group(1)) == n and int(said.group(2)) == n
+              and len(re.findall("baud rate|dropped|lost", err)) == 1 and quiet(err, srv),
+              "(b) %r questions in 2 s, each answered, and one line at the end counts them; nothing else is said (%r)"
+              % (n, err.strip()))
+        check(not srv.got and not srv.garbled and srv.line_ok(),
+              "(b) the questions put no byte on the board's line and left it at 1500000 8N1")
+        srv.close()
+
+        srv = FakeAdapter()
+        srv.start()
+        srv.on_question = ("answer", struct.pack("!I", 115200))
+        rc, err, out = silent_run(srv, b"BEFORE", lambda: None)
+        check(rc == 0 and srv.conns == 2 and re.fullmatch(
+            rb"BEFORE\r\n" + STAMP + rb"the adapter answers that its baud rate is 115200, not 1500000: the line is "
+            rb"not as this session set it, and what was read since " + T + rb" \(the line last known as set\) may be "
+            rb"garbled" + DROPPED
+            + rb"\r\n" + AGAIN + rb"\r\nAFTER", out),
+              "(c) the answer 115200: dropped and opened again, both said in the stream (rc %d, %r)" % (rc, out))
+        check(asked_only(srv.wire[0]) == 1 and not srv.got and not srv.garbled and same_session(srv)
+              and quiet(err, srv),
+              "(c) one question, no byte to the board, the new session sent the first one's bytes (%r)" % err.strip())
+        srv.close()
+
+        srv = FakeAdapter()
+        srv.start()
+        srv.on_question = ("reset",)
+        rc, err, out = silent_run(srv, b"BEFORE", srv.mute)
+        check(rc == 0 and srv.conns == 2 and re.fullmatch(rb"BEFORE\r\n" + LOST + rb"\r\nAFTER", out)
+              and "dropped" not in err and quiet(err, srv),
+              "(d) a reset instead of the answer: a lost connection, opened again, said in the stream (rc %d, %r)"
+              % (rc, out))
+        check(asked_only(srv.wire[0]) == 1 and not srv.got and not srv.garbled and same_session(srv),
+              "(d) one question, no byte to the board, the new session sent the first one's bytes")
+        srv.close()
+
+        # A watch that is not a number of seconds: refused before connecting.
+        srv = FakeAdapter()
+        srv.start()
+        for bad in ("0", "x", "nan", "7200"):
+            p, d = start(srv, ["mark", "started"], extra={SILENT_ENV: bad})
+            rc, err = finish(p)
+            check(rc == NOT_STARTED and "T6_UART_SILENT_S is not a number of seconds" in err and srv.conns == 0
+                  and read(d, "started") is None, "T6_UART_SILENT_S=%s: refused before it connects (rc %d)" % (bad, rc))
+        srv.close()
+
+        # 10. The parts.
         tn = Telnet()
         parts = tn.feed(b"a\xff\xffb\xff") + tn.feed(b"\xfd\x2c\xff\xfa\x2c\x65\xff\xff\x00\xff\xf0c")
         check(parts == [("data", b"a\xffb"), ("opt", DO, COM_PORT), ("sb", b"\x2c\x65\xff\x00"), ("data", b"c")],
