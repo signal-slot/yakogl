@@ -1,4 +1,4 @@
-# host-gles3-part commit=fa19cbb9 gpu=powervr module=gles3 cases=42810
+# host-gles3-part commit=9390b7d2 gpu=powervr module=gles3 cases=42810
 # section tip
 powervr	functional.attribute_location	274	0	0	0	0
 powervr	functional.buffer	168	527	0	0	0
