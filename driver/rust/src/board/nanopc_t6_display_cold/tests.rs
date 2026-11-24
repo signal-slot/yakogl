@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::env::{Level, LINE_MAX};
+use crate::errno::ENOTSUP;
 use crate::ip::hdptx::Refusal as PhyRefusal;
 use crate::mmio::Mmio;
 use crate::model_rk3588_display::{
@@ -241,4 +242,213 @@ fn bad_arguments_are_refused_before_anything_is_read() {
 fn the_bases_map_onto_the_chains() {
     assert_eq!(PHYS.chain(), chain::RK3588);
     assert_eq!(B.chain(), crate::model_rk3588_display::chain_bases());
+}
+
+// The board layer's screen over both routes ([`show`]).
+
+/// The GL window of the show tests: smaller than both modes and than the
+/// probes' buffer, so a start that took the probe's size would show.
+const WIN: (u32, u32, u32) = (1024, 600, 4096);
+const FB2: u64 = 0x1041_2000;
+
+fn show_at(m: &Rk3588Display, mode: u32, s: &mut Screen, fb: u64) -> (i32, Adopt, Start) {
+    let (mut a, mut st) = (Adopt::default(), Start { route: 9, cold: Cold { stage: 9, ..Cold::default() } });
+    let rc = show(&Mapped(m), &B, m, mode, s, fb, WIN.0, WIN.1, WIN.2, &mut a, &mut st);
+    (rc, a, st)
+}
+
+/// The chain ran from cold on the show tests' window at `fb`.
+fn shows_the_window(m: &Rk3588Display, fb: u64) {
+    assert_eq!(m.refused(), Vec::<String>::new());
+    assert!(m.port_runs(0));
+    assert_eq!(m.fetching(), WIN_ESMART0);
+    assert_eq!(m.peek(VOP + 0x1814), fb as u32, "Esmart0's YRGB_MST");
+    assert_eq!(m.peek(VOP + 0x1820), 599 << 16 | 1023, "Esmart0's ACT_INFO");
+    assert_eq!(m.peek(VOP + 0x1824), 599 << 16 | 1023, "Esmart0's DSP_INFO");
+}
+
+#[test]
+fn a_first_show_on_a_cold_chip_starts_the_chain_on_the_window() {
+    let m = chip(Faults::default());
+    let mut s = Screen::default();
+    let (rc, a, st) = show_at(&m, 0, &mut s, FB);
+    assert_eq!((rc, st), (0, Start { route: route::COLD, cold: Cold::default() }), "{:#?}", lines(&m));
+    // the adopt read PD_VOP off and wrote nothing; the chain did the rest
+    assert_eq!(a.stop, Stop::VopDomain as u32);
+    assert_eq!((s.state, s.last, s.width, s.height, s.stride), (display::SCREEN_SHOWN, FB, WIN.0, WIN.1, WIN.2));
+    shows_the_window(&m, FB);
+    let l = lines(&m);
+    let at = |start: &str| l.iter().position(|x| x.starts_with(start)).unwrap_or_else(|| panic!("{start}: {l:#?}"));
+    assert_eq!(at("t6 display: first show: no picture to adopt (stop 1), cold start"), 0);
+    assert!(at("t6 display: stage 1 START") < at("t6 display: up, 1024x768 at 0x10012000"));
+}
+
+#[test]
+fn a_first_show_after_a_normal_kexec_starts_the_chain_in_the_builds_mode() {
+    for (mode, htotal, up) in [
+        (0, 0x0540_0088, "t6 display: up, 1024x768 at 0x10012000"),
+        (flags::MODE_1920X1080, 0x0898_002c, "t6 display: up, 1920x1080 at 0x10012000"),
+    ] {
+        let m = after_normal_kexec();
+        let mut s = Screen::default();
+        let (rc, a, st) = show_at(&m, mode, &mut s, FB);
+        assert_eq!((rc, st), (0, Start { route: route::COLD, cold: Cold::default() }), "{:#?}", lines(&m));
+        // PD_VOP is on and its bus clocks are gated: the adopt's second stop
+        assert_eq!(a.stop, Stop::VopClock as u32);
+        assert_eq!(s.state, display::SCREEN_SHOWN);
+        shows_the_window(&m, FB);
+        assert_eq!(m.peek(VOP + 0xc48), htotal, "VP0 DSP_HTOTAL_HS_END");
+        assert!(has(&m, up), "{:#?}", lines(&m));
+    }
+}
+
+#[test]
+fn a_first_show_with_vp0_in_standby_starts_the_chain() {
+    // the chain ran and VP0 was then put in STANDBY, every clock still on
+    let m = chip(Faults::default());
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
+    m.write32(VOP + 0xc00, 1 << 31);
+    m.busy_wait_us(40_000);
+    m.clear_log();
+    m.clear_lines();
+    let mut s = Screen::default();
+    let (rc, a, st) = show_at(&m, 0, &mut s, FB);
+    assert_eq!((rc, st), (0, Start { route: route::COLD, cold: Cold::default() }), "{:#?}", lines(&m));
+    assert_eq!(a.stop, Stop::Standby as u32);
+    shows_the_window(&m, FB);
+}
+
+/// The chain's picture with Linux's on top: Cluster0 of VP0 at an IOVA,
+/// both vop_mmu sets paging (`leave_linux_running`).
+fn linux_picture() -> Rk3588Display {
+    let m = chip(Faults::default());
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
+    m.leave_linux_running(false);
+    m.clear_log();
+    m.clear_lines();
+    m
+}
+
+#[test]
+fn a_first_show_with_a_picture_running_is_the_adopts_alone() {
+    // the same state twice: the adopt by itself, and under the screen
+    let (alone, m) = (linux_picture(), linux_picture());
+    let (mut s0, mut a0) = (Screen::default(), Adopt::default());
+    let rc0 = display::show(
+        &Mapped(&alone),
+        &B.display,
+        &mut s0,
+        FB,
+        WIN.0,
+        WIN.1,
+        WIN.2,
+        &mut |us| alone.busy_wait_us(us),
+        &mut a0,
+    );
+    let mut s = Screen::default();
+    let (rc, a, st) = show_at(&m, flags::MODE_1920X1080, &mut s, FB);
+    assert_eq!(st, Start { route: route::ADOPT, cold: Cold::default() });
+    assert_eq!((rc, a, s), (rc0, a0, s0));
+    assert_eq!(m.writes(), alone.writes());
+    // nothing of the chain ran: no line of it, and the mode is the one found
+    assert_eq!(lines(&m), Vec::<String>::new());
+    assert_eq!(m.peek(VOP + 0xc48), 0x0540_0088, "VP0 DSP_HTOTAL_HS_END");
+    assert_eq!((rc, a.stop, s.state), (0, Stop::None as u32, display::SCREEN_SHOWN), "{a:#x?}");
+    assert_eq!(m.peek(VOP + 0x1814), FB as u32, "Esmart0's YRGB_MST");
+}
+
+#[test]
+fn a_picture_the_adopt_does_not_take_is_refused_and_final_without_the_chain() {
+    // Linux's picture in a mode the adopt does not know: 1280x720 at 60 Hz
+    let m = linux_picture();
+    for (off, w) in
+        [(0xc48, 1650 << 16 | 40), (0xc4c, 260 << 16 | 1540), (0xc50, 750 << 16 | 5), (0xc54, 25 << 16 | 745)]
+    {
+        m.poke(VOP + off, w);
+    }
+    let mut s = Screen::default();
+    let (rc, a, st) = show_at(&m, 0, &mut s, FB);
+    assert_eq!((rc, st), (-ENODEV, Start { route: route::ADOPT, cold: Cold::default() }));
+    assert_eq!((a.stop, s.state), (Stop::Mode as u32, display::SCREEN_STOPPED));
+    assert!(m.writes().is_empty() && m.lines().is_empty(), "{:#x?} {:#?}", m.writes(), lines(&m));
+    // final: the next show reads nothing and names no route
+    let (rc, _, st) = show_at(&m, 0, &mut s, FB2);
+    assert_eq!((rc, st), (-ENODEV, Start::default()));
+    assert!(m.writes().is_empty() && m.lines().is_empty());
+}
+
+#[test]
+fn another_port_running_stops_the_cold_start_by_name_and_is_final() {
+    // VP1 shows Linux's second output; VP0 is in STANDBY
+    let m = chip(Faults::default());
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
+    m.leave_linux_running(true);
+    m.write32(VOP + 0xc00, 1 << 31);
+    m.busy_wait_us(40_000);
+    m.clear_log();
+    m.clear_lines();
+    let mut s = Screen::default();
+    let (rc, a, st) = show_at(&m, 0, &mut s, FB);
+    assert_eq!(a.stop, Stop::Standby as u32);
+    assert_eq!(rc, -ENODEV);
+    assert_eq!(st.route, route::COLD);
+    assert_eq!((st.cold.stage, st.cold.error, st.cold.detail), (stage::START, ColdError::FoundRunning as u32, 0b10));
+    // the chain stopped at START: nothing written, VP1 still runs
+    assert!(m.writes().is_empty(), "{:#x?}", m.writes());
+    assert!(m.port_runs(1));
+    assert_eq!(s.state, display::SCREEN_STOPPED);
+}
+
+#[test]
+fn a_cold_start_that_stops_is_final_and_keeps_its_buffer_busy() {
+    let m = chip(Faults { phy_no_lock: true, ..Faults::default() });
+    let mut s = Screen::default();
+    let (rc, _, st) = show_at(&m, 0, &mut s, FB);
+    assert_eq!((rc, st.route, st.cold.stage, st.cold.error), (-ENODEV, route::COLD, stage::PHY, ColdError::Phy as u32));
+    assert_eq!((s.state, s.last), (display::SCREEN_STOPPED, FB));
+    m.clear_log();
+    m.clear_lines();
+    let (rc, _, st) = show_at(&m, 0, &mut s, FB2);
+    assert_eq!((rc, st), (-ENODEV, Start::default()));
+    assert_eq!(display::busy(&Mapped(&m), &B.display, &mut s, &[FB, FB2]), 0b01);
+    assert!(m.writes().is_empty() && m.lines().is_empty());
+}
+
+#[test]
+fn a_flip_after_a_cold_first_show_is_the_adopts_flip() {
+    let m = chip(Faults::default());
+    let mut s = Screen::default();
+    assert_eq!(show_at(&m, 0, &mut s, FB).0, 0);
+    assert_eq!(display::busy(&Mapped(&m), &B.display, &mut s, &[FB, FB2]), 0b01);
+    m.clear_log();
+    m.clear_lines();
+    let (rc, _, st) = show_at(&m, 0, &mut s, FB2);
+    assert_eq!((rc, st), (0, Start::default()));
+    // the address, then VP0's REG_CFG_DONE, then the frame start flag cleared
+    assert_eq!(m.writes(), vec![(VOP + 0x1814, FB2 as u32), (VOP, 0x0001_8001), (VOP + 0xa4, 0x0001_0001)]);
+    assert_eq!(lines(&m), Vec::<String>::new());
+    assert_eq!((s.state, s.last, s.flips), (display::SCREEN_SHOWN, FB2, 1));
+    // the old buffer stays busy until a frame start takes the flip
+    assert_eq!(display::busy(&Mapped(&m), &B.display, &mut s, &[FB, FB2]), 0b11);
+    m.busy_wait_us(40_000);
+    assert_eq!(display::busy(&Mapped(&m), &B.display, &mut s, &[FB, FB2]), 0b10);
+    assert_eq!(m.refused(), Vec::<String>::new());
+    // another geometry is refused as after an adopt
+    let (mut a, mut st) = (Adopt::default(), Start::default());
+    assert_eq!(show(&Mapped(&m), &B, &m, 0, &mut s, FB, 1024, 768, 4096, &mut a, &mut st), -ENOTSUP);
+}
+
+#[test]
+fn a_bad_mode_or_window_is_refused_before_anything_is_read() {
+    let m = chip(Faults::default());
+    let mut s = Screen::default();
+    for mode in [flags::POWER_CYCLE, flags::FORCE_COLD, flags::ALL, 1 << 3] {
+        let (rc, _, st) = show_at(&m, mode, &mut s, FB);
+        assert_eq!((rc, st, s), (-EINVAL, Start::default(), Screen::default()));
+    }
+    // a window the VOP cannot scan: the screen stays new, no route is named
+    let (mut a, mut st) = (Adopt::default(), Start::default());
+    assert_eq!(show(&Mapped(&m), &B, &m, 0, &mut s, FB, 1025, 768, 4100, &mut a, &mut st), -ENOTSUP);
+    assert_eq!((st, s), (Start::default(), Screen::default()));
+    assert!(m.writes().is_empty() && m.lines().is_empty());
 }

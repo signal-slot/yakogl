@@ -51,4 +51,17 @@ static inline void t6_record_screen(void)
 struct yd_t6_display_adopt;
 void t6_display_print_adopt(const char *tag, int rc, const struct yd_t6_display_adopt *a);
 
+/* The name of a stage of the cold display chain (YD_T6_DISPLAY_COLD_STAGE_*;
+ * "none" for 0, "unknown" for a number that is no stage). */
+const char *t6_display_cold_stage_name(uint32_t stage);
+
+/* Print where the cold display chain ended (yd_t6_display_cold, or a first
+ * yd_t6_screen_show that took the cold route): its return value `rc`, the
+ * time `ms` its call took and the record `c`, with the stage's and the
+ * error's names, as one line "<tag>: chain rc ..."
+ * (driver/tools/kexec-zephyr/t6-verdict.sh reads it). */
+struct yd_t6_display_cold;
+void t6_display_print_cold(const char *tag, int rc, long long ms,
+			   const struct yd_t6_display_cold *c);
+
 #endif /* YAKOGL_NANOPC_T6_H */

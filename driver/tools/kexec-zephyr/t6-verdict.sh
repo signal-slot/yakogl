@@ -9,14 +9,16 @@
 #
 #   T6_ROUTE=uboot t6-verdict.sh <probe> <uart.log>
 #
-# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_display or t6_cold.
+# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_display, t6_cold or
+# triangle (examples/triangle, the first GL image judged here).
 # The expected lines are in order: the early banner (T6:A .. T6:A3,
 # board::nanopc_t6_early), the board glue's lines (T6:B, the marker, the
 # three GIC lines, the arming, T6:C, "board: watchdog armed";
 # driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
 # lines (tools/probes/nanopc_t6/<probe>/src/main.c) and the glue's reset
-# line. Each template below is the printf format with its conversions
-# replaced: a value driver/docs/nanopc-t6-mali.md predicts exactly is written
+# line; for triangle the sample's and the board layer's lines
+# (table_triangle). Each template below is the printf format with its
+# conversions replaced: a value driver/docs/nanopc-t6-mali.md predicts exactly is written
 # out and compared exactly; one it gives as a range, "recorded" or not at all
 # is a token, checked for presence and form only. Tokens:
 #   {x8} {x16}  exactly 8 or 16 lower-case hex digits (%08x, Tx::hex 16)
@@ -90,7 +92,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: [T6_ROUTE=kexec|uboot] $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display|t6_cold} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: [T6_ROUTE=kexec|uboot] $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display|t6_cold|triangle} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 ROUTE=${T6_ROUTE:-kexec}
 case "$ROUTE" in kexec | uboot) ;; *) usage ;; esac
@@ -108,6 +110,7 @@ TPL=()  # the templates, in order
 PFX=()  # an ERE that marks the candidate line ('' = the template's leading text)
 HOOK=() # a function run after the line was found ('' = none)
 NOT=()  # EREs no line of the record may match (anywhere)
+CHAIN_RC= # the start of the cold chain's rc line, when the record must have one
 declare -A V=() # captured and derived values
 
 # e <template> [prefix ERE] [hook]
@@ -120,8 +123,11 @@ never() { NOT+=("$1"); }
 # banner_a_el2 .. banner_a3, printed raw on uart2) and the board glue's at
 # PRE_KERNEL_1 99 (nanopc_t6.c, t6_wdt_report), for the board's Kconfig
 # defaults: VHE exit on, TOP 13 (22369 ms), lifetime 60 s, alive 5 s, no
-# proof, loaded at 0x10000000.
+# proof, loaded at 0x10000000. A GL image is built with a longer lifetime and
+# alive window (driver/zephyr/lib/board/nanopc_t6/app.conf):
+# table_boot [lifetime s] [alive s].
 table_boot() {
+	local life=${1:-60} alive=${2:-5}
 	# banner_a_el2 with the VHE exit: HCR_EL2 found -> written (Z1 measured
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	# SCTLR_EL2 (SA) with M, C and I clear (hook t6a_sctlr)
@@ -137,7 +143,7 @@ table_boot() {
 	# banner_a3: rc 0, CR read back 0x9 (WDT_EN, RMOD), TOP 13's period
 	e 'T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369'
 	e 'T6:B console up (uart2 through the ns16550 driver)'
-	e 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000'
+	e "yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s $life; alive_s $alive; proof 0; load 0x10000000"
 	# printed when Linux left EOImode 1 (every kexec so far); the value is recorded
 	if [ "$ROUTE" = kexec ]; then
 		e 't6: GICv3 CPU interface: ICC_CTLR_EL1 0x{x} had EOImode 1 (the kernel before us), now 0'
@@ -158,7 +164,7 @@ table_boot() {
 		'' gic_active_line
 	# two printks, one line; as found depends on --no-linux-wdt (was stopped)
 	# or not (was running): recorded. CR after is WDT_EN | RMOD.
-	e 't6: WDT0 armed: CR 0x{x8} -> 0x00000009 (was {s}), TORR 0x{x8} -> 0x{x8}, CCVR 0x{x8}, PARAM_1 0x{x8}, version 0x{x8}, flags 0x{x}: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s' \
+	e "t6: WDT0 armed: CR 0x{x8} -> 0x00000009 (was {s}), TORR 0x{x8} -> 0x{x8}, CCVR 0x{x8}, PARAM_1 0x{x8}, version 0x{x8}, flags 0x{x}: period 22369 ms (TOP 13), fed until $life s of uptime, alive window $alive s" \
 		't6: WDT0 arm'
 	e 'T6:C WDT0 armed, period 22369 ms'
 	e 'board: watchdog armed'
@@ -450,13 +456,17 @@ table_t6_fw() {
 	table_reset t6_fw
 }
 
-# t6_display, t6_cold: the frame buffer's %p is its PA (the identity map);
-# FB8 is the PA as the later lines print it (%08x), FBX as the drivers
-# crate's lines do ({:#x})
-display_fb() {
-	[ $((16#${V[FBV]})) -eq $((16#${V[FB]})) ] || return 1
+# The picture's PA (FB) in the forms the later lines print it: FB8 as %08x,
+# FBX as the drivers crate's lines do ({:#x}).
+fb_forms() {
 	V[FB8]=$(printf '%08x' $((16#${V[FB]})))
 	V[FBX]=$(printf '%x' $((16#${V[FB]})))
+}
+
+# t6_display, t6_cold: the frame buffer's %p is its PA (the identity map)
+display_fb() {
+	[ $((16#${V[FBV]})) -eq $((16#${V[FB]})) ] || return 1
+	fb_forms
 }
 
 # The modes the display probes may find on VP0 (board::nanopc_t6_display::
@@ -464,8 +474,8 @@ display_fb() {
 # controller's video monitor words 0-5 (the dumps of 2026-11-12 and
 # 2026-11-23) and the pixel clock in kHz. display_mode picks one by the
 # timing words the record's "found VP0 timing" line names (the first when
-# it names none of them), cold_mode by t6_cold's "mode" line; display_pclk
-# then checks the clock against it.
+# it names none of them), cold_mode by the line of the record that names the
+# cold chain's mode; display_pclk then checks the clock against it.
 MODE_1024X768=(1024x768 '0x05400088 0x01280528 0x03260006 0x00230323'
 	'0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300' 65000)
 MODE_1920X1080=(1920x1080 '0x0898002c 0x00c00840 0x04650005 0x00290461'
@@ -480,12 +490,15 @@ display_mode() { # <probe>: sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
 	done
 	M_NAME=${m[0]} M_TIMING=${m[1]} M_MONITOR=${m[2]} M_KHZ=${m[3]}
 }
-# t6_cold's mode is its build's (T6_COLD_MODE), printed on its "mode" line:
-# the second mode when the line names it, else the first. A record without
-# the line is of a build before the option, which had only the first mode.
-cold_mode() { # sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
+# The cold chain's mode is the build's (t6_cold: T6_COLD_MODE, printed on
+# its "mode" line; the board layer: CONFIG_YAKOGL_BOARD_NANOPC_T6_COLD_
+# 1920X1080, printed on its "first show" line): the second mode when a line
+# of the record matches the ERE given, which names it, else the first. A
+# t6_cold record without the line is of a build before the option, which had
+# only the first mode.
+cold_mode() { # <ERE of the line that names 1920x1080>: sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
 	local m=("${MODE_1024X768[@]}")
-	if seen_line "^t6_cold: mode ${MODE_1920X1080[0]}\$"; then
+	if seen_line "$1"; then
 		m=("${MODE_1920X1080[@]}")
 	fi
 	M_NAME=${m[0]} M_TIMING=${m[1]} M_MONITOR=${m[2]} M_KHZ=${m[3]}
@@ -504,6 +517,41 @@ display_cmu() { (((16#${V[CMU]} & 0x3f) == 0x15)); }
 
 # t6_cold's stage names (soc::rk3588_display_chain::stage), by number
 COLD_STAGES=(none START POWER GRF PHY DCLK CONTROLLER VOP VIDEO)
+
+# The cold chain's lines (the drivers crate: board/nanopc_t6_display_cold.rs
+# and soc/rk3588_display_chain.rs), the same for t6_cold and for a GL image
+# whose first show is the cold chain.
+#
+# table_cold_stages <last>: what the chain found before it wrote, then its
+# stages 1 to <last>; no stage may fail.
+table_cold_stages() {
+	local s last=$1
+	e 't6 display: before: PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8}'
+	e 't6 display: before: PD_VOP powered {d} usable {d}, PD_VO1 powered {d} usable {d} (IDLE_REQ 0x{x8})'
+	e 't6 display: before: vop {s}' '^t6 display: before: vop '
+	e 't6 display: before: hdmi-tx0 {s}' '^t6 display: before: hdmi-tx0 '
+	e 't6 display: before: hdptx0 {s}' '^t6 display: before: hdptx0 '
+	e 't6 display: before: CLKSEL_CON(112) 0x{x8} (DCLK_VOP0 mux {d}), {s}'
+	e 't6 display: stage 1 START' '^t6 display: stage 1 '
+	e 't6 display: found VOP {s} DSP_CTRL 0x{x} 0x{x} 0x{x} 0x{x}, PHY STATUS 0x{x}' '^t6 display: found VOP '
+	for ((s = 2; s <= last; s++)); do
+		e "t6 display: stage $s ${COLD_STAGES[s]}" "^t6 display: stage $s "
+	done
+	never '^t6 display: stage [0-9]+ [A-Z_]+ failed: '
+}
+
+# table_cold_report: the lines of a chain that ran to the end, in the mode
+# M_NAME (cold_mode) on the picture at FB (fb_forms).
+table_cold_report() {
+	e "t6 display: up, $M_NAME at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}" '^t6 display: up, '
+	e 't6 display: START: running 0x{x}, stopped 0x{x}, no pixel clock 0x{x}, PHY powered off {d}'
+	e 't6 display: POWER: ACLK_VOP set {d}, PD_VOP was on {d} waited {d}/{d}/{d} us, PD_VO1 was on {d} waited {d}/{d}/{d} us'
+	e 't6 display: PHY: locked after {d} us, CON0 0x{x8} STATUS 0x{@PHY}' '' display_phy
+	e 't6 display: CONTROLLER: CORE_ID 0x48515458 VER_NUMBER 0x{x8} VER_TYPE 0x{x8} CONFIG 0x{x8}'
+	e 't6 display: VOP: VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} -> 0x{x8}, vop_mmu STATUS 0x{x8} 0x{x8} -> 0x{x8} 0x{x8}'
+	e 't6 display: VOP: overlay OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS}, in force after {d} us'
+	e 't6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD 1'
+}
 
 # table_picture_status <probe> [any]: the hold and the read-backs after it,
 # as common/t6_picture.c prints them for both display probes. The status
@@ -588,7 +636,7 @@ table_t6_display() {
 # read-backs, and STOPPED in place of PASS. A failed stage's line never
 # passes. What the display shows only a person can say.
 table_t6_cold() {
-	cold_mode
+	cold_mode "^t6_cold: mode ${MODE_1920X1080[0]}\$"
 	table_boot
 	local n=0 l re='^t6_cold: options: power-cycle 1, force-cold [01], stop after ([0-8]) '
 	for l in "${LINES[@]}"; do
@@ -599,6 +647,7 @@ table_t6_cold() {
 	done
 	local last=$n name=${COLD_STAGES[$n]}
 	[ "$n" != 0 ] || last=8
+	CHAIN_RC='t6_cold: chain rc'
 	e 't6_cold: build {s}'
 	e 't6_cold: WDT0 period 22369 ms, fed until 60000 ms of uptime'
 	if [ "$n" = 0 ]; then
@@ -611,28 +660,9 @@ table_t6_cold() {
 		e "t6_cold: mode $M_NAME" '^t6_cold: mode '
 	fi
 	e 't6_cold: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
-	e 't6 display: before: PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8}'
-	e 't6 display: before: PD_VOP powered {d} usable {d}, PD_VO1 powered {d} usable {d} (IDLE_REQ 0x{x8})'
-	e 't6 display: before: vop {s}' '^t6 display: before: vop '
-	e 't6 display: before: hdmi-tx0 {s}' '^t6 display: before: hdmi-tx0 '
-	e 't6 display: before: hdptx0 {s}' '^t6 display: before: hdptx0 '
-	e 't6 display: before: CLKSEL_CON(112) 0x{x8} (DCLK_VOP0 mux {d}), {s}'
-	e 't6 display: stage 1 START' '^t6 display: stage 1 '
-	e 't6 display: found VOP {s} DSP_CTRL 0x{x} 0x{x} 0x{x} 0x{x}, PHY STATUS 0x{x}' '^t6 display: found VOP '
-	local s
-	for ((s = 2; s <= last; s++)); do
-		e "t6 display: stage $s ${COLD_STAGES[s]}" "^t6 display: stage $s "
-	done
-	never '^t6 display: stage [0-9]+ [A-Z_]+ failed: '
+	table_cold_stages "$last"
 	if [ "$n" = 0 ]; then
-		e "t6 display: up, $M_NAME at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}" '^t6 display: up, '
-		e 't6 display: START: running 0x{x}, stopped 0x{x}, no pixel clock 0x{x}, PHY powered off {d}'
-		e 't6 display: POWER: ACLK_VOP set {d}, PD_VOP was on {d} waited {d}/{d}/{d} us, PD_VO1 was on {d} waited {d}/{d}/{d} us'
-		e 't6 display: PHY: locked after {d} us, CON0 0x{x8} STATUS 0x{@PHY}' '' display_phy
-		e 't6 display: CONTROLLER: CORE_ID 0x48515458 VER_NUMBER 0x{x8} VER_TYPE 0x{x8} CONFIG 0x{x8}'
-		e 't6 display: VOP: VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} -> 0x{x8}, vop_mmu STATUS 0x{x8} 0x{x8} -> 0x{x8} 0x{x8}'
-		e 't6 display: VOP: overlay OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS}, in force after {d} us'
-		e 't6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD 1'
+		table_cold_report
 		e 't6_cold: chain rc 0 in {d} ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000' 't6_cold: chain rc'
 		table_picture_status t6_cold
 		e 't6_cold: PASS: Esmart0 of VP0 shows 0x{=FB8}, frames run, no underflow, no bus error' 't6_cold: (PASS|FAIL|STOPPED)'
@@ -698,8 +728,107 @@ table_t6_submit() {
 	table_reset t6_submit
 }
 
+# ---- triangle ---------------------------------------------------------------
+# examples/triangle (src/main.c, check/src/lib.rs) on the board layer
+# (driver/zephyr/lib/board/nanopc_t6/board_nanopc_t6.c, common/board.c): the
+# first GL image judged here. A PASS says:
+#  - the window came up at the size the scene asks for, and GL names the GPU;
+#  - the first show put the window on the screen: by the cold chain when no
+#    picture was left running (the kexec route and U-Boot: the adopt stops
+#    at PD_VOP off, a gated clock or VP0 in STANDBY, having written
+#    nothing), else by the adopt of the picture Linux left (kexec --crash);
+#  - the check read every pixel of the window back: none wrong, the three
+#    counts add up to the window, the guard rows untouched, glReadPixels
+#    equal to memory;
+#  - the PICTURE record carries the words of the picture line;
+#  - no draw was refused, and the run ended by the board's own reset after
+#    the hold of a passed run, with the record screen up.
+# The progress records ("yk-record: 594b05..", one per stage of main.c) are
+# not judged: they are for a run that left no console.
+
+# the adopt's stops after which the board starts cold (no_picture() of
+# nanopc_t6_display_cold.rs): 1 PD_VOP, 2 a clock, 4 STANDBY
+triangle_stop() { [[ ${V[STOP]} =~ ^[124]$ ]]; }
+
+# the three counts are decimal and add up to the 1024x600 window
+triangle_pixels() {
+	local k
+	for k in TI TO TE; do
+		[[ ${V[$k]} =~ ^[0-9]+$ ]] || return 1
+	done
+	((10#${V[TI]} + 10#${V[TO]} + 10#${V[TE]} == 614400))
+}
+
+# what the adopt found, as t6_display_record.c prints it on both routes
+table_triangle_found() {
+	e 'board: found PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8} CLKGATE_CON(52) 0x{x8}'
+	e 'board: found VERSION_INFO 0x{x8} DSP_CTRL 0x{x8} 0x{x8} 0x{x8} 0x{x8} DSP_IF_EN 0x{x8} SYS_PD_CTRL 0x{x8}'
+	e 'board: found VP0 timing 0x{x8} 0x{x8} 0x{x8} 0x{x8} OVL_LAYER_SEL 0x{x8} OVL_PORT_SEL 0x{x8}'
+	e 'board: found Cluster0 0x{x8} 0x{x8} Esmart0 0x{x8} vop_mmu STATUS 0x{x8} 0x{x8} DTE_ADDR 0x{x8} 0x{x8}'
+}
+
+# the first show by the cold chain: the chain's own lines, then the board's
+# (the adopt that found no picture, the mode, the chain's rc)
+table_triangle_cold() {
+	if seen_line '^t6 display: first show: no picture to adopt '; then
+		CHAIN_RC='board: chain rc'
+	fi
+	e 't6 display: first show: no picture to adopt (stop {@STOP}), cold start' '' triangle_stop
+	table_cold_stages 8
+	table_cold_report
+	table_triangle_found
+	e 'board: adopt rc -19 stop {=STOP} ({s}), refusal 0, index {d}, detail 0x{x8}' '^board: adopt rc '
+	e "board: first show: no picture was left running: cold start at $M_NAME, rc 0" '^board: first show: '
+	e 'board: chain rc 0 in {d} ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000' '^board: chain rc '
+}
+
+# the first show by the adopt: the window is on Esmart0 and reads back
+table_triangle_adopt() {
+	table_triangle_found
+	e 'board: take-over: running ports 0x{x}, windows off 0x{x}'
+	e 'board: vop_mmu: STATUS 0x{x8} 0x{x8} after paging off, stall time-out 0'
+	e 'board: overlay: OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS} written, in force after {d} us'
+	e 'board: window: Esmart0 on 0x{=FB8} stride 4096; REG_CFG_DONE 0x{x8} after the write, 0x{x8} after the frame start ({d} us)'
+	e 'board: shown: YRGB_MST 0x{=FB8} REGION0_CTRL 0x00000001 OVL_PORT_SEL 0x{=OPS} OVL_LAYER_SEL 0x{=OLS}'
+	e 'board: adopt rc 0 stop 0 (none), refusal 0, index 0, detail 0x00000000' '^board: adopt rc '
+	e 'board: first show: a picture was left running: adopt, rc 0' '^board: first show: '
+}
+
+table_triangle() {
+	cold_mode "^board: first show: no picture was left running: cold start at ${MODE_1920X1080[0]},"
+	table_boot 300 20
+	e 'sample: build tree={s}'
+	e "t6: CSF firmware {d} bytes embedded, built from a file with sha256 {x} (mkmalifw.sh's digest, not computed at run time)"
+	e 'triangle: OpenGL ES 2.0 through YakoGL, 1024x600 window' '^triangle: OpenGL ES '
+	e 'triangle: window 1024x600 at phys 0x{@FB}, format 0x2, 8 guard rows' '^triangle: window [0-9]+x[0-9]+ at ' fb_forms
+	e 'triangle: GL_RENDERER Arm Mali-G610 (YakoGL), GL_VERSION OpenGL ES 2.0 YakoGL' '^triangle: GL_RENDERER '
+	e 'triangle: compile + link {d} ms; a_pos at {d}, a_color at {d}'
+	e 'triangle: frame {d} ms'
+	never '^triangle: board_show = '
+	if seen_line '^board: first show: a picture was left running: '; then
+		table_triangle_adopt
+	else
+		table_triangle_cold
+	fi
+	e 'triangle: window 1024x600: 614400 pixels = {@TI} inside + {@TO} outside + {@TE} edge (band 1 px)' '^triangle: window [0-9]+x[0-9]+: ' triangle_pixels
+	e 'triangle:   inside wrong 0 (largest channel diff {d}, tolerance 3)'
+	e 'triangle:   outside wrong 0, edge wrong 0 (edge drawn {d})'
+	e 'triangle:   guard rows: 0 of 8192 pixels changed'
+	e 'triangle:   glReadPixels against memory: 0 of {d} points differ'
+	e 'triangle: picture: centre 0x{@PC}, column crc 0x{@CRC} (19 samples), size 0x04000258'
+	e 'triangle: check PASS (every pixel read back)' '^triangle: check (PASS|FAIL)'
+	e 'yk-record: 594b04{x} {=PC} {=CRC} 04000258' '^yk-record: 594b04'
+	e 'yakogl: draws refused 0'
+	e 'triangle: PASS' '^triangle: (PASS|FAIL)'
+	e 'board: holding 60 s, then the reset'
+	e 'board: screen state 1, {d} flips'
+	e 'board: the record screen stays 20 s' '^board: (the record screen stays|no record screen)'
+	never '^board: fatal error '
+	e 't6: board: run over: PSCI SYSTEM_RESET at {d} ms ({d} feeds)'
+}
+
 case "$PROBE" in
-t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_display | t6_cold) "table_$PROBE" ;;
+t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_display | t6_cold | triangle) "table_$PROBE" ;;
 *) usage ;;
 esac
 
@@ -795,11 +924,12 @@ if [ "$ROUTE" = kexec ]; then
 	done
 fi
 
-# t6_cold: a record without the chain's rc line stopped inside the chain
-# (a hang, then WDT0's reset): name where, as the stage lines tell it.
-# Every such record already fails on its missing lines; this line is not
-# counted, it says which stage to look at.
-if [ "$PROBE" = t6_cold ] && ! seen_line '^t6_cold: chain rc '; then
+# A record that started the cold chain (CHAIN_RC, set by its table) and has
+# no rc line of the chain stopped inside it (a hang, then WDT0's reset):
+# name where, as the stage lines tell it. Every such record already fails
+# on its missing lines; this line is not counted, it says which stage to
+# look at.
+if [ -n "$CHAIN_RC" ] && ! seen_line "^$CHAIN_RC "; then
 	where='before the drivers crate printed anything'
 	for l in "${LINES[@]}"; do
 		if [[ $l == 't6 display: before: '* ]]; then
@@ -808,7 +938,7 @@ if [ "$PROBE" = t6_cold ] && ! seen_line '^t6_cold: chain rc '; then
 			where="stage ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
 		fi
 	done
-	printf 'ends     no "t6_cold: chain rc" line: the run stopped inside %s\n' "$where"
+	printf 'ends     no "%s" line: the run stopped inside %s\n' "$CHAIN_RC" "$where"
 fi
 
 # t6_fw, t6_submit: the stop line of a run that did not reach the end (the

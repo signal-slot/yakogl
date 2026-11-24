@@ -14,8 +14,14 @@ place, its check PASS. D8's CPU pattern by normal kexec (2026-11-24,
 development runs): `t6_cold` with `power-cycle` at 1024x768 and at
 1920x1080, the chain through in 48 ms and 62 ms, 60 frames a second counted,
 the image's verdict PASS; at 1920x1080 the pattern is read from the capture
-unit's pictures (section 3). The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
-in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
+unit's pictures (section 3). D8's triangle the same day (a development run):
+the triangle image by normal kexec, so with no picture left to adopt; its
+first show ran the cold chain at 1920x1080 on the GL window, through in
+63 ms; the image's check PASS, `t6-verdict.sh triangle` PASS on the UART
+record, the Mali-rendered triangle read from the capture unit's pictures.
+The T6 leaves "work in progress" only when Zephyr and YakoGL put the
+rendered picture on a display in the product form: U-Boot starts Zephyr from
+the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
 the mode, the hand-over from the GPU, the proofs, the dump the lead takes and
 the steps.
@@ -567,10 +573,13 @@ full sequence) with a `power-cycle` option that first puts every block into
 reset and its domain off, as the X2 HDMI design does
 (`x2-hdmi-cold.md`, `force-cold`, `power-cycle`); then signed off with U-Boot
 starting the image from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`),
-which is the same code with nothing left on. The chain's caller for D8 is
-the probe `tools/probes/nanopc_t6/t6_cold` (`board::nanopc_t6_display_cold`,
-C entry `yd_t6_display_cold`): it runs the chain with `power-cycle` on a
-CPU-drawn buffer, the stage to stop after a build option.
+which is the same code with nothing left on. The chain has two callers
+(`board::nanopc_t6_display_cold`). The probe `tools/probes/nanopc_t6/t6_cold`
+(C entry `yd_t6_display_cold`) runs it with `power-cycle` on a CPU-drawn
+buffer, the stage to stop after a build option. The board layer's first show
+(C entry `yd_t6_screen_show`, step D3) runs it with `power-cycle` on the GL
+window when the adopt finds no picture, so a GL image needs no Linux picture
+before it.
 
 The chain's START refusals (`soc::rk3588_display_chain`, its module text has
 the full rules) and two notes on them:
@@ -768,7 +777,8 @@ unchanged. The step has two parts:
   image (`west build -b nanopc_t6 examples/triangle`) and its gate row; then
   the board proof. The first `board_show()` prints the adopt's record with
   the lines of the `t6_display` probe under the tag `board`
-  (`t6_display_record.c`), so a stopped adopt reads the same in both. The
+  (`t6_display_record.c`), so a stopped adopt reads the same in both, and
+  after a cold start the chain's record with the lines of `t6_cold`. The
   image has one "still making progress" for the watchdog: with the board
   layer `t6_watchdog_feed()` is `board_watchdog_feed()`, and WDT0's feeder
   asks the layer's `board_wdog_alive()`.
@@ -786,14 +796,32 @@ register is written). The window needs no entry of its own in the GPU's
 address space: the OSAL's `window()` already resolves any range inside the
 carve-out. EGL's other three buffers are ordinary allocations.
 
-**The first show adopts.** The first `board_show()` is the adopt of route
-(a) with the GL window in place of the probe's CPU pattern: the same checks,
-the same order, the same record (`struct yd_t6_display_adopt`). The window
-sits at the screen's origin and is scanned in place; nothing is copied. An
-adopt that stops is final: that show and every later one return `-ENODEV`,
-and the display is not written again. It is in a state the adopt did not
-expect, and a second try per frame would write to it again without knowing
-more.
+**The first show adopts, or starts from cold.** The first `board_show()`
+reads what was left with the adopt of route (a), the GL window in place of
+the probe's CPU pattern: the same checks, the same order, the same record
+(`struct yd_t6_display_adopt`). The window sits at the screen's origin and
+is scanned in place; nothing is copied. Then one of three:
+
+- A picture runs in a mode the adopt knows: it is adopted (after
+  `kexec --crash`).
+- No picture runs: the adopt stopped at PD_VOP off (stop 1), a VOP clock
+  gated (stop 2) or VP0 in STANDBY (stop 4). These three stops write
+  nothing. The show runs the cold chain of route (c) with
+  `power-cycle` on the window (after a normal kexec or U-Boot). The mode is
+  the board library's build option: 1024x768, or 1920x1080 with
+  `CONFIG_YAKOGL_BOARD_NANOPC_T6_COLD_1920X1080=y`.
+- Any other stop is final: that show and every later one return `-ENODEV`,
+  and the display is not written again. It is in a state the adopt did not
+  expect, and a second try per frame would write to it again without
+  knowing more. A cold chain that stops is final in the same way.
+
+`struct yd_t6_screen_start` says which route ran and, for the cold route,
+what stopped the chain. The UART has one record of the first show: the
+adopt's lines; then for the cold route the chain's stage lines, the line
+`board: first show: no picture was left running: cold start at <mode>, rc
+N` and the chain's `board: chain rc` line (`t6_display_record.c`, shared
+with the probe `t6_cold`). `t6-verdict.sh triangle` judges a triangle
+record on either route.
 
 **The geometry is the first show's.** A later show must have the first
 show's width, height and stride; another one is refused with `-ENOTSUP`
@@ -1066,14 +1094,14 @@ answers polls, takes injected failures and records the order.
 | D0 | The dump: `driver/tools/kexec-zephyr/t6-display-dump.sh` (read only), its output committed as the dump file and the allow file seeded. Done on 2026-11-12 (section 6) | `t6-display-dump-selftest.sh`: the list check, the refusals and a whole run against a fake board | the run of section 6: 1120 words, the picture stayed on | script 490 lines, self-test 390 | yes |
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` (with its mode step, `t6-kms-mode.py`, section 2(a)) and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with both dumps (each mode accepted and kept, a third mode refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
-| D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
-| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen. The flip, the same day: glmark2's build and shading scenes, 2400 flips for 2402 swaps at two per frame, score 119, the image's verdict PASS | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
+| D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window, or the cold chain on it when no picture runs (stops 1, 2 and 4); a flip writes the address then `REG_CFG_DONE` and never waits, also after a cold first show; busy until the frame start that takes the flip; a stopped adopt or chain is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen. The flip, the same day: glmark2's build and shading scenes, 2400 flips for 2402 swaps at two per frame, score 119, the image's verdict PASS. The first show from cold (no picture left by Linux): on the board by normal kexec on 2026-11-24, row D8 | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
 | D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
-| D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection; `-DT6_COLD_MODE=1920x1080` builds it for the second mode, section 3), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4. On the board on 2026-11-24 (development runs): the CPU pattern at both modes, verdict PASS, seen on the capture unit at 1920x1080 (section 3); `gl_triangle` on the cold chain is still to run | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
-| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; it takes only the t6_hello..t6_submit probes today, so `gl_triangle` and `gl_slint` need adding to it and to `t6-verdict.sh`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
+| D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection; `-DT6_COLD_MODE=1920x1080` builds it for the second mode, section 3), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4. On the board on 2026-11-24 (development runs): the CPU pattern at both modes, verdict PASS, seen on the capture unit at 1920x1080 (section 3); the triangle image the same day, its first show the cold chain at 1920x1080 on the GL window: the adopt stopped at stop 1 (PD_VOP off), the chain through in 63 ms, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), `t6-verdict.sh triangle` PASS on the UART record, the triangle seen on the capture unit, the board's own reset at the end. Still to run: the GL image at 1024x768 from cold | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
+| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; it takes only the t6_hello..t6_submit probes today, so `t6_cold`, `gl_triangle` and `gl_slint` need adding to it; `t6-verdict.sh` has the table for `triangle`, judged on a kexec record so far, and none for `gl_slint`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
 Order and parallel work: D0 first (the lead; nothing else needs the board

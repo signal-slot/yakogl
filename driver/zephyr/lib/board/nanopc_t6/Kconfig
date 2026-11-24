@@ -28,12 +28,25 @@ config YAKOGL_BOARD_NANOPC_T6
 	help
 	  The board layer on the NanoPC-T6 (board_nanopc_t6.c). Window: the
 	  last pages of the Mali OSAL's carve-out, so board_window() comes
-	  before eglInitialize(); screen: VP0 of the VOP on HDMI0 as Linux
-	  left it, adopted at the first board_show()
-	  (driver/docs/nanopc-t6-display.md, step D3); record: the UART line;
-	  watchdog: WDT0 below, fed for YAKOGL_BOARD_LIFETIME_S while
-	  board_watchdog_feed() or the OSAL's waits come within
+	  before eglInitialize(); screen: VP0 of the VOP on HDMI0, at the
+	  first board_show() adopted when a picture was left running and
+	  started from cold when none was
+	  (driver/docs/nanopc-t6-display.md, steps D3 and D8); record: the
+	  UART line; watchdog: WDT0 below, fed for YAKOGL_BOARD_LIFETIME_S
+	  while board_watchdog_feed() or the OSAL's waits come within
 	  YAKOGL_BOARD_ALIVE_S; reset: t6_reset_to_linux().
+
+config YAKOGL_BOARD_NANOPC_T6_COLD_1920X1080
+	bool "The display's start from cold is 1920x1080@60 (n: 1024x768@60)"
+	depends on YAKOGL_BOARD_NANOPC_T6
+	help
+	  The mode the first board_show() programs when no picture was left
+	  running (a normal kexec, or U-Boot): 1024x768 at 60 Hz (65 MHz),
+	  or with this 1920x1080 at 60 Hz (148.5 MHz) for a sink that shows
+	  no other mode, such as the HDMI capture unit on the board's
+	  output. The window stays at the screen's origin and the rest is
+	  black. A picture left running (the crash route) is adopted in its
+	  own mode and this is not used.
 
 if YAKOGL_NANOPC_T6
 

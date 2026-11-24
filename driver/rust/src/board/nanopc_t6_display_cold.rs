@@ -35,9 +35,21 @@
 //! The caller draws the buffer ([`super::nanopc_t6_display::draw_pattern`])
 //! and cleans it to the point of coherency first: the chain points Esmart0
 //! at it in its VOP stage, and the VOP does not snoop the CPU's caches.
+//!
+//! [`show`] is the board layer's screen over both routes: the first show
+//! reads what was left ([`super::nanopc_t6_display::show`], the adopt). A
+//! picture that runs in a mode the adopt knows is adopted. No picture
+//! (PD_VOP off, one of its clocks gated, or VP0 in STANDBY: the adopt's
+//! first stops, which write nothing) starts the chain from cold with
+//! `power_cycle` on the caller's window, in the mode the caller names. Any
+//! other state is refused by name and is final. The chain leaves what the
+//! adopt leaves, Esmart0 as VP0's only layer on the buffer with the IOMMU
+//! off, so the later shows are the adopt's flips on both routes. [`Start`]
+//! says which route the first show took.
 
-use super::nanopc_t6_display::{self as display, Bases};
+use super::nanopc_t6_display::{self as display, Adopt, Bases, Screen, Stop};
 use crate::env::Env;
+use crate::errno::{EINVAL, ENODEV};
 use crate::ip::hdptx;
 use crate::mmio::Mmio;
 use crate::soc::rk3588::{PdRegs, PD_VO1, PD_VOP};
@@ -194,7 +206,8 @@ pub enum Refused {
 
 /// Bring the display up from cold on the buffer at physical `fb_pa`
 /// ([`display::FB_WIDTH`] x [`display::FB_HEIGHT`], stride
-/// [`display::FB_STRIDE`]): see the module text.
+/// [`display::FB_STRIDE`], the size of [`chain::t6::WINDOW`]): see the
+/// module text.
 /// `Ok(Cold)` with `stage` 0 when the chain ran through, else the stage
 /// that stopped it (a `stop_after` is [`ColdError::Stopped`]).
 pub fn cold(
@@ -211,14 +224,35 @@ pub fn cold(
     if stop_after > stage::VIDEO {
         return Err(Refused::StopAfter(stop_after));
     }
+    Ok(run(m, b, env, flags, stop_after, fb_pa, (display::FB_WIDTH, display::FB_HEIGHT), display::FB_STRIDE))
+}
+
+/// [`cold`] with its arguments checked, on a buffer of `size` pixels and
+/// `stride_bytes`: Esmart0's window is the buffer's, at the top left of the
+/// mode. The chain refuses a buffer the mode cannot hold at START
+/// ([`ColdError::Vop`]), before any write.
+#[allow(clippy::too_many_arguments)]
+fn run(
+    m: &impl Mmio,
+    b: &ColdBases,
+    env: &impl Env,
+    flags: u32,
+    stop_after: u32,
+    fb_pa: u64,
+    size: (u32, u32),
+    stride_bytes: u32,
+) -> Cold {
     before(m, b, env);
     let mode =
         if flags & flags::MODE_1920X1080 != 0 { chain::t6::Mode::M1920x1080 } else { chain::t6::Mode::M1024x768 };
-    let cfg = chain::t6::config(mode, flags & flags::FORCE_COLD != 0, flags & flags::POWER_CYCLE != 0, stop_after);
-    match chain::bring_up(m, &b.chain(), env, &cfg, fb_pa, display::FB_STRIDE) {
+    let cfg = chain::Config {
+        window: size,
+        ..chain::t6::config(mode, flags & flags::FORCE_COLD != 0, flags & flags::POWER_CYCLE != 0, stop_after)
+    };
+    match chain::bring_up(m, &b.chain(), env, &cfg, fb_pa, stride_bytes) {
         Ok(r) => {
             report(env, &r);
-            Ok(Cold::default())
+            Cold::default()
         }
         Err(f) => {
             if f.error == Error::Stopped {
@@ -226,9 +260,86 @@ pub fn cold(
             } else {
                 ylog!(env, Err, "t6 display: stage {} {} failed: {:?}", f.stage, stage::name(f.stage), f.error);
             }
-            Ok(Cold::of(&f))
+            Cold::of(&f)
         }
     }
+}
+
+/// Which way the first [`show`] of a screen went (`YD_T6_SCREEN_ROUTE_*`).
+pub mod route {
+    /// Not a first show: a flip, a show after a stop, or a window refused
+    /// before anything was read.
+    pub const NONE: u32 = 0;
+    /// The adopt ran, to its end or to a stop that is final.
+    pub const ADOPT: u32 = 1;
+    /// The adopt found no picture and the chain ran from cold.
+    pub const COLD: u32 = 2;
+}
+
+/// The record of a first [`show`] beside the adopt's: the C side's `struct
+/// yd_t6_screen_start`. `cold` is the chain's stop on [`route::COLD`] (all 0
+/// when it ran through) and all 0 on the other routes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Start {
+    pub route: u32,
+    pub cold: Cold,
+}
+
+/// The adopt's stops that mean "no picture runs": PD_VOP is off, a clock of
+/// it is gated, or VP0 is in STANDBY. The adopt has written nothing at any
+/// of them. A later stop found a picture the adopt does not take over (a
+/// mode, a route or a state it does not know), and a cold start over it
+/// would be a mode switch nobody asked for.
+fn no_picture(stop: u32) -> bool {
+    [Stop::VopDomain, Stop::VopClock, Stop::Standby].iter().any(|s| *s as u32 == stop)
+}
+
+/// Show the buffer at physical `addr` on the screen `s`: see the module
+/// text. `mode` is the cold start's, 0 for 1024x768 or
+/// [`flags::MODE_1920X1080`]; `a` is the first show's adopt record and
+/// `start` says which route it took. The waits of the adopt are `env`'s
+/// busy wait, and every line of the chain goes to `env`'s log.
+///
+/// 0; `-ENOTSUP` and `-ENODEV` as [`display::show`], where `-ENODEV` is also
+/// a cold start that stopped (`start.cold` names the stage), which is final
+/// as a stopped adopt is: the screen stays stopped and the first show's
+/// buffer stays busy. `-EINVAL` for another `mode`, before anything is read.
+#[allow(clippy::too_many_arguments)]
+pub fn show(
+    m: &impl Mmio,
+    b: &ColdBases,
+    env: &impl Env,
+    mode: u32,
+    s: &mut Screen,
+    addr: u64,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+    a: &mut Adopt,
+    start: &mut Start,
+) -> i32 {
+    *start = Start::default();
+    if mode & !flags::MODE_1920X1080 != 0 {
+        return -EINVAL;
+    }
+    let first = s.state == display::SCREEN_NEW;
+    let rc = display::show(m, &b.display, s, addr, width, height, stride_bytes, &mut |us| env.busy_wait_us(us), a);
+    if !first || s.state == display::SCREEN_NEW {
+        return rc;
+    }
+    if rc == 0 || !no_picture(a.stop) {
+        start.route = route::ADOPT;
+        return rc;
+    }
+    ylog!(env, Inf, "t6 display: first show: no picture to adopt (stop {}), cold start", a.stop);
+    start.route = route::COLD;
+    start.cold = run(m, b, env, flags::POWER_CYCLE | mode, 0, addr, (width, height), stride_bytes);
+    if start.cold != Cold::default() {
+        return -ENODEV;
+    }
+    s.state = display::SCREEN_SHOWN;
+    0
 }
 
 /// Step 1 of the module text: reads only, of the PMU, the CRU and (when the

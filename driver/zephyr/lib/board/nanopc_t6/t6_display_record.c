@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * The record of a display adopt on the NanoPC-T6, printed
- * (t6_display_print_adopt, nanopc_t6.h): the same lines for the t6_display
- * probe and for the board layer's first board_show(), each under its own tag.
- * driver/docs/nanopc-t6-display.md, section 4, says what the fields mean.
+ * The records of the display on the NanoPC-T6, printed (nanopc_t6.h): of an
+ * adopt (t6_display_print_adopt) and of the chain from cold
+ * (t6_display_print_cold). The same lines for the t6_display and t6_cold
+ * probes and for the board layer's first board_show(), each under its own
+ * tag. driver/docs/nanopc-t6-display.md, section 4, says what the adopt's
+ * fields mean.
  */
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <yakogl_drivers.h>
 
@@ -84,4 +88,55 @@ void t6_display_print_adopt(const char *tag, int rc, const struct yd_t6_display_
 	printk("%s: adopt rc %d stop %u (%s), refusal %u, index %u, detail 0x%08x\n", tag, rc,
 	       a->stop, a->stop < ARRAY_SIZE(stop_name) ? stop_name[a->stop] : "unknown",
 	       a->refusal, a->index, a->detail);
+}
+
+static const char *const cold_stage_name[] = {
+	[0] = "none",
+	[YD_T6_DISPLAY_COLD_STAGE_START] = "START",
+	[YD_T6_DISPLAY_COLD_STAGE_POWER] = "POWER",
+	[YD_T6_DISPLAY_COLD_STAGE_GRF] = "GRF",
+	[YD_T6_DISPLAY_COLD_STAGE_PHY] = "PHY",
+	[YD_T6_DISPLAY_COLD_STAGE_DCLK] = "DCLK",
+	[YD_T6_DISPLAY_COLD_STAGE_CONTROLLER] = "CONTROLLER",
+	[YD_T6_DISPLAY_COLD_STAGE_VOP] = "VOP",
+	[YD_T6_DISPLAY_COLD_STAGE_VIDEO] = "VIDEO",
+};
+
+static const char *const cold_error_name[] = {
+	[YD_T6_DISPLAY_COLD_ERROR_NONE] = "none",
+	[YD_T6_DISPLAY_COLD_ERROR_STOPPED] = "stopped as asked",
+	[YD_T6_DISPLAY_COLD_ERROR_MODE] = "the mode does not fit",
+	[YD_T6_DISPLAY_COLD_ERROR_PHY] = "the PHY",
+	[YD_T6_DISPLAY_COLD_ERROR_VOP] = "VOP2 refused",
+	[YD_T6_DISPLAY_COLD_ERROR_FOUND_RUNNING] = "a port runs (force-cold not set)",
+	[YD_T6_DISPLAY_COLD_ERROR_STANDBY] = "a running port did not stop",
+	[YD_T6_DISPLAY_COLD_ERROR_DISPLAY] = "a clock, domain or gate",
+	[YD_T6_DISPLAY_COLD_ERROR_GRF] = "a GRF word did not take",
+	[YD_T6_DISPLAY_COLD_ERROR_GATE] = "a gate stays closed",
+	[YD_T6_DISPLAY_COLD_ERROR_DCLK_MUX] = "DCLK_VOP0's mux did not take",
+	[YD_T6_DISPLAY_COLD_ERROR_HDMI] = "the HDMI controller refused",
+	[YD_T6_DISPLAY_COLD_ERROR_IOMMU] = "a vop_mmu set keeps paging",
+	[YD_T6_DISPLAY_COLD_ERROR_VIDEO] = "a video check failed",
+	[YD_T6_DISPLAY_COLD_ERROR_VOP_UNREADABLE] = "VOP2 is powered but cannot be read",
+	[YD_T6_DISPLAY_COLD_ERROR_UNCLOCKED] = "a port has no pixel clock",
+};
+
+static const char *name_of(const char *const *names, size_t n, uint32_t v)
+{
+	return v < n && names[v] != NULL ? names[v] : "unknown";
+}
+
+const char *t6_display_cold_stage_name(uint32_t stage)
+{
+	return name_of(cold_stage_name, ARRAY_SIZE(cold_stage_name), stage);
+}
+
+void t6_display_print_cold(const char *tag, int rc, long long ms,
+			   const struct yd_t6_display_cold *c)
+{
+	printk("%s: chain rc %d in %lld ms: stage %u (%s), error %u (%s), refusal %u, index %u, "
+	       "detail 0x%08x\n",
+	       tag, rc, ms, c->stage, t6_display_cold_stage_name(c->stage), c->error,
+	       name_of(cold_error_name, ARRAY_SIZE(cold_error_name), c->error), c->refusal,
+	       c->index, c->detail);
 }

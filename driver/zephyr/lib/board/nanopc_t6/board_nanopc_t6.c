@@ -9,12 +9,18 @@
  *            neither the GPU nor a check needs cache maintenance. The OSAL
  *            fixes the carve-out's layout when EGL starts it, so the window
  *            is taken before eglInitialize()
- *   screen   VP0 of the VOP on HDMI0, 1024x768 or 1920x1080 at 60 Hz as
- *            Linux left it: the first board_show() adopts it with the window
- *            at the screen's origin, the rest of a larger screen black
- *            (yd_t6_screen_show), and prints the adopt's record; a
- *            later show of another buffer is a flip, which never waits.
- *            Nothing is copied. An adopt that stopped is final
+ *   screen   VP0 of the VOP on HDMI0 at 60 Hz, the window at the screen's
+ *            origin and the rest of a larger screen black
+ *            (yd_t6_screen_show). The first board_show() reads what was
+ *            left. A picture that runs (the crash route: 1024x768 or
+ *            1920x1080 as Linux left it) is adopted. No picture (a normal
+ *            kexec or U-Boot: PD_VOP off, its clocks gated or VP0 in
+ *            STANDBY) starts the display from cold, in the build's mode
+ *            (CONFIG_YAKOGL_BOARD_NANOPC_T6_COLD_1920X1080), each line of
+ *            the chain on the UART at once. Either way the first show's
+ *            record is printed. A later show of another buffer is a flip,
+ *            which never waits. Nothing is copied. A first show that
+ *            stopped is final
  *   record   the yk-record line on the UART (common/record.c). With
  *            CONFIG_YAKOGL_BOARD_RECORD_SCREEN the console's last lines and
  *            that line are also drawn over the window on the screen when the
@@ -32,24 +38,33 @@
 #include <EGL/eglplatform.h>
 
 #include <yakogl_drivers.h>
+#include <yakogl_drv/yd_env.h>
 
 #include "yakogl_board.h"
 #include "board_internal.h"
 #include "nanopc_t6.h"
 #include "osal_internal.h"
 
-/* The display path's register blocks (rk3588-base.dtsi: vop, vop_mmu, pmu,
- * cru, sys_grf, hdptxphy0_grf, hdmi0), as the t6_display probe maps them. */
-#define VOP_PHYS     0xfdd90000UL
-#define VOP_MAP      0x2000
-#define VOP_MMU_PHYS 0xfdd97000UL /* the two sets at +0xe00, +0xf00 */
-#define PMU_PHYS     0xfd8d8000UL
-#define CRU_PHYS     0xfd7c0000UL
-#define SYS_GRF_PHYS 0xfd58c000UL
-#define PHY_GRF_PHYS 0xfd5e0000UL
-#define HDMI_PHYS    0xfde80000UL
+/* The display path's register blocks (YD_T6_DISPLAY_*_PHYS, yakogl_drivers.h),
+ * as the t6_cold probe maps them: the adopt's seven, the CRU with the PMU1
+ * CRU at +0x30000 and the HDMI controller up to its interrupt words for the
+ * chain from cold, and the chain's own three (vop_grf, vo1_grf, the PHY). */
+#define VOP_MAP  0x2000
+#define CRU_MAP  0x31000
+#define HDMI_MAP 0x5000
+#define PHY_MAP  0x2000
 
-static struct yd_t6_display_bases s_bases;
+/* The cold start's mode (yd_t6_screen_show's `mode`), at 60 Hz. */
+#ifdef CONFIG_YAKOGL_BOARD_NANOPC_T6_COLD_1920X1080
+#define COLD_MODE      YD_T6_DISPLAY_COLD_MODE_1920X1080
+#define COLD_MODE_NAME "1920x1080"
+#else
+#define COLD_MODE      0u
+#define COLD_MODE_NAME "1024x768"
+#endif
+
+static struct yd_t6_display_cold_bases s_bases;
+static struct yd_env s_env;
 static struct yd_t6_screen s_screen;
 static bool s_mapped;
 /* The window board_window() handed out and the last one a show put on the
@@ -91,38 +106,73 @@ int board_window(uint32_t w, uint32_t h, struct board_window *out)
 	return 0;
 }
 
-static void delay_us(uint32_t us)
+/* The drivers crate's lines (the chain from cold), on the UART at once and
+ * as they are: a line printed before a hang must not wait in a log buffer. */
+static void cold_log(void *ctx, uint32_t level, const uint8_t *buf, size_t len)
 {
-	k_busy_wait(us);
+	ARG_UNUSED(ctx);
+	ARG_UNUSED(level);
+	printk("%.*s\n", (int)len, (const char *)buf);
 }
 
 static void map_bases(void)
 {
-	mm_reg_t vop, mmu, pmu, cru, sys_grf, phy_grf, hdmi;
+	mm_reg_t vop, mmu, pmu, cru, sys_grf, phy_grf, hdmi, vop_grf, vo1_grf, phy;
 
-	device_map(&vop, VOP_PHYS, VOP_MAP, K_MEM_CACHE_NONE);
-	device_map(&mmu, VOP_MMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&pmu, PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&cru, CRU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&sys_grf, SYS_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&phy_grf, PHY_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&hdmi, HDMI_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	s_bases = (struct yd_t6_display_bases){
-		.vop = vop,
-		.vop_mmu = {mmu + 0xe00, mmu + 0xf00},
-		.pmu = pmu,
-		.cru = cru,
-		.sys_grf = sys_grf,
-		.phy_grf = phy_grf,
-		.hdmi = hdmi,
+	device_map(&vop, YD_T6_DISPLAY_VOP_PHYS, VOP_MAP, K_MEM_CACHE_NONE);
+	device_map(&mmu, YD_T6_DISPLAY_VOP_MMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&pmu, YD_T6_DISPLAY_PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&cru, YD_T6_DISPLAY_CRU_PHYS, CRU_MAP, K_MEM_CACHE_NONE);
+	device_map(&sys_grf, YD_T6_DISPLAY_SYS_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&phy_grf, YD_T6_DISPLAY_HDPTX0_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&hdmi, YD_T6_DISPLAY_HDMI0_PHYS, HDMI_MAP, K_MEM_CACHE_NONE);
+	device_map(&vop_grf, YD_T6_DISPLAY_VOP_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&vo1_grf, YD_T6_DISPLAY_VO1_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&phy, YD_T6_DISPLAY_HDPTX0_PHYS, PHY_MAP, K_MEM_CACHE_NONE);
+	s_bases = (struct yd_t6_display_cold_bases){
+		.display = {
+			.vop = vop,
+			.vop_mmu = {mmu + 0xe00, mmu + 0xf00},
+			.pmu = pmu,
+			.cru = cru,
+			.sys_grf = sys_grf,
+			.phy_grf = phy_grf,
+			.hdmi = hdmi,
+		},
+		.vop_grf = vop_grf,
+		.vo1_grf = vo1_grf,
+		.phy = phy,
 	};
+	yd_env_init(&s_env, NULL);
+	s_env.log = cold_log;
 	s_mapped = true;
+}
+
+/* The record of the show that left YD_T6_SCREEN_NEW: what the adopt found
+ * and did, which of the two routes ran, and for the cold start where the
+ * chain ended. `rc` is the show's and `ms` its time; on the cold route the
+ * adopt had stopped (-ENODEV) and the time is the chain's but for the
+ * adopt's few reads before its stop. */
+static void print_first_show(int rc, long long ms, const struct yd_t6_display_adopt *adopt,
+			     const struct yd_t6_screen_start *start)
+{
+	bool cold = start->route == YD_T6_SCREEN_ROUTE_COLD;
+
+	t6_display_print_adopt("board", cold ? -ENODEV : rc, adopt);
+	if (!cold) {
+		printk("board: first show: a picture was left running: adopt, rc %d\n", rc);
+		return;
+	}
+	printk("board: first show: no picture was left running: cold start at %s, rc %d\n",
+	       COLD_MODE_NAME, rc);
+	t6_display_print_cold("board", rc, ms, &start->cold);
 }
 
 static int screen_show(const struct board_window *win)
 {
 	struct yd_t6_display_adopt adopt;
-	bool first = s_screen.state == YD_T6_SCREEN_NEW;
+	struct yd_t6_screen_start start = {0};
+	int64_t t0;
 	int rc;
 
 	/* the VOP's window is set up for XRGB8888, top row first */
@@ -132,11 +182,11 @@ static int screen_show(const struct board_window *win)
 	if (!s_mapped) {
 		map_bases();
 	}
-	rc = yd_t6_screen_show(&s_bases, &s_screen, win->phys, win->w, win->h, win->stride,
-			       delay_us, &adopt);
-	/* the show that left YD_T6_SCREEN_NEW was the adopt: its record */
-	if (first && s_screen.state != YD_T6_SCREEN_NEW) {
-		t6_display_print_adopt("board", rc, &adopt);
+	t0 = k_uptime_get();
+	rc = yd_t6_screen_show(&s_bases, &s_env, COLD_MODE, &s_screen, win->phys, win->w, win->h,
+			       win->stride, &adopt, &start);
+	if (start.route != YD_T6_SCREEN_ROUTE_NONE) {
+		print_first_show(rc, (long long)(k_uptime_get() - t0), &adopt, &start);
 	}
 	if (rc == 0) {
 		window_set(&s_shown, win);
@@ -159,7 +209,7 @@ uint32_t board_display_busy(const uint64_t *phys, size_t n)
 	if (!s_mapped) {
 		return 0;
 	}
-	return yd_t6_screen_busy(&s_bases, &s_screen, phys, n);
+	return yd_t6_screen_busy(&s_bases.display, &s_screen, phys, n);
 }
 #endif
 
@@ -183,8 +233,9 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_YAKOGL_SAMPLE_REBOOT),
  * register is written, so a timer handler and the fatal error handler call
  * it too. With `show` and nothing shown yet (a run that failed before its
  * first frame) the window board_window() handed out is drawn and shown,
- * which is the adopt: thread context. Returns whether the record is on the
- * screen, and prints why when it is not. */
+ * which is the first show (the adopt, or the start from cold): thread
+ * context. Returns whether the record is on the screen, and prints why when
+ * it is not. */
 static bool record_screen(bool show)
 {
 	unsigned int key = irq_lock();

@@ -15,6 +15,12 @@
 # (t6_gpu-crash-pass) carry Z1's record as
 # tools/probes/nanopc_t6/common/t6_z1.c prints it: the host cc builds that file
 # with common/test/t6_z1_test.c, and its lines must be the fixture's.
+# triangle-cold-pass is the Zephyr part of a board record: the triangle image
+# after a normal kexec, its first show the cold chain at 1920x1080
+# (2026-11-24, a development run; the tree name in its build line is the
+# placeholder of the other fixtures). triangle-adopt-pass is predicted from the
+# code (examples/triangle, the board layer, the drivers crate), with the
+# register values of a board record of the adopt after kexec --crash.
 set -euo pipefail
 export LC_ALL=C
 
@@ -387,11 +393,13 @@ fi
 # the "ends" line names where a record without the chain's rc line
 # stopped: inside stage 8 VIDEO (its line is the last), inside the reads
 # before the chain, and inside stage 4 (the hang above)
+# cold_ends <name> <log> <where> [probe]
 cold_ends() {
-	local got
-	got=$(bash "$V" t6_cold "$2" | grep '^ends ' || true)
+	local got probe=${4:-t6_cold} rc='t6_cold: chain rc'
+	[ "$probe" = t6_cold ] || rc='board: chain rc'
+	got=$(bash "$V" "$probe" "$2" | grep '^ends ' || true)
 	runs=$((runs + 1))
-	if [ "$got" = "ends     no \"t6_cold: chain rc\" line: the run stopped inside $3" ]; then
+	if [ "$got" = "ends     no \"$rc\" line: the run stopped inside $3" ]; then
 		echo "ok   $1: $got"
 	else
 		echo "FAIL $1: '$got' (want the run stopped inside $3)"
@@ -460,6 +468,89 @@ check t6_cold-says-1920x1080 1 "VERDICT t6_cold FAIL (4 of $((COLD + 1)))" "$((C
 # a mode line naming neither mode differs (the rest is judged as 1024x768)
 sed '/^t6_cold: options: /a t6_cold: mode 1280x720' "$D/t6_cold-pass.uart" >"$WORK/cother.log"
 check t6_cold-other-mode 1 "VERDICT t6_cold FAIL (1 of $((COLD + 1)))" "$COLD 0 1" t6_cold "$WORK/cother.log"
+
+# triangle (examples/triangle on the board layer): the first show by the
+# cold chain (the kexec route) and by the adopt (kexec --crash)
+TRI=$(bash "$V" triangle "$D/triangle-cold-pass.uart" | grep -c '^ok ' || true)
+TRIA=$(bash "$V" triangle "$D/triangle-adopt-pass.uart" | grep -c '^ok ' || true)
+check triangle-cold-pass 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$D/triangle-cold-pass.uart"
+check triangle-adopt-pass 0 'VERDICT triangle PASS' "$TRIA 0 0" triangle "$D/triangle-adopt-pass.uart"
+# the progress records are not judged
+sed '/^yk-record: 594b05/d' "$D/triangle-cold-pass.uart" >"$WORK/tnoprog.log"
+check triangle-no-progress-records 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$WORK/tnoprog.log"
+# the mode is the one the board's first-show line names: a 1024x768 build
+# passes, and a chain that brought up another mode than the board says
+# differs on the chain's "up" line
+sed -e 's/cold start at 1920x1080, rc 0/cold start at 1024x768, rc 0/' -e 's/^t6 display: up, 1920x1080 at /t6 display: up, 1024x768 at /' \
+	"$D/triangle-cold-pass.uart" >"$WORK/t768.log"
+check triangle-1024x768 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$WORK/t768.log"
+sed 's/^t6 display: up, 1920x1080 at /t6 display: up, 1024x768 at /' "$D/triangle-cold-pass.uart" >"$WORK/tup.log"
+check triangle-mode-up 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tup.log"
+# the chain shows the window: another address in YRGB_MST differs
+sed '/^t6 display: VIDEO: /s/YRGB_MST 0x[0-9a-f]*/YRGB_MST 0x19440000/' "$D/triangle-cold-pass.uart" >"$WORK/tmst.log"
+check triangle-cold-mst 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tmst.log"
+# the cold start is taken after the adopt's stops 1, 2 and 4 only, and the
+# board's adopt line names the same stop
+sed 's/no picture to adopt (stop 1)/no picture to adopt (stop 6)/' "$D/triangle-cold-pass.uart" >"$WORK/tstop.log"
+check triangle-stop-6 1 "VERDICT triangle FAIL (2 of $TRI)" "$((TRI - 2)) 0 2" triangle "$WORK/tstop.log"
+sed -e 's/no picture to adopt (stop 1)/no picture to adopt (stop 4)/' \
+	-e 's/^board: adopt rc -19 stop 1 (PD_VOP is not powered or not out of idle)/board: adopt rc -19 stop 4 (VP0 is in STANDBY: no picture to adopt)/' \
+	"$D/triangle-cold-pass.uart" >"$WORK/tstop4.log"
+check triangle-stop-4 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$WORK/tstop4.log"
+# a hang inside stage 4: every later line is missing, and the "ends" line
+# names the stage
+sed '/^t6 display: stage 5 DCLK$/,/^t6: board: run over/d' "$D/triangle-cold-pass.uart" >"$WORK/thang.log"
+check triangle-hang 1 "VERDICT triangle FAIL (33 of $TRI)" "$((TRI - 33)) 33 0" triangle "$WORK/thang.log"
+cold_ends triangle-ends-in-phy "$WORK/thang.log" 'stage 4 PHY' triangle
+# a stage that fails: its failure line, the rc of the first show and of the
+# chain, and the sample's line that the window is not on the screen
+sed '/^t6 display: stage 5 DCLK$/,/^t6 display: VIDEO: /d' "$D/triangle-cold-pass.uart" |
+	sed -e '/^board: found PD_VOP /i t6 display: stage 4 PHY failed: Phy(Refused { why: LockTimeout, found: 6 })' \
+		-e 's/^board: first show: no picture was left running: cold start at 1920x1080, rc 0$/board: first show: no picture was left running: cold start at 1920x1080, rc -5/' \
+		-e 's/^board: chain rc 0 in [0-9]* ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000$/board: chain rc -5 in 170 ms: stage 4 (PHY), error 3 (the PHY), refusal 4, index 0, detail 0x00000006\ntriangle: board_show = -5 (the window is not on the screen)/' \
+		>"$WORK/tphy.log"
+check triangle-phy-failed 1 "VERDICT triangle FAIL (16 of $TRI)" "$((TRI - 14)) 12 4" triangle "$WORK/tphy.log"
+# the check: a wrong pixel fails its count line, the check line and the
+# sample's last line, and the hold is the failed run's
+sed -e 's/inside wrong 0 /inside wrong 12 /' -e 's/^triangle: check PASS .*/triangle: check FAIL: inside pixels wrong (code 1)/' \
+	-e 's/^triangle: PASS$/triangle: FAIL rc=-74/' -e 's/^board: holding 60 s/board: holding 40 s/' \
+	"$D/triangle-cold-pass.uart" >"$WORK/tcheck.log"
+check triangle-check-fail 1 "VERDICT triangle FAIL (4 of $TRI)" "$((TRI - 4)) 0 4" triangle "$WORK/tcheck.log"
+# the three counts add up to the window
+sed 's/= 194526 inside/= 194527 inside/' "$D/triangle-cold-pass.uart" >"$WORK/tsum.log"
+check triangle-pixel-sum 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tsum.log"
+sed 's/guard rows: 0 of 8192/guard rows: 3 of 8192/' "$D/triangle-cold-pass.uart" >"$WORK/tguard.log"
+check triangle-guard-rows 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tguard.log"
+# the PICTURE record carries the picture line's words
+sed 's/^yk-record: 594b0407 ff403f80 /yk-record: 594b0407 ff403f81 /' "$D/triangle-cold-pass.uart" >"$WORK/trec.log"
+check triangle-record-words 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/trec.log"
+sed '/^yk-record: 594b04/d' "$D/triangle-cold-pass.uart" >"$WORK/tnorec.log"
+check triangle-no-picture-record 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 1 0" triangle "$WORK/tnorec.log"
+sed 's/^yakogl: draws refused 0$/yakogl: draws refused 2/' "$D/triangle-cold-pass.uart" >"$WORK/tref.log"
+check triangle-draws-refused 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tref.log"
+sed 's/^board: the record screen stays 20 s$/board: no record screen: the display is not up (rc -19)/' "$D/triangle-cold-pass.uart" >"$WORK/tscr.log"
+check triangle-no-record-screen 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/tscr.log"
+# a fatal error line anywhere fails the record
+sed '/^triangle: frame /a board: fatal error 4: halted, WDT0 resets the SoC within 22369 ms' "$D/triangle-cold-pass.uart" >"$WORK/tfatal.log"
+check triangle-fatal 1 "VERDICT triangle FAIL (1 of $TRI)" "$TRI 0 1" triangle "$WORK/tfatal.log"
+# the adopt route: the window's address on Esmart0 and in the read-back,
+# a vop_mmu that did not stop, the rc of the first show
+sed '/^board: shown: /s/YRGB_MST 0x1943f000/YRGB_MST 0x19440000/' "$D/triangle-adopt-pass.uart" >"$WORK/tamst.log"
+check triangle-adopt-mst 1 "VERDICT triangle FAIL (1 of $TRIA)" "$((TRIA - 1)) 0 1" triangle "$WORK/tamst.log"
+sed '/^board: vop_mmu: /s/stall time-out 0/stall time-out 1/' "$D/triangle-adopt-pass.uart" >"$WORK/tastall.log"
+check triangle-adopt-stall 1 "VERDICT triangle FAIL (1 of $TRIA)" "$((TRIA - 1)) 0 1" triangle "$WORK/tastall.log"
+sed 's/^board: first show: a picture was left running: adopt, rc 0$/board: first show: a picture was left running: adopt, rc -5/' "$D/triangle-adopt-pass.uart" >"$WORK/tarc.log"
+check triangle-adopt-rc 1 "VERDICT triangle FAIL (1 of $TRIA)" "$((TRIA - 1)) 0 1" triangle "$WORK/tarc.log"
+# no "ends" line for a record that has the chain's rc, nor on the adopt route
+for f in "$D/triangle-cold-pass.uart" "$D/triangle-adopt-pass.uart"; do
+	runs=$((runs + 1))
+	if bash "$V" triangle "$f" | grep -q '^ends '; then
+		echo "FAIL ${f##*/}: an ends line in a record that did not stop inside the chain"
+		fails=$((fails + 1))
+	else
+		echo "ok   ${f##*/}: no ends line"
+	fi
+done
 
 # Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
 # probes' printk as printf): a fixture cannot drift from the code

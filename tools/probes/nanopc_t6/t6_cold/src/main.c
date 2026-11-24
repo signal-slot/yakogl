@@ -68,42 +68,6 @@ BUILD_ASSERT(T6_COLD_MODE_1920X1080 == 0 || T6_COLD_MODE_1920X1080 == 1,
 #define CRU_MAP  0x31000
 #define HDMI_MAP 0x5000
 
-static const char *const stage_name[] = {
-	[0] = "none",
-	[YD_T6_DISPLAY_COLD_STAGE_START] = "START",
-	[YD_T6_DISPLAY_COLD_STAGE_POWER] = "POWER",
-	[YD_T6_DISPLAY_COLD_STAGE_GRF] = "GRF",
-	[YD_T6_DISPLAY_COLD_STAGE_PHY] = "PHY",
-	[YD_T6_DISPLAY_COLD_STAGE_DCLK] = "DCLK",
-	[YD_T6_DISPLAY_COLD_STAGE_CONTROLLER] = "CONTROLLER",
-	[YD_T6_DISPLAY_COLD_STAGE_VOP] = "VOP",
-	[YD_T6_DISPLAY_COLD_STAGE_VIDEO] = "VIDEO",
-};
-
-static const char *const error_name[] = {
-	[YD_T6_DISPLAY_COLD_ERROR_NONE] = "none",
-	[YD_T6_DISPLAY_COLD_ERROR_STOPPED] = "stopped as asked",
-	[YD_T6_DISPLAY_COLD_ERROR_MODE] = "the mode does not fit",
-	[YD_T6_DISPLAY_COLD_ERROR_PHY] = "the PHY",
-	[YD_T6_DISPLAY_COLD_ERROR_VOP] = "VOP2 refused",
-	[YD_T6_DISPLAY_COLD_ERROR_FOUND_RUNNING] = "a port runs (force-cold not set)",
-	[YD_T6_DISPLAY_COLD_ERROR_STANDBY] = "a running port did not stop",
-	[YD_T6_DISPLAY_COLD_ERROR_DISPLAY] = "a clock, domain or gate",
-	[YD_T6_DISPLAY_COLD_ERROR_GRF] = "a GRF word did not take",
-	[YD_T6_DISPLAY_COLD_ERROR_GATE] = "a gate stays closed",
-	[YD_T6_DISPLAY_COLD_ERROR_DCLK_MUX] = "DCLK_VOP0's mux did not take",
-	[YD_T6_DISPLAY_COLD_ERROR_HDMI] = "the HDMI controller refused",
-	[YD_T6_DISPLAY_COLD_ERROR_IOMMU] = "a vop_mmu set keeps paging",
-	[YD_T6_DISPLAY_COLD_ERROR_VIDEO] = "a video check failed",
-	[YD_T6_DISPLAY_COLD_ERROR_VOP_UNREADABLE] = "VOP2 is powered but cannot be read",
-	[YD_T6_DISPLAY_COLD_ERROR_UNCLOCKED] = "a port has no pixel clock",
-};
-
-static const char *name_of(const char *const *names, size_t n, uint32_t v)
-{
-	return v < n && names[v] != NULL ? names[v] : "unknown";
-}
-
 /* The drivers crate's lines, on the UART at once and as they are: a line
  * printed before a hang must not wait in a log buffer. */
 static void cold_log(void *ctx, uint32_t level, const uint8_t *buf, size_t len)
@@ -134,7 +98,8 @@ int main(void)
 	       t6_watchdog_deadline_ms());
 	printk("t6_cold: options: power-cycle 1, force-cold %d, stop after %d (%s)\n",
 	       T6_COLD_FORCE_COLD, T6_COLD_STOP_AFTER,
-	       T6_COLD_STOP_AFTER == 0 ? "run to the end" : stage_name[T6_COLD_STOP_AFTER]);
+	       T6_COLD_STOP_AFTER == 0 ? "run to the end" :
+					 t6_display_cold_stage_name(T6_COLD_STOP_AFTER));
 	printk("t6_cold: mode %s\n", T6_COLD_MODE_1920X1080 ? "1920x1080" : "1024x768");
 
 	fb_pa = t6_picture_prepare("t6_cold");
@@ -160,14 +125,10 @@ int main(void)
 		printk("t6_cold: FAIL: yd_t6_display_cold refused its arguments\n");
 		t6_reset_to_linux("t6_cold done");
 	}
-	printk("t6_cold: chain rc %d in %lld ms: stage %u (%s), error %u (%s), refusal %u, index %u, "
-	       "detail 0x%08x\n",
-	       rc, (long long)ms, c.stage, name_of(stage_name, ARRAY_SIZE(stage_name), c.stage),
-	       c.error, name_of(error_name, ARRAY_SIZE(error_name), c.error), c.refusal, c.index,
-	       c.detail);
+	t6_display_print_cold("t6_cold", rc, (long long)ms, &c);
 	if (rc != 0 && rc != -ECANCELED) {
 		printk("t6_cold: FAIL: stage %u (%s) failed\n", c.stage,
-		       name_of(stage_name, ARRAY_SIZE(stage_name), c.stage));
+		       t6_display_cold_stage_name(c.stage));
 		t6_reset_to_linux("t6_cold done");
 	}
 
@@ -181,7 +142,7 @@ int main(void)
 		}
 	}
 	printk("t6_cold: STOPPED: after stage %u (%s) as asked%s\n", c.stage,
-	       name_of(stage_name, ARRAY_SIZE(stage_name), c.stage),
+	       t6_display_cold_stage_name(c.stage),
 	       up ? "" : ", nothing scans out");
 	t6_reset_to_linux("t6_cold done");
 }
