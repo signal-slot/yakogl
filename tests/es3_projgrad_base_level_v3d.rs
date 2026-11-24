@@ -9,19 +9,18 @@
 //! These variants read the same size uniform words as `textureGrad` (44
 //! width, 45 height, 46 depth of a 3D texture, 47 layer count of an array),
 //! filled from the draw's `V3dJobTmu` (`texture_units` in src/v3d/backend.rs),
-//! which today holds the LEVEL-0 sizes: `GL_TEXTURE_BASE_LEVEL` is not
-//! applied there. The test reads the record the job builder gets, so it pins
+//! which holds the base level's sizes: the draw applies
+//! `GL_TEXTURE_BASE_LEVEL` (`draw::effective_base_level`). The test reads the record the job builder gets, so it pins
 //! the words handed, whether or not a given variant's compiled stream reads
 //! each one (the record is the same for every variant of one sampler; this
 //! file does not tell which words a stream reads).
 //!
-//! After the fix the words follow docs/notes/v3d-texture-size-words.md:
+//! The words follow docs/notes/v3d-texture-size-words.md:
 //! width, height and 3D depth minified by the base level (never below 1),
 //! the array size never minified.
 //!
-//! The BASE_LEVEL 0 controls assert the correct sizes and stay; each
-//! `..._flip_when_the_base_level_is_applied` test asserts today's level-0
-//! record with BASE_LEVEL 1; the fix flips those asserts in its commit.
+//! The BASE_LEVEL 0 controls assert the level-0 sizes; the BASE_LEVEL 1 tests
+//! assert the minified base-level record.
 //!
 //! The textures are 16x16 (x8 deep, x5 layers) with the whole mip chain
 //! given level by level, NEAREST filters, so they are complete at
@@ -660,64 +659,64 @@ control!(a_2d_proj_grad_at_base_level_0_has_its_level_0_size, Kind::Tex2d, Func:
 control!(a_2d_proj_grad_offset_at_base_level_0_has_its_level_0_size, Kind::Tex2d, Func::ProjGradOffset, (16, 16, 1, 1));
 control!(a_2d_array_grad_offset_at_base_level_0_has_its_level_0_size, Kind::Array, Func::GradOffset, (16, 16, 1, 5));
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the draw applies the base level ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
 /// `sampler3D` `textureGradOffset` hands the LEVEL-0 size and depth,
 /// 16x16 and 8. The post-fix value is the base level's: 8x8 and depth 4.
 /// Flip the assert to (8, 8, 4, 1) when the base level is applied.
 #[test]
-fn a_3d_grad_offset_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_grad_offset_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, Func::GradOffset, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Func::GradOffset, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16x8 `sampler3D`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16x8 `sampler3D`
 /// `textureProjGrad` hands 16x16 and depth 8. Post-fix: (8, 8, 4, 1).
 #[test]
-fn a_3d_proj_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_proj_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, Func::ProjGrad, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Func::ProjGrad, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16x8 `sampler3D`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16x8 `sampler3D`
 /// `textureProjGradOffset` hands 16x16 and depth 8. Post-fix: (8, 8, 4, 1).
 #[test]
-fn a_3d_proj_grad_offset_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_proj_grad_offset_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, Func::ProjGradOffset, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Func::ProjGradOffset, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16 `sampler2D`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16 `sampler2D`
 /// `textureGradOffset` hands 16x16. Post-fix: 8x8 (the depth stays 1 for a
 /// 2D texture): flip to (8, 8, 1, 1).
 #[test]
-fn a_2d_grad_offset_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_grad_offset_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, Func::GradOffset, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Tex2d, Func::GradOffset, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16 `sampler2D` `textureProjGrad`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16 `sampler2D` `textureProjGrad`
 /// hands 16x16. Post-fix: flip to (8, 8, 1, 1).
 #[test]
-fn a_2d_proj_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_proj_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, Func::ProjGrad, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Tex2d, Func::ProjGrad, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16 `sampler2D`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16 `sampler2D`
 /// `textureProjGradOffset` hands 16x16. Post-fix: flip to (8, 8, 1, 1).
 #[test]
-fn a_2d_proj_grad_offset_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_proj_grad_offset_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, Func::ProjGradOffset, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Tex2d, Func::ProjGradOffset, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: BASE_LEVEL 1, 16x16x5-layer `sampler2DArray`
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`). Before it did, it BASE_LEVEL 1, 16x16x5-layer `sampler2DArray`
 /// `textureGradOffset` hands 16x16 and 5 layers. Post-fix: 8x8 and 5 layers,
 /// the layer count never minified: flip to (8, 8, 1, 5).
 #[test]
-fn a_2d_array_grad_offset_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_array_grad_offset_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, Func::GradOffset, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, Func::GradOffset, 1), (8, 8, 1, 5));
 }

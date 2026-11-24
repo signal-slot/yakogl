@@ -808,6 +808,7 @@ pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
         /* B,G,R,A: an XRGB8888 image, or a texture a draw rendered into */
         bgra: (t.bgra || t.pe_order) as u8,
         incomplete: incomplete_reason(t).is_some() as u8,
+        base_level: effective_base_level(t).0,
         no_alpha: texture_has_no_alpha(t) as u8,
         depth_luminance: texture_depth_luminance(t) as u8,
         swizzle: bind_swizzle(t),
@@ -3627,7 +3628,30 @@ fn mip_levels_needed(t: &GlTexture) -> u32 {
     q.max(1)
 }
 
+/// The effective GL_TEXTURE_BASE_LEVEL of `t` and whether it makes `t`
+/// incomplete (ES 3.0 3.8.13). An immutable texture clamps it to
+/// [0, levels-1] (3.8.4) and is never incomplete for it. A mutable one with a
+/// negative base level, one past its chain, or one with no image defined
+/// gives (0, true).
+pub(crate) fn effective_base_level(t: &GlTexture) -> (u8, bool) {
+    if crate::REPORT_ES2 {
+        return (0, false);
+    }
+    if t.immutable && t.immutable_levels > 0 {
+        let top = i32::from(t.immutable_levels) - 1;
+        return (t.base_level.clamp(0, top) as u8, false);
+    }
+    let b = t.base_level;
+    if b < 0 || b >= i32::from(t.chain_levels.max(1)).min(16) || t.level_defined >> b & 1 == 0 {
+        return (0, true);
+    }
+    (b as u8, false)
+}
+
 fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
+    if effective_base_level(t).1 {
+        return Some("GL_TEXTURE_BASE_LEVEL is negative, past the chain, or has no image (ES 3.0 3.8.13)");
+    }
     let mips = min_filter_uses_mipmaps(t.min_filter);
     let needed = mip_levels_needed(t);
 
@@ -4875,6 +4899,7 @@ fn build_common(
                 _ => GLES_TEXTYPE_2D,
             };
             tb.layers = nlayers as u16;
+            tb.base_level = effective_base_level(t).0;
             /* the whole stack, not one layer: the rows above are what the
              * hardware is told, these are what the storage holds */
             tb.bytes = if t.block_bytes != 0 {

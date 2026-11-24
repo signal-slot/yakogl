@@ -896,3 +896,70 @@ fn a_one_level_array_or_3d_texture_with_max_level_0_is_complete() {
         assert_eq!(incomplete(), 0, "0x{target:x}: MAX_LEVEL 0");
     }
 }
+
+/// `GlesTextureBind::base_level` is the effective GL_TEXTURE_BASE_LEVEL (ES
+/// 3.0 3.8.13): an immutable texture clamps it to levels-1 and stays
+/// complete; a mutable one in range carries it; a negative one, one past the
+/// chain or one with no image gives 0 and incomplete (a negative value is
+/// refused by glTexParameteri, so it never reaches the bind).
+#[test]
+fn the_bind_carries_the_effective_base_level() {
+    if crate::REPORT_ES2 {
+        return; /* no GL_TEXTURE_BASE_LEVEL on the ES 2.0 surface */
+    }
+    let gl = TestGl::new(4, 4);
+    let px = vec![0x40u8; 16 * 16 * 4];
+    let bind = |name: GLuint| super::draw::texture_bind_2d(&gl.ctx().objs().textures[name as usize]);
+    let base = |v: GLint| {
+        // SAFETY: plain GL call.
+        unsafe { glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, v) };
+    };
+
+    /* immutable, 3 levels: clamped to [0, 2], never incomplete for it */
+    let imm = new_tex(GL_TEXTURE_2D);
+    // SAFETY: plain GL call.
+    unsafe { glTexStorage2D(GL_TEXTURE_2D, 3, GL_RGBA8, 16, 16) };
+    for (set, want) in [(0, 0), (1, 1), (2, 2), (7, 2)] {
+        base(set);
+        let b = bind(imm);
+        assert_eq!((b.base_level, b.incomplete), (want, 0), "immutable, base level {set}");
+    }
+
+    /* mutable, levels 0 and 1 defined */
+    let m = new_tex(GL_TEXTURE_2D);
+    // SAFETY: `px` holds the 16x16 RGBA8 image, which covers level 1 too.
+    unsafe {
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8 as GLint,
+            16,
+            16,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            px.as_ptr() as *const c_void,
+        );
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            1,
+            GL_RGBA8 as GLint,
+            8,
+            8,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            px.as_ptr() as *const c_void,
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
+    }
+    base(1);
+    let b = bind(m);
+    assert_eq!((b.base_level, b.incomplete), (1, 0), "mutable, in range");
+    for set in [2, 5, 40] {
+        base(set);
+        let b = bind(m);
+        assert_eq!((b.base_level, b.incomplete), (0, 1), "mutable, base level {set}");
+    }
+    assert_eq!(gl.error(), GL_NO_ERROR);
+}
