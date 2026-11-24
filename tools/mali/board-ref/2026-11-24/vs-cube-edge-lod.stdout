@@ -1,0 +1,25 @@
+pandecode: dump command stream to file /root/mref-yakogl/vs-cube-edge-lod.pandecode.ctx-0.0000
+renderer: Mali-G610 (Panfrost)
+version: OpenGL ES 3.1 Mesa 25.0.7-2+deb13u1
+mode: vertex textureCubeLod 1.5, repeat, linear_mipmap_linear
+max vertex texture image units: 32
+status: 0x8cd5
+glGetError: 0x0000
+v00: b0005fff b2005eff b3005fff b4005fff b5005fff b7005fff b8005fff ba005fff ba0060ff bc005fff be005fff c1005eff c2005fff c4005eff c6005eff c9005eff
+v01: d50045ff d60046ff d70046ff d70047ff d80048ff d90049ff d9004aff d9004bff da004cff dd004bff de004cff e0004cff e3004bff e5004bff e8004bff e8004cff
+v02: ea0234ff ea0235ff eb0237ff eb0238ff eb023aff ec023bff ec023cff ec033dff ec033fff ed033fff ed0441ff ee0441ff ee0543ff ef0643ff ef0645ff f00745ff
+v03: ee052dff ee052eff ef0630ff f00631ff f00733ff f10734ff f10735ff f20836ff f20838ff f20939ff f30a3aff f40a3bff f50b3cff f60c3dff f60d3eff f60e40ff
+v04: e80b29ff e80c2aff e90d2cff eb0e2dff eb0f2fff ec1030ff ed1032ff ed1133ff ee1235ff ee1437ff ef1538ff ee1539ff ef173aff ef183cff f01a3dff f01c3eff
+v05: d81629ff d9172aff da182cff db192dff dc1a2fff dd1b30ff df1d32ff e01e33ff e11f35ff e12036ff e22238ff e42439ff e4253aff e5283cff e6293dff e72a3eff
+v06: c61f29ff c8212aff ca232cff cc242dff cd262fff cf2830ff d02931ff d32b33ff d42c35ff d62e36ff d73138ff d83239ff da343bff db363cff dc383dff de3a3eff
+v07: b62929ff b72a2aff ba2d2cff bd302dff bf322fff c03330ff c33632ff c53833ff c73a35ff c93c36ff cc3f38ff cd4039ff cf433bff d1453cff d3463dff d5483eff
+v08: a53229ff a7352aff aa382cff ad3b2dff b03d2fff b24030ff b54332ff b74433ff bb4835ff bc4936ff bf4d38ff c24f39ff c4523bff c7533cff c9553dff cb583eff
+v09: 943d29ff 97402aff 9b432cff 9d452dff a0492fff a34c30ff a64f31ff aa5233ff ae5635ff b05736ff b45a38ff b65d39ff b95f3aff bc633cff bf643dff c2673eff
+v10: 834629ff 86492aff 8b4e2cff 8d502dff 92552fff 955830ff 985b32ff 9c5f33ff a16335ff a56637ff a86938ff ab6a39ff b06f3bff b3713cff b5733dff b8763eff
+v11: 735029ff 76542aff 7b582cff 7f5c2dff 83612fff 866430ff 8b6832ff 8e6c33ff 937035ff 987437ff 9c7738ff a07939ff a47c3aff a8803cff ac823dff af843eff
+v12: 6b552cff 6e582dff 735d2fff 776230ff 7c6632ff 806b33ff 836e34ff 887336ff 8b7637ff 8f7b38ff 95803aff 98833aff 9d873cff a08a3cff a38e3eff a7923fff
+v13: 6a5431ff 6e5833ff 735d34ff 776136ff 7c6537ff 806a38ff 836e39ff 88733bff 8d783cff 907b3dff 95803fff 9a8440ff 9e8741ff a18a41ff a48e42ff a99244ff
+v14: 774e3eff 7b523fff 7f5740ff 815a41ff 855f42ff 886343ff 8c6744ff 906b45ff 936f46ff 967546ff 997a46ff 9b7e46ff 9f8347ff a28847ff a58e47ff a99248ff
+v15: 914352ff 924652ff 954a53ff 984e53ff 9a5154ff 9c5554ff 9e5854ff a05c54ff a25f54ff a56355ff a76755ff a96c54ff ac7055ff ad7454ff b07855ff b37e55ff
+fnv1a: e63f36c5
+rc=0

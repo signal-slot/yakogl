@@ -1,0 +1,12 @@
+pandecode: dump command stream to file /root/mref-yakogl/vs-tex2d-cube.pandecode.ctx-0.0000
+renderer: Mali-G610 (Panfrost)
+version: OpenGL ES 3.1 Mesa 25.0.7-2+deb13u1
+mode: vertex sampler2D (unit 1) + samplerCube (unit 0)
+max vertex texture image units: 32
+status: 0x8cd5
+glGetError: 0x0000
+pixel (32,32): 64 128 128 255
+pixels differing: 0
+fnv1a: 02c31dc5
+verdict: PASS
+rc=0
