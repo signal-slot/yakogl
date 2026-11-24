@@ -19,6 +19,13 @@ power-cycle the board**.
 Shown by: the console (uart10) goes quiet after the stopped line and the
 boot loader's log follows; `board: PM watchdog resets` appears once.
 
+Verdicts: `sh tools/probes/rpi_5/rpi5_wdog/verdicts.sh console.txt` (the
+`HH:MM:SS ` prefix stripped) prints one line per check (build, armed and
+board announce lines, feeding lines with rising uptime, the stopped line, no
+`FAIL no reset`) and `verdicts: PASS` or `verdicts: FAIL ...`. A log cut after
+the stopped line is a PASS (the reset is the silence). Exit 0 PASS, 1 no end
+line, 2 usage, 3 FAIL. `verdicts_selftest.sh` checks it on inline fixtures.
+
 Build (from the west workspace; `tools/check.sh` builds it with
 `-DYAKOGL_WERROR=ON`):
 
