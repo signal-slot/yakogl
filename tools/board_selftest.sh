@@ -270,6 +270,37 @@ out=$(PATH="$S/fs:$PATH" NETBOOT_BACKUP_DIR="$S/fsbk" BOARD_HOST=root@fake BOARD
 rc=$?
 check "imx95 install where fw_setenv returns 0 and changes nothing: rc 5 'environment is unchanged', not 'stale' or 'installed'" \
     eval '[ "$rc" = 5 ] && grep -q "environment is unchanged" <<<"$out" && ! grep -q "stale\|installed;" <<<"$out"'
+# A stateful fake of the board's libubootenv: fw_setenv -s takes key=value
+# lines on stdin ("key=" removes; a line without '=' is ignored), fw_printenv
+# prints the environment. install writes the hook; yako_net is then removed
+# (the state typed by hand on 2026-11-25, which had no yako_net) and install
+# must upgrade it in place, read back, bootcmd untouched.
+cat > "$S/fs/ssh" <<'EOF'
+#!/bin/bash
+case "$*" in
+*"id -u"*) echo 0 ;;
+*fw_setenv*)
+    while IFS= read -r l; do
+        case $l in '#'* | '') continue ;; *=*) ;; *) continue ;; esac
+        k=${l%%=*}; v=${l#*=}
+        awk -v k="$k" 'index($0, k "=") != 1' "$FAKE_ENV" > "$FAKE_ENV.n"; mv "$FAKE_ENV.n" "$FAKE_ENV"
+        [ -z "$v" ] || printf '%s\n' "$l" >> "$FAKE_ENV"
+    done ;;
+*fw_printenv*) cat "$FAKE_ENV" ;;
+esac
+EOF
+printf 'bootcmd=bootflow scan -b\nbootdelay=1\n' > "$S/fs/env"
+out=$(FAKE_ENV="$S/fs/env" PATH="$S/fs:$PATH" NETBOOT_BACKUP_DIR="$S/fsbk" BOARD_HOST=root@fake BOARD_BOOT=uboot-mmc "$B" imx95 install 2>&1)
+rc=$?
+check "imx95 install against a libubootenv-like fake: rc 0, installed, read back ok, status says install: ok" \
+    eval '[ "$rc" = 0 ] && grep -q "installed; bootcmd" <<<"$out" &&
+          [ "$(FAKE_ENV="$S/fs/env" PATH="$S/fs:$PATH" BOARD_HOST=root@fake BOARD_BOOT=uboot-mmc "$B" imx95 status 2>&1 | grep -c "^install: ok")" = 1 ]'
+bc=$(grep '^bootcmd=' "$S/fs/env")
+awk 'index($0, "yako_net=") != 1' "$S/fs/env" > "$S/fs/env.n"; mv "$S/fs/env.n" "$S/fs/env"
+out=$(FAKE_ENV="$S/fs/env" PATH="$S/fs:$PATH" NETBOOT_BACKUP_DIR="$S/fsbk" BOARD_HOST=root@fake BOARD_BOOT=uboot-mmc "$B" imx95 install 2>&1)
+rc=$?
+check "imx95 install over the hand-typed state (no yako_net): upgraded in place (stale is what install upgrades), bootcmd unchanged, yako_net back" \
+    eval '[ "$rc" = 0 ] && grep -q "upgraded in place" <<<"$out" && grep -q "^yako_net=" "$S/fs/env" && [ "$(grep "^bootcmd=" "$S/fs/env")" = "$bc" ]'
 out=$(BOARD_BOOT=uboot-tftp dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
 check "imx95 uboot-tftp run: the canary in NETBOOT_TFTP_LOG first, the server's log of the image read into tftp.txt" \
     eval 'grep -q "canary must be in the log" <<<"$out" && grep -q "/TFTP_LOG > <rundir>/tftp.txt" <<<"$out"'
