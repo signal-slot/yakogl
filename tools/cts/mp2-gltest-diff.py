@@ -9,6 +9,10 @@
 RESULT is a DK gl_test UART log or a result list parsed from one. Read:
   "gl_test: case N <name>: PASS|FAIL|TIMEOUT|SKIP[ (why)]"   (runner verdict line)
   "gl_test: case N skipped[: why]"                            (a walk's skip)
+  "gl_test: case N <name>: <text> SKIP <text>"                (a case that skips
+        itself and says so, as case 16: "1x half done; SKIP the 4x half"; it
+        returns -3, the tally counts a skip, and no verdict line follows. Only
+        where the case has no PASS/FAIL/TIMEOUT/SKIP verdict line of its own)
   "N PASS|FAIL|TIMEOUT|SKIP"                                  (a result list)
 Several inputs are merged, the last line of a case wins. A UART timestamp
 prefix is ignored.
@@ -38,6 +42,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 VERDICT = re.compile(r"gl_test: case (\d+) \S+: (PASS|FAIL|TIMEOUT|SKIP)\b")
+SELF_SKIP = re.compile(r"gl_test: case (\d+) \S+: .*\bSKIP\b")
 SKIPPED = re.compile(r"gl_test: case (\d+) skipped\b")
 LIST = re.compile(r"^\s*(\d+)\s+(PASS|FAIL|TIMEOUT|SKIP)\s*$")
 FAILS = ("FAIL", "TIMEOUT")
@@ -50,10 +55,19 @@ def read(path):
 
 def scan(text):
     got = {}
+    weak = set()  # cases whose entry is only a self-skip line
     for l in text.splitlines():
         m = VERDICT.search(l) or LIST.match(l)
         if m:
             got[int(m.group(1))] = m.group(2)
+            weak.discard(int(m.group(1)))
+            continue
+        m = SELF_SKIP.search(l)
+        if m:
+            c = int(m.group(1))
+            if c not in got or c in weak:
+                got[c] = "SKIP"
+                weak.add(c)
             continue
         m = SKIPPED.search(l)
         if m:
