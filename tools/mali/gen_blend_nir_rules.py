@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0 AND MIT
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# SPDX-FileCopyrightText: 2014, 2016 Intel Corporation
+# SPDX-FileCopyrightText: 2016 Red Hat
+# SPDX-FileCopyrightText: 2018-2019 Alyssa Rosenzweig
+# SPDX-FileCopyrightText: 2021 Collabora, Ltd.
+#
+# The MIT part is the data this script transcribes from Mesa 26.2.1 (MIT):
+# the Mali-G610 option conditions of src/panfrost/compiler/bifrost/bifrost_compile.h
+# and the fp-class relations of src/compiler/nir/nir_search_helpers.h.
 """Generate the NIR algebraic rules a Mali blend shader can meet, in Rust.
 
     tools/mali/gen_blend_nir_rules.py <mesa-26.2.1 tree> > src/shaderc/online/mali/blend_nir_rules.rs
