@@ -1,5 +1,7 @@
 /*
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.
  *
  * capture_usc.c -- print the machine code of one of Mesa's own USC programs
  * for the BXS-4-64 (BVNC 36.53.104.796), as Mesa 26.2.1's pco compiles it.

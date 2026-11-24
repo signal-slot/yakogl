@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0 AND MIT
  * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
- * SPDX-FileCopyrightText: Imagination Technologies Ltd.
+ * SPDX-FileCopyrightText: 2022 Imagination Technologies Ltd.
  *
  * pco_shc.c -- general offline GLSL/SPIR-V -> PowerVR Rogue USC compiler
  * for BXS-4-64 (BVNC 36.53.104.796, TI AM62P).
