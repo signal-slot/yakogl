@@ -16,3 +16,6 @@ west build -p always -b rpi_5 -DYAKOGL_WERROR=ON -d build/rpi5_triangle_ours yak
 What it does, its console, the verdict line (`v3d_triangle: PASS (...;
 shaders ours)` or `v3d_triangle: FAIL (...; shaders ours)`), how to run it
 and its board results: `../rpi5_triangle/README.md`.
+
+Verdicts: `../rpi5_triangle/verdicts.sh <console.log>` also reads this
+image's `shaders ours` log (see "Verdicts" in `../rpi5_triangle/README.md`).

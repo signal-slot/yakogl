@@ -129,6 +129,19 @@ The last line is the verdict, exactly one, at column 0, which
 
 `rpi5_triangle_ours` prints the same lines with `shaders ours`.
 
+## Verdicts
+
+`sh verdicts.sh <console.log>` (host selftest: `sh verdicts_selftest.sh`)
+reads a console log of either image and prints one line per group (build
+shaders, M1, M2, M5, pixels) and a last `verdicts: PASS` or `verdicts: FAIL
+(<reason>)`. PASS needs the end line to say PASS, the M1 identity line
+`V3D 7.1 ... : 0`, `M1 mailbox`, `M2 mmu_init` and `M5 caches_clean` at 0,
+`M5 bin` and `M5 render` with rc 0, five `M5 pixel` lines, a read-back with
+rc 0, 0 wrong pixels and 0 guard bytes changed, and the same shaders name
+(`mesa` or `ours`) in the build line and the end line: a PASS end line beside
+a non-zero rc or a missing identity line is a FAIL. Exit 0 PASS, 1 no end
+line, 2 usage, 3 FAIL.
+
 Nothing runs afterwards: the board layer's PM watchdog
 (`CONFIG_YAKOGL_RPI5_WDOG`, armed in the first `PRE_KERNEL_1` hook) stops
 being fed 30 s after boot and resets the SoC within 10 s more; tryboot brings
