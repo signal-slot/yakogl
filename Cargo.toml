@@ -71,8 +71,13 @@ osal-baremetal = []
 # are GL_INVALID_ENUM, and GL_EXTENSIONS lists the ES 2.0 extensions ES 3.0
 # has in core (GL_OES_texture_npot and the depth-texture pair). A conformance run must
 # have this: a client that reads GL_MAJOR_VERSION and gets an answer concludes
-# it is talking to ES 3 whatever the version string said. Off by default,
-# because Qt's RHI takes the ES 3.0 path from that string.
+# it is talking to ES 3 whatever the version string said. The ES 3.0-only
+# enums and rules go with the version (`crate::REPORT_ES2`, src/lib.rs), the
+# in-process compiler refuses a `#version 300 es` source
+# (src/shaderc/online/pp.rs) and GL_EXT_color_buffer_float is not listed
+# (src/gl/state.rs). Off by default here; the C builds turn it on by default
+# (CMake YAKOGL_REPORT_ES2, Kconfig YAKOGL_REPORT_ES2, make REPORT_ES2) and a
+# build that needs an ES 3.0 context (Qt's RHI, dEQP-GLES3) turns it off.
 report-es2 = []
 # The GPU whose backend and offline shader table are compiled in. Exactly one
 # of `gpu-powervr`, `gpu-vivante`, `gpu-v3d` and `gpu-mali` is in a build
@@ -119,25 +124,35 @@ vivante-depth-guard = ["gpu-vivante"]
 # its backend options marked TEST KNOB in src/pvr/pvr_backend.h, which
 # pvr_backend_set_option refuses without the feature.
 test-knobs = []
-# ES 3.0 multisample renderbuffers: a back end that can draw into and resolve
-# a 4x framebuffer reports max_samples = 4 under this feature (the
-# docs/notes/es3-msaa-renderbuffers.md capability). Off by default; without
-# it every back end reports one sample as before. No code reads it yet.
+# ES 3.0 multisample renderbuffers (docs/notes/es3-msaa-renderbuffers.md).
+# No code reads it: no `cfg(feature = "msaa-fbo")` is in src/. The capability
+# is the back end table's `max_samples` (src/backend.rs), which the GL core
+# reads whatever this feature says (src/gl/msaa.rs): the PowerVR back end
+# reports 4 (src/pvr/backend.rs), the others 0. Off by default; CMake's
+# YAKOGL_MSAA_FBO names it (capi/yakogl_capi.cmake), and it changes nothing.
 msaa-fbo = []
 # ES 3.0 float colour targets (plan #360, docs/notes/es3-float-targets.md):
 # a build that claims `GL_EXT_color_buffer_float`, for a GPU whose back end
-# draws and reads back the float formats. Off by default; without it the
-# extension is not listed. No code reads it yet except
-# tests/es3_color_buffer_float.rs.
+# draws and reads back the float formats. Today that is the V3D: with
+# `gpu-v3d` the three extension float surfaces are renderable
+# (`FLOAT_RT_FORMATS`, src/backend.rs), a float output to a 32F target is a
+# 32-bit TLB write (`F32_RT_WRITES`, src/v3d/backend.rs) and a 32F clear
+# takes Mesa's words (`F32_CLEAR_AS_MESA`, src/v3d/state.rs); the GL core
+# lists the extension in an ES 3.0 build of it
+# (`COLOR_BUFFER_FLOAT_EXTENSION`, src/gl/state.rs). On the other GPUs the
+# feature builds and claims nothing. Off by default; without it the
+# extension is not listed.
 color-buffer-float = []
 # The PowerVR back end's hardware instance divisors (P3,
 # docs/notes/instanceid-per-draw.md, row "P3 (full path)"): with it the back
 # end reports `max_instance_divisor` 0xffff and divides per stream in the PDS
 # (a multiplier and a shift, as Mesa's pvr_pipeline_pds.c does), so an
 # instanced draw with a divisor above 1 is one draw; without it it takes
-# divisor 1 only and the GL core draws instance by instance. Off by default;
-# the board images turn it on with Kconfig YAKOGL_PVR_INSTANCE_DIVISOR. No
-# code reads it yet: the P3 back-end item lifts that.
+# divisor 1 only and the GL core draws instance by instance
+# (`max_instance_divisor`, `stream_divisor` and `base_to_streams` in
+# src/pvr/backend.rs). Off by default; a board image turns it on with
+# Kconfig YAKOGL_PVR_INSTANCE_DIVISOR (default n), a CMake build with
+# YAKOGL_PVR_INSTANCE_DIVISOR.
 pvr-instance-divisor = []
 # Host tests only: links std so the test harness can unwind, and starts with a
 # null `g_backend` (the tests install mocks). Never enable it in a product:
@@ -145,17 +160,23 @@ pvr-instance-divisor = []
 #   cargo test --no-default-features --features host-test,gpu-powervr
 host-test = []
 # The in-process ("online") shader compiler: src/shaderc/online/, a GLSL ES
-# 1.00 front end and a PowerVR USC back end that run on the target, so a
-# Zephyr or bare-metal image can compile a shader an application hands it
-# instead of looking the text up in the offline table. It is no_std and
-# heap-free (the crate has no allocator): the caller lends it a scratch
-# buffer and owns the output. It also owns the instruction set itself - the USC
-# decoder, encoder and disassembler, gated by a byte-exact round trip over
-# every blob of the offline table (docs/online-shaderc/isa.md). It is the
-# only back end that needs neither a build-time table (offline) nor a host on
-# the network, so it is the one a product can ship with an application that
-# writes its shaders at run time; with the feature in it registers as
-# `g_shaderc`.
+# 1.00 front end (and GLSL ES 3.00 in a build without `report-es2`) and the
+# code generator of the build's GPU (powervr/, vivante/, v3d/, mali/ there)
+# that run on the target, so a Zephyr or bare-metal image can compile a
+# shader an application hands it instead of looking the text up in a table.
+# It is no_std and heap-free (the crate has no allocator): the caller lends
+# it a scratch buffer and owns the output. It also owns the instruction sets
+# themselves - for the PowerVR the USC decoder, encoder and disassembler,
+# gated by a byte-exact round trip over every blob of the Mesa reference
+# table (docs/online-shaderc/isa.md). It is the only back end that needs no
+# build-time table, so it is the one a product can ship with an application
+# that writes its shaders at run time, and the only one of `gpu-v3d` and
+# `gpu-mali` (src/lib.rs). With the feature in it is `g_shaderc`
+# (src/shaderc/mod.rs). A build that also links the Mesa reference table
+# (`cfg(mesa_reference)`) starts at the offline back end, and the first call
+# installs the compiler over it (`select_once`,
+# src/shaderc/online/backend.rs), except in a `host-test` build, whose tests
+# install their own back ends.
 shaderc-online = []
 # The precompiled shaders: a table our own compiler made of
 # tools/shaders/precompiled.list at image-build time (yakogl-precompile,
@@ -175,13 +196,16 @@ precompiled-shaders = []
 # (src/shaderc/offline.rs, `g_shaderc` = `SHC_OFFLINE`). It exists so that an
 # image can still be built with Mesa's code for an A/B against our compiler
 # (gl_test 193..195's "table image"; Kconfig YAKOGL_SHADERC_OFFLINE, the C
-# builds' SHADERC offline, select it). It will be replaced by the precompiled
-# table our own compiler makes (tools/precompile; what is left:
+# builds' SHADERC offline, select it). build.rs turns it into
+# `cfg(mesa_reference)`, which is what the code reads; the PowerVR and the
+# GC7000 only (src/lib.rs refuses it with `gpu-v3d`, `gpu-mali` and
+# `no-shader-table`). It will be replaced by the precompiled table our own
+# compiler makes (`precompiled-shaders`, tools/precompile; what is left:
 # #1214, #1215). Off by default: without it no product build links a Mesa-built
 # row (tools/check.sh, "no Mesa reference in the artefact"), and a build
-# with neither this nor `shaderc-online` has no shader back end and is
-# refused (src/lib.rs). The host tests compile the reference without it
-# (`host-test`), to compare our compiler with it.
+# with none of this, `shaderc-online` and `precompiled-shaders` has no shader
+# back end and is refused (src/lib.rs). The host tests compile the reference
+# without it (`host-test`), to compare our compiler with it.
 mesa-reference-table = []
 # Leave the Mesa reference table OUT of a host-test build too.
 #

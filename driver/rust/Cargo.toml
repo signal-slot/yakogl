@@ -14,7 +14,9 @@
 # Built as a staticlib for aarch64-unknown-none-softfloat: this code runs at
 # PRE_KERNEL_1 and inside ISRs, where arm64 Zephyr forbids the FP registers.
 # driver/zephyr/CMakeLists.txt builds it (libyakogl_drivers.a) when a driver
-# that needs it selects YAKOGL_DRV_DISPLAY_RUST or YAKOGL_DRV_GPU_PVR_RUST; the host tests are
+# that needs it selects YAKOGL_DRV_DISPLAY_RUST or YAKOGL_DRV_GPU_PVR_RUST,
+# the board layer's record writer YAKOGL_BOARD_RECORD_RUST, or an image has
+# one of the other options its `if` names there; the host tests are
 # `cargo test -p yakogl-drivers`.
 [package]
 name = "yakogl-drivers"
@@ -37,13 +39,17 @@ bench = false
 # from SYSTEM_PLL1 (gpu::vivante::power; IMX8MPRM Table 5-1, overdrive only).
 vivante-1000mhz = ["vivante"]
 # The SoC whose drivers are compiled in. A Zephyr build passes the ones its
-# Kconfig selected; the host tests take both.
+# Kconfig selected (driver/zephyr/CMakeLists.txt, `_yd_features`); the host
+# tests compile every SoC whatever the features (`cfg(any(feature = "...",
+# test))`, src/ffi.rs and src/soc/mod.rs).
 imx8mp = []
 am62p = []
 # The RK3588 (NanoPC-T6): the WDT0 self-arm and the board glue's CPU
 # helpers (driver/zephyr/lib/board/nanopc_t6).
 rk3588 = []
-# The STM32MP257F (STM32MP257F-DK): the SMC watchdog (soc::stm32mp2).
+# The STM32MP257F (STM32MP257F-DK): the SMC watchdog, the GPU power C ABI
+# and the display glue (soc::stm32mp2), and the display path's and the I2C
+# controller's entry points (ffi::mp25_display, ffi::mp25_i2c).
 stm32mp2 = []
 # The i.MX 95 (Toradex Verdin iMX95): the GPU power-on and the display's
 # power, pixel clock and DPU scan-out over SCMI and MMIO (soc::imx95).
@@ -55,9 +61,9 @@ mali = []
 pvr = []
 # PowerVR fence wait: read the fragment UFO every 20 us instead of once per
 # ms (gpu::pvr::render::WAIT_POLL_US;
-# docs/notes/pvr-fence-wait.md). Opt-in until gl_test and
-# glmark2 have run with it on the AM62P; a Zephyr image takes it from
-# CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT.
+# docs/notes/pvr-fence-wait.md). Off by default here; a Zephyr image takes
+# it from CONFIG_YAKOGL_DRV_GPU_PVR_FINE_WAIT, which is on by default on the
+# AM62P since gl_test and glmark2 ran with it (driver/zephyr/Kconfig).
 pvr-fine-wait = ["pvr"]
 # Per-kick timestamps of the PowerVR render service (gpu::pvr::kick_times:
 # submit, MMU invalidate, post, geometry and fragment fence seen, wait), read
@@ -70,7 +76,8 @@ pvr-kick-times = ["pvr"]
 # from CONFIG_YAKOGL_DRV_GPU_PVR_GROW_SCENE.
 pvr-grow-scene = ["pvr"]
 # The Vivante GC7000 kernel side (gpu::vivante): power, identify, reset, MMU,
-# ring, interrupt; i.MX 8M Plus images with YAKOGL_DRV_GPU_VIVANTE.
+# ring, interrupt; i.MX 8M Plus images with YAKOGL_DRV_GPU_VIVANTE, and the
+# STM32MP2's GPU power (YAKOGL_STM32MP2_GPU, over its identity table).
 vivante = ["imx8mp"]
 
 # The host tests only: the Zephyr Mali OSAL's test (board::nanopc_t6_osal)
