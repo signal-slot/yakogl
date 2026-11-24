@@ -85,6 +85,7 @@ tests/fixtures/deqp_random_dead_cube/* | Apache-2.0 | shaders from the dEQP rand
 tools/cts/testdata/* | Apache-2.0 | self-test inputs and expected outputs of tools/cts; compared byte for byte
 tools/mali/testdata/* | Apache-2.0 | probe shaders written for this project and their disassembly / traces; compared byte for byte
 tools/mali/panthor/uapi_pins.expected | Apache-2.0 | expected output of the panthor UAPI pin check
+tools/probes/stm32mp257f_dk/ramlog/crosscheck/expected/* | Apache-2.0 | decoded console text of the ramlog host cross-check; compared byte for byte, no header edit
 tools/mali/isa-ref/board-2026-10-18.txt | Apache-2.0 | disassembly of our board run
 tools/mali/board-dump/*.txt | Apache-2.0 | records of our board runs
 tools/hostharness/glmark2/testdata/* | Apache-2.0 | fixtures of the host harness's report tools: logs and reports the harness wrote
