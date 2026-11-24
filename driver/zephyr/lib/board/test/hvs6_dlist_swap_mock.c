@@ -64,6 +64,15 @@
  * HVS6S_ERR_LACT_PICKUP); no clock (times "none"); HVS6S_AT_ONCE printing
  * no new line; a bad write_at refused. No write but our list and LPTRS.
  *
+ * Restore at vblank (restore-vblank): the restore's LPTRS write just after
+ * an FRCNT step found by reads, within the 667 us window, LACT back on the
+ * firmware's head timed by the tight loop and on the boundary (the next
+ * step, or at once inside the vblank); no step within the restore's read
+ * bound (5 reads with FRCNT running, 50 with FRCNT stalled): the firmware's
+ * LPTRS written back anyway, marked not in vblank, and with FRCNT running
+ * the restore passing; untimed ("none"), a tight miss, and HVS6S_AT_ONCE
+ * (the old restore, no restore-vblank line).
+ *
  * Build: tools/v3d/check71.d/hvs6_dlist_swap.sh. Prints one line per check,
  * then "hvs6_dlist_swap_mock: N of N checks, 0 failed"; exits nonzero on a
  * failure.
@@ -139,6 +148,10 @@ struct hvs {
 	int64_t lptrs_write_line;   /* that place at our LPTRS write (val != fw), -1: none */
 	uint32_t lptrs_write_frcnt;
 	uint32_t fw_head;
+	/* restore-vblank: the last LPTRS write of the firmware's head (the
+	 * restore's), its place in the frame and FRCNT, -1: none */
+	int64_t fw_write_line;
+	uint32_t fw_write_frcnt;
 };
 
 static void logev(struct hvs *h, enum ev k, uint32_t off, uint32_t val)
@@ -230,6 +243,10 @@ static void m_write(void *ctx, uint32_t off, uint32_t val)
 			h->lptrs_write_line = m_line(h);
 			h->lptrs_write_frcnt = h->frcnt;
 		}
+		if (val == h->fw_head) {
+			h->fw_write_line = m_line(h);
+			h->fw_write_frcnt = h->frcnt;
+		}
 		if (h->lmode == L_NOW)
 			h->lptrs = val;
 		if (h->lact_now && h->lmode != L_NEVER && !h->lact_frozen)
@@ -320,6 +337,7 @@ static void model_init(struct hvs *h, uint32_t fw_head)
 	h->lact_from = -1;
 	h->lptrs_write_line = -1;
 	h->fw_head = fw_head;
+	h->fw_write_line = -1;
 }
 
 static struct hvs6s_io model_io(struct hvs *h)
@@ -2037,6 +2055,15 @@ static void case_vb_none(void)
 		      has_line("dlswap vblank FAIL mode=vblank reads=50 frame_reads=0 ") &&
 		      has_sub("since_us=none invblank=no"),
 		   "lines: write FAIL named, vblank FAIL reads=50");
+	/* restore-vblank: FRCNT stalled, no step for the restore either: the
+	 * firmware's LPTRS is written back anyway, marked not in vblank */
+	name_check(t, r.restored && r.restore_vb_tried && !r.restore_vb_found &&
+		      r.restore_vb_reads == 50 && !r.restore_write_in_vblank && h.fw_write_line >= 0 &&
+		      h.lptrs == 0,
+		   "restore: no step in 50 reads, the firmware's LPTRS written back anyway");
+	name_check(t, has_line("dlswap restore-vblank in-vblank=no found=no reads=50 ") &&
+		      has_sub(" since_us=none tight="),
+		   "line: dlswap restore-vblank in-vblank=no found=no reads=50 ... since_us=none");
 
 	/* a bound shorter than a frame: the same error, FRCNT running */
 	c.vblank_reads = VB_FRAME_READS - 10u;
@@ -2108,6 +2135,12 @@ static void case_vb_tight_out(void)
 	name_check(t, has_sub("dlswap lact-timing tight=miss reads=5 step=none frcnt=11..11 ") &&
 		      has_sub(" dt_us=none read_us=55.556 boundary=no"),
 		   "line: lact-timing tight=miss reads=5 step=none ... dt_us=none ... boundary=no");
+	name_check(t, r.restored && r.restore_vb_found && r.restore_write_in_vblank &&
+		      !r.restore_tight_pickup && r.restore_tight_reads == 5 && r.restore_lact_ok &&
+		      r.restore_lact_polls > 0 && h.lptrs == 0 &&
+		      has_sub("dlswap restore-vblank in-vblank=yes found=yes ") &&
+		      has_sub(" tight=miss step=none ") && has_sub(" dt_us=none read_us=55.556 boundary=no"),
+		   "restore: written in vblank, tight miss after 5 iterations, the slow poll sees LACT back");
 
 	/* and LACT never there: the pickup criterion fails as before */
 	vb_model(&h);
@@ -2140,6 +2173,12 @@ static void case_vb_untimed(void)
 	name_check(t, has_sub(" since_us=none invblank=yes") &&
 		      has_sub(" dt_us=none read_us=none boundary=yes"),
 		   "lines: since_us=none, dt_us=none read_us=none");
+	name_check(t, !r.restore_timed && r.restore_write_in_vblank && r.restore_lact_boundary &&
+		      r.restore_lact_dt_us == 0 && r.restore_read_ns == 0 &&
+		      has_line("dlswap restore-vblank in-vblank=yes found=yes ") &&
+		      has_sub(" since_us=none tight=ok ") &&
+		      has_sub(" dt_us=none read_us=none boundary=yes"),
+		   "restore untimed: in vblank by reads, since_us/dt_us/read_us none");
 
 	c.write_at = HVS6S_AT_ONCE;
 	vb_model(&h);
@@ -2147,11 +2186,141 @@ static void case_vb_untimed(void)
 	name_check(t, e == HVS6S_OK && !r.vb_tried && !r.timed && !has_sub("dlswap vblank") &&
 		      !has_sub("lact-timing"),
 		   "HVS6S_AT_ONCE: the old write point, no new lines");
+	name_check(t, !r.restore_vb_tried && !r.restore_tight_pickup && !has_sub("restore-vblank") &&
+		      r.restore_lact_ok && r.restore_lact_polls > 0,
+		   "HVS6S_AT_ONCE: the old restore, no wait, no tight loop, no restore-vblank line");
 
 	c.write_at = (enum hvs6s_write_at)3;
 	vb_model(&h);
 	vb_run(&h, &c, 1, &s, &r, &e);
 	name_check(t, e == HVS6S_ERR_ARG && h.nlog == 0, "write_at 3 refused before any access");
+}
+
+/* ---- restore at vblank (restore-vblank) ---------------------------------- */
+
+/* The restore's LPTRS write lands just after an FRCNT step found by reads;
+ * LACT goes back to the firmware's head at the next edge, timed by the tight
+ * loop and on the boundary. */
+static void case_rvb_found(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "rvb-found";
+
+	c.write_at = HVS6S_AT_VBLANK;
+	vb_model(&h);
+	vb_run(&h, &c, 1, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.swapped && r.restored && r.restore_equal && r.restore_lact_ok,
+		   "run ok, swapped, restored byte-equal, LACT back");
+	name_check(t, r.restore_vb_tried && r.restore_vb_found && r.restore_vb_reads >= 2u &&
+		      r.restore_vb_reads <= VB_FRAME_READS + 1u && hvs6s_yline(r.restore_vb_status) == 0,
+		   "restore: FRCNT step found by STATUS reads within one frame (the step's YLINE 0)");
+	name_check(t, h.fw_write_line >= 0 && h.fw_write_line <= (int64_t)VB_WIN_READS &&
+		      h.fw_write_frcnt == hvs6s_frcnt(r.restore_vb_status) &&
+		      r.restore_frcnt_write == h.fw_write_frcnt,
+		   "the restore's LPTRS write landed within the vblank window just after the step");
+	name_check(t, r.restore_write_in_vblank && r.restore_vb_since_ns > 0 &&
+		      r.restore_vb_since_ns <= 667000u && r.restore_write_yline <= VB_WIN_READS,
+		   "restore_write_in_vblank, since the step under 667 us, YLINE recorded");
+	name_check(t, r.restore_tight_pickup && r.restore_step_read >= 0 &&
+		      (int64_t)r.restore_pickup_read - r.restore_step_read >= -1 &&
+		      (int64_t)r.restore_pickup_read - r.restore_step_read <= 1 && r.restore_lact_boundary,
+		   "tight loop: LACT back within one iteration of the next FRCNT step, on the boundary");
+	name_check(t, r.restore_lact_polls == 0 && r.restore_lact_seen == 0 &&
+		      r.restore_frcnt_pickup == ((r.restore_frcnt_write + 1u) & 63u) &&
+		      r.restore_pickup_yline <= 2u,
+		   "the pickup at poll 0, FRCNT A..A+1, YLINE at the frame's start");
+	name_check(t, r.restore_timed && r.restore_read_ns == VB_NS && r.restore_lact_dt_us >= 16000u &&
+		      r.restore_lact_dt_us <= 17000u,
+		   "pickup timed: one read 55.556 us, LACT back about one frame after the write");
+	name_check(t, has_line("dlswap restore-vblank in-vblank=yes found=yes ") &&
+		      has_sub(" tight=ok ") && has_sub(" read_us=55.556 boundary=yes"),
+		   "line: dlswap restore-vblank in-vblank=yes found=yes ... tight=ok ... boundary=yes");
+	name_check(t, has_line("dlswap restore-lact ok polls=0 ") && has_line("dlswap result ok"),
+		   "restore-lact ok polls=0, result ok");
+	name_check(t, vb_writes_ok(&h, 2), "writes: our list and LPTRS twice, no other register");
+}
+
+/* LACT follows the restore's write at once: back inside the vblank it was
+ * written in, before any FRCNT step. */
+static void case_rvb_inside(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "rvb-inside";
+
+	c.write_at = HVS6S_AT_VBLANK;
+	vb_model(&h);
+	h.lact_now = 1;
+	vb_run(&h, &c, 1, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.restore_tight_pickup && r.restore_pickup_read == 0 &&
+		      r.restore_step_read < 0,
+		   "restore: LACT back at iteration 0, no FRCNT step before it");
+	name_check(t, r.restore_write_in_vblank && r.restore_lact_boundary &&
+		      r.restore_lact_dt_us < 667u,
+		   "on the boundary: inside the vblank window it was written in");
+	name_check(t, has_line("dlswap restore-vblank in-vblank=yes found=yes ") &&
+		      has_sub(" tight=ok step=none ") && has_sub(" boundary=yes"),
+		   "line: restore-vblank ... tight=ok step=none ... boundary=yes");
+}
+
+/* No FRCNT step within the restore's read bound while FRCNT runs: the
+ * firmware's LPTRS is still written back, marked not in vblank, and the
+ * restore passes on its own criteria. The swap ran with the default bound. */
+static void case_rvb_none(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg(), cr;
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	struct hvs6s_io io;
+	struct hvs6s_emit em = { collect, NULL };
+	uint32_t start = 0;
+	enum hvs6s_err e;
+	const char *t = "rvb-none";
+
+	c.write_at = HVS6S_AT_VBLANK;
+	vb_model(&h);
+	io = model_io(&h);
+	io.now_ns = m_now;
+	hvs6s_report_init(&r);
+	e = hvs6s_snapshot(&io, &c, &s);
+	if (e == HVS6S_OK)
+		e = hvs6s_place_io(&io, &c, &s, HVS6W_LIST_WORDS, &start, &r);
+	if (e == HVS6S_OK) {
+		r.start = start;
+		r.len = HVS6W_LIST_WORDS;
+		e = hvs6s_swap(&io, &c, start, &r);
+	}
+	name_check(t, e == HVS6S_OK && r.swapped && r.write_in_vblank && h.lptrs == 32,
+		   "the swap to 32 ran in vblank (default bound)");
+	cr = c;
+	cr.vblank_reads = 5; /* far under one frame of reads (300) */
+	e = hvs6s_restore(&io, &cr, &s, &r);
+	lines_n = 0;
+	(void)hvs6s_lines(&s, &r, &em);
+	name_check(t, r.restored && h.fw_write_line >= 0 && h.lptrs == 0 &&
+		      count_writes(&h, hvs6s_lptrs_reg(CH)) == 2,
+		   "no step in 5 reads: the firmware's LPTRS (0) written back anyway");
+	name_check(t, r.restore_vb_tried && !r.restore_vb_found && r.restore_vb_reads == 5 &&
+		      !r.restore_write_in_vblank && r.restore_vb_since_ns == 0,
+		   "marked: restore_vb_found 0, restore_write_in_vblank 0, exactly 5 reads");
+	name_check(t, e == HVS6S_OK && r.restore_frcnt_ok && r.restore_lptrs_ok && r.restore_lact_ok &&
+		      r.restore_equal,
+		   "the restore passes: no vblank alone fails nothing");
+	name_check(t, r.restore_tight_pickup && r.restore_lact_dt_us > 0,
+		   "the pickup still timed by the tight loop");
+	name_check(t, has_line("dlswap restore-vblank in-vblank=no found=no reads=5 ") &&
+		      has_sub(" since_us=none tight=ok ") && has_line("dlswap restore-lact ok ") &&
+		      has_line("dlswap result ok"),
+		   "lines: restore-vblank in-vblank=no found=no reads=5 ... tight=ok, result ok");
+	name_check(t, vb_writes_ok(&h, 2), "writes: our list and LPTRS twice");
 }
 
 int main(void)
@@ -2195,6 +2364,9 @@ int main(void)
 	case_vb_midframe();
 	case_vb_tight_out();
 	case_vb_untimed();
+	case_rvb_found();
+	case_rvb_inside();
+	case_rvb_none();
 	printf("hvs6_dlist_swap_mock: %d of %d checks, %d failed\n", total - failed, total, failed);
 	return failed ? 1 : 0;
 }
