@@ -12,6 +12,14 @@ would hold the Pi 5 until a person power-cycles it; `tools/board.sh` refuses
 it. `boards/rpi_5.overlay` resizes `sram0` to 32 MiB from 0x200000, as
 `driver/samples/zephyr/common/rpi_4b_sram.dtsi` does for the Pi 4.
 
+## Verdicts
+
+`verdicts.sh <console.log>` checks the count line `src/main.c` ends with,
+`rpi5_hello: counted 3 s in <ms> ms`: it passes when the count is 3 s and
+`<ms>` lies in 3000..4000. It prints `verdicts: PASS|FAIL ...` and exits 0
+(done), 1 (no end line), 2 (usage) or 3 (FAIL). `verdicts_selftest.sh` checks
+it against inline logs (good, short count, slow, truncated).
+
 Build (from the west workspace; add `-- -DYAKOGL_WERROR=ON` for zero warnings
 in our files):
 
