@@ -73,7 +73,7 @@ fn a_cold_bring_up_runs_the_blocks_in_order_and_shows_the_buffer() {
     assert!(m.port_runs(0));
     assert_eq!(m.fetching(), WIN_ESMART0);
 
-    // the block order: power, GRF, PHY, DCLK, controller, VOP
+    // the block order: power, GRF, PHY, DCLK, the controller's bind, VOP
     let pmu = m.first_write(B_PMU).unwrap();
     let grf = m.first_write(B_VOP_GRF).unwrap();
     let phy_grf = m.first_write(B_PHY_GRF).unwrap();
@@ -93,6 +93,13 @@ fn a_cold_bring_up_runs_the_blocks_in_order_and_shows_the_buffer() {
     assert!(first_to(&m, VOP_BASE + 0xc0c).unwrap() < start && first_to(&m, VOP_BASE + 0xc48).unwrap() < start);
     let win = m.writes().iter().rposition(|(a, v)| *a == VOP_BASE + 0x1810 && v & 1 != 0).unwrap();
     assert!(vop < mmu && mmu < start && start < win);
+    // Linux's order (drm_atomic_helper.c:1687-1689, :1940-1943): the
+    // controller's enable (HDCP2LOGIC_CONFIG0, then LINK_CONFIG0) after VP0
+    // started, before the window's layer and the window
+    let enable = first_to(&m, HDMI + 0x8e0).unwrap();
+    let layer = first_to(&m, VOP_BASE + 0x604).unwrap();
+    assert!(start < enable && enable < first_to(&m, HDMI + 0x968).unwrap(), "{start} {enable}");
+    assert!(enable < layer && layer < win, "{enable} {layer} {win}");
     // DCLK_VOP0 on the PHY (CLKSEL_CON(112)[8:7] = 1), its gate and reset open
     assert_eq!((m.peek(sel_addr(0, 112)) >> 7) & 3, 1);
     assert_eq!(m.peek(gate_addr(0, 52)) & (1 << 13), 0);
@@ -115,7 +122,12 @@ fn every_stop_after_stops_there_and_leaves_the_next_stage_untouched() {
         (stage::GRF, &|m| m.wrote_to(B_PHY_GRF) || m.wrote_to(B_PHY)),
         (stage::PHY, &|m| first_to(m, sel_addr(0, 112)).is_some()),
         (stage::DCLK, &|m| m.wrote_to(B_HDMI)),
-        (stage::CONTROLLER, &|m| m.wrote_to(B_VOP) || m.wrote_to(B_MMU)),
+        // the controller bound, not enabled: the enable is the VOP stage's
+        (stage::CONTROLLER, &|m| {
+            m.wrote_to(B_VOP)
+                || m.wrote_to(B_MMU)
+                || [HDMI + 0x8e0, HDMI + 0x968].iter().any(|a| first_to(m, *a).is_some())
+        }),
         // the video check's first write: clearing VP0's events after the window
         (stage::VOP, &|m| {
             let w = m.writes();
@@ -213,6 +225,47 @@ fn each_injected_failure_names_its_stage() {
         assert_eq!(up(&m, &c).map_err(|f| f.stage), Err(stage::START));
         assert!(m.writes().is_empty());
     }
+}
+
+#[test]
+fn the_controller_is_enabled_only_while_vp0_runs() {
+    // The words the enable writes answer only with the video clock (the
+    // model refuses them while VP0 does not run, issue #11856): a cold run
+    // touches neither before VP0 starts, and the model refuses nothing.
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    no_refusal(&m);
+    let start = first_to(&m, VOP_BASE + 0xc00).unwrap();
+    for a in [HDMI + 0x8e0, HDMI + 0x968] {
+        assert!(first_to(&m, a).unwrap() > start, "{a:#x} written before VP0 started");
+    }
+    // and the model does refuse them before VP0 runs: the stop after the
+    // controller's stage leaves VP0 in STANDBY
+    let m = Rk3588Display::cold();
+    let _ = up(&m, &Config { stop_after: stage::CONTROLLER, ..cfg() });
+    m.write32(HDMI + 0x8e0, 1);
+    assert_eq!(m.refused().len(), 1, "{:?}", m.refused());
+    assert_eq!(m.peek(HDMI + 0xb0) & 0xa, 0xa, "IPI_CLK_OFF and VIDQPCLK_OFF without VP0");
+}
+
+#[test]
+fn a_video_clock_reported_off_is_refused_before_the_enable() {
+    // VP0 runs, the controller's clock monitor still reports the video clock
+    // off: the enable refuses after its bounded wait, names the status word
+    // and writes nothing (a bus error on the board otherwise)
+    let m = Rk3588Display::with_faults(Faults { cmu_video_off: true, ..Faults::default() });
+    let r = up(&m, &cfg());
+    assert_eq!(
+        r.err(),
+        Some(Failed {
+            stage: stage::VOP,
+            error: Error::Hdmi(dw::Refused { why: dw::Refusal::VideoClockOff, found: 1 << 3 })
+        })
+    );
+    assert!(first_to(&m, HDMI + 0x8e0).is_none() && first_to(&m, HDMI + 0x968).is_none());
+    assert!(m.port_runs(0));
+    no_refusal(&m);
+    assert_eq!(stage_lines(&m).last().map(String::as_str), Some("t6 display: stage 7 VOP"));
 }
 
 #[test]

@@ -36,7 +36,16 @@
 //!   never touched; 0x10, 0x804 and 0x80c never touched (their reads end
 //!   in a bus error on the T6: the D0 dump's record, 2026-11-12); `CORE_ID` reads [`Rk3588Display::core_id`];
 //!   `CMU_STATUS` reads the locked value 0x15 while the PHY is locked
-//!   (link clock) and VP0 runs (video clock), 0 otherwise.
+//!   (link clock) and VP0 runs (video clock); otherwise `IPI_CLK_OFF`
+//!   (bit 1) and `VIDQPCLK_OFF` (bit 3) while VP0 does not run and
+//!   `LINKQPCLK_OFF` (bit 5) while the PHY is not locked (qp.h:47-49; which
+//!   bits the silicon sets for which missing clock is an assumption of this
+//!   model: the board read 0x00000200, no clock reported off, right after
+//!   VP0 started, issue #11856). `HDCP2LOGIC_CONFIG0` (0x8e0) and
+//!   `LINK_CONFIG0` (0x968), the words the controller's enable writes,
+//!   answer only while VP0 runs: on the T6 an access to 0x8e0 before VP0
+//!   started ended in a bus error (issue #11856); 0x968 is taken to behave
+//!   the same (not measured: the enable stopped at 0x8e0).
 //! - VOP2 (D1's model): ports run frames while STANDBY is clear and their
 //!   pixel clock runs. VP0-VP2's come from the CRU (clk-rk3588.c:2091-2111):
 //!   `DCLK_VOPn` gate 52/13, 53/0, 53/1 open (and for VP0 `SRST_D_VOP0`
@@ -253,6 +262,9 @@ pub struct Faults {
     pub mst_stuck: bool,
     /// The controller's clock monitor never reads locked.
     pub cmu_unlocked: bool,
+    /// The controller's clock monitor reports the video clock off
+    /// (`VIDQPCLK_OFF`) also while VP0 runs.
+    pub cmu_video_off: bool,
     /// The PHY's lanes report not ready (`PHY_RDY` 0) once VP0 runs; the
     /// PLL stays locked.
     pub phy_rdy_lost: bool,
@@ -597,11 +609,18 @@ impl Rk3588Display {
         match off {
             0x0 => self.core_id,
             0xb0 => {
-                let pll_locked = self.phy_status() & (1 << 3) != 0;
-                if pll_locked && self.vp_running(&self.vop.borrow(), 0) && !self.faults.cmu_unlocked {
-                    0x15
+                let link = self.phy_status() & (1 << 3) != 0;
+                let video = self.vp_running(&self.vop.borrow(), 0);
+                if self.faults.cmu_video_off {
+                    1 << 3
+                } else if link && video {
+                    if self.faults.cmu_unlocked {
+                        0
+                    } else {
+                        0x15
+                    }
                 } else {
-                    0
+                    (if video { 0 } else { 1 << 1 | 1 << 3 }) | if link { 0 } else { 1 << 5 }
                 }
             }
             _ => *self.blocks.borrow().get(&(HDMI + off)).unwrap_or(&0),
@@ -617,6 +636,8 @@ impl Rk3588Display {
             Some("a request word read")
         } else if [0x10, 0x804, 0x80c].contains(&off) {
             Some("a word this controller does not answer (a bus error on the T6, D0 record)")
+        } else if [0x8e0, 0x968].contains(&off) && !self.vp_running(&self.vop.borrow(), 0) {
+            Some("an enable word without the video clock: VP0 does not run (a bus error on the T6, #11856)")
         } else {
             None
         };

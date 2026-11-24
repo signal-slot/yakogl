@@ -7,6 +7,7 @@
 use super::*;
 use crate::env::{Level, LINE_MAX};
 use crate::errno::ENOTSUP;
+use crate::ip::dw_hdmi_qp;
 use crate::ip::hdptx::Refusal as PhyRefusal;
 use crate::mmio::Mmio;
 use crate::model_rk3588_display::{
@@ -116,6 +117,7 @@ fn a_cold_chip_shows_the_buffer_and_logs_every_stage() {
         "t6 display: PHY: locked after ",
         "t6 display: CONTROLLER: CORE_ID 0x48515458 ",
         "t6 display: VOP: VERSION_INFO 0x40176786 ",
+        "t6 display: VOP: controller enabled after VP0 started, CMU_STATUS 0x00000015 after 0 us",
         "t6 display: VOP: overlay OVL_LAYER_SEL ",
         "t6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x10012000, ",
     ];
@@ -206,6 +208,22 @@ fn a_failure_is_recorded_with_its_stage_and_numbers() {
     let m = chip(Faults { dead: Some("vo1"), ..Faults::default() });
     let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.index), (stage::POWER, ColdError::Display as u32, 2));
+    // the controller's enable without the video clock: refused at the VOP
+    // stage, with the CMU_STATUS word read (VIDQPCLK_OFF)
+    let m = chip(Faults { cmu_video_off: true, ..Faults::default() });
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    let want = Cold {
+        stage: stage::VOP,
+        error: ColdError::Hdmi as u32,
+        refusal: dw_hdmi_qp::Refusal::VideoClockOff as u32,
+        index: 0,
+        detail: 1 << 3,
+    };
+    assert_eq!(c, want);
+    assert!(m
+        .lines()
+        .iter()
+        .any(|(_, l)| l.starts_with("t6 display: stage 7 VOP failed: Hdmi(Refused { why: VideoClockOff")));
 }
 
 #[test]

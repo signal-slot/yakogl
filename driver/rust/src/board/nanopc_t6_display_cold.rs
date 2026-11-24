@@ -25,7 +25,8 @@
 //! 3. After it: the stage that stopped and why, or, when it ran through,
 //!    what each stage reported (the domains, the PHY's lock, the
 //!    controller's identity, `SYS_PD_CTRL` before and after (U6), the
-//!    IOMMU, the overlay, the video check).
+//!    IOMMU, `CMU_STATUS` when the controller's enable found VP0's video
+//!    clock running and how long it waited, the overlay, the video check).
 //!
 //! The record crossing to C ([`Cold`]) holds only the stop: the stage, the
 //! kind of error and its numbers. The section 5 read-backs after the picture
@@ -468,6 +469,13 @@ fn report(env: &impl Env, r: &Report) {
         s.status_found[1],
         s.status_now[0],
         s.status_now[1]
+    );
+    ylog!(
+        env,
+        Inf,
+        "t6 display: VOP: controller enabled after VP0 started, CMU_STATUS {:#010x} after {} us",
+        r.enabled.cmu_status,
+        r.enabled.waited_us
     );
     ylog!(
         env,
