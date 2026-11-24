@@ -6,6 +6,11 @@
 # the section 5 read-backs, then the reset back into Armbian.
 #
 #   west build -p always -b nanopc_t6 -d build/t6_display yakogl/tools/probes/nanopc_t6/t6_display
+#
+# The picture's hold is a build option, 30 s by default
+# (-DT6_PICTURE_HOLD_S=N, ../common/t6_picture.cmake); a longer hold needs
+# the board's watchdog lifetime raised with it
+# (-DCONFIG_YAKOGL_NANOPC_T6_LIFETIME_S).
 cmake_minimum_required(VERSION 3.20.0)
 
 # driver/ is a Zephyr module (the board, the board glue, the Rust crate).
@@ -25,9 +30,10 @@ endif()
 target_compile_definitions(app PRIVATE T6_DISPLAY_BUILD="${T6_DISPLAY_BUILD}")
 message(STATUS "t6_display build: ${T6_DISPLAY_BUILD}")
 
-# The picture, the hold and the read-backs, shared with t6_cold.
-target_sources(app PRIVATE src/main.c ../common/t6_picture.c)
-target_include_directories(app PRIVATE ../common)
+# The picture, the hold (T6_PICTURE_HOLD_S) and the read-backs, shared
+# with t6_cold.
+target_sources(app PRIVATE src/main.c)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../common/t6_picture.cmake)
 
 # Zero warnings in our C files: tools/check.sh builds this sample with
 # -DYAKOGL_WERROR=ON (the "zephyr" rows); off by default.
