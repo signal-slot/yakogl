@@ -6,9 +6,9 @@
 //! glReadPixels from a read framebuffer whose GL_SAMPLE_BUFFERS is 1 is
 //! GL_INVALID_OPERATION (4.3.2), and so are glCopyTexImage2D,
 //! glCopyTexSubImage2D and glCopyTexSubImage3D (3.8.5). The GL core checks
-//! the first today (src/gl/framebuffer.rs); the passing tests pin that and
-//! the single-sample reads next to it. The glCopyTex* ones have no check yet:
-//! their tests are `#[ignore]`d with the owner named (gl-msaa-read-errors,
+//! the first (src/gl/framebuffer.rs); the tests pin that and
+//! the single-sample reads next to it. The glCopyTex* ones are checked in
+//! `read_has_samples` (gl-msaa-read-errors,
 //! src/gl/texture.rs).
 //!
 //! The 4x framebuffers need a back end that says `max_samples` 4 (the
@@ -413,7 +413,6 @@ fn ms4_source() -> Fbo {
 
 /// ES 3.0 3.8.5: glCopyTexImage2D from a 4x read framebuffer.
 #[test]
-#[ignore = "owner: GL core, src/gl/texture.rs (gl-msaa-read-errors)"]
 fn copy_tex_image_2d_from_4x_is_invalid_operation() {
     let _g = context_ms4();
     let tex = filled_2d();
@@ -427,7 +426,6 @@ fn copy_tex_image_2d_from_4x_is_invalid_operation() {
 
 /// ES 3.0 3.8.5: glCopyTexSubImage2D from a 4x read framebuffer.
 #[test]
-#[ignore = "owner: GL core, src/gl/texture.rs (gl-msaa-read-errors)"]
 fn copy_tex_sub_image_2d_from_4x_is_invalid_operation() {
     let _g = context_ms4();
     let tex = filled_2d();
@@ -441,7 +439,6 @@ fn copy_tex_sub_image_2d_from_4x_is_invalid_operation() {
 
 /// ES 3.0 3.8.5: glCopyTexSubImage3D onto a 3D texture and onto a 2D array.
 #[test]
-#[ignore = "owner: GL core, src/gl/texture.rs (gl-msaa-read-errors)"]
 fn copy_tex_sub_image_3d_from_4x_is_invalid_operation() {
     let _g = context_ms4();
     for target in [GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY] {
@@ -453,4 +450,35 @@ fn copy_tex_sub_image_3d_from_4x_is_invalid_operation() {
         drop(src);
         assert!(texture_is_unchanged(target, tex, 1), "{target:#x}: layer 1 is as it was");
     }
+}
+
+/// The 4x framebuffer bound to GL_READ_FRAMEBUFFER only, a single-sample one
+/// as the draw framebuffer: the read binding decides.
+#[test]
+fn copy_tex_split_bindings_use_the_read_framebuffer() {
+    let _g = context_ms4();
+    let tex = filled_2d();
+    let (draw_fb, draw_tex) = single_fbo(GL_DRAW_FRAMEBUFFER);
+    let src = ms4_source();
+    // SAFETY: plain GL calls.
+    unsafe { glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 8, 8) };
+    assert_eq!(err(), GL_INVALID_OPERATION, "4x read, 1x draw");
+    drop(src);
+    // SAFETY: plain GL calls.
+    unsafe { glBindFramebuffer(GL_READ_FRAMEBUFFER, draw_fb) };
+    let ms_draw = rbo_fbo(GL_DRAW_FRAMEBUFFER, 4);
+    // SAFETY: plain GL calls.
+    unsafe {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, draw_fb);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 8, 8);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "1x read, 4x draw");
+    drop(ms_draw);
+    // SAFETY: names this test made.
+    unsafe {
+        glDeleteFramebuffers(1, &draw_fb);
+        glDeleteTextures(1, &draw_tex);
+    }
+    let _ = tex;
 }
