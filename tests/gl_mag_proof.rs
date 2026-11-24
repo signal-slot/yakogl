@@ -16,8 +16,8 @@
 //!
 //! The draws (lazy-mip-chain.md, "The per-chain table"), all with the
 //! fullscreen quad of `Mesh::make_grid(1, 1, 2.0, 2.0, 0)`
-//! (src/scene-terrain/texture-renderer.cpp:38,
-//! src/scene-terrain/overlay-renderer.cpp:100; vertices src/mesh.cpp:612-631),
+//! (src/scene-terrain/texture-renderer.cpp:39,
+//! src/scene-terrain/overlay-renderer.cpp:100; vertices src/mesh.cpp:612-634),
 //! `uvOffset` (0, 0) and `uvScale` (1, 1)
 //! (src/scene-terrain/blur-renderer.cpp:67-68, overlay-renderer.cpp:125-126):
 //!
@@ -91,7 +91,7 @@ fn terrain_texture_vert() -> VertexStage {
     }
 }
 
-/// data/shaders/terrain-overlay.frag:34-35
+/// data/shaders/terrain-overlay.frag:8-9
 /// `vec4 texel = texture2D(tDiffuse, vUv);`
 /// `gl_FragColor = opacity * texel;`
 fn overlay_frag_with(fetch: Expr) -> FragmentStage {
@@ -120,7 +120,7 @@ fn kernel(radius: usize, sigma: f64) -> Vec<f64> {
     values.iter().map(|v| v / sum).collect()
 }
 
-/// data/shaders/terrain-blur.frag:19-24 with the `$CONVOLUTION$` text of
+/// data/shaders/terrain-blur.frag:7-12 with the `$CONVOLUTION$` text of
 /// src/scene-terrain/blur-renderer.cpp:108-147.
 ///
 /// `tilt_shift == 1.0` gives `const float stepX = TextureStepX;` (:114,
@@ -134,7 +134,7 @@ fn kernel(radius: usize, sigma: f64) -> Vec<f64> {
 /// Each tap (:133-135, :142-144) is
 /// `texture2D(Texture0, TextureCoord + vec2(<o>.0 * stepX, 0.0)) * Kernel|o|`
 /// (or `vec2(0.0, <o>.0 * stepY)`), summed with a final `0.0`, and
-/// `gl_FragColor = vec4(result.xyz, 1.0)` (:24). `TextureCoord = vUv` (:20).
+/// `gl_FragColor = vec4(result.xyz, 1.0)` (:12). `TextureCoord = vUv` (:8).
 fn blur_frag(radius: usize, sigma: f64, dir: Dir, step: f64, tilt_shift: f64) -> FragmentStage {
     let coord = vary("vUv");
     let step_expr = if tilt_shift == 1.0 {
@@ -167,7 +167,7 @@ fn blur_program(radius: usize, sigma: f64, dir: Dir, step: f64, tilt_shift: f64)
     Program { vertex: terrain_texture_vert(), fragment: blur_frag(radius, sigma, dir, step, tilt_shift) }
 }
 
-/// The quad of src/mesh.cpp:612-631 for `make_grid(1, 1, 2.0, 2.0, 0)`:
+/// The quad of src/mesh.cpp:612-634 for `make_grid(1, 1, 2.0, 2.0, 0)`:
 /// a = (-1, 1, 0), b = (-1, -1, 0), c = (1, 1, 0), d = (1, -1, 0), drawn as
 /// ul, ll, ur, ll, lr, ur.
 fn quad() -> AttribSource {
