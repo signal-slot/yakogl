@@ -118,6 +118,16 @@ then three early returns, an fp16 divide and the lit arithmetic, each its own
 family in `nir_fs.rs`; the vertex INT_VALUE rows of the forecast (`vs bf4b`,
 `vs c265`) are `ok` at this tip.
 
+**Update (plan #367 lower-ideas).** ideas `fs c565` and `fs 1aca` are still
+INT_VALUE. Their references, `gm2_ideas_2` and `gm2_ideas_3`, show Mesa's
+whole flattening: the `&&` is `LSHIFT_AND.v2i16` of two fp16 masks, whose
+select is an fp16 `MUX.v2i16`, while the function's fp32 return value is
+selected by `CSEL.u32.eq` of widened lanes (docs/notes/mali-ideas.md section
+3). Lowering only the `iand` would move both shaders on to the mixed-precision
+select chain, so no item owns them yet. The vertex side of the same function,
+`vs 51b2`, is lowered: its conditions fold
+(docs/notes/mali-control-flow.md, the last section).
+
 ## References
 
 Mesa 26.2.1, panfrost on drm-shim (GPU_ID 0xa867), one draw per pair with
