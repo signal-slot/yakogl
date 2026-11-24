@@ -47,6 +47,18 @@
 #              FAIL or no restore-lact line -> FAIL; swap-1-only with its
 #              restore's LACT not back -> judged FAIL, q4 no; swap-1-only
 #              picked up and back (slot B refused) -> incomplete as before
+#   vb*        vblank landing (swap-lact-probe): every complete fixture carries
+#              one 'u3 vblank <k>:' line per swap (landed in vblank, swap 4
+#              across the FRCNT wrap 63 -> 0) and the library's dlswap
+#              vblank/lact-timing records; in vblank -> q4 yes and PASS
+#              naming it; a missed frame (two steps, also across the wrap),
+#              a pickup timeout (tight=miss), a write outside the vblank, the
+#              probe's own landed=no -> FAIL, q4 no naming the swap; a line
+#              claiming landed=yes over a missed frame -> FAIL; an older probe
+#              without the lines -> q4 not yes; boundary=no and odd YLINE
+#              values decide nothing; no vblank found at swap 1 or swap 3
+#              (LPTRS not written, the probe stops) -> judged FAIL, q4 no
+#              naming the vblank wait, not the pickup
 # `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
@@ -84,7 +96,21 @@ FS='rpi5_scanout32: feeding stopped, reset expected'
 # and the restores' restore-lact lines (swap 1's own, then the final one)
 LPOK='dlswap lact-pickup ok polls=9 frcnt=10..11 want=32 lact=32'
 RLOK='dlswap restore-lact ok polls=30 frcnt=14..16 want=672 lact=672'
-LA=("$LPOK" "$LPOK" "$LPOK" "$LPOK" "$RLOK" "$RLOK")
+# vblank landing (swap-lact-probe): one u3 vblank line per swap, and the
+# library's records (shown, not judged)
+vbl() { # vbl <k> <landed> <why> <w> <p> <invblank> <tight> [boundary] [yline]
+    printf 'u3 vblank %s: landed=%s why=%s frcnt %s -> %s steps=%s invblank=%s tight=%s pickup_reads=41000 pickup_us=%s read_us=0.195 boundary=%s since_us=0.840 yline %s (yline record only)' \
+        "$1" "$2" "$3" "$4" "$5" $(( ($5 - $4) & 63 )) "$6" "$7" \
+        "$([ "$7" = ok ] && echo 16012.345 || echo none)" "${8:-yes}" "${9:-1081 -> 2}"
+}
+VB1=$(vbl 1 yes landed 10 11 yes ok)
+VB2=$(vbl 2 yes landed 11 12 yes ok)
+VB3=$(vbl 3 yes landed 12 13 yes ok)
+VB4=$(vbl 4 yes landed 63 0 yes ok)
+DVB='dlswap vblank ok mode=vblank reads=5230 frame_reads=0 frcnt=10 yline=1081 since_us=0.840 invblank=yes'
+DVT='dlswap lact-timing tight=ok reads=41000 step=40998 frcnt=10..11 yline=1081..2 dt_us=16012.345 read_us=0.195 boundary=yes'
+LA=("$LPOK" "$LPOK" "$LPOK" "$LPOK" "$RLOK" "$RLOK" "$DVB" "$DVT" "$VB1" "$VB2" "$VB3" "$VB4")
+LAP=("$LPOK" "$LPOK" "$LPOK" "$LPOK" "$RLOK" "$RLOK") # without the vblank lines
 
 mk() { # mk <file> <lines...>
     f=$1; shift
@@ -185,22 +211,55 @@ mk "$T/lacterr.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$S2" "$S3" "$S4" \
     'dlswap swap2 FAIL DL.LACT did not reach the new head lptrs-readback ok frcnt-advance ok settle ok' \
     "$NM" "$RLOK" "$RSPICK" "$TMF"
 # four swaps picked up, the final restore's DL.LACT not back
-mk "$T/rlactfail.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" \
+mk "$T/rlactfail.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$RLOK" "$RLF" "$NM" "$RSRL" 'rpi5_scanout32: FAIL (restore: DL.LACT not back on the firmware'\''s head)'
 # ... and a restore PASS line although it was not back, or with no restore-lact line
-mk "$T/rlactlie.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" \
+mk "$T/rlactlie.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$RLOK" "$RLF" "$NM" "$RS" "$TM"
-mk "$T/rlactnone.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" \
+mk "$T/rlactnone.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$NM" "$RS" "$TM"
 # swap-1-only: picked up, its own restore's DL.LACT not back: the probe stops
-mk "$T/swap1rl.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLF" "$S1" \
+mk "$T/swap1rl.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLF" "$S1" "$VB1" \
     'u3 swap 2: skipped (swap 1: DL.LACT not back on the firmware'\''s head)' "$NM" "$RSRL" \
     'rpi5_scanout32: FAIL (restore: DL.LACT not back on the firmware'\''s head)'
 # swap-1-only, picked up and back, but no more swaps (slot B refused): incomplete as before
-mk "$T/swap1ok.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$S1" \
+mk "$T/swap1ok.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$S1" "$VB1" \
     'u3 swap 2: skipped (slot B refused: place: target range holds a non-zero word)' "$NM" \
     'u3 restore: PASS byte-equal list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef hwskip=none' \
     'rpi5_scanout32: FAIL (slot B was refused: its words are not known free)'
+
+# vblank landing (swap-lact-probe)
+SW4=("$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4")
+TMV='rpi5_scanout32: FAIL (swap 3 did not land in vblank (missed-frame))'
+mk "$T/vbmissed.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$(vbl 3 no missed-frame 12 14 yes ok)" "$VB4" "$NM" "$RS" "$TMV"
+mk "$T/vbmisswrap.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$VB3" "$(vbl 4 no missed-frame 63 1 yes ok)" "$NM" "$RS" \
+    'rpi5_scanout32: FAIL (swap 4 did not land in vblank (missed-frame))'
+mk "$T/vbtimeout.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$(vbl 2 no pickup-timeout 11 30 yes miss)" "$VB3" "$VB4" "$NM" "$RS" \
+    'rpi5_scanout32: FAIL (swap 2 did not land in vblank (pickup-timeout))'
+mk "$T/vboutside.log" "${SW4[@]}" "${LAP[@]}" "$(vbl 1 no write-not-in-vblank 10 11 no ok)" "$VB2" "$VB3" "$VB4" "$NM" "$RS" \
+    'rpi5_scanout32: FAIL (swap 1 did not land in vblank (write-not-in-vblank))'
+mk "$T/vbprobe.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$VB3" "$(vbl 4 no missed-frame 63 0 yes ok)" "$NM" "$RS" \
+    'rpi5_scanout32: FAIL (swap 4 did not land in vblank (missed-frame))'
+mk "$T/vblie.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$(vbl 3 yes landed 12 15 yes ok)" "$VB4" "$NM" "$RS" "$TM"
+mk "$T/vbold.log" "${SW4[@]}" "${LAP[@]}" "$NM" "$RS" "$TM"
+mk "$T/vbyline.log" "${SW4[@]}" "${LAP[@]}" "$(vbl 1 yes landed 10 11 yes ok no '0 -> 8191')" \
+    "$(vbl 2 yes landed 11 12 yes ok no '4000 -> 3')" "$VB3" "$(vbl 4 yes landed 63 0 yes ok no '7 -> 7')" "$NM" "$RS" "$TM"
+# no FRCNT step found at swap 1: LPTRS not written, the probe stops
+NOVB='dlswap vblank FAIL mode=vblank reads=1000000 frame_reads=0 frcnt=10 yline=500 since_us=none invblank=no'
+mk "$T/vbnostep.log" "$SNAP" "$DL" "$PL" "$NOVB" 'dlswap write FAIL no FRCNT step (vblank) within the read bound' "$RLOK" \
+    'dlswap swap1 FAIL no FRCNT step (vblank) within the read bound lptrs-readback FAIL frcnt-advance FAIL settle skip' \
+    'u3 swap 1: buf A list-ptr=0x000002a0 frcnt 10 -> 11 judge=pointer-not-latched slot=32' \
+    'u3 vblank 1: landed=no why=no-vblank frcnt 0 -> 0 steps=0 invblank=no tight=miss pickup_reads=0 pickup_us=none read_us=none boundary=no since_us=none yline 0 -> 0 (yline record only)' \
+    'u3 swap 2: skipped (swap 1: LPTRS was not written)' \
+    'u3 named: no LPTRS 0x000002a0 after swap 1, our list at word 32, first read 0x00000000 poll 0, DL.LACT pickup FAIL (want 0 lact 0)' \
+    "$RSPICK" 'rpi5_scanout32: FAIL (no FRCNT step (vblank) within the read bound)'
+# ... and at swap 3, after two landed swaps (its lact-pickup FAIL line follows from it)
+mk "$T/vbnostep3.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" "$NOVB" \
+    'dlswap swap3 FAIL no FRCNT step (vblank) within the read bound lptrs-readback FAIL frcnt-advance FAIL settle skip' \
+    'dlswap lact-pickup FAIL polls=0 frcnt=0..0 want=42 lact=672' \
+    'u3 swap 3: buf A list-ptr=0x0000002a frcnt 12 -> 13 judge=pointer-not-latched slot=32' \
+    'u3 vblank 3: landed=no why=no-vblank frcnt 0 -> 0 steps=0 invblank=no tight=miss pickup_reads=0 pickup_us=none read_us=none boundary=no since_us=none yline 0 -> 0 (yline record only)' \
+    'u3 swap 4: skipped (swap 3 failed)' "$RLOK" "$RSPICK" 'rpi5_scanout32: FAIL (no FRCNT step (vblank) within the read bound)'
 
 run() { out=$(bash "$V" "$1" 2>&1); rc=$?; }
 
@@ -413,6 +472,58 @@ nope "u3 restore: PASS" "swap-1-only: no restore PASS"
 run "$T/swap1ok.log"
 want_rc 1 "swap-1-only, picked up and back, slot B refused: incomplete"
 check "q4: unanswered" "swap-1-only ok: q4 unanswered"
+
+# ---- vblank landing (swap-lact-probe) --------------------------------------------
+run "$T/pass.log"
+check "every swap written in the vblank and picked up within one frame step)" "in vblank: q4 yes names the landing"
+check "each swap landed in vblank within one frame step" "in vblank: PASS names the landing"
+check "[v] u3 vblank 1: landed=yes why=landed frcnt 10 -> 11 steps=1" "in vblank: the u3 vblank lines are shown"
+check "[v] u3 vblank 4: landed=yes why=landed frcnt 63 -> 0 steps=1" "in vblank: one step across the FRCNT wrap lands"
+check "[v] dlswap vblank ok mode=vblank" "in vblank: the dlswap vblank record is shown"
+check "[v] dlswap lact-timing tight=ok" "in vblank: the dlswap lact-timing record is shown"
+run "$T/vbmissed.log"
+want_rc 3 "missed frame at swap 3"
+check "q4: no (swap 3: missed a frame (frcnt 12 -> 14, 2 steps from the write to the pickup))" "missed frame: q4 no names swap 3"
+check "verdicts: FAIL (swap 3: missed a frame" "missed frame: the verdict names it"
+nope "swap 1: missed" "missed frame: only swap 3"
+nope "q4: yes" "missed frame: no q4 yes"
+run "$T/vbmisswrap.log"
+want_rc 3 "missed frame across the wrap"
+check "q4: no (swap 4: missed a frame (frcnt 63 -> 1, 2 steps" "missed frame: 63 -> 1 is two steps"
+run "$T/vbtimeout.log"
+want_rc 3 "pickup timeout at swap 2"
+check "q4: no (swap 2: DL.LACT pickup timeout (the tight loop ran out, tight=miss))" "timeout: q4 no names swap 2"
+nope "swap 2: missed a frame" "timeout: named as the timeout, not the frames"
+nope "verdicts: PASS" "timeout: no PASS"
+run "$T/vboutside.log"
+want_rc 3 "written outside the vblank"
+check "q4: no (swap 1: written outside the vblank (invblank=no))" "outside: q4 no"
+run "$T/vbprobe.log"
+want_rc 3 "the probe's own landed=no"
+check "q4: no (swap 4: did not land in vblank (why=missed-frame))" "landed=no: the probe's reason named"
+run "$T/vblie.log"
+want_rc 3 "landed=yes over a missed frame"
+check "q4: no (swap 3: missed a frame (frcnt 12 -> 15, 3 steps" "claimed landed: the fields decide"
+check "u3 vblank 3: landed=yes although it did not land" "claimed landed: the claim is refused"
+run "$T/vbold.log"
+want_rc 3 "older probe without u3 vblank lines"
+check "q4: no (swap 1: no u3 vblank line, vblank landing not shown)" "no vblank lines: q4 not yes"
+check "swap 4: no u3 vblank line" "no vblank lines: every swap named"
+run "$T/vbyline.log"
+want_rc 0 "boundary=no and odd YLINE values"
+check "q4: yes" "YLINE and boundary decide nothing: q4 yes"
+check "verdicts: PASS" "YLINE and boundary decide nothing: PASS"
+run "$T/vbnostep.log"
+want_rc 3 "no vblank found at swap 1: judged, not incomplete"
+check "q4: no (swap 1: no vblank found (no FRCNT step (vblank) within the read bound), LPTRS not written)" "no step: q4 names the vblank wait"
+check "the probe stopped at swap 1's vblank wait (no FRCNT step (vblank) within the read bound)" "no step: the stop is named"
+nope "no dlswap lact-pickup line" "no step: the missing pickup is not the reason"
+nope "u3 restore: PASS" "no step: no restore PASS"
+run "$T/vbnostep3.log"
+want_rc 3 "no vblank found at swap 3"
+check "q4: no (swap 3: no vblank found (no FRCNT step (vblank) within the read bound), LPTRS not written)" "no step at 3: q4 names swap 3's vblank wait"
+check "3 of 4 swaps made: the probe stopped at swap 3's vblank wait" "no step at 3: the stop at swap 3"
+nope "DL.LACT did not reach the new head at swap 3" "no step at 3: the pickup FAIL line is not the reason"
 
 if [ $fail -eq 0 ]; then
     echo "verdicts_selftest: all $nok checks passed"

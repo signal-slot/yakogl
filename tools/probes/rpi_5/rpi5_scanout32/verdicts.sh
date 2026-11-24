@@ -76,12 +76,39 @@
 # its pickup, or the only swap line is followed by swap 1's restore-lact
 # FAIL, the log is judged (FAIL, q4 no), not incomplete.
 #
+# Vblank landing (swap-lact-probe; hvs6_dlist_swap.h, swap-vblank-lib). Each
+# swap writes LPTRS just after an FRCNT step of channel 0's STATUS found by
+# reads, and times the DL.LACT pickup with a tight loop. Lines, anywhere in
+# the log:
+#
+#   u3 vblank <k>: landed=yes|no why=<reason> frcnt <w> -> <p> steps=<n>
+#       invblank=yes|no tight=ok|miss pickup_reads=<n> pickup_us=<us|none>
+#       read_us=<us|none> boundary=yes|no since_us=<us|none> yline <a> -> <b>
+#       (yline record only)
+#       one per swap made, k its number (printed after 'u3 swap <k>'); w and
+#       p FRCNT at the write and at the pickup (6-bit), invblank the write
+#       right after the step, tight=ok the pickup inside the tight loop
+#   dlswap vblank ok|FAIL mode=... / dlswap lact-timing tight=... (the
+#       library's record of the same, one per swap, shown, not judged)
+#   dlswap swap<k> FAIL no FRCNT step (vblank) within the read bound ...
+#       HVS6S_ERR_VBLANK: LPTRS was not written; the probe stops there
+#
+# Swap k landed when its line says landed=yes, invblank=yes, tight=ok and
+# FRCNT stepped at most once from w to p ((p - w) & 63 <= 1). 'q4: yes' and
+# the PASS verdict need every swap landed; a swap without its line (an older
+# probe) or one that did not land makes q4 'no', naming the first: a missed
+# frame (more than one step), a pickup timeout (tight=miss), a write outside
+# the vblank, or no vblank found. boundary=, pickup_us=, read_us= and YLINE
+# are printed as a record and decide nothing. A stop at a swap whose vblank
+# wait found no FRCNT step is judged (FAIL, q4 no), not incomplete.
+#
 # Output: the seen lines, 'missing:' naming absent lines (after the last
 # seen one: the image stopped there; between two seen ones: a gap), then
 #   verdicts: PASS (...)            all of: placement valid (no overlap with
 #                                   the firmware span, within 4096), our list
 #                                   named, every swap's FRCNT advanced and
-#                                   DL.LACT picked it up, the buffers
+#                                   DL.LACT picked it up, every swap landed
+#                                   in vblank, the buffers
 #                                   alternated, restore PASS with DL.LACT
 #                                   back, the probe's own line not FAIL
 #   verdicts: FAIL (reasons)        complete log, one of those not met
@@ -92,7 +119,8 @@
 #   q4: yes|no|unanswered (...)     can channel 0's list pointer be swapped
 #                                   at vblank under a running scanout:
 #                                   from the swap lines, 'yes' needs the
-#                                   swaps, FRCNT, every DL.LACT pickup and
+#                                   swaps, FRCNT, every DL.LACT pickup,
+#                                   every swap landed in vblank and
 #                                   naming to hold (the
 #                                   restore is judged separately), 'no'
 #                                   names the first swap that failed,
@@ -189,6 +217,22 @@ pickup_of() {
         PU_LINE="" PU=""
     fi
 }
+# Vblank lines (swap-lact-probe): VB[k] is swap k's 'u3 vblank <k>:' line
+# (the first one per k), DV the library's dlswap vblank/lact-timing records.
+declare -A VB=()
+DV=()
+while IFS= read -r l; do
+    k=$(sed -E 's/^u3 vblank ([0-9]+):.*/\1/' <<< "$l")
+    [ -z "${VB[$k]:-}" ] && VB[$k]=$l
+done < <(grep -E '^u3 vblank [0-9]+: landed=(yes|no) ' "$TMP")
+while IFS= read -r l; do DV+=("$l"); done < <(grep -E '^dlswap (vblank (ok|FAIL) mode=|lact-timing tight=)' "$TMP")
+ERR_VBLANK="no FRCNT step (vblank) within the read bound"
+# swap k found no vblank: LPTRS was not written (HVS6S_ERR_VBLANK)
+vb_nostep() {
+    grep -qF "dlswap swap$1 FAIL $ERR_VBLANK" "$TMP" && return 0
+    case "${VB[$1]:-}" in *" why=no-vblank "*) return 0 ;; esac
+    return 1
+}
 lact_vals() { # "want=W lact=L" of a lact line; a dlswap swap<k> line has none
     local w
     w=$(grep -oE 'want=[0-9]+ lact=[0-9]+' <<< "$1" | head -n 1)
@@ -202,7 +246,9 @@ STOPPED=0 STOP_WHY=""
 if [ "$NSW" -ge 1 ] && [ "$NSW" -lt "$MIN_SWAPS" ]; then
     kl=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$((NSW - 1))]}")
     pickup_of $((NSW - 1)) "$kl"
-    if [ "$PU" = FAIL ]; then
+    if vb_nostep "$kl"; then
+        STOPPED=$kl STOP_WHY="swap $kl's vblank wait ($ERR_VBLANK)"
+    elif [ "$PU" = FAIL ]; then
         STOPPED=$kl STOP_WHY="swap $kl's failed DL.LACT pickup"
     elif [ "$NSW" -eq 1 ] && [ "$PU" = ok ]; then
         case "${RL[0]:-}" in
@@ -233,6 +279,11 @@ say "$PROG: $nseen of $nreq expected verdict lines in $LOG ($NSW swap line(s))"
 for i in 1 2 3; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
 for ((j = 0; j < NSW; j++)); do say "  [4] ${SW[$j]}"; done
 for l in ${LP[@]+"${LP[@]}"} ${RL[@]+"${RL[@]}"}; do say "  [l] $l"; done
+for l in ${DV[@]+"${DV[@]}"}; do say "  [v] $l"; done
+for ((j = 0; j < NSW; j++)); do
+    k=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$j]}")
+    [ -n "${VB[$k]:-}" ] && say "  [v] ${VB[$k]}"
+done
 for i in 5 6 7; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
 if [ -n "${SEEN[8]:-}" ] && [ "${SEEN[8]}" != "${SEEN[7]:-}" ]; then say "  [8] ${SEEN[8]}"; fi
 
@@ -317,7 +368,11 @@ for ((j = 0; j < NSW; j++)); do
     k=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$j]}")
     pickup_of "$j" "$k"
     [ "$j" -eq 0 ] && pick1=$PU
-    if [ -z "$PU" ]; then
+    if vb_nostep "$k"; then
+        # LPTRS was not written: the missing pickup follows from it, and
+        # the vblank section below names the cause
+        pick_bad=1
+    elif [ -z "$PU" ]; then
         pick_bad=1
         [ -z "$swap_fail" ] && swap_fail="swap $k: no dlswap lact-pickup line, DL.LACT pickup not shown"
         other+=("swap $k: no dlswap lact-pickup line (DL.LACT pickup not shown)")
@@ -326,6 +381,52 @@ for ((j = 0; j < NSW; j++)); do
         v=$(lact_vals "$PU_LINE")
         [ -z "$swap_fail" ] && swap_fail="swap $k: $ERR_PICKUP ($v)"
         other+=("$ERR_PICKUP at swap $k ($v)")
+    fi
+done
+
+# ---- vblank landing per swap (swap-lact-probe) ---------------------------------
+# From the u3 vblank line's fields, in the probe's order (swap_vblank_judge):
+# vblank found, written in it, picked up in the tight loop, at most one FRCNT
+# step; then the line's own landed=. YLINE, boundary= and the times are shown
+# only.
+for ((j = 0; j < NSW; j++)); do
+    k=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$j]}")
+    l=${VB[$k]:-}
+    why=""
+    if vb_nostep "$k"; then
+        why="swap $k: no vblank found ($ERR_VBLANK), LPTRS not written"
+    elif [ -z "$l" ]; then
+        why="swap $k: no u3 vblank line, vblank landing not shown"
+    elif ! grep -qE ' frcnt [0-9]+ -> [0-9]+ .*invblank=(yes|no) tight=(ok|miss) ' <<< "$l"; then
+        why="swap $k: malformed u3 vblank line"
+    else
+        landed=$(sed -E 's/.* landed=(yes|no) .*/\1/' <<< "$l")
+        vwhy=$(sed -nE 's/.* why=([^ ]+) .*/\1/p' <<< "$l")
+        w=$(sed -E 's/.* frcnt ([0-9]+) -> ([0-9]+) .*/\1/' <<< "$l")
+        p=$(sed -E 's/.* frcnt ([0-9]+) -> ([0-9]+) .*/\2/' <<< "$l")
+        inv=$(sed -E 's/.* invblank=(yes|no) .*/\1/' <<< "$l")
+        tight=$(sed -E 's/.* tight=(ok|miss) .*/\1/' <<< "$l")
+        if [ "$w" -gt 63 ] || [ "$p" -gt 63 ]; then
+            why="swap $k: vblank frcnt out of the 6-bit range ($w -> $p)"
+        elif [ "$inv" != yes ]; then
+            why="swap $k: written outside the vblank (invblank=no)"
+        elif [ "$tight" != ok ]; then
+            why="swap $k: DL.LACT pickup timeout (the tight loop ran out, tight=miss)"
+        else
+            steps=$(( (p - w) & 63 ))
+            if [ "$steps" -gt 1 ]; then
+                why="swap $k: missed a frame (frcnt $w -> $p, $steps steps from the write to the pickup)"
+            elif [ "$landed" != yes ]; then
+                why="swap $k: did not land in vblank (why=${vwhy:-none})"
+            fi
+        fi
+        if [ -n "$why" ] && [ "$landed" = yes ]; then
+            other+=("u3 vblank $k: landed=yes although it did not land")
+        fi
+    fi
+    if [ -n "$why" ]; then
+        [ -z "$swap_fail" ] && swap_fail=$why
+        other+=("$why")
     fi
 done
 if [ "$STOPPED" -ne 0 ]; then
@@ -481,11 +582,11 @@ grep -qE '^rpi5_scanout32: FAIL' <<< "${SEEN[7]}" && other+=("the probe's own li
 if [ -n "$swap_fail" ]; then
     say "q4: no ($swap_fail)"
 else
-    say "q4: yes (channel 0's list pointer swapped $NSW times under the running scanout, named after the first swap, DL.LACT picked up every swap, FRCNT advanced through every swap)"
+    say "q4: yes (channel 0's list pointer swapped $NSW times under the running scanout, named after the first swap, DL.LACT picked up every swap, FRCNT advanced through every swap, every swap written in the vblank and picked up within one frame step)"
 fi
 
 if [ ${#other[@]} -eq 0 ]; then
-    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, DL.LACT picked up each swap and came back, FRCNT advanced, firmware list restored byte-equal${hw_note})"
+    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, DL.LACT picked up each swap and came back, each swap landed in vblank within one frame step, FRCNT advanced, firmware list restored byte-equal${hw_note})"
     exit 0
 fi
 r=""
