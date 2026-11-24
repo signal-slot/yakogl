@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vertex shader of dEQP-GLES2.functional.shaders.loops.while_constant_iterations.double_continue_vertex as dEQP-GLES2 writes it, the loop template of es2fShaderLoopTests.cpp (VK-GL-CTS 93bca01), reconstructed for plan #402 item ref-vsloop (no dEQP source or network on the measuring host): the text of the verbatim deqp_loops2_vs_wh_uni_double_continue.vert (its uniform-count twin) with ui_three, ui_one written as the literals 3, 1.

@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vertex shader of dEQP-GLES2.functional.shaders.functions.control_flow.return_after_break_vertex as dEQP-GLES2 writes it, reconstructed for plan #402 item ref-vsloop: the shader-library harness of the verbatim deqp_loops2_vs_fn_return_in_loop.vert around the function of the case in data/gles3/shaders/functions.test (VK-GL-CTS 93bca01; the gles2 file's case is the same text without #version 300 es).
