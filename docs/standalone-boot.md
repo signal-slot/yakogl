@@ -686,11 +686,45 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
   `bootflow scan -b`), the file staged by Linux under `/var/yakogl`. `go`, not
   `booti`, for the reason in "What the image does on a `go` entry": `booti`
   moves an image with `text_offset` 0 to the start of DRAM. The runner is
-  `tools/board.sh imx95` (`BOARD_BOOT=uboot-tftp`, its default, or
-  `uboot-mmc`): the other Verdins' hook and sequence with `NB_MMC=0:1`,
-  `MMC_PART=/dev/mmcblk0p1` (the AM62P's; `mmc_where` refuses another mount),
-  the window `0xd0000000`..`0xe0000000` (the DTS's `zephyr,sram`), the
-  marker `verdin_imx95: WDOG3 armed`, and the record of the next section.
+  `tools/board.sh imx95` (`BOARD_BOOT=uboot-mmc`, its default, or
+  `uboot-tftp`): the other Verdins' hook with what the board answered when it
+  was read (2026-11-25): Toradex's Reference Multimedia Image 7.8.0 (Yocto
+  scarthgap), not Torizon; root logs in over ssh (Dropbear) and there is **no
+  sudo**, so the runner's commands run as root without a prefix (`SU` empty;
+  `BOARD_SU='sudo -n '` for a login that has one, and a login that is not uid
+  0 is refused); the eMMC is U-Boot's `mmc 0`, Linux's `mmcblk0`, whose
+  partition 2 (ext4) is the root file system, `/var` on it, so `NB_MMC=0:2`,
+  `MMC_PART=/dev/mmcblk0p2` (derived from `NB_MMC`; `mmc_where` reads the mount
+  from the board and refuses another source) and the file U-Boot loads is
+  `/var/yakogl/<name>` (the mount's `FSROOT` is `/`); the cache commands before
+  `go` are `dcache off; icache flush` (`NB_CACHE`, a per-board value; the other
+  boards keep `dcache off; icache off`), the sequence five images in a row
+  ran with (`icache off` was not tried); the window `0xd0000000`..`0xe0000000`
+  (the DTS's `zephyr,sram`); the marker `verdin_imx95: WDOG3 armed`. The
+  board's `fw_setenv` is libubootenv's (0.3.5), not u-boot-tools': its `-s`
+  script is `key=value` lines (a `name value` line is ignored with rc 0, and
+  a value that contains `=` then makes a junk variable), the runner writes
+  that form, through a file in `/tmp` (a tmpfs; `/dev/stdin` is not
+  established there), and reads every write back: a write that returned 0
+  and changed nothing is reported as a failure (rc 5), not as a stale hook.
+  An absent variable prints `NAME=` with rc 0 under `fw_printenv`, which the
+  runner filters. No command line sent over ssh passes 2048 bytes (Dropbear
+  reset the connection on an 8.6 kB one): scripts go on stdin. The kernel has
+  no SCMI raw interface, so the record is the console alone
+  (`rec_sink=console only`): `BOARD_UART`, a local device (the UART_3
+  adapter, 115200 8N1), is required for a run, and the capture only reads it
+  (`stty ... raw -echo -hupcl`, nothing written, so a character does not stop
+  U-Boot at its prompt). **The runner has still not run on the board after
+  these changes.** What did run, typed by hand with this runner's strings and
+  not by the runner: the hook installed in one `fw_setenv -s` write (the
+  repository's `yako_hook` and `yako_dflt` byte for byte; `yako_mmc` with
+  `0:2` and `icache flush`; `yako_net` absent), a one-shot
+  (`yako_src=mmc`, `yako_file=/var/yakogl/gl_test.bin`, `yako_once=1`, then
+  `reboot`: `yakogl-netboot: once=1`, `cleared`, `go 0xd0000000`, gl_test
+  50 of 50, `PSCI SYSTEM_RESET`, Linux's login 47 s after the reboot
+  command) and a counted default (`yako_default_left=2`: two runs of 50 of 50,
+  `default used up, booting Linux`, 70 s in all). The runner's `install` meets
+  that state as stale (`yako_net` differs) and upgrades it in place.
 - The development route `kexec-dev` (`driver/tools/kexec-zephyr`, as on the
   Verdin iMX8M Plus and the NanoPC-T6) carries over in its form: Linux loads
   the image at 0xd0000000 with `kexec_load` and jumps. The Verdin iMX95's
@@ -773,7 +807,11 @@ writes them only on request).
   i.MX8MP's `snvs.txt` is. Without the interface a run reads the console
   instead when `BOARD_UART` is set (`rec_sink=console only` in `meta.txt`) and
   refuses (rc 3) when it is not. The image reads no selector, so `SEL` is
-  refused.
+  refused. **This board's kernel has no raw interface**
+  (`# CONFIG_ARM_SCMI_RAW_MODE_SUPPORT is not set`, no
+  `/sys/kernel/debug/scmi`), so `board.sh imx95` defaults to the console sink
+  and does not run this script (`BOARD_REC_SINK=bbm` brings the route back for
+  a kernel that has the interface); the commands above describe that route.
 - **Tests**: `driver/rust/src/soc/imx95/bbm_tests.rs` runs the store and the
   load over the mock SM with AP-NS's rights (the order, the words decoded as
   the console line's, DENIED and a store cut off half way);
@@ -791,7 +829,10 @@ writes them only on request).
 ### Open questions for sign-off
 
 1. **Can U-Boot start our image with the System Manager still serving
-   SCMI?** The System Manager runs on the M33 on its own, so it is still
+   SCMI?** Answered by the board for the start: five images ran after `go`
+   (the image's first line, `verdin_imx95: WDOG3 armed: ...`, and its
+   results came out). Left open: the System Manager's configuration for the
+   GPU. The System Manager runs on the M33 on its own, so it is still
    there after `go`; the image's first SCMI messages (the LPUART1 pins and
    clock, at `PRE_KERNEL`) go through the same channel U-Boot used (MU2,
    shared memory at 0x445b1000; the same channel in Linux's `imx95.dtsi`).
@@ -800,19 +841,29 @@ writes them only on request).
    (`imx-sm-toradex`, `verdin-imx95`) gives the A55 non-secure agent the
    LPUART1 pins and clock and, for the GPU later, power domain 14 and the
    GPU clocks.
-2. **The watchdog.** The image arms WDOG3 itself (above), so it does not
+2. **The watchdog.** Answered by the board: the image's first line is
+   `verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped),
+   TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, ...` (stopped at `go`), and an
+   unfed WDOG3 resets the board 60 s after the arming (`LM Boot reason: fccu,
+   origin: -1, errid: 19`) back into Linux; an image's own end, PSCI
+   `SYSTEM_RESET`, returns to U-Boot (`LM Boot reason: sw`) and Linux, the
+   login prompt about 20 s after the reset. The image arms WDOG3 itself (above), so it does not
    depend on U-Boot's (`CONFIG_WDT`, `CONFIG_ULP_WATCHDOG`, 30 s), which is
    probably still counting at `go`. To check on the board: the armed line's
    `CS`/`TOVAL` found (running with `TOVAL` 0xea6 if U-Boot left it so), the
    poll counts and time of the arming, and a proof run that arms and never
    feeds: WDOG3's timeout must reach the System Manager's fault (with
    `CS.INT` set) and reset the board through `WDOG_ANY` back into Linux.
-3. **Caches at `go`.** The pin's EVK route uses `dcache off; icache flush`,
-   the other Verdins' `dcache off; icache off`. Either must leave the MMU off
-   at entry; which one this U-Boot needs is unmeasured.
+3. **Caches at `go`.** Answered by the board: `dcache off; icache flush`
+   (the pin's EVK route) ran five images in a row (the four probes of
+   `tools/probes/verdin_imx95` and gl_test, all passing); `icache off` was not
+   tried. It is the iMX95's `NB_CACHE`.
 4. **The eMMC device and partition U-Boot reads**, and where Linux can stage
-   the file (Torizon's `/var` on the other Verdins). U-Boot's `mmc 0` is the
-   eMMC (`update_uboot`); the rest is unknown.
+   the file. Answered by the board: `mmc 0` (Linux's `mmcblk0`); partition 1
+   (98304 sectors from 8192, FAT) holds the boot files, partition 2 (ext4) is
+   the root file system, so `/var` is on it and U-Boot's
+   `ext4load mmc 0:2 0xd0000000 /var/yakogl/<name>.bin` reads what Linux copied
+   to `/var/yakogl/<name>.bin`; `md5sum` of the load equalled the host's.
 5. **The SoC package.** The board takes the 19x19 package's pin list
    (`mimx9596avzxn-pinctrl.dtsi`, as `imx95_evk`); every pad the module's
    Linux uses is in it and in the 15x15 one, so the console does not depend
@@ -908,20 +959,33 @@ In order; stop at the first step that prints something else.
 
 ### Verdin iMX95
 
-Not run yet; the order the first session takes (pre-study B1, B2, B3):
+The board was read on 2026-11-25 and its hook and two boots were typed by
+hand with the runner's strings; **`tools/board.sh imx95` itself has not run on
+the board** since it was made to match. The order of the first session
+(`BOARD_HOST=root@<board>`, `BOARD_UART=<the console device>`,
+`BOARD_BOOT=uboot-mmc`, the default):
 
-1. `tools/board.sh imx95 status`: the hook variables and `install: absent`,
-   the staging directory's mount (`/dev/mmcblk0p1` expected), then
-   `raw: /sys/kernel/debug/scmi/<n>/raw` or `no SCMI raw interface` and the
-   BBM record. Without the interface the console (`BOARD_UART`) is the only
-   record until the kernel has `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`.
-2. `tools/board.sh imx95 install`, then `status`: `install: ok`.
-3. `BOARD_BOOT=uboot-mmc tools/board.sh imx95 probe <logdir>`: `rc=0
-   verdict=probe_ok boot=uboot-mmc row boot_verdict=probe_ok`, as on the
-   i.MX8MP.
-4. `BOARD_BOOT=uboot-mmc tools/board.sh imx95 run <zephyr.bin> <logdir>`:
-   `boot_verdict=cycled` and the image's record from `bbm.txt`
-   (`result=record:<KIND>`), or from the console with `BOARD_UART` set.
+1. `tools/board.sh imx95 status`: the lease line, the hook variables
+   (`bootcmd=run yako_hook; bootflow scan -b`, `yako_net` absent if the hand
+   installation is still there), `install: stale: yako_net differs from this
+   script's` (or `install: absent` on a clean environment), then the listing of
+   `/var/yakogl` and `/dev/mmcblk0p2 / /` for `/var`. No `sudo` message and no
+   `fw_printenv failed`.
+2. `tools/board.sh imx95 install`, then `status`: `board.sh imx95: upgraded in
+   place (was: yako_net differs ...); bootcmd unchanged` (stale) or `installed;
+   bootcmd = 'run yako_hook; ' + the saved bootcmd` (absent, with the saved
+   environment in `records/imx95/netboot`), then `install: ok`. A write that
+   changed nothing prints `fw_setenv returned 0 but the environment is
+   unchanged` and exits 5.
+3. `tools/board.sh imx95 probe <logdir>`: `rc=0 verdict=probe_ok boot=uboot-mmc
+   row boot_verdict=probe_ok`, as on the i.MX8MP.
+4. `tools/board.sh imx95 run <zephyr.bin> <logdir>`: needs `BOARD_UART` (rc 3
+   without it); the run directory's `meta.txt` has `rec_sink=console only`,
+   `mmc_where=/var/yakogl = mmc 0:2 /var/yakogl (/dev/mmcblk0p2)`, the console
+   shows `yakogl-netboot: go 0xd0000000`, the image's `WDOG3 armed` line, the
+   `yk-record:` line and `PSCI SYSTEM_RESET`; then `boot_verdict=cycled`,
+   `result=record:<KIND>` read from the console, and `/var/yakogl/once-*.bin`
+   removed.
 
 ### NanoPC-T6
 

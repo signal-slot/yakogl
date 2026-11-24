@@ -168,8 +168,8 @@ am62p:kexec-dev:kexec_run.sh
 imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
 imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
 imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash
-imx95:uboot-tftp:sync; sudo -n systemctl reboot
-imx95:uboot-mmc:sync; sudo -n systemctl reboot
+imx95:uboot-tftp:sync; systemctl reboot
+imx95:uboot-mmc:sync; systemctl reboot
 x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash
 nanopc-t6:kexec-dev:bash driver/tools/kexec-zephyr/nanopc-t6.sh
 pi5:tryboot:sudo reboot "0 tryboot"'
@@ -212,28 +212,64 @@ for boot in uboot-tftp uboot-mmc; do
         eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
               grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
 done
-# the Verdin iMX95 (uboot-tftp, uboot-mmc): the record is the BBM GPR4..7,
-# cleared before the boot and read after it by tools/imx95_bbm_record.sh piped
-# to the board's sh; the console is opt-in (BOARD_UART), as on the i.MX8MP
-for boot in uboot-tftp uboot-mmc; do
-    out=$(BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+# the Verdin iMX95 (uboot-mmc first, uboot-tftp): root logs in and there is no
+# sudo; the kernel has no SCMI raw interface, so the record is the console
+# alone (BOARD_UART, a local device, only read); BOARD_REC_SINK=bbm keeps the
+# BBM GPR4..7 route (tools/imx95_bbm_record.sh piped to the board's sh)
+for boot in uboot-mmc uboot-tftp; do
+    out=$(BOARD_UART=/dev/ttyFAKE9 BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
     rc=$?
-    check "imx95 $boot run: rc 0, the BBM record cleared before the stage and the reboot, read after the cycle" \
-        eval '[ "$rc" = 0 ] && grep -qF "sudo -n sh -s -- clear   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
-              grep -qF "sudo -n sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
-              [ "$(grep -n -- "-- clear" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" ] &&
-              [ "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" -lt "$(grep -n -- "-- read" <<<"$out" | cut -d: -f1)" ] &&
-              ! grep -q "/sys/bus/nvmem\|snvs" <<<"$out"'
-    check "imx95 $boot run, no BOARD_UART: no probe, capture, stty or fd scan; the bound 600 s in all" \
-        eval '! grep -q "am62p_netboot_uart.py" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out" &&
-              grep -q "<= 600 s" <<<"$out"'
+    check "imx95 $boot run: rc 0, no sudo in any command, the board's commands as root, console only: no BBM script, no SNVS" \
+        eval '[ "$rc" = 0 ] && ! grep -q "sudo" <<<"$out" && grep -qF "DRY board\$ sync; systemctl reboot" <<<"$out" &&
+              ! grep -q "imx95_bbm_record\|/sys/bus/nvmem\|snvs" <<<"$out" && grep -q "the record is the console capture" <<<"$out"'
+    check "imx95 $boot run, BOARD_UART a device: fd scan, stty with -echo -hupcl, the line reader into console.txt; nothing written to the device, no bridge command" \
+        eval 'grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" &&
+              grep -qF "stty -F /dev/ttyFAKE9 115200 cs8 -cstopb -parenb raw -echo -hupcl" <<<"$out" &&
+              grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out" &&
+              ! grep -q "> */dev/ttyFAKE9\|>> */dev/ttyFAKE9\|tee /dev/ttyFAKE9" <<<"$out"'
+    check "imx95 $boot run, no BOARD_UART given: a dry run shows the capture of the stand-in device; the bound 600 s" \
+        eval '[ "$(BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1 | grep -c "stty -F /dev/BOARD_UART")" = 1 ] && grep -q "<= 600 s" <<<"$out"'
     out=$(BOARD_UART=bridge.invalid:1 BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
     rc=$?
     check "imx95 $boot run, BOARD_UART host:port: probe and TCP capture, no stty, no fd scan" \
         eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
               grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" &&
               ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+    out=$(BOARD_UART=/dev/ttyFAKE9 BOARD_REC_SINK=bbm BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+    rc=$?
+    check "imx95 $boot run, BOARD_REC_SINK=bbm: the BBM record cleared before the stage and the reboot, read after the cycle, without sudo" \
+        eval '[ "$rc" = 0 ] && grep -qF "DRY board\$ sh -s -- clear   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
+              grep -qF "DRY board\$ sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out" && ! grep -q sudo <<<"$out" &&
+              [ "$(grep -n -- "-- clear" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" ] &&
+              [ "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" -lt "$(grep -n -- "-- read" <<<"$out" | cut -d: -f1)" ]'
 done
+out=$(BOARD_SU='sudo -n ' BOARD_UART=/dev/ttyFAKE9 BOARD_BOOT=uboot-mmc dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+check "imx95 with BOARD_SU='sudo -n ' (a login that has sudo): the commands carry it again" \
+    eval 'grep -qF "DRY board\$ sync; sudo -n systemctl reboot" <<<"$out" && grep -qF "sudo -n fw_printenv" <<<"$out"'
+out=$(BOARD_BOOT=uboot-mmc dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1; BOARD_BOOT=uboot-tftp dry imx95 status 2>&1)
+check "imx95: no board command line past 2048 bytes in any verb (the scripts go on stdin or to a /tmp file)" \
+    eval '[ "$(grep "^DRY board" <<<"$out" | awk "{ if (length(\$0) > 2048) n++ } END { print n + 0 }")" = 0 ]'
+# Against a fake ssh that answers like the board's libubootenv: the login must
+# be root (id -u), and an fw_setenv that returns 0 and writes nothing (the
+# script syntax it ignores) is a failed write, not a state
+mkdir -p "$S/fs" "$S/fsbk"
+cat > "$S/fs/ssh" <<'EOF'
+#!/bin/sh
+case "$*" in
+*"id -u"*) echo "${FAKE_UID:-0}" ;;
+*fw_setenv*) cat > /dev/null ;;
+*fw_printenv*) echo "bootcmd=bootflow scan -b"; echo "bootdelay=1" ;;
+esac
+EOF
+chmod +x "$S/fs/ssh"
+out=$(FAKE_UID=1000 PATH="$S/fs:$PATH" BOARD_HOST=user@fake BOARD_BOOT=uboot-mmc "$B" imx95 status 2>&1)
+rc=$?
+check "imx95 status with a login that is not root and no sudo: refused (rc 3), naming BOARD_SU" \
+    eval '[ "$rc" = 3 ] && grep -q "not root" <<<"$out" && grep -q "BOARD_SU" <<<"$out"'
+out=$(PATH="$S/fs:$PATH" NETBOOT_BACKUP_DIR="$S/fsbk" BOARD_HOST=root@fake BOARD_BOOT=uboot-mmc "$B" imx95 install 2>&1)
+rc=$?
+check "imx95 install where fw_setenv returns 0 and changes nothing: rc 5 'environment is unchanged', not 'stale' or 'installed'" \
+    eval '[ "$rc" = 5 ] && grep -q "environment is unchanged" <<<"$out" && ! grep -q "stale\|installed;" <<<"$out"'
 out=$(BOARD_BOOT=uboot-tftp dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
 check "imx95 uboot-tftp run: the canary in NETBOOT_TFTP_LOG first, the server's log of the image read into tftp.txt" \
     eval 'grep -q "canary must be in the log" <<<"$out" && grep -q "/TFTP_LOG > <rundir>/tftp.txt" <<<"$out"'
@@ -253,13 +289,27 @@ out=$(BOARD_BOOT=kexec-dev dry imx95 status 2>&1)
 rc=$?
 check "imx95 has no kexec-dev: rc 2" [ "$rc" = 2 ]
 out=$(BOARD_BOOT=uboot-mmc dry imx95 status 2>&1)
-check "imx95 status: the hook, the staging directory, then the raw interface and the BBM record" \
-    eval 'grep -q "fw_printenv" <<<"$out" && grep -qF "sudo -n sh -s -- probe   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
-          grep -qF "sudo -n sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out"'
+check "imx95 status: the hook and the staging directory, as root, without the BBM script (the console is the record)" \
+    eval 'grep -qF "DRY board\$ fw_printenv bootcmd" <<<"$out" && grep -qF "findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var" <<<"$out" &&
+          ! grep -q "sudo\|imx95_bbm_record" <<<"$out"'
+out=$(BOARD_REC_SINK=bbm BOARD_BOOT=uboot-mmc dry imx95 status 2>&1)
+check "imx95 status with BOARD_REC_SINK=bbm: the raw interface and the BBM record" \
+    eval 'grep -qF "DRY board\$ sh -s -- probe   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
+          grep -qF "DRY board\$ sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out"'
 out=$(BOARD_BOOT=uboot-mmc dry imx95 install 2>&1)
-check "imx95 install: yako_addr 0xd0000000, ext4load from mmc 0:1, go at the load address with the caches off" \
+check "imx95 install: yako_addr 0xd0000000, ext4load from mmc 0:2, go at the load address after 'dcache off; icache flush' (the sequence proved on the board)" \
     eval 'grep -q "^    yako_addr=0xd0000000$" <<<"$out" &&
-          grep -qF "yako_mmc=if ext4load mmc 0:1 \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi" <<<"$out"'
+          grep -qF "yako_mmc=if ext4load mmc 0:2 \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache flush; go \${yako_addr}; fi" <<<"$out" &&
+          grep -qF "yako_net=" <<<"$out" && grep -qF "dcache off; icache flush; go \${yako_addr}; fi; echo yakogl-netboot: fetch failed" <<<"$out" &&
+          ! grep -q "icache off" <<<"$out"'
+check "imx95 install: ONE write, key=value lines through a file in /tmp (not /dev/stdin), no sudo, the saved env read without sudo" \
+    eval '[ "$(grep -c "fw_setenv -s" <<<"$out")" = 1 ] && grep -qF "DRY board\$ f=/tmp/yakogl-setenv.\$\$; cat > \$f && fw_setenv -s \$f; rc=\$?; rm -f \$f; exit \$rc" <<<"$out" &&
+          ! grep -q "/dev/stdin\|sudo" <<<"$out" && grep -q "^    yako_bootcmd_prev=<the bootcmd read from the board>$" <<<"$out" &&
+          grep -q "^    bootcmd=run yako_hook; <the bootcmd read from the board>$" <<<"$out" && ! grep -q "^    [a-z_]* [^=]*$" <<<"$out"'
+out=$(BOARD_BOOT=uboot-mmc dry am62p install 2>&1)
+check "am62p install: the cache commands stay 'dcache off; icache off', the write stays /dev/stdin with sudo -n" \
+    eval 'grep -qF "dcache off; icache off; go \${yako_addr}" <<<"$out" && ! grep -q "icache flush" <<<"$out" &&
+          grep -qF "DRY board\$ sudo -n fw_setenv -s /dev/stdin" <<<"$out"'
 check "imx95 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 # the window is the board's DTS's zephyr,sram (the dram node): a window changed
 # there alone would leave board.sh refusing an image that fits, or passing one
@@ -499,8 +549,8 @@ check "am62p: no /dev/pvrgpu command in run or kexec-dev status (pvrgpu.ko retir
 
 # uboot-mmc (docs/standalone-boot.md): U-Boot loads the image from the eMMC,
 # where Linux staged it; no TFTP server, no network
-for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcblk0p1; do
-    IFS=: read -r board mdev mpart mlinux <<<"$bm"
+for bm in am62p:0:1:/dev/mmcblk0p1:/ostree/deploy/torizon/var/yakogl imx8mp:2:1:/dev/mmcblk2p1:/ostree/deploy/torizon/var/yakogl imx95:0:2:/dev/mmcblk0p2:/var/yakogl; do
+    IFS=: read -r board mdev mpart mlinux ubdir <<<"$bm"
     out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
     check "$board uboot-mmc run: staged in /var/yakogl on $mlinux, read back from the eMMC, no TFTP canary" \
         eval 'grep -q "findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var/yakogl" <<<"$out" &&
@@ -508,7 +558,7 @@ for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcb
               grep -q "mmc_where\|mmc $mdev:$mpart\|$mlinux" <<<"$out$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)" &&
               ! grep -q "curl\|canary\|TFTP_ROOT" <<<"$out"'
     check "$board uboot-mmc run: armed yako_src=mmc with the file as U-Boot names it, removed after the cycle" \
-        eval 'grep -q "^    yako_src=mmc$" <<<"$out" && grep -q "^    yako_file=/ostree/deploy/torizon/var/yakogl/once-.*\.bin$" <<<"$out" &&
+        eval 'grep -q "^    yako_src=mmc$" <<<"$out" && grep -q "^    yako_file=$ubdir/once-.*\.bin$" <<<"$out" &&
               grep -q "rm -f /var/yakogl/once-" <<<"$out" && ! grep -q "yako_server" <<<"$out"'
     out=$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)
     check "$board install: yako_mmc loads with ext4load from mmc $mdev:$mpart; the hook runs yako_\${yako_src}, then the default" \
@@ -531,7 +581,7 @@ for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcb
         eval '[ "$rc" = 0 ] && [ "$(grep -n "UNDO" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "^DRY board" <<<"$out" | head -1 | cut -d: -f1)" ] &&
               grep -q "UNDO, without Linux: none needed: after 2 boots" <<<"$out" &&
               grep -q "cat > /var/yakogl/default.bin.part" <<<"$out" && grep -q "sha256sum /var/yakogl/default.bin" <<<"$out" &&
-              grep -A2 "fw_setenv -s" <<<"$out" | grep -q "^    yako_default=/ostree/deploy/torizon/var/yakogl/default.bin$" &&
+              grep -A2 "fw_setenv -s" <<<"$out" | grep -q "^    yako_default=$ubdir/default.bin$" &&
               grep -A3 "fw_setenv -s" <<<"$out" | grep -q "^    yako_default_left=2$" &&
               grep -q "fw_printenv -n yako_default_left" <<<"$out" && ! grep -q "systemctl reboot" <<<"$out"'
     out=$(BOARD_PERSON_PRESENT=1 dry "$board" default "$S/img/$board.bin" forever 2>&1)

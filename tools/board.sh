@@ -51,15 +51,17 @@
 # verdict of driver/tools/kexec-zephyr/t6-verdict.sh. The boot loader
 # backend (uboot-mmc) is not here yet.
 # imx95 is the Toradex Verdin iMX95 (i.MX 95, Mali-G310) on the Mallow, under
-# Torizon: the i.MX8MP's U-Boot routes with the same hook, the image loaded
-# and entered at 0xd0000000 (its zephyr,sram), WDOG3 the watchdog the image
-# arms. Its record is the image's last yk-record in the battery-backed BBNSM
-# GPR4..7, which the image writes over SCMI to the System Manager and Linux
-# reads back after the reset through the kernel's SCMI raw interface
-# (tools/imx95_bbm_record.sh, piped to the board's sh; docs/standalone-boot.md,
-# "The record without a console"). A kernel without that interface leaves
-# the console (BOARD_UART) as the only record: a run refuses without one of
-# the two. Not run on a board yet (docs/notes/pre-study-imx95.md, B1-B3).
+# Toradex's Reference Multimedia Image 7.8.0 (not Torizon: root logs in and
+# there is no sudo): the U-Boot hook as on the i.MX8MP, the image loaded
+# from partition 2 of the eMMC (the root file system, /var/yakogl) and
+# entered at 0xd0000000 (its zephyr,sram) after "dcache off; icache flush",
+# WDOG3 the watchdog the image arms. Its kernel has no SCMI raw interface,
+# so the record is the console only: BOARD_UART, a local device (the UART_3
+# adapter, 115200 8N1, only read), is required for a run. (The BBM GPR4..7
+# route, tools/imx95_bbm_record.sh, stays for a kernel that has the raw
+# interface: BOARD_REC_SINK=bbm.) The hook was typed by hand on the board
+# with this runner's strings and ran the image (one-shot and counted default);
+# the runner itself has not run on the board yet (docs/standalone-boot.md).
 # stm32mp257f-dk is the STM32MP257F-DK (ST's U-Boot 2023.10, booted after
 # TF-A v2.10 BL2/BL31 and OP-TEE 4.0): its run belongs to its own runner,
 # tools/board-stm32mp2-uboot.sh (mp2_uboot, below), typed at ST's U-Boot
@@ -230,8 +232,8 @@
 #                      tftp/uboot-mmc run probes it and captures the console into
 #                      the run directory (console.raw/.ts/.txt; read it with
 #                      tools/cts/imx8mp-console-scan.py), unset: no capture;
-#                      imx95: optional in the same way (U-Boot's and the
-#                      image's LPUART1); unset, the record is the BBM GPRs'
+#                      imx95: a local device (the UART_3 adapter), required
+#                      for a run: the console is the only record there
 #                      x2: optional in the same way (UART2, the board's own
 #                      USB serial adapter), for a kexec-dev run; nanopc-t6:
 #                      the host's tty on the debug UART, or
@@ -352,8 +354,10 @@ NV=
 UART_VAR=           # the Pis' own name for BOARD_UART (PI4_UART, PI5_UART)
 GPU_DEV=
 RESET_RE=
-SU='sudo -n '       # the prefix of a root command on the board (x2: root logs in, none)
-REC_SINK=           # where the record is read: nvmem (imx8mp), devmem (x2), bbm (imx95), none
+SU='sudo -n '       # the prefix of a root command on the board (x2, imx95: root logs in, none)
+MMC_WHERE_DRY=      # the stand-in of mmc_where's "TARGET FSROOT" in a dry run (default: Torizon's)
+UART_STTY=          # more stty settings of a local console device (imx95)
+REC_SINK=           # where the record is read: nvmem (imx8mp), devmem (x2), console (imx95; bbm: its SCMI raw route), none
 REC_FILE=snvs.txt   # the run directory's copy of the record (imx95: bbm.txt)
 X2_DIR=
 case "$BOARD" in
@@ -457,23 +461,51 @@ imx8mp)
     ;;
 imx95)
     # The Toradex Verdin iMX95 on the Mallow (docs/standalone-boot.md,
-    # "Toradex Verdin iMX95"; docs/notes/pre-study-imx95.md H2). Not run on a
-    # board yet: NB_MMC, MMC_PART and the hook's "dcache off; icache off"
-    # before go are the other Verdins' and are B1's to confirm.
-    BOOTS="uboot-tftp uboot-mmc"
-    # the eMMC is U-Boot's mmc 0 (Toradex's env: update_uboot writes "mmc dev
-    # 0 1"), Torizon's root on its partition 1, Linux's mmcblk0 (as on the
-    # AM62P); mmc_where reads the mount from the board and refuses another
-    NB_MMC=0:1; MMC_PART=/dev/mmcblk0p1
+    # "Toradex Verdin iMX95"; docs/notes/pre-study-imx95.md H2). The board
+    # was read on 2026-11-25: Toradex Reference Multimedia Image 7.8.0 (Yocto
+    # scarthgap), not Torizon; root logs in over ssh (Dropbear) and there is no
+    # sudo; fw_setenv is libubootenv's. The values below are what the board
+    # answered, and the hook with them was typed by hand with this runner's
+    # strings (a one-shot and a counted default, both ran the image). This
+    # runner itself has NOT run on the board since it was brought to these
+    # values: its first status, install and run are still to do.
+    BOOTS="uboot-mmc uboot-tftp"
+    # the eMMC is U-Boot's mmc 0 and Linux's mmcblk0; its partition 2 (ext4)
+    # is the root file system, /var included, so U-Boot names the staged file
+    # /var/yakogl/<name> (mmc_where reads the mount from the board and
+    # refuses anything else). MMC_PART follows from NB_MMC.
+    NB_MMC=0:2; MMC_PART=/dev/mmcblk${NB_MMC%:*}p${NB_MMC#*:}
+    MMC_WHERE_DRY="/ /"   # findmnt's TARGET and FSROOT of /var/yakogl there
     # driver/boards/toradex/verdin_imx95/verdin_imx95_mimx9596_a55.dts
     # zephyr,sram (&dram): 256 MiB at 0xd0000000, the link, load and go address
     YAKO_ADDR=0xd0000000; LOAD_END=0xe0000000
+    # the cache commands before go: the sequence five images in a row ran
+    # with ("icache off", the other Verdins', was not tried)
+    NB_CACHE='dcache off; icache flush'
+    # root logs in: no sudo (BOARD_SU='sudo -n ' for a login that has it);
+    # the lib refuses a login that is not uid 0
+    SU=${BOARD_SU-}
+    NB_REQUIRE_ROOT=1
+    # fw_setenv/fw_printenv are libubootenv's (0.3.5): key=value scripts, a file
+    # in /tmp (a tmpfs) rather than /dev/stdin, an absent variable prints NAME=;
+    # Dropbear resets the connection on a very long command line (8.6 kB did)
+    NB_SETENV=tmpfile
+    FWN_FILTER=1
+    NB_CMD_MAX=2048
+    # the console of the UART_3 adapter (a local device, 115200 8N1); only read:
+    # a character sent to it during boot stops U-Boot at its prompt, so the
+    # capture also leaves DTR alone on close (-hupcl) and echoes nothing (-echo)
+    UART_STTY='-hupcl'
     # driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c, the WDOG3
     # self-arm's line ("verdin_imx95: WDOG3 armed: CS 0x%08x ..."); an image
     # with the board layer carries "board: watchdog armed" too
     MARKER='verdin_imx95: WDOG3 armed'
     NB_WATCHDOG=WDOG3
-    REC_SINK=bbm
+    # the record: the kernel has no SCMI raw interface, so the console is the
+    # only sink (BOARD_REC_SINK=bbm: tools/imx95_bbm_record.sh, for a kernel
+    # that has one)
+    REC_SINK=${BOARD_REC_SINK:-console}
+    case "$REC_SINK" in console | bbm) ;; *) echo "board.sh imx95: BOARD_REC_SINK must be console or bbm, not '$REC_SINK'" >&2; exit 2 ;; esac
     REC_FILE=bbm.txt
     NO_CONSOLE_WHY="BOARD_UART was not set"
     END_RE_DEFAULT=
@@ -1176,6 +1208,8 @@ write_index() {
             ytools record --log "$dir/console.txt" 2>&1 | sed 's/^/  /'
         elif [ "$REC_SINK" = bbm ]; then
             echo "  none (no BBM record was read)"
+        elif [ "$REC_SINK" = console ]; then
+            echo "  none (the console has no yk-record line)"
         elif [ -n "$REC_SINK" ]; then
             echo "  none (no SNVS record was read)"
         else
@@ -1431,7 +1465,7 @@ snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
 # BBM_OFF=1: this kernel has no raw interface and the console (BOARD_UART) is
 # the run's record instead.
 BBM_OFF=0
-bbm_sh() { b "sudo -n sh -s -- $1   # stdin: tools/imx95_bbm_record.sh" < "$HERE/imx95_bbm_record.sh"; }
+bbm_sh() { b "${SU}sh -s -- $1   # stdin: tools/imx95_bbm_record.sh" < "$HERE/imx95_bbm_record.sh"; }
 # bbm_clear: the record zeroed (w0 first) and read back; without the raw
 # interface, the console stands in when BOARD_UART is set, else a refusal
 bbm_clear() {
@@ -1457,6 +1491,14 @@ bbm_clear() {
     [ "$rc" = 0 ] || die "cannot clear the BBM record (rc $rc): $(cat "$TMP/bbm.err")"
     [ "$got" = "$REC0" ] || die "BBM record read back '$got', not '$REC0'"
     meta rec_sink "BBM GPR4..7 (SCMI raw)"
+}
+# console_record_only: the i.MX 95 on a kernel without the raw interface: no
+# record is cleared or read on the board, the console capture is the record
+console_record_only() {
+    [ -z "${SEL:-}" ] || die "SEL: the i.MX 95 image reads no selector (board_selector is -1); unset SEL" 2
+    meta rec0 ""
+    meta rec_sink "console only"
+    note "the record is the console capture (BOARD_UART): nothing is cleared or read on the board" >&2
 }
 # bbm_read: the four words, "w0 w1 w2 w3", empty when the read failed
 bbm_read() { [ "$BBM_OFF" = 1 ] || bbm_sh read 2>/dev/null | xargs; }
@@ -1747,12 +1789,12 @@ run_tryboot() {
 # ---- uboot-tftp (am62p, imx8mp) --------------------------------------------------
 uboot_on_exit() {
     if [ "${ARMED:-0}" = 1 ]; then
-        b 'sudo -n fw_setenv yako_once' && note "disarmed after a failure before the reboot" >&2
+        b "${SU}fw_setenv yako_once" && note "disarmed after a failure before the reboot" >&2
         [ "$BOOT" = uboot-tftp ] && rm -f "$NETBOOT_TFTP_ROOT/$UB_FILE"
     fi
     # an eMMC copy staged for a boot that never came is removed again
     if [ -n "${MMC_STAGED:-}" ] && [ "${REBOOTED:-0}" = 0 ]; then
-        b "sudo -n rm -f $MMC_STAGED" && note "removed $MMC_STAGED (no reboot)" >&2
+        b "${SU}rm -f $MMC_STAGED" && note "removed $MMC_STAGED (no reboot)" >&2
     fi
     stop_cap
     lease_release
@@ -1798,8 +1840,8 @@ STAGE_DIR=/var/yakogl
 # STAGE_DIR is on MMC_PART, the partition NB_MMC names; and MMC_FREE.
 mmc_where() {
     local m src tgt root rel
-    bget m "sudo -n mkdir -p $STAGE_DIR && set -- \$(findmnt -n -v -o SOURCE,TARGET,FSROOT -T $STAGE_DIR) && echo \$(readlink -f \$1) \$2 \$3" \
-        "$MMC_PART /var /ostree/deploy/torizon/var" || die "cannot read the mount of $STAGE_DIR on the board"
+    bget m "${SU}mkdir -p $STAGE_DIR && set -- \$(findmnt -n -v -o SOURCE,TARGET,FSROOT -T $STAGE_DIR) && echo \$(readlink -f \$1) \$2 \$3" \
+        "$MMC_PART ${MMC_WHERE_DRY:-/var /ostree/deploy/torizon/var}" || die "cannot read the mount of $STAGE_DIR on the board"
     read -r src tgt root <<<"$m"
     [ "$src" = "$MMC_PART" ] ||
         die "$STAGE_DIR is on '$src', not $MMC_PART (U-Boot's mmc $NB_MMC): U-Boot would not find the image there"
@@ -1818,15 +1860,15 @@ mmc_where() {
 mmc_stage() {
     local dst=$STAGE_DIR/$1 got
     if [ "$DRY" = 1 ]; then
-        echo "DRY board\$ sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync' < $IMG"
+        echo "DRY board\$ ${SU}sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync' < $IMG"
     else
-        timeout 900 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync'" < "$IMG" ||
-            { b "sudo -n rm -f $dst.part $dst"; die "copying the image to $dst failed"; }
+        timeout 900 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync'" < "$IMG" ||
+            { b "${SU}rm -f $dst.part $dst"; die "copying the image to $dst failed"; }
     fi
     MMC_STAGED=$dst
-    bget got "echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null && sha256sum $dst" "$IMG_SHA  $dst"
+    bget got "echo 3 | ${SU}tee /proc/sys/vm/drop_caches >/dev/null && sha256sum $dst" "$IMG_SHA  $dst"
     got=${got%% *}
-    [ "$got" = "$IMG_SHA" ] || { b "sudo -n rm -f $dst"; MMC_STAGED=; die "the eMMC copy $dst reads back as '$got', not $IMG_SHA (removed)"; }
+    [ "$got" = "$IMG_SHA" ] || { b "${SU}rm -f $dst"; MMC_STAGED=; die "the eMMC copy $dst reads back as '$got', not $IMG_SHA (removed)"; }
     meta staged "$dst on the eMMC, read back equal"
 }
 
@@ -1844,7 +1886,8 @@ imx8mp_capture_start() {
         meta console "serial bridge: console.raw, console.ts; console.txt derived"
         return 0
     fi
-    act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo || {
+    # shellcheck disable=SC2086  # UART_STTY: words
+    act stty -F "$BOARD_UART" 115200 cs8 -cstopb -parenb raw -echo $UART_STTY || {
         [ "$src" = net ] && rm -f "$NETBOOT_TFTP_ROOT/$file"
         die "stty on BOARD_UART failed (no reboot)"
     }
@@ -1871,6 +1914,12 @@ run_uboot() {
     # the i.MX8MP captures the console only when BOARD_UART is set (opt-in)
     UCAP=0
     case "$BOARD" in imx8mp | imx95) [ -n "${BOARD_UART:-}" ] && UCAP=1 ;; esac
+    if [ "$BOARD" = imx95 ] && [ "$REC_SINK" = console ]; then
+        # the console is the only record: no run without it
+        [ "$DRY" = 1 ] && BOARD_UART=${BOARD_UART:-/dev/BOARD_UART}
+        [ -n "${BOARD_UART:-}" ] || die "set BOARD_UART=the console device (115200 8N1): the record of the i.MX 95 is the console only"
+        UCAP=1
+    fi
     if [ "$DRY" = 1 ]; then
         case "$BOARD" in imx8mp | imx95) ;; *) BOARD_UART=${BOARD_UART:-BRIDGE:PORT} ;; esac
         if [ "$BOOT" = uboot-tftp ]; then
@@ -1932,16 +1981,16 @@ run_uboot() {
         [ "$kx" = 00 ] || die "a kexec image is loaded on the board (kexec_loaded, kexec_crash_loaded = '$kx'): someone else's jump is pending"
     fi
     if [ "$DRY" = 1 ]; then
-        b 'sudo -n fw_printenv   # env route: the install must match the library; yako_once and yako_default must be absent'
+        b "${SU}fw_printenv   # env route: the install must match the library; yako_once and yako_default must be absent"
     else
         if [ "$route" = env ]; then
             st=$(check_install)
             [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st; 'install' upgrades a stale one)"
         fi
-        pend=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
+        pend=$(b "$(fwn yako_once)")
         [ -z "$pend" ] || die "a one-shot is already pending (yako_once=$pend); find its owner, or 'disarm'"
         # with a default set, the boot after the image is the default image, not Linux
-        pend=$(b 'sudo -n fw_printenv -n yako_default 2>/dev/null')
+        pend=$(b "$(fwn yako_default)")
         [ -z "$pend" ] || die "a permanent default is set (yako_default=$pend): the board would not come back to Linux ('nodefault')"
     fi
     if [ "$src" = mmc ]; then
@@ -1958,6 +2007,7 @@ run_uboot() {
     #    i.MX 95's in the BBM GPRs
     [ "$BOARD" = imx8mp ] && snvs_clear
     [ "$REC_SINK" = bbm ] && bbm_clear
+    [ "$REC_SINK" = console ] && console_record_only
 
     # From here on any exit runs uboot_on_exit: it disarms an armed env and
     # removes an eMMC copy whose boot never came (MMC_STAGED, REBOOTED).
@@ -2029,7 +2079,7 @@ run_uboot() {
         if [ "$DRY" = 0 ]; then ARMED=1; fi
         setenv_script "$TMP/arm" || die "fw_setenv (arm) failed" 5
         if [ "$DRY" = 0 ]; then
-            back=$(b 'sudo -n fw_printenv -n yako_once')
+            back=$(b "$(fwn yako_once)")
             [ "$back" = "$TOKEN" ] || die "read-back of yako_once: '$back', not '$TOKEN'" 5
         fi
     else
@@ -2038,7 +2088,7 @@ run_uboot() {
     meta t_arm "$(date +%s)"
 
     # 7. reboot; the ssh session ends with it
-    b 'sync; sudo -n systemctl reboot' || true
+    b "sync; ${SU}systemctl reboot" || true
     ARMED=0   # the board owns the one-shot now; U-Boot clears it
     REBOOTED=1
     T_REBOOT=$(date +%s)
@@ -2049,15 +2099,15 @@ run_uboot() {
         else
             echo "DRY host\$ wait until ssh answers from a new boot (uptime < time since the reboot), <= $RUN_BOUND s"
         fi
-        b 'sudo -n fw_printenv -n yako_once   # must print nothing'
+        b "${SU}fw_printenv -n yako_once   # must print nothing"
         if [ "$BOARD" = imx8mp ]; then
-            b "sudo -n od -A n -t x4 $NV"
+            b "${SU}od -A n -t x4 $NV"
         fi
         [ "$REC_SINK" = bbm ] && bbm_sh read
         if [ "$BOARD" != am62p ] && [ "$src" = net ]; then
             echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
         fi
-        [ "$src" = mmc ] && [ "$PROBE" = 0 ] && b "sudo -n rm -f $STAGE_DIR/$file"
+        [ "$src" = mmc ] && [ "$PROBE" = 0 ] && b "${SU}rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory (yakogl-tools record)"
         exit 0
     fi
@@ -2090,10 +2140,10 @@ run_uboot() {
     # 9. the one-shot must be gone; then what the server and the record say
     if [ "$rcc" != 5 ]; then
         meta back 1
-        left=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
+        left=$(b "$(fwn yako_once)")
         if [ -n "$left" ]; then
             note "yako_once is still '$left' after the cycle: disarming" >&2
-            b 'sudo -n fw_setenv yako_once'
+            b "${SU}fw_setenv yako_once"
             rcc=6
         fi
     fi
@@ -2104,7 +2154,7 @@ run_uboot() {
             grep -F " file=$file " "$NETBOOT_TFTP_LOG" > "$RD/tftp.txt" 2>/dev/null
             [ -s "$RD/tftp.txt" ] || rm -f "$RD/tftp.txt"
         fi
-        if [ "$BOARD" = imx8mp ]; then snvs_read > "$RD/$REC_FILE"; else bbm_read > "$RD/$REC_FILE"; fi
+        if [ "$BOARD" = imx8mp ]; then snvs_read > "$RD/$REC_FILE"; elif [ "$REC_SINK" = bbm ]; then bbm_read > "$RD/$REC_FILE"; fi
         [ -s "$RD/$REC_FILE" ] && [ "$(wc -w < "$RD/$REC_FILE")" = 4 ] || rm -f "$RD/$REC_FILE"
         if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
     else
@@ -2117,7 +2167,7 @@ run_uboot() {
     if [ -n "${MMC_STAGED:-}" ]; then
         if [ "$rcc" = 5 ]; then
             meta cleanup "not done: Linux not back ($MMC_STAGED left on the eMMC)"
-        elif b "sudo -n rm -f $MMC_STAGED && ! test -e $MMC_STAGED"; then
+        elif b "${SU}rm -f $MMC_STAGED && ! test -e $MMC_STAGED"; then
             meta cleanup "$MMC_STAGED removed (read back)"
         else
             meta cleanup "$MMC_STAGED NOT removed"
@@ -2669,7 +2719,7 @@ cmd_setup() {
     uboot-*:uninstall) nb_uninstall ;;
     uboot-tftp:disarm) nb_disarm ;;
     uboot-mmc:disarm)
-        b "sudo -n rm -f $STAGE_DIR/once-*.bin; ls $STAGE_DIR 2>/dev/null"
+        b "${SU}rm -f $STAGE_DIR/once-*.bin; ls $STAGE_DIR 2>/dev/null"
         nb_disarm ;;
     tryboot:install | tryboot:uninstall)
         note "tryboot needs no install: config.txt stays the Linux default; each run writes tryboot.txt and puts it back" ;;
@@ -2691,10 +2741,10 @@ uboot_default() {
     if [ "$DRY" = 0 ]; then
         st=$(check_install)
         [ "$st" = ok ] || die "the U-Boot hook is not installed as tools/uboot-netboot-lib.sh writes it ($st): 'install' first"
-        st=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
+        st=$(b "$(fwn yako_once)")
         [ -z "$st" ] || die "a one-shot is pending (yako_once=$st); find its owner, or 'disarm'"
     else
-        b 'sudo -n fw_printenv   # the install must match the library; yako_once must be absent'
+        b "${SU}fw_printenv   # the install must match the library; yako_once must be absent"
     fi
     mmc_where
     mmc_stage default.bin
@@ -2706,7 +2756,7 @@ uboot_default() {
     setenv_script "$TMP/default" || die "fw_setenv failed; the env is as it was (one write)" 5
     w="$UB_DIR/default.bin"
     [ "$BOOTS_N" = forever ] || w+=$'\n'"$BOOTS_N"
-    bget got 'sudo -n fw_printenv -n yako_default; sudo -n fw_printenv -n yako_default_left 2>/dev/null' "$w"
+    bget got "$(fwn yako_default); $(fwn yako_default_left)" "$w"
     [ "$got" = "$w" ] || die "read-back of yako_default and its count: '$got', not '$w'" 5
     if [ "$BOOTS_N" = forever ]; then
         note "default set: from the next boot on, U-Boot loads $UB_DIR/default.bin from mmc $NB_MMC at every boot. Nothing was rebooted."
@@ -2719,9 +2769,9 @@ uboot_nodefault() {
     local got
     printf 'yako_default=\nyako_default_left=\n' > "$TMP/nodefault"
     setenv_script "$TMP/nodefault" || die "fw_setenv failed" 5
-    bget got 'sudo -n fw_printenv -n yako_default 2>/dev/null' ''
+    bget got "$(fwn yako_default)" ''
     [ -z "$got" ] || die "yako_default is still '$got'" 5
-    b "sudo -n rm -f $STAGE_DIR/default.bin"
+    b "${SU}rm -f $STAGE_DIR/default.bin"
     note "no default: U-Boot boots the saved bootcmd (Linux) again"
 }
 
