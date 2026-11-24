@@ -117,6 +117,8 @@ want tests/mali_vcube_magswitch.rs "mali treekey"
 want tests/mali_deqp_intval.rs "mali treekey"
 want tests/mali_deqp_colourpair.rs "mali treekey"
 want tests/mali_ref_selftest.rs "mali treekey"
+want tests/mali_glmark2_corpus.rs "mali treekey"
+want tests/mali_depthonly_gl.rs "mali treekey"
 want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
 want src/mali/genxml/v10.rs "mali treekey"
@@ -506,6 +508,7 @@ done
 expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
 # the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
 expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
+expect "tests: mali_glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/mali_glmark2_corpus.rs)"
 expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
 # The tree key row (scope treekey): every .rs file the scan reads reaches it,
 # a test file with a GPU's scope too, and so does the scan itself; a document
@@ -542,7 +545,7 @@ expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "
 # the test knobs); the bound says --local trimmed the plan, not the exact count.
 # One gap: its shaderc-online rows compile tests/es3_shaderc_corpus.rs, and the
 # plans here run without the dEQP corpus (DEQP_GLES3_TEST_DIR unset above).
-expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+expect "local: the summary says so" '^check.sh: (9|[123][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
 expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"
