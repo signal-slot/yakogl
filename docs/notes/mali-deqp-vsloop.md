@@ -41,46 +41,40 @@ which compares the Fail counts with those at 37305608.
 
 ## 2. How the cases were measured
 
-**The host measure could not run here.** `tools/mali/deqp-host-measure.sh`
-needs a VK-GL-CTS checkout with the yakogl target and its external sources.
-This machine has no `DEQP_WORK`, and the shallow fetch of VK-GL-CTS
-`93bca01` into `$CONNECTED_DEPS_DIR` was refused: no network was allowed.
-So the cases were measured another way:
-
 1. **The case list.** The 196 lines of the four slices' `refusals.tsv`
    whose text holds "a loop in a vertex shader", with each case's status
-   from `results.tsv` (section 3).
-2. **The sources.**
-   - Most cases are shapes of references drawn earlier from the host
-     measure's `.qpa`: `deqp_loops_vs_*`, `deqp_loops2_vs_*` and
-     `deqp_loops3_vs_*`.
-   - For a shape with no such reference, the vertex shader was rebuilt from
-     the generator's template, which is in `docs/notes/mali-deqp-loops.md`
-     section 2.1. A constant count writes `${ONE}`, `${TWO}` and the rest as
-     literals, so the constant twin is the verbatim uniform-count reference
-     with each `ui_*` bound written as its literal.
-   - The `functions.control_flow` cases use the verbatim shader-library
-     harness of `deqp_loops2_vs_fn_return_in_loop` around the case's
-     function. The function comes from `data/gles3/shaders/functions.test`
-     at `93bca01` in `$CONNECTED_DEPS_DIR/VK-GL-CTS-gles3`. It is the gles2
-     text when the loop is a `for`. `tools/shaders/es100/ret_nested.vert`,
-     taken from the gles2 file, has the same `return_in_nested_loop`
-     function.
-   - Each `.license` sibling names its source and says that it was
-     rebuilt.
-3. **The refusal at the tip.** Every rebuilt pair and every existing
-   `deqp_loops*_vs_*` reference was compiled at `e65567ea` through
-   `tests/mali_ref::compile_pair` (glCompileShader and glLinkProgram as
-   `src/gl/program.rs` runs them). The features were `host-test, gpu-mali,
-   shaderc-online, no-shader-table`. A throw-away test printed the first
-   refusal of each pair, and it is not committed. Section 3 has the results.
+   from `results.tsv` (section 3). `--filter` matches case names, not
+   refusal text, so the list was passed as a file.
+2. **The host measure** at `63c6418d` (the references' first commit; it
+   changes no compiler code, so the compiler is the one of `e65567ea`),
+   VK-GL-CTS `93bca01` fetched shallow into `$CONNECTED_DEPS_DIR` with the
+   yakogl target patch and its external sources:
+
+   ```text
+   grep -h 'a loop in a vertex shader' tools/cts/log/2026-11-24-t6-gles2-S{1,2,3,4}-8ff01055/refusals.tsv | cut -f1 > cases.txt
+   tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS-host" \
+       --slice tools/cts/log/2026-11-24-t6-gles2-S1-8ff01055 ... --slice ...-S4-8ff01055 \
+       --cases cases.txt --out "$TMPDIR/measure-vsloop"
+   ```
+
+   All 196 cases began. 188 have a compile refusal on the host: 179
+   LoopVertex (159 Fail and 20 NotSupported on the board), 8 UniformType
+   and 1 constant op. 8 compile (section 3). The output is not committed.
+3. **The sources.** Every reference's pair is verbatim from the measure's
+   `programs/` (each `.license` sibling names its program). A first draft, made
+   before VK-GL-CTS could be fetched, rebuilt all eight vertex shaders from
+   the generator's template and the shader library. Six of them were
+   byte-equal to the `.qpa`. Two were not, and were drawn again from the verbatim text:
+   `uni_inf_break_last` (the draft declared an unused `int i`) and
+   `uni_only_continue` (whitespace). Mesa's records for both are the same
+   bytes as before.
 
 ## 3. The shapes
 
 Groups of the 196 cases (status at 8ff01055) and the reference that holds
 each shape:
 
-| group | cases | refusal at e65567ea (host) | reference |
+| group | cases | first refusal on the host (measure at 63c6418d) | reference |
 |---|---|---|---|
 | constant bound, a guard or `continue` that folds once unrolled: `conditional_{body,break,continue}`, `double_continue`, `mixed_break_continue`, `unconditional_{break,continue}`, `infinite_with_conditional_break`; each of `for`, `while`, `do_while` | 24 Fail | LoopVertex | **new**: `con_cond_break`, `con_mixed`, `con_double_continue`, `con_inf_cond_break` |
 | `infinite_with_unconditional_break_{first,last}`, every loop type and count | 18 Fail | LoopVertex | **new**: `uni_inf_break_last` |
@@ -88,29 +82,30 @@ each shape:
 | `functions.control_flow.return_after_{break,continue}_vertex` | 2 Fail | LoopVertex | **new**: `fn_after_break` |
 | `functions.control_flow.return_in_nested_loop_vertex` | 1 Fail | LoopVertex | **new**: `fn_nested` |
 | constant `101_iterations` (Mesa keeps it: 101 passes is more than 32) | 3 Fail | LoopVertex | `deqp_loops2_vs_{do,wh}_con_101_iterations` |
-| constant `nested`, `nested_sequence`, `nested_tricky_dataflow_{1,2}` | 12 Fail | `do_while`: LoopVertex. `for`: **compiles** on the host (see below) | `deqp_loops2_vs_do_con_nested`, `deqp_loops_vs_nested_const` (MATCHED) |
-| uniform and dynamic counts, kept by Mesa: `basic_*_float`, `conditional_*`, `double_continue`, `infinite_with_conditional_break`, `mixed_break_continue`, `nested*`, `unconditional_{break,continue}` | 90 Fail | LoopVertex. Three refs stop earlier: `for_dyn_nested`, `wh_dyn_nested_sequence` at UniformType; `deqp_loops_vs_float_uni` at LoopVertex | `deqp_loops2_vs_{for,wh,do}_{uni,dyn}_*`, `deqp_loops_vs_float_uni` |
+| constant `nested`, `nested_sequence`, `nested_tricky_dataflow_{1,2}` | 12 Fail | `do_while`: LoopVertex. `for` and `while`: **compile** on the host (see below) | `deqp_loops2_vs_do_con_nested`, `deqp_loops_vs_nested_const` (MATCHED) |
+| uniform and dynamic counts, kept by Mesa: `basic_*_float`, `conditional_*`, `double_continue`, `infinite_with_conditional_break`, `mixed_break_continue`, `nested*`, `unconditional_{break,continue}` | 90 Fail | LoopVertex, except the 8 dynamic `for`/`while` `nested*` cases: UniformType (an `int` uniform, plan #402 `ref-vsunif`) | `deqp_loops2_vs_{for,wh,do}_{uni,dyn}_*`, `deqp_loops_vs_float_uni` |
 | `functions.control_flow.{return_in_loop,mixed_return_break_continue}_vertex` 2 Fail, `return_after_loop_sequence_vertex` 1 NS | 2 Fail + 1 NS | LoopVertex | `deqp_loops2_vs_fn_*`, `deqp_loops3_vs_fn_*` |
 | `return.return_in_{static,dynamic,infinite}_loop_*_vertex` | 7 Fail | LoopVertex | `deqp_loops2_vs_ret_*` |
 | `invariance.{highp,mediump,lowp}.loop_{1,2}` | 6 Fail | LoopVertex | `deqp_loops2_vs_inv_*` |
 | `indexing.vector_subscript.vec{2,3,4}_dynamic_loop_subscript_write_*_vertex` | 18 NS | LoopVertex | `deqp_loops2_vs_idx_vec_*` |
-| `functions.control_flow.return_in_loop_if_vertex` | 1 Fail | LoopVertex (gles3 text) | none: the gles2 text was not at hand, and gles3 uses a `while` here |
-| `struct.uniform.{dynamic_,}loop_nested_struct_array_vertex` | 1 Fail + 1 NS | not measured | none: a generated case, and its text was not at hand |
+| `functions.control_flow.return_in_loop_if_vertex` | 1 Fail | LoopVertex | none: the eight slots are used |
+| `struct.uniform.dynamic_loop_nested_struct_array_vertex` | 1 NS | LoopVertex | none: the eight slots are used |
+| `struct.uniform.loop_nested_struct_array_vertex` | 1 Fail | a constant operation on a value that is not a finite normal float (plan #402 `ref-vsconst`) | none |
 
 The new references cover **54 Fail** cases. The earlier references cover
 139 cases. Three cases have no reference.
 
-**Constant nested `for` loops have been taken since 8ff01055.**
-`for_constant_iterations.{nested,nested_sequence,nested_tricky_dataflow_1,_2}_vertex`
-was refused with LoopVertex on the board at 8ff01055. At the tip,
-`compile_pair` compiles the rebuilt pairs, and the verbatim
+**Constant nested `for` and `while` loops have been taken since 8ff01055.**
+`{for,while}_constant_iterations.{nested,nested_sequence,nested_tricky_dataflow_1,_2}_vertex`
+(8 cases) were refused with LoopVertex on the board at 8ff01055. In the
+host measure every shader of those 8 cases compiles and links. The verbatim
 `deqp_loops_vs_nested_const` (`nested_sequence_vertex`) is byte-equal (its
 test in `tests/mali_deqp_loops.rs` runs). Commit `4aadf854`, which comes
 after `8ff01055`, taught `vs_loop_shape` and `put_loop` the counted loop
-nested in a counted loop. So these four cases should leave the family at
-the next board run. Whether they pass there is for that run, and for the
-host measure through the C library, to say. The `while` and `do_while`
-twins (`deqp_loops2_vs_do_con_nested`) are still refused.
+nested in a counted loop. So these 8 cases should leave the family at
+the next board run. Whether they pass there is for that run to say: the
+host draws nothing. The `do_while` twins (`deqp_loops2_vs_do_con_nested`)
+are still refused.
 
 ## 4. What Mesa 26.2.1 does
 
@@ -120,7 +115,10 @@ Mesa 26.2.1's drm-shim, built in `$CONNECTED_DEPS_DIR/mesa-shim` with
 `drm_shim_ref.sh build` from the tarball whose sha256 is in
 `third_party/mesa-26.2.1/UPSTREAM`. Two self-checks passed first: the
 README's `gm2_cf_ifelse_vs` and `deqp_loops_vs_nested_const` were drawn
-again, and both were byte-equal apart from the `trace` name. Mesa's
+again, and both were byte-equal apart from the `trace` name. The shim was
+built again later in `$CONNECTED_DEPS_DIR/mesa-shim`, and
+`con_cond_break` drawn on it was byte-equal to the committed record. The two
+verbatim redraws (section 2) were made on that build. Mesa's
 shaderdb line shows **0 loops** in the position, varying and fragment
 programs of every reference. **Mesa unrolls or deletes every loop here.**
 
@@ -130,7 +128,7 @@ programs of every reference. **Mesa unrolls or deletes every loop here.**
 | `con_mixed` | `loops.for_constant_iterations.mixed_break_continue_vertex` | unrolled (5 passes). Pass 0 continues and pass 3 breaks: two rotations | the same 11 words as `con_cond_break` |
 | `con_double_continue` | `loops.while_constant_iterations.double_continue_vertex` | unrolled. Pass 1 continues: two rotations | the same 11 words |
 | `con_inf_cond_break` | `loops.do_while_constant_iterations.infinite_with_conditional_break_vertex` | `do {..} while (true)` with `if (i == 1) break;`: unrolled to two passes | the same 11 words |
-| `uni_inf_break_last` | `loops.do_while_uniform_iterations.infinite_with_unconditional_break_last_vertex` (its body `do { res = res.yzwx; break; } while (true);` is assumed, not read from a `.qpa`) | the loop ends in `break`, so it is one pass (`wrapper_unroll`): one rotation | 11 words, stored as `.yzw` |
+| `uni_inf_break_last` | `loops.do_while_uniform_iterations.infinite_with_unconditional_break_last_vertex` (body `do { res = res.yzwx; break; } while (true);`) | the loop ends in `break`, so it is one pass (`wrapper_unroll`): one rotation | 11 words, stored as `.yzw` |
 | `uni_only_continue` | `loops.do_while_uniform_iterations.only_continue_vertex` | the loop has no effect and is deleted. The uniform bound is not read | 11 words, `LD_ATTR_IMM.v3.f32` stored as `.xyz` |
 | `fn_after_break` | `functions.control_flow.return_after_break_vertex` | inlined, unrolled to 5 negations, folded to `-in0` | 4 words: `LD_ATTR_IMM.f32`, `FADD.f32 r0, r0.neg, -0`, the store |
 | `fn_nested` | `functions.control_flow.return_in_nested_loop_vertex` | inlined. The nested loops unroll and the return at `i == 1` folds to `-in0` | the same 4 words as `fn_after_break` |
