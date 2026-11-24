@@ -13,9 +13,9 @@
 //! output and their `FCMP_AND.f32`) compile and are byte-equal
 //! ([`LOWERED`]): the shader library's `isOk` chains, the operator suite's
 //! int arithmetic, compares and bool logic in either stage, the rsg
-//! programs' folded literals and the `uniform_api` bool compares. `opvs_logical_and` compiles with other words than Mesa's
-//! ([`DIFFERS`]: Mesa compares the mediump attributes at fp16, the vertex
-//! walk at fp32). The rest stay `#[ignore]`d with their refusal
+//! programs' folded literals and the `uniform_api` bool compares; plan #387
+//! intval-vs16 (vs16-1) added `opvs_logical_and` and `opvs_not_equal_bvec3`,
+//! the vertex walk's mediump compares at fp16. The rest stay `#[ignore]`d with their refusal
 //! ([`REFUSED`], asserted exactly by `refusals_pinned`): the lowering that
 //! lifts one must move it in the same commit. `rsg_cond_fs` gets its result
 //! from Mesa's link (the dead varyings removed), which `mali_ref` cannot
@@ -42,7 +42,9 @@ const LOWERED: &[&str] = &[
     "opvs_add_int_highp",
     "opvs_div_ivec2_highp",
     "opvs_less_ivec4",
+    "opvs_logical_and",
     "opvs_mul_ivec3_mediump",
+    "opvs_not_equal_bvec3",
     "opvs_post_increment_int",
     "reslib_bvec_fs",
     "reslib_float_fs",
@@ -55,22 +57,11 @@ const LOWERED: &[&str] = &[
     "uniapi_bool_vs",
 ];
 
-/// The references that compile with other words than Mesa's: a mediump
-/// attribute's compare (`a_in0.z > 0.0` of a `mediump vec4` attribute) is
-/// fp16 in Mesa (the lane narrowed `FADD.f32 r0.h0`, `FMIN.v2f16` of the
-/// `&&`'s two, `FCMP_OR.v2f16.lt.m1`, `S16_TO_S32` into the colour's
-/// `CSEL`), fp32 in the vertex walk (the mixprec family's vertex side).
-const DIFFERS: &[&str] = &["opvs_logical_and"];
+/// The references that compile with other words than Mesa's: none.
+const DIFFERS: &[&str] = &[];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    /* `bvec3 != bvec3` of two `greaterThan` of mediump attributes: `any`
-     * of the lanes' `ine`, which the walk's reduction does not take (the
-     * mixprec family's vertex side, as `opvs_logical_and`) */
-    (
-        "opvs_not_equal_bvec3",
-        "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet",
-    ),
     /* its vertex shader compiles since step 2; its fragment shader reads
      * the varyings Mesa's link removes as dead, which `mali_ref` cannot
      * reach */
@@ -132,8 +123,11 @@ fn opvs_less_ivec4() {
     mali_ref::assert_matches("deqp_intval_opvs_less_ivec4");
 }
 
+/// `a_in0.z > 0.0 && a_in1.x > 0.0` of mediump attributes: each lane
+/// narrowed alone, `FMIN.v2f16` of the two and one `FCMP_OR.v2f16.lt.m1`
+/// against 0, `S16_TO_S32` into the colour's `CSEL` (plan #387
+/// intval-vs16, vs16-1).
 #[test]
-#[ignore = "differs: Mesa compares the mediump attributes at fp16, the vertex walk at fp32 (mixprec's vertex side); pinned by refusals_pinned"]
 fn opvs_logical_and() {
     mali_ref::assert_matches("deqp_intval_opvs_logical_and");
 }
@@ -143,8 +137,11 @@ fn opvs_mul_ivec3_mediump() {
     mali_ref::assert_matches("deqp_intval_opvs_mul_ivec3_mediump");
 }
 
+/// `bvec3 != bvec3` of two `greaterThan` of mediump attributes: the pair
+/// and the lone lane of each compared at fp16, each lane's
+/// `ICMP_OR.v2u16.ne.m1` and the `LSHIFT_OR.v2i16` chain lane 2, lane 1,
+/// lane 0 (plan #387 intval-vs16, vs16-1).
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * ... (the `any` of two bvec3's `ine`, mixprec's vertex side)"]
 fn opvs_not_equal_bvec3() {
     mali_ref::assert_matches("deqp_intval_opvs_not_equal_bvec3");
 }

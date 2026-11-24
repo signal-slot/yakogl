@@ -19,7 +19,7 @@
 //! - R9: uapi_bvec4_mix, uapi_bvec3_mix: `uniform_api` `bvec4`/`bvec3` with a true/false mix
 //!
 //! Drawn once on Mesa's drm-shim (`tools/mali/deqp_ref.sh --instrument
-//! shim`, uniform values from `gl_ref.py`). None is byte-equal at the tip:
+//! shim`, uniform values from `gl_ref.py`). [`MATCHED`] are byte-equal;
 //! [`REFUSALS`] pins the ones the compiler refuses with the text it gives,
 //! [`DIFFERS`] the ones it compiles to other words than Mesa. The lowering
 //! removes a reference from its list, lists it in [`MATCHED`] and drops the
@@ -56,7 +56,6 @@ fn vs16ref_bany_bvec4() {
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_bcmp_eq_bvec3() {
     mali_ref::assert_matches("deqp_vs16ref_bcmp_eq_bvec3");
 }
@@ -68,7 +67,6 @@ fn vs16ref_bcmp_eq_bvec4() {
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
 fn vs16ref_bcmp_ne_bvec3() {
     mali_ref::assert_matches("deqp_vs16ref_bcmp_ne_bvec3");
 }
@@ -128,7 +126,6 @@ fn vs16ref_not_bool() {
 }
 
 #[test]
-#[ignore = "compiles, but to other words than Mesa's"]
 fn vs16ref_or_bool() {
     mali_ref::assert_matches("deqp_vs16ref_or_bool");
 }
@@ -179,9 +176,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_vs16ref_ball_bvec4", ARITH),
     ("deqp_vs16ref_bany_bvec3", ARITH),
     ("deqp_vs16ref_bany_bvec4", ARITH),
-    ("deqp_vs16ref_bcmp_eq_bvec3", ARITH),
     ("deqp_vs16ref_bcmp_eq_bvec4", ARITH),
-    ("deqp_vs16ref_bcmp_ne_bvec3", ARITH),
     ("deqp_vs16ref_bcmp_ne_bvec4", ARITH),
     ("deqp_vs16ref_eq_mediump_vec4", ARITH),
     ("deqp_vs16ref_uapi_bvec3_mix", ARITH),
@@ -201,12 +196,14 @@ const DIFFERS: &[&str] = &[
     "deqp_vs16ref_lt_mediump_float",
     "deqp_vs16ref_ne_mediump_float",
     "deqp_vs16ref_not_bool",
-    "deqp_vs16ref_or_bool",
     "deqp_vs16ref_xor_bool",
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run): plan #387
+/// intval-vs16 step vs16-1, the mediump compares of an attribute against a
+/// constant at 16 bits, the `fmax` rule of `||` and the width-three
+/// `bvec` `==` / `!=` chain.
+const MATCHED: &[&str] = &["deqp_vs16ref_bcmp_eq_bvec3", "deqp_vs16ref_bcmp_ne_bvec3", "deqp_vs16ref_or_bool"];
 
 #[test]
 fn refusals_pinned() {
