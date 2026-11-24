@@ -11,5 +11,8 @@
 #   yako_part         the bootfs partition (ext4; the runner stages under
 #                     /boot/yakogl, which U-Boot sees as /yakogl)
 # The file is written only when the magic is there; mw.l afterwards clears
-# the magic so a later boot does not save the same ring again.
-if itest.l *${yako_ramlog_addr} == 0x474C4B59; then if ext4write mmc ${boot_instance}:${yako_part} ${yako_ramlog_addr} /yakogl/ramlog.bin ${yako_ramlog_size}; then echo yakogl-mp2: ramlog saved; else echo yakogl-mp2: ramlog write failed; fi; mw.l ${yako_ramlog_addr} 0 1; fi
+# the magic so a later boot does not save the same ring again. Without the
+# magic it says so ("yakogl-mp2: ramlog no ring at <addr>") and writes
+# nothing, so U-Boot's console always shows which of the three it was. On the
+# DK that is every boot: its warm reset does not keep DDR (README.md "Limit").
+if itest.l *${yako_ramlog_addr} == 0x474C4B59; then if ext4write mmc ${boot_instance}:${yako_part} ${yako_ramlog_addr} /yakogl/ramlog.bin ${yako_ramlog_size}; then echo yakogl-mp2: ramlog saved; else echo yakogl-mp2: ramlog write failed; fi; mw.l ${yako_ramlog_addr} 0 1; else echo yakogl-mp2: ramlog no ring at ${yako_ramlog_addr}; fi

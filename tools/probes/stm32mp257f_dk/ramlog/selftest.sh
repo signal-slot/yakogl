@@ -93,5 +93,52 @@ case $cmd in
     *) bad "snippet lacks the magic check, the write or the clear in order" ;;
 esac
 
+# The limit (README.md "Limit", measured 2026-11-24): the DK's warm reset
+# does not keep DDR, so the magic is never there after it. (1) the snippet
+# says so on U-Boot's console (the magic check's else), and writes nothing
+# there. (2) what U-Boot's md read at the ring after the reset (all
+# ffffffff) is no ring to the decoder. (3) the runner names the limit on the
+# verdict line of a blind MP2_RAMLOG=1 run whose ring is missing, and leaves
+# a record without ramlog_limit as it was.
+case $cmd in
+    *'mw.l ${yako_ramlog_addr} 0 1; else echo yakogl-mp2: ramlog no ring at ${yako_ramlog_addr}; fi') ok "snippet: no magic prints 'ramlog no ring', writes nothing" ;;
+    *) bad "snippet: no 'else echo yakogl-mp2: ramlog no ring at \${yako_ramlog_addr}' after the save (the console cannot tell a missing ring from a snippet that never ran)" ;;
+esac
+python3 -I -c 'import sys; open(sys.argv[1], "wb").write(b"\xff" * 0x10000)' "$tmp/after-reset.bin"
+python3 -I "$tool" "$tmp/after-reset.bin" >"$tmp/after-reset.out" 2>"$tmp/after-reset.err"
+r=$?
+if [ "$r" = 3 ] && [ "$(cat "$tmp/after-reset.err")" = 'ramlog: no ring' ] && [ ! -s "$tmp/after-reset.out" ]; then
+    ok "the ring after the DK's reset (all ffffffff): no ring, exit 3"
+else
+    bad "the ring after the DK's reset: exit $r, stderr '$(cat "$tmp/after-reset.err")'"
+fi
+runner=$here/../../../board-stm32mp2.sh
+limit=$(sed -n 's/^RAMLOG_LIMIT=//p' "$runner")
+for c in limit old; do
+    mkdir -p "$tmp/rec-$c"
+    {
+        printf 'name=rl%s\nboot=uboot-sd\nprobe=0\nblind=1\nrow_eligible=no\nramlog_addr=0xb0100000\nramlog_size=0x10000\n' "$c"
+        [ "$c" = old ] || printf 'ramlog_limit=%s\n' "$limit"
+        printf 't_reboot=1000\nt_back=1058\nback=1\nramlog=missing\n'
+    } >"$tmp/rec-$c/meta.txt"
+    : >"$tmp/rec-$c/console.txt"
+done
+got=$(LC_ALL=C bash "$runner" tally "$tmp/rec-limit" 2>/dev/null)
+r=$?
+want='board-stm32mp2.sh stm32mp257f-dk rllimit rc=0 verdict=done boot=uboot-sd blind boot_verdict=unknown result=none back_after=58s ramlog=missing:ddr_lost_in_warm_reset'
+if [ "$limit" = ddr_lost_in_warm_reset ] && [ "$r" = 0 ] && [ "$got" = "$want" ]; then
+    ok "runner tally names the limit: ...${got#*back_after=}"
+else
+    bad "runner tally of a missing ring with ramlog_limit (rc $r, limit '$limit'): '$got'"
+fi
+got=$(LC_ALL=C bash "$runner" tally "$tmp/rec-old" 2>/dev/null)
+want='board-stm32mp2.sh stm32mp257f-dk rlold rc=0 verdict=done boot=uboot-sd blind boot_verdict=unknown result=none back_after=58s'
+if [ "$got" = "$want" ]; then ok "runner tally of a record without ramlog_limit: unchanged"; else bad "runner tally without ramlog_limit: '$got'"; fi
+if grep -q "WARNING: MP2_RAMLOG=1: \$RAMLOG_LIMIT_WHY" "$runner" && grep -q 'meta ramlog_limit "\$RAMLOG_LIMIT"' "$runner"; then
+    ok "runner warns before the arm and records ramlog_limit"
+else
+    bad "runner: no WARNING naming the limit in check_ramlog, or no meta ramlog_limit"
+fi
+
 echo "$n checks, $failed failed"
 [ "$failed" = 0 ]

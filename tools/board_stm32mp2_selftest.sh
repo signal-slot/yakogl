@@ -1235,8 +1235,9 @@ mv "$F/state/ramlog.src" "$F/state/ramlog.src.keep"
 out=$(live_rl run "$S/imgr/zephyr.bin" "$S/live-logs" rlnone 2>&1)
 rc=$?
 rd=$(ls -d "$S"/live-logs/*-rlnone-* 2>/dev/null | head -1)
-check "live ramlog run with no ramlog.bin: rc 0, verdict=done boot_verdict=unknown result=none (not a pass), blind, ramlog=missing, the ring save removed all the same" \
-    eval '[ "$rc" = 0 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk rlnone rc=0 verdict=done boot=uboot-sd blind boot_verdict=unknown result=none back_after=[0-9]+s$" <<<"$out" &&
+check "live ramlog run with no ramlog.bin: rc 0, verdict=done boot_verdict=unknown result=none (not a pass), blind, ramlog=missing named as the documented limit (line, meta, WARNING and NOTE), the ring save removed all the same" \
+    eval '[ "$rc" = 0 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk rlnone rc=0 verdict=done boot=uboot-sd blind boot_verdict=unknown result=none back_after=[0-9]+s ramlog=missing:ddr_lost_in_warm_reset$" <<<"$out" &&
+          grep -qx "ramlog_limit=ddr_lost_in_warm_reset" "$rd/meta.txt" && grep -q "WARNING: MP2_RAMLOG=1: the DK.s warm reset does not keep DDR" <<<"$out" && grep -q "NOTE: no ring came back (ramlog=missing), as documented" <<<"$out" &&
           grep -qx "ramlog=missing" "$rd/meta.txt" && grep -qx "row_eligible=no" "$rd/meta.txt" && ! grep -q "^console_source=" "$rd/meta.txt" && [ ! -s "$rd/console.txt" ] &&
           [ "$(vals "$PART" preboot yako_ramlog | paste -sd"|" -)" = "run yako_hook|-" ] && ! grep -q "rm -f /boot/yakogl/ramlog.bin" "$F/ssh.log"'
 mv "$F/state/ramlog.src.keep" "$F/state/ramlog.src"
