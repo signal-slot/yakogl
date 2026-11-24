@@ -4,9 +4,11 @@
 //! glGetVertexAttribiv(GL_VERTEX_ATTRIB_ARRAY_DIVISOR): the call sequence of
 //! dEQP-GLES3.functional.default_vertex_array_object.vertex_attrib_divisor
 //! (tools/cts/gles3-mustpass.txt:1591, es3fDefaultVertexArrayObjectTests.cpp
-//! at VK-GL-CTS 93bca01). The case runs on the default VAO (name 0), sets a
-//! divisor per attribute with glVertexAttribDivisor and reads it back; the
-//! initial value of every attribute is 0. ES 3.0 6.2 (table 6.2): the divisor
+//! at VK-GL-CTS 93bca01). The case itself is glBindVertexArray(0),
+//! glVertexAttribDivisor(0, 3), glGetError() == GL_NO_ERROR ("not an error on
+//! the default VAO in ES 3.0"); it queries nothing. The tests here add the
+//! read-back with the same entry points: the initial value of every attribute
+//! is 0, and ES 3.0 6.2 (table 6.2): the divisor
 //! is vertex array object state, so each VAO owns its own and the default VAO
 //! keeps its values while a named VAO is bound.
 //!
@@ -180,8 +182,21 @@ fn want(i: u32, salt: u32) -> u32 {
     1 + (i * 7 + salt * 3) % 5
 }
 
-/// The initial value of every attribute of the default VAO is 0 (dEQP reads it
-/// before it sets anything), as is that of a new named VAO.
+/// The dEQP case verbatim: a divisor on the default VAO raises no error.
+#[test]
+fn deqp_vertex_attrib_divisor_default_vao_no_error() {
+    let _g = context();
+    unsafe {
+        glBindVertexArray(0);
+        glVertexAttribDivisor(0, 3);
+        assert_eq!(glGetError(), GL_NO_ERROR);
+    }
+    assert_eq!(div(0), 3);
+    unsafe { glVertexAttribDivisor(0, 0) };
+}
+
+/// The initial value of every attribute of the default VAO is 0, as is that of
+/// a new named VAO.
 #[test]
 fn initial_divisor_is_zero() {
     let _g = context();
@@ -202,8 +217,7 @@ fn initial_divisor_is_zero() {
     }
 }
 
-/// The dEQP sequence: set a divisor on every attribute of the default VAO and
-/// read each back, as an int and as a float; then reset to 0 and read again.
+/// Set a divisor on every attribute of the default VAO and read each back, as an int and as a float; then reset to 0 and read again.
 #[test]
 fn default_vao_set_and_read_back() {
     let _g = context();
