@@ -114,3 +114,15 @@ their ARM physical addresses through our page table (U10 for buffers below
 - `get_throttled` is recorded by `tools/board.sh` in `meta.txt`, not by the
   image (the image cannot read it);
   check it before reading a GPU fault as a hardware one.
+
+## Verdicts
+
+`tools/probes/rpi_5/rpi5_clear/verdicts.sh <console.log>` checks a captured
+console against the lines `src/main.c` prints: `M1` (mailbox, power_on and
+identity `V3D 7.1` all 0), `M2 mmu_init`, `M3` (bin, render, caches_clean),
+the `M4:` read-back (0 pixels wrong, guard row 0 changed) and the end line.
+It prints one `verdicts:` line per group, `end:` and `verdicts: PASS|FAIL`.
+An end line of PASS beside a wrong read-back or a non-zero step is a FAIL.
+Exit 0 done, 1 no end line, 2 usage, 3 FAIL. `verdicts_selftest.sh` runs it
+on inline logs (good, image FAIL, wrong read-back, guard row, bad step,
+truncated, CR and timestamp form, usage); the gate runs it on its own.
