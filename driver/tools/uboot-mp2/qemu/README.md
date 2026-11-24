@@ -30,6 +30,7 @@ U-Boot (a few minutes); later runs take about a minute.
 ## Tools
 
 - QEMU: any `qemu-system-aarch64` with `virt`, `sdhci-pci`, `sd-card`,
+  `filter-buffer`,
   `e1000` and user-mode networking (slirp). Tested with 10.0.2 from the Zephyr
   SDK host tools (`zephyr-sdk-x86_64-hosttools-standalone-0.10.sh -y -d DIR`;
   the binary is `DIR/sysroots/x86_64-pokysdk-linux/usr/bin/`): put its
@@ -178,14 +179,26 @@ How the cut window is guaranteed, on any host speed:
   holes, which `ext4load` reads at memory speed: 0.3 s for 255 MiB). The cut
   boots of the SD route read the card at most 4 MiB/s (`throttling.bps-read`
   on the drive), so that load takes at least 8 s on any host; under TCG it
-  takes about 13 s. Over TFTP the transfer is U-Boot's e1000 and slirp work
-  (about 6 s here).
+  takes about 13 s.
+- Over TFTP the same boots hold every packet of the user network and release
+  them once per 33 microseconds (`filter-buffer` on the netdev). `tftpboot`
+  is lock-step, one 1468-byte block per ACK (`CONFIG_TFTP_BLOCKSIZE=1468`,
+  `CONFIG_TFTP_WINDOWSIZE=1` in `build-uboot.sh`'s U-Boot), so a block takes
+  at least one release: the 182,143 blocks of `long.bin` take at least 6.0 s
+  on any host. Without the hold the transfer was 5.7 to 8.4 s on a
+  development host and 1.8 s on a faster one, where `window-net` failed
+  (#11662). With it, it is about 18 s here, and 35 s with the hold at 100
+  microseconds (each ACK waits for a release, and releases are at least one
+  interval apart). The big-TFTP case and every other boot run without the
+  hold.
 - Before the cuts, `drive.py` loads `long.bin` uncut once per route and
   measures the load window, from the cut marker to `mp2z: loaded`; it prints
   `load window mmc: N s (32 MiB file)` and the same for net, and fails
-  `window-<route>` when a window is under 3 s (a host so fast the cut could
-  not be placed; the TFTP window has no floor but the check). The wait after the marker is capped at a quarter of the
-  measured window.
+  `window-<route>` when a window is under 3 s (the cut could not be placed).
+  For net it also fails when the window is under the 6.0 s floor: the hold
+  did not govern the transfer (another block size, a windowed transfer, no
+  filter in this QEMU). The wait after the marker is capped at a quarter of
+  the measured window.
 - Each during-load cut checks `cut landed inside the load`: no
   `mp2z: loaded` was seen before the kill or printed up to it, and no `go`.
   A case that missed its window counts as failed, not ok. Check 2 stays.
