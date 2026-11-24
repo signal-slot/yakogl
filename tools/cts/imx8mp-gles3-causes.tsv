@@ -20,6 +20,16 @@ rc8-blit-msaa	dEQP-GLES3.functional.multisample.*	RC8 glBlitFramebuffer and mult
 rc8-blit-msaa	dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max*	RC8 glBlitFramebuffer and multisample
 rc8-blit-msaa	dEQP-GLES3.functional.texture.multisample.*	RC8 glBlitFramebuffer and multisample
 rc8-blit-msaa	dEQP-GLES3.functional.fbo.invalidate.*.unbind_blit_msaa_*	RC8 glBlitFramebuffer and multisample
+# The 8/16-bit R and RG integer texture colour attachments are never accepted (not in GC_SAMPLED_TEXFMTS, src/backend.rs;
+# src/gl/es3_formats.rs): the completeness check fails them. Named before the wide RC17 line, which first-match would take.
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r8i	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r8ui	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16i	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16ui	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg8i	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg8ui	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg16i	R and RG integer texture colour attachments (board)
+gc-rg-int-attachment	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg16ui	R and RG integer texture colour attachments (board)
 rc17-fbo-completeness	dEQP-GLES3.functional.fbo.completeness.*	RC17 framebuffer completeness
 # Seen on the board at 9bc82915 (docs/es3-cts-failures.md, "GC7000UL (i.MX8MP) failures by group"): picture and
 # read-back verdicts the host never sees, so these causes are 'board-only' there. Narrow lines first: a blit from
