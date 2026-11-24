@@ -398,6 +398,27 @@ sha256 = "a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b"
 # With a board.
 
 [[dep]]
+name = "HOST_CTS"
+path = "VK-GL-CTS-host"
+marker = "VK-GL-CTS-host/targets/yakogl/yakogl.cmake"
+board = "*"
+note = "a complete VK-GL-CTS at 93bca01 (external/fetch_sources.py run) with tools/cts/cts-yakogl-target.patch applied, the way cts-build.sh applies it: the tree tools/cts/host-deqp-run.sh builds the host deqp-gles3 from (it builds in its own directory under build/host-deqp, not in this tree). Point it there with CTS=\"$HOST_CTS\" (its default is a checkout under $HOME). A directory of its own: not $DEPS/VK-GL-CTS (DEQP_WORK takes it as unmodified, the board build must not see the yakogl target) and not VK-GL-CTS-gles3 (a sparse corpus). Source is cloned from GitHub (about 1 GB with the external sources); the marker appears only after the patch applied"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+part="$DEPS/VK-GL-CTS-host.part"
+rm -rf "$part"
+git init -q "$part"
+git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+git -C "$part" fetch -q --depth 1 origin "$want"
+git -C "$part" checkout -q --detach "$want"
+(cd "$part" && python3 external/fetch_sources.py)
+git -C "$part" apply "$PWD/tools/cts/cts-yakogl-target.patch"
+mv "$part" "$DEPS/VK-GL-CTS-host"
+'''
+packages.apt = ["git", "python3"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
 name = "DEQP_WORK"
 path = "deqp-stage1-{board}"
 marker = "deqp-stage1-{board}/build"

@@ -50,6 +50,7 @@ check "--check has the MESA_PAN_TREE marker" "missing  MESA_PAN_TREE  $L/mesa-pa
 check "--check counts the entries" "entries missing in $L" "$out"
 check "--check accepts the layout itself as a marker" "ok       GLSL2USC_CACHE  $L" "$out"
 absent "--check without a board has no board entry" DEQP_WORK "$out"
+absent "--check without a board has no host CTS tree (a board set; the gate does not build it)" HOST_CTS "$out"
 check "--check has the Mali firmware entry" "missing  MALI_CSFFW  $L/mali-csffw/mali_csffw.bin" "$out"
 check "--check has the rustup target entry" "RUST_TARGET_AARCH64_LINUX  $(rustc --print sysroot)/lib/rustlib/aarch64-unknown-linux-gnu/lib" "$out"
 
@@ -71,6 +72,7 @@ check "--present prints that tree's alias" "ZEPHYR_WORKSPACE=$L/zephyr-ws" "$out
 rm -rf "$L/zephyr-ws"
 out=$("$ENV_SH" imx8mp 2>&1)
 check "a board adds its tree" "DEQP_WORK=$L/deqp-stage1-imx8mp" "$out"
+check "a board adds the host CTS tree" "HOST_CTS=$L/VK-GL-CTS-host" "$out"
 check "a board adds a board=\"*\" entry" "NOSTD_PATCH_DIR=$L/nostd" "$out"
 check "imx8mp adds IMX8MP_OUT" "IMX8MP_OUT=$L/imx8mp-out" "$out"
 out=$("$ENV_SH" rpi_4b 2>&1)
