@@ -670,3 +670,28 @@ Not measured: the GIC-400's line count (`GICD_TYPER`, section 8), the V3D's
 interrupts (the first clear polls), whether the board's 16 KiB Linux pages
 matter to anything of ours (our MMU maps 4 KiB pages and the first clear
 passed), and buffers above 34 MiB or 4 GiB (U10).
+
+### Q3: pixels per clock of the firmware's 1080p mode (2026-11-24)
+
+Answer: **two pixels per clock**, inferred from the pixel valve's timing
+registers; the clock relation is not decidable from the recorded clock values.
+Source of every value: the `rpi5_dispregs` run of 2026-11-22
+(`tools/probes/rpi_5/rpi5_dispregs/README.md`, "On the board": the `q3`, `q5`
+lines and the `pv0 regs` / `pv1 regs` raw words). No register was written and
+no board session was made for this subsection.
+
+| Claim | Evidence (README) | Status |
+|---|---|---|
+| pv0 and HVS channel 0 carry the 1920x1080 plane | `pv0` active 960x1080 (`horzb` 0x002c03c0: active 0x3c0 = 960; `vertb` 0x00040438: active 0x438 = 1080); `hvs ch0 fwidth 1919 lines 1079`; GET_DISPLAY_SETTINGS 0x780 x 0x438 | confirmed (read) |
+| pv0's horizontal words are the 1920x1080@60 CEA timing divided by two | `horza` 0x004a0016: HBP 0x4a = 74 (148/2), HSYNC 0x16 = 22 (44/2); `horzb` 0x002c03c0: HFP 0x2c = 44 (88/2), active 960 (1920/2); total 1100 clocks of a 2200-pixel line. The vertical words are not divided: `verta` 0x00240005 VBP 36, VSYNC 5; `vertb` HFP-equivalent VFP 4, active 1080 | confirmed (arithmetic on the read words) |
+| pv1 does the same for 640x480@60 | `horza` 0x00180030: HBP 24 (48/2), HSYNC 48 (96/2); `horzb` 0x00080140: HFP 8 (16/2), active 320 (640/2); `verta` 0x00210002 VBP 33, VSYNC 2; `vertb` 0x000a01e0 VFP 10, active 480; HVS ch1 fwidth 639 | confirmed (arithmetic) |
+| Both valves therefore run two pixels per clock | the only way the halved horizontal words and an undivided 1080-line active height describe a full 1920-wide line is a valve that takes two pixels per clock; no other reading of the three words gives standard CEA numbers | inferred (no register of the valve names the rate) |
+| `PIXEL_REP` is not the cause | `PV_CONTROL` 0x07174001: PIXEL_REP (bits 5:4) = 0, CLK_SELECT (3:2) = 0; the field is pixel repetition, not pixels per clock (`pv_hdmi.h:53-54`, `pv_timing.h:17`: "one pixel per clock and pixel_rep 1") | confirmed (read field); the field's meaning is from the repo's own header |
+| `PV_V_CONTROL` 0x00000003 (CONTINUOUS and VIDEN set; ODD_TIMING bit 29 clear) | `pv0 regs`, `pv1 regs` | confirmed (read). Linux sets ODD_TIMING for one pixel per clock on this HVS (`driver/docs/rpi5-display.md:289`); that it is clear here is consistent with two, inferred |
+| Linux divides `PV_HORZA`/`HORZB` by the pixels per clock, 2 on the Pi 5 for interlaced and 1 for progressive | `driver/docs/rpi5-display.md:290`, citing `rpi:vc4_crtc.c:387-391,1338-1339` (tree `rpi-6.12.y`, `5bd564aa`, see "Sources and rules") | **unverified here**: the fetch of `vc4_crtc.c` from the Raspberry Pi linux repository into the dependency cache was refused by this session's sandbox, so the function names and the `pixels_per_clock` variable were not re-read. Note that the line says progressive is 1, which contradicts the board's progressive 1080p at half widths: the firmware does not follow that Linux rule, or the line is wrong; neither is decided |
+| Pixel clock relation | A 1080p60 mode needs a 148.5 MHz pixel rate; at two pixels per clock the valve clock would be 74.25 MHz. `q5`: clock 13 (HSM) state on, GET_CLOCK_RATE 0, measured 648006592 Hz; clock 14 (bvb) off, measured 324003296; clock 16 (disp) off, measured 648009856; clock 4 (core) 500000000 set, measured 910010752. The "measured" values of the clocks the firmware reports off sit at their maxima (648 / 324 / 648 MHz) and are not the running rate | **undecidable from registers**: no tag reports the pixel clock, GET_CLOCK_RATE answers 0 for the three display clocks, and 648 MHz / 324 MHz are neither 148.5 nor 74.25 MHz (nor an integer ratio of them: 648/148.5 = 4.36). 324 MHz = 648/2 matches the bvb max, not a pixel rate |
+
+Not read: PV_MUX, PV_STAT, the HDMI PHY and the HDMI timing words, which are
+where the HDMI block's own pixel rate (HDMI_RM, the TMDS character rate) would
+show; reading them is a probe change and belongs to a later board run
+(`rpi5_dispregs` README, "Not read, and why").
