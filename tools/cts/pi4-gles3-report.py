@@ -229,10 +229,20 @@ def recoveries(dirs):
 
 # (file under the repo root, regex of the current Pi 4 text, what it is). Matched in the file, not by line number.
 ANCHORS = [
-    ('tools/cts/RESULTS.md', re.compile(r'^\*\*Pi 4, first nine images\*\*.*?(?=\n\n)', re.M | re.S),
+    # RESULTS.md: the entry pi4-results2 wrote ("**Pi 4, whole tree**"), what this tool drafts (same lead, "PARTIAL: "
+    # when incomplete) and the older "first nine images" form; each runs to the next blank line
+    ('tools/cts/RESULTS.md',
+     re.compile(r'^(?:PARTIAL: )?\*\*Pi 4, (?:whole tree|first nine images)\*\*.*?(?=\n\n|\Z)', re.M | re.S),
      'RESULTS.md Pi 4 ES 3.0 entry'),
-    ('tools/cts/STATUS.md', re.compile(r'Pi 4 は 91 画像のうち 9 画像だけ[^。\n]*。'), 'STATUS.md Pi 4 sentence'),
-    ('ROADMAP.md', re.compile(r'^- Raspberry Pi 4: 9 of its 91 images[^\n]*(?:\n  [^\n]*)*', re.M),
+    # STATUS.md: one sentence, from "Pi 4 は" to the full stop followed by "i.MX8MP", white space or the end;
+    # full stops inside its parentheses are followed by more text and do not end it
+    ('tools/cts/STATUS.md',
+     re.compile(r'Pi 4 は(?:全ツリー（|（途中、記録が不完全）|全 \d+ 画像| 91 画像のうち 9 画像だけ)[^\n]*?。(?=i\.MX8MP|\s|$)'),
+     'STATUS.md Pi 4 sentence'),
+    # ROADMAP.md: the stage 4 bullet and its indented continuation lines
+    ('ROADMAP.md',
+     re.compile(r'^- Raspberry Pi 4: (?:the whole tree|9 of its 91 images|(?:PARTIAL: )?\d+ of \d+ images)'
+                r'[^\n]*(?:\n  [^\n]*)*', re.M),
      'ROADMAP.md stage 4 Pi 4 bullet'),
 ]
 
@@ -703,6 +713,33 @@ def self_test():
                and new['tools/cts/STATUS.md'].endswith('。 残り。\n')
                and new['ROADMAP.md'].count('- Raspberry Pi 4: 3 of 3 images') == 1
                and new['ROADMAP.md'].endswith('(#2).\n- i.MX8MP: next\n'), out + repr(new))
+
+        # the current form (pi4-results2): anchors found once, --apply replaces, a second --apply changes nothing
+        cur = {
+            'tools/cts/RESULTS.md': 'head\n\n**Pi 4, whole tree** on `b1b5b845` (x;\n`tools/cts/pi4-gles3-tree.txt`, 114 rows),\n'
+                                    '2026-11-23: 114 of 114 images run. Records:\n`a/`\n(S32c re-split).\n\n**next entry**\n',
+            'tools/cts/STATUS.md': 'ES 3.0。Pi 4 は全ツリー（114 行）を b1b5b845（2026-11-23）で実行し、結果なし 1,979（止まった 9 画像。再実行が残る。'
+                                   '失敗の一覧は docs/es3/pi4-gles3-fails.tsv）。i.MX8MP はまだボードで走らせていない。\n',
+            'ROADMAP.md': '## stage 4\n- Raspberry Pi 4: the whole tree (114 rows, the 91 images re-split where dEQP\n'
+                          '  aborted) at `b1b5b845` (2026-11-23): 42,810 cases\n  (#1261).\n- i.MX8MP: next\n',
+        }
+        write_docs(cur)
+        rc, out = rep(td, s1, s2)
+        expect('current-form anchors: each found once',
+               rc == 0 and 'RESULTS.md Pi 4 ES 3.0 entry: tools/cts/RESULTS.md line 3' in out
+               and 'STATUS.md Pi 4 sentence: tools/cts/STATUS.md line 1' in out
+               and 'ROADMAP.md stage 4 Pi 4 bullet: ROADMAP.md line 2' in out, out)
+        rc, out = rep(td, '--apply', docs, s1, s2)
+        once = {p: open(os.path.join(docs, p), encoding='utf-8').read() for p in cur}
+        expect('current-form --apply replaces exactly the three entries',
+               rc == 0 and all('b1b5b845' not in t for t in once.values())
+               and once['tools/cts/RESULTS.md'].endswith('\n\n**next entry**\n')
+               and once['tools/cts/STATUS.md'].startswith('ES 3.0。Pi 4 は全 3 画像のうち 3 画像')
+               and once['tools/cts/STATUS.md'].endswith('。i.MX8MP はまだボードで走らせていない。\n')
+               and once['ROADMAP.md'].endswith('(#2).\n- i.MX8MP: next\n'), out + repr(once))
+        rc, out = rep(td, '--apply', docs, s1, s2)
+        twice = {p: open(os.path.join(docs, p), encoding='utf-8').read() for p in cur}
+        expect('a second --apply changes nothing', rc == 0 and twice == once, out)
 
         doubled = dict(files)
         doubled['ROADMAP.md'] = files['ROADMAP.md'] + pi4_road + '\n'
