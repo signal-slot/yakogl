@@ -22,7 +22,8 @@ cd "$(dirname "$0")/../../../.." || exit 1
 # shape -> jobs (gl_shapes.py's docstring; one job per glFinish of the case)
 EXPECTED=(scissor:2 scisbox:3 writemask:4 viewport:3 fbods:9 colormask:6 mrt4:1 mrt8:1
   tex2d:2 texfmt:2 mipgen:1 cube:12
-  blend:1 depthfunc:1 stencilops:1 indexed:1 instanced:1 prims:1)
+  blend:1 depthfunc:1 stencilops:1 indexed:1 instanced:1 prims:1
+  blendsub:1 depthfuncs:1 primswide:1)
 # textured shape -> TFU submissions (glGenerateMipmap: one)
 TEXTURED=(tex2d:0 texfmt:0 mipgen:1 cube:0)
 
