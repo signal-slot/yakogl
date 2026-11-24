@@ -49,12 +49,15 @@
 # no T6:G line (a T6:G there differs); uboot does not judge the GICv3 line:
 # U-Boot does not touch the CPU interface. On both routes T6:A's SCTLR_EL2
 # must have M, C and I clear: the image runs its early code with the MMU and
-# caches off. A third line depends on it for t6_cold: the hot-plug value on
-# the chain's VIDEO line, 1 on kexec (Linux left the display up), 0 or 1 on
-# uboot (a display powered from the board's 5 V, which the image switches
-# on, has not raised hot-plug yet when the chain ends; the chain does not
-# wait for it). There the "HPD 1" line after the hold is the proof of a
-# connected display.
+# caches off. A third line depends on it for t6_cold and triangle: the
+# hot-plug value on the chain's VIDEO line, 1 on kexec (Linux left the
+# display up), 0 or 1 on uboot (a display powered from the board's 5 V,
+# which the image switches on, has not raised hot-plug yet when the chain
+# ends; the chain does not wait for it). There the "HPD 1" line of the
+# read-backs after the hold is the proof of a connected display: t6_cold's
+# own, and for triangle the board layer's at the end of the run, which a
+# uboot record must have (a kexec record is judged on them when it has
+# them).
 #
 # The probes' own tables (t6_gpu and after) predict the GPU hand-over Linux
 # leaves (PD_GPU off with vdd_gpu_s0 on, the clock at CPLL / 5). With
@@ -613,14 +616,9 @@ picture_timing() {
 picture_hold_fits() { ((HOLD_S % 10 == 0 && HOLD_S >= 30 && HOLD_S + 10 < LIFE_S)); }
 
 # table_picture_status <probe> [any]: the hold and the read-backs after it,
-# as common/t6_picture.c prints them for both display probes. The status
-# must read back the buffer (FB8) and the overlay selects the probe wrote
-# (OLS, OPS: otherwise Esmart0 may be outside VP0's layers and the screen
-# shows only the background); with "any" the selects are checked for form
-# only (a run whose record does not print what it wrote).
+# as common/t6_picture.c prints them for both display probes.
 table_picture_status() {
-	local p=$1 ops='{=OPS}' ols='{=OLS}'
-	if [ "${2:-}" = any ]; then ops='{x8}' ols='{x8}'; fi
+	local p=$1
 	# the hold of picture_timing, a line every 10 s; one after them is
 	# judged after the table (HELD_PROBE)
 	e "$p: holding the picture for $HOLD_S s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border" \
@@ -630,6 +628,21 @@ table_picture_status() {
 		e "$p: held $i s"
 	done
 	HELD_PROBE=$p
+	table_read_back "$@"
+}
+
+# table_read_back <tag> [any]: the section 5 read-backs over a picture that
+# is up, as the board glue prints them (t6_display_read_back, nanopc_t6.c's
+# library) for the display probes after their hold and for the board layer
+# at the end of a run, in the mode M_* (display_mode, cold_mode). The status
+# must read back the buffer (FB8) and the overlay selects that were written
+# (OLS, OPS: otherwise Esmart0 may be outside VP0's layers and the screen
+# shows only the background); with "any" the selects are checked for form
+# only (a run whose record does not print what it wrote). HPD 1 there is
+# the proof of a connected display.
+table_read_back() {
+	local p=$1 ops='{=OPS}' ols='{=OLS}'
+	if [ "${2:-}" = any ]; then ops='{x8}' ols='{x8}'; fi
 	e "$p: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}"
 	e "$p: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz" "^$p: ([0-9]+ frames in|no frame timed) " display_pclk
 	local t
@@ -813,13 +826,24 @@ table_t6_submit() {
 #    equal to memory;
 #  - the PICTURE record carries the words of the picture line;
 #  - no draw was refused, and the run ended by the board's own reset after
-#    the hold of a passed run, with the record screen up.
+#    the hold of a passed run (60 s or longer, triangle_hold), with the
+#    record screen up;
+#  - after the hold the read-backs of section 5 (table_read_back under the
+#    tag board): the picture still runs on the window, and HPD 1. Required
+#    with T6_ROUTE=uboot, where the chain's VIDEO line may read HPD 0.
 # The progress records ("yk-record: 594b05..", one per stage of main.c) are
 # not judged: they are for a run that left no console.
 
 # the adopt's stops after which the board starts cold (no_picture() of
 # nanopc_t6_display_cold.rs): 1 PD_VOP, 2 a clock, 4 STANDBY
 triangle_stop() { [[ ${V[STOP]} =~ ^[124]$ ]]; }
+
+# the hold of a passed run (board_finish, CONFIG_YAKOGL_BOARD_HOLD_S): 60 s
+# by default and longer when the image is built so (the U-Boot route's
+# display that boots with the board); a failed run's 40 s differs. That it
+# fits the watchdog's lifetime the run-over line says: a hold that does not
+# ends at WDT0's reset, without that line.
+triangle_hold() { [[ ${V[HOLD]} =~ ^[0-9]{1,4}$ ]] && ((10#${V[HOLD]} >= 60)); }
 
 # the three counts are decimal and add up to the 1024x600 window
 triangle_pixels() {
@@ -846,7 +870,7 @@ table_triangle_cold() {
 	fi
 	e 't6 display: first show: no picture to adopt (stop {@STOP}), cold start' '' triangle_stop
 	table_cold_stages 8
-	table_cold_report
+	if [ "$ROUTE" = uboot ]; then table_cold_report hpd-any; else table_cold_report; fi
 	table_triangle_found
 	e 'board: adopt rc -19 stop {=STOP} ({s}), refusal 0, index {d}, detail 0x{x8}' '^board: adopt rc '
 	e "board: first show: no picture was left running: cold start at $M_NAME, rc 0" '^board: first show: '
@@ -866,7 +890,15 @@ table_triangle_adopt() {
 }
 
 table_triangle() {
-	cold_mode "^board: first show: no picture was left running: cold start at ${MODE_1920X1080[0]},"
+	local adopt=0
+	if seen_line '^board: first show: a picture was left running: '; then adopt=1; fi
+	# the mode: the one the adopt found (its "found VP0 timing" line), or
+	# the cold start's, which the board's first-show line names
+	if [ "$adopt" = 1 ]; then
+		display_mode board
+	else
+		cold_mode "^board: first show: no picture was left running: cold start at ${MODE_1920X1080[0]},"
+	fi
 	table_boot 300 20
 	e 'sample: build tree={s}'
 	e "t6: CSF firmware {d} bytes embedded, built from a file with sha256 {x} (mkmalifw.sh's digest, not computed at run time)"
@@ -876,7 +908,7 @@ table_triangle() {
 	e 'triangle: compile + link {d} ms; a_pos at {d}, a_color at {d}'
 	e 'triangle: frame {d} ms'
 	never '^triangle: board_show = '
-	if seen_line '^board: first show: a picture was left running: '; then
+	if [ "$adopt" = 1 ]; then
 		table_triangle_adopt
 	else
 		table_triangle_cold
@@ -891,8 +923,16 @@ table_triangle() {
 	e 'yk-record: 594b04{x} {=PC} {=CRC} 04000258' '^yk-record: 594b04'
 	e 'yakogl: draws refused 0'
 	e 'triangle: PASS' '^triangle: (PASS|FAIL)'
-	e 'board: holding 60 s, then the reset'
+	e 'board: holding {@HOLD} s, then the reset' '^board: holding ' triangle_hold
 	e 'board: screen state 1, {d} flips'
+	# the read-backs after the hold (board_nanopc_t6.c, read_back): on the
+	# U-Boot route the proof of a connected display, which the chain's
+	# VIDEO line there is not; on the kexec route judged when the record
+	# has them (an image before them has none, and the chain's HPD 1 is
+	# that route's proof)
+	if [ "$ROUTE" = uboot ] || seen_line '^board: (frame check over|no read-backs) '; then
+		table_read_back board
+	fi
 	e 'board: the record screen stays 20 s' '^board: (the record screen stays|no record screen)'
 	never '^board: fatal error '
 	e 't6: board: run over: PSCI SYSTEM_RESET at {d} ms ({d} feeds)'

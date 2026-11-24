@@ -676,6 +676,76 @@ for f in "$D/triangle-cold-pass.uart" "$D/triangle-adopt-pass.uart"; do
 	fi
 done
 
+# the board layer's read-backs after the hold (board_nanopc_t6.c, read_back;
+# the lines of the display probes, t6_display_read_back, under the tag
+# board), made at run time until a board record of an image with them is a
+# fixture: read_back <in> <out> puts them after the "screen state" line, at
+# 1920x1080 (the values of the U-Boot route's t6_cold record of 2026-11-24)
+# on the record's window (its "window ... at phys" line) with the overlay
+# selects the chain and the adopt write (0xa0507880, 0x76543012).
+read_back() {
+	local fb
+	fb=$(sed -n 's/^triangle: window 1024x600 at phys 0x\([0-9a-f]*\),.*/\1/p' "$1")
+	fb=$(printf '%08x' $((16#$fb)))
+	awk -v fb="$fb" '{print} /^board: screen state /{
+		print "board: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x000002ef"
+		print "board: 60 frames in 1000030 us: 59998 mHz, pixel clock 148495 kHz"
+		print "board: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x00000070 REG_CFG_DONE 0x00008000 DSP_IF_EN 0x00000008 DSP_CTRL 0x0000000f HTOTAL_HS_END 0x0898002c VTOTAL_VS_END 0x04650005"
+		print "board: VOP OVL_PORT_SEL 0xa0507880 OVL_LAYER_SEL 0x76543012 Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x" fb " VIR 0x00000400 INT_RAW_STATUS 0x000002ef SYS0 0x00000000 SYS1 0x00000000"
+		print "board: HPD 1 (SOC_STATUS1 0x001f2240), PHY0 GRF STATUS 0x0000000e"
+		print "board: HDMI0 CMU_STATUS 0x00000255 VIDQPCLK_FREQ 37125 LINKQPCLK_FREQ 37125"
+		print "board: HDMI0 VIDEO_MONITOR_STATUS0-6 0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438 0x00000000"
+	}' "$1" >"$2"
+}
+RB=7
+read_back "$D/triangle-cold-pass.uart" "$WORK/trb.log"
+runs=$((runs + 1))
+if [ "$(diff "$D/triangle-cold-pass.uart" "$WORK/trb.log" | grep -c '^>')" = "$RB" ]; then
+	echo "ok   triangle-read-back: $RB lines added to the pass record"
+else
+	echo "FAIL triangle-read-back: not $RB lines added (read_back no longer matches the record)"
+	fails=$((fails + 1))
+fi
+# kexec: judged when the record has them, on both first shows; HPD 0 after
+# the hold differs, and the chain's VIDEO line keeps HPD 1 on this route
+check triangle-read-back 0 'VERDICT triangle PASS' "$((TRI + RB)) 0 0" triangle "$WORK/trb.log"
+read_back "$D/triangle-adopt-pass.uart" "$WORK/tarb.log"
+check triangle-adopt-read-back 0 'VERDICT triangle PASS' "$((TRIA + RB)) 0 0" triangle "$WORK/tarb.log"
+sed 's/^board: HPD 1 /board: HPD 0 /' "$WORK/trb.log" >"$WORK/trbhpd0.log"
+check triangle-read-back-hpd0 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/trbhpd0.log"
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$WORK/trb.log" >"$WORK/trbv0.log"
+check triangle-read-back-video-hpd0 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/trbv0.log"
+# the hold of a passed run: 60 s or longer (the U-Boot route's build holds
+# 90 s); 50 s differs
+sed 's/^board: holding 60 s,/board: holding 90 s,/' "$D/triangle-cold-pass.uart" >"$WORK/th90.log"
+check triangle-hold90 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$WORK/th90.log"
+sed 's/^board: holding 60 s,/board: holding 50 s,/' "$D/triangle-cold-pass.uart" >"$WORK/th50.log"
+check triangle-hold50 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/th50.log"
+# T6_ROUTE=uboot: the U-Boot form of the image (a 90 s hold) by go, with the
+# read-backs; the chain's VIDEO line may read HPD 0 there, as t6_cold's
+as_uboot "$WORK/th90.log" "$WORK/tu.log"
+read_back "$WORK/tu.log" "$WORK/turb.log"
+check triangle-uboot-hold90 0 'VERDICT triangle PASS' "$((TRI + RB)) 0 0" triangle "$WORK/turb.log" T6_ROUTE=uboot
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$WORK/turb.log" >"$WORK/tuv0.log"
+check triangle-uboot-video-hpd0 0 'VERDICT triangle PASS' "$((TRI + RB)) 0 0" triangle "$WORK/tuv0.log" T6_ROUTE=uboot
+# the same record as kexec: the VIDEO line differs, the EOImode line is
+# missing, and the T6:G line differs (judged after the table, so it is not
+# one of the table's lines)
+check triangle-uboot-video-hpd0-as-kexec 1 "VERDICT triangle FAIL (3 of $((TRI + RB)))" "$((TRI + RB - 2)) 1 2" triangle "$WORK/tuv0.log"
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 2/' "$WORK/turb.log" >"$WORK/tuv2.log"
+check triangle-uboot-video-hpd2 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/tuv2.log" T6_ROUTE=uboot
+# the proof is required there: a record without the read-backs (an image
+# before them) misses them; HPD 0 after the hold, another buffer on Esmart0
+# or another mode's pixel clock differs
+sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$WORK/tu.log" >"$WORK/tunorb.log"
+check triangle-uboot-no-read-back 1 "VERDICT triangle FAIL ($RB of $((TRI + RB)))" "$TRI $RB 0" triangle "$WORK/tunorb.log" T6_ROUTE=uboot
+sed 's/^board: HPD 1 /board: HPD 0 /' "$WORK/tuv0.log" >"$WORK/turbhpd0.log"
+check triangle-uboot-read-back-hpd0 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/turbhpd0.log" T6_ROUTE=uboot
+sed '/^board: VOP OVL_PORT_SEL /s/YRGB_MST 0x[0-9a-f]*/YRGB_MST 0x19440000/' "$WORK/tuv0.log" >"$WORK/turbmst.log"
+check triangle-uboot-read-back-mst 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/turbmst.log" T6_ROUTE=uboot
+sed 's/^board: 60 frames in 1000030 us: 59998 mHz, pixel clock 148495 kHz$/board: 60 frames in 999900 us: 60006 mHz, pixel clock 65002 kHz/' "$WORK/tuv0.log" >"$WORK/turbpclk.log"
+check triangle-uboot-read-back-pclk 1 "VERDICT triangle FAIL (1 of $((TRI + RB)))" "$((TRI + RB - 1)) 0 1" triangle "$WORK/turbpclk.log" T6_ROUTE=uboot
+
 # Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
 # probes' printk as printf): a fixture cannot drift from the code
 P=$(cd "$HERE/../../.." && pwd)/tools/probes/nanopc_t6/common
