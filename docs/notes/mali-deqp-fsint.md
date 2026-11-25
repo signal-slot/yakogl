@@ -154,3 +154,89 @@ cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no
 and each byte-compare is `#[ignore]`d until the lowering takes it. The
 lowering moves a reference to `MATCHED` (or `DIFFERS`) and drops its
 `#[ignore]` in the same commit.
+
+## 5. HOST-ONLY tip measure (plan #402 item `measure-fsint`)
+
+**HOST-ONLY.** This fills the gap of section 1: the cases were re-run
+through `deqp-gles2` at the tip `2e8f2527` (the `deqp-host-measure.sh` library
+is the Mali back end at that commit), VK-GL-CTS `93bca01861b0` with the yakogl
+target patch and its external sources (`external/fetch_sources.py`). The tree
+was a shallow clone in `$CONNECTED_DEPS_DIR/VK-GL-CTS-host2`. Only compile
+and link outcomes are measured; every `glReadPixels` reads black, so no
+render verdict is claimed. Nothing ran on the board. The references and the
+test are unchanged.
+
+```sh
+cat tools/cts/log/2026-11-24-t6-gles2-S[1-4]-8ff01055/refusals.tsv \
+    | grep -F 'an integer or boolean value is not lowered yet' | cut -f1 | sort -u > fsint-cases.txt
+tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS-host2" \
+    --slice tools/cts/log/2026-11-24-t6-gles2-S1-8ff01055 --slice tools/cts/log/2026-11-24-t6-gles2-S2-8ff01055 \
+    --slice tools/cts/log/2026-11-24-t6-gles2-S3-8ff01055 --slice tools/cts/log/2026-11-24-t6-gles2-S4-8ff01055 \
+    --cases fsint-cases.txt --out measure-fsint
+```
+
+(As run: the case list and `--out` were under `$CONNECTED_DEPS_DIR`, and
+the paths were absolute.)
+
+### 5.1 Counts
+
+The list holds **210** cases (188 Fail and 22 NotSupported on the board,
+the count of section 1). All 210 began on the host.
+
+| Host outcome at `2e8f2527` | Cases |
+|---|--:|
+| first refusal is still "an integer or boolean value" (166 Fail + 22 NS on the board) | **188** |
+| another first refusal (16, below) | 16 |
+| no compile refusal on the host (dEQP Fail) | 6 |
+| **total** | **210** |
+
+The 16 whose first refusal moved, by text:
+
+| Now first refused by | Cases | Which |
+|---|--:|---|
+| gl_FragColor lane other than the varying's own lane or a constant | 5 | `operator.sequence.no_side_effects.{highp,mediump,lowp}_bool_vec2_fragment`, `random.comparison_ops.fragment.46`, `random.swizzle.fragment.38` |
+| texture coordinate other than a vec2 varying | 3 | `random.texture.fragment.{11,38,102}` |
+| mediump fragment-shader uniform (`FsUniform`/UniformPrecision) | 3 | `random.scalar_conversion.fragment.62`, `random.swizzle.fragment.12`, `random.texture.fragment.65` |
+| fragment varying load or conversion | 2 | `random.comparison_ops.fragment.6`, `random.scalar_conversion.fragment.6` |
+| back end defect, LaneCycle | 1 | `random.comparison_ops.fragment.13` |
+| fragment operand of a form no reference draws (ARITH) | 1 | `random.conditionals.fragment.66` |
+| control flow | 1 | `random.conditionals.fragment.9` |
+
+The 6 without a compile refusal: `random.scalar_conversion.combined.32`,
+`.fragment.32`, `.fragment.55`, `random.swizzle.fragment.37`,
+`random.texture.fragment.106`, `.120`. The 188 + 16 + 6 = 210.
+
+### 5.2 Shapes of the 188 still refused by this text
+
+The measure's own shapes, mapped to the rows of section 2:
+
+| Measure shape | Cases | Section 2 rows | Reference |
+|---|--:|---|---|
+| `ivec_operator` | 69 | decrements 48, `not_equal` 12, `int_compare.notEqual` 9 | `intval3_opfs_*`, `intval4_ne_ivec2_fs` and the new `fsint_predec_effect_ivec4_lowp`, `fsint_postdec_result_ivec3_mediump`, `fsint_ne_ivec4_highp`, `fsint_notequal_ivec4_highp` |
+| `int_uniform` | 37 | 22 NotSupported indexing/struct, 9 functions (int), 6 constants | `intval3_idx_tmp_vec3_dynwrite_fs`, `intval3_reslib_inout_int_fs`, `intval3_reslib_const_int_vs` |
+| `bool_uniform` | 31 | conversions 25, functions (bool) 6 | `intval3_reslib_int_to_bool_fs`, `intval3_reslib_ivec4_to_bvec4_fs`, `intval3_reslib_func_bool_fs` and the new `fsint_conv_*` |
+| `random_mixed` | 24 | random 23, `fragment_ops.interaction.basic_shader.85` | the `intval3_rsg_*` / `intrnd_*` of `mali-deqp-intval3.md` section 2, per the section 2 mapping (not re-compared case by case here) |
+| `step_sign` | 21 | `common_functions.step` | `intval3_opfs_step_*` and the new `fsint_step_float_lowp` |
+| `bool_literal` | 2 | `conditionals.if` | `intval3_cond_complex_fs` |
+| `bool_logic` | 2 | `conditionals.if` | `intval3_cond_compound_fs` |
+| `scalar_conversion` | 2 | `logical_{and,or}.bool` | `intval3_opfs_logical_and_bool`, `intval4_logical_or_fs` |
+| **total** | **188** | | |
+
+The measure's two `conditionals.if` shapes (4 cases) are the 4 of section
+2; which of the two references covers which case is by section 2, not
+re-compared here. The 3 `operator.sequence.*_bool_vec2` cases are no longer first-refused here
+(they refuse at the colour lane, as `fsint_sequence_bool_vec2_highp` pins).
+
+### 5.3 What no reference covers
+
+- `random.trigonometric.fragment.93` is still first-refused by this text
+  (it is in `random_mixed`) and still has no reference. Its source is
+  `rsg::ProgramGenerator` output; the `.qpa` of this run holds it
+  (`measure-fsint`, not committed).
+- `random.conditionals.fragment.9`, uncovered in section 2, now first refuses
+  at control flow: it is no longer this refusal's case.
+- The 16 moved cases belong to the other refusals' items (colour lane,
+  texture coordinate, mediump uniform, varying load, LaneCycle).
+- No other shape of the 188 is without a reference at the section 2
+  mapping. Each of the eight `deqp_fsint_*` references is a form of the
+  rows above; the measure gives no per-reference case count of its own.
