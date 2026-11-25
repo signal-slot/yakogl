@@ -166,6 +166,18 @@ fresh
 sed '$d' "$S4/rows.tsv" >"$T/rows" && cp "$T/rows" "$S4/rows.tsv"
 run
 expect "c1: rows.tsv lacks a row" 1 FAIL PASS PASS "T6S4R08"
+# the span guard of imx95-rows-tsv.py --check refuses the same truncation
+expect "c1: rows.tsv lacks a row: the guard of --check refuses it too" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
+fresh
+# a split table (S3b keeps session-wide numbers 16..30) without its last row
+sed '$d' "$S3B/rows.tsv" >"$T/rows" && cp "$T/rows" "$S3B/rows.tsv"
+run
+expect "c1: S3b table lacks T6S3R30" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
+fresh
+# a duplicate row of S3b
+tail -n 1 "$S3B/rows.tsv" >>"$S3B/rows.tsv"
+run
+expect "c1: S3b table repeats a row" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
 fresh
 awk -F '\t' -v OFS='\t' 'NR == 3 { $5 = "-" } { print }' "$S4/rows.tsv" >"$T/rows" && cp "$T/rows" "$S4/rows.tsv"
 run
