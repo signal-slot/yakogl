@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # rpi5_scanout32
 
-Stage 2 of `docs/notes/rpi5-display.md` (section 3, question Q4): our own
+Stage 2 of `docs/notes/rpi5-display.md` (section 3; it answers Q4 of section 4): our own
 32 bpp XRGB8888 plane placed in list words at or after word 32 that read
 zero, clear of the firmware's display list (wherever channel 0's
 `LPTRS.HEADE` names it, word 672 on the board, walked to its END by
