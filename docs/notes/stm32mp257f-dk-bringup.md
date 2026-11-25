@@ -456,7 +456,26 @@ runner record directory name) and folds the findings into the pre-study
 | 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
 
-### The `gl_test` regression set (2026-11-25, `670913e1`): 5 FAIL, 1 SKIP, 44 PASS, one run of 100 s
+### The `gl_test` regression set (P9 result, 2026-11-24, `a5f1dc8e`): 5 FAIL, 1 SKIP, 44 PASS
+
+The P9 result of the whole set is the run built from `a5f1dc8e` (origin/main),
+the same commit as the dEQP-GLES2 sweep (`docs/notes/stm32mp257f-dk-p9.md`
+section 6). Records: `20261124-1038-gl_test_set-a5f1dc8e` (default image, case
+10 skipped) and `20261124-1044-gl_test_all-a5f1dc8e` (`GL_TEST_MP2_SKIP=""`, the
+whole 50-case set; case 10 ran and **passed**). Both came back on Linux after
+58-70 s. Tally:
+
+`gl_test: all: 5 of 49 cases failed (44 passed; 0 timed out; first failure case 6 at index 5; second failure case 11; 1 skipped, first skip case 16)`
+
+Diff against the i.MX8MP, built from `a5f1dc8e` (new failures 6, 11, 47, 182, 189;
+flaky 0; expected 0; case 16 counts through its own SKIP line, commit `1e546068`):
+
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (back on Linux after 70 s of 100 s lifetime)
+
+The per-case verdicts below are the same at `a5f1dc8e` and in the rerun that
+follows. The rerun at `670913e1` is a confirmation, not the P9 result.
+
+#### Confirmation: the rerun at `670913e1` (2026-11-25), one run of 100 s
 
 The whole 50-case `SET_ORDER` (`driver/tools/pvrlab/runner/src/lib.rs:53-54`)
 is one run: `tools/cts/mp2-gltest-shards.py --skip "" --budget-ms 90000`
