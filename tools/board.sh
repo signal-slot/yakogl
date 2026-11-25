@@ -1571,9 +1571,14 @@ pi4_prechecks() {
     meta boot_firmware_free "$avail"
     if [ "$DRY" = 1 ]; then
         b "test ! -e /boot/firmware/$STAGED   # a leftover of a run that did not clean up refuses"
+        b "test ! -e $TRY_BAK   # a leftover backup of the stock tryboot.txt refuses"
         b "test ! -e /boot/firmware/config-linux.txt   # a permanent default refuses"
     else
         b "test ! -e /boot/firmware/$STAGED" || die "/boot/firmware/$STAGED exists (a run that did not clean up): look at it first"
+        # the stock tryboot.txt of a run that did not put it back: which of the
+        # two files is the stock one, only a person may say
+        b "test ! -e $TRY_BAK" ||
+            die "$TRY_BAK exists (a run that did not put the stock tryboot.txt back): compare it with tryboot.txt, put the stock one back by hand and remove the backup first"
         # after a tryboot the firmware boots config.txt: with a default set, that is not Linux
         b "test ! -e /boot/firmware/config-linux.txt" ||
             die "a permanent default is set (/boot/firmware/config-linux.txt exists): the board would not come back to Linux ('nodefault')"
@@ -1602,6 +1607,16 @@ pi4_timings_check() {
         die "BOARD_HDMI_TIMINGS is '$BOARD_HDMI_TIMINGS': hdmi_timings takes 17 integers (h_active h_sync_pol h_front h_sync h_back v_active v_sync_pol v_front v_sync v_back v_off_a v_off_b pixel_rep frame_rate interlaced pixel_freq aspect; tools/cts/README.md section 6). A value the firmware cannot read leaves the board at the firmware splash (#905). Nothing was staged."
 }
 
+# The stock tryboot.txt comes back byte for byte: copied on the board to
+# TRY_BAK before the run writes its own (pi4_try_backup), copied back with
+# cp -p and compared with cmp before the backup goes (pi4_undo), and its
+# sha256 read again after the run (pi4_try_check). A capture with $(...) and a
+# put-back through a here-string changed a file without a final newline, or
+# with several.
+TRY_BAK=/boot/firmware/tryboot.txt.yk-orig
+TRY_SHA=
+TRY_DRY_SHA=0000000000000000000000000000000000000000000000000000000000000000
+
 pi4_undo() {
     b "sudo rm -f /boot/firmware/$STAGED"
     # pi5: a card with no tryboot.txt before the run gets none after it (the
@@ -1611,7 +1626,49 @@ pi4_undo() {
         b 'sudo rm -f /boot/firmware/tryboot.txt && sync'
         return
     fi
-    b 'sudo tee /boot/firmware/tryboot.txt >/dev/null && sync' <<<"$PREV"
+    # the backup goes only once the put-back compares equal to it; a backup
+    # left behind refuses the next run (pi4_prechecks)
+    b "sudo cp -p $TRY_BAK /boot/firmware/tryboot.txt && sync && sudo cmp -s $TRY_BAK /boot/firmware/tryboot.txt && sudo rm -f $TRY_BAK && sync" && return 0
+    note "warning: the stock tryboot.txt was NOT put back from $TRY_BAK; by hand: sudo cp -p $TRY_BAK /boot/firmware/tryboot.txt && sudo cmp $TRY_BAK /boot/firmware/tryboot.txt && sudo rm -f $TRY_BAK" >&2
+    return 1
+}
+
+# pi4_try_backup: before the run changes anything, the undo printed, then the
+# stock tryboot.txt copied to TRY_BAK (cp -p) and the copy read back by its
+# sha256 (TRY_SHA: the sha256sum line of tryboot.txt). A pi5 card without one
+# (TRY_HAD=0) gets none back, as before.
+pi4_try_backup() {
+    local got
+    TRY_SHA=
+    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+        note "UNDO, from Linux (if the run stops before its clean-up): sudo rm -f /boot/firmware/$STAGED /boot/firmware/tryboot.txt"
+        return 0
+    fi
+    note "UNDO, from Linux (if the run stops before its clean-up): sudo cp -p $TRY_BAK /boot/firmware/tryboot.txt && sudo cmp $TRY_BAK /boot/firmware/tryboot.txt && sudo rm -f $TRY_BAK /boot/firmware/$STAGED"
+    bget TRY_SHA 'sudo sha256sum /boot/firmware/tryboot.txt' "$TRY_DRY_SHA  /boot/firmware/tryboot.txt" ||
+        die "cannot read /boot/firmware/tryboot.txt (the run backs up the stock one first; nothing changed)"
+    [[ $TRY_SHA =~ ^[0-9a-f]{64}\ \ /boot/firmware/tryboot.txt$ ]] ||
+        die "sha256sum of /boot/firmware/tryboot.txt reads '$TRY_SHA' (nothing changed)"
+    b "sudo cp -p /boot/firmware/tryboot.txt $TRY_BAK && sync" ||
+        { b "sudo rm -f $TRY_BAK"; die "backing up tryboot.txt to $TRY_BAK failed (removed; nothing changed)"; }
+    bget got "sudo sha256sum $TRY_BAK" "$TRY_DRY_SHA  $TRY_BAK"
+    [ "${got%% *}" = "${TRY_SHA%% *}" ] ||
+        { b "sudo rm -f $TRY_BAK"; die "the backup $TRY_BAK reads back as '${got%% *}', not ${TRY_SHA%% *} (removed; nothing changed)"; }
+}
+
+# pi4_try_check: after the clean-up, 0 when it read back as it should: neither
+# the image nor the backup left, and tryboot.txt's sha256 as before the run
+# (or no tryboot.txt, when the pi5's card had none)
+pi4_try_check() {
+    local left
+    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+        # no tryboot.txt before: none after, so neither file may be listed
+        left=$(b "ls /boot/firmware/$STAGED /boot/firmware/tryboot.txt 2>/dev/null")
+        [ -z "$left" ]
+    else
+        left=$(b "ls /boot/firmware/$STAGED $TRY_BAK 2>/dev/null; sudo sha256sum /boot/firmware/tryboot.txt")
+        [ -n "$TRY_SHA" ] && [ "$left" = "$TRY_SHA" ]
+    fi
 }
 
 pi4_stage() {
@@ -1621,14 +1678,14 @@ pi4_stage() {
         bget TRY_HAD 'test -e /boot/firmware/tryboot.txt && echo 1 || echo 0' 1
         [ "$TRY_HAD" = 0 ] || TRY_HAD=1
     fi
-    bget PREV 'cat /boot/firmware/tryboot.txt 2>/dev/null' '<the tryboot.txt read from the board>'
+    pi4_try_backup
     TRY="# tools/board.sh: $NAME, one-shot boot (reboot \"0 tryboot\"); config.txt stays the Linux default
 $(pi4_config "$STAGED")"
     # A fresh directory: a copy into a fixed /tmp name would write through a
     # symlink someone left there (tools/cts/README.md, "Deploying").
     bget tmpd 'mktemp -d' /tmp/DRY.board
-    [[ $tmpd == /tmp/* ]] || die "mktemp -d on the board failed"
-    b "cat > $tmpd/img" < "$IMG" || { b "rm -rf $tmpd"; die "copy to the board failed"; }
+    [[ $tmpd == /tmp/* ]] || { pi4_undo; die "mktemp -d on the board failed"; }
+    b "cat > $tmpd/img" < "$IMG" || { b "rm -rf $tmpd"; pi4_undo; die "copy to the board failed"; }
     b "sudo install -m 0755 $tmpd/img /boot/firmware/$STAGED; r=\$?; rm -rf $tmpd; sync; exit \$r" ||
         { pi4_undo; die "install into /boot/firmware failed (removed again)"; }
     # a here-string, not "printf | b": under pipefail a printf whose reader
@@ -1682,7 +1739,7 @@ throttled_record() {
 }
 
 run_tryboot() {
-    local t0 ended=0 back=0 bid left
+    local t0 ended=0 back=0 bid
     local bound=${RUN_BOUND:-$RUN_BOUND_DEFAULT} backs=${RETURN_BOUND:-$RETURN_BOUND_DEFAULT}
     HOLD_MAX=${HOLD_MAX:-$((bound + backs + 300))}
     STAGED="yakogl-$NAME.bin"
@@ -1725,13 +1782,7 @@ run_tryboot() {
         meta t_back "$(date +%s)"
         throttled_record after
         pi4_undo
-        if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
-            # no tryboot.txt before: none after, so neither file may be listed
-            left=$(b "ls /boot/firmware/$STAGED /boot/firmware/tryboot.txt 2>/dev/null")
-        else
-            left=$(b "ls /boot/firmware/$STAGED 2>/dev/null; cat /boot/firmware/tryboot.txt")
-        fi
-        if [ "$left" = "$PREV" ]; then
+        if pi4_try_check; then
             meta cleanup "staged image removed, tryboot.txt put back (read back)"
         else
             meta cleanup "did NOT read back as expected"

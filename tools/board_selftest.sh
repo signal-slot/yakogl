@@ -461,9 +461,22 @@ unset MP2S_STANDALONE_RUNNER
 out=$(env -u BOARD_PERSON_PRESENT "$B" --dry-run stm32mp257f-dk default "$dkimg" forever 2>&1); rc=$?
 check "the real runner, --dry-run default <img> forever without BOARD_PERSON_PRESENT: non-zero naming BOARD_PERSON_PRESENT" \
     eval '[ "$rc" != 0 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
+# trydry OUTPUT: a tryboot dry run's tryboot.txt steps: the undo printed before
+# the stock file is backed up on the board (cp -p to tryboot.txt.yk-orig), the
+# run's file written once (tee), the stock one copied back and compared with
+# cmp before the backup goes; a leftover backup refuses the start
+trydry() {
+    local u c
+    u=$(grep -n "UNDO, from Linux .*sudo cp -p /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt" <<<"$1" | head -1 | cut -d: -f1)
+    c=$(grep -nF "sudo cp -p /boot/firmware/tryboot.txt /boot/firmware/tryboot.txt.yk-orig && sync" <<<"$1" | head -1 | cut -d: -f1)
+    [ -n "$u" ] && [ -n "$c" ] && [ "$u" -lt "$c" ] &&
+        [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$1")" = 1 ] &&
+        grep -qF "sudo cp -p /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt && sync && sudo cmp -s /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt && sudo rm -f /boot/firmware/tryboot.txt.yk-orig" <<<"$1" &&
+        grep -qF "test ! -e /boot/firmware/tryboot.txt.yk-orig" <<<"$1"
+}
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
-    eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
+    eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && trydry "$out"'
 # the Pi's console behind a serial bridge (BOARD_UART=host:port): the bridge
 # capture with its 'busy' retry, no stty and no /proc scan of a local device;
 # a device path keeps both
@@ -472,7 +485,7 @@ rc=$?
 check "pi4 BOARD_UART=host:port: rc 0, the bridge capture ('busy' retried), console.txt derived from console.ts, no stty, no fd scan" \
     eval '[ "$rc" = 0 ] && grep -qF "am62p_netboot_uart.py capture bridge:40001 <rundir>/console.raw <rundir>/console.ts &   # '"'"'busy'"'"' retried 12 x 10 s" <<<"$out" &&
           grep -q "derive <rundir>/console.txt" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out" &&
-          grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
+          grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && trydry "$out"'
 out=$(BOARD_UART=bridge:40001 dry pi4 probe "$S/logs" 2>&1)
 check "pi4 BOARD_UART=host:port probe: rc 0, no fd scan" eval '[ $? = 0 ] && ! grep -q "/proc/<pid>/fd" <<<"$out"'
 out=$(BOARD_UART=/dev/ttyACM9 dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
@@ -585,7 +598,7 @@ check "pi4 default forever BOARD_HDMI_TIMINGS=1920x720: rc 3, config.txt not wri
 out=$(BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1" dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 rc=$?
 check "pi4 run with the lab's 17-field BOARD_HDMI_TIMINGS: rc 0, tryboot.txt written and put back (its lines: the pi4_config check below)" \
-    eval '[ "$rc" = 0 ] && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'
+    eval '[ "$rc" = 0 ] && trydry "$out"'
 out=$(dry pi4 default "$S/img/pi4.bin" 2 2>&1)
 rc=$?
 check "pi4 default with a boot count: rc 2 (the firmware has none)" eval '[ "$rc" = 2 ] && grep -q "forever. only" <<<"$out"'
@@ -617,7 +630,7 @@ check "pi4 tryboot run refuses when a default is set (config-linux.txt)" grep -q
 out=$(BOARD_UART=/dev/ttyACM9 BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50 0 0 0 60 0 99070000 1" dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
 rc=$?
 check "pi5 run: rc 0, tryboot.txt written and put back, the reboot is '0 tryboot', a default set refuses, config.txt not written" \
-    eval '[ "$rc" = 0 ] && grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ] &&
+    eval '[ "$rc" = 0 ] && grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && trydry "$out" &&
           grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out" && ! grep -q "tee /boot/firmware/config.txt" <<<"$out" &&
           grep -qF "test -e /boot/firmware/tryboot.txt && echo 1 || echo 0" <<<"$out"'
 check "pi5 run: the console is only read (stty and the fd scan, no write to the device), printed as <BOARD_UART>" \
@@ -666,17 +679,94 @@ check "pi5_config: [all], kernel= the staged file, no arm_64bit, the UART lines,
 # the command): a pi5 card with no tryboot.txt before the run gets none after it
 eval "$(sed -n '/^pi4_undo() {/,/^}/p' "$B")"
 b() { echo "b: $*"; }
-out=$(STAGED=s.bin PREV= TRY_HAD=0 pi4_undo)
+eval "$(sed -n '/^TRY_BAK=/p' "$B")"
+note() { echo "note: $*"; }
+out=$(STAGED=s.bin TRY_HAD=0 pi4_undo)
 check "pi5 undo, no tryboot.txt before: image removed, tryboot.txt removed, nothing written" \
-    eval 'grep -qF "b: sudo rm -f /boot/firmware/s.bin" <<<"$out" && grep -qF "b: sudo rm -f /boot/firmware/tryboot.txt" <<<"$out" && ! grep -q tee <<<"$out"'
-out=$(STAGED=s.bin PREV=x TRY_HAD=1 pi4_undo)
-check "pi5 undo, a tryboot.txt before: it is put back (tee), not removed" \
-    eval 'grep -q "tee /boot/firmware/tryboot.txt" <<<"$out" && ! grep -qF "rm -f /boot/firmware/tryboot.txt" <<<"$out"'
+    eval 'grep -qF "b: sudo rm -f /boot/firmware/s.bin" <<<"$out" && grep -qxF "b: sudo rm -f /boot/firmware/tryboot.txt && sync" <<<"$out" && ! grep -q "tee\|cp " <<<"$out"'
+out=$(STAGED=s.bin TRY_HAD=1 pi4_undo)
+check "pi5 undo, a tryboot.txt before: the backup copied back (cp -p), compared (cmp), then removed; tryboot.txt not removed, no tee" \
+    eval 'grep -qF "b: sudo cp -p /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt && sync && sudo cmp -s /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt && sudo rm -f /boot/firmware/tryboot.txt.yk-orig && sync" <<<"$out" &&
+          ! grep -qF "rm -f /boot/firmware/tryboot.txt &&" <<<"$out" && ! grep -q tee <<<"$out"'
 BOARD=pi4
-out=$(STAGED=s.bin PREV= TRY_HAD=0 pi4_undo)
-check "pi4 undo: tryboot.txt put back as before, whatever TRY_HAD says" \
-    eval 'grep -q "tee /boot/firmware/tryboot.txt" <<<"$out" && ! grep -qF "rm -f /boot/firmware/tryboot.txt" <<<"$out"'
-unset -f b pi4_undo
+out=$(STAGED=s.bin TRY_HAD=0 pi4_undo)
+check "pi4 undo: tryboot.txt put back from the backup, whatever TRY_HAD says" \
+    eval 'grep -qF "sudo cp -p /boot/firmware/tryboot.txt.yk-orig /boot/firmware/tryboot.txt" <<<"$out" && ! grep -qF "rm -f /boot/firmware/tryboot.txt &&" <<<"$out"'
+check "board.sh: no tryboot.txt goes back through a here-string or a captured PREV" \
+    eval '! grep -qF "<<<\"\$PREV\"" "$B" && ! grep -q "bget PREV" "$B"'
+unset -f b
+
+# the stock tryboot.txt comes back byte for byte: board.sh's own tryboot helpers
+# (pi4_prechecks, pi4_try_backup, pi4_undo, pi4_try_check, bget; read from its
+# source) against a fake board, a b that runs the command here with
+# /boot/firmware a directory of this test and sudo dropped, its output naming
+# /boot/firmware again
+eval "$(sed -n '/^TRY_DRY_SHA=/p' "$B")"
+for f in bget pi4_prechecks pi4_try_backup pi4_try_check; do eval "$(sed -n "/^$f() {/,/^}/p" "$B")"; done
+FW="$S/fw/boot-firmware"
+b() {
+    local c=$*
+    c=${c//\/boot\/firmware/$FW}
+    c=${c//sudo /}
+    bash -c "$c" 2>&1 | sed "s|$FW|/boot/firmware|g"
+}
+die() { echo "die: $1"; exit 3; }
+meta() { :; }
+pi4_timings_check() { :; }
+pi4_uart_free() { :; }
+DRY=0
+IMG_SIZE=1
+# fwcase BOARD STOCK (printf %b): the stock tryboot.txt backed up, the run's
+# own written over it with an image staged, the undo, the read-back check;
+# then the file equals the stock one byte for byte, no backup or image left
+fwcase() {
+    rm -rf "$S/fw"
+    mkdir -p "$FW"
+    printf '%b' "$2" > "$FW/tryboot.txt"
+    cp -p "$FW/tryboot.txt" "$S/fw/stock"
+    (
+        BOARD=$1 TRY_HAD=1 STAGED=s.bin
+        pi4_prechecks > /dev/null || exit 4
+        pi4_try_backup > /dev/null || exit 5
+        printf '# tools/board.sh: run\n[all]\nkernel=s.bin\n' > "$FW/tryboot.txt"
+        : > "$FW/s.bin"
+        pi4_undo > /dev/null || exit 6
+        pi4_try_check || exit 7
+    ) && cmp -s "$S/fw/stock" "$FW/tryboot.txt" && [ ! -e "$FW/tryboot.txt.yk-orig" ] && [ ! -e "$FW/s.bin" ]
+}
+# (the old capture and here-string changed both of the first two files)
+check "fake board: the old \$(cat) and <<< put-back would change a file without a final newline and one with two" \
+    eval '( for t in "[all]\nkernel=k.bin" "[all]\nkernel=k.bin\n\n"; do
+                printf "%b" "$t" > "$S/fwold"; p=$(cat "$S/fwold"); cat <<<"$p" > "$S/fwnew"; ! cmp -s "$S/fwold" "$S/fwnew" || exit 1; done )'
+check "pi5 tryboot.txt without a final newline: restored byte-identical, no backup or image left" fwcase pi5 '[all]\nkernel=k.bin'
+check "pi5 tryboot.txt with two final newlines: restored byte-identical, no backup or image left" fwcase pi5 '[all]\nkernel=k.bin\n\n'
+check "pi5 tryboot.txt with one final newline: restored byte-identical, no backup or image left" fwcase pi5 '[all]\nkernel=k.bin\n'
+check "pi4 tryboot.txt without a final newline: restored byte-identical, no backup or image left" fwcase pi4 '# stock\n[all]\ntryboot_a_b=1'
+check "pi4 tryboot.txt with one final newline and a CR: restored byte-identical, no backup or image left" fwcase pi4 '[all]\r\nkernel=k.bin\n'
+# a file not the stock one after the undo: the read-back check says so
+rm -rf "$S/fw"; mkdir -p "$FW"; printf '[all]' > "$FW/tryboot.txt"
+out=$(BOARD=pi5 TRY_HAD=1 STAGED=s.bin; pi4_try_backup > /dev/null; pi4_undo > /dev/null; printf '[all]\n' > "$FW/tryboot.txt"; pi4_try_check; echo "rc=$?")
+check "a tryboot.txt that differs from the stock one by a newline after the undo: pi4_try_check fails" eval '[ "$out" = "rc=1" ]'
+# a leftover backup of an earlier run refuses the start, and is left as it was
+rm -rf "$S/fw"; mkdir -p "$FW"; printf 'ours\n' > "$FW/tryboot.txt"; printf 'stock' > "$FW/tryboot.txt.yk-orig"
+out=$(BOARD=pi5 STAGED=s.bin; pi4_prechecks 2>&1); rc=$?
+check "a leftover tryboot.txt.yk-orig refuses the start: rc 3, named, both files untouched" \
+    eval '[ "$rc" = 3 ] && grep -qF "die: /boot/firmware/tryboot.txt.yk-orig exists" <<<"$out" &&
+          [ "$(cat "$FW/tryboot.txt.yk-orig")" = stock ] && [ "$(cat "$FW/tryboot.txt")" = ours ]'
+# TRY_HAD=0 (a pi5 card without tryboot.txt): no backup, the run's file removed
+rm -rf "$S/fw"; mkdir -p "$FW"
+out=$(BOARD=pi5 TRY_HAD=0 STAGED=s.bin
+      pi4_try_backup; ls "$FW"; printf '[all]\n' > "$FW/tryboot.txt"; : > "$FW/s.bin"; pi4_undo; pi4_try_check; echo "rc=$?")
+check "pi5 TRY_HAD=0: the undo printed, no backup made, the run's tryboot.txt removed, the check passes, the directory empty" \
+    eval 'grep -q "^note: UNDO, from Linux .*sudo rm -f /boot/firmware/s.bin /boot/firmware/tryboot.txt$" <<<"$out" &&
+          ! grep -q "yk-orig" <<<"$out" && [ "$(tail -1 <<<"$out")" = "rc=0" ] && [ -z "$(ls -A "$FW")" ]'
+# a pi4 card without tryboot.txt: refused before anything changed
+rm -rf "$S/fw"; mkdir -p "$FW"
+out=$(BOARD=pi4 TRY_HAD=1 STAGED=s.bin; pi4_try_backup 2>&1); rc=$?
+check "pi4 without tryboot.txt: the backup refuses (rc 3), nothing written" \
+    eval '[ "$rc" = 3 ] && grep -q "die: cannot read /boot/firmware/tryboot.txt" <<<"$out" && [ -z "$(ls -A "$FW")" ]'
+unset -f b die meta note bget pi4_prechecks pi4_try_backup pi4_try_check pi4_undo pi4_timings_check pi4_uart_free fwcase
+unset DRY IMG_SIZE
 
 # pi5 with a fake board (pi5-fake): the dry run prints the tryboot.txt it would
 # write, and nothing the pi5 prints names its host, an address or the UART
