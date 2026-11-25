@@ -14,6 +14,12 @@
 # the board directory the binary goes to (MALI_STAGE_ROOT, /root/yakogl-mali)
 # and the UART speed (MALI_UART_BAUD); each may be set in the environment. The
 # binary runs with YAKOGL_MALI_DEV set to the render node.
+# The cross compiler (build.rs compiles gl_test with it, cargo links with it):
+# aarch64-linux-gnu-gcc from PATH. With none on PATH the script takes
+# MALI_DEQP_TOOLCHAIN from `tools/cts/deps-env.sh --present nanopc_t6` (tools/
+# cts/deps.toml; build it with `tools/cts/deps-env.sh --build --board nanopc_t6
+# MALI_DEQP_TOOLCHAIN`) and puts its bin/ first on PATH; with neither it exits
+# 2 before the board lock and before any ssh. run-on-board-cc-selftest.sh.
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp (e.g. a known_hosts file).
 # The board runs one GL client at a time: the script refuses to start while a
 # process opens the render node, and names it. A dmesg -w capture of the run
@@ -38,6 +44,22 @@
 # over by chat only. LOCK_WAIT defaults to 0 here (refuse, never queue);
 # HOLD_MAX to 1800 s (the build, a sweep and DMESG_TAIL_S fit well inside).
 set -euo pipefail
+# Make aarch64-linux-gnu-gcc resolvable on PATH (see the header). Run from the
+# repository root.
+select_cross_cc() {
+  command -v aarch64-linux-gnu-gcc >/dev/null 2>&1 && return 0
+  local t
+  t=$(tools/cts/deps-env.sh --present nanopc_t6 2>/dev/null | sed -n 's/^MALI_DEQP_TOOLCHAIN=//p') || t=
+  if [ -n "$t" ] && [ -x "$t/bin/aarch64-linux-gnu-gcc" ]; then
+    PATH=$t/bin:$PATH
+    export PATH
+    echo "run-on-board.sh: no aarch64-linux-gnu-gcc on PATH, using MALI_DEQP_TOOLCHAIN $t"
+    return 0
+  fi
+  echo "run-on-board.sh: no aarch64-linux-gnu-gcc on PATH and no MALI_DEQP_TOOLCHAIN: tools/cts/deps-env.sh --build --board nanopc_t6 MALI_DEQP_TOOLCHAIN" >&2
+  return 2
+}
+if [ -n "${RUN_ON_BOARD_FUNCS_ONLY-}" ]; then return 0; fi
 bin=${1:?usage: BOARD_HOST=<user@host> $0 <binary> [args...]}
 shift
 host=${BOARD_HOST:?set BOARD_HOST=<user@host>}
@@ -47,6 +69,7 @@ cd "$(dirname "$0")/../../.."
 . tools/mali/panthor/board-profile.sh
 board_profile_load || exit 2
 node=$MALI_RENDER_NODE
+select_cross_cc || exit 2
 LOCK_WAIT=${LOCK_WAIT:-0}
 HOLD_MAX=${HOLD_MAX:-1800}
 # shellcheck source=../../../driver/tools/kexec-zephyr/board_lock.sh
