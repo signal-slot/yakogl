@@ -2582,9 +2582,18 @@ step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mal
 # Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
 # shader shapes (Mesa 26.2.1 references where the record has one) and pins the
 # program or the refusal. Feature sets are those of each file's header.
-step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
+step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle,const_fold,vs_arith,vs_fma,tex_multi,locals,int_loops,texcoord_lane,tex_vertex,fragcoord16}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
+    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle \
+    --test mali_const_fold --test mali_vs_arith --test mali_vs_fma --test mali_tex_multi \
+    --test mali_locals --test mali_int_loops --test mali_texcoord_lane --test mali_tex_vertex \
+    --test mali_fragcoord16
+# Plan #367's GL-level tests on the Mali mock (shadow's depth-only pass, a
+# depth texture sampled after it, refract's NPOT chain; the last test's
+# panfrost-shaped case is #[ignore]d until the chain is laid out).
+step "test    $MALI_CONFIG (tests/mali_{depthonly_gl,depthtex_gl,npot_mip_gl}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_depthonly_gl --test mali_depthtex_gl --test mali_npot_mip_gl
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
