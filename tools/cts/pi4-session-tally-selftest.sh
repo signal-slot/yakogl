@@ -123,6 +123,56 @@ mv "$T/S01b2.hold" "$S2/S01b2.console.txt"
 [ "$(none_of)" = 0 ] && ok "S01b2 back: TOTAL none is 0" || bad "restored: none=$(none_of)"
 unset PI4_TREE PI4_MUSTPASS
 
+# ---- a cut-shaped session: image C1x began with c1..c4 and aborted at c2; the
+# tree now gives C1x only c1,c2 and the moved cases c3,c4 the new label C1y
+CT=$T/cut
+mkdir "$CT"
+cat > "$CT/tree.txt" <<EOF
+# synthetic cut tree: only the '# image <LABEL>:' lines are read
+# image C1x: 2 (cut after its abort trigger c2)
+# image C1y: 2 (the moved cases)
+EOF
+cat > "$CT/mustpass.txt" <<EOF
+$G.c1
+$G.c2
+$G.c3
+$G.c4
+EOF
+CS=$CT/session
+mkdir "$CS"
+{
+    echo "deqp: case filter '$G.*'"
+    echo "deqp: Pass $G.c1"
+    echo "deqp: ResourceError $G.c2"
+    echo "deqp: done: 1 passed, 1 failed, 0 not supported, 0 warnings, complete=0"
+    echo "deqp: summary: 2 cases begun, 2 with a result, 0 without"
+} > "$CS/C1x.console.txt"
+{
+    echo "deqp: case filter '$G.c3,$G.c4'"
+    echo "deqp: Pass $G.c3"
+    echo "deqp: Pass $G.c4"
+    echo "deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=1"
+    echo "deqp: summary: 2 cases begun, 2 with a result, 0 without"
+} > "$CS/C1y.console.txt"
+out=$(PI4_TREE=$CT/tree.txt PI4_MUSTPASS=$CT/mustpass.txt bash "$HERE/pi4-session-tally.sh" "$CS" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "cut session tallied" || bad "cut session rc=$rc: $out"
+case "$out" in *"C1x: aborted"*) ok "cut image C1x reported aborted" ;; *) bad "C1x: $out" ;; esac
+case "$out" in *"C1y: 2 pass, 0 fail"*) ok "moved cases C1y complete" ;; *) bad "C1y: $out" ;; esac
+grep -q "^ResourceError $G.c2" "$CS/C1x.tally.txt" && ok "C1x tally keeps its ResourceError" || bad "C1x tally lacks c2"
+grep -q "image C1y: " "$CS/C1y.tally.txt" && ok "C1y tally named by its label" || bad "C1y label missing"
+leak=0
+for pat in "${HOME:-/nonexistent-home}" "$(cd "$HERE/../.." && pwd)" "$T" "${TMPDIR:-/nonexistent-tmp}"; do
+    [ "${#pat}" -ge 4 ] && { grep -qF -- "$pat" "$CS"/*.tally.txt && leak=1; printf '%s\n' "$out" | grep -qF -- "$pat" && leak=1; }
+done
+[ $leak -eq 0 ] && ok "no HOME, workspace or TMPDIR path in the cut tallies or output" || bad "an absolute path leaked"
+# a label the cut tree lacks (the new label not yet added) is an error, nothing written
+rm -f "${CS:?}"/*.tally.txt
+printf '# image C1x: 4\n' > "$CT/tree-old.txt"
+out=$(PI4_TREE=$CT/tree-old.txt PI4_MUSTPASS=$CT/mustpass.txt bash "$HERE/pi4-session-tally.sh" "$CS" 2>&1); rc=$?
+[ $rc -ne 0 ] && ok "label missing from the tree is an error" || bad "missing label accepted"
+case "$out" in *C1y*) ok "error names C1y" ;; *) bad "no C1y in: $out" ;; esac
+[ ! -e "$CS/C1x.tally.txt" ] && [ ! -e "$CS/C1y.tally.txt" ] && ok "nothing written for the missing label" || bad "tally written"
+
 if [ $fail -eq 0 ]; then
     echo "pi4-session-tally-selftest: all checks passed"
 else
