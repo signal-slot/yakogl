@@ -488,7 +488,7 @@ check "prompt-go.py's plan types only ext4size, printenv filesize, ext4load, md.
 		[ "$(sed 's/ *#.*//; /^$/d' <<<"$plan" | grep -Evc '^(ext4size mmc 0:1 /boot/yakogl/t6_hello.bin|printenv filesize|ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_hello.bin|md.l 0x[0-9a-f]+ 1|crc32 0x10000000 1000|go 0x10000000)$')" = 0 ]; echo $?)"
 # Addresses, UART paths and credentials come from the environment only.
 check "stage.sh, prompt-go.*, prompt-lib.sh hold no IPv4 address, UART device path or credential" \
-	"$(! grep -nE '\b[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b|/dev/tty|sshpass|password=|passwd|IdentityFile' "$here/stage.sh" "$here/prompt-go.sh" "$here/prompt-go.py" "$here/prompt-lib.sh" | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' | grep -q .; echo $?)"
+	"$(! grep -nE '\b[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b|/dev/tty|sshpass|pass(wor)?d|IdentityFile' "$here/stage.sh" "$here/prompt-go.sh" "$here/prompt-go.py" "$here/prompt-lib.sh" | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' | grep -q .; echo $?)"
 check "no command of stage.sh or of prompt-go.sh's dry runs asks for a reboot" \
 	"$(! cat "$tmp/ssh.log" "$tmp/go.log" | grep -q 'reboot'; echo $?)"
 
