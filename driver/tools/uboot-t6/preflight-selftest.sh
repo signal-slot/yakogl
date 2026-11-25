@@ -57,7 +57,7 @@ ALL=
 run "$W/good" T6_UART=$S1 T6_HAND=$S2; ALL="$ALL$out"
 check "good dir: exit 0 (rc $rc)" "$rc"
 grep -q 'preflight: all ok' <<<"$out"; check "good dir: all ok" $?
-! grep -q 'run: bash' <<<"$out"; check "console-check.sh absent: no command printed" $?
+grep -q 'ok   e: next, run: bash .*/uboot-t6/console-check.sh' <<<"$out"; check "console-check.sh in this tree: command printed" $?
 
 run "$W/good" T6_UART=$S1; ALL="$ALL$out"
 has 'FAIL a: not set: T6_HAND'; check "T6_HAND unset: FAIL a" $?
@@ -91,15 +91,23 @@ rc=$?
 ALL="$ALL$out"
 has 'FAIL b: python3 cannot import'; check "python3 import fails: FAIL b" $?
 
-# e: console-check.sh executable -> the command is printed, the script not run
+# e: in a copy of preflight.sh's directory (this tree has console-check.sh):
+# without console-check.sh nothing is printed; with an executable one the
+# command is printed and the script is not run
 F=$W/fake
 mkdir -p "$F/driver/tools/uboot-t6" "$F/driver/tools/kexec-zephyr"
 cp "$PF" "$HERE/prompt-go.py" "$F/driver/tools/uboot-t6/"
 cp "$HERE/../kexec-zephyr/t6-uart-rfc2217.py" "$F/driver/tools/kexec-zephyr/"
+run_copy() {
+	out=$(env -i PATH="$PATH" HOME="$W" PREFLIGHT_REPO="$R" T6_UART=$S1 T6_HAND=$S2 bash "$F/driver/tools/uboot-t6/preflight.sh" "$W/good" 2>&1)
+	ALL="$ALL$out"
+}
+run_copy
+! grep -q 'run: bash' <<<"$out"; check "console-check.sh absent: no command printed" $?
+grep -q 'ok   e: console-check.sh not present' <<<"$out"; check "console-check.sh absent: said so" $?
 printf '#!/bin/sh\ntouch %s/ran\n' "$W" >"$F/driver/tools/uboot-t6/console-check.sh"
 chmod +x "$F/driver/tools/uboot-t6/console-check.sh"
-out=$(env -i PATH="$PATH" HOME="$W" PREFLIGHT_REPO="$R" T6_UART=$S1 T6_HAND=$S2 bash "$F/driver/tools/uboot-t6/preflight.sh" "$W/good" 2>&1)
-ALL="$ALL$out"
+run_copy
 grep -q 'ok   e: next, run: bash .*console-check.sh' <<<"$out"; check "console-check.sh executable: command printed" $?
 [ ! -e "$W/ran" ]; check "console-check.sh not run" $?
 

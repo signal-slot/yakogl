@@ -21,7 +21,43 @@ Status:
   the adapter's stored 115200, not the console's 1500000, so `--go` exited
   40 (`busy`). A `--go` run needs that slot free, or the line opened at
   1500000 (docs/notes/nanopc-t6-uboot-handover.md, section 5, "Board
-  sessions").
+  sessions"). `console-check.sh` ("Before a session: the console") now
+  finds either cause before anything is rebooted; it has not run on the
+  board.
+
+## Before a session: the console
+
+`console-check.sh` proves that the debug UART reads at 1500000 on this host
+while Armbian runs, before `prompt-reads.sh --go` or `prompt-go.sh --go`
+reboots anything. `preflight.sh` (host only) prints the command to run it
+(its check e).
+
+```sh
+BOARD_HOST=root@<t6> T6_UART=<tty or rfc2217://<host>:<port>> \
+  driver/tools/uboot-t6/console-check.sh
+```
+
+It reads the board over ssh (a NanoPC-T6, root, `/dev/ttyS2` at 1500000),
+opens `T6_UART` the way the runners do (a local tty set to 1500000 raw with
+no echo and read back; an `rfc2217://` address through
+`../kexec-zephyr/t6-uart-rfc2217.py`, whose adapter must confirm 1500000),
+writes one line, `#### console-check <16 random hex digits>`, to
+`/dev/ttyS2` on the board over ssh, and must read that line back on
+`T6_UART` within `CONSOLE_CHECK_READ_S` seconds (default 5). It never
+writes to `T6_UART` (a root shell reads that line), takes no board lock,
+reboots nothing, and prints no address.
+
+Exit codes, one meaning each; a session goes on only after 0: 0 the line
+read back verbatim; 1 this script or the RFC 2217 tool failed (tool exit
+41); 2 usage, `BOARD_HOST` or `T6_UART` unset; 3 the board over ssh (no
+answer, not a T6, not root, the line not written); 4 the board's
+`/dev/ttyS2` not at 1500000; 5 `T6_UART` not a tty this user can use at
+1500000 (or open by another process); 6 the adapter's client slot busy
+(tool exit 40, "busy"); 7 the RFC 2217 session not opened otherwise (tool
+exit 40); 8 the adapter did not confirm 1500000 (tool exit 42); 9 no byte
+read; 10 bytes read but not the line (the console reaches this host at
+another rate). Its self-test is `console-check-selftest.sh` (a fake board
+and a fake adapter on a pty; a gate row).
 
 ## Prompt reads
 
