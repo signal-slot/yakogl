@@ -65,7 +65,14 @@
 //!   `ICR` (0x3C) to clear; `LIF` (bit 0) is the line interrupt at `LIPCR`
 //!   (vblank), `FUWIF` (1) FIFO underrun warning, `TERRIF` (2) transfer
 //!   error, `FUEIF` (6) FIFO underrun error. [`Ltdc::wait_frame`] polls
-//!   `LIF` with the interrupt masked.
+//!   `LIF` with `IER.LIE` set, as r3.1 ltdc.c only ever relies on `LIF`
+//!   with `LIE` set (`ltdc_crtc_enable_vblank` :1454-1456,
+//!   `ltdc_crtc_set_crc_source` :1488-1490); the GIC line is not connected,
+//!   so the flag is still only polled. The scan line `CPSR.CYPOS` (:86,
+//!   :197, `ltdc_crtc_get_scanout_position` :1413-1415) wrapping is a second
+//!   witness, and [`Ltdc::frame_diag`] reads `ISR`, `IER`, `CPSR` twice,
+//!   `CDSR` (:87) and `GCR` after a timeout. At board-display3 (368e7875)
+//!   the poll with `LIE` clear saw no `LIF` in 83 ms after the chain came up.
 //! - Stop (`ltdc_plane_atomic_disable`, `ltdc_crtc_atomic_disable`,
 //!   `ltdc_encoder_disable`): `LXCR &= ~0x513` (LEN, COLKEN, CLUTEN, HMEN,
 //!   SCEN), `CACR` = 0, `IER &= ~0x146` (the rotation underrun too), an
@@ -115,6 +122,12 @@ pub const IER: u32 = 0x34;
 pub const ISR: u32 = 0x38;
 pub const ICR: u32 = 0x3c;
 pub const LIPCR: u32 = 0x40;
+/// `LTDC_CPSR` (r3.1 ltdc.c :86): the current position, `CXPOS` << 16 | `CYPOS`.
+pub const CPSR: u32 = 0x44;
+/// `LTDC_CDSR` (:87): the current display status (VDES, HDES, VSYNCS, HSYNCS).
+pub const CDSR: u32 = 0x48;
+/// `CPSR_CYPOS` (:197).
+pub const CPSR_CYPOS: u32 = 0xffff;
 pub const EDCR: u32 = 0x60;
 pub const FUT: u32 = 0x90;
 /// `LTDC_CCRCR`: the computed frame CRC (MP25 versions only).
@@ -154,6 +167,8 @@ pub const INT_FU_WARN: u32 = 1 << 1;
 pub const INT_TRANSFER_ERR: u32 = 1 << 2;
 pub const INT_FU_ERR: u32 = 1 << 6;
 pub const INT_FU_ROT: u32 = 1 << 8;
+/// `IER_LIE` (r3.1 ltdc.c :188), the enable of `INT_LINE`.
+pub const IER_LIE: u32 = INT_LINE;
 /// The error interrupts `ltdc_crtc_atomic_enable` unmasks (0x46).
 pub const IER_ERRORS: u32 = INT_FU_WARN | INT_TRANSFER_ERR | INT_FU_ERR;
 /// `LXCR`: layer enable, colour keying, CLUT, horizontal mirror, scaler.
@@ -551,15 +566,52 @@ impl Ltdc {
         wr(m, self.base, ICR, bits)
     }
 
-    /// Wait for one line interrupt (`LIPCR`, the end of the active area):
-    /// clears `LIF`, then polls `ISR` for it. `Err(-ETIMEDOUT)` after two frames.
+    /// Wait for one frame boundary, the way r3.1 ltdc.c gets its vblank: the
+    /// line interrupt (`LIF` at `LIPCR`, the end of the active area) with
+    /// `IER.LIE` set. ST's driver never reads `LIF` with `LIE` clear: it sets
+    /// `LIE` in `ltdc_crtc_enable_vblank` (:1454-1456) and for the CRC in
+    /// `ltdc_crtc_set_crc_source` (:1488-1490), and clears it only when
+    /// neither needs it (:1472-1473, :1494-1495); `ltdc_crtc_atomic_enable`
+    /// itself unmasks only the error interrupts (:1265-1266). So: `LIE` set if
+    /// it was clear, `LIF` cleared through `ICR` (`ltdc_irq` :1051-1052), then
+    /// `ISR` polled. As a second witness the scan line (`CPSR.CYPOS`, which
+    /// `ltdc_crtc_get_scanout_position` reads, :1413-1415) is sampled each
+    /// step: a wrap to a lower line is a frame boundary too (logged as a
+    /// warning, since then `LIF` did not latch). `LIE` is cleared again
+    /// afterwards when it was clear before; nothing routes the interrupt
+    /// (no IRQ is connected), so the flag is only polled.
+    /// `Err(-ETIMEDOUT)` after two 24 Hz frames.
     pub fn wait_frame(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
+        let b = self.base;
+        let lie_was_set = rd(m, b, IER) & IER_LIE != 0;
+        if !lie_was_set {
+            upd(m, b, IER, IER_LIE, IER_LIE);
+        }
         self.clear_status(m, INT_LINE);
+        let res = self.poll_frame(m, env);
+        if !lie_was_set {
+            upd(m, b, IER, IER_LIE, 0);
+        }
+        res
+    }
+
+    fn poll_frame(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
+        let mut last = rd(m, self.base, CPSR) & CPSR_CYPOS;
         let mut waited = 0;
         loop {
-            if self.status(m) & INT_LINE != 0 {
+            let isr = self.status(m);
+            if isr & INT_LINE != 0 {
                 return Ok(());
             }
+            let line = rd(m, self.base, CPSR) & CPSR_CYPOS;
+            if line < last {
+                env.log(
+                    Level::Wrn,
+                    format_args!("ltdc: frame seen by CPSR (line {last} -> {line}), ISR.LIF not set (ISR {isr:#x})"),
+                );
+                return Ok(());
+            }
+            last = line;
             if waited >= FRAME_WAIT_US {
                 return Err(-ETIMEDOUT);
             }
@@ -567,6 +619,45 @@ impl Ltdc {
             waited += POLL_STEP_US;
         }
     }
+
+    /// The registers that tell why no frame came ([`FrameDiag`]): `ISR`,
+    /// `IER`, `CPSR` read twice [`DIAG_CPSR_GAP_US`] apart, `CDSR`, `GCR` and
+    /// the reload register. Reads only; nothing is cleared.
+    pub fn frame_diag(&self, m: &impl Mmio, env: &impl Env) -> FrameDiag {
+        let b = self.base;
+        let isr = rd(m, b, ISR);
+        let ier = rd(m, b, IER);
+        let cpsr0 = rd(m, b, CPSR);
+        env.busy_wait_us(DIAG_CPSR_GAP_US);
+        let cpsr1 = rd(m, b, CPSR);
+        FrameDiag {
+            isr,
+            ier,
+            cpsr: [cpsr0, cpsr1],
+            cdsr: rd(m, b, CDSR),
+            gcr: rd(m, b, GCR),
+            rcr: rd(m, b, self.reload_reg()),
+        }
+    }
+}
+
+/// Gap between the two `CPSR` reads of [`Ltdc::frame_diag`]: at 1080p60 a
+/// line is 14.8 us, so a running timing generator moves ~67 lines.
+pub const DIAG_CPSR_GAP_US: u32 = 1000;
+
+/// What [`Ltdc::frame_diag`] read after a frame timeout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct FrameDiag {
+    pub isr: u32,
+    pub ier: u32,
+    /// `CPSR` (`CXPOS` << 16 | `CYPOS`) twice, [`DIAG_CPSR_GAP_US`] apart:
+    /// equal values mean the timing generator stands (no pixel clock).
+    pub cpsr: [u32; 2],
+    /// `CDSR`: bit 0 VDES, 1 HDES, 2 VSYNCS, 3 HSYNCS (current states).
+    pub cdsr: u32,
+    pub gcr: u32,
+    /// `L1RCR` (MP25) or `SRCR`.
+    pub rcr: u32,
 }
 
 /// Eight colour bars (white, yellow, cyan, green, magenta, red, blue, black;
@@ -620,6 +711,13 @@ mod tests {
         log: RefCell<Vec<(bool, u32, u32)>>,
         rcr: Option<u32>,
         no_clock: bool,
+        /// `LIF` latches only while `IER.LIE` is set (what r3.1 ltdc.c
+        /// relies on; whether the MP25 also latches it masked is unproven).
+        lif_needs_lie: bool,
+        /// `LIF` never latches (a block whose flag the poll cannot see).
+        no_lif: bool,
+        /// `CPSR` values returned in turn, the last one repeating.
+        cpsr: RefCell<Vec<u32>>,
     }
 
     impl Fake {
@@ -629,6 +727,9 @@ mod tests {
                 log: RefCell::default(),
                 rcr: (idr >= HWVER_40100).then_some(0x108),
                 no_clock: false,
+                lif_needs_lie: false,
+                no_lif: false,
+                cpsr: RefCell::default(),
             };
             f.regs.borrow_mut().insert(B + IDR as usize, idr);
             f.regs.borrow_mut().insert(B + GC2R as usize, bw << 4);
@@ -660,8 +761,13 @@ mod tests {
                 v &= !RCR_VBR;
                 self.regs.borrow_mut().insert(addr, v);
             }
-            if off == ISR && on {
+            let lie = self.peek(IER) & IER_LIE != 0;
+            if off == ISR && on && !self.no_lif && (lie || !self.lif_needs_lie) {
                 v |= INT_LINE;
+            }
+            if off == CPSR {
+                let mut q = self.cpsr.borrow_mut();
+                v = if q.len() > 1 { q.remove(0) } else { q.first().copied().unwrap_or(0) };
             }
             self.log.borrow_mut().push((false, off, v));
             v
@@ -833,6 +939,110 @@ mod tests {
         // the immediate reload is not waited for (ltdc.c does not)
         assert_eq!(l.disable(&f, &e), Ok(()));
         assert_eq!(f.peek(GCR) & GCR_LTDCEN, 0);
+    }
+
+    fn running(f: &Fake, e: &TestEnv) -> Ltdc {
+        let l = Ltdc::probe(f, B).unwrap();
+        l.configure(f, &M720, &Output::default(), &LAYER).unwrap();
+        l.enable(f, e).unwrap();
+        f.clear_log();
+        l
+    }
+
+    #[test]
+    fn wait_frame_sets_lie_as_st_does_before_it_relies_on_lif() {
+        // r3.1 ltdc.c: LIF is only consumed with IER_LIE (:188) set,
+        // ltdc_crtc_enable_vblank :1454-1456 / ltdc_crtc_set_crc_source
+        // :1488-1490; ltdc_crtc_atomic_enable unmasks only the errors
+        // (:1265-1266); ltdc_irq clears through ICR (:1051-1052);
+        // ltdc_crtc_disable_vblank clears LIE again when unused (:1472-1473).
+        // board-display3 (368e7875) polled LIF with LIE clear: -116.
+        let mut f = Fake::mp25();
+        f.lif_needs_lie = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        assert_eq!(f.peek(IER) & IER_LIE, 0, "enable leaves LIE clear, as ltdc.c");
+        l.wait_frame(&f, &e).unwrap();
+        assert_eq!(f.writes(), [(IER, IER_ERRORS | IER_LIE), (ICR, INT_LINE), (IER, IER_ERRORS)]);
+        let reads: Vec<u32> = f.log.borrow().iter().filter(|x| !x.0).map(|x| x.1).collect();
+        // IER (for LIE), IER (the modify), CPSR (the start line), ISR (LIF), IER (the restore)
+        assert_eq!(reads, [IER, IER, CPSR, ISR, IER]);
+        assert!(e.lines.borrow().is_empty());
+        // the old poll (LIE clear) sees nothing on such a block
+        l.clear_status(&f, INT_LINE);
+        assert_eq!(l.status(&f) & INT_LINE, 0);
+    }
+
+    #[test]
+    fn wait_frame_keeps_lie_set_when_the_crc_had_set_it() {
+        // ltdc_crtc_set_crc_source :1488-1490 sets LIE; it stays while the CRC
+        // is active (:1494-1495): the wait must not clear it
+        let mut f = Fake::mp25();
+        f.lif_needs_lie = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        upd(&f, B, IER, IER_LIE, IER_LIE);
+        f.clear_log();
+        l.wait_frame(&f, &e).unwrap();
+        assert_eq!(f.writes(), [(ICR, INT_LINE)]);
+        assert_eq!(f.peek(IER) & IER_LIE, IER_LIE);
+    }
+
+    #[test]
+    fn wait_frame_takes_a_cpsr_wrap_when_lif_does_not_latch() {
+        // CPSR_CYPOS (:197), as ltdc_crtc_get_scanout_position reads it
+        // (:1413-1415): the line counting up then back to a low line is a
+        // frame boundary; the wait says that LIF did not come
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        *f.cpsr.borrow_mut() = vec![(5 << 16) | 700, (9 << 16) | 744, (1 << 16) | 3];
+        l.wait_frame(&f, &e).unwrap();
+        let lines = e.lines.borrow();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].0, Level::Wrn);
+        assert!(lines[0].1.contains("line 744 -> 3"), "{}", lines[0].1);
+        assert_eq!(f.peek(IER) & IER_LIE, 0, "LIE restored");
+    }
+
+    #[test]
+    fn wait_frame_times_out_on_a_standing_line_and_restores_ier() {
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        *f.cpsr.borrow_mut() = vec![(100 << 16) | 412];
+        assert_eq!(l.wait_frame(&f, &e), Err(-ETIMEDOUT));
+        assert!(*e.waited_us.borrow() >= u64::from(FRAME_WAIT_US));
+        assert_eq!(f.peek(IER), IER_ERRORS);
+    }
+
+    #[test]
+    fn frame_diag_reads_isr_cpsr_twice_cdsr_gcr_and_clears_nothing() {
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        f.regs.borrow_mut().insert(B + ISR as usize, INT_FU_WARN);
+        f.regs.borrow_mut().insert(B + CDSR as usize, 0xc);
+        *f.cpsr.borrow_mut() = vec![(7 << 16) | 10, (8 << 16) | 77];
+        let d = l.frame_diag(&f, &e);
+        assert_eq!(
+            d,
+            FrameDiag {
+                isr: INT_FU_WARN,
+                ier: IER_ERRORS,
+                cpsr: [(7 << 16) | 10, (8 << 16) | 77],
+                cdsr: 0xc,
+                gcr: GCR_HSPOL | GCR_VSPOL | GCR_LTDCEN,
+                rcr: 0,
+            }
+        );
+        assert_eq!(*e.waited_us.borrow(), u64::from(DIAG_CPSR_GAP_US));
+        assert!(f.writes().is_empty());
+        let reads: Vec<u32> = f.log.borrow().iter().map(|x| x.1).collect();
+        assert_eq!(reads, [ISR, IER, CPSR, CPSR, CDSR, GCR, 0x108]);
     }
 
     #[test]
