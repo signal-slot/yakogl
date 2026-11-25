@@ -19,6 +19,14 @@ more (three or four RGBA8 targets, 4x MSAA). The G310's GPU-side work is
 therefore the frame builder's tile-buffer budget and its GPU identity, not
 the compiler.
 
+**The variant is measured, not assumed.** The Verdin iMX95's GPU reads
+`GPU_ID 0xac740001` and `CORE_FEATURES 0x1`: Mesa's G310v2 (product (10, 12,
+4), variant 1), one of the v1-v3 variants with the smaller tile buffer
+(`tools/cts/RESULTS.md`, "Mali: Verdin iMX95 on Zephyr", row `imx95_ident`;
+the 12 consoles of `tools/cts/log/2026-11-24-imx95-gles2-S1a-e63ab28e/` print
+`mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features
+0x809`). The frame difference below therefore applies to the board.
+
 Mesa citations are `file:line` in Mesa 26.2.1
 (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`). `P/` is `src/panfrost/` and
 `G/` is `src/gallium/drivers/panfrost/`.
@@ -55,7 +63,7 @@ default:
 | --- | --- | --- | --- | --- | --- |
 | 88 | G610 | (10, 8, 7) | 0 | 32768 / 16384 | 4, 8, 16, 64, 64, 16 |
 | 91 | G310v1 | (10, 12, 4) | 0 | 16384 / 8192 | 2, 2, 8, 16, 16, 4 |
-| 93 | G310v2 | (10, 12, 4) | 1 | 16384 / 8192 | 2, 4, 16, 32, 32, 8 |
+| 93 | G310v2 (the Verdin iMX95's GPU) | (10, 12, 4) | 1 | 16384 / 8192 | 2, 4, 16, 32, 32, 8 |
 | 95 | G310v3 | (10, 12, 4) | 2 | 16384 / 8192 | 4, 4, 16, 48, 48, 12 |
 | 97 | G310v4 | (10, 12, 4) | 3 | 32768 / 16384 | 4, 8, 16, 48, 48, 12 |
 | 99 | G310v5 | (10, 12, 4) | 4 | 32768 / 16384 | 4, 8, 16, 64, 64, 16 |
@@ -70,7 +78,8 @@ Other facts of the table:
 
 The arch revision nibble of `GPU_ID` (bits 20-23) is in no table, and
 nothing in Mesa reads it: `PAN_ARCH_REV` has no user. The script sets it
-to 7. That is assumed, not taken from a probe log (section 5).
+to 7, and the board agrees: bits 23:20 of its `GPU_ID 0xac740001` are 7
+(`tools/cts/RESULTS.md`, row `imx95_ident`).
 
 ### Where `src/panfrost/` and `G/` branch on what the two differ in
 
@@ -121,7 +130,9 @@ to 7. That is assumed, not taken from a probe log (section 5).
   `texture_features[0]`, AFBC from `afbc_features`, AFRC from bit 25
   (`pan_props.c:93-113`). These are raw registers, not model rows: the
   shim answers the G610's for every id, so this measurement cannot see
-  them (section 5).
+  them. The board's own values are in `tools/cts/RESULTS.md`, row
+  `imx95_ident`: `TILER_FEATURES 0x809` and `SHADER_PRESENT 0x1` (the shim's
+  0x809 and 0x50005), `L2_FEATURES 0x07110306` (the shim's 0x7120306).
 
 ## 2. Method
 
@@ -208,11 +219,14 @@ pointers masked. Scratch output was kept outside the tree.
 | whole trace identical (host pointers masked) | 580 |
 | differing | 0 |
 
-The G310 draws reported `gl_ref: renderer Mali-G310v2 MC4 (Panfrost)`.
+The G310 draws reported `gl_ref: renderer Mali-G310v2 MC4 (Panfrost)`
+(the shim's four cores; the board has one, `SHADER_PRESENT 0x1`, `imx95_ident`).
 The 580 include the references of plan #387's items (arith, fclane, negzero,
 posvary, unif2, mixcol, loops2, varylink2, fmaloc, constprod) and the older
 deqp ones. Only the G310v2 variant was drawn; v1-v3 share the tile buffer
-and v4-v5 the G610's, and no deqp reference is a frame probe.
+and v4-v5 the G610's, and no deqp reference is a frame probe. G310v2 is the variant the Verdin
+iMX95 reports (`imx95_ident`, S1a consoles), so the draws are those of the
+board's variant.
 
 ### Recheck over the references added since `7b540fee`, tip `7e27b1eb`
 
@@ -327,7 +341,7 @@ size (pixels), the colour buffer allocation (bytes) and the hierarchy mask.
    and the RGBA32F `GL_MAX_SAMPLES` (8 against 16, section 1).
 
 G310v4 and G310v5 have the G610's tile buffer, and none of 1-4 appears on
-them.
+them. The Verdin iMX95 is a G310v2 (`imx95_ident`), so 1-4 do apply to it.
 
 ## 5. What it means for our code
 
