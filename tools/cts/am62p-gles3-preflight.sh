@@ -8,16 +8,16 @@
 #                                      [--rows <a>-<b> | <i,j,...>] [--gltest-img <dir>] [--skip-table]
 # Defaults: commit = git rev-parse origin/main, table = tools/cts/am62p-gles3-tree.txt,
 # img-dir = build/deqp/am62p-gles3-<sha8> (board-stage.sh am62p gles3 names it so; with an arm it is
-# ...-n3d0|-n3d1[-idiv0|-idiv1], give that directory), rows = all (the spec grammar of TREE_ROWS, from 0).
+# ...[-n3d0|-n3d1][-narr0|-narr1][-idiv0|-idiv1], give that directory), rows = all (the spec grammar of TREE_ROWS, from 0).
 # Checks: (a) gen-am62p-gles3-tree.py --check; (b) check-gles3-tree.py on the table (every mustpass case
 # matched once); (c) every selected row's image is built rc=0 from --commit; (d) RUN_BOUND >= 900 and
 # RETURN_BOUND = 240 in the environment (board.sh's own defaults, 780 s and 180 s for a dEQP image, are not
 # enough for the 3D rows); (e) ZEPHYR_WS, DEQP_WORK or GLES3_WORK, PVR_FW_BLOB, BOARD_UART set or unset (a value
-# is never printed); (f) the DEQP_PVR_NATIVE_3D arm, read from the image directory name.
+# is never printed); (f) the DEQP_PVR_NATIVE_3D and DEQP_PVR_NATIVE_ARRAY arms, read from the image directory name.
 # The image layout is am62p-deqp-images.sh's: a row with a '# image <LABEL>:' line in the table has
 # <img-dir>/<LABEL>.built = '<LABEL> rc=<rc> sha256=<hash|none>' (a 'build=<describe>' field, if present, must be
 # a clean hash of the commit); any other row is 'img<N> rc=<rc> bin=<hash|none>' in <img-dir>/build.out (the
-# last such line wins). The commit identity of the images is the directory name's <sha8>: a '-dirty' name, a
+# last such line wins; *.log files, e.g. img<N>-<tag>.log build logs, beside the images are ignored). The commit identity of the images is the directory name's <sha8>: a '-dirty' name, a
 # name without a hash, or a row directory img<N>-<tag> with another tag is a FAIL.
 # Injection (for the selftest): PREFLIGHT_GEN and PREFLIGHT_CHECK name commands that replace (a) and (b)
 # (the latter gets the table as its argument); --skip-table leaves (a) and (b) out, printed as 'skip'.
@@ -120,16 +120,21 @@ else
 		am62p-gles3-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f] | am62p-gles3-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*)
 			dtag=${name#am62p-gles3-}; dtag=${dtag:0:8}; arm=${name#am62p-gles3-????????}
 			case $arm in
-				'' | -n3d[01] | -n3d[01]-idiv[01] | -idiv[01]) ;;
+				'' | -n3d[01] | -narr[01] | -idiv[01] | -n3d[01]-narr[01] | -n3d[01]-idiv[01] | -narr[01]-idiv[01] | -n3d[01]-narr[01]-idiv[01]) ;;
 				*) bad "image directory name has an unknown suffix '$arm'"; dtag='' ;;
 			esac ;;
-		*) bad "image directory name carries no build identity (am62p-gles3-<sha8>[-n3d0|-n3d1][-idiv0|-idiv1])" ;;
+		*) bad "image directory name carries no build identity (am62p-gles3-<sha8>[-n3d0|1][-narr0|1][-idiv0|1])" ;;
 	esac
 	# (f) the native 3D arm
 	case $arm in
 		*-n3d1*) ok "arm: DEQP_PVR_NATIVE_3D=1 (native 3D textures)" ;;
 		*-n3d0*) ok "arm: DEQP_PVR_NATIVE_3D=0 (slice-grid 3D textures)" ;;
 		*) ok "arm: DEQP_PVR_NATIVE_3D unset (the library default)" ;;
+	esac
+	case $arm in
+		*-narr1*) ok "arm: DEQP_PVR_NATIVE_ARRAY=1 (native 2D array textures)" ;;
+		*-narr0*) ok "arm: DEQP_PVR_NATIVE_ARRAY=0 (emulated 2D array textures)" ;;
+		*) ok "arm: DEQP_PVR_NATIVE_ARRAY unset (the library default)" ;;
 	esac
 	case $arm in
 		*-idiv1*) ok "arm: DEQP_PVR_INSTANCE_DIVISOR=1" ;;
@@ -153,6 +158,7 @@ else
 				if [ -n "$dtag" ]; then
 					for d in "$img"/img$rn-*; do
 						[ -e "$d" ] || continue
+						case $d in *.log) continue ;; esac
 						if [ "${d##*/}" != "img$rn-$dtag" ]; then other+=("$id(directory ${d##*/})"); fi
 					done
 				fi
