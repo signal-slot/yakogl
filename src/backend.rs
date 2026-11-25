@@ -925,12 +925,26 @@ const _: () = assert!(DRAW_TARGETS >= 1 && DRAW_TARGETS <= GLES_MAX_TARGETS);
 #[cfg(feature = "host-test")]
 pub static HOST_DRAW_TARGETS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
+/// A `test-knobs` build's runtime override of [`DRAW_TARGETS`] (0: not set;
+/// at most [`GLES_MAX_TARGETS`]), set by a GPU's `*_debug_set_draw_targets`
+/// (PowerVR: `pvr_debug_set_draw_targets`, docs/notes/mrt4-deqp-cases.md).
+#[cfg(feature = "test-knobs")]
+pub static KNOB_DRAW_TARGETS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// The colour targets one draw of this build's back end writes:
-/// [`DRAW_TARGETS`], or a host test's [`HOST_DRAW_TARGETS`].
+/// [`DRAW_TARGETS`], a host test's [`HOST_DRAW_TARGETS`], or a `test-knobs`
+/// build's [`KNOB_DRAW_TARGETS`] (the host stand-in wins).
 pub fn draw_targets() -> usize {
     #[cfg(feature = "host-test")]
     {
         let n = HOST_DRAW_TARGETS.load(core::sync::atomic::Ordering::Relaxed) as usize;
+        if n != 0 {
+            return n.min(GLES_MAX_TARGETS);
+        }
+    }
+    #[cfg(feature = "test-knobs")]
+    {
+        let n = KNOB_DRAW_TARGETS.load(core::sync::atomic::Ordering::Relaxed) as usize;
         if n != 0 {
             return n.min(GLES_MAX_TARGETS);
         }

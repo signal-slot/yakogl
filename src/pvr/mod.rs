@@ -32,6 +32,8 @@ pub mod mesa_internal;
     clippy::pedantic
 )]
 pub mod csbgen;
+/// Test knobs that belong to no one backend table (`test-knobs` only).
+pub mod debug;
 pub mod ffi;
 /// Where up to four colour targets go: output registers or tile buffers, and
 /// the end-of-tile program that emits them (RC14, pure, not wired in yet).

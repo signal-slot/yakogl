@@ -1824,6 +1824,9 @@ scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
   knobs_lib_tests "$KNOBS_POWERVR_CONFIG" "${KNOBS_POWERVR_TESTS[@]}"
+tests_row pvr_draw_targets_knob
+step "test    $KNOBS_POWERVR_CONFIG (tests/pvr_draw_targets_knob.rs, every declared test)" \
+  knobs_file_tests pvr_draw_targets_knob "$KNOBS_POWERVR_CONFIG"
 
 # gl_FragDepth on the GC7000UL (plan #340, docs/notes/gl-fragdepth.md): the
 # depth written, clamped, to r0.z with `viv.ps_depth_out_reg` 0 and
@@ -3826,7 +3829,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 KNOB_VIVANTE_SYMBOLS="gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
 gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
-KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
+KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_draw_targets pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
   tools/precompile tools/shaders tools/yakogl-tools/src/shc_print.rs)
