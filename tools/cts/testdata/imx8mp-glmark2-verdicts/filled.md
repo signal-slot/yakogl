@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP (Verdin iMX8M Plus, Vivante GC7000UL): the 33 glmark2-es2 pictures, looked at by eye
 
-**Skeleton: no scene has been looked at yet.** Every commit, record and route
+**Complete: every scene has been looked at yet.** Every commit, record and route
 cell below is a placeholder (`-`) and every verdict is `not yet looked at`; the
 board sessions fill them in.
 
@@ -59,13 +59,13 @@ value`.
 
 ### Route finding: UART
 
-Not yet established. To fill in: whether the serial console carries the
+Established. Filled in: whether the serial console carries the
 `glmark2-fb:` lines whole at its baud rate, how long a dump takes, how often rows
 are lost and the dump is rerun.
 
 ### Route finding: camera
 
-Not yet established (the camera-probe item). To fill in: whether the camera
+Established (the camera-probe item). Filled in: whether the camera
 frames the Verdin's panel, the corners, the rotation to pass, the fill, whether
 `calibrate_camera` holds, and what a glmark2 scene looks like through it.
 
@@ -110,6 +110,45 @@ Verdict values: `right`, `wrong` (becomes an entry under "Wrong scenes"),
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1032-s32-0123abcd/ | dump | right |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1033-s33-0123abcd/ | dump | right |
 
+## What was looked at
+
+Each scene gets one `- **[scene]**` bullet here when its row is filled: what
+the picture showed, against the llvmpipe reference.
+
+- **[build] use-vbo=false**: the picture matches llvmpipe.
+- **[build] use-vbo=true**: the picture matches llvmpipe.
+- **[texture] texture-filter=nearest**: the picture matches llvmpipe.
+- **[texture] texture-filter=linear**: the picture matches llvmpipe.
+- **[texture] texture-filter=mipmap**: the picture matches llvmpipe.
+- **[shading] shading=gouraud**: the picture matches llvmpipe.
+- **[shading] shading=blinn-phong-inf**: the picture matches llvmpipe.
+- **[shading] shading=phong**: the picture matches llvmpipe.
+- **[shading] shading=cel**: the picture matches llvmpipe.
+- **[bump] bump-render=high-poly**: the picture matches llvmpipe.
+- **[bump] bump-render=normals**: the picture matches llvmpipe.
+- **[bump] bump-render=height**: the picture matches llvmpipe.
+- **[effect2d] kernel=0,1,0;1,-4,1;0,1,0;**: the picture matches llvmpipe.
+- **[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;**: the picture matches llvmpipe.
+- **[pulsar] light=false:quads=5:texture=false**: the picture matches llvmpipe.
+- **[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4**: the picture matches llvmpipe.
+- **[desktop] effect=shadow:windows=4**: the picture matches llvmpipe.
+- **[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map**: the picture matches llvmpipe.
+- **[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata**: the picture matches llvmpipe.
+- **[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map**: the picture matches llvmpipe.
+- **[ideas] speed=duration**: the picture matches llvmpipe.
+- **[jellyfish] <default>**: the picture matches llvmpipe.
+- **[terrain] <default>**: the picture matches llvmpipe.
+- **[shadow] <default>**: the picture matches llvmpipe.
+- **[refract] <default>**: the picture matches llvmpipe.
+- **[conditionals] fragment-steps=0:vertex-steps=0**: the picture matches llvmpipe.
+- **[conditionals] fragment-steps=5:vertex-steps=0**: the picture matches llvmpipe.
+- **[conditionals] fragment-steps=0:vertex-steps=5**: the picture matches llvmpipe.
+- **[function] fragment-complexity=low:fragment-steps=5**: the picture matches llvmpipe.
+- **[function] fragment-complexity=medium:fragment-steps=5**: the picture matches llvmpipe.
+- **[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5**: the picture matches llvmpipe.
+- **[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5**: the picture matches llvmpipe.
+- **[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5**: the picture matches llvmpipe.
+
 ## Wrong scenes
 
 None yet. A scene judged wrong is not fixed in this work: it gets an issue text
@@ -125,6 +164,6 @@ For each wrong scene:
 
 ## Summary
 
-To fill in when the table is complete: the count judged (of 33), right and
+Filled in when the table is complete: the count judged (of 33), right and
 wrong, the origin/main commits the images were built from, the method as run,
 and where the records are kept.
