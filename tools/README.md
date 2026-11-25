@@ -796,8 +796,9 @@ python3 standard library only.
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it
-(`.github/workflows/gate.yml` runs every row of `tools/check.sh` on every pull
-request to main and nightly on main), a review, a merge. Locally
+(`.github/workflows/gate.yml` runs `tools/check.sh --no-clippy --changed
+<merge base>` on every pull request from a branch of this repository, and
+every row nightly on main), a review, a merge. Locally
 an agent runs only the tests it added or changed (`CONTRIBUTING.md`); the
 gate is the CI's job.
 

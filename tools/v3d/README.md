@@ -112,8 +112,9 @@ its CLIF decoder, the part of `src/util` that needs, and its format table,
 into `build/v3d-check/mesa/` (`tools/v3d/mesa-stub/` holds the two gallium
 driver headers and libdrm's that the table and the shared headers include and
 nothing here uses). `MESA_V3D_TREE`, a Mesa tree with `build-v3d` (the
-tree above), compares against that tree instead; set to something that is
-not one, the rows fail.
+tree above), compares against that tree instead; set to a tree without
+`build-v3d`, the three rows become one `gap` naming `MESA_V3D_TREE`, which
+keeps the run red (`env -u MESA_V3D_TREE` for the reference build).
 
 - `cl_golden.c` (with `cl_golden_mesa.c`): the packets are Mesa's own
   generated packers since 2026-10-01 (`driver/src/v3d/generated/v3d_packet_v42_pack.h`,
