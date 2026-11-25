@@ -1,0 +1,17 @@
+glmark2-mali-tally: [texture] texture-filter=nearest has no picture value (absent), no line for it
+glmark2-mali-tally: [texture] texture-filter=linear has no picture value (absent), no line for it
+glmark2-mali-tally: [texture] texture-filter=mipmap has no picture value (absent), no line for it
+glmark2-mali-tally: [shading] shading=blinn-phong-inf has no picture value (absent), no line for it
+glmark2-mali-tally: [shading] shading=phong has no picture value (absent), no line for it
+glmark2-mali-tally: [shading] shading=cel has no picture value (absent), no line for it
+glmark2-mali-tally: [bump] bump-render=high-poly has no picture value (absent), no line for it
+glmark2-mali-tally: [bump] bump-render=normals has no picture value (absent), no line for it
+glmark2-mali-tally: [bump] bump-render=height has no picture value (absent), no line for it
+glmark2-mali-tally: [effect2d] kernel=0,1,0;1,-4,1;0,1,0; has no picture value (absent), no line for it
+glmark2-mali-tally: [ideas] speed=duration has no picture value (absent), no line for it
+glmark2-mali-tally: [jellyfish] <default> has no picture value (absent), no line for it
+glmark2-mali-tally: [terrain] <default> has no picture value (absent), no line for it
+glmark2-mali-tally: [shadow] <default> has no picture value (absent), no line for it
+glmark2-mali-tally: [refract] <default> has no picture value (absent), no line for it
+glmark2-mali-tally: [function] fragment-complexity=medium:fragment-steps=5 has no picture value (absent), no line for it
+glmark2-mali-tally: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 has no picture value (absent), no line for it

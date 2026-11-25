@@ -1,0 +1,214 @@
+glmark2-mali-tally: causes of run (main `038b7d7d`): 10
+
+## Draft issue 1
+
+Title: gpu-mali: glmark2-es2 3 scenes on the NanoPC-T6: fail: refused: link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+
+Cause 1: fail: refused: link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 3 scene(s): `[texture] texture-filter=nearest`, `[texture] texture-filter=linear`, `[texture] texture-filter=mipmap`.
+
+- `[texture] texture-filter=nearest`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet
+  > [texture] texture-filter=nearest: Set up failed
+  > Error: Failed to link program created from files None and None:  link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+  > yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+- `[texture] texture-filter=linear`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet
+  > [texture] texture-filter=linear: Set up failed
+  > Error: Failed to link program created from files None and None:  link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+  > yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+- `[texture] texture-filter=mipmap`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet
+  > [texture] texture-filter=mipmap: Set up failed
+  > Error: Failed to link program created from files None and None:  link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+  > yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 2
+
+Title: gpu-mali: glmark2-es2 5 scenes on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+
+Cause 2: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 5 scene(s): `[shading] shading=blinn-phong-inf`, `[shading] shading=cel`, `[bump] bump-render=high-poly`, `[bump] bump-render=normals`, `[bump] bump-render=height`.
+
+- `[shading] shading=blinn-phong-inf`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 1747 bytes]
+  > [shading] shading=blinn-phong-inf: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+- `[shading] shading=cel`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 2737 bytes]
+  > [shading] shading=cel: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+- `[bump] bump-render=high-poly`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 1730 bytes]
+  > [bump] bump-render=high-poly: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+- `[bump] bump-render=normals`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 2268 bytes]
+  > [bump] bump-render=normals: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+- `[bump] bump-render=height`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 2676 bytes]
+  > [bump] bump-render=height: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 3
+
+Title: gpu-mali: glmark2-es2 2 scenes on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet)
+
+Cause 3: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 2 scene(s): `[shading] shading=phong`, `[refract] <default>`.
+
+- `[shading] shading=phong`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  > [shading] shading=phong: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is
+- `[refract] <default>`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  > [refract] <default>: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 4
+
+Title: gpu-mali: glmark2-es2 effect2d kernel=0,1,0;1,-4,1;0,1,0; on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than # look-ups, is not lowered yet)
+
+Cause 4: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than # look-ups, is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;`.
+
+- `[effect2d] kernel=0,1,0;1,-4,1;0,1,0;`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups,
+  > [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 5
+
+Title: gpu-mali: glmark2-es2 ideas speed=duration on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+
+Cause 5: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[ideas] speed=duration`.
+
+- `[ideas] speed=duration`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(21): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 1551 bytes]
+  > [ideas] speed=duration: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 6
+
+Title: gpu-mali: glmark2-es2 jellyfish on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet)
+
+Cause 6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[jellyfish] <default>`.
+
+- `[jellyfish] <default>`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 431
+  > [jellyfish] <default>: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 7
+
+Title: gpu-mali: glmark2-es2 terrain on the NanoPC-T6: crash: no yakogl-mali-exit line (the process died before atexit)
+
+Cause 7: crash: no yakogl-mali-exit line (the process died before atexit)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict crash in 1 scene(s): `[terrain] <default>`.
+
+- `[terrain] <default>`: exit 0, timeout 0, panthor kernel lines 0; also gl-error: GL error 0x501 in glGetAttribLocation, GL error 0x501 in glGetUniformLocation; also fail: no result line
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 3252 bytes]
+  > yakogl: GL error 0x501 in glGetAttribLocation (8 times)
+  > yakogl: GL error 0x501 in glGetUniformLocation (8 times)
+  > yakogl: glCompileShader(7): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 693 bytes]
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+## Draft issue 8
+
+Title: gpu-mali: glmark2-es2 shadow on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+
+Cause 8: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[shadow] <default>`.
+
+- `[shadow] <default>`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(13): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 724 bytes]
+  > [shadow] <default>: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 9
+
+Title: gpu-mali: glmark2-es2 function fragment-complexity=medium:fragment-steps=5 on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet)
+
+Cause 9: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[function] fragment-complexity=medium:fragment-steps=5`.
+
+- `[function] fragment-complexity=medium:fragment-steps=5`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 9
+  > [function] fragment-complexity=medium:fragment-steps=5: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.
+
+## Draft issue 10
+
+Title: gpu-mali: glmark2-es2 loop fragment-steps=5:fragment-uniform=true:vertex-steps=5 on the NanoPC-T6: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet)
+
+Cause 10: fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet)
+
+The first glmark2-es2 run on the NanoPC-T6 (Mali-G610, panthor, back end gpu-mali, #20) from main `038b7d7d` (kernel 6.18.55-current-rockchip64, the tools/mali/panthor-gles pair, libGLESv2.so.2 sha256 `absent`), one glmark2-es2 process per scene at 800x600 on an EGL pbuffer, gives verdict fail in 1 scene(s): `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5`.
+
+- `[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5`: exit 0, timeout 0, panthor kernel lines 0; also fail: set up failed
+  > yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 879 b
+  > [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: Set up failed
+  > Error: Failed to add fragment shader from file None:
+  > Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet)
+
+Run directory `run`, tallied by `tools/cts/glmark2-mali-tally.py`. Rerun the scene alone with tools/cts/mali-glmark2-run.sh to reproduce. ROADMAP.md stage 2 asks for all 33 scenes with no failed scene, no GL error and no scene out of GPU memory.
+
+A refusal of the Mali back end or its compiler: plan #309 owns these; cross-reference its issue rather than opening a new one.

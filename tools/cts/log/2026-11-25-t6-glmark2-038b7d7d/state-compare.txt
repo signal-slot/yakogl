@@ -1,0 +1,4 @@
+mali-board-state: /boot unchanged (419 files, sha256 7ebf21ccba82b8a4507a810a514711617b035d5b94c02a62307ef0b9e19e30c2)
+mali-board-state: modules unchanged (100 modules, sha256 65cd42a2de835b3dc84e98f610c15d81a56733d122d72e34ef834f16fd507e50)
+mali-board-state: U-Boot env unavailable in both snapshots (fw_printenv missing or needs root; not compared)
+mali-board-state: boot_id unchanged (ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d)
