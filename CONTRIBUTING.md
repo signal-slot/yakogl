@@ -105,7 +105,10 @@ pull request (step 1 above).
   Gentoo `app-arch/lz4`). A `CC_<target>` variable in the shell that names a
   tool that is not there (for example `CC_aarch64_unknown_none`) fails the
   aarch64 and `no Mesa reference` rows from a cold tree, in the build scripts
-  of the crates; `--check` reports it and `unset` fixes it. `ZEPHYR_WS` may be given
+  of the crates; `--check` reports it and `unset` fixes it. An `LC_ALL` or
+  `LANG` naming a locale the host has not installed fails the rows that run
+  `tools/` scripts; `--check` reports it and `export LC_ALL=C` before the
+  run fixes it. `ZEPHYR_WS` may be given
   through a symbolic link: the gate resolves it to the real path first, and
   every Zephyr build rewrites its generated linker snippets' `#include` paths
   to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
@@ -124,7 +127,7 @@ pull request (step 1 above).
   summary lines give the counts, ok plus gaps (a row whose tool or file the
   host lacks is listed as a gap). No file keeps the count: a row added by
   one pull request edits no number that another one edits too. The plan
-  at `ab919063` is 480 rows in `--quick` and 540 in the full run (the
+  at `512f3297` is 494 rows in `--quick` and 554 in the full run (the
   summary lines of `YAKOGL_CHECK_PLAN=1`), and a docs-only change run as
   `tools/check.sh --no-clippy --changed <parent>` reaches 4 rows; the dated runs below keep the
   row counts they had then (177 in `--quick` at `570cd8c6` and `18353e05`).
