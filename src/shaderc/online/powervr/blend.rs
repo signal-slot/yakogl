@@ -91,6 +91,29 @@ impl Blend {
         Ok(Some(b))
     }
 
+    /// The blend of one draw buffer of a multi key
+    /// (`crate::target_key::shc_blend_key_multi`, docs/notes/pvr-blend-multi.md
+    /// section 4): the shared blend word `word` (bits 0-25, 0 for the replace
+    /// state) with the slot's float class and disabled channels -- exactly
+    /// what [`Blend::from_key`] decodes from the one-target key the slot would
+    /// have alone, so the slot's tail is that key's. `Ok(None)` when the slot
+    /// is drawn as written: the replace state with no channel disabled. An
+    /// integer slot is never blended and has no `Blend` (the caller masks it).
+    pub fn for_slot(word: u32, class: u32, masked: u32) -> Result<Option<Blend>, &'static str> {
+        if !matches!(class, SHC_RT_RGBA8 | SHC_RT_F16X4 | SHC_RT_F16 | SHC_RT_F32) {
+            return Err("a blended slot of a class other than RGBA8, F16X4, F16 or F32");
+        }
+        if word >> 26 != 0 {
+            return Err("a blend word past bit 25");
+        }
+        let word = match (word, masked) {
+            (0 | SHC_BLEND_KEY_REPLACE, 0) => return Ok(None),
+            (0, _) => SHC_BLEND_KEY_REPLACE,
+            (w, _) => w,
+        };
+        Blend::from_key(word | shc_blend_key_target(class, masked))
+    }
+
     /// The channels the target has: all four, or red alone.
     pub fn channels(&self) -> u16 {
         if matches!(self.class, SHC_RT_F16 | SHC_RT_F32) {
@@ -158,6 +181,10 @@ pub struct Regs {
     /// alpha-to-one flag, applied to the blended alpha last (pco's
     /// `pco_nir_pfo` blends first).
     pub a2one: Option<u16>,
+    /// The first pixel output register the target's pixel is read from: 0
+    /// for one target, the slot's first register by the mrt layout for
+    /// several (an RGBA16F pixel's second dword is the next one).
+    pub out: u16,
 }
 
 impl Regs {
@@ -461,25 +488,25 @@ pub fn step(b: &Blend, r: &Regs, i: usize) -> Result<Option<Group>, BuildError> 
     if b.reads_pixel() {
         let reads: &[Step] = match b.class {
             SHC_RT_F16X4 | SHC_RT_SRGB => &[
-                Step::PixRead(0, r.p()),
-                Step::PixRead(1, r.p1()),
+                Step::PixRead(r.out, r.p()),
+                Step::PixRead(r.out + 1, r.p1()),
                 Step::Unpack("f16f16", 0, 2, r.d(0), r.p()),
                 Step::Unpack("f16f16", 0, 2, r.d(2), r.p1()),
             ],
             SHC_RT_F16 => &[
-                Step::PixRead(0, r.p()),
+                Step::PixRead(r.out, r.p()),
                 Step::Unpack("f16f16", 0, 1, r.d(0), r.p()),
                 Step::Group(mov(r.d(1), special(SR_ZERO))),
                 Step::Group(mov(r.d(2), special(SR_ZERO))),
                 Step::Group(mov(r.d(3), special(SR_ONE))),
             ],
             SHC_RT_F32 => &[
-                Step::PixRead(0, r.d(0)),
+                Step::PixRead(r.out, r.d(0)),
                 Step::Group(mov(r.d(1), special(SR_ZERO))),
                 Step::Group(mov(r.d(2), special(SR_ZERO))),
                 Step::Group(mov(r.d(3), special(SR_ONE))),
             ],
-            _ => &[Step::PixRead(0, r.p()), Step::Unpack("u8888", 1, 4, r.d(0), r.p())],
+            _ => &[Step::PixRead(r.out, r.p()), Step::Unpack("u8888", 1, 4, r.d(0), r.p())],
         };
         if let Some(st) = reads.get(i) {
             return fixed(*st);
@@ -534,7 +561,7 @@ mod tests {
     /// channel `k`'s result. In order because a channel reads a factor an
     /// earlier channel computed (`computed_earlier`).
     fn run(b: &Blend, fuse: bool, s: [f32; 4], d: [f32; 4], c: [f32; 4], k: u16) -> f32 {
-        let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None };
+        let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None, out: 0 };
         let mut t: BTreeMap<u16, f32> = BTreeMap::new();
         for i in 0..4u16 {
             t.insert(r.s(i), s[i as usize]);
@@ -661,7 +688,7 @@ mod tests {
                             checked += 1;
                         }
                     }
-                    let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None };
+                    let r = Regs { colour: 0, scratch: 4, consts: None, a2one: None, out: 0 };
                     let mut out = [Step::Group(mov(0, special(SR_ZERO))); 8];
                     let n = channel(&b, &r, 0, true, &mut out);
                     if out.iter().take(n).any(|st| matches!(st, Step::Group(g) if g.op == SelOp::Alu(AluOp::Ffma))) {
@@ -716,5 +743,228 @@ mod tests {
         /* the population: the comparisons made, and the cases that fused */
         assert_eq!(checked, eqs.len() * factors.len() * factors.len() * vals.len() * 4);
         assert!(fused_seen > 100, "only {fused_seen} factor pairs fused: the check did not see the fmad");
+    }
+
+    /// A multi key's slot is the blend the slot's own one-target key
+    /// decodes to (docs/notes/pvr-blend-multi.md section 4): the shared word
+    /// with the slot's class and mask. The replace state with nothing
+    /// disabled is no blend; the replace state with a mask is the masked
+    /// replace a one-target key carries.
+    #[test]
+    fn a_slot_blend_is_its_one_target_key() {
+        let words = [
+            0,
+            SHC_BLEND_KEY_REPLACE,
+            shc_blend_key(
+                SHC_BF_SRC_ALPHA,
+                SHC_BF_INV_SRC_ALPHA,
+                SHC_BF_ONE,
+                SHC_BF_ZERO,
+                SHC_BLEND_ADD,
+                SHC_BLEND_SUBTRACT,
+            ),
+            shc_blend_key(SHC_BF_CONST_COLOR, SHC_BF_DST_COLOR, SHC_BF_ONE, SHC_BF_ONE, SHC_BLEND_MAX, SHC_BLEND_ADD),
+        ];
+        let mut seen = 0;
+        for class in [SHC_RT_RGBA8, SHC_RT_F16X4, SHC_RT_F16, SHC_RT_F32] {
+            for masked in 0..16u32 {
+                let masked = if matches!(class, SHC_RT_F16 | SHC_RT_F32) { masked & 1 } else { masked };
+                for &w in &words {
+                    let got = Blend::for_slot(w, class, masked).expect("a valid slot");
+                    if w & !SHC_BLEND_KEY_REPLACE == 0 && masked == 0 {
+                        assert_eq!(got, None, "class {class} word {w:#x}");
+                        continue;
+                    }
+                    let word = if w == 0 { SHC_BLEND_KEY_REPLACE } else { w };
+                    let one = Blend::from_key(word | shc_blend_key_target(class, masked)).unwrap();
+                    assert_eq!(got, one, "class {class} mask {masked:#x} word {w:#x}");
+                    seen += 1;
+                }
+            }
+        }
+        assert!(seen > 100);
+        assert!(Blend::for_slot(0, SHC_RT_SRGB, 0).is_err());
+        assert!(Blend::for_slot(1 << 26, SHC_RT_RGBA8, 0).is_err());
+    }
+
+    /// One decoded group of a built program: its operations' names, its
+    /// destinations and its sources as (bank, index).
+    type Op = (std::vec::Vec<&'static str>, std::vec::Vec<(u32, u32)>, std::vec::Vec<(u32, u32)>);
+
+    fn decode_ops(image: &[u8]) -> std::vec::Vec<Op> {
+        use super::super::decode::decode_group;
+        use super::super::isa::ops_for;
+        use super::super::operands::{dsts, srcs};
+        let (mut off, mut out) = (0usize, std::vec::Vec::new());
+        while off < image.len() {
+            let g = decode_group(image, off).expect("decodes");
+            let names = g.instrs().filter_map(|(_, ph, r)| ops_for(r, ph).next().map(|o| o.name)).collect();
+            let d = g
+                .dst
+                .as_ref()
+                .map_or(std::vec::Vec::new(), |r| dsts(r).iter().flatten().map(|o| (o.bank, o.index)).collect());
+            let s = g.lower.iter().chain(g.upper.iter()).flat_map(srcs).flatten().map(|o| (o.bank, o.index)).collect();
+            out.push((names, d, s));
+            off += g.total;
+        }
+        out
+    }
+
+    /// `ops` with every register named relative to its role: the colour's
+    /// four temporaries from `colour` ("c"), the scratch from `scratch`
+    /// ("s"), the pixel output registers from `pix` ("p"); anything else as
+    /// it is.
+    fn relative(ops: &[Op], colour: u32, scratch: u32, pix: u32) -> std::vec::Vec<std::string::String> {
+        let (temp, special) = (Bank::Temp.hw(), Bank::Special.hw());
+        let name = |&(bank, i): &(u32, u32)| -> std::string::String {
+            let pixout = u32::from(super::super::assemble::PIXOUT0);
+            if bank == temp && (colour..colour + 4).contains(&i) {
+                format!("c{}", i - colour)
+            } else if bank == temp && (scratch..scratch + u32::from(Regs::SCRATCH)).contains(&i) {
+                format!("s{}", i - scratch)
+            } else if bank == special && (pixout..pixout + 4).contains(&i) {
+                format!("p{}", i as i64 - i64::from(pixout + pix))
+            } else {
+                format!("{bank}:{i}")
+            }
+        };
+        ops.iter()
+            .map(|(n, d, s)| {
+                let d: std::vec::Vec<_> = d.iter().map(name).collect();
+                let s: std::vec::Vec<_> = s.iter().map(name).collect();
+                format!("{n:?} {d:?} <- {s:?}")
+            })
+            .collect()
+    }
+
+    /// How many groups `step` builds for `b`.
+    fn tail_len(b: &Blend) -> usize {
+        let r = Regs { colour: 0, scratch: 8, consts: None, a2one: None, out: 0 };
+        (0..).take_while(|&i| step(b, &r, i).expect("builds").is_some()).count()
+    }
+
+    /// Several blended outputs (`build_fragment_shader_targets`, a multi
+    /// key's float draw buffers): output `j`'s blend tail is, group for group,
+    /// the tail [`super::super::assemble::build_fragment_shader_blended`]
+    /// builds for the same blend alone, with its colour, its scratch and its
+    /// pixel read moved to output j's registers. Then the packs and the
+    /// writes, each target at its registers.
+    fn assert_each_slot_is_the_one_target_tail(outs: &[(u16, Blend)]) {
+        use super::super::assemble::{
+            build_fragment_shader_blended, build_fragment_shader_targets, TargetOut, TargetPlace,
+        };
+        const FREE: u16 = 10;
+        /* the colours from temporaries not in place, so each tail moves them */
+        let colour = |j: usize| core::array::from_fn(|k| (Bank::Temp, 200 + 4 * j as u16 + 3 - k as u16));
+        let list: std::vec::Vec<_> = outs
+            .iter()
+            .enumerate()
+            .map(|(j, &(reg, b))| {
+                (
+                    TargetPlace::Register(reg),
+                    TargetOut::Blended { blend: b, colour: colour(j), consts: None, a2one: None },
+                )
+            })
+            .collect();
+        let mut buf = std::vec![0u8; 64 << 10];
+        let (len, temps) = build_fragment_shader_targets(&[], &[], &list, None, None, FREE, &mut buf).expect("builds");
+        let n = outs.len() as u16;
+        /* six temporaries an output, then one scratch every tail shares */
+        assert_eq!(temps, FREE + 6 * n + Regs::SCRATCH);
+        let multi = decode_ops(&buf[..len]);
+        /* RGBA16F packs and writes two dwords, R32F is written unpacked */
+        let packs_of = |b: &Blend| match b.class {
+            SHC_RT_F16X4 => 2,
+            SHC_RT_F32 => 0,
+            _ => 1,
+        };
+        let writes_of = |b: &Blend| if b.class == SHC_RT_F16X4 { 2 } else { 1 };
+        let packs: usize = outs.iter().map(|(_, b)| packs_of(b)).sum();
+        let writes: usize = outs.iter().map(|(_, b)| writes_of(b)).sum();
+        let tails: usize = outs.iter().map(|(_, b)| tail_len(b)).sum();
+        assert_eq!(multi.len(), 4 * outs.len() + tails + packs + writes, "{multi:?}");
+        let mut at = 4 * outs.len();
+        for (j, &(reg, b)) in outs.iter().enumerate() {
+            let mut one = std::vec![0u8; 64 << 10];
+            let (l1, _) =
+                build_fragment_shader_blended(&[], &[], colour(j), None, FREE, Some((b, None, None)), None, &mut one)
+                    .expect("builds");
+            let single = decode_ops(&one[..l1]);
+            let wide = u32::from(b.class == SHC_RT_F16X4);
+            let nb = tail_len(&b);
+            /* the one-target program: four moves, the tail, its pack(s), its write(s) */
+            assert_eq!(single.len(), 4 + nb + packs_of(&b) + writes_of(&b), "{single:?}");
+            let want = relative(&single[4..4 + nb], u32::from(FREE), u32::from(FREE) + 5 + wide, 0);
+            let got =
+                relative(&multi[at..at + nb], u32::from(FREE + 6 * j as u16), u32::from(FREE + 6 * n), u32::from(reg));
+            assert_eq!(got, want, "output {j} at register {reg}");
+            /* and it reads its own pixel when it reads one */
+            let reads: std::vec::Vec<u32> = multi[at..at + nb]
+                .iter()
+                .flat_map(|(_, _, s)| s.iter())
+                .filter(|(bank, i)| *bank == Bank::Special.hw() && (32..36).contains(i))
+                .map(|(_, i)| i - 32)
+                .collect();
+            let expect: std::vec::Vec<u32> = match (b.reads_pixel(), b.wide()) {
+                (false, _) => std::vec![],
+                (true, false) => std::vec![u32::from(reg)],
+                (true, true) => std::vec![u32::from(reg), u32::from(reg) + 1],
+            };
+            assert_eq!(reads, expect, "output {j}");
+            at += nb;
+        }
+        /* the writes: each target's registers, in order */
+        let pixout: std::vec::Vec<u32> = multi[at + packs..]
+            .iter()
+            .flat_map(|(_, d, _)| d.iter())
+            .filter(|(bank, _)| *bank == Bank::Special.hw())
+            .map(|(_, i)| i - 32)
+            .collect();
+        let regs: std::vec::Vec<u32> = outs
+            .iter()
+            .flat_map(|&(r, b)| {
+                let r = u32::from(r);
+                if b.class == SHC_RT_F16X4 {
+                    std::vec![r, r + 1]
+                } else {
+                    std::vec![r]
+                }
+            })
+            .collect();
+        assert_eq!(pixout, regs);
+    }
+
+    /// Four RGBA8 targets under one blend (SRC_ALPHA, ONE_MINUS_SRC_ALPHA;
+    /// alpha ADD ONE ONE), one with a channel disabled: four tails, each the
+    /// one-target tail on its register 0..3.
+    #[test]
+    fn four_rgba8_slots_each_blend_as_one_target_on_their_register() {
+        let w =
+            shc_blend_key(SHC_BF_SRC_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_ONE, SHC_BLEND_ADD, SHC_BLEND_ADD);
+        let b = |masked| Blend::for_slot(w, SHC_RT_RGBA8, masked).unwrap().unwrap();
+        assert_each_slot_is_the_one_target_tail(&[(0, b(0)), (1, b(0)), (2, b(0b0100)), (3, b(0))]);
+    }
+
+    /// RGBA16F at registers 0-1 beside RGBA8 at 2, and RGBA8 at 0 beside
+    /// RGBA16F at 2-3 (the pair on an even register): the halves read and
+    /// written as two dwords, the bytes as one, each from its own register.
+    #[test]
+    fn f16x4_beside_rgba8_each_blend_as_one_target_on_their_register() {
+        let w = shc_blend_key(
+            SHC_BF_DST_COLOR,
+            SHC_BF_INV_SRC_ALPHA,
+            SHC_BF_ONE,
+            SHC_BF_ZERO,
+            SHC_BLEND_REVERSE_SUBTRACT,
+            SHC_BLEND_MIN,
+        );
+        let f = Blend::for_slot(w, SHC_RT_F16X4, 0).unwrap().unwrap();
+        let u = Blend::for_slot(w, SHC_RT_RGBA8, 0b1000).unwrap().unwrap();
+        assert_each_slot_is_the_one_target_tail(&[(0, f), (2, u)]);
+        assert_each_slot_is_the_one_target_tail(&[(0, u), (2, f)]);
+        /* one-channel floats beside them, and a masked replace that reads */
+        let r = Blend::for_slot(0, SHC_RT_F32, 1).unwrap().unwrap();
+        let h = Blend::for_slot(w, SHC_RT_F16, 0).unwrap().unwrap();
+        assert_each_slot_is_the_one_target_tail(&[(0, u), (1, r), (2, h), (3, u)]);
     }
 }

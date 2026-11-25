@@ -1934,7 +1934,8 @@ pub fn build_fragment_shader_blended(
     };
     let temps = temps.ok_or(BuildError::Unsupported("no temporaries left for the colour"))?;
     /* The blend works in temporaries above everything else. */
-    let regs = blend.map(|(_, consts, a2one)| super::blend::Regs { colour: first, scratch: temps, consts, a2one });
+    let regs =
+        blend.map(|(_, consts, a2one)| super::blend::Regs { colour: first, scratch: temps, consts, a2one, out: 0 });
     let temps = match regs {
         Some(_) => temps
             .checked_add(super::blend::Regs::SCRATCH)
@@ -2308,6 +2309,19 @@ pub enum TargetOut {
     /// An integer target's `n` packed dwords (`chain::pack_int_output`),
     /// written as they are.
     Packed { dwords: [(super::sel::Bank, u16); 4], n: u8 },
+    /// A float colour blended (and masked) for its own target before the
+    /// pack, as [`build_fragment_shader_blended`] blends one target: the
+    /// blend tail of `blend` (`blend::step`; its class is the target's)
+    /// reading the pixel from the target's own output registers, the
+    /// constants from shared register `consts` when a factor reads them, and
+    /// alpha-to-one's flag `a2one` applied last (output 0 only). The target
+    /// must be in the output registers (a [`TargetPlace::Register`]).
+    Blended {
+        blend: super::blend::Blend,
+        colour: [(super::sel::Bank, u16); 4],
+        consts: Option<u16>,
+        a2one: Option<u16>,
+    },
 }
 
 /// Where [`build_fragment_shader_targets`] puts one attachment's dwords: the
@@ -2323,7 +2337,7 @@ pub enum TargetPlace {
 }
 
 /// A fragment shader writing several colour attachments of different
-/// classes, none blended: output (`place`, out) is packed for its own target
+/// classes: output (`place`, out) is packed for its own target
 /// and written where the end-of-tile program emits that attachment from
 /// (`src/pvr/mrt_layout.rs`): pixel output registers `first..`, or a tile
 /// buffer the end-of-tile program loads back (`TileStores`). Each output
@@ -2336,6 +2350,16 @@ pub enum TargetPlace {
 /// in order, the last one ending the program -- or, when a target is
 /// spilled, the tile-buffer stores after them and a `nop` ending it, as pco
 /// orders them. Returns the bytes written and the temporaries.
+///
+/// A [`TargetOut::Blended`] output (a multi key's slot,
+/// docs/notes/pvr-blend-multi.md section 4) moves all four components and
+/// runs its blend tail (`blend::step`, reading its pixel from its own
+/// registers) after every move and before the packs, slot after slot in
+/// output order, each in the same eighteen scratch temporaries above the
+/// outputs' (the tail is serial); the constants and alpha-to-one are the
+/// output's own. An empty list is a program that writes no colour (every
+/// target's channels disabled): the kill test and feedback, if any, and an
+/// ending `nop`.
 pub fn build_fragment_shader_targets(
     iterated: &[super::fragment::Iterated],
     arithmetic: &[super::sel::SelGroup],
@@ -2349,6 +2373,7 @@ pub fn build_fragment_shader_targets(
 ) -> Result<(usize, u16), BuildError> {
     use super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc};
     use crate::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8};
+    /* `Blend(j)`: output j's blend tail, every group `blend::step` builds */
     #[derive(Clone, Copy)]
     enum Step {
         Move { ty: OpType, src: (Bank, u16), dst: u16 },
@@ -2358,17 +2383,29 @@ pub fn build_fragment_shader_targets(
         Write { index: u16, src: u16 },
         Tile(usize),
         End,
+        Blend(usize),
     }
-    if outs.is_empty() || outs.len() > MAX_RGBA8_OUTPUTS {
-        return Err(BuildError::Unsupported("a target list of other than 1..=4 outputs"));
+    if outs.len() > MAX_RGBA8_OUTPUTS {
+        return Err(BuildError::Unsupported("a target list of more than 4 outputs"));
     }
     let temps = free
         .checked_add(6 * outs.len() as u16)
         .ok_or(BuildError::Unsupported("no temporaries left for the colours"))?;
+    /* the blend tails' scratch, shared: above the outputs' temporaries */
+    let blended = outs.iter().any(|(_, o)| matches!(o, TargetOut::Blended { .. }));
+    let scratch = temps;
+    let temps = if blended {
+        temps
+            .checked_add(super::blend::Regs::SCRATCH)
+            .ok_or(BuildError::Unsupported("no temporaries left for the blend"))?
+    } else {
+        temps
+    };
     let mut tiles = TileStores { dwords: [(0, 0, 0); 16], n: 0, scratch: temps };
-    /* at most 4 x (4 moves, 2 packs, 4 writes), the 4 kill and depth steps,
-     * the tile-buffer stores of up to twelve dwords and the end */
-    let mut steps = [Step::Kill(0); 44 + TileStores::MASK_GROUPS + 12 * TileStores::DWORD_GROUPS + 1];
+    /* at most 4 x (4 moves, 1 blend tail, 2 packs, 4 writes), the 4 kill
+     * and depth steps, the tile-buffer stores of up to twelve dwords and the
+     * end */
+    let mut steps = [Step::Kill(0); 48 + TileStores::MASK_GROUPS + 12 * TileStores::DWORD_GROUPS + 1];
     let mut n = 0usize;
     let mut push = |s: Step| {
         steps[n] = s;
@@ -2380,12 +2417,19 @@ pub fn build_fragment_shader_targets(
         let b = free + 6 * j as u16;
         /* where each written dword is packed (an integer one: moved) */
         let (srcs, ns): ([u16; 4], usize) = match out {
-            TargetOut::Colour { class, colour } => {
+            TargetOut::Colour { class, colour }
+            | TargetOut::Blended { blend: super::blend::Blend { class, .. }, colour, .. } => {
+                let is_blended = matches!(out, TargetOut::Blended { .. });
+                /* a blend reads the source's alpha whatever the target has */
                 let moved = match class {
                     SHC_RT_RGBA8 | SHC_RT_F16X4 => 4,
+                    SHC_RT_F16 | SHC_RT_F32 if is_blended => 4,
                     SHC_RT_F16 | SHC_RT_F32 => 1,
                     _ => return Err(BuildError::Unsupported("a target class other than RGBA8, F16X4, F16 or F32")),
                 };
+                if is_blended && !matches!(place, TargetPlace::Register(_)) {
+                    return Err(BuildError::Unsupported("a blended or masked target spilled to a tile buffer"));
+                }
                 for (k, &src) in colour[..moved].iter().enumerate() {
                     push(Step::Move { ty: OpType::F32, src, dst: b + k as u16 });
                 }
@@ -2436,18 +2480,24 @@ pub fn build_fragment_shader_targets(
         _ => temps.checked_add(5).ok_or(BuildError::Unsupported("no temporaries left for the tile-buffer stores"))?,
     };
     for (j, &(_, out)) in outs.iter().enumerate() {
+        if matches!(out, TargetOut::Blended { .. }) {
+            push(Step::Blend(j));
+        }
+    }
+    for (j, &(_, out)) in outs.iter().enumerate() {
         let b = free + 6 * j as u16;
-        match out {
-            TargetOut::Colour { class: SHC_RT_RGBA8, .. } => {
-                push(Step::Pck { format: "u8888", scale: 1, rpt: 4, first: b, dst: b + 4 })
-            }
-            TargetOut::Colour { class: SHC_RT_F16X4, .. } => {
+        let class = match out {
+            TargetOut::Colour { class, .. } => class,
+            TargetOut::Blended { blend, .. } => blend.class,
+            TargetOut::Packed { .. } => continue,
+        };
+        match class {
+            SHC_RT_RGBA8 => push(Step::Pck { format: "u8888", scale: 1, rpt: 4, first: b, dst: b + 4 }),
+            SHC_RT_F16X4 => {
                 push(Step::Pck { format: "f16f16", scale: 0, rpt: 2, first: b, dst: b + 4 });
                 push(Step::Pck { format: "f16f16", scale: 0, rpt: 2, first: b + 2, dst: b + 5 });
             }
-            TargetOut::Colour { class: SHC_RT_F16, .. } => {
-                push(Step::Pck { format: "f16f16", scale: 0, rpt: 1, first: b, dst: b + 4 })
-            }
+            SHC_RT_F16 => push(Step::Pck { format: "f16f16", scale: 0, rpt: 1, first: b, dst: b + 4 }),
             _ => {}
         }
     }
@@ -2467,16 +2517,30 @@ pub fn build_fragment_shader_targets(
     for k in 0..tiles.groups() {
         push(Step::Tile(k));
     }
-    if tiles.n != 0 {
+    if tiles.n != 0 || nw == 0 {
         push(Step::End);
     }
     let last = n - 1;
     let mut pro = Prologue::new(iterated, arithmetic);
     let mut at = 0usize;
+    let mut bstep = 0usize;
     let len = encode_closed(
         || {
             if let Some(g) = pro.group()? {
                 return Ok(Some(g));
+            }
+            /* a blend tail: its groups one at a time, then the next step */
+            while let Some(&Step::Blend(j)) = steps[..n].get(at) {
+                let (TargetPlace::Register(out), TargetOut::Blended { blend, consts, a2one, .. }) = outs[j] else {
+                    return Err(BuildError::Unsupported("a blend tail for an output that is not blended"));
+                };
+                let regs = super::blend::Regs { colour: free + 6 * j as u16, scratch, consts, a2one, out };
+                if let Some(g) = super::blend::step(&blend, &regs, bstep)? {
+                    bstep += 1;
+                    return Ok(Some(g));
+                }
+                bstep = 0;
+                at += 1;
             }
             if at == n {
                 return Ok(None);
@@ -2523,6 +2587,7 @@ pub fn build_fragment_shader_targets(
                 Step::Write { index, src } => build_pixout_write_to(index, src, k == last),
                 Step::Tile(t) => tiles.group(t),
                 Step::End => super::fragment::end_nop(),
+                Step::Blend(_) => Err(BuildError::Unsupported("a blend tail out of order")),
             }
             .map(Some)
         },
