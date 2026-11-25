@@ -15,12 +15,11 @@
 //! loop over `baseLevel`) is not in third_party/ (only gallium, broadcom,
 //! compiler, util and the like are vendored), so the spec is the reference.
 //!
-//! Today the GL core's check (src/gl/draw.rs `incomplete_reason`) looks at
-//! level 0 alone: `faces_set` records the faces that hold a LEVEL 0 image,
-//! and the per-level face records (`level_faces`) are looked at only for a
-//! mipmap min filter, from level 1 up to the chain's last. The base level
-//! plays no part. The item `basecompl` makes the check start at the base
-//! level.
+//! The GL core's check (src/gl/draw.rs `incomplete_reason`) starts at the
+//! base level since item `basecompl`: the faces at the base level are
+//! `faces_set` for level 0 and the per-level face record (`level_faces`)
+//! for a base level above it. Until then it looked at level 0 alone, and at
+//! the per-level face records only for a mipmap min filter.
 //!
 //! Every texture is RGBA8, 16x16 at level 0 (8x8 at level 1), NEAREST
 //! filters (only the base level counts for completeness), sampled and
@@ -39,9 +38,8 @@
 //! - (d) an immutable cube (`glTexStorage2D`, 5 levels), BASE_LEVEL 1;
 //! - (e) BASE_LEVEL 0 controls, mutable and immutable.
 //!
-//! Asserts whose value disagrees with the spec today carry the suffix
-//! `_flip_when_completeness_follows_the_base_level`; their doc comment gives
-//! the spec value. The others hold after the fix. The size words of a
+//! Cases (a), (b2) and (c2) were pinned at the level-0 rule's values until
+//! item basecompl. The size words of a
 //! complete cube are the base level's (the draw fills
 //! `GlesTextureBind::base_level`, item basefield): (8, 8) at BASE_LEVEL 1.
 //!
@@ -710,21 +708,16 @@ fn e_a_mutable_cube_missing_a_face_at_base_level_0_is_incomplete() {
 
 /* ---- (a) only levels 1.. on all six faces, BASE_LEVEL 1 ---- */
 
-/// Case (a), pins today's behaviour: a mutable cube with ONLY levels 1..4
-/// (8x8 down to 1x1) on all six faces and BASE_LEVEL 1 is drawn as
-/// incomplete (`faces_set` records level-0 faces only: "cube map without
-/// all six faces"), with the stand-in record and words (1, 1).
-///
-/// Spec value: ES 3.0 3.8.13 looks at the six faces' BASE level only, here
-/// six 8x8 RGBA8 images: the cube is cube complete, samples its own texels,
-/// and `textureSize(s, 0)` is level 1's size: **`drawn(false, (8, 8))`**
-/// (the words also need item basefix's base-level size words). Flip to that
-/// when completeness follows the base level.
+/// Case (a): a mutable cube with ONLY levels 1..4 (8x8 down to 1x1) on all
+/// six faces and BASE_LEVEL 1. ES 3.0 3.8.13 looks at the six faces' BASE
+/// level only, here six 8x8 RGBA8 images: the cube is cube complete,
+/// samples its own texels, and `textureSize(s, 0)` is level 1's size:
+/// **`drawn(false, (8, 8))`**. Pinned as incomplete ("cube map without all
+/// six faces", the level-0 record) until item basecompl.
 #[test]
-fn a_a_mutable_cube_with_only_levels_1_up_and_base_level_1_is_incomplete_flip_when_completeness_follows_the_base_level()
-{
+fn a_a_mutable_cube_with_only_levels_1_up_and_base_level_1_is_complete() {
     let _g = rig();
-    assert_eq!(outcome(mutable_cube(1..5, None, None, 1)), drawn(true, (1, 1)));
+    assert_eq!(outcome(mutable_cube(1..5, None, None, 1)), drawn(false, (8, 8)));
 }
 
 /* ---- (b) a face missing at the base level ---- */
@@ -739,19 +732,15 @@ fn b_a_mutable_cube_with_only_levels_1_up_and_a_face_missing_at_base_level_1_is_
     assert_eq!(outcome(mutable_cube(1..5, Some(1), None, 1)), drawn(true, (1, 1)));
 }
 
-/// Case (b2), pins today's behaviour: all six faces at levels 0..4 except
-/// -Z missing at level 1, BASE_LEVEL 1. Today the check looks at level 0
-/// (the per-level face records only under a mipmap filter), so the cube is
-/// complete; its words are the base level's (8, 8) (the other faces' level 1,
-/// `texture_units` at the bind's base level).
-///
-/// Spec value: ES 3.0 3.8.13: -Z's base level (1) is not defined, so the
-/// cube is not cube complete: the stand-in, **`drawn(true, (1, 1))`**. Flip
-/// to that when completeness follows the base level.
+/// Case (b2): all six faces at levels 0..4 except -Z missing at level 1,
+/// BASE_LEVEL 1. ES 3.0 3.8.13: -Z's base level (1) is not defined, so the
+/// cube is not cube complete, whatever level 0 holds: the stand-in,
+/// **`drawn(true, (1, 1))`**. Pinned as complete with words (8, 8) (the
+/// level-0 check) until item basecompl.
 #[test]
-fn b2_a_full_level_0_under_a_face_missing_at_base_level_1_is_complete_flip_when_completeness_follows_the_base_level() {
+fn b2_a_full_level_0_under_a_face_missing_at_base_level_1_is_incomplete() {
     let _g = rig();
-    assert_eq!(outcome(mutable_cube(0..5, Some(1), None, 1)), drawn(false, (8, 8)));
+    assert_eq!(outcome(mutable_cube(0..5, Some(1), None, 1)), drawn(true, (1, 1)));
 }
 
 /* ---- (c) faces of different sizes at the base level ---- */
@@ -766,19 +755,15 @@ fn c_a_mutable_cube_with_faces_of_different_sizes_at_base_level_1_is_incomplete(
     assert_eq!(outcome(mutable_cube(1..5, None, Some(1), 1)), drawn(true, (1, 1)));
 }
 
-/// Case (c2), pins today's behaviour: all six faces at levels 0..4 except
-/// +Z 4x4 at level 1, BASE_LEVEL 1. Today the check looks at level 0, so
-/// the cube is complete; its words are the base level's (8, 8).
-///
-/// Spec value: ES 3.0 3.8.13: the six base (level 1) images are not of one
-/// size, so the cube is not cube complete: the stand-in,
-/// **`drawn(true, (1, 1))`**. Flip to that when completeness follows the
-/// base level.
+/// Case (c2): all six faces at levels 0..4 except +Z 4x4 at level 1,
+/// BASE_LEVEL 1. ES 3.0 3.8.13: the six base (level 1) images are not of
+/// one size, so the cube is not cube complete, whatever level 0 holds: the
+/// stand-in, **`drawn(true, (1, 1))`**. Pinned as complete with words
+/// (8, 8) (the level-0 check) until item basecompl.
 #[test]
-fn c2_a_full_level_0_under_faces_of_different_sizes_at_base_level_1_is_complete_flip_when_completeness_follows_the_base_level(
-) {
+fn c2_a_full_level_0_under_faces_of_different_sizes_at_base_level_1_is_incomplete() {
     let _g = rig();
-    assert_eq!(outcome(mutable_cube(0..5, None, Some(1), 1)), drawn(false, (8, 8)));
+    assert_eq!(outcome(mutable_cube(0..5, None, Some(1), 1)), drawn(true, (1, 1)));
 }
 
 /* ---- (d) an immutable cube, BASE_LEVEL 1 ---- */
