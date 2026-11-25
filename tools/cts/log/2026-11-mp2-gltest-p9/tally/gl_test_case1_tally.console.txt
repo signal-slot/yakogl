@@ -1,0 +1,87 @@
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,stm32mp257f-dk)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+yakogl-mp2: once=gl_test_case1_tally-91d7274a81cd469a-1795649137
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+2844624 bytes read in 330 ms (8.2 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c48 x2=0xf8099c48 x3=0xa0000000 pc=0xa01fbed0 cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 155495324 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 100 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 100000 ms of uptime
+sample: build tree=b7236e03 table=6c5b8a70
+display_power: powered: hdmi 5v 0 -> 7, supplies 0x7, rates gpiob 200000000 gpiof 200000000 i2c2 100000000 dsiphy 27000000 ltdc 148500000
+display_power: up
+gc_power: rcc gpucfgr 0x00000006 at entry
+gc_power: rcc gpucfgr 0x00000007 (reset held)
+gc_power: rcc gpucfgr 0x00000006
+gc_power: rcc reset released after 1 reads
+gc_power: gpu idle 0x7fffffff after 1 reads
+gc_power: powered: level 800000000 (found 800000000), rcc 0x00000006, idle 0x7fffffff after 1 reads
+gc_power: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+gc_power: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 table=1
+I: GC8000 bring-up milestone 1 complete (Rust; core clock 800000000 Hz, carveout 0xfa800000+64M)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+gl_test: the first 1 case(s) of the regression set, from case 1
+gl_test: case 1 on the STM32MP257F-DK's GPU (lifetime 100000 ms)
+yk-record: 594b0501 00000240 00000ac0 00000001
+I: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0xa0 group=0 pend=0 active=0 gicd_ctlr=0x1 typer=0xfc2c secext=1 gicc_ctlr=0x41 pmr=0xf0 route=ours
+I: render service up: 30 events, pool 65152 KiB free
+yk-record: 594b0502 00000243 00000b15 00000002
+gl_test: start (case=1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: osal(gc): ready
+gl_test:   orange centroid              (32,40) = 0xff0080ff  want 0xff0080ff  ok  [check 1]
+gl_test:   orange apex                  (31,12) = 0xff0080ff  want 0xff0080ff  ok  [check 2]
+gl_test:   background                   ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 3]
+gl_test:   cyan centroid                (32,40) = 0xffffff00  want 0xffffff00  ok  [check 4]
+gl_test:   active attributes 2; [1] = a_color size 1 type 0x8b52
+gl_test:   bound a_pos -> 3, a_color -> 1 (link 1)
+gl_test:   magenta via attribute 3      (32,40) = 0xffff00ff  want 0xffff00ff  ok  [check 5]
+gl_test:   half: inside small tri       (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 6]
+gl_test:   half: outside small tri      (32,14) = 0xff000000  want 0xff000000  ok  [check 7]
+gl_test:   half: outside small tri      (12,52) = 0xff000000  want 0xff000000  ok  [check 8]
+gl_test:   shift: moved right           (56,40) = 0xff00ffff  want 0xff00ffff  ok  [check 9]
+gl_test:   shift: left now empty        (16,40) = 0xff000000  want 0xff000000  ok  [check 10]
+gl_test:   active uniforms 2; [0] = u_mvp size 1 type 0x8b5c
+gl_test: case 1 uniform: PASS
+gl_test: done
+gl_test: the suite took 410 ms
+osal(gc): pending frees: high-water 0/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept), held peak 0 KiB
+osal(gc): ds surfaces peak 1/32, ds bytes peak 16384, ds given up 0, ds refused 0 (all live 0, no surface 0)
+osal(gc): log: 0 causes logged once, 0 repeats not printed
+gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 6
+yk-record: 594b0103 0001ff01 0000000a 00000000
+shaderc: keep high-water 9408 of 1048576 bytes (9408 held now)
+yakogl: draws refused 0
+gl_test: PASS
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 3312 ms
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.

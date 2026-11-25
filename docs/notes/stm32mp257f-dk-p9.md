@@ -381,6 +381,33 @@ the 100 s lifetime with 85 s to spare, so the lifetime and `RUN_BOUND` stay as
 they are. The per-case table and the failing checks are in the bring-up
 note, "Board verdicts".
 
+Plan #405 ran the set once more on 2026-11-25 (gltest-set), built from
+origin/main `2f020ffb`, record `20261125-1130-gltest-set-2f020ffb`, log
+`tools/cts/log/2026-11-mp2-gltest-p9/set/`. The plan is again 1 shard of 50
+cases, so no shard was left over to rerun. Its time against
+`CONFIG_YAKOGL_STM32MP2_LIFETIME_S=100`:
+
+| shard | cases | suite | PSCI reset at | of the lifetime | back on Linux |
+| --- | --- | --- | --- | --- | --- |
+| 0 of 1 | 50 (49 counted, case 16 SKIP) | 11,436 ms | 14,412 ms | 14 % (no `mp2: lifetime` line) | 70 s |
+
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (built from `2f020ffb`, shard 0 of 1: 14.4 s of 100 s; new 6, 11, 47, 182, 189; stale 1, case 10)
+
+The verdicts are the same as at `a5f1dc8e` and `670913e1`, and there was no
+hang or refusal (`draws refused 0`, fences 173 of 173). The stale case 10
+entry is the Q11 matter. `tools/cts/mp2-gltest-expected.txt` is changed only
+if the Q11 decision calls for it (section 4).
+
+The one-case image now prints its tally (bring-up note, step 8). Case 1
+alone, built from origin/main `b7236e03` with
+`-DCONFIG_GL_TEST_MP2_SET_HEAD=y`, record
+`20261125-2325-gl_test_case1_tally-91d7274a`, log
+`tools/cts/log/2026-11-mp2-gltest-p9/tally/`: `gl_test: all: 0 of 1 cases
+failed (1 passed; ...)`, `dk_verdict.py` `tally=PASS:0/1`, a PSCI reset at
+3,312 ms of the 100 s lifetime, and back on Linux after 59 s. A shard with
+one case number (`CONFIG_GL_TEST_MP2_CASES`) takes the same one-case path
+in the source; that form has not been run on the board.
+
 ### dEQP-GLES2 sweep
 
 Record `20261124-1857-deqp-gles2-a5f1dc8e`, built from `a5f1dc8e` with
