@@ -458,3 +458,258 @@ and touches no `src/` file and not `tools/check.sh`.
   store program (`pvr_arch_job_context.c:88-155`) means for a GPU
   transform feedback path.
 - What the hardware can do that Mesa does not use.
+
+## 11. Fix design: the AM62P state_query, uniform_api, qualification_order and uniform_block fails
+
+Plan #400, item fix-state-design, at `bdd2ba1c`. The causes are tri-state's
+(host dEQP-GLES3 at `31cdaefc`, VK-GL-CTS 93bca01, `--gpu=powervr`; its
+report, not a file in the tree). Every file:line was reread here at
+`bdd2ba1c`. The board lines are those of `docs/es3/am62p-gles3-notpass.tsv`.
+Rows 11-45 there, which hold all four families, are from build ad2b5ed, so
+a host Pass at `31cdaefc` still needs the board to confirm it (board-b).
+Nothing below is changed by this item. A `src/gl` change is only named:
+`src/gl` belongs to plan #397.
+
+### 11.1 Family totals (TSV lines)
+
+| Family | Fail | NotSupported | Lines |
+|---|---|---|---|
+| `state_query` | 25 | 9 | 34 |
+| `uniform_api` | 1 | 0 | 1 |
+| `qualification_order` | 7 | 0 | 7 |
+| `uniform_block` | 2 | 0 | 2 |
+| **all four** | **35** | **9** | **44** |
+
+`grep -cP '^Fail\t\S*\.state_query\.' docs/es3/am62p-gles3-notpass.tsv`, and
+the same for each family and outcome. The three
+`implementation_limits.max_{color_attachments,draw_buffers,vertex_output_components}`
+lines share causes S-A and S-B. They belong to another family and are not
+counted here.
+
+### 11.2 Causes and counts
+
+| Cause | Cases | Owner | Status at `bdd2ba1c` |
+|---|---|---|---|
+| S-0 fixed after ad2b5ed | 20 (state_query 18, uniform_block 2) | — | host Pass at `31cdaefc`; board confirm |
+| S-A three draw targets | 4 (state_query) | `src/backend.rs`, the PowerVR arm (the shared back-end table, not `src/gl`) | open; board-gated |
+| S-B MAX_VERTEX_OUTPUT_COMPONENTS 60 | 2 (state_query) | `src/gl` (named only) | open; the change exists on another plan's branch |
+| S-C RGB10_A2 renderbuffer held as RGBA8 | 1 (state_query) | `src/backend.rs` mask + `src/pvr` | open |
+| S-D random.83 vertex shader over 64 KiB | 1 (uniform_api) | `src/shaderc/online/powervr` | **fixed** `a0ee07e3`; board confirm |
+| S-E centroid scalar varyings, image wrong | 7 (qualification_order) | unknown until the board (likely `src/shaderc/online/powervr`) | no host verdict |
+| S-F GL_EXT_draw_buffers_indexed not claimed | 9 NotSupported (state_query) | — | not an ES 3.0 requirement; no fix |
+
+Sums: state_query 18 + 4 + 2 + 1 = 25 Fail, plus 9 NotSupported (S-F) = 34.
+uniform_api 1 (S-D). qualification_order 7 (S-E). uniform_block 2 (S-0).
+In total 35 Fail + 9 NotSupported = 44, the totals of §11.1.
+
+### 11.3 S-0: fixed after the board's ad2b5ed build (20 cases, no change)
+
+| Cases (TSV lines) | n | Fixed by | Host test that holds it |
+|---|---|---|---|
+| `integers.compressed_texture_formats_{getfloat,getinteger,getinteger64}` | 3 | the ES 3.0 list of 11 names (ETC1 and the ten ETC2/EAC, §2 NUM_COMPRESSED_TEXTURE_FORMATS; `963dd440`, `e9f4b8d7`) | `tests/es2_compressed_list.rs`, `tests/es3_caps.rs` |
+| `integers.max_samples_{getfloat,getinteger64}` | 2 | `d5231f8a` (4x MSAA renderbuffers, MAX_SAMPLES 4) | `tests/pvr_msaa_rb.rs`, `tests/es3_caps.rs` |
+| `integers.max_varying_{vectors,components}_{getfloat,getinteger64}`, `integers.max_fragment_input_components_{getfloat,getinteger64}` | 6 | `b9a5a673` (MAX_VARYING_VECTORS 15, so 15 / 60 / 60) | `tests/es3_pvr_varyings.rs` |
+| `integers64.max_uniform_block_size_{getfloat,getinteger}`, `integers64.max_combined_{vertex,fragment}_uniform_components_{getfloat,getinteger}` | 6 | `5e6b27ef` (16384-byte blocks, 50688 combined; `src/gl/context.rs:113-116,133-139`) with `b85960c2`/`fad0558a` (blocks read by `ld` from memory) | `tests/es3_caps.rs` |
+| `shader.program_binary` | 1 | `5e94999a` (glLinkProgram captures the binary, NUM_PROGRAM_BINARY_FORMATS 1) | `tests/es3_program_binary.rs` |
+| `uniform_block.valid.long_instance_name_{vertex,fragment}` | 2 | `83644bb2`, `eceaabe6` (names of 63+ characters link and are reported whole) | `tests/es3_uniform_block_long_name.rs`, `tests/es3_ubo_name_queries.rs` |
+
+Sum 3 + 2 + 6 + 6 + 1 + 2 = 20. Work: none. Board-b confirms them at the
+commit it runs.
+
+### 11.4 S-A: the PowerVR answers 3 draw buffers and colour attachments (4 cases)
+
+Cases: `state_query.integers.max_color_attachments_{getfloat,getinteger64}`,
+`state_query.integers.max_draw_buffers_{getfloat,getinteger64}`.
+
+- **Cause.** `src/backend.rs:901-918` `DRAW_TARGETS`. Its `gpu-powervr` arm
+  is `3` (`:910-913`). `src/gl/context.rs:245-247` `max_color_attachments()`
+  returns `max_draw_buffers()`, which reads `backend::draw_targets()`
+  (`src/backend.rs:937-953`). ES 3.0 requires 4. The hardware has four
+  32-bit output registers a pixel (§1.3). The host render layer already
+  packs four targets (`driver/src/pvr_render.h:59`,
+  `src/pvr/mrt_layout.rs`), and `tests/es3_mrt4_pvr.rs` draws four under
+  `HOST_DRAW_TARGETS`.
+- **Change.** In `src/backend.rs:910-913`, the `gpu-powervr` arm becomes
+  `4`. Do this only after a board run of the CONFIG_PVR_DEQP_MRT4 image
+  (`pvr_debug_set_draw_targets(4)`, `src/pvr/debug.rs:17`) draws the
+  `docs/notes/mrt4-deqp-cases.md` cases. With the arm at 4, update
+  `tests/es3_caps.rs:272-278` `known_gaps()`: MAX_COLOR_ATTACHMENTS and
+  MAX_DRAW_BUFFERS leave it for `gpu-powervr` (the condition becomes
+  `!cfg!(any(feature = "gpu-mali", feature = "gpu-powervr"))`). In the same
+  change, update §3's and §5's rows of this doc.
+- **Owner.** The PowerVR's entry of the shared back-end table
+  `src/backend.rs`. Neither `src/gl` nor `src/pvr` changes: the GL core
+  follows `draw_targets()`. A layout that does not fit four 32-bit
+  registers (three RGBA16F, RGBA32F with others) stays a per-draw refusal
+  (§5).
+- **Host test.** `tests/es3_caps.rs`
+  `every_es3_limit_meets_the_spec_minimum_or_is_a_listed_gap`, features
+  `host-test,gpu-powervr`. Assert: MAX_DRAW_BUFFERS and
+  MAX_COLOR_ATTACHMENTS read 4 in all four query forms (`glGetIntegerv`,
+  `glGetInteger64v`, `glGetFloatv`, `glGetBooleanv`), and the test prints no
+  GAP line for them. `tests/es3_mrt4_pvr.rs`
+  (`host-test,gpu-powervr,shaderc-online`) then runs without the
+  `HOST_DRAW_TARGETS` stand-in and still draws and reads back four targets.
+- **Also closes** `implementation_limits.max_color_attachments` and
+  `.max_draw_buffers` (other family, not counted here).
+
+### 11.5 S-B: GL_MAX_VERTEX_OUTPUT_COMPONENTS is 60 on the PowerVR (2 cases)
+
+Cases: `state_query.integers.max_vertex_output_components_{getfloat,getinteger64}`.
+
+- **Cause.** `src/gl/context.rs:259-262`:
+
+  ```rust
+  #[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+  pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
+  #[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+  pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
+  ```
+
+  The PowerVR gets 15 x 4 = 60, and ES 3.0 requires 64. That is a software
+  choice. `tests/pvr_vertex_outputs_64.rs` (since `fdfe49ff`) shows that a
+  PowerVR vertex shader with 16 vec4 outputs beside gl_Position and
+  gl_PointSize compiles and links, and that a 17th output is refused at
+  compile.
+- **Change (named, not made; `src/gl` is plan #397's).**
+  `src/gl/context.rs:259` becomes
+  `#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]`,
+  and `:261` becomes
+  `#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]`.
+  The doc comment at `:249-258` gains the PowerVR reason. gl_MaxVertexOutputVectors
+  follows (16). The per-GPU expectation in `src/gl/state.rs` reads 64 on the
+  PowerVR. This change already exists as commit `7b522e6e` on the result
+  branch `connected/01a212fa-d793-726a-ac03-d5fd52530dbe`, which is not on
+  main. Merge or cherry-pick that commit; do not write it again. Its other
+  edits: `tests/es3_caps.rs` drops the PowerVR's MAX_VERTEX_OUTPUT_COMPONENTS
+  gap, `tests/es3_pvr_varyings.rs` expects 64, and this doc's §2, §3 and §5
+  rows read 64.
+- **Owner.** `src/gl`. The PowerVR back end needs no change.
+- **Host test.** `tests/pvr_vertex_outputs_64.rs`
+  `the_limit_reads_64_and_the_shader_sees_16_vectors` (in `7b522e6e`),
+  features `host-test,gpu-powervr,shaderc-online`. Assert: all four query
+  forms read 64, and a vertex shader sized `gl_MaxVertexOutputVectors - 15`
+  (1) and `17 - gl_MaxVertexOutputVectors` (1) compiles. It fails on the
+  current `context.rs` (60).
+- **Also closes** `implementation_limits.max_vertex_output_components`
+  (other family).
+
+### 11.6 S-C: a GL_RGB10_A2 renderbuffer is held as RGBA8 (1 case)
+
+Case: `state_query.rbo.renderbuffer_component_size_color`. For GL_RGB10_A2,
+dEQP wants RED/GREEN/BLUE/ALPHA sizes of 10/10/10/2 (or more). The PowerVR
+build answers 8/8/8/8.
+
+- **Cause.** `src/gl/framebuffer.rs:2322-2323` reports 10/10/10/2 only when
+  `rgb10a2_surface()` holds (`:438-446`). That is
+  `backend::rt_format_drawable(GLES_SURF_RGB10_A2)`, and
+  `src/backend.rs:658-660` reads it from the build's sampled mask.
+  `PVR_SAMPLED_TEXFMTS` (`src/backend.rs:215-231`) leaves
+  `GLES_TEXFMT_RGB10A2` out on purpose (the comment at `:211-214`: no
+  render target and no mipmap for the class on the PowerVR). So the name is
+  stored as RGBA8 and its component sizes are 8 each (`:2323`).
+- **Change.** No `src/gl` change: the GL core already routes RGB10_A2 to
+  its own surface, 10-bit sizes, the read-back and the field-wise mipmap
+  chain (`src/gl/texture.rs` around `:5142`) for every build whose mask has
+  the class, as the V3D does (`03f4bbd9`).
+  1. `src/pvr/backend.rs:1069-1076` `pbe_emit_words`: add the arm
+     `(GLES_SURF_RGB10_A2, _) => csb::ROGUE_PBESTATE_PACKMODE_A2R10B10G10`
+     (`src/pvr/csbgen.rs:491`) before the `U8U8U8U8` fallback. At `:1085`,
+     set `source_format` to `F16_PER_CHANNEL` for this surface too: a 10-bit
+     normalised channel does not fit the 8-per-channel source. This is
+     Mesa's choice for formats wider than 8 bits [U]: `pvr_arch_job_common.c`
+     is not vendored here, so check it before the change. `norm` stays
+     true.
+  2. Check that `pbe_reg_words` (`src/pvr/backend.rs:943`) gives the
+     surface 4 bytes a pixel, and that a clear packs the 10/10/10/2 word.
+     The clear is the `pvr_pack_a2x10y10z10` path that RGB10_A2UI uses
+     (`src/pvr/backend.rs:10937-10958`), with UNORM scaling.
+  3. `src/backend.rs:215-231`: add `GLES_TEXFMT_RGB10A2` to
+     `PVR_SAMPLED_TEXFMTS` and replace the comment at `:211-214`. Sampling
+     is already there (`TEXF_RGB10A2`, `TEX_PCK_INFO_RGB10A2_UNORM`,
+     `src/pvr/backend.rs:1279,1300,1309`).
+- **Owner.** `src/pvr` (the PBE word) plus the PowerVR mask in
+  `src/backend.rs`. The two must change in one commit: the mask alone makes
+  draws into the class store U8U8U8U8.
+- **Host test.** A new `tests/es3_rgb10a2_queries_pvr.rs`, the PowerVR twin
+  of `tests/es3_rgb10a2_queries_v3d.rs`, features
+  `host-test,gpu-powervr,shaderc-online`. Assert: (a) a GL_RGB10_A2
+  renderbuffer answers RED/GREEN/BLUE/ALPHA_SIZE 10/10/10/2 and its
+  framebuffer attachment component sizes match; (b) the draw's PBE
+  STATE_WORD1 has `packmode` A2R10B10G10 (14), `source_format`
+  F16_PER_CHANNEL and `norm` 1; (c) a clear to (1, 0.5, 0, 1) reads back
+  through `glReadPixels` GL_RGBA/GL_UNSIGNED_INT_2_10_10_10_REV as
+  `0x3ff | 0x200 << 10 | 0 << 20 | 3 << 30`. (c) is the host render layer's
+  word, not the silicon's: the board run confirms it.
+- **Probably also** the RGB10_A2 lines of texture.format, fbo.color and
+  fbo.render (tri-texfmt, tri-fbo). Those are their families' counts, not
+  these.
+
+### 11.7 S-D: uniform_api.random.83's vertex shader did not fit the shader image (1 case, fixed)
+
+- **Cause (at ad2b5ed and `31cdaefc`).** The vertex shader builds to 18,958
+  dwords (75,832 bytes), more than `chain::MAX_IMAGE_BYTES` 64 KiB.
+  `encode_closed` (`src/shaderc/online/powervr/assemble.rs`) refused it
+  with "the shader does not fit the buffer".
+- **Change. Done.** `a0ee07e3` (after `31cdaefc`) sets
+  `src/shaderc/online/powervr/chain.rs:277`
+  `MAX_IMAGE_BYTES = 128 << 10`.
+- **Owner.** `src/shaderc/online/powervr`.
+- **Host test.** `tests/es3_pvr_random83.rs` `random_83_compiles_and_links`,
+  features `host-test,gpu-powervr,shaderc-online`. Assert: the program
+  compiles, links and reflects. It passed on this tip in this item: `cargo test
+  --no-default-features --features host-test,gpu-powervr,shaderc-online
+  --test es3_pvr_random83` gave 1 passed. Left to do: the board confirms it.
+  Also check that the 128 KiB scratch fits the Zephyr heap of the AM62P
+  image. That heap is the risk this fix adds.
+
+### 11.8 S-E: qualification_order.variables.valid, image wrong (7 cases, cause open)
+
+Cases: `invariant_interp_storage_precision`, `interp_storage_precision`,
+`invariant_interp_storage`, `invariant_storage_precision`,
+`storage_precision`, `interp_storage`, `invariant_storage` (the whole
+`variables.valid` group). The `invalid` group and all of `parameters` pass.
+
+- **What is known.** The shaders compile and link on the host. They are
+  judged on pixels, and the host back end reads black, so there is no host
+  verdict. Each case
+  (`data/gles3/shaders/qualification_order.test:8-295`, VK-GL-CTS 93bca01)
+  draws `(x0 + x1 + x2) / 3.0` with `values {}`. Here `x0` is a scalar
+  **`centroid`** varying (with `smooth`, `invariant` or neither, `lowp` or
+  default), `x1` is a scalar `flat` or smooth varying, and `x2` is an
+  unset uniform (0). The result is 1.0, white. The only thing all seven
+  share, and that no passing case has, is a scalar `centroid` varying beside
+  another scalar varying. `linkage.varying.interpolation.centroid` (a vec4)
+  is not in the TSV, so `centroid` alone draws right.
+- **Candidates, in order.**
+  1. The coefficient layout of two 1-component varyings when one is
+     iterated at the centroid: `chain.rs:888-896` (`coefficient_offsets`
+     over `comps`) and the `ditrp` `mode` at `fragment.rs:219-233`.
+     `tests/es3_pvr_centroid.rs` proves only that the varying *layout* equals
+     the non-centroid twin's. It does not compare the fragment program or
+     what is iterated.
+  2. `lowp` / `mediump` handling of `x0 + x1 + x2` and the 1/3 product
+     (precision is hinted only, so it is unlikely).
+  3. Fixed since ad2b5ed. The rows-11-45 build predates the squashed history,
+     so this cannot be checked in the tree.
+- **Change.** None until the board run of image 15 at the tip (board-b)
+  keeps the dEQP log with the pixel values. If they still fail, add a host
+  test before any change:
+  `tests/es3_pvr_centroid.rs::qualification_order_valid_programs_iterate_both_scalars`,
+  features `host-test,gpu-powervr,shaderc-online`. It compiles the seven
+  programs verbatim, with the same attribution as the file's header. Assert:
+  the fragment program has one `ditrp`, or a flat move, per scalar; their
+  `coff` values are the two coefficient sets `coefficient_offsets` gives;
+  and the `ditrp` of `x0` carries `iter_mode` centroid while `x1`'s carries
+  pixel, or is the flat move from `coff + 2`. Owner if it fails:
+  `src/shaderc/online/powervr`. If the board passes them, the 7 move to S-0.
+
+### 11.9 S-F: GL_EXT_draw_buffers_indexed is not claimed (9 NotSupported)
+
+Cases: `state_query.indexed.{blend_equation_advanced,blend_equation,blend_func,color_mask}_{getinteger64i_v,getintegeri_v}`
+and `state_query.indexed.blend_isenabledi`.
+`es3fIndexedStateQueryTests.cpp:530` skips each case unless the context has
+GL_EXT_draw_buffers_indexed. That extension is optional in ES 3.0 (it is core
+in ES 3.2). NotSupported is the right result for an ES 3.0 driver that does
+not claim it, so there is no fix and no test. These cases are not Fail and do
+not count toward stage 4's 0 Fail.
