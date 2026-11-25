@@ -514,15 +514,31 @@ check "am62p: no /dev/pvrgpu command in run or kexec-dev status (pvrgpu.ko retir
 # where Linux staged it; no TFTP server, no network
 for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcblk0p1; do
     IFS=: read -r board mdev mpart mlinux <<<"$bm"
+    # imx8mp stages under /boot/yakogl only; the other boards keep /var/yakogl (/boot is its own mount: U-Boot sees /yakogl)
+    if [ "$board" = imx8mp ]; then sd=/boot/yakogl ubd=/yakogl; else sd=/var/yakogl ubd=/ostree/deploy/torizon/var/yakogl; fi
     out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
-    check "$board uboot-mmc run: staged in /var/yakogl on $mlinux, read back from the eMMC, no TFTP canary" \
-        eval 'grep -q "findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var/yakogl" <<<"$out" &&
-              grep -q "cat > /var/yakogl/once-.*\.bin\.part" <<<"$out" && grep -q "drop_caches.*sha256sum /var/yakogl/once-" <<<"$out" &&
+    check "$board uboot-mmc run: staged in $sd on $mlinux, read back from the eMMC, no TFTP canary" \
+        eval 'grep -q "findmnt -n -v -o SOURCE,TARGET,FSROOT -T ${sd%/*}" <<<"$out" &&
+              grep -q "cat > $sd/once-.*\.bin\.part" <<<"$out" && grep -q "drop_caches.*sha256sum $sd/once-" <<<"$out" &&
               grep -q "mmc_where\|mmc $mdev:$mpart\|$mlinux" <<<"$out$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)" &&
               ! grep -q "curl\|canary\|TFTP_ROOT" <<<"$out"'
     check "$board uboot-mmc run: armed yako_src=mmc with the file as U-Boot names it, removed after the cycle" \
-        eval 'grep -q "^    yako_src=mmc$" <<<"$out" && grep -q "^    yako_file=/ostree/deploy/torizon/var/yakogl/once-.*\.bin$" <<<"$out" &&
-              grep -q "rm -f /var/yakogl/once-" <<<"$out" && ! grep -q "yako_server" <<<"$out"'
+        eval 'grep -q "^    yako_src=mmc$" <<<"$out" && grep -q "^    yako_file=$ubd/once-.*\.bin$" <<<"$out" &&
+              grep -q "rm -f $sd/once-" <<<"$out" && ! grep -q "yako_server" <<<"$out"'
+    if [ "$board" = imx8mp ]; then
+        out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
+        check "imx8mp uboot-mmc run: only /boot/yakogl, never /var/yakogl; leftover refused and the mount read before the mkdir; UNDO lines before each write; the file and the directory removed" \
+            eval '! grep -q "/var/yakogl" <<<"$out" && grep -q "test ! -e /boot/yakogl" <<<"$out" &&
+                  [ "$(grep -n "test ! -e /boot/yakogl" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "findmnt" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+                  [ "$(grep -n "findmnt" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "sudo -n mkdir /boot/yakogl" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+                  [ "$(grep -n "^UNDO: sudo -n rm -f /boot/yakogl/once-.*rmdir /boot/yakogl" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "sudo -n mkdir /boot/yakogl" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+                  [ "$(grep -n "^UNDO: .*fw_setenv yako_once" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "fw_setenv -s" <<<"$out" | head -1 | cut -d: -f1)" ] &&
+                  grep "^UNDO: .*fw_setenv yako_once" <<<"$out" | grep -q "yako_src.*yako_file" &&
+                  grep -q "rm -f /boot/yakogl/once-" <<<"$out" && grep -q "rmdir /boot/yakogl" <<<"$out"'
+        out=$(BOARD_BOOT=uboot-mmc dry imx8mp disarm 2>&1)
+        check "imx8mp uboot-mmc disarm: only the runner's once-*.bin and its empty /boot/yakogl are removed" \
+            eval 'grep -q "rm -f /boot/yakogl/once-\*.bin" <<<"$out" && grep -q "rmdir /boot/yakogl" <<<"$out" && ! grep -q "/var/yakogl" <<<"$out"'
+    fi
     out=$(BOARD_BOOT=uboot-mmc dry "$board" install 2>&1)
     check "$board install: yako_mmc loads with ext4load from mmc $mdev:$mpart; the hook runs yako_\${yako_src}, then the default" \
         eval 'grep -qF "yako_mmc=if ext4load mmc $mdev:$mpart \${yako_addr} \${yako_file}; then" <<<"$out" &&
@@ -530,7 +546,7 @@ for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcb
               grep -qF "setexpr yako_default_left \${yako_default_left} - 1; if saveenv; then" <<<"$out"'
     out=$(BOARD_BOOT=uboot-mmc dry "$board" probe "$S/logs" 2>&1)
     check "$board uboot-mmc probe: a real cycle, armed, nothing staged" \
-        eval 'grep -q "systemctl reboot" <<<"$out" && grep -q "^    yako_once=probe-" <<<"$out" && ! grep -q "cat > /var/yakogl" <<<"$out"'
+        eval 'grep -q "systemctl reboot" <<<"$out" && grep -q "^    yako_once=probe-" <<<"$out" && ! grep -q "cat > $sd" <<<"$out"'
     out=$(dry "$board" default "$S/img/$board.bin" 2>&1)
     rc=$?
     check "$board default without a boot count: usage, rc 2" eval '[ "$rc" = 2 ] && ! grep -q "^DRY board" <<<"$out"'
