@@ -217,3 +217,78 @@ on taking the `FRCNT` step as the start of the vertical blank (no source
 states it), and the farm has no camera on the Pi 5. The plane's UPM bits that Linux sets in PTR0 are not
 written (`hvs6_dlist_write.h`); whether a raw RGB plane needs them is a board
 question this probe can only bound.
+
+## On the board
+
+### 2026-11-25: placement refused, nothing written (Q4 unanswered)
+
+One tryboot session on the Pi 5 (BCM2712 D0), with the image of `458834ea`
+(origin/main; it printed `rpi5_scanout32: build 458834ea`; Zephyr
+`af17c0c8aa2a`; sha256 `92671f499ad3`, 86304 bytes), built with
+`-DYAKOGL_WERROR=ON` and the default `RPI5_SCANOUT32_HW_WORDS="4:skip"`,
+no warnings. `tools/board.sh pi5 run` with
+`BOARD_END_RE='^rpi5_scanout32: (PASS|FAIL)'` and the name argument
+`rpi5_scanout32`:
+
+```
+board.sh pi5 rpi5_scanout32 rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout32_fail resets=0 record=absent back_after=171s
+```
+
+The board came back to Linux by itself through the PM watchdog and tryboot,
+171 s after the reboot (`meta.txt`: `cleanup=staged image removed,
+tryboot.txt put back (read back)`, `throttled_before=0x0`,
+`throttled_after=0x0`). The card had no `tryboot.txt` before the run and
+none after it. The sha256 of every file under `/boot/firmware` (435 files)
+was the same before and after the run.
+
+The probe refused to place its list, so it wrote no list word and no
+`LPTRS`, and it made no swap. The firmware's list at `HEADE` 672 has no END
+within the 256-word window. The walk went through 8 entries and stopped at
+word 896. With no END the library places our list only wholly before
+`HEADE` (`hvs6s_place_io`, `fw_noend`). Words 32..671 held 619 non-zero
+words, so no 20-word zero span was found there:
+
+```
+rpi5_scanout32: S2 ch0 CTRL0 0x877f0437 LPTRS 0x000002a0 STATUS 0x00814091 DL 0x000002a0
+rpi5_scanout32: S2 ch0 FRCNT series 2 3 4 6 7 8 (6 reads 20 ms apart): 6 frames, advancing
+rpi5_scanout32: S3 list read from word 672: 256 words; END NOT found within them (entry walk stopped at list index 256, word 928, past the 256 words read)
+rpi5_scanout32: S5 dlswap snapshot ok (ok) mem_words 4096 (CXM_SIZE 0x00001000) lptrs 0x000002a0 fw_head 672 fw_len 256 entries 8, walk stopped at word 896 (0x20000000), END NOT found: fixed window kept, our list before HEADE
+u3 snapshot: list-ptr=0x000002a0 heade=672 words=256 hash=0xc3fc4aad window=noend hwskip=4:skip
+rpi5_scanout32: S6 placement check FAIL: place: no END, no room wholly before HEADE (619 non-zero words stepped past); nothing is written
+u3 dlist: refused place: no END, no room wholly before HEADE (619 non-zero words stepped past)
+u3 swap 1: skipped (not placed)
+u3 named: no (no swap was made)
+rpi5_scanout32: S10 restore write skip: nothing was written; read-only compare
+dlswap restore-diff word 676 entry 0 off 4 was 0x8000001e now 0x800003e3 hw=skip
+dlswap restore-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip
+u3 restore: PASS byte-equal except hw words off 4 (1 differed: 1 skip, 0 expect) list-ptr=0x000002a0 heade=672 words=256 hash=0xc3fc4aad hwskip=4:skip (nothing was written)
+dlswap result FAIL place: no END, no room wholly before HEADE
+rpi5_scanout32: FAIL (our list was refused: its words are not known free)
+```
+
+(`u3 swap 2` .. `u3 swap 8` read the same as swap 1.) This run printed no
+`u3 vblank`, `dlswap lact-pickup`, `dlswap restore-lact` or
+`dlswap restore-vblank` line. `verdicts.sh` on the console with its
+`HH:MM:SS ` prefix stripped exited 3:
+
+```
+q4: unanswered (placement refused)
+verdicts: FAIL (placement refused: place: no END, no room wholly before HEADE (619 non-zero words stepped past))
+```
+
+Reading it: this run does not answer Q4. The only write-free result is that
+the read-only compare of the firmware's 256 words passed. Only word 676
+(entry 0, offset 4, the declared `4:skip` word) differed between the snapshot
+and the compare, so the Q2 word set holds. The probe needs room for its list
+that it can prove is free on this firmware before it can make a swap. Either
+the walk finds the list's END, or there is a zero span before `HEADE`. That
+is a change to the probe or the library, not a board retry.
+
+The console was captured as in `rpi5_dispregs`. The farm's console lease
+holds the serial bridge, so `BOARD_UART` was a local
+`am62p_netboot_uart.py feed` relay of the lease's copy of the same console.
+The copy left out most of the boot loader's lines and the `S3 dl[...]` list
+lines, and kept dl[672..680], 703..705 and 735. Every other `rpi5_scanout32:`,
+`u3` and `dlswap` line is as the board printed it. The run directory
+`20261125-1059-rpi5_scanout32-92671f49` is under the gitignored `records/`
+and is not committed.
