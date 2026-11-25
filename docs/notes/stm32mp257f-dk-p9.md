@@ -6,9 +6,10 @@ Roadmap item P9 (`docs/notes/pre-study-stm32mp257f-dk.md:979`): the DK's
 `gl_test` regression set, then its dEQP-GLES2 sweep diffed against the
 i.MX8MP's failures, and the line-width decision Q11 (`:890`). The DK's first
 triangle has run on the board (`docs/notes/stm32mp257f-dk-bringup.md:696`,
-2026-11-23). **Status: a procedure and a recommendation. No DK run of either
-suite exists yet — `tools/cts/RESULTS.md` has no DK row — and the Q11 decision
-stays a recommendation until the board test below has run.**
+2026-11-23). **Status: both suites and the Q11 board test have run on the board
+(2026-11-24), all from origin/main `a5f1dc8e`; results in section 6. Sections
+1-5 are the procedure as written beforehand; section 6 corrects what the runs
+showed.**
 
 Citations are `file:line` on the tree this note was written on. The VK-GL-CTS
 facts (section 4) are from the CTS source on its `main` branch, read for this
@@ -173,7 +174,7 @@ wide-line cases (section 4) before counting.
   **unknown**: a board test.
 - The DK build's wide-line items: case 10 `prims` (skipped by default,
   Kconfig `:180-187`), case 103 `maskdepth`, which draws at
-  `glLineWidth(6.0f)` (`driver/tools/pvrlab/gl_test.c:23946`, `:23964`), and
+  `glLineWidth(6.0f)` (`driver/tools/pvrlab/gl_test.c:23946`, `:23964`; the run showed case 103 draws no line, the `glLineWidth(6.0f)` is the panel demo at `gl_test.c:24666`, section 6), and
   the flat ES 3.0 cases 231/233/235 — none of them in `SET_ORDER`; the image
   runs one asked for by number (`driver/samples/zephyr/gl_test/src/main_stm32mp2.c:24-26`).
 
@@ -312,3 +313,67 @@ checks and a failure of any is a defect in the emulation.
 - A finished DK row replaces the current text in `tools/cts/RESULTS.md` and
   `tools/cts/STATUS.md` (CLAUDE.md) and gets an issue update on #1281 and #7;
   the Q11 decision goes back into the pre-study's Q11 row.
+
+## 6. Results on the board (2026-11-24, built from `a5f1dc8e`)
+
+Every result below was built from `a5f1dc8e` (origin/main). Records are
+gitignored, under `records/stm32mp257f-dk/`, cited by name. Every run is judged
+on the serial console; the console has no time stamps, so there is no DK time
+table. After the runs `u-boot-env` and `/boot` were back byte for byte.
+
+### gl_test
+
+The regression set (50 cases, case 10 included): 44 PASS, 5 FAIL (cases 6, 11,
+47, 182, 189), 1 SKIP (case 16), in `20261124-1044-gl_test_all-a5f1dc8e`. The
+per-case table and the diff (`mp2-gltest-diff: new 5, flaky 0, expected 0,
+missing 0`) are in the bring-up note, "Board verdicts". Case 10 passed.
+
+### dEQP-GLES2 sweep
+
+Record `20261124-1857-deqp-gles2-a5f1dc8e`, built from `a5f1dc8e` with
+`tools/cts/board-stage.sh stm32mp257f-dk deqp` (stage 1 from VK-GL-CTS
+`93bca01`). 83 groups minus the 21 excluded names: 17,144 listed cases plus 223
+extra cases the patterns also ran, 17,367 results: **Pass 15,790, Fail 1,508
+(1,496 new, 12 shared), NotSupported 34, QualityWarning 35.**
+
+`mp2-p9-diff: shared 12, new 1496, fixed 5, missing 0` (built from `a5f1dc8e`).
+
+- Six group-prefix pattern shards (450 s at 150 ms a case), because a flat list
+  does not fit the 16 KiB slot.
+- Shard 5 ran 643 s, past the 600 s lifetime, and overflowed the 1 MiB console.
+  It was re-split into 5a, 5b, 5c and a tail, with 5x as a rerun.
+- Per run (Pass/Fail/NotSupported/QualityWarning): 0: 2812/0/8/0; 1:
+  2890/68/26/3; 2: 2869/224/0/0; 3: 2481/460/0/0; 4: 2589/260/0/0; 5a:
+  286/318/0/30; 5x: 142/178/0/0; 5b: 841/0/0/0; 5c: 865/0/0/0.
+
+Failure classes (observed, not root-caused):
+
+- (a) Shader groups, all new, mostly fragment (in `operator`, 375 fragment
+  against 93 vertex). Fail counts: struct 3, builtin_variable 1, functions 13,
+  constant_expressions 35, matrix 39, swizzles 45, conversions 9, indexing 44,
+  random 345, binary_operator 153, unary_operator 110, common_functions 103,
+  trig 22, geometric 16, exponential 29, selection 3, sequence 32.
+- (b) Every colour-texture case fails: filtering.2d 136, cube 112, size 80,
+  wrap 58, format 32, mipmap 78 Fail (66 new). Only a8 passes.
+- (c) `fragment_ops.interaction`: 10 new failures.
+- NotSupported: negative_api compressedtexsubimage2d 9, multisample 16,
+  clip_control 8, msrtt 1.
+
+### Q11: the measured line width
+
+Q11 board runs, all at `a5f1dc8e`, each case alone with `GL_TEST_MP2_SKIP=""`, all pass:
+
+- `20261124-1344-q11_case10-0eca6ffc`: 32/32. Check 11, `loop: 3 px wide (17,32) ... ok`: at width 3 the hardware draws at least 2 px, so a range of [1,1] is wrong.
+- `20261124-1346-q11_case103-68d6cda3`: case 103 draws no line. The `glLineWidth(6.0f)` is the panel demo at `gl_test.c:24666`; section 4's claim that case 103 draws at width 6 is corrected.
+- `20261124-1347-q11_case230-3a6f407d`, `20261124-1348-q11_case231-ac0e64b0`, `20261124-1349-q11_case232-527afbc8`, `20261124-1350-q11_case233-995cefe7`, `20261124-1351-q11_case234-4ca2280f`, `20261124-1352-q11_case235-21609b50`: the flat line cases 230-235; width 5 is at least 3 px wide.
+
+The dEQP Q11 shard (17 wide-line names at widths 1..16): 15 Pass, 2
+QualityWarning. The 4 range queries pass under either range.
+
+Q11 measured width: record `20261124-1344-q11_case10-0eca6ffc`, check `loop: 3 px wide` ok at glLineWidth 3 (at least 2 px wide).
+
+**Decision: option A (the profile's range), no emulation.** The measured lower
+bound for the maximum width is 5; [1,1] would break case 10's check 11. The
+change to `src/gl/state.rs` and `src/vivante/profile.rs` belongs to plan #397,
+not to this note. The 21 names stay in the exclude file until a
+`gpu-vivante-st` image exists.
