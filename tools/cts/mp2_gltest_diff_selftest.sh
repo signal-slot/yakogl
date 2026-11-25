@@ -118,11 +118,11 @@ run "$D/nonexistent" >/dev/null; chk "missing input exits 2" test $? -eq 2
 python3 -I "$TOOL" --results "$D/lib.rs" "$D/clean.log" >/dev/null 2>&1
 chk "bad RESULTS.md exits 2" test $? -eq 2
 
-# the real files: expected list is the 4 wide-line cases; set and baseline parse
+# the real files: expected list has no entries; set and baseline parse
 out=$(python3 -I "$TOOL" --report-only "$D/clean.log" 2>&1); rc=$?
 chk "real baseline parses (exit 0 report-only)" test $rc -eq 0
 chk "real baseline: 50 cases missing from a 1-case log" grep -q 'missing [0-9]*$' <<<"$out"
-chk "real expected list has 4 cases" test "$(grep -c '^[0-9]' "$HERE/mp2-gltest-expected.txt")" -eq 4
+chk "real expected list has no cases" test "$(grep -c '^[0-9]' "$HERE/mp2-gltest-expected.txt")" -eq 0
 chk "every expected line has a reason" test -z "$(grep '^[0-9]' "$HERE/mp2-gltest-expected.txt" | grep -v '#')"
 
 echo "mp2_gltest_diff selftest: $pass ok, $fail failed"
