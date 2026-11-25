@@ -416,10 +416,30 @@ Q11 board runs, all at `a5f1dc8e`, each case alone with `GL_TEST_MP2_SKIP=""`, a
 The dEQP Q11 shard (17 wide-line names at widths 1..16): 15 Pass, 2
 QualityWarning. The 4 range queries pass under either range.
 
-Q11 measured width: record `20261124-1344-q11_case10-0eca6ffc`, check `loop: 3 px wide` ok at glLineWidth 3 (at least 2 px wide).
+The Q11 board test was repeated on 2026-11-25 with case 249 `linewidth`, which
+reads back the drawn width. All six images were built from origin/main
+`00cb1c8e` (`-DCONFIG_GL_TEST_MP2_CASE=<N>`, `GL_TEST_MP2_SKIP=""`). Each ran
+alone as a one-shot from the DK's U-Boot and was judged on the serial console.
+All six ended `result=pass:gl_test`, with `draws refused 0` and a PSCI reset
+3.0 to 3.4 s into the 100 s lifetime. The board was back on Linux after 45 to
+61 s.
 
-**Decision: option A (the profile's range), no emulation.** The measured lower
-bound for the maximum width is 5; [1,1] would break case 10's check 11. The
-change to `src/gl/state.rs` and `src/vivante/profile.rs` belongs to plan #397,
-not to this note. The 21 names stay in the exclude file until a
-`gpu-vivante-st` image exists.
+- `20261125-1540-q11-be8802a9` (case 249): `GL_ALIASED_LINE_WIDTH_RANGE 1.00 16.00`;
+  `req 1 h 1 v 1`, `req 2 h 2 v 2`, `req 3 h 3 v 3`, `req 4 h 4 v 4`,
+  `req 5 h 5 v 5`, `req 6 h 6 v 6`, `req 8 h 8 v 8`, `req 16 h 16 v 16`. The
+  horizontal and vertical runs equal the requested width at every width up to 16.
+- `20261125-1551-q11_case10-46cd3ecb`: 32/32, check 11 `loop: 3 px wide (17,32) ... ok`.
+- `20261125-1553-q11_case231-32c86ede` (27 checks), `20261125-1555-q11_case233-df07b287`
+  (10) and `20261125-1557-q11_case235-e5f63fca` (12): every +-1 px check at width 5 is ok.
+- `20261125-1558-q11_case103-8cc3364f`: the control, which draws no line, 2/2.
+
+Q11 measured width: record `20261125-1540-q11-be8802a9`, a line drawn at glLineWidth 16 is 16 px wide, and at 1, 2, 3, 4, 5, 6 and 8 as wide as requested.
+
+**Decision: option A (the profile's range), no emulation, with the range
+[1, 16].** The ST row's `line_width_range: [1.0, 1.0]`
+(`src/vivante/profile.rs:165`) is wrong for this hardware and should be the
+i.MX8MP's `[1.0, 16.0]`. The DK image already reports 1 to 16 (`ACTIVE` is the
+i.MX8MP row). Two things stay open, as a follow-up and not in this note: the
+`glLineWidth` clamp (`src/gl/state.rs:789`) and the ST row as the DK build's
+`ACTIVE`. At [1, 16], the 21 names in the exclude file are expected to run as
+in the `a5f1dc8e` Q11 shard. They stay listed until that follow-up lands.
