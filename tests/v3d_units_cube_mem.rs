@@ -46,15 +46,17 @@
 //! was refused and no GL error was raised. Asserted:
 //! (a) with rpi_4b.conf's carve-out and tiled budget, at least one
 //!     8_units.only_cube case does not allocate (the board at b1b5b845);
-//! (b) with texture-2048.conf's, every replayed case allocates. Ignored:
-//!     8_units.only_cube.3, .4 and .8 do not; the smallest carve-out that
-//!     holds them all is 105 MiB (110,100,480 bytes) at the 24 MiB tiled
-//!     budget (`the_smallest_numbers_hold_every_case` pins it);
+//! (b) with texture-2048.conf's, every replayed case allocates. The smallest
+//!     carve-out that holds them all is 105 MiB (110,100,480 bytes) at a 24
+//!     or 32 MiB tiled budget; the file's 112 MiB carve-out is 7,340,032
+//!     bytes above it (`the_smallest_numbers_hold_every_case` pins the
+//!     minima);
 //! (c) all_units.only_cube.0 alone in a fresh context: its peak under
-//!     both, and that it allocates under neither (`ALL_CUBE_FITS`). It
-//!     needs a tiled budget of at least 30,146,560 bytes and, with 32 MiB,
-//!     a carve-out of 95,420,416 (91 MiB); 105 MiB and 32 MiB hold it after
-//!     the other cases in one context.
+//!     both, and that it allocates with texture-2048.conf but not with
+//!     rpi_4b.conf (`ALL_CUBE_FITS`). It needs a tiled budget of at least
+//!     30,146,560 bytes (the file's 32 MiB is 3,407,872 above) and, with
+//!     32 MiB, a carve-out of 95,420,416 (91 MiB); 105 MiB and 32 MiB hold
+//!     it after the other cases in one context.
 //! Every case's peak (granule-rounded bytes in use, the page table and the
 //! scratch page not counted) is printed with `--nocapture`.
 //!
@@ -638,7 +640,7 @@ fn osal() -> &'static OsalOps {
 }
 
 /// all_units.only_cube.0 alone allocates with (rpi_4b.conf, texture-2048.conf).
-const ALL_CUBE_FITS: (bool, bool) = (false, false);
+const ALL_CUBE_FITS: (bool, bool) = (false, true);
 
 /* ---- de::Random and deUint32Hash (VK-GL-CTS 93bca01, framework/delibs) -------- */
 
@@ -1258,18 +1260,17 @@ fn the_board_conf_runs_out_in_8_units_only_cube() {
 /// (b) texture-2048.conf's carve-out and tiled budget hold every replayed
 /// case of T14 and T14a but all_units.only_cube.0.
 ///
-/// Ignored: with texture-2048.conf's current numbers (a 75,497,472-byte
-/// carve-out, a 25,165,824-byte tiled budget) 8_units.only_cube.3, .4 and
-/// .8 do not allocate (an allocation of 4,206,592, 6,295,552 and 8,409,088
-/// bytes finds no room; their draws are refused, GL_OUT_OF_MEMORY).
-/// Stepping the carve-out up by 1 MiB at that tiled budget, the smallest
-/// that holds every case is 110,100,480 bytes (105 MiB): .3 needs 76 MiB,
-/// .4 79 MiB and .8 105 MiB (six RGBA32-class cubes, 8,409,088 bytes of
-/// tiled copy each). A 16 MiB tiled budget fails at any carve-out up to
-/// 250 MiB; a 32 MiB one needs the same 105 MiB.
+/// At the file's earlier numbers (a 75,497,472-byte carve-out, a
+/// 25,165,824-byte tiled budget) 8_units.only_cube.3, .4 and .8 did not
+/// allocate (an allocation of 4,206,592, 6,295,552 and 8,409,088 bytes
+/// found no room; their draws were refused, GL_OUT_OF_MEMORY), which is
+/// why the file was raised. Stepping the carve-out up by 1 MiB at that
+/// tiled budget, the smallest that holds every case is 110,100,480 bytes
+/// (105 MiB): .3 needs 76 MiB, .4 79 MiB and .8 105 MiB (six RGBA32-class
+/// cubes, 8,409,088 bytes of tiled copy each). A 16 MiB tiled budget fails
+/// at any carve-out up to 250 MiB; a 32 MiB one needs the same 105 MiB.
 /// `the_smallest_numbers_hold_every_case` pins those numbers.
 #[test]
-#[ignore = "texture-2048.conf's 72 MiB carve-out is too small: 105 MiB (110100480) holds every case"]
 fn texture_2048_conf_holds_every_t14_cube_and_mixed_case() {
     let r = t14_2048();
     for c in &r.cases {
@@ -1307,11 +1308,12 @@ fn the_smallest_numbers_hold_every_case() {
 }
 
 /// (c) all_units.only_cube.0 alone in a fresh context, under both. It fits
-/// neither: with rpi_4b.conf allocations find no room; with
-/// texture-2048.conf an allocation of 3,149,824 bytes finds no room, and
-/// at any carve-out a tiled budget under `ALL_CUBE_TILED` leaves a draw no
-/// empty job holds (16 cubes; the per-job texture arena cannot take the
-/// copies past the budget).
+/// texture-2048.conf but not rpi_4b.conf: with rpi_4b.conf allocations
+/// find no room, and at the earlier 25,165,824-byte tiled budget an
+/// allocation of 3,149,824 bytes found no room. At any carve-out a tiled
+/// budget under `ALL_CUBE_TILED` leaves a draw no empty job holds (16
+/// cubes; the per-job texture arena cannot take the copies past the
+/// budget).
 #[test]
 fn all_units_only_cube_0_alone() {
     let board = replay("rpi_4b", &[ALL_CUBE]);
