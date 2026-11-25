@@ -137,7 +137,7 @@ out of the tree (`da11eb6b`). The state of each checklist line is in
   snapshot commit, exit 0, and the history decisions D7/D8 (#1606 step 8).
 - The website (line 9): `bash tools/website-check.sh` exits 0 at this tip:
   "website-check: ok (5 pages, 168 links and sources, 19 figures)".
-  `website/data.js` is checked against `3a45f7a8` (2026-11-23, `cfe028aa`):
+  `website/data.js` is checked against `026bf85d` (2026-11-25, `1b1fdd44`):
   its dEQP tables and the Mali and Pi 5 lines, and the NanoPC-T6 status
   line of `status.html`, follow `tools/cts/RESULTS.md`, which the check
   verifies against. The glmark2 figures wait for #1196.
