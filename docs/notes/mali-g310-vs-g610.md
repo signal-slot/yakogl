@@ -214,6 +214,64 @@ posvary, unif2, mixcol, loops2, varylink2, fmaloc, constprod) and the older
 deqp ones. Only the G310v2 variant was drawn; v1-v3 share the tile buffer
 and v4-v5 the G610's, and no deqp reference is a frame probe.
 
+### Recheck over the references added since `7b540fee`, tip `7e27b1eb`
+
+Date 2026-11-25 (plan #387 item `loops-lower-1`), tip `7e27b1eb`. The
+standing check `tools/mali/g310_check.sh` (README-deqp_ref.md, "Checking the
+G310") redrew at this tip every committed `expect.json` reference its
+`--since 7b540fee` selection names: `git diff --diff-filter=AMR` over
+`tools/mali/testdata` since `7b540fee`, each `.expect.json` and each changed
+`.vert`/`.frag` mapped to its reference. 387 committed references result:
+320 named `deqp_*` (316 added since `7b540fee` and 4 redrawn
+`deqp_unif2_*` struct references) and 67 not named `deqp_*` (45 `gm2_*`
+glmark2-corpus references, 17 `route_*`, 5 `prec_rebal_*`). One added pair
+maps to no `expect.json`: `tile-budget/mrt4.vert/.frag`, part of the frame
+probes of `tools/mali/testdata/tile-budget/` (section 5), whose Mesa traces
+are drawn per GPU (`mrt4` and `ms4` for the G610, G310v1 and G310v4) and
+already record the frame difference of items 1-4; it is not a shader
+reference to recheck.
+
+Method as in section 2 and the `7b540fee` recheck: the 26.2.1 tarball
+rebuilt unmodified with `drm_shim_ref.sh build` into
+`$CONNECTED_DEPS_DIR/mesa-pan-shim` (tarball sha256 checked against
+`third_party/mesa-26.2.1/UPSTREAM`); each reference drawn with the first
+option set whose `pan_ref_diff.py extract --draw` (`--attributes` where the
+committed file has attributes) equals the committed file, `trace` aside,
+then the same draw with `--gpu g310v2`; the extracts compared per region
+(words, FAU, `work_reg_count`, `preload`, VA) plus `secondary_offset` and
+attributes. Only the G310v2 variant was drawn, as before. Nothing was
+changed: the runs draw and compare.
+
+| Run | Selected | Summary line |
+| --- | --- | --- |
+| `g310_check.sh --since 7b540fee` | 320 `deqp_*` | `310 identical, 0 differ, 10 skipped` |
+| `g310_check.sh --since 7b540fee 'gm2_*' 'prec_rebal_*' 'route_*'` | 67 | `67 identical, 0 differ, 0 skipped` |
+
+The 320 split by family: audit 38, boolpix 29, ctrlflow 27, vs16ref 23,
+intval3 22, cfold2 19, intval4 19, idxloc 18, texmisc 17, intval5 13, gaps
+10, misc2 10, irindex 9, intrnd 8, misc3 8, mixprec3 8, vsconst 8, vsunif
+8, constrnd 6, fclane2 6, defects 4, unif2 4, loops3 3, structmember 3. The
+67: gm2_fsop 9, gm2_nbshrf 9, gm2_cprod 6, gm2_fsarith2 6, gm2_nonfin 5,
+gm2_tc425 4, gm2_fx2d 3, gm2_ideas 3, prec_rebal 5, route 17.
+
+The 10 `NO-OPTION-SET` lines are the eight `deqp_misc3_bind_*` and the two
+`deqp_defects_encode_*`: Mesa drew them with the aliasing attribute bindings
+of each reference's `.bind` file (`gl_ref.py --attrib-bindings`, with
+`--uniform-values` for the FAU uniform-value words), which the script's four
+option sets do not try — skipped, not a pass. The same machinery drawn with
+`--uniform-values --attrib-bindings <the reference's .bind file>` reproduced
+each committed G610 reference and drew it on the G310v2: `10 identical, 0
+differ, 0 skipped`. (Adding the `.bind` files to the script's option sets
+would remove those skips; noted for the tool's owner.)
+
+Counting the 10 in their real draw: 387 references added or changed since
+`7b540fee`, 387 with a G610 redraw equal to the committed reference, 387
+G310v2 extracts identical to the G610's — 0 differing, in no field. With
+the 580 rechecked at `7b540fee` this covers every `deqp_*.expect.json` on
+disk at the tip (896) and the new `gm2_*`, `prec_rebal_*` and `route_*`
+references: the claim that the G310 needs no separate compiler work now
+holds over the whole reference corpus the train compares.
+
 ### The identity reached the driver
 
 "Identical" does not mean "the switch did nothing". Three pieces of
