@@ -10,8 +10,14 @@
 # varyings 16, streams 16 and non_power_of_two are the same on both parts, so
 # no shader, texture or varying limit case is excluded. The only profile
 # difference that reaches GLES2 is wideline_triangle_emu: true (line_width_range
-# [1,1] until Q11), so the wide-line cases are listed here as pending Q11 and
-# move back into the run when Q11 decides.
+# [1,1]). Q11 decided to report that range and clamp it (the decision,
+# docs/notes/vivante-st-line-width.md section 5). Board evidence at the
+# core's present 1..16: record 20261124-1857-deqp-gles2-a5f1dc8e's Q11 shard
+# gave 15 Pass and 2 QualityWarning for the 17 wide-line names, and the 4
+# range queries pass under either range. All 21 names stay excluded until a
+# gpu-vivante-st image reads the ST profile's range: it brings the 4 range
+# queries back into the sweep and keeps the 17 wide-line draws out (the
+# decision's cost, docs/notes/vivante-st-line-width.md section 5).
 #
 # Arena (128 MiB, boards/stm32mp257f_dk_stm32mp257fxx_a35.conf): the full tree
 # fits (74.2% of the runner's window, the dk-image-budget study); the conf
