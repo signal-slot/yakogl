@@ -130,10 +130,19 @@ forecast note lists every program's both stages.
   in glmark2's `Mesh::render_vbo` called from `TerrainRenderer::render`
   (the `gm2: mali-crash` frames, resolved against the binary's symbols),
   after 7 of its fragment shaders were refused (`1637`, `c549`, `4d26`,
-  `e043`, `bdfd`, `bbba`, `8c86`; its vertex shaders compile): glmark2 uses
-  the -1 attribute locations of the unlinked program as an index. A
-  host-side crash of glmark2, not of YakoGL; on the board the same cause
-  ends as SIGABRT (rc 134, libstdc++'s assertion; `tools/cts/RESULTS.md`).
+  `e043`, `bdfd`, `bbba`, `8c86`; its vertex shaders compile): the main
+  terrain program's fragment shader is among them, so its
+  `Scene::load_shaders_from_strings` fails and `TerrainRenderer::init_program`
+  returns at `src/scene-terrain/terrain-renderer.cpp:92` before the
+  `mesh_.set_attrib_locations` of terrain-renderer.cpp:136 runs, leaving the
+  mesh's `attrib_locations_` empty; `TerrainRenderer::render`
+  (terrain-renderer.cpp:52) calls `Mesh::render_vbo`, and at glmark2
+  `22c527cb` `src/mesh.cpp:575` the `if (attrib_locations_[i] < 0)` reads
+  element 0 of the empty vector, for the terrain mesh's first of its 4
+  vertex formats: an out-of-range `std::vector::operator[]`, not a -1
+  index. A crash of glmark2, not of YakoGL; the read gives signal 11
+  (rc 139) on the host and SIGABRT (rc 134) on the board, through
+  libstdc++'s bounds assertion (`tools/cts/RESULTS.md`).
 
 ### New causes not owned by the compiler work
 
