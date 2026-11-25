@@ -385,7 +385,7 @@ fn a_bvec4_array_is_sixteen_words_of_all_ones_or_zero() {
 /// (no `~0` conversion for an int), rows of 12 words or one of 4 an element.
 #[test]
 fn an_ivec4_array_keeps_its_ints() {
-    let gl: Vec<u32> = (0..12).map(|i| (i as i32 * 5 - 20) as u32).collect();
+    let gl: Vec<u32> = (0..12).map(|i: i32| (i * 5 - 20) as u32).collect();
     let table = [leaf(0, 12, crate::gl::consts::GL_INT_VEC4, 3)];
     assert_eq!(vs_block(&[vrow(0, 0, 12)], &table, &gl).unwrap(), le(&gl));
     let per: Vec<UboRow> = (0..3).map(|e| vrow(4 * e, 4 * e, 4)).collect();

@@ -372,9 +372,9 @@ unsafe fn colour(texture: bool, name: GLuint) -> GLuint {
 /// # Safety
 /// Plain GL calls on the current context; the vertex data outlives the
 /// draw, which the caller's glFinish completes.
-unsafe fn quad(p: GLuint, z0: f32, z1: f32, keep: &mut Vec<Box<[f32; 16]>>) {
+unsafe fn quad(p: GLuint, z0: f32, z1: f32, keep: &mut Vec<Box<[f32]>>) {
     let mid = 0.5 * (z0 + z1);
-    let pos = Box::new([-1.0, -1.0, z0, 1.0, -1.0, 1.0, mid, 1.0, 1.0, -1.0, mid, 1.0, 1.0, 1.0, z1, 1.0]);
+    let pos: Box<[f32]> = Box::new([-1.0, -1.0, z0, 1.0, -1.0, 1.0, mid, 1.0, 1.0, -1.0, mid, 1.0, 1.0, 1.0, z1, 1.0]);
     glUseProgram(p);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
