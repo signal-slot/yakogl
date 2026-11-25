@@ -18,7 +18,9 @@
         LOG is a STAMPED file or a raw capture.
     mp2s_console_watch.py --self-test
         Scan verdicts on synthetic logs and a passive watch on a pseudo-
-        terminal (the watcher must read everything and send nothing).
+        terminal (the watcher must read everything and send nothing). The
+        gate runs it, and the CLI over a pty, from
+        tools/mp2s_console_watch_selftest.py.
 
 A boot cycle starts at TF-A's "NOTICE:  BL2: v<version>" line. In a cycle the scan looks
 for: "boots left <n>" (the product script's count), "*** Booting Zephyr"
@@ -210,17 +212,20 @@ def self_test():
             "/nonexistent/tty", os.path.join(tmp, "r0"), os.path.join(tmp, "s0")) == 4)
 
         # Passive watch on a pty: it must read all of it and send nothing.
+        # The console text goes into the slave's input queue before the
+        # watcher starts: this process holds the slave open, so the queue
+        # keeps the bytes, and the watcher's open (tcsetattr TCSANOW) does
+        # not flush it. No sleep or wait orders the write after the open.
         master, slave = pty.openpty()
         tty.setraw(slave)
+        text = "".join(x + "\r\n" for x in c(1, 1, 0) + c(0, 1, 0) + c(None, 0, 1)).encode()
+        os.write(master, text)
         p = subprocess.Popen(
             [sys.executable, "-I", here, "watch", os.ttyname(slave),
              os.path.join(tmp, "raw"), os.path.join(tmp, "st"),
              "--boots", "2", "--linger", "1", "--timeout", "30"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(1)
-        text = "".join(x + "\r\n" for x in c(1, 1, 0) + c(0, 1, 0) + c(None, 0, 1)).encode()
-        os.write(master, text)
-        back, end = b"", time.time() + 20
+        back, end = b"", time.time() + 40
         while p.poll() is None and time.time() < end:
             r, _, _ = select.select([master], [], [], 0.2)
             if r:
@@ -228,6 +233,13 @@ def self_test():
         if p.poll() is None:
             p.kill()
         out, _err = p.communicate(timeout=5)
+        while select.select([master], [], [], 0)[0]:
+            got = os.read(master, 4096)
+            if not got:
+                break
+            back += got
+        os.close(master)
+        os.close(slave)
         with open(os.path.join(tmp, "raw"), "rb") as f:
             raw = f.read()
         check("watch: exit 0 and verdict ok", p.returncode == 0 and b"verdict: ok" in out)
