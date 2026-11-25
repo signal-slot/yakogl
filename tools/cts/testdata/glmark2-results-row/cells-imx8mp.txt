@@ -1,0 +1,1 @@
+terrain 250.00 ms (4 FPS), shadow 500.00 ms (2 FPS), refract 500.00 ms (2 FPS)
