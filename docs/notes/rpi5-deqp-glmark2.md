@@ -369,18 +369,29 @@ separate item, because it edits `board-stage.sh`, `deps.toml`,
 
 Size as in `pre-study-rpi5.md:601`: S a day or less once its inputs exist, M
 a few days, L a week or more. "Depends on" names plan items and says for
-each whether it is merged at `ab919063` (checked by `git log` and the files).
+each whether it is merged at `888583fc` (checked by `git log` and the files).
 None of the P13 items below is started.
 
 At the tip, **merged**: `backend71` (`f1df7fe7`, `7f791cde`), `fill71`
 (`90776db5`), `glue71` (`699353e9`), `texuni71` (`b066d160`), `link71`
-(`966a39a5`), `refs71b` (`9e8c8fc9`), the OSAL's 7.1 TFU (`osaltfu71`,
-`eeb4e485`), gl_test's `rpi_5` board files (`1bb98759`, the board-file
-half of `gltest71`) and `mip71` (`src/v3d/mip71.rs`, a pure module, not
-wired). **Not on main**: `feat71` (the `gpu-v3d71` feature and
-the `mod` lines), the link of the `rpi_5` gl_test image (the rest of
-`gltest71`), `stage71`, `texverdict71`, `cases71`, `board71`,
-`shaders71tex`, `boardtex71`, `compose71d`, `gate71plan`.
+(`966a39a5`), `refs71b` (`9e8c8fc9`) and its check `compose71d`
+(`tests/v3d71_compose5.rs`, `8bc24775`), the OSAL's 7.1 TFU (`osaltfu71`,
+`eeb4e485`), `mip71` (`e6f6e56d`, a pure module, not wired), `texglue71`
+(`e7737914`) and `backend71tex` (`5bde3959`), the two texture assembly
+modules, pure and not wired; the board files and CMake branch of
+`gltest71a` (`1bb98759`, `dec352ac`: `boards/rpi_5.*`, the `V3D71` branch
+of gl_test's `CMakeLists.txt`, `main_rpi5.c`; its link is not on main),
+of `deqp-rpi5a` (`35c98f25`: `boards/rpi_5.*`, `v3d71_board.c`, the
+`CONFIG_YAKOGL_GPU_V3D71` branch of `deqp/CMakeLists.txt`; link not on
+main) and of glmark2 (`a6bb122f`, the board layer's BCM2712 arm
+`d4f95c29`, `glmk71bl`); `tree71` (`e4001734`: `pi5-full-tree.txt`,
+`pi5-deqp-images.sh`, the `rpi_5` arm of `deqp-tree-images.sh`, item 4);
+`tfu140` (`e8d59f40`: gl_test case 140 is left out of 7.1 builds).
+**Not on main**: `feat71` (the `gpu-v3d71` feature, no `gpu-v3d71` in
+`Cargo.toml`, no `*71` `mod` line in `src/v3d/mod.rs`), the link of the
+`rpi_5` gl_test, deqp and glmark2 images (they wait for `feat71`),
+`stage71` (no `pi5` arm in `board-stage.sh`), `texverdict71`, `cases71`,
+`board71`, `shaders71tex`, `boardtex71`, `gate71plan`.
 
 | # | Item | Size | Depends on | Files (new unless said) | Done when |
 |---|---|---|---|---|---|
