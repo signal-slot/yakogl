@@ -6,6 +6,10 @@
 # Seeded from RC1-RC18 of docs/es3-cts-failures.md: the causes that apply to the GC7000UL (Vivante)
 # and the generic ones; the PowerVR-only (RC6, RC15, RC16) and closed (RC4, RC12) causes are left
 # out. Conservative: a group the RC section does not name stays unclassified.
+# Lines whose title starts '(predicted, 05769bf2)' are host predictions for entries 51-132 (host-only investigations of
+# plan #401), not yet confirmed on the board. The indexed blend and colour-mask queries are refused before RC10 takes them.
+ext-draw-buffers-indexed	dEQP-GLES3.functional.state_query.indexed.blend_*	(predicted, 05769bf2) GL_EXT_draw_buffers_indexed not offered: indexed blend / colour-mask state NotSupported, allowed for ES 3.0 (inv-refusal; 5454be1b host column, 9 NotSupported)
+ext-draw-buffers-indexed	dEQP-GLES3.functional.state_query.indexed.color_mask_*	(predicted, 05769bf2) GL_EXT_draw_buffers_indexed not offered: indexed blend / colour-mask state NotSupported, allowed for ES 3.0 (inv-refusal; 5454be1b host column, 9 NotSupported)
 rc14-mrt-draw-buffers	dEQP-GLES3.functional.state_query.integers.max_draw_buffers*	RC14 four draw buffers
 rc14-mrt-draw-buffers	dEQP-GLES3.functional.state_query.integers.max_color_attachments*	RC14 four draw buffers
 rc14-mrt-draw-buffers	dEQP-GLES3.functional.implementation_limits.max_draw_buffers*	RC14 four draw buffers
@@ -89,7 +93,12 @@ ext-srgb-r8-rg8	dEQP-GLES3.functional.texture.*.srgb_r8_*	GL_EXT_texture_sRGB_R8
 ext-srgb-r8-rg8	dEQP-GLES3.functional.texture.*.srgb_rg8_*	GL_EXT_texture_sRGB_R8 / RG8 not claimed: NotSupported, not a failure (docs/es3/srgb.md, docs/notes/gc-texture-swizzle-wrap.md)
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.swizzle.*	RC18 texture swizzle and wrap R
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.filtering.3d.*	RC18 texture swizzle and wrap R
+rc2-sized-formats	dEQP-GLES3.functional.texture.format.sized.*.rgba32i_*	(predicted, 05769bf2) RC2: RGBA32UI/I storage class not in GC_SAMPLED_TEXFMTS at 05769bf2 (gc-wide128-flip), upload GL error, fixed by 8f019dae (inv-glerr; hgc4 texture.tsv Fail)
+rc2-sized-formats	dEQP-GLES3.functional.texture.format.sized.*.rgba32ui_*	(predicted, 05769bf2) RC2: RGBA32UI/I storage class not in GC_SAMPLED_TEXFMTS at 05769bf2 (gc-wide128-flip), upload GL error, fixed by 8f019dae (inv-glerr; hgc4 texture.tsv Fail)
 rc2-sized-formats	dEQP-GLES3.functional.texture.format.*	RC2 sized texture formats
+# Entry 121: two seeds of random_full_array_capture are predicted to fail to compile on the GC7000UL's varying packing; the
+# other cases of the entry are predicted Pass (inv-xfb). Named before the wide RC3 line.
+gc-varying-packing-limit	dEQP-GLES3.functional.transform_feedback.random_full_array_capture.*	(predicted, 05769bf2) Vivante varying-packing limit: 2 compile Fails in entry 121, not RC3 (inv-xfb, register count from the src/vivante varying allocator)
 rc3-transform-feedback	dEQP-GLES3.functional.transform_feedback.*	RC3 transform feedback
 rc3-transform-feedback	dEQP-GLES3.functional.lifetime.attach.deleted_output.buffer_transform_feedback	RC3 transform feedback
 rc11-occlusion-query	dEQP-GLES3.functional.occlusion_query.*	RC11 occlusion queries
@@ -168,12 +177,37 @@ unexplained-shader-single-case	dEQP-GLES3.functional.shaders.random.*	unexplaine
 # document; a group no document explains stays on the 'unexplained' lines below.
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.mipmap.3d.*	RC18 wrap R: the 3D mipmap cases set GL_TEXTURE_WRAP_R, which the GC7000UL back end sends from S (docs/notes/gc-texture-swizzle-wrap.md sections 1 and 7; docs/es3-cts-failures.md RC18)
 rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.vertex.3d.*	RC18 wrap R: texture.vertex.3d sets GL_TEXTURE_WRAP_R, which the GC7000UL back end sends from S (docs/notes/gc-texture-swizzle-wrap.md section 7; docs/es3-cts-failures.md RC18)
+# texture.mipmap 2d/cube and texture.filtering.cube (entries 67, 83, 84), predicted by inv-cubemip; mipmap.3d keeps the RC18
+# line above. These retire the old 'unexplained' texture.mipmap line. Narrow first: generate, LOD range, base level, then
+# the LINEAR cube cases; a *_nearest_mipmap_linear cube case samples NEAREST and falls to the predicted-pass line.
+gc-cube-corner-lod-qw	dEQP-GLES3.functional.texture.mipmap.cube.generate.*	(predicted, 05769bf2) cube glGenerateMipmap predicted Fail at the face corners (inv-cubemip, id gc-cube-corner-lod-qw)
+gc-lod-range-ignored	dEQP-GLES3.functional.texture.mipmap.*.min_lod.*	(predicted, 05769bf2) GL_TEXTURE_MIN_LOD / MAX_LOD ignored: the sampler LOD range is always 0..0xfff (src/vivante/texture.rs:718 at 05769bf2; inv-cubemip)
+gc-lod-range-ignored	dEQP-GLES3.functional.texture.mipmap.*.max_lod.*	(predicted, 05769bf2) GL_TEXTURE_MIN_LOD / MAX_LOD ignored: the sampler LOD range is always 0..0xfff (src/vivante/texture.rs:718 at 05769bf2; inv-cubemip)
+gc-base-level-ignored	dEQP-GLES3.functional.texture.mipmap.*.base_level.*	(predicted, 05769bf2) GL_TEXTURE_BASE_LEVEL ignored: the descriptor's BASELOD base is always 0 (src/vivante/texture.rs:476 at 05769bf2; inv-cubemip)
+predicted-pass-cubemip	dEQP-GLES3.functional.texture.filtering.cube.*nearest_mipmap_linear	(predicted, 05769bf2) predicted Pass: NEAREST cube sampling; any not-pass here is new (inv-cubemip)
+gc-cube-not-seamless	dEQP-GLES3.functional.texture.filtering.cube.*linear	(predicted, 05769bf2) LINEAR cube filtering not seamless across faces: no seamless-cube state in the GC sampler setup (src/vivante/texture.rs:701-722 at 05769bf2; inv-cubemip)
+gc-cube-not-seamless	dEQP-GLES3.functional.texture.filtering.cube.*linear_mipmap_*	(predicted, 05769bf2) LINEAR cube filtering not seamless across faces: no seamless-cube state in the GC sampler setup (src/vivante/texture.rs:701-722 at 05769bf2; inv-cubemip)
+gc-cube-not-seamless	dEQP-GLES3.functional.texture.filtering.cube.combinations.linear_*	(predicted, 05769bf2) LINEAR cube filtering not seamless across faces: no seamless-cube state in the GC sampler setup (src/vivante/texture.rs:701-722 at 05769bf2; inv-cubemip)
+gc-cube-not-seamless	dEQP-GLES3.functional.texture.mipmap.cube.*.linear_*	(predicted, 05769bf2) LINEAR cube filtering not seamless across faces: no seamless-cube state in the GC sampler setup (src/vivante/texture.rs:701-722 at 05769bf2; inv-cubemip)
+predicted-pass-cubemip	dEQP-GLES3.functional.texture.filtering.cube.*	(predicted, 05769bf2) predicted Pass: NEAREST cube sampling; any not-pass here is new (inv-cubemip)
+predicted-pass-cubemip	dEQP-GLES3.functional.texture.mipmap.*	(predicted, 05769bf2) predicted Pass: no GC cause found for the rest of texture.mipmap 2d/cube; a hang in mipmap.2d.generate points at d3ce1261 (inv-cubemip)
+# vertex_arrays (entries 131-132), predicted by inv-vao: D3, then D1 and D2. The D1 globs hold all 72 integer 8/16-bit
+# output_types cases; inv-vao predicts 48 of them Fail (a pass is not on a not-pass list, so the wider glob labels nothing wrong).
+gc-vertex-unaligned-stride	dEQP-GLES3.functional.vertex_arrays.*stride17*	(predicted, 05769bf2) D3: stride 17 and unaligned offsets fetched in place, the GC7000UL wants 4-byte aligned vertex streams (inv-vao; docs/notes/es3-draw-random.md section 2)
+gc-vertex-unaligned-stride	dEQP-GLES3.functional.vertex_arrays.multiple_attributes.stride.*_17*	(predicted, 05769bf2) D3: stride 17 and unaligned offsets fetched in place, the GC7000UL wants 4-byte aligned vertex streams (inv-vao; docs/notes/es3-draw-random.md section 2)
+gc-vertex-unaligned-stride	dEQP-GLES3.functional.vertex_arrays.*offset1_*	(predicted, 05769bf2) D3: stride 17 and unaligned offsets fetched in place, the GC7000UL wants 4-byte aligned vertex streams (inv-vao; docs/notes/es3-draw-random.md section 2)
+gc-vertex-unaligned-stride	dEQP-GLES3.functional.vertex_arrays.*offset17_*	(predicted, 05769bf2) D3: stride 17 and unaligned offsets fetched in place, the GC7000UL wants 4-byte aligned vertex streams (inv-vao; docs/notes/es3-draw-random.md section 2)
+gc-draw-int-byte-short-attrib	dEQP-GLES3.functional.vertex_arrays.single_attribute.output_types.byte.*_ivec*	(predicted, 05769bf2) D1: integer byte/short vertex attributes fetched in place with NFE_GENERIC_ATTRIB_SCALE 1.0f (src/vivante/backend.rs:1429 at 05769bf2; docs/notes/es3-draw-random.md; inv-vao)
+gc-draw-int-byte-short-attrib	dEQP-GLES3.functional.vertex_arrays.single_attribute.output_types.short.*_ivec*	(predicted, 05769bf2) D1: integer byte/short vertex attributes fetched in place with NFE_GENERIC_ATTRIB_SCALE 1.0f (src/vivante/backend.rs:1429 at 05769bf2; docs/notes/es3-draw-random.md; inv-vao)
+gc-draw-int-byte-short-attrib	dEQP-GLES3.functional.vertex_arrays.single_attribute.output_types.unsigned_byte.*_uvec*	(predicted, 05769bf2) D1: integer byte/short vertex attributes fetched in place with NFE_GENERIC_ATTRIB_SCALE 1.0f (src/vivante/backend.rs:1429 at 05769bf2; docs/notes/es3-draw-random.md; inv-vao)
+gc-draw-int-byte-short-attrib	dEQP-GLES3.functional.vertex_arrays.single_attribute.output_types.unsigned_short.*_uvec*	(predicted, 05769bf2) D1: integer byte/short vertex attributes fetched in place with NFE_GENERIC_ATTRIB_SCALE 1.0f (src/vivante/backend.rs:1429 at 05769bf2; docs/notes/es3-draw-random.md; inv-vao)
+gc-vertex-normalize-float	dEQP-GLES3.functional.vertex_arrays.single_attribute.normalize.float.*	(predicted, 05769bf2) D2: normalized GL_FLOAT / GL_FIXED arrays, 12 cases predicted Fail (inv-vao)
+gc-vertex-normalize-float	dEQP-GLES3.functional.vertex_arrays.single_attribute.normalize.fixed.*	(predicted, 05769bf2) D2: normalized GL_FLOAT / GL_FIXED arrays, 12 cases predicted Fail (inv-vao)
 gc-ubo-const-limit	dEQP-GLES3.functional.ubo.single_nested_struct_array.*_instance_array_both	GC7000UL 320 constant registers: 368 needed, fixed on the host by reading block members with load, board run open (docs/notes/gc-ubo-const-limit.md sections 1 and 7)
 rc13-shader-compiler	dEQP-GLES3.functional.uniform_api.random.21	RC13 shader compiler refusals (docs/es3-cts-failures.md RC13: GC7000UL library refuses uniform_api.random.21 and .83)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.specification.*	unexplained: texture.specification, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.wrap.*	unexplained: texture.wrap, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.filtering.*	unexplained: texture.filtering, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
-unexplained-texture-no-record	dEQP-GLES3.functional.texture.mipmap.*	unexplained: texture.mipmap, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.size.*	unexplained: texture.size, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.units.*	unexplained: texture.units, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.vertex.*	unexplained: texture.vertex, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
