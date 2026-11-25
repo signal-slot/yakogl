@@ -73,8 +73,11 @@ Left for the criterion:
 
 - Pictures by eye: only the AM62P's were looked at on its panel (at
   `bc43ea09`; 29 of 33 scenes match the current run, the other 4 are animated).
-  The Pi 4 and i.MX8MP pictures are checked by value only (the i.MX8MP:
-  #17).
+  The Pi 4's 33 of 33 were looked at by eye from the image's own frame
+  dump and all are right (`docs/notes/pi4-glmark2-pictures-by-eye.md`,
+  recorded in `d1e77916`; the origin/main commit of each scene is in the
+  note's table). Only the i.MX8MP by-eye check stays open (#17); its
+  pictures are checked by value only.
 - One main commit for the three scores again, with terrain and refract
   checked (#1196).
 
