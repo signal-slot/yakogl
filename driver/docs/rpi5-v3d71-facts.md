@@ -494,6 +494,16 @@ Facts behind the table:
   (EMPTY, FRCNT, OFIELD, MODE, YLINE), and `SCALER6_DISPX_DL` with the field
   `LACT` ("last active" list pointer, bits 11:0, `vc4_regs.h:616-619`). `grep` for a
   latch, "pending" or a strobe on `LPTRS` finds none.
+- `STATUS.YLINE` on the board (read-only trace, `rpi5_dispregs`, image
+  `ed36498d`, Pi 5 D0, firmware 1920x1080 mode; README section "2026-11-25:
+  the YLINE trace (Q4)" in `tools/probes/rpi_5/rpi5_dispregs/README.md`):
+  channel 0's YLINE counts up, range 4 to 1080 (1075 distinct values, never a
+  jump of more than 4 lines between reads), and wraps 4 times in the 4096-read
+  trace (60 ms), once per FRCNT step. At each FRCNT step the read before it
+  showed 1080 and the first read after it showed 4, 7, 8 and 8; FRCNT
+  therefore advances at the end of the frame, and the exact wrap line was
+  not seen. One read of `STATUS` took 14.6 us (4096 reads in 59.98 ms). The
+  trace is one run of four frames.
 - The driver detects the pickup by reading the active pointer, not by a
   latch: `vc4_hvs_update_dlist` records the new start as `current_dlist`
   (`vc4_hvs.c:1177-1204`), and the vblank interrupt completes the flip only
