@@ -1,0 +1,9 @@
+commit=aaaabbbbccccddddeeeeffff00001111aaaabbbb
+session=S9
+rows=1-2
+tree=tools/cts/mali-gles2-tree.txt
+board=verdin-imx95-zephyr
+build=v0.1-100-gaaaabbbb
+fw=GLB 1.5.0
+started=2026-11-26T10:00:00Z
+ended=2026-11-26T10:12:00Z

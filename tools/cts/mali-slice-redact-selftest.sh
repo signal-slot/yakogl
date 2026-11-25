@@ -38,6 +38,19 @@ else
     ok "dirty fixture: no match echoed"
 fi
 
+# A Zephyr Verdin iMX95 slice has no kmsg/: clean passes; the U-Boot
+# identifiers of its console (ethaddr, serial#, eth1addr, serverip) are hits.
+[ ! -d "$DATA/zephyr-clean/kmsg" ] && ok "zephyr fixture has no kmsg/" || bad "zephyr-clean has a kmsg/"
+out=$(python3 -I "$TOOL" "$DATA/zephyr-clean" 2>&1); rc=$?
+if [ "$rc" = 0 ] && [ -z "$out" ]; then ok "zephyr-clean: exit 0 (placeholders pass)"; else bad "zephyr-clean: exit $rc: $out"; fi
+out=$(python3 -I "$TOOL" "$DATA/zephyr-dirty" 2>&1); rc=$?
+[ "$rc" = 1 ] && ok "zephyr-dirty: exit 1" || bad "zephyr-dirty: exit $rc"
+for k in mac ipv4 uboot-id; do
+    grep -Eq "^REDACT .+console.txt:[0-9]+: $k\$" <<<"$out" && ok "zephyr-dirty: reports $k" || bad "zephyr-dirty: no $k"
+done
+[ "$(grep -c 'uboot-id' <<<"$out")" = 4 ] && ok "zephyr-dirty: 4 uboot-id lines" || bad "zephyr-dirty: not 4 uboot-id lines"
+if grep -Eq '192\.0\.2|00:00:5e|12345678|garbled' <<<"$out"; then bad "zephyr-dirty: a match was echoed"; else ok "zephyr-dirty: no match echoed"; fi
+
 # The committed good slices (read-only) are clean.
 out=$(python3 -I "$TOOL" "$HERE"/testdata/mali-deqp/good/* 2>&1); rc=$?
 if [ "$rc" = 0 ] && [ -z "$out" ]; then ok "mali-deqp/good slices are clean"; else bad "mali-deqp/good: exit $rc: $out"; fi
