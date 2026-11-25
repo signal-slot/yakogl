@@ -126,3 +126,54 @@ saw the end line (`boot_verdict=complete`) but named no result
 (`verdict=no_record`, rc 4), because its pi5 label table does not know
 `rpi5_dispregs` yet. The run directory is outside the tree (gitignored
 `build/`).
+
+### 2026-11-25: the YLINE trace (Q4)
+
+One tryboot session on the Pi 5 (BCM2712 D0), with the image of
+`ed36498d` (it printed `rpi5_dispregs: build ed36498d`; Zephyr
+`af17c0c8aa2a`; sha256 `f20271ea7a13`, 61728 bytes), built with
+`-DYAKOGL_WERROR=ON`. `tools/board.sh pi5 run` with
+`BOARD_END_RE='^rpi5_dispregs: (done|FAIL)'` ended `rc=0 verdict=done
+boot_verdict=complete`; the board came back to Linux by itself through the
+PM watchdog and tryboot, 168 s after the reboot. `verdicts.sh` on the console
+with its `HH:MM:SS ` prefix stripped: exit 0. The q3, q5 and q6 answers and
+the raw words are those of the 2026-11-22 run above, unchanged.
+
+The trace lines:
+
+```
+rpi5_dispregs: yline trace ch0 samples 4096 period_ns 14648 span_us 59984 cycle_hz 54000000 all_ones 0 stepping D0
+rpi5_dispregs: yline range min 4 max 1080 distinct 1075 wraps 4 max_jump 4
+rpi5_dispregs: yline frcnt first 63 last 3 steps 4
+rpi5_dispregs: yline step 0 frcnt 63->0 sample 539 yline 1080->4
+rpi5_dispregs: yline step 1 frcnt 0->1 sample 1677 yline 1080->7
+rpi5_dispregs: yline step 2 frcnt 1->2 sample 2815 yline 1080->8
+rpi5_dispregs: yline step 3 frcnt 2->3 sample 3953 yline 1080->8
+rpi5_dispregs: q4yline: counts (1075 distinct values, 4 wraps over 4 FRCNT steps)
+```
+
+End line, and the verdict lines `verdicts.sh` printed for the trace:
+
+```
+rpi5_dispregs: done (pv 2 of 2, clock tags 16 of 16, hdmi read)
+rpi5_dispregs verdict: q4yline: counts (samples 4096 period_ns 14648 span_us 59984, yline 4..1080 distinct 1075 wraps 4 max_jump 4, frcnt 63..3 steps 4)
+rpi5_dispregs verdict: end: done (pv 2 of 2, clock tags 16 of 16, hdmi read)
+rpi5_dispregs verdict: done
+```
+
+Reading it: channel 0's YLINE counts up, from 4 to 1080 (1080 is the
+active height), and wraps four times in the 60 ms trace, once per FRCNT step.
+One read takes 14.6 us (4096 reads in 59.98 ms), so a line of the 1080 in a
+16.7 ms frame is about 15 us: about one read per line, never a jump of more
+than 4 lines. At each of the four FRCNT steps, YLINE went from 1080 (the last
+line of the frame) to a low value: 4, 7, 8, 8. FRCNT therefore advances at the
+frame's end, and a read right after it lands a few lines into the next frame
+(the reads between the two samples are one period apart, so the exact
+wrap line is not seen).
+
+The console was captured as in the 2026-11-22 run: the farm's console lease
+holds the serial bridge, so `BOARD_UART` was a local feed relay of the
+lease's copy of the same console, and the copy that reached the runner left out
+the boot loader's lines before `Starting OS` and Zephyr's `xlat tables` log
+lines. Every `rpi5_dispregs:` line is as the board printed it. The run
+directory is outside the tree.
