@@ -62,7 +62,7 @@ L="$R/tools/cts/log"
 slice() { # session prefix first last
 	d="$L/2026-11-25-imx95-gles2-$1-$SHA8"
 	mkdir -p "$d"
-	printf 'commit=%s\nsession=%s\nrows=%s-%s\ntree=tools/cts/mali-gles2-tree.txt\nboot_id_before=-\nboot_id_after=-\nkernel=zephyr\nlib=yakogl-mali\nstarted=2026-11-25T01:00:00Z\nended=2026-11-25T02:00:00Z\nboard=verdin_imx95\n' \
+	printf 'commit=%s\nsession=%s\nrows=%s-%s\ntree=tools/cts/mali-gles2-tree.txt\nboot_id_before=-\nboot_id_after=-\nkernel=zephyr\nlib=yakogl-mali\nstarted=2026-11-25T01:00:00Z\nended=2026-11-25T02:00:00Z\nboard=verdin-imx95\n' \
 		"$BASE" "$1" "$3" "$4" >"$d/meta.txt"
 	printf 'row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line\n' >"$d/chunks.tsv"
 	printf 'case\tstatus\tdetail\n' >"$d/results.tsv"
