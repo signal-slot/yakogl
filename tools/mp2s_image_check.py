@@ -4,7 +4,7 @@
 """Host-side image check for the STM32MP257F-DK standalone default.
 
     tools/mp2s_image_check.py IMAGE [--free-bytes N] [--require-marker TEXT]
-                                [--require-bounded]
+                              [--require-bounded]
 
 The runner's `default <image>` (tools/board-stm32mp2-standalone.sh, plan
 #362) must refuse an image that the product script would refuse at boot
@@ -33,7 +33,17 @@ here on the host before the runner stages anything:
     the image. The watchdog-refresh marker
     (docs/notes/stm32mp257f-dk-standalone.md :446-459, checked for
     `forever` at :370-372) is defined by plan #362's iwdg-refresh item;
-    this tool only takes it as a parameter.
+    this tool only takes it as a parameter;
+  - last, not a check of mp2-mmc.cmd: the lifetime marker
+    "yakogl-lifetime-s=<N>" + NUL that mp2_product embeds
+    (tools/probes/stm32mp257f_dk/mp2_product/README.md; N decimal seconds,
+    0 = the image runs indefinitely). Always one line: "ok: lifetime <N> s",
+    "skip: lifetime (no marker)" (mp2_hello has none), or, for two or more
+    markers that disagree, "skip: lifetime (markers disagree: ...)". With
+    --require-bounded a marker saying 0, or markers that disagree, are
+    refused: a counted default must never get an image that runs forever
+    (it would live on BL2's IWDG and the count would not come back
+    cleanly). No marker is still only a skip, so mp2_hello passes.
 
 One difference, in the refusing direction: mp2-mmc.cmd:81 compares the
 low word of image_size with the window using `itest.l`, which is signed,
@@ -41,13 +51,6 @@ so on the board a footprint between 2 GiB and 4 GiB passes; here any
 image_size above the window is refused. The image goes in at 0xa0000000
 with `go`, not `booti` (mp2-mmc.cmd:87-90), so the footprint really does
 have to fit the window.
-
-  - the lifetime marker "yakogl-lifetime-s=<N>" (decimal, NUL-terminated):
-    always one line, "ok: lifetime <N> s" or "skip: lifetime (no marker)"
-    (two disagreeing markers without --require-bounded: a skip line);
-    with --require-bounded, N = 0 or disagreeing markers are refused (a
-    counted default must not get an image that runs forever); no marker
-    is still only a skip.
 
 Output: each check that passes prints one "ok: ..." line on stdout, in
 the order of mp2-mmc.cmd (size before content); a check not made prints
@@ -141,9 +144,13 @@ def main(argv):
 
     try:
         with open(path, "rb") as f:
+            # The whole file (at most the window): the lifetime marker may
+            # be anywhere; mmap keeps a 256 MiB image out of memory.
             data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
     except OSError as e:
         refuse(f"{path} is not a readable file ({e.strerror})")
+    except ValueError:  # mmap of something that is not a regular file
+        refuse(f"{path} is not a readable file (cannot be mapped)")
 
     magic = int.from_bytes(data[MAGIC_OFF : MAGIC_OFF + 4], "little")
     if magic != MAGIC:  # mp2-mmc.cmd:65-70
