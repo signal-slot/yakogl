@@ -1,5 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2019 Broadcom
+// SPDX-FileCopyrightText: 2021 Raspberry Pi Ltd
+//
+// The limits and the tile-size choice are transcribed from Mesa 26.2.1
+// src/broadcom/common/v3d_limits.h (MIT, Copyright © 2019 Broadcom) and
+// v3d_util.c (MIT, Copyright © 2021 Raspberry Pi Ltd).
 //! The V3D 7.1 limits and tile-size choice (roadmap P9; the Pi 5's V3D
 //! 7.1.10, docs/notes/v3d71-gl-table.md item 4).
 //!
