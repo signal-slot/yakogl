@@ -36,7 +36,7 @@ const VS_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (
 const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// The references that compile byte-equal, without the `deqp_unif2_` prefix.
-const LOWERED: &[&str] = &["vs_mat_uniform"];
+const LOWERED: &[&str] = &["fs_mat_uniform", "vs_mat_uniform"];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
@@ -46,7 +46,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("arr_struct_array", VS_PRECISION),
     ("fs_bool_uniform", FS_OTHER),
     ("fs_int_uniform", FS_OTHER),
-    ("fs_mat_uniform", LANE),
     ("fs_other", FS_OTHER),
     ("fs_struct_uniform", FS_OTHER),
     ("vs_bool_uniform", ARITH),
@@ -91,6 +90,15 @@ fn vs_mat_uniform() {
     mali_ref::assert_matches("deqp_unif2_vs_mat_uniform");
 }
 
+/// A highp matrix varying plus a highp matrix uniform into the mediump
+/// colour: the shader's floats are all highp, the highp path's (plan #387
+/// item fclane-lower-1: a matrix local is not grafted, the loads stand in
+/// slot order before `nir_opt_move` sinks them).
+#[test]
+fn fs_mat_uniform() {
+    mali_ref::assert_matches("deqp_unif2_fs_mat_uniform");
+}
+
 /// An ignored test per refused reference: the byte-compare the lowering enables.
 macro_rules! refused {
     ($($name:ident),* $(,)?) => {$(
@@ -109,7 +117,6 @@ refused!(
     arr_struct_array,
     fs_bool_uniform,
     fs_int_uniform,
-    fs_mat_uniform,
     fs_other,
     fs_struct_uniform,
     vs_bool_uniform,

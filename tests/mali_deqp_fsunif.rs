@@ -48,8 +48,10 @@ mod mali_ref;
 /// suffix.
 const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
 
-/// The references the compiler makes byte-equal. None yet.
-const MATCHED: &[&str] = &[];
+/// The references the compiler makes byte-equal: `highp_mat4_add_float`,
+/// a shader whose floats are all highp, since a matrix local is not
+/// grafted (plan #387 item fclane-lower-1, nir_fs.rs `grafted_locals`).
+const MATCHED: &[&str] = &["highp_mat4_add_float"];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
@@ -59,7 +61,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("struct_int_ivec4", FS_UNIFORM),
     ("mat4_add_float", FS_UNIFORM),
     ("mat2_mul_mat2", FS_UNIFORM),
-    ("highp_mat4_add_float", FS_UNIFORM),
     ("struct_basic", FS_UNIFORM),
 ];
 
@@ -160,7 +161,6 @@ fn mat2_mul_mat2() {
 /// colour lane narrowed alone (`FADD.f32 r.h0, r, -0`) and paired by
 /// `MKVEC.v2i16`.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (a highp mat4's words in a mediump colour, nir_fs.rs:9678)"]
 fn highp_mat4_add_float() {
     mali_ref::assert_matches("deqp_fsunif_highp_mat4_add_float");
 }

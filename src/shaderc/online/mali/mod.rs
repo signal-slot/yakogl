@@ -1140,14 +1140,11 @@ impl FsPrecision {
             && !ast.decls.iter().any(|d| matches!(d, Decl::Precision { base: BaseType::Float, .. }));
         let all_highp = no_default && {
             let mut named = 0usize;
-            /* a matrix varying's lanes on the highp path load and store in
-             * an order no reference has pinned yet (deqp_fclane_mat_vec_lanes,
-             * _mat_elem_pairs, _mat_cols_sum, _mat4_swz_sum): such a shader
-             * stays refused as mixed */
+            /* a matrix varying's too (deqp_fclane_mat_vec_lanes,
+             * _mat_elem_pairs, _mat_cols_sum: its slots' loads stand first,
+             * nir_fs.rs `matrix_slot`, and a matrix local is not grafted,
+             * `grafted_locals`) */
             let all = ast.decls.iter().all(|d| match *d {
-                Decl::Var { storage: StorageQualifier::Varying, ty, .. } if matches!(ty.base, BaseType::Mat(..)) => {
-                    false
-                }
                 Decl::Var { storage, ty, .. } if float(&ty.base) => {
                     named += usize::from(storage != StorageQualifier::Uniform);
                     ty.precision == Precision::High

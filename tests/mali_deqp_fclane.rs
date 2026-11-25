@@ -9,13 +9,17 @@
 //! compare; the references were drawn with `--uniform-values`
 //! (`tools/mali/deqp_ref.sh --instrument shim`, the command is in the note).
 //!
-//! Every reference is refused at the tip, so each test is `#[ignore]`d with
-//! its refusal pinned exactly by `refusals_pinned` ([`REFUSED`]): the
+//! Ten references are byte-equal ([`LOWERED`]): mechanisms A, B and D's
+//! `tex_coord_ramp` of `docs/notes/mali-fclane-lowering.md` (plan #387,
+//! item fclane-lower-1). Every other is refused, so its test is `#[ignore]`d
+//! with its refusal pinned exactly by `refusals_pinned` ([`REFUSED`]): the
 //! lowering step that lifts a shape moves it to [`LOWERED`] (or [`DIFFERS`]
 //! when it compiles with other words than Mesa's) in the same commit, drops
 //! the `#[ignore]` and runs the compare. Shapes whose reference `gl_ref.py`
 //! cannot draw (a `structType` uniform of the `uniform_api` cases) have none:
-//! see the note.
+//! see the note. `mat_cols_sum` and `mat_elem_pairs` were drawn again with
+//! `--mat-columns` (their vertex shader's `a_coords` after a matrix
+//! attribute took the matrix's second column's location without it).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_fclane
@@ -25,37 +29,45 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_fclane_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &["tex_zw_lane"];
+const LOWERED: &[&str] = &[
+    "mat_cols_sum",
+    "mat_elem_pairs",
+    "mat_vec_lanes",
+    "op_pair_xyz",
+    "op_pair_xyzw",
+    "op_pair_yz",
+    "struct_fields",
+    "tex_coord_ramp",
+    "tex_zw_lane",
+    "varying_merged",
+];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
 
 const COLOUR_FORM: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// `mat4_swz_sum`'s refusal past its colour lanes: the sums of a constant
+/// matrix's lanes, which Mesa's rules fold and reassociate once they are
+/// scalar (`FMA.f32 r1, r1^, 0x44000000.h1, 0x0.neg` of four equal lanes).
+const ARITH_CONSTANT: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
+/// `op_pair_x`'s: its lane is `exp`, the arith family's.
+const ARITHMETIC: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message (all twenty
-/// are the colour-lane text at `9ac31f30`; several are expected to move to
-/// another text when their lane source is lowered, as the note's section 5
-/// says).
+/// were the colour-lane text at `9ac31f30`; one whose lane source is
+/// lowered and whose lane operation is another family's has that family's
+/// text, as the note's section 5 says).
 const REFUSED: &[(&str, &str)] = &[
     ("bcast_compare_array", COLOUR_FORM),
     ("bcast_compare_bool", COLOUR_FORM),
     ("bcast_compare_float", COLOUR_FORM),
     ("bcast_compare_int", COLOUR_FORM),
     ("bcast_const", COLOUR_FORM),
-    ("mat4_swz_sum", COLOUR_FORM),
-    ("mat_cols_sum", COLOUR_FORM),
-    ("mat_elem_pairs", COLOUR_FORM),
-    ("mat_vec_lanes", COLOUR_FORM),
+    ("mat4_swz_sum", ARITH_CONSTANT),
     ("op_pair_other", COLOUR_FORM),
-    ("op_pair_x", COLOUR_FORM),
-    ("op_pair_xyz", COLOUR_FORM),
-    ("op_pair_xyzw", COLOUR_FORM),
-    ("op_pair_yz", COLOUR_FORM),
+    ("op_pair_x", ARITHMETIC),
     ("rnd_vec4", COLOUR_FORM),
-    ("struct_fields", COLOUR_FORM),
-    ("tex_coord_ramp", COLOUR_FORM),
-    ("varying_merged", COLOUR_FORM),
     ("vec3_local", COLOUR_FORM),
 ];
 
@@ -90,25 +102,22 @@ fn bcast_const() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
+#[ignore = "refused: a constant product in a shape Mesa's algebraic rules move or fold (the sums of a constant matrix's lanes); pinned by refusals_pinned"]
 fn mat4_swz_sum() {
     mali_ref::assert_matches("deqp_fclane_mat4_swz_sum");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn mat_cols_sum() {
     mali_ref::assert_matches("deqp_fclane_mat_cols_sum");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn mat_elem_pairs() {
     mali_ref::assert_matches("deqp_fclane_mat_elem_pairs");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn mat_vec_lanes() {
     mali_ref::assert_matches("deqp_fclane_mat_vec_lanes");
 }
@@ -120,25 +129,22 @@ fn op_pair_other() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
+#[ignore = "refused: arithmetic other than +, -, * (exp, the arith family's); pinned by refusals_pinned"]
 fn op_pair_x() {
     mali_ref::assert_matches("deqp_fclane_op_pair_x");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn op_pair_xyz() {
     mali_ref::assert_matches("deqp_fclane_op_pair_xyz");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn op_pair_xyzw() {
     mali_ref::assert_matches("deqp_fclane_op_pair_xyzw");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn op_pair_yz() {
     mali_ref::assert_matches("deqp_fclane_op_pair_yz");
 }
@@ -150,13 +156,11 @@ fn rnd_vec4() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn struct_fields() {
     mali_ref::assert_matches("deqp_fclane_struct_fields");
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn tex_coord_ramp() {
     mali_ref::assert_matches("deqp_fclane_tex_coord_ramp");
 }
@@ -167,7 +171,6 @@ fn tex_zw_lane() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn varying_merged() {
     mali_ref::assert_matches("deqp_fclane_varying_merged");
 }

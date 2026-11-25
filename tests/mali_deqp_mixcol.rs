@@ -55,7 +55,14 @@ const LOWERED: &[&str] = &["ck_scale", "ck_sum", "lz_scale"];
 /// folded away with the unrolled loop (`nir_fs.rs` `folded_counter`), and
 /// `f2i_seq`, the conversions of the sequence's dead first operand left out
 /// of the walk (`nir_fs.rs` `ir_live`).
-const MATCHED: &[&str] = &["hp_mat", "hp_loop", "f2i_seq"];
+///
+/// Since plan #387 item fclane-lower-1: `hp_scale` and `ck_scale_highp`, a
+/// highp varying's lanes and arithmetic kept fp32 and narrowed where the
+/// mediump `color` takes them (`nir_fs.rs` `Fs::hp32`); `int_uniform`, the
+/// fp32 product of an int uniform's float with the varying's lane as
+/// loaded (step MX4 of `docs/notes/mali-mixcol-lowering.md`); `f2i_rnd`,
+/// whose products by 0.0 then fold as Mesa's.
+const MATCHED: &[&str] = &["hp_mat", "hp_loop", "f2i_seq", "hp_scale", "ck_scale_highp", "int_uniform", "f2i_rnd"];
 
 /// The references that compile with other words than Mesa's: `f2i_dead`'s
 /// colour holds a `-0.0` half (`80003c00`) where Mesa's FAU word has `0.0`
@@ -67,26 +74,20 @@ const DIFFERS: &[&str] = &["f2i_dead"];
 const REFUSALS: &[(&str, &str)] = &[
     /* mixprec, declared highp: Mesa computes the highp values at fp32 and
      * narrows each where it meets a mediump value (FADD.f32 .h0) */
-    ("hp_scale", MIX),
     ("hp_bool", MIX),
     ("hp_param", MIX),
     ("hp_seq", MIX),
-    /* mixprec, an int read as a float: S32_TO_F32 at 32 bits */
-    ("int_uniform", MIX),
+    /* mixprec, an int read as a float beside two mediump float members
+     * Mesa widens (`F16_TO_F32 r, u.w0.h0`) */
     ("int_uniform_struct", MIX),
-    /* mixprec, a mediump float converted to int: F32_TO_S32.rtz at 32 bits,
-     * or folded in Mesa (`* vec4(0, 0, 1, a)`) */
-    ("f2i_rnd", MIX),
-    /* colourpair, the pair as an operand past its pair: a highp varying's
-     * lanes in the mediump colour, and the random shaders' other lanes */
-    ("ck_scale_highp", LOAD),
+    /* colourpair, the pair as an operand past its pair: the random
+     * shaders' other lanes */
     ("ck_rnd_other", FORM),
     ("lz_rnd", FORM),
     ("lz_rnd_other", LOAD),
 ];
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (hp_scale)"]
 fn mixcol_hp_scale() {
     mali_ref::assert_matches("deqp_mixcol_hp_scale");
 }
@@ -120,7 +121,6 @@ fn mixcol_hp_seq() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (int_uniform)"]
 fn mixcol_int_uniform() {
     mali_ref::assert_matches("deqp_mixcol_int_uniform");
 }
@@ -137,7 +137,6 @@ fn mixcol_f2i_seq() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (f2i_rnd)"]
 fn mixcol_f2i_rnd() {
     mali_ref::assert_matches("deqp_mixcol_f2i_rnd");
 }
@@ -154,7 +153,6 @@ fn mixcol_ck_scale() {
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (ck_scale_highp)"]
 fn mixcol_ck_scale_highp() {
     mali_ref::assert_matches("deqp_mixcol_ck_scale_highp");
 }

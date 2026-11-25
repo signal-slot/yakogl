@@ -31,6 +31,11 @@ const DIFFERS: &[&str] = &[];
 
 const IR_INDEX: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
 
+/// `mat3_uniform_conv` past its defect (a matrix local is not grafted,
+/// `nir_fs.rs` `grafted_locals`): the sum of products that share the
+/// varying's lane, which Mesa factors (`Fs::shared_factor`).
+const ALGEBRAIC: &str = "Valhall: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product) is not lowered yet";
+
 /// `sqrt_op_value` past its defect (the two lanes alone as an operand,
 /// `nir_fs.rs` `op`'s `Leaf::Pack`): its highp locals in a mediump shader.
 const MIXED: &str =
@@ -42,8 +47,8 @@ const MIXED: &str =
 const REFUSED: &[(&str, &str)] = &[
     ("b2f16_pair", IR_INDEX),
     ("load_mat3", IR_INDEX),
-    ("load_vec3_cmp", IR_INDEX),
-    ("mat3_uniform_conv", IR_INDEX),
+    ("load_vec3_cmp", MIXED),
+    ("mat3_uniform_conv", ALGEBRAIC),
     ("mat4_pair_unread", IR_INDEX),
     ("pair_hi_unread", IR_INDEX),
     ("pair_lo_unread", IR_INDEX),
@@ -64,13 +69,13 @@ fn load_mat3() {
 }
 
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:10690 (src32), a V2F32_TO_V2F16 pair reads a swizzled highp vec4 varying's load that was never emitted"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (a compare of a highp varying's narrowed lanes)"]
 fn load_vec3_cmp() {
     mali_ref::assert_matches("deqp_irindex_load_vec3_cmp");
 }
 
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:13112 (conv_of), mat3 uniform * float varying reads a varying conversion the walk never made"]
+#[ignore = "refused: a shape Mesa's algebraic rules rewrite (the sum of the uniform columns' products by one varying lane, which Mesa factors)"]
 fn mat3_uniform_conv() {
     mali_ref::assert_matches("deqp_irindex_mat3_uniform_conv");
 }

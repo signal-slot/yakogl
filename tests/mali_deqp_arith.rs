@@ -44,6 +44,17 @@ const LOWERED: &[&str] = &[
     "op_common_clamp_fs_mediump",
     "op_common_max_fs_mediump",
     "op_common_min_fs_mediump",
+    /* plan #387 item fclane-lower-1: a highp varying's arithmetic kept fp32
+     * in a mediump shader and narrowed where `color` takes it (nir_fs.rs
+     * `Fs::hp32`): `/`, ceil, floor, min, max, clamp of highp lanes (53
+     * cases of the note's buckets) */
+    "op_binary_div_assign_fs_highp",
+    "op_binary_div_fs_highp",
+    "op_common_ceil_fs_highp",
+    "op_common_clamp_fs_highp",
+    "op_common_floor_fs_highp",
+    "op_common_max_fs_highp",
+    "op_common_min_fs_highp",
 ];
 
 /// The references that compile with other words than Mesa's. None yet.
@@ -53,6 +64,17 @@ const DIFFERS: &[&str] = &[];
 const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 /// `MaliError::FsOperandForm`.
 const OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
+/// `MaliError::ArithConstant`: the sums of a constant matrix's lanes, which
+/// Mesa's rules fold and reassociate once they are scalar (nir_fs.rs
+/// `unfolded_zero_sum`).
+const ARITH_CONST: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
+/// `MaliError::FsVaryingLoad`: `mod`'s `ffma` is outside the highp
+/// varying's island (nir_fs.rs `hp32_op`), so its lanes meet the load's
+/// rule first.
+const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
+/// `MaliError::ColourForm`: `smoothstep`'s `ffma` likewise, met at the
+/// colour's lane.
+const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 /// `MaliError::Rebalance`.
 const CHAIN: &str = "Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet";
 
@@ -93,7 +115,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* matrix.div fs mediump: 36 cases of shaders.matrix.div.const_mediump_mat2_float_fragment */
     ("matrix_div_fs_mediump", ARITH),
     /* matrix.storeout fs highp: 11 cases of shaders.matrix.add.const_highp_mat3_float_fragment */
-    ("matrix_storeout_fs_highp", OPERAND),
+    ("matrix_storeout_fs_highp", ARITH_CONST),
     /* matrix.storeout fs mediump: 18 cases of shaders.matrix.add.const_mediump_mat3_float_fragment */
     ("matrix_storeout_fs_mediump", OPERAND),
     /* op.angle.acos fs highp: 4 cases of shaders.operator.angle_and_trigonometry.acos.highp_float_fragment */
@@ -140,12 +162,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_binary_add_assign_fs_mediump", OPERAND),
     /* op.binary.add fs mediump: 8 cases of shaders.operator.binary_operator.add.mediump_float_vec3_fragment */
     ("op_binary_add_fs_mediump", OPERAND),
-    /* op.binary.div_assign fs highp: 14 cases of shaders.operator.binary_operator.div_assign_effect.highp_float_fragment */
-    ("op_binary_div_assign_fs_highp", ARITH),
     /* op.binary.div_assign fs mediump: 28 cases of shaders.operator.binary_operator.div_assign_effect.mediump_float_fragment */
     ("op_binary_div_assign_fs_mediump", ARITH),
-    /* op.binary.div fs highp: 10 cases of shaders.operator.binary_operator.div.highp_float_fragment */
-    ("op_binary_div_fs_highp", ARITH),
     /* op.binary.div fs mediump: 20 cases of shaders.operator.binary_operator.div.mediump_float_fragment */
     ("op_binary_div_fs_mediump", ARITH),
     /* op.binary.equal vs highp: 6 cases of shaders.operator.binary_operator.equal.highp_ivec2_vertex */
@@ -174,28 +192,18 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_bool_any_vs_none", ARITH),
     /* op.common.abs fs mediump: 2 cases of shaders.operator.common_functions.abs.mediump_vec3_fragment */
     ("op_common_abs_fs_mediump", OPERAND),
-    /* op.common.ceil fs highp: 4 cases of shaders.operator.common_functions.ceil.highp_float_fragment */
-    ("op_common_ceil_fs_highp", ARITH),
     /* op.common.ceil vs highp: 4 cases of shaders.operator.common_functions.ceil.highp_float_vertex */
     ("op_common_ceil_vs_highp", ARITH),
     /* op.common.ceil vs mediump: 8 cases of shaders.operator.common_functions.ceil.mediump_float_vertex */
     ("op_common_ceil_vs_mediump", ARITH),
-    /* op.common.clamp fs highp: 7 cases of shaders.operator.common_functions.clamp.highp_float_fragment */
-    ("op_common_clamp_fs_highp", ARITH),
     /* op.common.clamp vs highp: 7 cases of shaders.operator.common_functions.clamp.highp_float_vertex */
     ("op_common_clamp_vs_highp", ARITH),
     /* op.common.clamp vs mediump: 14 cases of shaders.operator.common_functions.clamp.mediump_float_vertex */
     ("op_common_clamp_vs_mediump", ARITH),
-    /* op.common.floor fs highp: 4 cases of shaders.operator.common_functions.floor.highp_float_fragment */
-    ("op_common_floor_fs_highp", ARITH),
-    /* op.common.max fs highp: 7 cases of shaders.operator.common_functions.max.highp_float_fragment */
-    ("op_common_max_fs_highp", ARITH),
     /* op.common.max vs highp: 7 cases of shaders.operator.common_functions.max.highp_float_vertex */
     ("op_common_max_vs_highp", ARITH),
     /* op.common.max vs mediump: 14 cases of shaders.operator.common_functions.max.mediump_float_vertex */
     ("op_common_max_vs_mediump", ARITH),
-    /* op.common.min fs highp: 7 cases of shaders.operator.common_functions.min.highp_float_fragment */
-    ("op_common_min_fs_highp", ARITH),
     /* op.common.min vs highp: 7 cases of shaders.operator.common_functions.min.highp_float_vertex */
     ("op_common_min_vs_highp", ARITH),
     /* op.common.min vs mediump: 14 cases of shaders.operator.common_functions.min.mediump_float_vertex */
@@ -203,7 +211,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.mix fs mediump: 4 cases of shaders.operator.common_functions.mix.mediump_vec3_float_fragment */
     ("op_common_mix_fs_mediump", OPERAND),
     /* op.common.mod fs highp: 7 cases of shaders.operator.common_functions.mod.highp_float_fragment */
-    ("op_common_mod_fs_highp", ARITH),
+    ("op_common_mod_fs_highp", LOAD),
     /* op.common.mod fs mediump: 7 cases of shaders.operator.common_functions.mod.mediump_float_fragment */
     ("op_common_mod_fs_mediump", ARITH),
     /* op.common.sign fs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_fragment */
@@ -213,7 +221,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.sign vs mediump: 8 cases of shaders.operator.common_functions.sign.mediump_float_vertex */
     ("op_common_sign_vs_mediump", ARITH),
     /* op.common.smoothstep fs highp: 7 cases of shaders.operator.common_functions.smoothstep.highp_float_fragment */
-    ("op_common_smoothstep_fs_highp", ARITH),
+    ("op_common_smoothstep_fs_highp", FORM),
     /* op.common.smoothstep fs mediump: 14 cases of shaders.operator.common_functions.smoothstep.mediump_float_fragment */
     ("op_common_smoothstep_fs_mediump", ARITH),
     /* op.exponential.exp2 fs highp: 2 cases of shaders.operator.exponential.exp2.highp_vec3_fragment */
@@ -428,7 +436,7 @@ fn matrix_div_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: operand (matrix.storeout, fs, highp; 11 cases)"]
+#[ignore = "refused: a constant product Mesa's rules move or fold (matrix.storeout, fs, highp; 11 cases)"]
 fn matrix_storeout_fs_highp() {
     mali_ref::assert_matches("deqp_arith_matrix_storeout_fs_highp");
 }
@@ -572,7 +580,6 @@ fn op_binary_add_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.div_assign, fs, highp; 14 cases)"]
 fn op_binary_div_assign_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_binary_div_assign_fs_highp");
 }
@@ -584,7 +591,6 @@ fn op_binary_div_assign_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.div, fs, highp; 10 cases)"]
 fn op_binary_div_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_binary_div_fs_highp");
 }
@@ -684,7 +690,6 @@ fn op_common_abs_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.ceil, fs, highp; 4 cases)"]
 fn op_common_ceil_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_ceil_fs_highp");
 }
@@ -707,7 +712,6 @@ fn op_common_ceil_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.clamp, fs, highp; 7 cases)"]
 fn op_common_clamp_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_clamp_fs_highp");
 }
@@ -730,7 +734,6 @@ fn op_common_clamp_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.floor, fs, highp; 4 cases)"]
 fn op_common_floor_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_floor_fs_highp");
 }
@@ -741,7 +744,6 @@ fn op_common_floor_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.max, fs, highp; 7 cases)"]
 fn op_common_max_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_max_fs_highp");
 }
@@ -764,7 +766,6 @@ fn op_common_max_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.min, fs, highp; 7 cases)"]
 fn op_common_min_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_min_fs_highp");
 }
@@ -793,7 +794,7 @@ fn op_common_mix_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.mod, fs, highp; 7 cases)"]
+#[ignore = "refused: a varying load of a form no reference draws (op.common.mod, fs, highp; 7 cases)"]
 fn op_common_mod_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_mod_fs_highp");
 }
@@ -828,7 +829,7 @@ fn op_common_sign_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.smoothstep, fs, highp; 7 cases)"]
+#[ignore = "refused: a gl_FragColor lane (op.common.smoothstep, fs, highp; 7 cases)"]
 fn op_common_smoothstep_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_smoothstep_fs_highp");
 }
