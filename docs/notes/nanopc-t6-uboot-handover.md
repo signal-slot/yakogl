@@ -348,7 +348,12 @@ its compiled-in environment, read from the eMMC image under Armbian). So
 nothing of sections 1, 2, 6 and 7 has been measured from U-Boot's state.
 The next session needs one of: the console lease opened at 1500000, the
 adapter's stored baud set to 1500000 (its own shell, `baud 1500000`), or the
-slot left free for `t6-uart-rfc2217.py`; and a `T6_HAND`.
+slot left free for `t6-uart-rfc2217.py`; and a `T6_HAND`. A session runs
+`driver/tools/uboot-t6/console-check.sh` first: it writes one line to
+`/dev/ttyS2` from Armbian and reads it back on `T6_UART`, before anything is
+rebooted. Exit 0 is the console read at 1500000; 6 is the slot busy, 8 the
+adapter not confirming 1500000, 10 bytes that are not the line (another
+rate). It has not run on the board yet.
 
 Load addresses, from source (U-Boot v2026.07, file:line), and confirmed on the
 board twice:
