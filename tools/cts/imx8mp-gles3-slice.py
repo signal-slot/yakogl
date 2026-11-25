@@ -5,6 +5,7 @@
 
   imx8mp-gles3-slice.py --commit HASH40 --rows AA-BB --date YYYY-MM-DD --lines FILE [--lines FILE...]
                         [--records DIR...] [--results results.tsv] [--out DIR]
+                        [--artefacts FILE] [--preflight FILE] [--window START/END]
 
 --rows is the slice's table rows, counted from 1 as the directory name `<date>-imx8mp-gles3-<hash8>-rows<AA>-<BB>`
 counts them: rows01-13 are entries 0-12 (`e<NN>` counts from 0). AA-AA (or AA) is a one-row slice.
@@ -22,6 +23,11 @@ The README has the 40-hex commit, the verdict lines in a fenced block (what imx8
 imx8mp-gles3-times.py read), a per-entry table (rc, verdict, resets, back_after, uptime, pages) and, with
 --results, the per-entry counts and the not-pass list (failing names). The tally's results.tsv and rows.md
 go beside it, as in every committed slice; one slice alone passes `imx8mp-gles3-merge.py --check --partial`.
+--artefacts (the stdout of imx8mp-gles3-artefacts.sh), --preflight (the preflight's stdout) and --window
+(board-clock UTC, `HH:MM/HH:MM`, or `YYYY-MM-DDTHH:MM/YYYY-MM-DDTHH:MM`) are optional. With any of them the draft
+also has a "## What ran" section (window, artefact lines with the path cut to the part below $IMX8MP_OUT, the
+preflight result, the commands with knob names only) and a "## Console" section for BOARD_UART unset ("not
+captured, recoveries not observed"); without all three the output is exactly as before.
 Without --out the README goes to stdout; with --out it is DIR/README.md. Before it is written or printed,
 imx8mp-gles3-redact.py --check must find nothing in it (exit 1 on a hit, nothing written). The check's scratch
 file is under --out, else $TMPDIR, else the current directory; never /tmp or /var/tmp.
@@ -98,6 +104,84 @@ def kv(line, k):
     return m.group(1) if m else '-'
 
 
+WINDOW = re.compile(r'(?:\d{4}-\d{2}-\d{2}T)?([01]\d|2[0-3]):[0-5]\d')
+
+
+def parse_window(s):
+    p = s.split('/')
+    if len(p) != 2 or not all(WINDOW.fullmatch(x) for x in p):
+        raise Refuse('--window must be START/END as HH:MM/HH:MM (board-clock UTC), got %r' % s)
+    return [x.split('T')[-1] for x in p]
+
+
+def rel_artefact(path):
+    """The part of an artefact path below $IMX8MP_OUT: from es3-<hash8> or the stage 1 directory on."""
+    parts = path.split('/')
+    for i, c in enumerate(parts):
+        if re.match(r'es3-[0-9a-f]{8}(\.|$)', c) or c.startswith('deqp-stage1'):
+            return '/'.join(parts[i:])
+    return parts[-1]
+
+
+def read_artefacts(path):
+    out = []
+    with open(path, errors='replace') as f:
+        for l in f:
+            l = l.rstrip('\n')
+            m = re.match(r'^(\d+ [0-9a-f]{64}) (\S+)$', l)
+            if m:
+                out.append('%s %s' % (m.group(1), rel_artefact(m.group(2))))
+            elif re.match(r'^\s*(#\s*)?CONFIG_\w+|^\s*(Memory region|RAM:|FLASH:)', l):
+                out.append(l)
+    if not any(re.match(r'^\d+ [0-9a-f]{64} ', l) for l in out):
+        raise Refuse('--artefacts has no "bytes sha256 file" line (the stdout of imx8mp-gles3-artefacts.sh)')
+    return out
+
+
+def read_preflight(path):
+    with open(path, errors='replace') as f:
+        ls = [l.strip() for l in f]
+    nok = sum(1 for l in ls if l.startswith('ok '))
+    bad = sum(1 for l in ls if l.startswith('FAIL '))
+    last = [l for l in ls if l.startswith('preflight:')]
+    if not last:
+        raise Refuse('--preflight has no "preflight: ..." result line')
+    return nok, bad, last[-1]
+
+
+def what_ran(a, lo, hi, h8):
+    o = ['', '## What ran', '']
+    if a.window:
+        st, en = parse_window(a.window)
+        o += ['Run %s, %s-%s UTC (the board\'s clock): %s of `tools/cts/imx8mp-gles3-tree.txt`'
+              % (a.date, st, en, 'row %d' % lo if lo == hi else 'rows %d-%d' % (lo, hi)),
+              '(`TREE_ROWS=%d-%d`), one boot per entry.' % (lo - 1, hi - 1), '']
+    if a.artefacts:
+        o += ['`tools/cts/imx8mp-gles3-artefacts.sh es3-%s` (bytes, sha256, file below `$IMX8MP_OUT`):' % h8, '',
+              '```'] + read_artefacts(a.artefacts) + ['```', '']
+    if a.preflight:
+        nok, bad, last = read_preflight(a.preflight)
+        o += ['`tools/cts/imx8mp-gles3-preflight.sh --commit %s --out $IMX8MP_OUT`: %d `ok` line%s, %s`%s`.'
+              % (a.commit, nok, '' if nok == 1 else 's', '%d `FAIL`, ' % bad if bad else '', last), '']
+    o += ['The run, knob names only (values come from the environment):', '', '```',
+          'TREE_ROWS=%d-%d TREE_IMAGE=$IMX8MP_OUT/es3-%s/zephyr/zephyr.bin BOARD_BOOT=uboot-mmc \\' % (lo - 1, hi - 1, h8),
+          '  BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=$RUN_BOUND BOARD_UART=$BOARD_UART \\',
+          '  NAMES=0 tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-%s-rows%02d-%02d   # pass 1: the rows'
+          % (h8, lo, hi),
+          '  ...  (NAMES unset) tools/cts/imx8mp-gles3-board.sh tree records/imx8mp/es3-%s-rows%02d-%02d   # pass 2: the name pages'
+          % (h8, lo, hi),
+          'tools/cts/imx8mp-gles3-board.sh tally records/imx8mp/es3-%s-rows%02d-%02d' % (h8, lo, hi), '```', '',
+          '`BOARD_HOST` and `BOARD_UART` are named, never their values.']
+    return o
+
+
+CONSOLE = ['', '## Console', '',
+           'not captured, recoveries not observed: `BOARD_UART` was unset, so `tools/board.sh` kept no console',
+           'for these boots and GPU recoveries were not observable (`resets=absent` is `board.sh`\'s, it does',
+           'not count them on this board). The zero-recovery proof of the recipe is missing for every row; this is',
+           'reported, not claimed.']
+
+
 def build(a):
     if not re.fullmatch(r'[0-9a-f]{40}', a.commit):
         raise Refuse('--commit must be the full 40-hex commit, got %r' % a.commit)
@@ -136,6 +220,9 @@ def build(a):
     if a.records:
         o += ['', 'Records (gitignored): %s.' % ', '.join(
             '`records/imx8mp/%s`' % os.path.basename(os.path.normpath(r)) for r in a.records)]
+    new = bool(a.artefacts or a.preflight or a.window)
+    if new:
+        o += what_ran(a, lo, hi, h8)
     o += ['', '## Verdict lines', '',
           'Verbatim from `tools/board.sh imx8mp` (`back_after` is reboot to ssh, `uptime` Linux\'s at that moment):',
           '', '```']
@@ -159,6 +246,8 @@ def build(a):
         for e in want:
             names = [n for n in res[e][8].split(';') if n and n != '-']
             o.append('- e%d: %s' % (e, ('%d failing: ' % len(names) + '; '.join(names)) if names else 'none named'))
+    if new:
+        o += CONSOLE
     o += ['', '`imx8mp-gles3-merge.py --check` reads the verdict lines above; `results.tsv` and `rows.md` of the',
           'same tally stand beside this README.', '']
     return '\n'.join(o)
@@ -194,6 +283,9 @@ def main():
     ap.add_argument('--records', nargs='*', default=[])
     ap.add_argument('--results')
     ap.add_argument('--out')
+    ap.add_argument('--artefacts', metavar='FILE')
+    ap.add_argument('--preflight', metavar='FILE')
+    ap.add_argument('--window', metavar='START/END')
     a = ap.parse_args()
     try:
         text = build(a)
