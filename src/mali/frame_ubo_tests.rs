@@ -183,7 +183,7 @@ fn try_build(ubo: &'static [UboRow], fs_uniforms: &[u32]) -> Result<Built, Frame
             front_cw: false,
             cull: Cull::None,
             textures: &[texture()],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             blend_shader: None,
             alpha_to_coverage: false,

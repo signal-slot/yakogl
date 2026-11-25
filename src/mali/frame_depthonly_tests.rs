@@ -198,7 +198,7 @@ fn build(no_colour: bool, colour_mask: u8) -> Built {
             front_cw: false,
             cull: Cull::None,
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             alpha_to_coverage: false,
             blend_shader: None,
