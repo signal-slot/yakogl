@@ -1,0 +1,7 @@
+# Fixture RESULTS (made-up numbers; @PI4_CELL@ is replaced by the generated cell)
+
+| Board | glmark2-es2 | gl_test | GPU resets |
+|---|---|---|---:|
+| AM62P | 400, 33 scenes, 0 failed, 0 unsupported, 0 GL errors, 0 out-of-memory scenes; main `1234abcd`, 2026-12-01 (`records/am62p/20261201-0900-GM-1234abcd/`; GM `verdict=done`, resets 0); **terrain 80.00 ms a frame (12 FPS), shadow 10.00 ms (100 FPS), refract 30.00 ms (33 FPS)** | 50 of 50 | 0 |
+| Pi 4 | @PI4_CELL@ | 13 of 13 | 0 |
+| i.MX8MP | 40, 33 scenes, 0 failed, 0 unsupported, 0 GL errors, 0 out-of-memory scenes; main `1234abcd`, 2026-12-01 (`records/imx8mp/20261201-1100-GM-1234abcd/`; GM `verdict=done`, resets absent); **terrain 250.00 ms a frame (4 FPS), shadow 500.00 ms (2 FPS), refract 500.00 ms (2 FPS)** | 49 of 49 | 0 |
