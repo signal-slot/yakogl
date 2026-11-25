@@ -10,8 +10,9 @@ still open. It holds current state only: the run logs of the 2026-10 walks
 what they found is in the table below and in the commits named there. Open work
 is in the GitHub issues, not in a file.
 
-The walks are below, from "Line 6: cross builds" on. Each names its date, base
-commit, each command with exit code and time, and the `--quick` summary line.
+The walks are below, from "Line 3" on. Each names its date, commit, host and
+each command with its exit code and time. Line 3 ends with the `--quick`
+summary line, or says there is none.
 
 ## Findings of the earlier walks, at the tip
 
@@ -42,189 +43,109 @@ needs TI's firmware). They need hardware or files a fresh host does not have.
 
 ## Checklist cells
 
-Checklist lines 3 and 6 take their State from the walks below. The state words
+Checklist lines 3 and 6 take their State from "Line 3" and "Line 6" below. The state words
 are in `docs/release/checklist.md`; the walks decide, not this file.
 
-## Line 6: cross builds (README steps 1-4)
+## Line 3
 
-This section is the measured record of the README cross-build block (README.md,
-"host library" to "Zephyr") for checklist line 6. For line 6 it supersedes rows 4-7
-of "Steps run" above (`aarch64.cmake` not found, no GCC on the host, the clang
-header error, Zephyr not run), which were measured at `a63fcc5b48c5` with the
-README as it was then; those rows stay as the earlier record.
+CONTRIBUTING.md's build, test and gate commands, walked on a gate host.
 
-Every command was run as `sh -c '...; echo EXIT=$?'` with the output in a file (never
-through a pipe, which would hide the exit code). Builds went into `build/` of the
-workspace, one `BUILD=` directory per row, each from an empty directory. Rows 1-3c and
-V1-V3 were measured at **`f652d6dc`**, the integration tip of 2026-11-07, which holds the
-`DRVSRC` fix (`9c736975`, `baremetal.mk:73` reads `DRVSRC  ?= $(HERE)/driver/src`). Main
-(`80c486d2`) differs from it only in README.md, checklist.md and two docs notes, none in
-a build input. Host: Linux 7.0.0 x86-64, rustc 1.101.0-nightly (`5d8fec066`, 2026-10-16)
-with the `aarch64-unknown-none` target, cmake 4.2.3, ninja 1.13.2, GNU Make 4.4.1.
+- Date: 2026-11-25. Main commit walked: `d6d93303` (2026-11-25 07:10 UTC), a
+  fresh clone, no build directory. The walking host could not reach GitHub, so
+  the commit is the newest `origin/main` ref the workspace held, not a live
+  fetch.
+- Host: x86-64 Linux, 4 cores, rustc 1.99.1 (the walk's report did not record
+  the kernel). `tools/setup-gate-host.sh --check` exits 0 with the layout
+  exported and the PowerVR firmware header copied in: every item is ok,
+  including the aarch64 compiler, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
+  `GLMARK2_SRC` and the firmware header. This host would have had no gap row.
+  Its disk was the problem (below).
 
-Acceptance checks on `f652d6dc`, under `sh` with GNU grep 3.12: c1 (`baremetal.mk` has
-the line `DRVSRC ?= $(HERE)/driver/src`) exit **0**; c2 (no `../src` left in
-`baremetal.mk`, `grep -q` finds none) exit **1** (nothing found, as required).
+| Command | Exit | Wall time |
+| --- | --- | --- |
+| `tools/cts/deps-env.sh --check` (layout missing `MP2_QEMU`) | 1 | not recorded |
+| `tools/cts/deps-env.sh --build ...` (as CONTRIBUTING.md writes it) | 0 | not recorded |
+| the PowerVR header copy | 0 | not recorded |
+| `tools/setup-gate-host.sh --check` | 0 | not recorded |
+| `tools/check.sh --changed origin/main` (no change) | 0 | not recorded |
+| `tools/check.sh --quick` | stopped, red, **no summary line** | stopped after 18 of 487 rows |
+| `tools/check.sh --local origin/main` | not run | |
+| `tools/check_scope_selftest.sh` | not run | |
 
-Toolchain of the gcc-prefix rows: the **Zephyr SDK 1.0.1** (`$ZEPHYR_SDK_INSTALL_DIR`):
-`aarch64-zephyr-elf-gcc (Zephyr SDK 1.0.1) 14.3.0`, GNU ar and objcopy 2.43.1. The prefix
-with SDK 1.0 is
-`$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` (the pre-1.0
-path `$ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/` fails). The Arm GNU Toolchain
-`aarch64-none-elf-` prefix is row 2a (the same toolchain download as the clang sysroot, below).
+Every CONTRIBUTING command before `--quick` exited 0, apart from the first
+`deps-env.sh --check`, which exits 1 until the next command builds the missing
+entry. The report that carried this walk gave exit codes but no per-command
+times, so none is written here.
 
-Toolchain of the clang rows: Ubuntu clang 21.1.8 (`6ubuntu1`) and Ubuntu LLVM 21.1.8
-`llvm-ar`, `llvm-nm`, `llvm-objcopy`, all with `--target=aarch64-none-elf`, run as the
-README's **unversioned** names: `/usr/lib/llvm-21/bin` (which has `clang`, `llvm-ar`,
-`llvm-nm`, `llvm-objcopy` unversioned) was put first on `PATH`. Sysroot: the
-`aarch64-none-elf` directory of the Arm GNU Toolchain 14.3.rel1
-(`arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf`, newlib; tarball downloaded from
-developer.arm.com into `$CONNECTED_DEPS_DIR/arm-gnu-dl`, sha256
-`ebaf2d47f2e7f7b645864c5c8cf839e526daed83a2e675a3525d03f5ba3d2be9`, equal to the
-published value). `<sysroot>` in the table is that directory.
+**Result: not green.** There is no `tools/check.sh --quick` summary line at this
+commit, and none is invented here. Two reasons:
 
-| Row | Command | Exit | Commit | Compiler and tools | Sysroot / SDK | Output |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1. CMake toolchain build | `cmake -S . -B build/a64 --toolchain <toolchain.cmake> -DYAKOGL_OSAL=baremetal`, then `cmake --build build/a64`. The toolchain file is the reader's own: `CMAKE_SYSTEM_NAME Generic`, `CMAKE_SYSTEM_PROCESSOR aarch64`, `CMAKE_C_COMPILER`/`CMAKE_AR`/`CMAKE_NM`/`CMAKE_OBJCOPY` set to the SDK prefix below, `CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY` | configure 0, build 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 41,945,730 bytes | aarch64-zephyr-elf-gcc 14.3.0, cmake 4.2.3, ninja 1.13.2, rustc 1.101.0-nightly; Rust target derived: `aarch64-unknown-none` | Zephyr SDK 1.0.1 | `build/a64/libyakogl.a` 42,130,018 bytes (default `online` shader back end) |
-| 2. `baremetal.mk`, gcc prefix, with `DRVSRC=driver/src` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf- DRVSRC=driver/src` | 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 27,493,510 bytes | aarch64-zephyr-elf-gcc 14.3.0, rustc 1.101.0-nightly, cmake 4.2.3 | Zephyr SDK 1.0.1 (freestanding; no libc needed to build) | `libyakogl.a` 27,643,406 bytes ("133 runtime symbols made local" in the earlier runs) |
-| 2'. the same without `DRVSRC` | `make -f baremetal.mk CROSS_COMPILE=$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` | **0** | `f652d6dc` (the `DRVSRC` default is committed there, `9c736975`). Earlier: `964f50f0` without the fix: 2, `pvr_render.h: No such file or directory` at `src/abi_layout_check.c:17` | aarch64-zephyr-elf-gcc 14.3.0 | Zephyr SDK 1.0.1 | `libyakogl.a` 27,643,790 bytes (384 bytes more than row 2: the path strings differ; the member list was identical with and without `DRVSRC=driver/src` at the earlier commits) |
-| 2a. rows 2 and 2' with the Arm GNU prefix | row 2 and row 2' with `CROSS_COMPILE=<Arm GNU Toolchain 14.3.rel1>/bin/aarch64-none-elf-` | 0 with `DRVSRC`, 0 without | `f652d6dc`. Earlier: `98251549`: 0, 0 | aarch64-none-elf-gcc (Arm GNU Toolchain 14.3.Rel1, Build arm-14.174) 14.3.1 20250623 | the toolchain's newlib | `libyakogl.a` 27,661,518 bytes with `DRVSRC`, 27,661,966 without |
-| 3. clang form, README literal (no `--sysroot`) | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy` | **2** | `f652d6dc`. Earlier: `964f50f0`, `14e93e64`: 2 | clang 21.1.8, llvm-ar, llvm-nm, llvm-objcopy 21.1.8, unversioned names via `PATH` | none | `'string.h' file not found` at `src/osal/baremetal.c:25` (`baremetal.mk:184`): a host requirement, a newlib sysroot must be in `CC`; no tree defect |
-| 3a. clang form with a sysroot, GPU=powervr | `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<sysroot>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy DRVSRC=driver/src` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 26,936,654 bytes | as row 3 | Arm GNU Toolchain 14.3.rel1 newlib, `<sysroot>` as above | `libyakogl.a` 26,943,854 bytes |
-| 3b. the same, `GPU=vivante` | row 3a plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `964f50f0`: 0, 22,781,802 bytes | as row 3 | as 3a | `libyakogl.a` 22,822,930 bytes |
-| 3c. the same, powervr, no `DRVSRC` | row 3a without `DRVSRC=driver/src` | **0** | `f652d6dc`. Earlier: `964f50f0` without the fix: 2, `pvr_render.h` not found at `src/abi_layout_check.c:17` | as row 3 | as 3a | `libyakogl.a` 26,944,542 bytes |
-| 3d. clang form with a distribution libc, `GPU=powervr` and `GPU=vivante` | `make -f baremetal.mk CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>' AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy`, plus a link of a minimal test program against `libyakogl.a`; `-isystem` is the only change to the README's `CC` string (no `--sysroot`), and no Arm GNU toolchain is used | 0 (the archive build and the test link, for `GPU=powervr` and for `GPU=vivante`) | `8d1488cd` (item picolibc-link; measured there) | clang 21.1.8, `ld.lld` 21.1.8; `lld-21` and `liblld-21` are not installed by default on this host and were fetched the same no-root way | Ubuntu picolibc: package `picolibc-aarch64-linux-gnu` 1.8.10-3 from the Ubuntu archive pool (universe/p/picolibc), unpacked without root with `apt-get download` and `dpkg-deb -x` | archive sizes not recorded; no libc symbol that `libyakogl.a` needs is missing from picolibc, so the tree needs no change; the test link needs `stdout`, `stderr` and `_exit` from the integrator; the handoff reported an lld linker-script quirk, its details were not recorded |
-| 4a. Zephyr, `ZEPHYR_EXTRA_MODULES` | `west build -b rpi_4b examples/triangle` with yakogl and `driver/` in `ZEPHYR_EXTRA_MODULES`, `CONFIG_YAKOGL=y` | 0 | `b60224da` (zephyr-step4; **not** re-run at `f652d6dc`, see below) | rustc 1.101.0-nightly, cmake 4.2.3, ninja 1.13.2, west 1.5.0 | Zephyr 4.4.99 (`af17c0c8aa2a`), Zephyr SDK 1.0.1 | `zephyr.elf` 20,159,608 bytes; `libyakogl.a` 1,942,720 bytes |
-| 4b. Zephyr, form (a): a fresh west workspace from yakogl's `west.yml` | a fresh west workspace from `west.yml`, `west update` (3 m 21.8 s), then the sample build | 0 | `d055a0b` (not re-run) | as 4a | Zephyr `af17c0c8` (equal to the `west.yml` pin), Zephyr SDK 1.0.1 | `zephyr.elf` 20,174,808 bytes; `libyakogl.a` 1,944,368 bytes |
-| V1. `GPU=vivante` | row 2 plus `GPU=vivante` | 0 | `f652d6dc`. Earlier: `6ad0f777`: 0, 22,951,578 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 22,992,970 bytes |
-| V2. `REPORT_ES2=0` | `make -f baremetal.mk CROSS_COMPILE=<SDK prefix> REPORT_ES2=0` (no `DRVSRC`) | 0 | `f652d6dc`. Earlier: `606343ff`: 0, 28,291,846 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl.a` 28,442,126 bytes |
-| V3. `RUST_LINKAGE=external` | row 2' plus `RUST_LINKAGE=external` | 0 | `f652d6dc`. Earlier: `6ad0f777`, `964f50f0`: 0, 659,340 bytes | as row 2 | Zephyr SDK 1.0.1 | `libyakogl_c.a` 659,724 bytes (C parts only) |
+- Disk: the first 18 of the 487 `--quick` rows used about 16 GB of build output
+  on a host with about 3 GB free (later 20 GB), so the run was stopped. A
+  re-walk needs about 50 GB free, or a pruned gate cache (it was over 160 GB),
+  with `CARGO_INCREMENTAL=0`. `tools/setup-gate-host.sh --check` exits 0 even
+  with only 18 GB free: it does not check disk before a walk.
+- A red clippy row before the stop: `host-test,gpu-v3d,shaderc-online,no-shader-table`
+  fails with "`format!` in `format!` args" at `tests/es3_tf_v3d.rs:448`, which
+  came in with `78741eae` (2026-11-24). A re-walk is red on that row until a
+  `tests:` commit fixes it.
 
-Sources of the rows: rows 1, 2, 2', 2a, 3, 3a-3c and V1-V3 were all re-run for this record at
-`f652d6dc`, each into an empty `BUILD=` directory, so the exit codes are those of the
-first, complete `make`/`cmake` run. The "Earlier" numbers are the previous measurements
-at `6ad0f777`, `964f50f0`, `606343ff` and `14e93e64`; sizes differ from the current ones
-because the sources moved. Rows 4a and 4b come from earlier items (
-zephyr-step4/zephyr-4a-rerun, zephyr-west-init/west-venv-e2e); their commands and
-outputs are not stored in the repository, so those cells are as the items reported them.
-Of steps 2 and 4 only step 2 with the SDK prefix was re-run at the tip (rows 2, 2', 2a): the
-re-run of step 4 needs `west`, a venv with `requirements-base.txt` and a Zephyr
-workspace, none of which this host had, so row 4 keeps its older commits (the Zephyr
-build does not read `baremetal.mk`; the `DRVSRC` change cannot reach it).
+CONTRIBUTING's statements, checked at the tip:
 
-Host quirks seen:
+- Plan sizes (`YAKOGL_CHECK_PLAN=1`): `--quick` 487 rows and the full plan 547
+  at `d6d93303`. They move with main and no file keeps them.
+- A docs-only `tools/check.sh --no-clippy --changed <parent>` plans 4 rows:
+  holds.
+- `MESA_V3D_TREE` set to a tree without `build-v3d` turns the three v3d rows
+  into one gap (483 ok, 1 gap in the plan listing): holds.
+- The flag order is `--no-clippy --changed <base>`; with `--no-clippy` last,
+  `tools/check.sh` ignores it and keeps clippy.
 
-- With Zephyr SDK 1.0 the step-2 prefix is
-  `$ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-`; the pre-1.0
-  path fails.
-- The clang form needs a newlib sysroot in `CC` (`--sysroot=<Arm GNU
-  Toolchain>/aarch64-none-elf`); without it step 3 stops at `string.h` (row 3).
-- The same clang form also works with a distribution C library, without the Arm GNU
-  toolchain: Ubuntu's `picolibc-aarch64-linux-gnu`, `-isystem <picolibc include dir>`
-  in `CC` in place of `--sysroot` (the only change to the README's `CC` string); the
-  link step needs `ld.lld` (`lld-21` and `liblld-21` are not installed by default), and
-  `stdout`, `stderr` and `_exit` for the test link come from the integrator (row 3d).
-- Ubuntu installs the unversioned `llvm-ar`, `llvm-nm`, `llvm-objcopy` only under
-  `/usr/lib/llvm-21/bin`, not in `/usr/bin` (there only the `-21` names); that directory
-  has to be on `PATH` for README's literal names, or the `-21` names passed.
-- A stale `ZEPHYR_BASE` in the environment breaks step 4 form (a); unset it first. The
-  sample also needs `RUSTUP_TOOLCHAIN=nightly`.
-- On hosts that refuse `$?` in a command line, put `echo EXIT=$?` inside `sh -c '...'`.
-  Some hosts also refuse a direct call of the toolchain binaries; a call through `make`
-  or `sh -c` works.
-- README's step 1 needs a toolchain file of the reader's own; the one used here is eight
-  lines (listed in row 1).
+The last complete `--quick` summary line is the 2026-11-12 one, from a fresh
+clone of `570cd8c6`: "181 ok, 0 failed, 0 gap(s)" in 3121 s. It is not a
+reading of the current tip.
 
-## Line 6: texts to paste (#1606, checklist State, README)
+## Line 6
 
-Three texts for places this record cannot edit (checklist.md and README.md are held by
-other plans). All hashes and versions are from the section "Line 6: cross builds" above.
+README's host steps in order, then CONTRIBUTING, on a fresh clone.
 
-### #1606 (comment for GitHub issue #1606)
+- Date: 2026-11-24. Main commit walked: `cb36d3c7` (2026-11-24 15:04 UTC), the
+  newest `origin/main` ref the workspace held (GitHub was not reachable). Fresh
+  `git clone`, detached at that commit, no build directory at the start; each
+  `make` row used its own `BUILD=` directory.
+- Host: Linux 7.0.0-43-generic x86-64, rustc 1.99.1 (stable,
+  `aarch64-unknown-none` installed), cargo 1.99.1, cmake 4.2.3, ninja 1.13.2,
+  GNU Make 4.4.1, Ubuntu clang 21.1.8 with LLVM 21.1.8 (`llvm-ar-21`,
+  `llvm-nm-21`, `llvm-objcopy-21`), Zephyr SDK 1.0.1 (`aarch64-zephyr-elf-gcc`
+  14.3.0), Arm GNU Toolchain 14.3.rel1 (`aarch64-none-elf`, newlib). Every
+  passing build log had 0 warnings.
 
-```
-Checklist line 6 (README walkthrough): both open points are closed.
+| Step | Command as written | Exit | Wall time |
+| --- | --- | --- | --- |
+| 1 configure | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | <1 s |
+| 1 build | `cmake --build build` | 0 | 35 s |
+| 2 configure | `cmake -S . -B build/a64 --toolchain <reader's toolchain file> -DYAKOGL_OSAL=baremetal` | 0 | <1 s |
+| 2 build | `cmake --build build/a64` | 0 | 35 s |
+| 3 GCC form, `aarch64-none-elf` GCC on PATH | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-` | 0 | 23 s |
+| 3 GCC form, host without that GCC | the same command | 2 | <1 s |
+| 3 GCC form, Zephyr SDK 1.0 prefix | `make -f baremetal.mk CROSS_COMPILE=<sdk>/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` | 0 | 16 s |
+| 3 clang form, no sysroot | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar-21 NM=llvm-nm-21 OBJCOPY=llvm-objcopy-21` | 2 | 15 s |
+| 3 clang form, `--sysroot` (Arm toolchain) | the same with `CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf'` | 0 | 22 s |
+| 3 clang form, `--sysroot` (Zephyr SDK newlib) | the same with `--sysroot=<sdk>/gnu/aarch64-zephyr-elf/aarch64-zephyr-elf` | 0 | 18 s |
+| 4 Zephyr (`west`) | not run: `west` is absent on this host | | |
+| host tools test | `cargo test -p yakogl-tools` | 0 | 27 s |
+| API coverage prep | `cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table` | 0 | 9 s |
+| API coverage | `python3 -I tools/api_coverage.py` | 0 | 1 s |
+| API coverage, no archive | the same with an empty cargo target directory | 0 | <1 s |
 
-1. DRVSRC default: baremetal.mk:73 now reads `DRVSRC ?= $(HERE)/driver/src`
-   (commit 9c736975, the cherry-pick of f82cfcce). `make -f baremetal.mk` no
-   longer needs `DRVSRC=driver/src`: step 2 exits 0 with and without it, and the
-   clang form too.
-2. README step 3, clang form: exit 0 with a newlib sysroot (Arm GNU Toolchain
-   14.3.rel1, aarch64-none-elf directory, via --sysroot in CC) for GPU=powervr
-   and GPU=vivante, with the unversioned llvm-ar, llvm-nm, llvm-objcopy of
-   Ubuntu LLVM 21.1.8 (clang 21.1.8). The README literal without a sysroot exits 2
-   ('string.h' file not found at src/osal/baremetal.c:25): a host requirement,
-   not a tree defect. A distribution route works too, without the Arm GNU
-   toolchain: Ubuntu's picolibc (package picolibc-aarch64-linux-gnu 1.8.10-3,
-   unpacked no-root), -isystem <picolibc include dir> in CC in place of
-   --sysroot, ld.lld for the link: exit 0 for GPU=powervr and GPU=vivante at
-   8d1488cd (row 3d).
+All `baremetal.mk` rows used the default `DRVSRC` (`DRVSRC ?= $(HERE)/driver/src`
+in `baremetal.mk`); none passed it. The two exit-2 rows are the documented host
+requirements: the GCC form needs an `aarch64-none-elf` GCC (`failed to find tool
+"aarch64-none-elf-gcc"`), and the clang form needs bare-metal C headers
+(`'string.h' file not found` at `src/osal/baremetal.c:25`) that `--sysroot`
+supplies. Outputs: `cargo test -p yakogl-tools` "128 passed; 0 failed";
+`api_coverage.py` `SUMMARY declared=186 exported=304 procaddress=304`, missing
+0, from the archive (`nm`) and, with no archive, from the source: the same 304.
 
-Also: step 1 (CMake toolchain build) exit 0, step 2 with the Zephyr SDK 1.0.1
-prefix (gcc 14.3.0) exit 0, step 4 (Zephyr) exit 0 (earlier commits b60224da,
-d055a0b; the Zephyr build does not read baremetal.mk).
-
-Evidence: docs/release/readme-walkthrough.md, section "Line 6: cross builds
-(README steps 1-4)". Rows 1-3c and V1-V3 were measured at f652d6dc.
-```
-
-### checklist State (replacement for the State cell of row 6)
-
-```
-**done** (2026-11-08; the cross builds at `f652d6dc`, line 3 at `14e93e64`, GCC form at `22265e87`, base `40eb8d00`). The criterion is that a new reader following README then CONTRIBUTING reaches a passing `tools/check.sh --quick` with no gap: a fresh clone does (line 3, 170 ok, 0 failed, 0 gap(s) at `14e93e64`), and every cross build README lists builds as README writes it (`docs/release/readme-walkthrough.md`, "Line 6: cross builds": CMake step 1 exit 0; `baremetal.mk` step 2 exit 0 with and without `DRVSRC`, since `baremetal.mk:73` defaults `DRVSRC` to `$(HERE)/driver/src`, commit `9c736975`; clang form of step 3 exit 0 with a newlib sysroot (Arm GNU Toolchain 14.3.rel1, clang 21.1.8) and exit 2 without one, a host requirement; Zephyr step 4 exit 0). `CONTRIBUTING.md` gives the `--quick` size and the `MESA_V3D_TREE` gap.
-```
-
-### README (cross-build wording)
-
-`grep -n DRVSRC README.md` finds only line 244, the option table row
-`YAKOGL_PVR_DRIVER_DIR` (`DRVSRC`) with default `driver/src`. `git log --oneline -S
-'DRVSRC=driver/src' -- README.md` lists `d254d172` ("docs: README bare-metal commands use
-baremetal.mk's in-tree DRVSRC default"), which removed the `DRVSRC=driver/src` argument.
-The current lines are:
-
-```
-make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-
-...
-make -f baremetal.mk \
-     CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf' \
-     AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-```
-
-No change is needed for the `DRVSRC` wording. Three host-quirk insertions follow, each
-anchored to the README text above (grep the anchor; apply from the bottom up, or
-re-grep, because (a) adds 3 lines and (c) adds 1). They rest on the rows and the
-"Host quirks seen" notes of the section "Line 6: cross builds".
-
-**(a) Step 2, SDK 1.0 prefix** (rows 2, 2'; first quirk note). Anchor: the line
-`make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-`. Add above it:
-
-```
-# with the Zephyr SDK 1.0 the prefix is
-# $ZEPHYR_SDK_INSTALL_DIR/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-
-# (the pre-1.0 $ZEPHYR_SDK_INSTALL_DIR/aarch64-zephyr-elf/bin/ path does not exist there)
-```
-
-**(b) Step 3, clang form** (rows 3, 3a, 3d; the sysroot, picolibc and llvm-name quirk
-notes). Anchor: the three comment lines that start `# clang needs bare-metal C
-headers:`. Replace them (this replaces the older optional sentence of this section) with:
-
-```
-# clang needs bare-metal C headers: a newlib sysroot, e.g. the aarch64-none-elf
-# directory of the Arm GNU toolchain (without one the build stops at 'string.h').
-# It also needs llvm-ar, llvm-nm and llvm-objcopy under those names on PATH;
-# Ubuntu installs them unversioned only in /usr/lib/llvm-21/bin and puts just the
-# -21 names in /usr/bin, so add that directory to PATH or pass AR=llvm-ar-21 etc.
-# Without the Arm GNU toolchain Ubuntu's picolibc-aarch64-linux-gnu works too:
-# CC='clang --target=aarch64-none-elf -isystem <picolibc include dir>' in place of
-# --sysroot; linking a program against it also needs ld.lld (package lld-21 or lld)
-```
-
-**(c) Step 4, stale ZEPHYR_BASE** (the ZEPHYR_BASE quirk note; recorded for form (a), the
-`west.yml` workspace, row 4b; no row records it for the `ZEPHYR_EXTRA_MODULES` form 4a,
-so that form is not named). Anchor: the line
-`# Zephyr: a workspace from west.yml (driver/samples/zephyr/README.md), or add this`.
-Add above it:
-
-```
-# for the west.yml workspace unset a ZEPHYR_BASE left over from another workspace
-```
+The criterion of line 6 ends in a passing `tools/check.sh --quick` with no gap.
+That part is the Line 3 walk above, which has no summary line at this commit.
