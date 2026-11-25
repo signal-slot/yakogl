@@ -16,8 +16,10 @@ the board layer's `stm32mp2/app.conf` for the DK, the board layer's
 for the Verdin iMX95, `../common/verdin_imx95.cmake`). The options of each GPU are in
 their own menu of `Kconfig`. Every case reads its pixels back and prints
 `gl_test: case N <name>: PASS/FAIL`; a run ends with
-`gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
-every case. Current results are in `tools/cts/STATUS.md`.
+`gl_test: all: N of M cases failed` (the STM32MP257F-DK's one-case image
+prints it too, as `gl_test: all: <0|1> of 1 cases failed ...`; see its
+section below). The header comment of `gl_test.c` lists every case. Current
+results are in `tools/cts/STATUS.md`.
 
 ```sh
 # once per checkout: embed the board's DDK firmware (TI/Img property, never
@@ -168,6 +170,25 @@ Kconfig (`Kconfig`, the STM32MP257F-DK menu):
   (`gc_gl_triangle`, `docs/notes/pre-study-stm32mp257f-dk.md` row P7). 2 adds
   case 2 (texture), and so on; more than one case runs on one context as a
   list.
+- `GL_TEST_MP2_CASES` (default ""): an explicit comma list of case numbers
+  (`"1,2,3"`, at most 64), one shard of the regression set: it overrides
+  `GL_TEST_MP2_CASE` and `GL_TEST_MP2_SET_HEAD`, one number runs that case
+  alone and more are walked on one context.
+  `tools/cts/mp2-gltest-shards.py` writes one `shard-NNNN.conf` fragment
+  with it per shard (build with `-DEXTRA_CONF_FILE=<out>/shard-NNNN.conf`).
+  Anything but a comma-separated list of decimal case numbers makes the
+  image print `gl_test: FAIL: CONFIG_GL_TEST_MP2_CASES is not a list of
+  cases: <value>` and run nothing. Empty: as before.
+
+A one-case run (`GL_TEST_MP2_CASE` other than 7, a `SET_HEAD` of one case,
+or a one-number `GL_TEST_MP2_CASES`) has no set tally of its own, so the
+image prints the runner's line for it, the same fields as its `all_line`:
+`gl_test: all: <0|1> of 1 cases failed (<0|1> passed; 0 timed out; first
+failure case <N|-1> at index <0|-1>; second failure case -1; <0|1> skipped,
+first skip case <N|-1>); precompiled hits H, compiler runs R`. 0 failed is
+a pass, 1 a failure; a case the image skips reads as 0 of 1 failed with 1
+skipped. `tools/probes/stm32mp257f_dk/verdict/dk_verdict.py` reads the
+verdict from this line.
 
 The console has every case's line and `gl_test: all:`; the record is the
 `yk-record:` line on USART2, kind CASE as on the i.MX8MP: one case gives
