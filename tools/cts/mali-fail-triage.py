@@ -20,8 +20,10 @@ table a draft issue (title and body) for each cause marked NEW. A case has
 exactly one cause, the first that applies:
 
   1. a back end refusal: "refused <name>" in the detail, a MaliError or
-     src/mali message in the detail, or first_refused= / "refused <name>" of
-     the chunk's exit line. Row "refused <name>".
+     src/mali message in the detail, or the case's own line of the slice's
+     refusals.tsv. Only a slice without a refusals.tsv falls back to
+     first_refused= / "refused <name>" of the chunk's exit line (which marks
+     every non-Pass case of a refusing chunk). Row "refused <name>".
   2. a fragment loop of shaders.loops with a run-time bound in a hang, fault
      or crash chunk, or in a chunk whose kernel lines show a job timeout or a
      fault: the hang-risk of the forecast note's section 3.
@@ -183,6 +185,18 @@ def refusal(detail, exit_line):
     return None
 
 
+def refusal_text(text):
+    """The refusal of a refusals.tsv line: a back end message, a name, or the text."""
+    m = MSG_RE.search(text)
+    if m:
+        return "message", m.group(1).strip()
+    m = tally.REFUSED.search(re.sub(r"refused this\b", "", text))
+    if m:
+        return "name", m.group(1)
+    m = re.search(r"Mali\((.*)\)\s*$", text)
+    return "message", tally.normalize(m.group(1) if m else text)
+
+
 def group_of(case):
     parts = case.split(".")
     if parts and parts[0].startswith("dEQP-"):
@@ -291,6 +305,8 @@ def triage(slices, fc):
     for s in ordered:
         chunk_rows = chunk_of_results(s)
         km = {}
+        if s["refusals"] is not None:
+            s = dict(s, refusals={f[0]: f[1] for _n, f, _w in s["refusals"]})
         for i, (_ln, f, _w) in enumerate(s["results"]):
             if i in superseded[s["name"]] or f[1] == "Pass":
                 continue
@@ -302,7 +318,13 @@ def triage(slices, fc):
                 km[row[1]] = chunk_kmsg(s, row[1], row)
             r, noisy = km.get(row[1], (None, False)) if row else (None, False)
             first = r["first"] if r and r["first"] != "-" else ""
-            ref = refusal(detail, exit_line)
+            if s["refusals"] is not None:
+                rtext = s["refusals"].get(case)
+                ref = refusal(detail, "")
+                if ref is None and rtext is not None:
+                    ref = refusal_text(rtext)
+            else:
+                ref = refusal(detail, exit_line)
             if ref:
                 kind, text = ref
                 if kind == "name":
