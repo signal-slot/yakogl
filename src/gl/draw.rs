@@ -787,8 +787,8 @@ fn texture_fixed_depth(t: &GlTexture) -> bool {
 /// [`GlesTextureBind::base_level`] of texture `t`: the effective
 /// GL_TEXTURE_BASE_LEVEL (Mesa st's first_level). An immutable texture
 /// clamps it to its last level; a mutable one uses it when the texture has
-/// an image at that level and it is at most 15, else 0 (completeness of that
-/// case is decided elsewhere). Only carried: no completeness rule reads it.
+/// an image at that level and it is at most 15, else 0 (that texture is
+/// incomplete: [`incomplete_reason`], which starts at the same base level).
 pub(crate) fn bind_base_level(t: &GlTexture) -> u8 {
     let base = t.base_level.max(0);
     let v = if t.immutable && t.immutable_levels > 0 {
@@ -3621,39 +3621,69 @@ fn min_filter_uses_mipmaps(f: GLenum) -> bool {
 /// the texture. Saying which rule was broken, once, turns that into a one-line
 /// answer. (It is what the i.MX8MP's case 20 needed, and it will be what the
 /// next one needs.)
-/// The levels a mipmap filter needs, from level 0 on. ES 3.0 3.8.13: the
-/// base level up to q = min(p, GL_TEXTURE_MAX_LEVEL), p the last level of
-/// the base image's chain; for an immutable texture no further than its last
-/// level (3.8.4, "levels - 1" clamps the maximum level). ES 2.0 3.7.10 has no
-/// GL_TEXTURE_MAX_LEVEL: the whole chain. The base level is level 0 here:
-/// the draw does not apply GL_TEXTURE_BASE_LEVEL (`GlTexture::base_level`).
+/// The levels completeness looks at, as (base, end): the base level, and
+/// one past the last level q a mipmap filter needs (`end <= base` when that
+/// range is empty). `None` when the base level cannot hold an image.
+///
+/// ES 3.0 3.8.13: the base level GL_TEXTURE_BASE_LEVEL up to
+/// q = min(p, GL_TEXTURE_MAX_LEVEL), p the last level of the base image's
+/// chain (the same level whichever level is the base: each level halves the
+/// one before). An immutable texture clamps both (3.8.4): the base level to
+/// [0, levels - 1] and the maximum level to [base, levels - 1], so its range
+/// is never empty. A mutable texture clamps nothing: a base level past the
+/// chain has no image, and GL_TEXTURE_MAX_LEVEL below the base level leaves
+/// a mipmap filter no level (incomplete), while NEAREST and LINEAR read the
+/// base level alone (as Mesa's _mesa_test_texobj_completeness: only its
+/// mipmap branch looks at the maximum level). The base level is
+/// [`bind_base_level`]'s wherever the texture is complete.
+///
+/// ES 2.0 3.7.10 has neither parameter: level 0 and the whole chain.
 ///
 /// dEQP-GLES3 texture.specification samples every texture it makes with
 /// NEAREST_MIPMAP_NEAREST and GL_TEXTURE_MAX_LEVEL at its last level; with
 /// the whole chain required, every one-level texture (teximage2d_pbo,
 /// texsubimage2d_pbo, the *_unpack_params and *_align groups) and every
 /// short glTexStorage2D chain was incomplete and read (0,0,0,1).
-fn mip_levels_needed(t: &GlTexture) -> u32 {
+fn mip_levels_needed(t: &GlTexture) -> Option<(u32, u32)> {
     let p = u32::from(super::context::gl_mip_levels(t.width, t.height).min(15));
     if crate::REPORT_ES2 {
-        return p;
+        return Some((0, p));
     }
-    let mut q = p.min(u32::try_from(t.max_level_set).unwrap_or(0).saturating_add(1));
+    let max = u32::try_from(t.max_level_set).unwrap_or(0);
     if t.immutable && t.immutable_levels > 0 {
-        q = q.min(u32::from(t.immutable_levels));
+        let last = u32::from(t.immutable_levels) - 1;
+        let base = u32::try_from(t.base_level).unwrap_or(0).min(last);
+        /* p stays the bound it was, but never below the base level, which
+         * an immutable texture always has */
+        let q = max.clamp(base, last).min(p.max(1) - 1).max(base);
+        return Some((base, q + 1));
     }
-    q.max(1)
+    let base = u32::try_from(t.base_level).ok().filter(|&b| b < 16)?;
+    Some((base, p.min(max.saturating_add(1))))
 }
 
 fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
     let mips = min_filter_uses_mipmaps(t.min_filter);
-    let needed = mip_levels_needed(t);
+    let Some((base, end)) = mip_levels_needed(t) else {
+        return Some("the base level (GL_TEXTURE_BASE_LEVEL) has no image");
+    };
 
-    if t.target == GL_TEXTURE_CUBE_MAP && t.faces_set != 0x3f {
-        return Some("cube map without all six faces");
+    /* a cube map's faces at the base level: `faces_set` is level 0's record,
+     * `level_faces` the other levels' */
+    let base_faces = if base == 0 { t.faces_set } else { t.level_faces.get(base as usize).copied().unwrap_or(0) };
+    if t.target == GL_TEXTURE_CUBE_MAP && base_faces != 0x3f {
+        return Some(if base == 0 {
+            "cube map without all six faces"
+        } else {
+            "cube map without all six faces at the base level (GL_TEXTURE_BASE_LEVEL)"
+        });
     }
-    if t.level_defined & 1 == 0 || t.level_bad & 1 != 0 {
-        return Some("level 0 has no image, or one with a zero side");
+    if (t.level_defined >> base) & 1 == 0 || (t.level_bad >> base) & 1 != 0 {
+        return Some(if base == 0 {
+            "level 0 has no image, or one with a zero side"
+        } else {
+            "the base level (GL_TEXTURE_BASE_LEVEL) has no image, or one that does not fit the chain"
+        });
     }
     /* ES 3.0 3.8.13: an integer (or 32-bit float) texture is complete only
      * with nearest filtering */
@@ -3662,29 +3692,35 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
             return Some("an integer or 32-bit float texture filtered by anything but NEAREST (ES 3.0 3.8.13)");
         }
     }
-    if mips && u32::from(t.levels) < u32::from(t.chain_levels).min(needed) {
+    if mips && end <= base {
+        return Some("a mipmap min filter, but GL_TEXTURE_MAX_LEVEL is below GL_TEXTURE_BASE_LEVEL");
+    }
+    if mips && u32::from(t.levels) < u32::from(t.chain_levels).min(end) {
         return Some("a mipmap min filter, but fewer levels uploaded than the chain needs");
     }
     /* ES 2.0 3.7.10 / ES 3.0 3.8.13: with a mipmap filter every level of
-     * the chain must have an image, of the chain's size and level 0's
-     * format. `levels` is the highest level plus one and cannot see a hole
-     * (dEQP texture.completeness.2d.missing_level_1) or a level of another
-     * format (format_mismatch_*); the per-level record can. */
+     * the chain from the base level must have an image, of the chain's size
+     * and level 0's format. `levels` is the highest level plus one and
+     * cannot see a hole (dEQP texture.completeness.2d.missing_level_1) or a
+     * level of another format (format_mismatch_*); the per-level record
+     * can. Levels below the base level are not looked at. */
     if mips {
         /* GL's chain, not the store's: where the backend keeps one level of
          * a NPOT image (a PowerVR NPOT cube), GL still wants its whole chain, which
          * glGenerateMipmap, glTexStorage2D or the application's own levels
          * record as present without holding them */
-        let chain = ((1u32 << needed) - 1) as u16;
+        let chain = (((1u32 << end) - 1) & !((1u32 << base) - 1)) as u16;
         if t.level_defined & chain != chain {
             return Some("a mipmap min filter, but a level of the chain has no image");
         }
         if t.level_bad & chain != 0 {
             return Some("a mipmap min filter, but a level of the chain has another size or format");
         }
-        /* a cube map's level is complete only when all six faces hold it */
-        let levels = (needed as usize).min(t.level_faces.len());
-        if t.target == GL_TEXTURE_CUBE_MAP && t.level_faces[1..levels.max(1)].iter().any(|&f| f != 0x3f) {
+        /* a cube map's level is complete only when all six faces hold it
+         * (the base level's faces were looked at above) */
+        let levels = (end as usize).min(t.level_faces.len());
+        let first = (base as usize + 1).min(levels);
+        if t.target == GL_TEXTURE_CUBE_MAP && t.level_faces[first..levels].iter().any(|&f| f != 0x3f) {
             return Some("a mipmap min filter, but a cube map face lacks a level of the chain, or has one of another size or format");
         }
     }

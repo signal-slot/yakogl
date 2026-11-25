@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # GLES 3.0 texture completeness with GL_TEXTURE_BASE_LEVEL and GL_TEXTURE_MAX_LEVEL
 
-The rules the planned `basecompl` change implements in `src/gl/draw.rs`,
+The rules the `basecompl` change implements in `src/gl/draw.rs`,
 with where each comes from. Spec is OpenGL ES 3.0.6, 3.8.13 "Texture
 Completeness" and 3.8.10 "Texture Minification" (the mipmapping rules, with
 the level-of-detail clamps to the base and max levels). Mesa is 26.2.1,
@@ -15,17 +15,23 @@ vendored); check the function names against the 26.2.1 tree before relying
 on a detail. Line numbers
 drift; the names are the address.
 
-## What the tip does today
+## What `src/gl/draw.rs` does
 
-`src/gl/draw.rs` ignores `GL_TEXTURE_BASE_LEVEL` in its completeness check.
-`incomplete_reason` (`draw.rs:3630`) tests level 0: `level_defined & 1 == 0`
-(`draw.rs:3637`); the chain it demands under a mipmap filter is
-`(1 << needed) - 1` from bit 0 (`draw.rs:3661`) and a cube's faces are
-checked from level 1 up (`draw.rs:3669`); `mip_levels_needed`
-(`draw.rs:3618`) counts from level 0 and says so in its comment, "the base
-level is level 0 here: the draw does not apply GL_TEXTURE_BASE_LEVEL
-(`GlTexture::base_level`)". The field exists (`src/gl/context.rs:534`) and
-is only read by the native-volume and transform-feedback code.
+Before `basecompl`, `incomplete_reason` tested level 0 whatever
+`GL_TEXTURE_BASE_LEVEL` was: `level_defined & 1`, the chain `(1 << needed) - 1`
+from bit 0 under a mipmap filter, a cube's faces from level 1 up, and
+`mip_levels_needed` counted from level 0.
+
+Since `basecompl` they follow the rules below. `mip_levels_needed` returns
+the base level and one past q (nothing when a mutable texture's base level
+cannot hold an image); `incomplete_reason` tests bits base..q of
+`level_defined` and `level_bad`, and a cube's faces at the base level
+(`faces_set` for level 0, `level_faces` above it) and from base + 1 to q.
+ES 2.0 reporting (`REPORT_ES2`) keeps level 0 and the whole chain. p is
+taken from the width and height (a 3D texture's depth is not counted, as
+before). `GlesTextureBind::mip_levels` stays the count from level 0, and
+`bind_base_level` gives 0 exactly where a mutable texture's base level has
+no image, which is where the texture is now incomplete.
 
 ## The rules
 
