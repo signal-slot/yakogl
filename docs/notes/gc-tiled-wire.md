@@ -619,6 +619,13 @@ agree with `layout.rs`. It does not show what the hardware does.
 - **Gate**: gt-tiled-probe (iii) shows a TS clear and resolve landing at the
   back end's addresses with the MMU off. Mesa never runs that configuration
   (`gc-tiled-targets.md`, "Risks").
+- **Gate answer (2026-11-25): stop, unanswered.** The probe session at
+  `bd687f62` (item x2-ts-probe-session; `gc-ts-probe.md`, "Result") made no
+  jump: `tools/board.sh x2 run` refused arm 0 (`SEL=0x10d0`) at its readiness
+  check, `rc=3`, "something is running (containers 1)", no `verdict=` line, no
+  record words. Arm 0 gave no outcome, so neither "go" (`YES`) nor "stays
+  off" (`IGNORED`, `NO_WRITE`, `FILL_MISS`, `HANG`) applies. W7 is not wired
+  until a session gives arm 0's page.
 - **What**: every W4 shadow gets a TS buffer of `ts::ts_bytes(w * h * 4)`,
   aligned to `0x100` inside the shadow's allocation, after the pixels. The
   shadow's draws then program:
@@ -649,6 +656,23 @@ agree with `layout.rs`. It does not show what the hardware does.
 
 ### W8. Fast colour clear of shadow targets, and the TS-sourced resolve (about 2 h)
 
+- **Gate answer (2026-11-25): stop, unanswered**, as W7 (`gc-ts-probe.md`,
+  "Result": arm 0 refused at readiness, `rc=3`, no record). W8 needs arm 0
+  `YES` (the TS fill lands and the TS-sourced resolve honours the clear code)
+  and, for its `AUTO_DISABLE` words, arm 1; neither ran.
+- **What it saves: bytes, not RS jobs.** At the tip a clear is already an RS
+  fill (`rs_clear.rs`, plan #328), not a quad. `tests/gc_scene_kicks_tiled.rs`
+  pins "RS other" (fills and linear copies) at **9, 3 and 4** a frame for
+  terrain, shadow and refract, knob off and on alike. W8 turns the fill of a
+  W4 shadow's colour into a fill of its tile status: still **one RS job**,
+  writing 7 680 bytes (800x600x4 / 128 B tiles x 4 bit, `0x100`-aligned)
+  instead of **1.92 MB**. Terrain's pass is the only W4 shadow in the three
+  scenes, so W8 as wired removes 1.92 MB a frame from terrain, 0.24 to 0.96 ms
+  at the assumed 2 to 8 GB/s RS rate. The TS-sourced resolve skips reading
+  cleared tiles: 0 to 0.96 ms more. Total **0.24 to 1.9 ms**. Shadow and
+  refract: 0 bytes, 0 ms (their targets are textures). Source:
+  `gc-slow-host-counts.md`, "Predicted effect of W7 to W9". No RS job count
+  in any scene moves.
 - **What**: in `record` (`backend.rs:3097`), a colour clear of a shadow
   target that is full, unscissored and has every channel
   (`clear_components == 0xf`) becomes:
@@ -705,11 +729,19 @@ agree with `layout.rs`. It does not show what the hardware does.
     is the clear code reads the clear value), gives the clear colour where the
     draw did not cover, and the drawn pixels where it did;
   - a scissored clear keeps the quad.
-- **Board check**: terrain's ms a frame (a W4 shadow's 1.92 MB colour fill,
-  0.24 to 1.9 ms, `gc-slow-host-counts.md`; gl_test's clear cases).
+- **Board check**: terrain's ms a frame (a W4 shadow's 1.92 MB colour fill
+  shrunk to a 7 680-byte TS fill in the same RS job, 0.24 to 1.9 ms,
+  `gc-slow-host-counts.md`; gl_test's clear cases). The RS job count stays;
+  the bytes-written page falls by 1.92 MB.
 
 ### W9. Depth TS and fast depth clear for PE-private surfaces (about 2 h)
 
+- **Gate answer (2026-11-25): stop, unanswered.** W9 comes after W8, whose
+  gate (probe arm 0) has no outcome (`gc-ts-probe.md`, "Result": refused at
+  readiness, `rc=3`). Even an arm 0 `YES` would not cover depth: the probe has
+  no depth-TS arm, so W9's own board check stays. As with W8, it saves bytes,
+  not RS jobs: terrain's pass's depth fill, 1.92 MB, becomes a 7 680-byte TS
+  fill in the same job (0.24 to 0.96 ms). Shadow and refract get 0 without W12.
 - **What**: a `SuperTiled` (private) `ds_cache` surface gets a TS buffer of
   `ts::ts_bytes(stride * rows)`. A depth clear for which
   `ts::whole_word_clear` holds becomes:
@@ -898,6 +930,17 @@ agree with `layout.rs`. It does not show what the hardware does.
 - **Gate**: gt-tiled-probe (ii) dumps the D24S8 surface under SINGLE_BUFFER(2)
   with and without `SUPER_TILED`. depth-sample-design and the X2 depth-TPU
   session decide whether the CPU resolve stays at all.
+- **Gate answer (2026-11-25): stop, unanswered**, on both halves
+  (`gc-ts-probe.md`, "Result"; commit `bd687f62`, `tools/board.sh x2 run`
+  refused at readiness, `rc=3`, "something is running (containers 1)", no
+  `verdict=` line, no record words).
+  - **Does TS work with the MMU off?** Not known. Case 246 arm 0 did not run.
+  - **Which granule and order?** Arm 2 (256B granules, Mesa's `0x382`) and
+    arm 3 (super-tiled, `Drm` or `Interleaved`) did not run. Case 247 (the D24S8
+    layout under SINGLE_BUFFER(2)) is built on `origin/main`, but modes 1 and 3
+    did not run, and modes 0 and 2 are not built (the hook refuses them).
+  - So `layout::SUPER_ORDER` stays the host's assumption, W12a gets no layout
+    answer and W12b no TS answer. The CPU depth resolve stays as it is.
 - **W12a**: a depth texture's surface (not private) may be `SuperTiled` when
   its draws are shadow draws (refract's colour pass with W11), or when it has
   no colour target (shadow's depth pass, under SINGLE_BUFFER(2) with Mesa's
@@ -941,12 +984,12 @@ window goes through `gpu_idle_for_cpu`'s `finish`.
 | W4 | W2, W3 | session A (knob) | none by itself; costs three 800x600 RS copies in the host model (`gc-slow-host-counts.md`) |
 | W5 | W4, gc-early-z | session A | terrain 0.75 to 1.6 ms (`gc-terrain-overdraw.md`) |
 | W6 | session A | none | as W5 |
-| W7 | W4, gc-ts-words | gt-tiled-probe (iii) | none |
-| W8 | W7 | an X2 run | terrain 0.24 to 1.9 ms as wired, -1.3 to +3.4 ms with W10 to W12; refract 0 as wired, -1.9 to +7.7 ms with W10 to W12 (`gc-slow-host-counts.md`) |
-| W9 | W3, W8 | an X2 run | terrain's depth fill 0.24 to 0.96 ms, 0.5 to 2.9 ms with W8's colour; shadow 0.96 to 3.84 ms only with W12 (`gc-slow-host-counts.md`) |
+| W7 | W4, gc-ts-words | gt-tiled-probe (iii): **stop, unanswered** (2026-11-25, `bd687f62`: arm 0 refused at readiness, `rc=3`; `gc-ts-probe.md` "Result") | none |
+| W8 | W7 | probe arm 0 `YES`, then an X2 run: **stop, unanswered** (as W7) | RS-fill bytes, not jobs ("RS other" 9, 3, 4 a frame unchanged, `gc_scene_kicks_tiled`): terrain's 1.92 MB colour fill becomes a 7 680-byte TS fill, 0.24 to 0.96 ms, plus 0 to 0.96 ms of resolve read, 0.24 to 1.9 ms as wired; -1.3 to +3.4 ms with W10 to W12; shadow, refract 0 as wired, refract -1.9 to +7.7 ms with W10 to W12 (`gc-slow-host-counts.md`) |
+| W9 | W3, W8 | W8's gate, then an X2 run with a depth-TS check: **stop, unanswered** (as W7) | RS-fill bytes, not jobs: terrain's 1.92 MB depth fill becomes a 7 680-byte TS fill, 0.24 to 0.96 ms, 0.5 to 2.9 ms with W8's colour; shadow 0.96 to 3.84 ms only with W12 (`gc-slow-host-counts.md`) |
 | W10 | W4, tiled-copy-rs | an X2 run | terrain 4 to 6 ms (the part tiled-copy-rs has not already taken) |
 | W11a, W11b | W10, mip-one-kick | an X2 run | the chains' resolves, and texture-cache locality (unmodelled) |
-| W12a, W12b | gt-tiled-probe (ii), depth-sample-design | an X2 run | shadow and refract 30 to 150 ms, if the CPU resolve stays |
+| W12a, W12b | gt-tiled-probe (ii), depth-sample-design | gt-tiled-probe (ii) and (iii), then an X2 run: **stop, unanswered** (2026-11-25, as W7; case 247 not run) | shadow and refract 30 to 150 ms, if the CPU resolve stays |
 | W13 | W8 | an X2 run, every scene | terrain about 2 ms |
 
 Why W1 to W5 is the least risk for terrain's early depth:
@@ -1217,9 +1260,11 @@ X2 numbers are development measurements (`x2-glmark2-scenes.sh:25-27`). With
   the colour is TILED under SINGLE_BUFFER(2). Mesa emits that combination only
   for 128-bit targets. Session A answers it.
 - TS with the MMU off (gt-tiled-probe (iii)), and the compression bits Mesa's
-  shim row writes (W8, "Compression, an open point").
+  shim row writes (W8, "Compression, an open point"). The probe session of
+  2026-11-25 (`bd687f62`) made no jump: refused at readiness, a podman
+  container running on the X2 (`gc-ts-probe.md`, "Result").
 - The depth layout under SINGLE_BUFFER(2) for depth textures (gt-tiled-probe
-  (ii)), and whether the CPU resolve survives depth-sample-design.
+  (ii), case 247: not run in the same session), and whether the CPU resolve survives depth-sample-design.
 - How many of terrain's fragments early depth rejects: `gc-terrain-overdraw.md`
   models 0.019 to 0.030 of them in `make_grid`'s order, which the model finds
   already at the per-pixel floor. Session A measures it on the board.
