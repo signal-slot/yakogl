@@ -444,6 +444,35 @@ what they are, not by row number:
   itself and refuses a block that does not answer. Whether WDT0 is clocked
   and whether its timeout resets the SoC under U-Boot is not measured: the
   reads of section 3, step 3 (CLKGATE_CON(15), GLB_RST_CON, WDT0) decide it.
+Decoding the WDT0 reads (host-side, written before the board reads; the
+names are the constants of `driver/rust/src/soc/rk3588.rs`, `driver/rust/src/ip/dw_wdt.rs`
+and `driver/tools/uboot-t6/prompt-reads.py`). `prompt-reads.py` reads each
+register with `md.l <addr> <count>` and takes the first word printed:
+
+| Register (constant) | Address | Field | Value and what it means for the image |
+| --- | --- | --- | --- |
+| `CLKGATE_CON15` (prompt-reads.py), `clkgate_con(15)` (rk3588.rs: CRU_BASE 0xfd7c0000 + 0x800 + 4·15 = 0xfd7c083c) | 0xfd7c083c | bit 0, `PCLK_WDT0` (`Gate { con: 15, bit: 0 }`) | Gates are set-to-disable: 0 is open, 1 is gated. Open: WDT0's registers answer. Gated: `gate_open` writes `bit << 16` (hiword mask) to open it. |
+| same | same | bit 1, `TCLK_WDT0` (`Gate { con: 15, bit: 1 }`) | Open (0): the counter runs from xin24m (`TCLK_WDT0_HZ` 24 MHz). Gated (1): the counter does not count; `gate_open` opens it. |
+| same | same | bits 1:0 together (`wdt0_clocked`: `word & 3 == 0`) | 0: both gates open, WDT0's words are read (`WDT_CR`, `WDT_TORR`, then `COMP_PARAM_1`, `COMP_VERSION`, `COMP_TYPE`). 1, 2 or 3: a gate is closed, WDT0 is not read, and the image opens the gates itself (`yd_dw_wdt_arm`). Only an open pair (or the image's own opening) lets WDT0 count and reset. Other bits are other blocks' gates and do not matter here. |
+| `GLB_RST_CON` (prompt-reads.py) | 0xfd7c0c10 | whole word | Read raw; neither `prompt-reads.py` nor `rk3588.rs` names a bit of it. The CRU's global reset configuration decides what a WDT0 timeout resets; its bit meanings are in no source on this host (`dw_wdt.rs` header; driver/docs/nanopc-t6-mali.md, "Open"). |
+| `GLB_RST_ST` (prompt-reads.py) | 0xfd7c0c04 | whole word | Read raw; no bit is named by the code. It is the register that records what reset the SoC (driver/docs/nanopc-t6-mali.md: "`GLB_RST_ST` after a WDT0 reset says what reset the SoC"). |
+
+The code does not define which `GLB_RST_CON` bits mean "a WDT reset" or
+"first reset", nor which `GLB_RST_ST` bits record one: `rk3588.rs` has no
+constant for either register, and `prompt-reads.py` only prints them. The two
+sources do not disagree; both are silent. So no bit is decoded here. The value
+read after a WDT0 return is read against the value read at the prompt, and any
+bit meaning comes from the TRM or from that comparison, written down with its
+source when it is.
+
+Rule: "WDT0 timeout resets the SoC from U-Boot's state" counts as proven only
+when the board reads the `GLB_RST_CON` value after a WDT0 return, that is,
+after an image that ended by its own WDT0 and not by PSCI `SYSTEM_RESET`
+(the board glue's `t6: <probe> done: PSCI SYSTEM_RESET at N ms` line is the PSCI case). Armbian coming back is not that proof:
+a PSCI reset brings it back too, and a return by WDT0 with `GLB_RST_CON` not
+read stays unproven. `CLKGATE_CON(15)` reading open at the prompt is a
+different fact (WDT0 is clocked) and does not prove the reset either.
+
 - RK806 on SPI2: probing it from U-Boot writes `SYS_CFG3`. This build probes it
   by itself on every boot (`dm tree`, section 4 (c)), so the write is part of
   the state U-Boot hands over, not something a command at the prompt adds.
