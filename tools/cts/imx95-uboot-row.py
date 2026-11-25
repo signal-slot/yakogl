@@ -9,12 +9,13 @@
 <img-dir> is what tools/cts/imx95-deqp-images.sh writes: <LABEL>/zephyr/
 zephyr.bin (with zephyr/.config) and <LABEL>.built. --storage (U-Boot's
 <dev:part> of the file system the module's Linux stages to) and --stage (the
-file name, or a directory ending in / which gets <LABEL>.bin) have no
-defaults: they are the session's decision. A range is two labels with the same
-prefix and a numeric tail (T6S1R01-T6S1R12). Nothing is run: the ssh side
-prints with $VI95_SSH as the placeholder for host and credentials. The run
-bound is the lifetime (CONFIG_YAKOGL_BOARD_LIFETIME_S of the image's .config,
-else of the conf file) plus the WDOG3 period (CONFIG_YAKOGL_BOARD_ALIVE_S).
+file name for one label, or a directory ending in / which gets <LABEL>.bin;
+several labels need the directory) have no defaults: they are the session's
+decision. A range is two labels with the same prefix and a numeric tail
+(T6S1R01-T6S1R12). Nothing is run: the ssh side prints with $VI95_SSH as the
+placeholder for host and credentials. The run bound is the lifetime
+(CONFIG_YAKOGL_BOARD_LIFETIME_S of the image's .config, else of the conf
+file) plus the WDOG3 period (CONFIG_YAKOGL_BOARD_ALIVE_S).
 A row whose AArch64 header image_size (offset 16) or file exceeds the 256 MiB
 window, or that has no header, is refused (exit 1); other rows still print.
 """
@@ -124,8 +125,15 @@ def main():
     a = ap.parse_args()
     if not re.fullmatch(r"\d+:\d+", a.storage):
         sys.exit("--storage must be <dev:part>, e.g. 0:2")
+    if not a.stage or any(c.isspace() or c == "'" for c in a.stage):
+        sys.exit("--stage must be a non-empty path without whitespace or '")
+    labels = expand(a.labels)
+    if len(labels) > 1 and not a.stage.endswith("/"):
+        sys.exit("more than one label needs a --stage directory (ending in /):"
+                 " an explicit --stage file name would stage every row to"
+                 " one file")
     bad = 0
-    for l in expand(a.labels):
+    for l in labels:
         txt, err = row(a.img_dir, l, a.storage, a.stage, a.conf)
         if err:
             print("refused: " + err, file=sys.stderr)
