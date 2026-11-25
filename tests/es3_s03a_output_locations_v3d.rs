@@ -213,10 +213,13 @@ fn mat4_output_refused_with_three_draw_targets() {
     assert!(log.contains("3 draw buffers"), "{log:?}");
 }
 
-/// #1261: the 54 S03a mat4 link Fails. Holds once V3D has four draw targets
-/// (docs/notes/mrt4-v3d-pvr.md); the host stand-in shows it today.
+/// #1261: the 54 S03a mat4 link Fails. This runs with the host stand-in
+/// `HOST_DRAW_TARGETS = 4` (`context(4)`), so it passes on the host today. It
+/// shows that 4 draw targets remove the link refusal. The `#[ignore]` is
+/// dropped once V3D's real `DRAW_TARGETS` (`src/backend.rs`) is 4
+/// (docs/notes/mrt4-v3d-pvr.md).
 #[test]
-#[ignore = "V3D answers 3 draw targets until the mrt4 work (#1261, docs/notes/mrt4-v3d-pvr.md)"]
+#[ignore = "runs with the host stand-in HOST_DRAW_TARGETS = 4 and passes on the host today; drop the ignore once V3D's real DRAW_TARGETS (src/backend.rs) is 4 (#1261)"]
 fn mat4_output_links_with_four_draw_targets() {
     let _g = context(4);
     let (ok, log) = link();
