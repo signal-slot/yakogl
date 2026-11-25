@@ -1,0 +1,6 @@
+case	status	detail
+dEQP-GLES2.a.one	Pass	Pass
+dEQP-GLES2.a.two	Pass	Pass
+dEQP-GLES2.a.three	Fail	mismatch
+dEQP-GLES2.b.one	Pass	Pass
+dEQP-GLES2.b.two	NotSupported	NotSupported

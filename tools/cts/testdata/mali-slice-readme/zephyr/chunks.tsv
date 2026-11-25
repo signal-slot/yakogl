@@ -1,0 +1,3 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	T6S9R01	3	done	12	-	-	-	-	vi95_deqp: row done
+2	T6S9R02	2	done	9	-	-	-	-	vi95_deqp: row done
