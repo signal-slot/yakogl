@@ -413,6 +413,23 @@ for pr in t6_fw:$FW:t6_fw-z1fail:10 t6_submit:$SUB:t6_submit-z3-stop:17; do
 	done
 done
 
+# An image that comes back by WDT0 instead of PSCI SYSTEM_RESET prints no
+# reset line; the next boot's U-Boot banner follows its last line (synthetic,
+# built from t6_submit-uboot-pass's shape). A completed summary then a banner
+# is a PASS; a hung image (no PASS line) is a FAIL naming what is missing,
+# from where it stopped (Z4a on; Z4d on), never a pass.
+check t6_submit-uboot-wdt0-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-uboot-wdt0-pass.uart" T6_ROUTE=uboot
+check t6_submit-uboot-wdt0-hung 1 "VERDICT t6_submit FAIL (13 of $SUB)" "$((SUB - 13)) 13 0" t6_submit "$D/t6_submit-uboot-wdt0-hung.uart" T6_ROUTE=uboot
+check t6_submit-uboot-wdt0-hung-z4 1 "VERDICT t6_submit FAIL (10 of $SUB)" "$((SUB - 10)) 10 0" t6_submit "$D/t6_submit-uboot-wdt0-hung-z4.uart" T6_ROUTE=uboot
+# the same pass record on the kexec route has no WDT0 allowance
+runs=$((runs + 1))
+if bash "$V" t6_submit "$D/t6_submit-uboot-wdt0-pass.uart" >/dev/null 2>&1; then
+	echo "FAIL t6_submit-uboot-wdt0-as-kexec: passed"
+	fails=$((fails + 1))
+else
+	echo "ok   t6_submit-uboot-wdt0-as-kexec: FAIL"
+fi
+
 # t6_display (step D2): the line count is the table's, read from the pass
 # run (every line ok), not kept by hand here
 DISP=$(bash "$V" t6_display "$D/t6_display-pass.uart" | grep -c '^ok ' || true)

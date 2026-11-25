@@ -122,6 +122,25 @@ LOG=$2
 # maybe NULs or line noise around the jump and the resets.
 mapfile -t LINES < <(tr -d '\r\000' <"$LOG")
 
+# U-Boot route: an image may come back by WDT0 instead of PSCI SYSTEM_RESET,
+# which prints no reset line: the next boot's U-Boot banner follows the
+# summary. A record with no reset line whose probe "PASS" summary line is
+# followed by that banner is judged as if the reset line stood there. A hung
+# image has no PASS line and stays missing everything after where it stopped.
+if [ "$ROUTE" = uboot ] && ! printf '%s\n' "${LINES[@]}" | grep -q 'PSCI SYSTEM_RESET at'; then
+	bn=-1 pn=-1
+	pass_re='^[a-z_0-9]+:[[:space:]]PASS($|:|[[:space:]])'
+	banner_re='^(DDR[[:space:]]V[0-9]|U-Boot[[:space:]][0-9])'
+	for i in "${!LINES[@]}"; do
+		if [ "$bn" -lt 0 ] && [ "$pn" -ge 0 ] && [[ ${LINES[i]} =~ $banner_re ]]; then bn=$i; fi
+		if [ "$bn" -lt 0 ] && [[ ${LINES[i]} =~ $pass_re ]]; then pn=$i; fi
+	done
+	if [ "$bn" -ge 0 ]; then
+		if [ "$PROBE" = triangle ]; then rl='t6: board: run over: PSCI SYSTEM_RESET at 0 ms (0 feeds)'; else rl="t6: $PROBE done: PSCI SYSTEM_RESET at 0 ms (0 feeds)"; fi
+		LINES=("${LINES[@]:0:bn}" "$rl" "${LINES[@]:bn}")
+	fi
+fi
+
 # ---- the tables -------------------------------------------------------------
 TPL=()  # the templates, in order
 PFX=()  # an ERE that marks the candidate line ('' = the template's leading text)
