@@ -685,6 +685,49 @@ mid-image abort, fold the trigger back into the label's filter as the
 `b1b5b845` records have it. `tools/cts/pi4-gles3-resplit-selftest.sh` is
 its test.
 
+The rerun of #1261 uses it on the nine images that aborted at `b1b5b845`
+(S03a, S07, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c): each aborting case gets
+its own image, named by the rule above — `S03a1`, `T14a1`, `T17a1`, `TF1a1`,
+`TF1b1`, `TF2a1`, `TF2b1`, `TF2c1` — and the tree then has 122 images, not 114.
+A session builds them from the *re-split tree*, not from the 114-image one:
+
+```sh
+python3 tools/cts/pi4-gles3-resplit.py --at <sha8> tools/cts/pi4-gles3-tree.txt \
+    --refuse-file <LABEL-CASE-FILE> -o tools/cts/pi4-gles3-tree.txt.new   # or --tally <LABEL>.tally.txt...
+python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt.new
+```
+
+The tree the script writes (once reviewed and committed as
+`tools/cts/pi4-gles3-tree.txt`) is the table the session passes to
+`pi4-deqp-images.sh` in section 3, and the image count there and in
+`check-gles3-tree.py`'s last line is the script's, not this recipe's. Read the
+names and the count off the committed tree's `# image` lines before the build.
+
+T14 and T14a need more GPU memory than the default image has (the
+texture-unit cases). The table's `# image` line for each of them carries
+the marker `(with texture-2048.conf)`, and `tools/cts/deqp-tree-images.sh`
+reads that marker per image and adds `-DEXTRA_CONF_FILE=texture-2048.conf` for
+it (its header, "<table>"); the conf is
+`driver/samples/zephyr/deqp/texture-2048.conf`. A session does not pass it by
+hand; the dry run in section 3 shows it as the image's extra argument. If the
+tree's `# image T14` and `# image T14a` lines lack the marker, the dry run
+shows no extra argument for them: stop and add the marker to the tree
+(`tools/cts/pi4-full-tree.txt`'s `# image T5` line is the form) before
+building.
+
+### Before a record directory is committed
+
+Run both on the directory, from the repository root:
+
+```sh
+python3 -I tools/cts/console-redact.py tools/cts/log/<dir>
+python3 -I tools/cts/console-redact.py --check-readme tools/cts/log/<dir>
+```
+
+The first redacts the consoles in place; the second checks the README: it
+carries `commit: <40-hex sha>`, the full sha of a commit on origin/main, and
+no label appears in two directories of `tools/cts/log/`.
+
 ## 7. Reading the first run against the AM62P's
 
 The AM62P's GLES3 run (RESULTS.md 1r, `396d667a`) had 8,835 failures in 78
