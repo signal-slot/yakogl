@@ -919,11 +919,20 @@ two things for every case:
 - `sampler_with(false)` packs to those words with `Seamless Cube Map` clear
   and GL's S, T and R. That is the rule above applied to Mesa's words.
 
-No ES 2.0 drm-shim trace was made: the shim build is gone from the dependency
+No ES 2.0 drm-shim trace was made for tex-refs' 42 cases: the shim build is gone from the dependency
 cache. `MESA_GLES_VERSION_OVERRIDE=2.0` on `pan_tex_ref.sh`'s draws should
 make one, and the second check would then compare against its words
 directly. In a `report-es2` build, `a_cube_map_s_texture_is_the_board_s` names
-the same difference against the board's ES 3 dump.
+the same difference against the board's ES 3 dump. cube-ref (plan #406) later
+made ES 2.0 traces of three of the REPEAT shapes, and they hold the words of
+this rule (section (l)).
+
+Mesa's dEQP-GLES2 context on panfrost is an ES 3.x context (Mesa computes the
+version from the driver's capabilities, `M:mesa/main/version.c:583-584`), so
+Mesa itself never emits the ES 2.0 sampler on the G610 unless
+`MESA_GLES_VERSION_OVERRIDE=2.0` is set. Our ES 2.0 sampler is checked
+against Mesa's words under that override, not against a Mesa run that passes
+dEQP-GLES2.
 
 **The shader words do not change.** Mesa's vertex program for these cases
 (`vcube.pan_shc.disasm`, `vs varying`) is the cube sequence of (b): `CUBEFACE1`,
@@ -1050,3 +1059,106 @@ Tests:
   build, where the two states get the remapped program and every other
   state gets the plain one. Without `report-es2`,
   `no_remap_outside_an_es2_build` checks that they keep the plain program.
+
+## (l) A vertex cube near a face edge with REPEAT, and texturecubelod (#7489)
+
+Plan #406, docs/es2-cts-failures.md M.1 rows 5 and 11. Four cases still draw
+wrong pixels with no refusal:
+
+- `texture.vertex.cube.filtering.linear_mipmap_linear_{linear,nearest}_repeat`
+  and `texture.vertex.cube.wrap.repeat_repeat`: max difference 18 against a
+  threshold of 16.
+- `shaders.texture_functions.vertex.texturecubelod`.
+
+**Not the descriptors.** cube-ref's drm-shim references
+(`tools/mali/testdata/vs_cube_edge*`, `cube_lod*`, made by
+`vs_cube_edge_ref.sh`) hold Mesa 26.2.1's words in its ES 3 context and under
+`MESA_GLES_VERSION_OVERRIDE=2.0`. Our words match them:
+
+- The sampler matches word for word in both contexts.
+- The texture descriptor matches field for field, except for two choices that
+  are ours by design: the storage is linear (`Texel interleave` clear, where
+  Mesa's planes are AFBC), and a GL_RGB map is RGBA8 read RGB1.
+- The planes are in Mesa's face-major, level-minor order and have Mesa's
+  extents.
+
+Two tests check this:
+
+- `mali::frame_tex_tests::vertex_cube_edge_and_cube_lod_words_are_mesa_s_in_both_contexts`
+  checks the words from the back end.
+- `tests/mali_vs_cube_edge_gl.rs` (vscube-pin) checks the same words through
+  the GL core's draw.
+
+**Not the shader.** The vertex programs match Mesa's word for word:
+`CUBEFACE1`, `CUBEFACE2_V9`, `CUBE_SSEL`, `CUBE_TSEL`, `FRCP`, `FMA`, `MUX`,
+then `TEX_SINGLE.cube.explicit` with the level clamped to 8.8 (item
+cube-shaderc-text). No address or upload difference was found either (item
+cube-lod-inv).
+
+**Not the sampler bits.** cube-seam-probe drew the 47 vertex cube cases on
+the board at a6d27033, twice, with the same result both times:
+
+| Variant | REPEAT trilinear (3) | CLAMP/MIRROR trilinear (8) | texturecubelod |
+|---|---|---|---|
+| Unpatched (`report-es2` sampler: not seamless, GL's wraps) | Fail, 18 | Pass | Fail, 6.38 |
+| `Seamless Cube Map` set | Pass | Fail, 19 | Fail, 105.9 |
+| Wrap R clamped | Fail, 18 | Pass | Fail, 6.38 |
+
+Neither bit moves the result the right way. Do not set Seamless Cube Map in
+the ES 2.0 build, and do not change wrap R.
+
+**The cause: the hardware does not wrap inside a face.** dEQP-GLES2 judges a
+context without `GL_MAJOR_VERSION` against the non-seamless reference
+(`es2fVertexTextureTests.cpp:1154`). That reference treats the selected face
+as an independent 2D image whose wrap modes apply inside the face (ES 2.0
+3.7.5; `tcuTexture.cpp` samples the one face with the sampler's wraps).
+
+On a cube that is not seamless, the Mali texture unit does not wrap a LINEAR
+tap across the face edge. A host model in which the unit reads the edge
+texel instead (cube-inv; 63x63 grid, 32x32 cube, level 0.1926) reproduces the
+board's result on all 12 modelled cases:
+
+- Level 0 has no visible tap across an edge.
+- At level 1, a tap crosses the edge with weight 0.246, and level 1 carries
+  19% of the trilinear blend.
+- With one wrapped axis, the error is 13 and the case passes. With two wrapped
+  axes at the face corner, the error is 18 and the case fails.
+
+`texturecubelod` (REPEAT, LINEAR_MIPMAP_NEAREST, 256x256, level -1 to 9, a
+coordinate 0.005 from the edge) crosses the edge from level 2 up. It was not
+modelled, so the same cause is an inference here. Its response to seamless
+filtering is different from the other three cases (6.38 rises to 105.9), so
+its row is counted on its own until a board run of the fix shows it.
+
+The model cannot tell "clamps to the edge texel" from "reads the neighbouring
+face". Both fit, and the fix is the same for either.
+
+**The fix: read the cube as a six-layer 2D array.** The V3D does this for the
+same dEQP rule (`docs/v3d-noseamless-cube.md`, `LodKey::cube_noseam`). The
+unit wraps a 2D array's layer natively, and the passing
+`texture.vertex.2d.*repeat*` cases already exercise that. The fix has three
+parts, and none of them works alone:
+
+1. src/shaderc (plan #400): `online::backend::sensitivity_of` reports
+   `cube_noseam` for the Mali's cube bindings in a `report-es2` build.
+   `src/shaderc/online/mali` compiles a keyed variant: the same face and
+   coordinate sequence, then a 2D-array `TEX_SINGLE` whose layer is the face
+   index, in place of the `MUX` and the `.cube` look-up. This needs a Mesa
+   reference for a vertex `sampler2DArray` look-up with an explicit level.
+2. src/gl (plan #397): the stage key reaches the back end with the draw.
+   `stage_lod_key` in `src/gl/draw.rs` selects only the program variant today.
+3. src/mali: `SampledTexture` gets a flag (for example `cube_layers`), which
+   `stage_texture` (src/mali/backend.rs) sets for a binding keyed
+   `cube_noseam`. With the flag set:
+   - `is_cube()` is false.
+   - `texture()` writes `Dimension = 2D` and `Array size = 6`. The 6 x levels
+     planes stay as they are, already layer-major as a 2D array's are.
+   - `sampler_with` writes GL's S, T and R with `Seamless Cube Map` set, as
+     for any texture that is not a cube.
+
+   The flag is added together with parts 1 and 2. Without them nothing would
+   set it.
+
+A build without `report-es2` is unchanged by all three, so the gate's byte
+comparisons and the other back ends' output do not move. When the fix lands,
+the pin above changes with it for the `es2` references.
