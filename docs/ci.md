@@ -185,8 +185,12 @@ their largest material shaders.
 
 `tools/check.sh --changed` (the scope map) does not help a shared-layer
 change: `src/gl/draw.rs`, `src/shaderc/online/*` and `tools/check.sh`
-select all 134 rows ("scopes: all"); `src/vivante/*` selects 38; a document
-selects 2.
+select every row ("scopes: all"); `src/vivante/*` selects a subset; a
+document selects 2. Plan sizes at `ab919063` (`YAKOGL_CHECK_PLAN=1
+tools/check.sh <args> | grep -c '^plan'`, nothing built, 4-core host): the
+full plan lists 540 rows, `--quick` 480, and `--no-clippy --changed HEAD`
+with a `src/gl` change 501 (plus 40 clippy rows left to the nightly). The
+counts move with every new row; re-measure them rather than trust these.
 
 ## 2. The four causes
 
@@ -571,7 +575,7 @@ gate needs about 220 GB free without pruning (walk-fit, disk-map);
 
 ## 5. Steps, in order
 
-1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;
+1. `gate.yml`: a pull request runs `tools/check.sh --no-clippy --changed <merge-base>`;
    the nightly run on main runs every row. (No decision needed.)
 2. `check.sh`: test binaries run concurrently inside a row, and a binary
    whose hash passed on main is skipped (3.2, 3.3). The gate's summary
