@@ -3,8 +3,9 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # HOST-ONLY measure of the dEQP-GLES2 cases the Mali online compiler refused
-# on the NanoPC-T6: every case whose refusals.tsv text in the board slices is a
-# compile refusal is run through deqp-gles2 on THIS HOST against the Mali back
+# on the NanoPC-T6: every case whose refusals.tsv text in the board slices the
+# board's extractor recorded (a compile refusal or a link refusal) is run
+# through deqp-gles2 on THIS HOST against the Mali back
 # end's library, which compiles and links every shader dEQP writes with the
 # compiler at the current tip. The .qpa keeps the shader sources and the info
 # logs; per case the first refusal is read from them, its family is named from
@@ -38,8 +39,9 @@
 #            <repo>/build/host-deqp-mali/ (reused when present); `deqp` and
 #            `lib` are its two halves alone
 #   run      the case list from the slices' refusals.tsv (the cases whose
-#            text holds "online shaderc: the code generator refused"), or
-#            every case of --cases FILE (for example tools/cts/gles2-mustpass.txt,
+#            text the board's own extractor records: "refused" or one of the
+#            library's link refusals, which lack that word; tools/cts/mali-deqp-run.sh),
+#            or every case of --cases FILE (for example tools/cts/gles2-mustpass.txt,
 #            the whole tree; the slices still give board.tsv), in
 #            fresh-process chunks as host-deqp-run.sh runs them (a chunk whose
 #            process stops early goes on in a fresh process), logs in OUT
@@ -48,11 +50,15 @@
 # Output (OUT, default $TMPDIR/deqp-host-measure-<commit>; TMPDIR else /tmp):
 #   cases.txt        the case list, in mustpass order
 #   board.tsv        case, the board's status and its refusal text (the slices)
-#   c_NNN, c_NNN.qpa, c_NNN.out, c_NNN.r<k>.qpa  the chunks and their logs
+#   c_NNN, c_NNN.qpa, c_NNN.out, c_NNN.r<k>.qpa  the chunks and their logs;
+#                    a back-end refusal has no info log: its line is the
+#                    "yakogl-mali-refusal:" one in c_NNN.out, and extract
+#                    counts it (mali-deqp-tally.py's --per-case rule)
 #   c_NNN.crashed    only after a crash: "case<TAB>exit=N" per case a process
 #                    died in; the chunk goes on with the cases after it
 #   measure.tsv      per case: board status, board family, host status, the
-#                    refusing stage, host family, shape, the host refusal text
+#                    refusing stage (vs, fs, link or the back end's line 'be'),
+#                    host family, shape, the host refusal text
 #   summary.md       HOST-ONLY: per family a table of shapes with case counts
 #                    (Fail/NotSupported by the BOARD's status), an example case
 #                    and the count by stage; the families' totals; the cases
@@ -87,10 +93,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 me=deqp-host-measure
 CTS_COMMIT=93bca01861b0e3ef3c387027a9791e6d065f900c
-REFUSED='online shaderc: the code generator refused'
 
 usage() {
-	sed -n '13,16p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n '14,17p' "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
@@ -108,7 +113,7 @@ while [ $# -gt 0 ]; do
 	--filter) filter=${2:?--filter needs a string}; shift 2 ;;
 	--cases) caselist=$(realpath "${2:?--cases needs a file}"); shift 2 ;;
 	--stage) stage=${2:?--stage needs all|build|run|extract}; shift 2 ;;
-	-h | --help) sed -n '5,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h | --help) sed -n '5,66p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "$me: unknown argument '$1'" >&2; usage ;;
 	esac
 done
@@ -408,12 +413,19 @@ run_cases() {
 		[ -f "$s/refusals.tsv" ] && [ -f "$s/results.tsv" ] ||
 			{ echo "$me: $s is not a slice (no refusals.tsv and results.tsv)" >&2; exit 1; }
 	done
-	# board.tsv: case, status, refusal text, for every case whose refusal is
-	# a compile refusal (link refusals quote the compile refusal too).
-	awk -F'\t' -v OFS='\t' -v want="$REFUSED" '
+	# board.tsv: case, status, refusal text, for every case the board's own
+	# extractor refused: an info log with 'refused' or one of the library's
+	# link refusals, which lack that word (the rule of mali-deqp-run.sh's
+	# qpa_refusal; its LINK_REFUSAL forms, inlined here and as a pattern in
+	# the extract below).
+	awk -F'\t' -v OFS='\t' '
 		FNR == 1 {next}
 		FILENAME ~ /results\.tsv$/ {st[$1] = $2; next}
-		index($2, want) {ref[$1] = $2}
+		index($2, "refused") || index($2, "is not lowered yet") ||
+		index($2, "(a back-end defect)") || index($2, "Valhall back end defect") ||
+		index($2, "Valhall: the scratch arena ran out") ||
+		index($2, "Valhall: a shader with more than 65535 uniform rows") ||
+		index($2, "not compiled by the in-process compiler") {ref[$1] = $2}
 		END {for (c in ref) print c, (c in st ? st[c] : "?"), ref[c]}' \
 		$(for s in "${slices[@]}"; do echo "$s/results.tsv" "$s/refusals.tsv"; done) | sort > "$out/board.tsv"
 	# in mustpass order; --cases: that list as it is
@@ -452,6 +464,33 @@ from collections import Counter, OrderedDict
 
 out, repo = sys.argv[1], sys.argv[2]
 REFUSED = 'online shaderc: the code generator refused'
+# The board tools' refusal rules (tools/cts/mali-deqp-run.sh qpa_refusal and
+# mali-deqp-tally.py --per-case; keep the three equal). A link refusal of the
+# library carries no word 'refused' (#11309): LINK_REFUSAL names its forms
+# after 'online shaderc: '. A back-end refusal reaches no info log at all:
+# CASE_LINE and MALI_REFUSAL read its line from the chunk's c_NNN.out.
+LINK_REFUSAL = re.compile(
+    r"\bonline shaderc: [^\n]*?(?:\bis not lowered yet\b|\(a back-end defect\)"
+    r"|\bValhall back end defect\b|\bValhall: the scratch arena ran out\b"
+    r"|\bValhall: a shader with more than 65535 uniform rows\b"
+    r"|\bnot compiled by the in-process compiler\b)")
+LOG_REFUSAL = re.compile(r"\brefused\b")
+CASE_LINE = re.compile(r"Test case '([^']+)'")
+MALI_REFUSAL = re.compile(r"yakogl-mali-refusal:\s+(-?\d+)\s*(.*\S)?")
+
+def normalize(detail):
+    """mali-deqp-tally.py's normalize (a cause without the case's own parts);
+    keep them equal."""
+    d = re.sub(r"dEQP-[A-Za-z0-9_.]+", "<case>", detail)
+    d = re.sub(r"'[^']*'|\"[^\"]*\"", "<name>", d)
+    d = re.sub(r"0x[0-9a-fA-F]+", "<hex>", d)
+    d = re.sub(r"-?\d+(?:\.\d+)?", "#", d)
+    return re.sub(r"\s+", " ", d).strip() or "-"
+
+def refused_in(text):
+    """qpa_refusal's rule for an info or link log: the library's word 'refused'
+    or one of its link forms."""
+    return bool(text) and (LOG_REFUSAL.search(text) or LINK_REFUSAL.search(text))
 
 # ---- the families: the refusal text's key, in the order of the plan ----------
 # (family, taken by plan #377?, key substring of the Mali(Valhall: ...) text)
@@ -511,13 +550,23 @@ for fam, taken, _ in FAMILIES:
     TAKEN.setdefault(fam, taken)
 
 def family_of(text):
-    """The family of a refusal text ('' when it is not a compile refusal)."""
-    if not text or REFUSED not in text:
+    """The family of a refusal text ('' when it is not a refusal): a compile
+    family below, 'link' for the library's link refusals (they name no
+    compile family) and 'other' for a refusal that names none. A back-end
+    line's reason is 'back_end', named by the caller (family_of never sees
+    it: it holds no 'online shaderc: ' text)."""
+    if not text:
         return ''
-    for fam, _, key in FAMILIES:
-        if key in text:
-            return fam
-    return 'other'
+    if REFUSED in text:
+        for fam, _, key in FAMILIES:
+            if key in text:
+                return fam
+        return 'other'
+    if LINK_REFUSAL.search(text):
+        return 'link'
+    if LOG_REFUSAL.search(text):
+        return 'other'
+    return ''
 
 def stage_of(text):
     m = re.search(r'refused this (vertex|fragment) shader', text or '')
@@ -525,11 +574,21 @@ def stage_of(text):
 
 def short(text):
     """The Mali(Valhall: ...) part, cut at 'is not lowered' (a board text
-    longer than the info log dEQP reads ends cut: same_refusal allows it)."""
+    longer than the info log dEQP reads ends cut: same_refusal allows it).
+    A link refusal ends in the case's own varying; the text groups without
+    it (mali-deqp-tally.py's refusal_cause leaves it out)."""
     m = re.search(r'Mali\(Valhall: (.*)', text or '')
     t = m.group(1) if m else (text or '')
+    t = re.sub(r" \('[^']*'\)\s*$", '', t)
     t = t.split(' is not lowered')[0].rstrip(')')
     return t.strip()
+
+def link_why(text):
+    """The reason of a link refusal, 'online shaderc: ' and the case's own
+    varying left out (the tally's 'refused, link: <why>' cause)."""
+    m = re.search(r'online shaderc: (.*)', text or '')
+    w = (m.group(1) if m else (text or '')).split('\n')[0]
+    return re.sub(r" \('[^']*'\)\s*$", '', w).strip() or 'link'
 
 def same_refusal(host, board):
     """The host's and the board's texts name the same refusal of the same
@@ -783,6 +842,26 @@ for q in sorted(f for f in os.listdir(out) if f.startswith('c_') and f.endswith(
     for i in range(1, len(parts), 2):
         cases[parts[i]] = parse_case(parts[i + 1])
 
+# the back end's refusals: 'yakogl-mali-refusal: <errno> <reason>' lines in
+# the chunks' c_NNN.out (stdout and stderr merged), each owned by the last
+# dEQP "Test case '<case>'" line before it, the case's first line: the
+# --per-case rule and patterns of mali-deqp-tally.py. A back-end refusal
+# raises no GL error dEQP logs to an info log, so without this the case reads
+# as 'no refusal on the host' (docs/es2-cts-failures.md M.1 row 17).
+beref = {}
+for q in sorted(f for f in os.listdir(out) if re.fullmatch(r'c_\d+\.out', f)):
+    cur = None
+    with open(os.path.join(out, q), errors='replace') as f:
+        for ln in f:
+            m = CASE_LINE.search(ln)
+            if m:
+                cur = m.group(1)
+                continue
+            m = MALI_REFUSAL.search(ln)
+            if m and cur is not None and cur not in beref:
+                why = (m.group(2) or 'errno').strip()
+                beref[cur] = 'errno %s' % m.group(1) if why == 'errno' else why
+
 # the cases a process died in (run_chunk's c_NNN.crashed): their own 'crash' row
 crashed = OrderedDict()
 for q in sorted(f for f in os.listdir(out) if re.fullmatch(r'c_\d+\.crashed', f)):
@@ -806,9 +885,9 @@ def first_refusal(programs):
     compiled it too (both shaders are compiled before the link), else ''."""
     for vs, fs, vl, fl, link in programs:
         for stage, log, src, other, olog in (('vs', vl, vs, fs, fl), ('fs', fl, fs, vs, vl)):
-            if REFUSED in log:
-                return stage, log, src, other, (olog if REFUSED in olog else '')
-        if REFUSED in link:
+            if refused_in(log):
+                return stage, log, src, other, (olog if refused_in(olog) else '')
+        if refused_in(link):
             st = stage_of(link)
             return st or 'link', link, (vs if st == 'vs' else fs), (fs if st == 'vs' else vs), ''
     return '', '', '', '', ''
@@ -856,20 +935,31 @@ for c in order:
         continue
     status, programs = cases[c]
     stage, text, src, other, ntext = first_refusal(programs)
-    hfam = family_of(text)
+    if not text and c in beref:
+        # the refusal raised no info log: it is the back end's line alone
+        stage, text = 'be', beref[c]
+    hfam = 'back_end' if stage == 'be' else family_of(text)
     if not text:
         rows.append((c, bst, bfam, status, '', '', '', '', ''))
-        m = RE_RESULT.search('')
-        notrep.append((c, bst, bfam, 'no compile refusal on the host (dEQP %s)' % status, short(btext)))
+        notrep.append((c, bst, bfam, 'no refusal on the host (dEQP %s)' % status, short(btext)))
         continue
-    shape = shape_of(hfam, src, text, stage, c, other) if TAKEN.get(hfam, False) else ('367' if hfam.startswith('367') else 'other')
+    if hfam == 'link':
+        shape = normalize(link_why(text))
+    elif hfam == 'back_end':
+        shape = normalize(text)
+    elif TAKEN.get(hfam, False):
+        shape = shape_of(hfam, src, text, stage, c, other)
+    else:
+        shape = '367' if hfam.startswith('367') else 'other'
     if not same_refusal(text, btext):
         notrep.append((c, bst, bfam, 'host refusal differs: %s %s' % (stage, short(text)), short(btext)))
     nfam = family_of(ntext)
     rows.append((c, bst, bfam, status, stage, hfam, shape, short(text), nfam))
-    for ext, s in (('.vert', src if stage == 'vs' else other), ('.frag', src if stage == 'fs' else other)):
-        with open(os.path.join(srcdir, c + ext), 'w') as f:
-            f.write(s if not s or s.endswith('\n') else s + '\n')
+    if stage in ('vs', 'fs'):
+        for ext, s in (('.vert', src if stage == 'vs' else other),
+                       ('.frag', src if stage == 'fs' else other)):
+            with open(os.path.join(srcdir, c + ext), 'w') as f:
+                f.write(s if not s or s.endswith('\n') else s + '\n')
     k = (hfam, shape)
     d = shapes.setdefault(k, {'cases': 0, 'Fail': 0, 'NotSupported': 0, 'other_status': 0,
                               'stages': Counter(), 'moved': 0, 'next': Counter(), 'groups': Counter(),
@@ -919,14 +1009,20 @@ with open(os.path.join(sd, 'index.tsv'), 'w') as idx:
         idx.write('%s\t%s\t%s\t%d\t%d\t%d\t%s\n' % (fam, shape, owner_of(fam, shape), d['cases'], d['Fail'], d['NotSupported'], d['example']))
 
 # summary.md
-fam_order = list(TAKEN.keys()) + ['other']
+# families the FAMILIES table does not list ('link', 'back_end', ...) come
+# after them, in first-seen order
+extra_fams = []
+for (fam, _shape) in shapes:
+    if fam not in TAKEN and fam != 'other' and fam not in extra_fams:
+        extra_fams.append(fam)
+fam_order = list(TAKEN.keys()) + extra_fams + ['other']
 tot = Counter(); totF = Counter(); totN = Counter()
 for (fam, shape), d in shapes.items():
     tot[fam] += d['cases']; totF[fam] += d['Fail']; totN[fam] += d['NotSupported']
 def fmt_counter(cnt, n=3):
     return ', '.join('%s %d' % (k, v) for k, v in cnt.most_common(n))
 with open(os.path.join(out, 'summary.md'), 'w') as f:
-    f.write('HOST-ONLY: %d cases asked, %d began on the host, %d with a compile refusal on the host, %d not reproduced.\n\n'
+    f.write('HOST-ONLY: %d cases asked, %d began on the host, %d with a refusal on the host (compile, link or back end), %d not reproduced.\n\n'
             % (len(order), sum(1 for c in order if c in cases), sum(1 for r in rows if r[5]), len(notrep)))
     f.write('| Family | Owner | Cases (HOST-ONLY) | Fail (board) | NotSupported (board) |\n|---|---|---:|---:|---:|\n')
     for fam in fam_order:
