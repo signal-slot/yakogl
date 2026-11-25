@@ -711,7 +711,8 @@ const RS_SOURCE_STRIDE_TS_MODE_SHIFT: u32 = 29;
 /// How the source surface of a TS-sourced resolve is laid out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TsSourceLayout {
-    /// `TILED`: `RS_SOURCE_STRIDE` `TILING` only (W8's shadow).
+    /// `TILED`: stride times 4 with RS_CONFIG `SOURCE_TILED`, no stride
+    /// `TILING` bit (Mesa sets it only with `SUPER_TILED_NEW`; W8's shadow).
     Tiled,
     /// `SUPER_TILED`: `TILING | SUPER_TILED_NEW` (the golden's source).
     SuperTiled,
@@ -764,16 +765,13 @@ pub fn ts_resolve(c: &TsResolve) -> Words {
     r.end();
     let super_tiled = match c.layout {
         TsSourceLayout::Tiled => 0,
-        TsSourceLayout::SuperTiled => GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW,
+        TsSourceLayout::SuperTiled => GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW,
     };
     let mut r = Coalesce::new(&mut w);
     r.emit(GC_RS_CONFIG, rs_config(c.format) | GC_RS_SOURCE_TILED | if c.swap_rb { GC_RS_SWAP_RB } else { 0 });
     r.emit(
         GC_RS_SOURCE_STRIDE,
-        (c.source_stride << 2)
-            | GC_RS_SOURCE_STRIDE_TILING
-            | ((c.source_ts_mode & 1) << RS_SOURCE_STRIDE_TS_MODE_SHIFT)
-            | super_tiled,
+        (c.source_stride << 2) | ((c.source_ts_mode & 1) << RS_SOURCE_STRIDE_TS_MODE_SHIFT) | super_tiled,
     );
     r.emit(GC_RS_DEST_STRIDE, c.dest_stride);
     r.emit(rs_pipe_source_addr(0), t.surface_addr);
