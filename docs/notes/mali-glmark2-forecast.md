@@ -62,7 +62,7 @@ causes, not the results of a session.
 | 15 | `desktop:…:effect=blur:…` | **clean** | — (`68af`, `7f17` compile) |
 | 16 | `desktop:windows=4:effect=shadow` | **clean** | — |
 | 17, 18, 19 | `buffer:…` (map, subdata, map with interleave) | **clean** | — |
-| 20 | `ideas:speed=duration` | refused | VS `51b2` `CONTROL_FLOW`; FS `1aca`, `c565` `INT_VALUE` |
+| 20 | `ideas:speed=duration` | refused | FS `1aca`, `c565` `INT_VALUE` (the vertex shaders, `51b2` included, are ok) |
 | 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST`; FS `8ee5` `FS_OPERAND` |
 | 22 | `terrain` | refused | FS `1637`, `4d26`, `c549` `ARITH`; FS `8c86`, `bbba`, `bdfd`, `e043` `TEX_MULTI` |
 | 23 | `shadow` | refused | FS `cf4b` `ARITH` |
@@ -101,13 +101,11 @@ lowering item that covers it (named in plan #367's queue, continued by plans
 | `ARITH_CONST` | a constant product in a shape Mesa's algebraic rules move or fold is not lowered yet | FS `8a64` `3fae`; VS `08a2` | 7, 21, 24 | 2 (7, 24) | `lower-constprod-rest` |
 | `ARITH` | arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | FS `cf4b` `1637` `4d26` `c549` | 22, 23 | 1 (23) | `lower-fs-arith2`; none named for `cf4b` |
 | `INT_VALUE` | an integer or boolean value is not lowered yet | FS `1aca` `c565` | 20 | 0 | `lower-ideas` |
-| `CONTROL_FLOW` | control flow (if, a loop, a return before the end) is not lowered yet | VS `51b2` | 20 | 0 | `lower-ideas` |
 | `FS_OPERAND` | a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | FS `8ee5` | 21 | 0 | none queued |
 | `FRAGCOORD_FP16` | fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet | FS `849c` | 29 | 1 | `lower-mploop` |
 | `LOOP_FP16` | a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | FS `3678` | 32 | 1 | `lower-mploop` |
 
-Three scenes need more than one family: 20 needs `INT_VALUE` and
-`CONTROL_FLOW`; 21 needs `ARITH_CONST` (`08a2`) and `FS_OPERAND`; 22 needs
+Two scenes need more than one family: 21 needs `ARITH_CONST` (`08a2`) and `FS_OPERAND`; 22 needs
 `ARITH` and `TEX_MULTI`.
 
 **Order of scenes unblocked** (greedy; this is the arithmetic of the table,
@@ -122,7 +120,7 @@ not a measurement: a lowering can uncover a later refusal behind the first):
 | 4 | `ARITH_CONST` | 7, 24 | 27 |
 | 5 | `ARITH` (`cf4b`) | 23 | 28 |
 | 6 | `FRAGCOORD_FP16`, `LOOP_FP16` | 29, 32 | 30 |
-| 7 | `INT_VALUE`, `CONTROL_FLOW` | 20 | 31 |
+| 7 | `INT_VALUE` | 20 | 31 |
 | 8 | `FS_OPERAND`, `ARITH_CONST` `08a2` | 21 | 32 |
 | 9 | `ARITH`, `TEX_MULTI` | 22 (`terrain`) | 33 |
 
