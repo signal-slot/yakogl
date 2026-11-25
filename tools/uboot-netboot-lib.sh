@@ -13,6 +13,26 @@
 # byte; "install" brings an installed hook of another version to these
 # strings in one env write, bootcmd untouched.
 #
+# Per-board values the runner may set before sourcing (all optional; the
+# defaults are what the other boards use):
+#   NB_CACHE      the cache commands before "go" ("dcache off; icache off";
+#                 the Verdin iMX95's proven sequence is "dcache off; icache flush")
+#   SU            the prefix of a root command on the board ("sudo -n "; empty
+#                 where root logs in and there is no sudo: the iMX95)
+#   NB_REQUIRE_ROOT  1: need_board reads "id -u" from the board and refuses a
+#                 login that is not root when SU is empty
+#   NB_SETENV     how a fw_setenv script reaches the board: "stdin" (the
+#                 default: fw_setenv -s /dev/stdin) or "tmpfile" (the script is
+#                 piped to a file in /tmp, a tmpfs, and fw_setenv -s reads that:
+#                 /dev/stdin is not established on the iMX95). The script's
+#                 syntax is key=value lines, libubootenv's (fw_setenv 0.3.5);
+#                 u-boot-tools' "name value" form is not written
+#   FWN_FILTER    non-empty when "fw_printenv -n NAME" of an absent variable
+#                 may print "NAME=" (libubootenv) instead of nothing: the value
+#                 is filtered so that absent is always the empty string
+#   NB_CMD_MAX    the longest command line b may send over ssh, in bytes (0 or
+#                 unset: no limit). The iMX95's Dropbear resets the connection
+#                 on a very long one (8.6 kB did): a long script goes on stdin
 # The runner sets, before sourcing:
 #   NB_TAG        its name, the prefix of every message ("board.sh am62p")
 #   NB_RECORDS    where "install" saves the env, relative to the main
@@ -50,13 +70,21 @@ die() { echo "$NB_TAG: $1" >&2; exit "${2:-3}"; }
 #    why not and return.
 YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-netboot: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-netboot: cleared; run yako_${yako_src}; else echo yakogl-netboot: saveenv failed, booting Linux; fi; fi; if test -n "${yako_default}"; then run yako_dflt; fi'
 YAKO_DFLT='if test -n "${yako_default_left}"; then if test ${yako_default_left} -gt 0; then setexpr yako_default_left ${yako_default_left} - 1; if saveenv; then echo yakogl-netboot: default ${yako_default}, boots left ${yako_default_left}; setenv yako_file ${yako_default}; run yako_mmc; else echo yakogl-netboot: saveenv failed, booting Linux; fi; else echo yakogl-netboot: default used up, booting Linux; setenv yako_default; setenv yako_default_left; saveenv; fi; else echo yakogl-netboot: default ${yako_default}; setenv yako_file ${yako_default}; run yako_mmc; fi'
-YAKO_NET='setenv autoload no; setenv netretry no; setenv tftptimeout 1000; setenv tftptimeoutcountmax 5; setenv tftpblocksize 1468; setenv tftpwindowsize 8; if dhcp && tftpboot ${yako_addr} ${yako_server}:${yako_file}; then echo yakogl-netboot: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-netboot: fetch failed, booting Linux'
-YAKO_MMC="if ext4load mmc $NB_MMC \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi; echo yakogl-netboot: mmc load failed, booting Linux"
+# the cache commands before "go" (per board, see the header)
+NB_CACHE=${NB_CACHE:-dcache off; icache off}
+YAKO_NET='setenv autoload no; setenv netretry no; setenv tftptimeout 1000; setenv tftptimeoutcountmax 5; setenv tftpblocksize 1468; setenv tftpwindowsize 8; if dhcp && tftpboot ${yako_addr} ${yako_server}:${yako_file}; then echo yakogl-netboot: go ${yako_addr}; '"$NB_CACHE"'; go ${yako_addr}; fi; echo yakogl-netboot: fetch failed, booting Linux'
+YAKO_MMC="if ext4load mmc $NB_MMC \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; $NB_CACHE; go \${yako_addr}; fi; echo yakogl-netboot: mmc load failed, booting Linux"
 HOOK_PREFIX='run yako_hook; '
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes)
 # b <command>: run on the board, bounded; in --dry-run print it instead.
 b() {
+    # a command line past NB_CMD_MAX is a defect of the caller (the script goes
+    # on stdin), in --dry-run as on a board
+    if [ "${NB_CMD_MAX:-0}" -gt 0 ]; then
+        local __c="$*"
+        [ "${#__c}" -le "$NB_CMD_MAX" ] || die "internal: a ${#__c}-byte command line for ssh (limit $NB_CMD_MAX): pipe it on stdin" 2
+    fi
     if [ "$DRY" = 1 ]; then echo "DRY board\$ $*"; return 0; fi
     timeout 60 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "$@"
 }
@@ -68,7 +96,17 @@ act() {
 need_board() {
     if [ "$DRY" = 1 ]; then BOARD_HOST=${BOARD_HOST:-user@BOARD}; return; fi
     : "${BOARD_HOST:?set BOARD_HOST=user@host of the board}"
+    # no sudo prefix on this board: the login must be root
+    if [ "${NB_REQUIRE_ROOT:-0}" = 1 ] && [ -z "${SU-sudo -n }" ] && [ -z "${NB_ROOT_CHECKED:-}" ]; then
+        local uid
+        uid=$(b 'id -u' 2>/dev/null) || die "cannot run id on $BOARD_HOST (ssh key login)"
+        [ "$uid" = 0 ] || die "this board runs commands without sudo, but the login on $BOARD_HOST is uid '$uid', not root (BOARD_SU='sudo -n ' for a login that has sudo)"
+        NB_ROOT_CHECKED=1
+    fi
 }
+# fwn NAME: the remote command that prints the value of NAME and nothing when
+# it is absent (also with libubootenv, whose fw_printenv prints "NAME=")
+fwn() { echo "${SU-sudo -n }fw_printenv -n $1 2>/dev/null${FWN_FILTER:+ | sed 's/^$1=\$//'}"; }
 # env_get NAME < fw_printenv output: the value of NAME, empty when absent.
 env_get() { sed -n "s/^$1=//p"; }
 
@@ -80,7 +118,7 @@ check_install() {
     # --dry-run reads nothing: callers skip the verdict ("not read" is not "ok")
     if [ "$DRY" = 1 ]; then echo "not read (dry run)"; return; fi
     local env hook dflt net mmc addr bc prev
-    env=$(b 'sudo -n fw_printenv' 2>/dev/null) || { echo "fw_printenv failed"; return; }
+    env=$(b "${SU-sudo -n }fw_printenv" 2>/dev/null) || { echo "fw_printenv failed"; return; }
     hook=$(env_get yako_hook <<<"$env"); net=$(env_get yako_net <<<"$env")
     mmc=$(env_get yako_mmc <<<"$env"); dflt=$(env_get yako_dflt <<<"$env")
     addr=$(env_get yako_addr <<<"$env"); bc=$(env_get bootcmd <<<"$env")
@@ -96,18 +134,35 @@ check_install() {
     echo ok
 }
 # setenv_script FILE: one fw_setenv call = one env write (all or nothing).
+# FILE is key=value lines (libubootenv's script syntax; "key=" removes). The
+# exit status proves nothing on a fw_setenv that ignores a syntax it does not
+# know: callers read back (check_install, nb_env_changed).
 setenv_script() {
+    local su=${SU-sudo -n } cmd
+    if [ "${NB_SETENV:-stdin}" = tmpfile ]; then
+        cmd='f=/tmp/yakogl-setenv.$$; cat > $f && '"${su}"'fw_setenv -s $f; rc=$?; rm -f $f; exit $rc'
+    else
+        cmd="${su}fw_setenv -s /dev/stdin"
+    fi
     if [ "$DRY" = 1 ]; then
-        echo "DRY board\$ sudo -n fw_setenv -s /dev/stdin <<'EOF'"; sed 's/^/    /' "$1"; echo "    EOF"
+        echo "DRY board\$ $cmd <<'EOF'"; sed 's/^/    /' "$1"; echo "    EOF"
         return 0
     fi
-    b 'sudo -n fw_setenv -s /dev/stdin' < "$1"
+    b "$cmd" < "$1"
+}
+# nb_env_changed BEFORE: the board's environment is not the text BEFORE (a
+# fw_printenv of it). A write that returned 0 and changed nothing is a failed
+# write (a script syntax the tool ignored, a read-only boot area), not a state.
+nb_env_changed() {
+    local after
+    after=$(b "${SU-sudo -n }fw_printenv") || return 1
+    [ "$after" != "$1" ]
 }
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 nb_status() {
     need_board
-    b 'sudo -n fw_printenv bootcmd bootdelay yako_hook yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left yako_bootcmd_prev 2>&1'
+    b "${SU-sudo -n }fw_printenv bootcmd bootdelay yako_hook yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left yako_bootcmd_prev 2>&1"
     echo "install: $(check_install)"
 }
 
@@ -121,7 +176,7 @@ nb_hook_vars() {
 }
 
 nb_install() {
-    local st main bdir bak prev
+    local st main bdir bak prev before
     need_board
     st=$(check_install)
     if [ "$DRY" = 0 ]; then
@@ -129,7 +184,9 @@ nb_install() {
         if [ "${st#stale: }" != "$st" ]; then
             # bootcmd and the saved bootcmd stay as they are: only the strings change
             nb_hook_vars > "$TMP/upgrade"
+            before=$(b "${SU-sudo -n }fw_printenv") || die "cannot read the env"
             setenv_script "$TMP/upgrade" || die "fw_setenv failed; the env is as it was (one write)" 5
+            nb_env_changed "$before" || die "fw_setenv returned 0 but the environment is unchanged (it ignored the script, or wrote nothing): nothing was upgraded" 5
             prev=$(check_install)
             [ "$prev" = ok ] || die "read-back after the upgrade: $prev" 5
             echo "$NB_TAG: upgraded in place (was: ${st#stale: }); bootcmd unchanged"
@@ -143,14 +200,15 @@ nb_install() {
     bdir=${NETBOOT_BACKUP_DIR:-$main/$NB_RECORDS}
     bak=$bdir/env-before-install-$(date +%Y%m%d-%H%M%S).txt
     if [ "$DRY" = 1 ]; then
-        b 'sudo -n fw_printenv'; echo "DRY host\$ (the output goes to $bak)"
+        b "${SU-sudo -n }fw_printenv"; echo "DRY host\$ (the output goes to $bak)"
         prev='<the bootcmd read from the board>'
     else
         mkdir -p "$bdir"
         # The copy is unredacted (MACs, serial numbers): created mode 600
         # before the first byte goes in, never widened afterwards.
         install -m 600 /dev/null "$bak" || die "cannot create $bak"
-        b 'sudo -n fw_printenv' > "$bak" || die "cannot read the env"
+        b "${SU-sudo -n }fw_printenv" > "$bak" || die "cannot read the env"
+        before=$(cat "$bak")
         prev=$(env_get bootcmd < "$bak")
         [ -n "$prev" ] || die "the board's env has no bootcmd; refusing to build on nothing"
         echo "$NB_TAG: env saved to $bak ($(wc -l < "$bak") lines)"
@@ -162,6 +220,7 @@ nb_install() {
     } > "$TMP/install"
     setenv_script "$TMP/install" || die "fw_setenv failed; the env is as it was (one write)" 5
     [ "$DRY" = 1 ] && exit 0
+    nb_env_changed "$before" || die "fw_setenv returned 0 but the environment is unchanged (it ignored the script, or wrote nothing): nothing was installed" 5
     st=$(check_install)
     [ "$st" = ok ] || die "read-back after install: $st" 5
     echo "$NB_TAG: installed; bootcmd = '$HOOK_PREFIX' + the saved bootcmd"
@@ -176,7 +235,7 @@ nb_uninstall() {
         # a stale hook is still ours: bootcmd is the saved one behind our prefix
         [ "$st" = ok ] || [ "${st#stale: }" != "$st" ] ||
             die "the install is not this script's ($st); restore bootcmd by hand from the saved env"
-        prev=$(b 'sudo -n fw_printenv -n yako_bootcmd_prev') || die "cannot read yako_bootcmd_prev"
+        prev=$(b "$(fwn yako_bootcmd_prev)") || die "cannot read yako_bootcmd_prev"
     else
         prev='<yako_bootcmd_prev read from the board>'
     fi
@@ -197,9 +256,9 @@ nb_uninstall() {
 nb_disarm() {
     local v
     need_board
-    b 'sudo -n fw_setenv yako_once' || die "fw_setenv failed" 5
+    b "${SU-sudo -n }fw_setenv yako_once" || die "fw_setenv failed" 5
     if [ "$DRY" = 0 ]; then
-        v=$(b 'sudo -n fw_printenv -n yako_once 2>/dev/null')
+        v=$(b "$(fwn yako_once)")
         [ -z "$v" ] || die "yako_once is still '$v'" 5
     fi
     if [ "$DRY" = 1 ]; then echo "$NB_TAG: (dry run) nothing was written"; else echo "$NB_TAG: disarmed"; fi
