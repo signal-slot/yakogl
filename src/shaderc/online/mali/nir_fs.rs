@@ -13450,12 +13450,20 @@ fn multi_forms(f: &Fs<'_>) -> Result<(), MaliError> {
             if matches!(node(src[0]), Some(NirNode { kind: Kind::Input { .. }, .. })))
     };
     /* a colour operand: a constant, a texel, or a colour operation */
-    let colour = |v: Val| match node(v) {
+    let colour1 = |v: Val| match node(v) {
         None => matches!(v, Val::Const(_)),
         Some(NirNode { kind: Kind::Tex, .. }) => true,
         Some(NirNode { kind: Kind::Alu(Alu::Fadd | Alu::Fmul), bits: 16, src, .. }) => !conv(src[0]),
         _ => false,
     };
+    /* or the negation of a texel, a kernel's `-1.0` (effect2d's sharpen and
+     * emboss, gm2_fx2d_2: `FADD.v2f16 r3, r4^.neg, r6^.neg`, the fneg a
+     * source modifier of the sum; docs/notes/mali-tex-multi.md) */
+    let neg_texel = |v: Val| {
+        matches!(node(v), Some(NirNode { kind: Kind::Alu(Alu::Fneg), bits: 16, src, .. })
+            if matches!(node(src[0]), Some(NirNode { kind: Kind::Tex, .. })))
+    };
+    let colour = |v: Val| colour1(v) || neg_texel(v);
     for &id in &f.nir.order[..f.nir.len] {
         let nd = f.nir.nodes[id as usize];
         let read_by_tex = f.nir.uses(id).any(|(u, _)| f.nir.nodes[u as usize].kind == Kind::Tex);
@@ -13486,6 +13494,7 @@ fn multi_forms(f: &Fs<'_>) -> Result<(), MaliError> {
                 nd.bits == 16 && nd.src[..2].iter().all(|&v| colour(v))
             }
             Kind::Alu(Alu::Fadd | Alu::Fmul) => nd.bits == 16 && nd.src[..2].iter().all(|&v| colour(v)),
+            Kind::Alu(Alu::Fneg) => neg_texel(Val::Lane(id, 0)),
             _ => false,
         };
         if !ok {

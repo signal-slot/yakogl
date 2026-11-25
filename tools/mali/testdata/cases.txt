@@ -296,3 +296,10 @@ gm2_tc425_4  gm2_tc425_4.vert gm2_tc425_4.frag triangles vs.position=differs:una
 gm2_mploop_1  gm2_mploop_1.vert gm2_mploop_1.frag triangles vs.position=equal fs.fragment=differs:mediump:18:07966aa742a7
 gm2_mploop_2  gm2_mploop_2.vert gm2_mploop_2.frag triangles vs.position=equal fs.fragment=differs:mediump:41:0b7dea079e45
 gm2_mploop_3  gm2_mploop_3.vert gm2_mploop_3.frag triangles vs.position=equal fs.fragment=differs:mediump:9:97345a1c9945
+# #367 lower-nonfinite-const step 6 (effect2d): effect2d fs 3c3d and ba8e's convolution kernels, look-ups beside another
+# at the converted coordinate plus a constant pair, a kernel's -1.0 a negated texel in the sum (TEX_MULTI;
+# docs/notes/mali-tex-multi.md), drawn with --uniform-values. Our compiler is byte-equal to gm2_fx2d_1..3
+# (tests/mali_effect2d_tex.rs). pan_shc's SPIR-V path has no lower_precision (`mediump`).
+gm2_fx2d_1  gm2_fx2d_1.vert gm2_fx2d_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:0ed6c5778673
+gm2_fx2d_2  gm2_fx2d_2.vert gm2_fx2d_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:a2a53c22716d
+gm2_fx2d_3  gm2_fx2d_3.vert gm2_fx2d_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:64:53e53836e370

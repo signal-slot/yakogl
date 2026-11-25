@@ -24,7 +24,7 @@
 10 bump:bump-render=normals vs 51d0: ok
 11 bump:bump-render=height fs 77c5: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 11 bump:bump-render=height vs 270a: ok
-12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
+12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: ok
 12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; vs 4623: ok
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; fs ba8e: ok
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; vs 4623: ok
