@@ -11,8 +11,10 @@
 Replaces exactly the row of SCENE under '## Verdicts' in place; every other
 byte of the file stays. The commit cell is the first 8 hex digits (lowercase).
 Refuses (exit 1, message on stderr) an unknown scene, a commit that is not 7
-to 40 hex digits, a record path outside the full pattern, a record sha8 that
-is not a prefix of the commit, a route or verdict outside the allowed values,
+to 40 hex digits, a record path outside the full pattern (its sha8 is 8
+lowercase hex digits; it is the image's sha256 prefix from tools/board.sh, as
+on the Pi 4 note, and is not compared with the commit), a route or verdict
+outside the allowed values,
 photograph with anything but `seen without a value` and dump/both with it
 (the rules of imx8mp-glmark2-verdicts.py). --check-main also requires
 `git merge-base --is-ancestor <commit> origin/main`.
@@ -64,8 +66,6 @@ def validate(a):
     if not m:
         raise Refuse(f"record {a.record!r} does not match "
                      "records/imx8mp/YYYYMMDD-HHMM-<name>-<sha8>/")
-    if not commit.startswith(m.group(1)):
-        raise Refuse(f"record sha8 {m.group(1)} is not a prefix of commit {commit}")
     if a.route not in ROUTES:
         raise Refuse(f"route {a.route!r} not one of {', '.join(ROUTES)}")
     if a.verdict not in VERDICTS:

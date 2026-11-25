@@ -45,6 +45,15 @@ check_one "effect2d cell" "[effect2d] kernel=0,1,0;1,-4,1;0,1,0;" dump right
 if grep -q "^| \[build\] use-vbo=false | 01234567 | $R | dump | right |$" "$T/n.md"; then
   ok "row text"; else bad "row text"; fi
 
+# the record's sha8 is the image's, not the commit's (as on the Pi 4 note)
+cp "$T/n.md" "$T/before.md"
+if python3 "$FILL" --note "$T/n.md" --scene gm05 --commit d4f95c29 \
+    --record records/imx8mp/20261125-1200-gm05-texture-0a1b2c3d/ \
+    --route dump --verdict right >/dev/null 2>&1 \
+  && grep -q "| d4f95c29 | records/imx8mp/20261125-1200-gm05-texture-0a1b2c3d/ |" "$T/n.md"
+then ok "sha8 differs from commit: accepted"; else bad "sha8 differs from commit: refused"; fi
+cp "$T/before.md" "$T/n.md"
+
 # refusals: each must exit nonzero with a message, and leave the file alone
 cp "$T/n.md" "$T/before.md"
 G=(--scene gm02 --commit "$C" --record "$R" --route dump --verdict right)
@@ -66,7 +75,8 @@ refuse "commit too long" --commit "${C}0"
 refuse "record bad name" --record records/imx8mp/2026-1200-x-01234567/
 refuse "record bad dir" --record records/pi4/20261124-1200-x-01234567/
 refuse "record short sha" --record records/imx8mp/20261124-1200-x-0123456/
-refuse "record sha8 not prefix" --record records/imx8mp/20261124-1200-x-deadbeef/
+refuse "record sha8 upper case" --record records/imx8mp/20261124-1200-x-DEADBEEF/
+refuse "record sha8 not hex" --record records/imx8mp/20261124-1200-x-deadbeeg/
 refuse "bad route" --route camera
 refuse "bad verdict" --verdict fine
 refuse "verdict todo" --verdict "not yet looked at"
