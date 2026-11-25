@@ -42,6 +42,8 @@
 # Check 59 runs gles3-rerun-rows.py (the TREE_ROWS of the AM62P GLES3 tree
 # that hold a case glob or a not-pass family) on a synthetic tree, mustpass
 # list, not-pass list and rule file.
+# Check 62 runs glmark2-log-check-selftest.sh (the layout and redaction checker
+# of a glmark2 board-session log directory), its count pinned.
 set -u
 
 HERE=$(dirname "$0")
@@ -1066,6 +1068,12 @@ fi
 # differs between documents and a TSV that disagrees each fail, named. The
 # live repository is not checked here (its entries change with the Pi 4 rerun).
 gl3check 61 check-pi4-gles3-results-selftest.sh "the Pi 4 ES 3.0 entries checked against tree, mustpass and TSV, four wrong sets named"
+
+# 62: glmark2-log-check.sh on synthetic glmark2 log directories (c1: the three
+# tally/state files; c2: the redaction expression, one hit per class, matched
+# text masked in the output; usage errors exit 2). Run like checks 46-52, its
+# ok count pinned and its last line "<name>: N checks passed".
+malicheck 62 glmark2-log-check-selftest.sh 25
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
