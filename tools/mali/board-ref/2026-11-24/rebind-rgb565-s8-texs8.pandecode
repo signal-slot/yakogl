@@ -1,0 +1,4399 @@
+  00 50 01 00 00 80 48 01    MOVE d72, #0x800000015000
+  00 00 00 00 00 48 00 30    HEAP_SET d72
+  00 90 fe ff ff 7f 56 01    MOVE d86, #0x7FFFFFFE9000
+  40 01 00 00 00 00 58 02    MOVE32 r88, #0x140
+  02 00 00 00 58 56 00 19    SET_EXCEPTION_HANDLER d86, r88
+  44 00 03 00 00 4c 5e 14      LOAD_MULTIPLE r94:r95, [d76 + 68]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 ff ff 00 5e 28 15      STORE_MULTIPLE [d94], r40:r41:r42:r43:r44:r45:r46:r47:r48:r49:r50:r51:r52:r53:r54:r55
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 01 00 00 4c 2f 14      LOAD_MULTIPLE r47, [d76]
+  00 00 01 00 00 00 00 03      WAIT #1
+  02 00 00 00 00 2f 00 16      BRANCH.le r47, #2
+  1c 00 03 00 00 4c 28 14      LOAD_MULTIPLE r40:r41, [d76 + 28]
+  01 00 00 60 00 00 00 16      BRANCH.always r0, #1
+  0c 00 03 00 00 4c 28 14      LOAD_MULTIPLE r40:r41, [d76 + 12]
+  34 00 01 00 00 4c 2a 14      LOAD_MULTIPLE r42, [d76 + 52]
+  38 00 01 00 00 4c 2b 14      LOAD_MULTIPLE r43, [d76 + 56]
+  00 00 00 00 00 00 2c 01      MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02      MOVE32 r46, #0x0
+  00 00 01 00 00 00 00 03      WAIT #1
+  03 00 00 00 00 00 00 17      SET_SB_ENTRY #3, #0
+  00 00 00 00 00 00 00 07      RUN_FRAGMENT.tile_order=zorder
+  00 00 08 00 00 00 00 03      WAIT #8
+  01 00 00 00 00 2f 2f 10      ADD_IMMEDIATE32 r47, r47, #1
+  00 00 01 00 00 4c 2f 15      STORE_MULTIPLE [d76], r47
+  3c 00 03 00 00 4c 32 14      LOAD_MULTIPLE r50:r51, [d76 + 60]
+  00 00 01 00 00 00 00 03      WAIT #1
+  28 00 0f 00 00 32 34 14      LOAD_MULTIPLE r52:r53:r54:r55, [d50 + 40]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 00 00 36 34 00 0b      FINISH_FRAGMENT d54, d52, #0, #0
+  00 00 00 00 00 00 30 01      MOVE d48, #0x0
+  00 00 03 00 00 32 30 15      STORE_MULTIPLE [d50], r48:r49
+  28 00 03 00 00 32 30 15      STORE_MULTIPLE [d50 + 40], r48:r49
+  30 00 03 00 00 32 30 15      STORE_MULTIPLE [d50 + 48], r48:r49
+  00 02 00 00 00 30 00 24      FLUSH_CACHE2.nop_l2.nop_lsc.invalidate_other r48, #0, #0
+  00 00 01 00 00 00 00 03      WAIT #1
+  02 00 00 00 00 00 00 17      SET_SB_ENTRY #2, #0
+  44 00 03 00 00 4c 5e 14      LOAD_MULTIPLE r94:r95, [d76 + 68]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 ff ff 00 5e 28 14      LOAD_MULTIPLE r40:r41:r42:r43:r44:r45:r46:r47:r48:r49:r50:r51:r52:r53:r54:r55, [d94]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  e0 02 fb ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFB02E0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  c7 06 fb ff ff 7f 00 01    MOVE d0, #0x7FFFFFFB06C7
+  60 02 fb ff 00 00 08 02    MOVE32 r8, #0xFFFB0260
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  47 07 fb ff ff 7f 04 01    MOVE d4, #0x7FFFFFFB0747
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  60 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD060
+  40 d0 ff ff ff 7f 12 01    MOVE d18, #0x7FFFFFFFD040
+  00 01 fb ff ff 7f 18 01    MOVE d24, #0x7FFFFFFB0100
+  00 01 fb ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFB0100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  40 03 fb ff ff 7f 28 01    MOVE d40, #0x7FFFFFFB0340
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  7f 00 7f 00 00 00 2b 02    MOVE32 r43, #0x7F007F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  10 00 00 00 00 00 30 02    MOVE32 r48, #0x10
+  61 01 fb ff ff 7f 32 01    MOVE d50, #0x7FFFFFFB0161
+  40 01 fb ff ff 7f 34 01    MOVE d52, #0x7FFFFFFB0140
+  20 01 fb ff ff 7f 36 01    MOVE d54, #0x7FFFFFFB0120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  0c 00 00 00 00 00 27 02    MOVE32 r39, #0xC
+  08 02 04 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #40208
+  Position resources resource table @7ffffffb06c0
+      Entry 0 @7ffffffb06c0:
+        Address: 0x7ffffffb0240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffb0220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffb06d0:
+        Address: 0x7ffffffb0180
+        Contains descriptors: true
+        Size: 0x40
+          Attribute @7ffffffb0180:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGBA32F RGBA
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 16
+            Attribute stride: 16
+            Packet stride: 0
+            Divisor D: 0
+          Attribute @7ffffffb01a0:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 1
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffb06e0:
+        Address: 0x7ffffffb01c0
+        Contains descriptors: true
+        Size: 0x40
+          Buffer @7ffffffb01c0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048576
+            Address: 0x7fffffea8000
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+          Buffer @7ffffffb01e0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048512
+            Address: 0x7fffffea8040
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffb06f0:
+        Address: 0x7ffffffb0200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffb0200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffb0700:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7ffffffb0710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffb0720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Varying resources resource table @7ffffffb06c0
+      Entry 0 @7ffffffb06c0:
+        Address: 0x7ffffffb0240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffb0220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffb06d0:
+        Address: 0x7ffffffb0180
+        Contains descriptors: true
+        Size: 0x40
+          Attribute @7ffffffb0180:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGBA32F RGBA
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 16
+            Attribute stride: 16
+            Packet stride: 0
+            Divisor D: 0
+          Attribute @7ffffffb01a0:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 1
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffb06e0:
+        Address: 0x7ffffffb01c0
+        Contains descriptors: true
+        Size: 0x40
+          Buffer @7ffffffb01c0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048576
+            Address: 0x7fffffea8000
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+          Buffer @7ffffffb01e0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048512
+            Address: 0x7fffffea8040
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffb06f0:
+        Address: 0x7ffffffb0200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffb0200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffb0700:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7ffffffb0710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffb0720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Fragment resources resource table @7ffffffb0740
+      Entry 0 @7ffffffb0740:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 1 @7ffffffb0750:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 2 @7ffffffb0760:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 3 @7ffffffb0770:
+        Address: 0x7ffffffb02a0
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffb02a0:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Repeat
+            Wrap Mode T: Repeat
+            Wrap Mode S: Repeat
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffb0780:
+        Address: 0x7ffffffb0280
+        Contains descriptors: true
+        Size: 0x20
+          Texture @7ffffffb0280
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGB1
+            Width: 64
+            Height: 64
+            Swizzle: 2696 (RGB1)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd080
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3f003f00004000
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 16384
+              Pointer: 0x7ffffffe4000
+              Row stride: 256
+              Slice stride: 16384
+              Width: 64
+              Height: 64
+      Entry 5 @7ffffffb0790:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffb07a0:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+Position FAU @7ffffffb0260:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+Varying FAU @7ffffffb0260:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+  Position shader Shader @7fffffffd020:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc000
+
+Shader 0xffffb9bf5000 (GPU VA 7fffffffc000) sz 4096
+7c 7d 01 32 08 80 66 08    LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, ^r60, ^r61, index:0x0, table:0x1
+43 00 00 00 00 c3 9c 00    FRCP.f32 r3, ^r3
+c0 00 00 00 c7 c4 10 01    IADD_IMM.i32 r4, 0x0, #0xC7000000
+43 44 03 00 00 c3 a4 00    FMAX.f32 r3, ^r3, ^r4
+c0 00 00 00 47 c4 10 01    IADD_IMM.i32 r4, 0x0, #0x47000000
+43 44 02 00 00 c3 a4 00    FMIN.f32 r3, ^r3, ^r4
+40 03 c0 00 04 c0 b2 00    FMA.f32 r0, ^r0, r3, 0x0.neg
+41 03 c0 00 04 c1 b2 00    FMA.f32 r1, ^r1, r3, 0x0.neg
+42 03 c0 00 04 c2 b2 00    FMA.f32 r2, ^r2, r3, 0x0.neg
+40 80 81 00 00 c0 b2 00    FMA.f32 r0, ^r0, u0, u1
+41 82 83 00 00 c1 b2 00    FMA.f32 r1, ^r1, u2, u3
+42 84 85 00 00 c2 b2 00    FMA.f32 r2, ^r2, u4, u5
+7b 0d 00 40 04 84 5e 10    LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0
+44 00 00 b9 08 40 61 78    STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0
+
+
+
+  Varying shader Shader @7fffffffd040:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: DX
+    Vertex warp limit: Full
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc080
+
+Shader 0xffffb9bf5080 (GPU VA 7fffffffc080) sz 3968
+7c 7d 11 12 04 80 66 00    LD_ATTR_IMM.v2.f32.slot0 @r0:r1, ^r60, ^r61, index:0x1, table:0x1
+7b 0d 00 40 04 82 5e 18    LEA_BUF_IMM.slot1.wait01 @r2:r3, ^r59, table:0xD, index:0x0
+42 00 00 aa 04 40 61 78    STORE.i64.estream.slot2.end @r0:r1, ^r2, offset:0
+
+
+
+  Fragment shader Shader @7fffffffd060:
+    Type: Shader
+    Stage: Fragment
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: true
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3000
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: false
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc100
+
+Shader 0xffffb9bf5100 (GPU VA 7fffffffc100) sz 3840
+7d 00 00 12 04 80 5c 00    LD_VAR_BUF_IMM.f32.slot0.v2.src_f32.center.store @r0:r1, ^r61, index:0x0
+c0 00 18 00 20 c2 10 01    IADD_IMM.i32 r2, 0x0, #0x20001800
+c0 00 00 00 00 c3 91 08    MOV.i32.wait0 r3, 0x0
+42 20 c0 53 94 00 28 41    TEX_SINGLE.slot1.skip.reserved.16.2d.computed.wait0126 @r0:r1, @r0:r1, ^r2
+7c 01 ea 08 02 bc 7d 48    ATEST.wait @r60, ^r60, r1.h1, atest_datum.w0
+f0 00 3c b3 04 40 7f 78    BLEND.slot2.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+c0 00 00 00 00 f0 10 01    IADD_IMM.i32 r48, 0x0, #0x0
+c0 f1 00 00 10 c1 2f 00    BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+
+
+  Position Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Varying Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Fragment Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Global attribute offset: 0
+  Index count: 6
+  Instance count: 1
+  Index offset: 0
+  Vertex offset: 0
+  Instance offset: 0
+  Tiler DCD flags2: 0
+  Index array size: 12
+  Tiler Heap:
+    Type: Buffer
+    Buffer type: Tiler heap
+    Chunk size: 256 KiB
+    Partitioning: Dynamic
+    Size: 2097152
+    Base: 0x800000a00000
+    Bottom: 0x800000a00d40
+    Top: 0x800000bffb80
+  Tiler Context @7ffffffb0340:
+    Polygon List: 0xa800000bffe00
+    Hierarchy Mask: 254
+    Sample Pattern: Single-sampled
+    Sample test disable: false
+    First provoking vertex: false
+    FB Width: 128
+    FB Height: 128
+    Layer count: 1
+    Layer offset: 0
+    Heap: 0x7fffffffb000
+    Geometry buffer size: 65536
+    Geometry buffer: 0x7ffffffeb000
+    Completed top: 0x0
+    Completed bottom: 0x0
+    Private state:
+      Word0: 2
+      Word1: 0
+      Word2: 0
+      Word3: 0
+      Word4: 0
+      Word5: 0
+      Word6: 0
+      Word7: 0
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 127
+    Scissor Maximum Y: 127
+  Low depth clamp: 0.000000
+  High depth clamp: 1.000000
+  Occlusion: 0
+  Varying allocation: 16
+  Blend RT 0:
+    Load Destination: false
+    Alpha To One: false
+    Enable: true
+    sRGB: false
+    Round to FB precision: false
+    Constant: 0
+    Equation:
+      RGB:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Alpha:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Color Mask: 15
+    Internal:
+      Mode: Opaque
+      Shader:
+        PC: 970752
+      Fixed-Function:
+        Num Comps: 4
+        RT: 0
+        Conversion:
+          Format (v7): RGBA8 TB RGBA
+          Raw: false
+          Register Format: F16
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Never
+    Front stencil fail: Keep
+    Front depth fail: Keep
+    Front depth pass: Keep
+    Back compare function: Never
+    Back stencil fail: Keep
+    Back depth fail: Keep
+    Back depth pass: Keep
+    Stencil from shader: false
+    Stencil test enable: false
+    Front write mask: 0x0
+    Back write mask: 0x0
+    Front value mask: 0x0
+    Back value mask: 0x0
+    Front reference value: 0x0
+    Back reference value: 0x0
+    Shader read only Z/S: false
+    Depth cull enable: true
+    Depth clamp mode: [0, 1]
+    Depth source: Fixed function
+    Depth write enable: false
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Indices: 7ffffffb0120
+  Primitive flags
+    Draw mode: Triangles
+    Index type: UINT16
+    Point size array format: None
+    Primitive Index Enable: false
+    Primitive Index Writeback: false
+    Allow rotating primitives: true
+    Low Depth Cull: true
+    High Depth Cull: true
+    Secondary Shader: true
+    Primitive restart: false
+    Layer index enable: false
+    Scissor array enable: false
+    Position FIFO format: Basic
+    View mask: 0x0
+  DCD Flags 0
+    Allow forward pixel to kill: true
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Weak Early
+    ZS update operation: Weak Early
+    Allow primitive reorder: false
+    Overdraw alpha0: true
+    Overdraw alpha1: true
+    Clean Fragment Write: false
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: true
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+  DCD Flags 1
+    Sample mask: 65535
+    Render target mask: 0x1
+  Primitive size
+    Constant: 1.000000
+    Size Array: 0x3f800000
+  47 09 fb ff ff 7f 00 01    MOVE d0, #0x7FFFFFFB0947
+  80 08 fb ff 00 00 08 02    MOVE32 r8, #0xFFFB0880
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  e0 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD0E0
+  00 00 00 00 00 00 04 01    MOVE d4, #0x0
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  00 00 00 00 00 00 14 01    MOVE d20, #0x0
+  00 01 fb ff ff 7f 18 01    MOVE d24, #0x7FFFFFFB0100
+  00 01 fb ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFB0100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  40 03 fb ff ff 7f 28 01    MOVE d40, #0x7FFFFFFB0340
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  7f 00 7f 00 00 00 2b 02    MOVE32 r43, #0x7F007F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  00 00 00 00 00 00 30 02    MOVE32 r48, #0x0
+  e1 07 fb ff ff 7f 32 01    MOVE d50, #0x7FFFFFFB07E1
+  c0 07 fb ff ff 7f 34 01    MOVE d52, #0x7FFFFFFB07C0
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  83 21 00 00 00 00 39 02    MOVE32 r57, #0x2183
+  ff ff 00 00 00 00 3a 02    MOVE32 r58, #0xFFFF
+  00 00 00 00 00 00 3c 01    MOVE d60, #0x0
+  04 00 00 00 00 00 21 02    MOVE32 r33, #0x4
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  0c 00 00 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #c
+  Position resources resource table @7ffffffb0940
+      Entry 0 @7ffffffb0940:
+        Address: 0x7ffffffb0860
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0860:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffb0840
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffb0950:
+        Address: 0x7ffffffb0800
+        Contains descriptors: true
+        Size: 0x20
+          Attribute @7ffffffb0800:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGB32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 36
+            Attribute stride: 36
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffb0960:
+        Address: 0x7ffffffb0820
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0820:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048480
+            Address: 0x7fffffea8060
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffb0970:
+        Address: 0x7ffffffb0200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffb0200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffb0980:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7ffffffb0990:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffb09a0:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Varying resources resource table @7ffffffb0940
+      Entry 0 @7ffffffb0940:
+        Address: 0x7ffffffb0860
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0860:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffb0840
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffb0950:
+        Address: 0x7ffffffb0800
+        Contains descriptors: true
+        Size: 0x20
+          Attribute @7ffffffb0800:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGB32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 36
+            Attribute stride: 36
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffb0960:
+        Address: 0x7ffffffb0820
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffb0820:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048480
+            Address: 0x7fffffea8060
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffb0970:
+        Address: 0x7ffffffb0200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffb0200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffb0980:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7ffffffb0990:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffb09a0:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+Position FAU @7ffffffb0880:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+Varying FAU @7ffffffb0880:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+  Position shader Shader @7fffffffd0e0:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc200
+
+Shader 0xffffb9bf5200 (GPU VA 7fffffffc200) sz 3584
+7c 7d 01 32 08 80 66 08    LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, ^r60, ^r61, index:0x0, table:0x1
+43 00 00 00 00 c3 9c 00    FRCP.f32 r3, ^r3
+c0 00 00 00 c7 c4 10 01    IADD_IMM.i32 r4, 0x0, #0xC7000000
+43 44 03 00 00 c3 a4 00    FMAX.f32 r3, ^r3, ^r4
+c0 00 00 00 47 c4 10 01    IADD_IMM.i32 r4, 0x0, #0x47000000
+43 44 02 00 00 c3 a4 00    FMIN.f32 r3, ^r3, ^r4
+40 03 c0 00 04 c0 b2 00    FMA.f32 r0, ^r0, r3, 0x0.neg
+41 03 c0 00 04 c1 b2 00    FMA.f32 r1, ^r1, r3, 0x0.neg
+42 03 c0 00 04 c2 b2 00    FMA.f32 r2, ^r2, r3, 0x0.neg
+40 80 81 00 00 c0 b2 00    FMA.f32 r0, ^r0, u0, u1
+41 82 83 00 00 c1 b2 00    FMA.f32 r1, ^r1, u2, u3
+42 84 85 00 00 c2 b2 00    FMA.f32 r2, ^r2, u4, u5
+7b 0d 00 40 04 84 5e 10    LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0
+44 00 00 b9 08 40 61 78    STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0
+
+
+
+  Position Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Varying Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Fragment Local Storage @7ffffffb0100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Global attribute offset: 0
+  Index count: 4
+  Instance count: 1
+  Vertex offset: 0
+  Instance offset: 0
+  Tiler DCD flags2: 0
+  Tiler Heap:
+    Type: Buffer
+    Buffer type: Tiler heap
+    Chunk size: 256 KiB
+    Partitioning: Dynamic
+    Size: 2097152
+    Base: 0x800000a00000
+    Bottom: 0x800000a00d40
+    Top: 0x800000bffb80
+  Tiler Context @7ffffffb0340:
+    Polygon List: 0xa800000bffe00
+    Hierarchy Mask: 254
+    Sample Pattern: Single-sampled
+    Sample test disable: false
+    First provoking vertex: false
+    FB Width: 128
+    FB Height: 128
+    Layer count: 1
+    Layer offset: 0
+    Heap: 0x7fffffffb000
+    Geometry buffer size: 65536
+    Geometry buffer: 0x7ffffffeb000
+    Completed top: 0x0
+    Completed bottom: 0x0
+    Private state:
+      Word0: 2
+      Word1: 0
+      Word2: 0
+      Word3: 0
+      Word4: 0
+      Word5: 0
+      Word6: 0
+      Word7: 0
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 127
+    Scissor Maximum Y: 127
+  Low depth clamp: 0.000000
+  High depth clamp: 1.000000
+  Occlusion: 0
+  Blend RT 0:
+    Load Destination: false
+    Alpha To One: false
+    Enable: false
+    sRGB: false
+    Round to FB precision: false
+    Constant: 0
+    Equation:
+      RGB:
+        A: XXX: INVALID
+        Negate A: false
+        B: Src Minus Dest
+        Negate B: false
+        C: XXX: INVALID
+        Invert C: false
+      Alpha:
+        A: XXX: INVALID
+        Negate A: false
+        B: Src Minus Dest
+        Negate B: false
+        C: XXX: INVALID
+        Invert C: false
+      Color Mask: 0
+    Internal:
+      Mode: Off
+      Shader:
+        PC: 0
+      Fixed-Function:
+        Num Comps: 1
+        RT: 0
+        Conversion:
+          Format (v7): XXX: INVALID RGBA
+          Raw: false
+          Register Format: F16
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Always
+    Front stencil fail: Replace
+    Front depth fail: Replace
+    Front depth pass: Replace
+    Back compare function: Always
+    Back stencil fail: Replace
+    Back depth fail: Replace
+    Back depth pass: Replace
+    Stencil from shader: false
+    Stencil test enable: true
+    Front write mask: 0xff
+    Back write mask: 0xff
+    Front value mask: 0xff
+    Back value mask: 0xff
+    Front reference value: 0x1
+    Back reference value: 0x1
+    Shader read only Z/S: false
+    Depth cull enable: true
+    Depth clamp mode: [0, 1]
+    Depth source: Fixed function
+    Depth write enable: false
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Primitive flags
+    Draw mode: Triangle fan
+    Index type: None
+    Point size array format: None
+    Primitive Index Enable: false
+    Primitive Index Writeback: false
+    Allow rotating primitives: true
+    Low Depth Cull: true
+    High Depth Cull: true
+    Secondary Shader: false
+    Primitive restart: false
+    Layer index enable: false
+    Scissor array enable: false
+    Position FIFO format: Basic
+    View mask: 0x0
+  DCD Flags 0
+    Allow forward pixel to kill: true
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Force Early
+    ZS update operation: Force Early
+    Allow primitive reorder: false
+    Overdraw alpha0: true
+    Overdraw alpha1: true
+    Clean Fragment Write: false
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: true
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+  DCD Flags 1
+    Sample mask: 65535
+    Render target mask: 0x0
+  Primitive size
+    Constant: 0.000000
+    Size Array: 0x0
+  00 00 00 00 00 00 00 09    FINISH_TILING
+  00 00 04 00 00 00 00 03    WAIT #4
+  00 00 00 00 01 00 00 31    HEAP_OPERATION.vt_end #0, #0
+  03 00 fb ff ff 7f 28 01    MOVE d40, #0x7FFFFFFB0003
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  7f 00 7f 00 00 00 2b 02    MOVE32 r43, #0x7F007F
+  00 00 00 00 00 00 2c 01    MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02    MOVE32 r46, #0x0
+  00 00 01 00 00 4c 4e 14    LOAD_MULTIPLE r78, [d76]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 00 4e 00 16    BRANCH.le r78, #1
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 127
+    Scissor Maximum Y: 127
+  Parameters:
+    Pre Frame 0: Never
+    Pre Frame 1: Never
+    Post Frame: Never
+    Downscale geometry: None
+    Internal layer index: 0
+    Frame argument: 0x0
+    Sample Locations: 0x7ffffffff000
+    Frame Shader DCDs: 0x0
+    Width: 128
+    Height: 128
+    Bound Min X: 0
+    Bound Min Y: 0
+    Bound Max X: 127
+    Bound Max Y: 127
+    Sample Count: 1
+    Sample Pattern: Single-sampled
+    Tie-Break Rule: MINUS_180_IN_0_OUT
+    Effective Tile Size: 1024
+    First provoking vertex: false
+    Point sprite coord origin max Y: false
+    Blend suppress Inf: false
+    Blend suppress NaN: false
+    Blend suppress denorm: false
+    Render Target Count: 1
+    Color Buffer Allocation: 4096
+    S Clear: 0
+    S Write Enable: false
+    S Preload Enable: false
+    S Unload Enable: false
+    Z Internal Format: D24
+    Z Write Enable: true
+    Z Preload Enable: false
+    Z Unload Enable: false
+    Has ZS CRC Extension: true
+    Empty Tile Read Enable: false
+    Empty Tile Write Enable: false
+    CRC Read Enable: false
+    CRC Write Enable: false
+    Z Clear: 0.000000
+    Tiler: 0x7ffffffb0340
+  Sample locations @7ffffffff000:
+    (0, 0),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (0, 0),
+  Framebuffer @7ffffffb0000:
+    Parameters:
+      Pre Frame 0: Never
+      Pre Frame 1: Never
+      Post Frame: Never
+      Downscale geometry: None
+      Internal layer index: 0
+      Frame argument: 0x0
+      Sample Locations: 0x7ffffffff000
+      Frame Shader DCDs: 0x0
+      Width: 128
+      Height: 128
+      Bound Min X: 0
+      Bound Min Y: 0
+      Bound Max X: 127
+      Bound Max Y: 127
+      Sample Count: 1
+      Sample Pattern: Single-sampled
+      Tie-Break Rule: MINUS_180_IN_0_OUT
+      Effective Tile Size: 1024
+      First provoking vertex: false
+      Point sprite coord origin max Y: false
+      Blend suppress Inf: false
+      Blend suppress NaN: false
+      Blend suppress denorm: false
+      Render Target Count: 1
+      Color Buffer Allocation: 4096
+      S Clear: 0
+      S Write Enable: false
+      S Preload Enable: false
+      S Unload Enable: false
+      Z Internal Format: D24
+      Z Write Enable: true
+      Z Preload Enable: false
+      Z Unload Enable: false
+      Has ZS CRC Extension: true
+      Empty Tile Read Enable: false
+      Empty Tile Write Enable: false
+      CRC Read Enable: false
+      CRC Write Enable: false
+      Z Clear: 0.000000
+      Tiler: 0x7ffffffb0340
+    Tiler Heap:
+      Type: Buffer
+      Buffer type: Tiler heap
+      Chunk size: 256 KiB
+      Partitioning: Dynamic
+      Size: 2097152
+      Base: 0x800000a00000
+      Bottom: 0x800000a00d40
+      Top: 0x800000bffb80
+    Tiler Context @7ffffffb0340:
+      Polygon List: 0xa800000bffe00
+      Hierarchy Mask: 254
+      Sample Pattern: Single-sampled
+      Sample test disable: false
+      First provoking vertex: false
+      FB Width: 128
+      FB Height: 128
+      Layer count: 1
+      Layer offset: 0
+      Heap: 0x7fffffffb000
+      Geometry buffer size: 65536
+      Geometry buffer: 0x7ffffffeb000
+      Completed top: 0x0
+      Completed bottom: 0x0
+      Private state:
+        Word0: 2
+        Word1: 0
+        Word2: 0
+        Word3: 0
+        Word4: 0
+        Word5: 0
+        Word6: 0
+        Word7: 0
+  
+  ZS CRC Extension:
+    ZS Write Format: D24S8
+    ZS Block Format: Linear
+    ZS MSAA: Single
+    CRC Render Target: 0
+    S Write Format: XXX: INVALID
+    S Block Format: No Write
+    S MSAA: Single
+    AFBC Reverse Issue Order: false
+    ZS Clean Pixel Write Enable: true
+    CRC Row Stride: 0
+    CRC Clear Color: 0x0
+    CRC Base: 0x0
+    ZS Writeback Base: 0x7ffffffc0000
+    ZS Writeback Row Stride: 512
+    ZS Writeback Surface Stride: 0
+    ZS AFBC Body Offset: 0
+    S Writeback Base: 0x7ffffffc0000
+    S Writeback Row Stride: 0
+    S Writeback Surface Stride: 0
+    S AFBC Body Offset: 0
+  
+  Color Render Targets @7ffffffb00c0:
+    Color Render Target 0:
+      YUV:
+        Swizzle: YUVA
+        Full Range: false
+        Conversion Mode: No Conversion
+        Cr Siting: Co-Sited
+        Unsigned Cr Range: false
+        Plane 0 Base: 0x0
+        Plane 1 Base: 0x0
+        Plane 2 Base: 0x7ffffffd0000
+        Plane 0 Stride: 512
+        Plane 1 2 Stride: 0
+      AFBC:
+        YUV Transform: false
+        Split block: false
+        Wide block: false
+        Reverse issue order: false
+        Front buffer: false
+        Alpha hint: false
+        Compression mode: R8
+        Header: 0x7ffffffd0000
+        Row stride: 512
+        Body offset: 0
+      AFRC:
+        Writeback Format: XXX: INVALID
+        Block Size: XXX: INVALID
+        Format: R8 SCAN
+      Writeback Mode: Compat
+      Internal Buffer Offset: 0
+      YUV Enable: false
+      Dithered Clear: false
+      Internal Format: R8G8B8A8
+      Write Enable: true
+      Writeback Format: R8G8B8A8
+      Writeback Block Format: Linear
+      Writeback MSAA: Single
+      sRGB: false
+      Dithering Enable: true
+      Swizzle: 2184 (RGB0)
+      Clean Pixel Write Enable: true
+      RGB:
+        Base: 0x7ffffffd0000
+        Row Stride: 512
+        Surface Stride: 0
+      Clear:
+        Color 0: 4278190335
+        Color 1: 4278190335
+        Color 2: 4278190335
+        Color 3: 4278190335
+  
+  00 00 04 00 00 00 00 03    WAIT #4
+  40 03 fb ff ff 7f 5a 01    MOVE d90, #0x7FFFFFFB0340
+  28 00 0f 00 00 5a 56 14    LOAD_MULTIPLE r86:r87:r88:r89, [d90 + 40]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 58 56 00 0b    FINISH_FRAGMENT.frag_end d88, d86, #0, #0
+  00 00 ff 00 00 00 00 03    WAIT #ff
+  60 0e fb ff ff 7f 5a 01    MOVE d90, #0x7FFFFFFB0E60
+  00 00 00 00 03 5a 00 28    STORE_STATE.ERROR_STATE d90, #0, #0, #0
+  00 00 00 00 00 00 4a 02    MOVE32 r74, #0x0
+  11 02 00 00 00 4a 00 24    FLUSH_CACHE2.clean_l2.clean_lsc.invalidate_other r74, #0, #0
+  00 00 01 00 00 00 00 03    WAIT #1
+Buffer: memory_7ffffffff000 gpu 7ffffffff000
+
+000000  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  40 00 40 00 C0 00 40 00 40 00 C0 00 C0 00 C0 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000190  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  60 00 20 00 E0 00 60 00 20 00 A0 00 A0 00 E0 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000280  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000290  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000300  90 00 50 00 70 00 B0 00 D0 00 90 00 50 00 30 00 
+000310  30 00 D0 00 10 00 70 00 B0 00 F0 00 F0 00 10 00 
+000320  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000380  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000390  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000400  90 00 90 00 70 00 50 00 50 00 A0 00 C0 00 70 00 
+000410  30 00 60 00 A0 00 D0 00 D0 00 B0 00 B0 00 30 00 
+000420  60 00 E0 00 80 00 10 00 40 00 20 00 20 00 C0 00 
+000430  00 00 80 00 F0 00 40 00 E0 00 F0 00 10 00 00 00 
+000440  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000480  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffe000 gpu 7fffffffe000
+
+000000  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000010  C0 00 00 00 00 C3 91 08 42 00 40 50 84 40 28 41 
+000020  7C C0 EA 00 02 BC 7D 40 40 C0 7C 02 02 BC 7E 78 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000090  C0 00 00 00 00 C3 91 08 42 00 80 50 84 40 28 41 
+0000A0  7C C0 EA 00 02 BC 7D 40 C0 40 7C 01 02 BC 7E 78 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000110  C0 00 00 00 00 C3 91 08 42 00 C0 53 B4 40 28 49 
+000120  F0 00 3C B2 08 40 7F 78 C0 00 00 00 00 F0 10 01 
+000130  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+000140  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000190  C0 00 00 00 00 C3 91 08 42 00 42 50 84 40 28 01 
+0001A0  C0 00 10 01 18 C3 10 01 43 00 00 00 00 C4 91 00 
+0001B0  C0 00 00 00 00 C5 91 00 44 00 80 90 84 40 28 41 
+0001C0  7C C0 EA 00 02 BC 7D 40 42 40 7C 03 02 BC 7E 78 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffd000 gpu 7fffffffd000
+
+000000  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000020  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000040  38 00 00 80 00 38 00 00 80 C0 FF FF FF 7F 00 00 
+000050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000060  28 01 00 90 00 30 00 00 00 C1 FF FF FF 7F 00 00 
+000070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000080  1A 02 00 02 00 40 00 00 00 40 FE FF FF 7F 00 00 
+000090  00 01 00 00 00 00 00 00 00 40 00 00 3F 00 3F 00 
+0000A0  28 01 00 80 00 30 00 00 80 C1 FF FF FF 7F 00 00 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000C0  38 01 00 80 00 38 00 00 00 C2 FF FF FF 7F 00 00 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000E0  38 01 00 80 00 38 00 00 00 C2 FF FF FF 7F 00 00 
+0000F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffc000 gpu 7fffffffc000
+
+000000  7C 7D 01 32 08 80 66 08 43 00 00 00 00 C3 9C 00 
+000010  C0 00 00 00 C7 C4 10 01 43 44 03 00 00 C3 A4 00 
+000020  C0 00 00 00 47 C4 10 01 43 44 02 00 00 C3 A4 00 
+000030  40 03 C0 00 04 C0 B2 00 41 03 C0 00 04 C1 B2 00 
+000040  42 03 C0 00 04 C2 B2 00 40 80 81 00 00 C0 B2 00 
+000050  41 82 83 00 00 C1 B2 00 42 84 85 00 00 C2 B2 00 
+000060  7B 0D 00 40 04 84 5E 10 44 00 00 B9 08 40 61 78 
+000070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000080  7C 7D 11 12 04 80 66 00 7B 0D 00 40 04 82 5E 18 
+000090  42 00 00 AA 04 40 61 78 00 00 00 00 00 00 00 00 
+0000A0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  7D 00 00 12 04 80 5C 00 C0 00 18 00 20 C2 10 01 
+000110  C0 00 00 00 00 C3 91 08 42 20 C0 53 94 00 28 41 
+000120  7C 01 EA 08 02 BC 7D 48 F0 00 3C B3 04 40 7F 78 
+000130  C0 00 00 00 00 F0 10 01 C0 F1 00 00 10 C1 2F 00 
+000140  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  EA 00 00 00 00 C0 91 40 7C 83 40 00 02 BC 7D 08 
+000190  82 00 00 00 00 C2 91 68 83 00 00 00 00 C3 91 00 
+0001A0  80 00 00 00 00 C0 91 00 81 00 00 00 00 C1 91 48 
+0001B0  F0 00 3C 30 08 40 7F 78 C0 00 00 00 00 F0 10 01 
+0001C0  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  7C 7D 01 32 08 80 66 08 43 00 00 00 00 C3 9C 00 
+000210  C0 00 00 00 C7 C4 10 01 43 44 03 00 00 C3 A4 00 
+000220  C0 00 00 00 47 C4 10 01 43 44 02 00 00 C3 A4 00 
+000230  40 03 C0 00 04 C0 B2 00 41 03 C0 00 04 C1 B2 00 
+000240  42 03 C0 00 04 C2 B2 00 40 80 81 00 00 C0 B2 00 
+000250  41 82 83 00 00 C1 B2 00 42 84 85 00 00 C2 B2 00 
+000260  7B 0D 00 40 04 84 5E 10 44 00 00 B9 08 40 61 78 
+000270  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffb000 gpu 7fffffffb000
+
+000000  29 00 00 00 00 00 20 00 00 00 A0 00 00 80 00 00 
+000010  40 0D A0 00 00 80 00 00 80 FB BF 00 00 80 00 00 
+000020  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffeb000 gpu 7ffffffeb000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffea000 gpu 7ffffffea000
+
+000000  00 50 01 00 00 80 48 01 00 00 00 00 00 48 00 30 
+000010  00 90 FE FF FF 7F 56 01 40 01 00 00 00 00 58 02 
+000020  02 00 00 00 58 56 00 19 00 00 00 00 00 00 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe9000 gpu 7ffffffe9000
+
+000000  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000010  00 00 FF FF 00 5E 28 15 00 00 01 00 00 00 00 03 
+000020  00 00 01 00 00 4C 2F 14 00 00 01 00 00 00 00 03 
+000030  02 00 00 00 00 2F 00 16 1C 00 03 00 00 4C 28 14 
+000040  01 00 00 60 00 00 00 16 0C 00 03 00 00 4C 28 14 
+000050  34 00 01 00 00 4C 2A 14 38 00 01 00 00 4C 2B 14 
+000060  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000070  00 00 01 00 00 00 00 03 03 00 00 00 00 00 00 17 
+000080  00 00 00 00 00 00 00 07 00 00 08 00 00 00 00 03 
+000090  01 00 00 00 00 2F 2F 10 00 00 01 00 00 4C 2F 15 
+0000A0  3C 00 03 00 00 4C 32 14 00 00 01 00 00 00 00 03 
+0000B0  28 00 0F 00 00 32 34 14 00 00 01 00 00 00 00 03 
+0000C0  00 00 00 00 36 34 00 0B 00 00 00 00 00 00 30 01 
+0000D0  00 00 03 00 00 32 30 15 28 00 03 00 00 32 30 15 
+0000E0  30 00 03 00 00 32 30 15 00 02 00 00 00 30 00 24 
+0000F0  00 00 01 00 00 00 00 03 02 00 00 00 00 00 00 17 
+000100  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000110  00 00 FF FF 00 5E 28 14 00 00 01 00 00 00 00 03 
+000120  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe8000 gpu 7ffffffe8000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe4000 gpu 7ffffffe4000
+
+000000  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+*
+003FF0  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+
+
+Buffer: memory_7ffffffe0000 gpu 7ffffffe0000
+
+000000  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+003FF0  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+
+
+Buffer: memory_7ffffffd0000 gpu 7ffffffd0000
+
+000000  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+*
+00FFF0  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+
+
+Buffer: memory_7ffffffc0000 gpu 7ffffffc0000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AA80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AB80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AC80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AD80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AE80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AF80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BA80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BB80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BC80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BD80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BE80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BF80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffb0000 gpu 7ffffffb0000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000020  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+000030  00 00 25 00 00 00 00 00 40 03 FB FF FF 7F 00 00 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  25 00 00 80 00 00 00 00 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000A0  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0000B0  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0000C0  00 00 00 04 99 82 88 88 00 00 00 00 00 00 00 00 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000E0  00 00 FD FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0000F0  FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF 
+000100  00 00 00 00 1F 00 00 00 00 00 00 00 00 00 00 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000120  00 00 01 00 02 00 02 00 01 00 03 00 00 00 00 00 
+000130  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000140  07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000150  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+000160  00 02 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 00 
+000170  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000180  15 01 C0 2F 02 00 00 00 00 00 00 00 00 00 00 00 
+000190  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001A0  15 41 C0 2B 02 00 00 00 00 00 00 00 01 00 00 00 
+0001B0  08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001C0  19 00 00 00 00 00 10 00 00 80 EA FF FF 7F 00 00 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001E0  19 00 00 00 C0 FF 0F 00 40 80 EA FF FF 7F 00 00 
+0001F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000200  01 99 A9 06 00 00 00 00 00 00 00 00 00 00 00 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000220  00 00 80 42 00 00 80 42 00 00 00 3F 00 00 00 00 
+000230  00 00 80 42 00 00 80 42 00 00 00 3F 06 A0 07 28 
+000240  19 00 00 00 20 00 00 00 20 02 FB FF FF 7F 00 00 
+000250  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000260  00 00 80 42 00 00 80 42 00 00 80 42 00 00 80 42 
+000270  00 00 00 3F 00 00 00 3F 00 00 00 00 00 00 00 00 
+000280  22 40 C0 2E 3F 00 3F 00 88 0A 00 00 00 00 00 00 
+000290  80 D0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0002A0  01 88 A8 46 00 00 FF 1F 00 00 00 00 00 00 00 00 
+0002B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0002E0  00 00 00 00 C0 13 DC AC FF FF 00 00 C3 03 FB FF 
+0002F0  FF 7F 00 00 C0 14 DC AC FF FF 00 00 C3 04 FB FF 
+000300  FF 7F 00 00 C0 15 DC AC FF FF 00 00 C3 05 FB FF 
+000310  FF 7F 00 00 00 00 00 00 7F 00 7F 00 40 03 FB FF 
+000320  FF 7F 00 00 00 80 FE FF FF 7F 00 00 00 00 00 00 
+000330  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000340  00 FE BF 00 00 80 0A 00 FE 00 00 00 7F 00 7F 00 
+000350  00 00 00 00 00 00 00 00 00 B0 FF FF FF 7F 00 00 
+000360  10 B0 FE FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000370  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003A0  02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0003B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003D0  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0003E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0003F0  00 00 25 00 00 00 00 00 40 03 FB FF FF 7F 00 00 
+000400  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000440  25 00 00 80 00 00 00 00 00 00 00 00 00 00 00 00 
+000450  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000460  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000470  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000480  00 00 00 04 99 82 88 88 00 00 00 00 00 00 00 00 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0004A0  00 00 FD FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0004B0  FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF 
+0004C0  1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0004D0  00 F0 FF FF FF 7F 00 00 00 0A FB FF FF 7F 00 00 
+0004E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0004F0  00 00 25 00 00 00 00 00 40 03 FB FF FF 7F 00 00 
+000500  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000540  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000550  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000560  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000570  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000580  00 00 00 04 99 82 88 08 00 00 00 00 00 00 00 00 
+000590  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005A0  00 00 FD FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0005B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005C0  1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005D0  00 F0 FF FF FF 7F 00 00 00 0A FB FF FF 7F 00 00 
+0005E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0005F0  00 00 25 00 00 00 00 00 40 03 FB FF FF 7F 00 00 
+000600  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000640  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000650  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000660  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000670  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000680  00 00 00 04 99 82 88 08 00 00 00 00 00 00 00 00 
+000690  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0006A0  00 00 FD FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0006B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0006C0  40 02 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+0006D0  80 01 FB FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+0006E0  C0 01 FB FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+0006F0  00 02 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000700  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000770  A0 02 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000780  80 02 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000790  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0007C0  F7 24 4F 82 FF FF FF FF 01 01 00 00 00 00 00 00 
+0007D0  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+0007E0  00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00 
+0007F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000800  15 41 C0 2D 02 00 00 00 00 00 00 00 00 00 00 00 
+000810  24 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000820  19 00 00 00 A0 FF 0F 00 60 80 EA FF FF 7F 00 00 
+000830  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000840  00 00 80 42 00 00 80 42 00 00 00 3F 00 00 00 00 
+000850  00 00 80 42 00 00 80 42 00 00 00 3F AB AA 00 00 
+000860  19 00 00 00 20 00 00 00 40 08 FB FF FF 7F 00 00 
+000870  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000880  00 00 80 42 00 00 80 42 00 00 80 42 00 00 80 42 
+000890  00 00 00 3F 00 00 00 3F 00 00 00 00 00 00 00 00 
+0008A0  22 40 C0 2E 3F 00 3F 00 88 0A 00 00 00 00 00 00 
+0008B0  80 D0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0008C0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000920  00 00 80 3F 00 00 00 00 00 00 00 00 00 00 80 3F 
+000930  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000940  60 08 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000950  00 08 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000960  20 08 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000970  00 02 FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0009C0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+0009D0  00 00 00 43 00 00 00 00 00 00 00 00 00 00 80 3F 
+0009E0  00 00 00 00 00 00 00 43 00 00 00 00 00 00 80 3F 
+0009F0  00 00 00 43 00 00 00 43 00 00 00 00 00 00 80 3F 
+000A00  03 02 00 00 FF FF 01 00 00 00 00 00 00 00 00 00 
+000A10  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000A20  00 00 00 00 00 00 00 00 40 0E FB FF FF 7F 00 00 
+000A30  21 0E FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000A40  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000A60  C4 0D FB FF FF 7F 00 00 00 0E FB FF FF 7F 00 00 
+000A70  00 01 FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000A80  3E 02 00 00 FF FF 00 00 00 00 00 00 00 00 00 00 
+000A90  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000AA0  00 00 00 00 00 00 00 00 E0 0C FB FF FF 7F 00 00 
+000AB0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000AE0  84 0C FB FF FF 7F 00 00 C0 0C FB FF FF 7F 00 00 
+000AF0  00 01 FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000B00  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000B80  22 00 40 13 7F 00 7F 00 00 00 00 00 00 00 00 00 
+000B90  C0 0B FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000BA0  22 08 40 17 7F 00 7F 00 00 00 00 00 00 00 00 00 
+000BB0  00 0C FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000BC0  1A 02 00 02 00 00 01 00 00 00 FC FF FF 7F 00 00 
+000BD0  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000BE0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000C00  1A 02 00 14 00 00 01 00 00 00 FC FF FF 7F 00 00 
+000C10  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000C20  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+000C30  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000C40  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000C50  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000C60  19 00 00 00 40 00 00 00 C0 09 FB FF FF 7F 00 00 
+000C70  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000C80  40 0C FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000C90  60 0C FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000CA0  20 0C FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000CB0  80 0B FB FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+000CC0  28 01 00 80 00 30 00 00 80 E1 FF FF FF 7F 00 00 
+000CD0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000CE0  F7 24 4F C2 FF FF FF FF 00 00 00 00 00 00 00 00 
+000CF0  00 00 80 EE 00 00 00 00 00 00 00 00 00 00 00 00 
+000D00  22 40 C0 2E 7F 00 7F 00 88 06 00 00 00 00 00 00 
+000D10  40 0D FB FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000D20  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000D40  1A 02 00 02 00 00 01 00 00 00 FD FF FF 7F 00 00 
+000D50  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000D60  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+000D70  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000D80  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000D90  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000DA0  19 00 00 00 40 00 00 00 C0 09 FB FF FF 7F 00 00 
+000DB0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000DC0  80 0D FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DD0  A0 0D FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DE0  60 0D FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DF0  00 0D FB FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000E00  28 01 00 80 00 30 00 00 00 E1 FF FF FF 7F 00 00 
+000E10  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000E20  00 0A 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 01 
+000E30  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000E40  F7 24 4F C2 FF FF FF FF 00 00 00 00 00 00 00 00 
+000E50  00 00 80 EE 00 00 00 00 00 00 00 00 00 00 00 00 
+000E60  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffa8000 gpu 7ffffffa8000
+
+000000  0F 00 00 00 00 00 00 22 02 00 00 00 00 00 00 17 
+000010  E0 02 FB FF FF 7F 4C 01 00 00 00 00 00 00 00 31 
+000020  C7 06 FB FF FF 7F 00 01 60 02 FB FF 00 00 08 02 
+000030  FF 7F 00 03 00 00 09 02 20 D0 FF FF FF 7F 10 01 
+000040  47 07 FB FF FF 7F 04 01 00 00 00 00 00 00 0C 01 
+000050  60 D0 FF FF FF 7F 14 01 40 D0 FF FF FF 7F 12 01 
+000060  00 01 FB FF FF 7F 18 01 00 01 FB FF FF 7F 1E 01 
+000070  00 00 00 00 00 00 20 02 00 00 00 00 00 00 25 02 
+000080  00 00 00 00 00 00 26 02 40 03 FB FF FF 7F 28 01 
+000090  00 00 00 00 00 00 2A 02 7F 00 7F 00 00 00 2B 02 
+0000A0  00 00 00 00 00 00 2C 02 00 00 80 3F 00 00 2D 02 
+0000B0  10 00 00 00 00 00 30 02 61 01 FB FF FF 7F 32 01 
+0000C0  40 01 FB FF FF 7F 34 01 20 01 FB FF FF 7F 36 01 
+0000D0  00 80 43 00 00 00 38 02 AB 21 00 00 00 00 39 02 
+0000E0  FF FF 01 00 00 00 3A 02 00 00 80 3F 00 00 3C 01 
+0000F0  06 00 00 00 00 00 21 02 01 00 00 00 00 00 22 02 
+000100  00 00 00 00 00 00 23 02 00 00 00 00 00 00 24 02 
+000110  0C 00 00 00 00 00 27 02 08 02 04 00 42 00 00 06 
+000120  47 09 FB FF FF 7F 00 01 80 08 FB FF 00 00 08 02 
+000130  FF 7F 00 03 00 00 09 02 E0 D0 FF FF FF 7F 10 01 
+000140  00 00 00 00 00 00 04 01 00 00 00 00 00 00 0C 01 
+000150  00 00 00 00 00 00 14 01 00 01 FB FF FF 7F 18 01 
+000160  00 01 FB FF FF 7F 1E 01 00 00 00 00 00 00 20 02 
+000170  00 00 00 00 00 00 25 02 00 00 00 00 00 00 26 02 
+000180  40 03 FB FF FF 7F 28 01 00 00 00 00 00 00 2A 02 
+000190  7F 00 7F 00 00 00 2B 02 00 00 00 00 00 00 2C 02 
+0001A0  00 00 80 3F 00 00 2D 02 00 00 00 00 00 00 30 02 
+0001B0  E1 07 FB FF FF 7F 32 01 C0 07 FB FF FF 7F 34 01 
+0001C0  00 80 43 00 00 00 38 02 83 21 00 00 00 00 39 02 
+0001D0  FF FF 00 00 00 00 3A 02 00 00 00 00 00 00 3C 01 
+0001E0  04 00 00 00 00 00 21 02 01 00 00 00 00 00 22 02 
+0001F0  00 00 00 00 00 00 23 02 00 00 00 00 00 00 24 02 
+000200  00 00 00 00 00 00 27 02 0C 00 00 00 42 00 00 06 
+000210  00 00 00 00 00 00 00 09 00 00 04 00 00 00 00 03 
+000220  00 00 00 00 01 00 00 31 03 00 FB FF FF 7F 28 01 
+000230  00 00 00 00 00 00 2A 02 7F 00 7F 00 00 00 2B 02 
+000240  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000250  00 00 01 00 00 4C 4E 14 00 00 01 00 00 00 00 03 
+000260  01 00 00 00 00 4E 00 16 C3 05 FB FF FF 7F 28 01 
+000270  00 00 00 00 00 00 00 07 00 00 04 00 00 00 00 03 
+000280  40 03 FB FF FF 7F 5A 01 28 00 0F 00 00 5A 56 14 
+000290  00 00 01 00 00 00 00 03 01 00 00 00 58 56 00 0B 
+0002A0  00 00 FF 00 00 00 00 03 60 0E FB FF FF 7F 5A 01 
+0002B0  00 00 00 00 03 5A 00 28 00 00 00 00 00 00 4A 02 
+0002C0  11 02 00 00 00 4A 00 24 00 00 01 00 00 00 00 03 
+0002D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffea8000 gpu 7fffffea8000
+
+000000  00 00 80 BF 00 00 80 BF 00 00 00 00 00 00 80 3F 
+000010  00 00 80 BF 00 00 80 3F 00 00 00 00 00 00 80 3F 
+000020  00 00 80 3F 00 00 80 BF 00 00 00 00 00 00 80 3F 
+000030  00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 80 3F 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000050  00 00 80 3F 00 00 00 00 00 00 80 3F 00 00 80 3F 
+000060  00 00 00 BF 00 00 00 3F 00 00 80 3F 00 00 80 3F 
+000070  00 00 00 00 00 00 00 00 00 00 80 3F 00 00 00 00 
+000080  00 00 00 00 00 00 00 3F 00 00 00 3F 00 00 80 3F 
+000090  00 00 80 3F 00 00 00 00 00 00 00 00 00 00 80 3F 
+0000A0  00 00 00 00 00 00 00 00 00 00 00 3F 00 00 00 BF 
+0000B0  00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00 
+0000C0  00 00 80 3F 00 00 00 00 00 00 00 00 00 00 00 BF 
+0000D0  00 00 00 BF 00 00 80 3F 00 00 80 3F 00 00 00 00 
+0000E0  00 00 00 00 00 00 80 3F 00 00 00 00 00 00 00 00 
+0000F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0FFFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffe98000 gpu 7fffffe98000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffe88000 gpu 7fffffe88000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  e0 82 e8 ff ff 7f 4c 01    MOVE d76, #0x7FFFFFE882E0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  c7 86 e8 ff ff 7f 00 01    MOVE d0, #0x7FFFFFE886C7
+  60 82 e8 ff 00 00 08 02    MOVE32 r8, #0xFFE88260
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  47 87 e8 ff ff 7f 04 01    MOVE d4, #0x7FFFFFE88747
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  60 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD060
+  40 d0 ff ff ff 7f 12 01    MOVE d18, #0x7FFFFFFFD040
+  00 81 e8 ff ff 7f 18 01    MOVE d24, #0x7FFFFFE88100
+  00 81 e8 ff ff 7f 1e 01    MOVE d30, #0x7FFFFFE88100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  40 83 e8 ff ff 7f 28 01    MOVE d40, #0x7FFFFFE88340
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  7f 00 7f 00 00 00 2b 02    MOVE32 r43, #0x7F007F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  10 00 00 00 00 00 30 02    MOVE32 r48, #0x10
+  61 81 e8 ff ff 7f 32 01    MOVE d50, #0x7FFFFFE88161
+  40 81 e8 ff ff 7f 34 01    MOVE d52, #0x7FFFFFE88140
+  20 81 e8 ff ff 7f 36 01    MOVE d54, #0x7FFFFFE88120
+  00 80 43 00 00 00 38 02    MOVE32 r56, #0x438000
+  83 21 00 00 00 00 39 02    MOVE32 r57, #0x2183
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  06 00 00 00 00 00 21 02    MOVE32 r33, #0x6
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  0c 00 00 00 00 00 27 02    MOVE32 r39, #0xC
+  08 02 04 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #40208
+  Position resources resource table @7fffffe886c0
+      Entry 0 @7fffffe886c0:
+        Address: 0x7fffffe88240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7fffffe88240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7fffffe88220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7fffffe886d0:
+        Address: 0x7fffffe88180
+        Contains descriptors: true
+        Size: 0x40
+          Attribute @7fffffe88180:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGBA32F RGBA
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 16
+            Attribute stride: 16
+            Packet stride: 0
+            Divisor D: 0
+          Attribute @7fffffe881a0:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 1
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7fffffe886e0:
+        Address: 0x7fffffe881c0
+        Contains descriptors: true
+        Size: 0x40
+          Buffer @7fffffe881c0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048336
+            Address: 0x7fffffea80f0
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+          Buffer @7fffffe881e0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048272
+            Address: 0x7fffffea8130
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7fffffe886f0:
+        Address: 0x7fffffe88200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7fffffe88200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7fffffe88700:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7fffffe88710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7fffffe88720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Varying resources resource table @7fffffe886c0
+      Entry 0 @7fffffe886c0:
+        Address: 0x7fffffe88240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7fffffe88240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7fffffe88220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7fffffe886d0:
+        Address: 0x7fffffe88180
+        Contains descriptors: true
+        Size: 0x40
+          Attribute @7fffffe88180:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RGBA32F RGBA
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 16
+            Attribute stride: 16
+            Packet stride: 0
+            Divisor D: 0
+          Attribute @7fffffe881a0:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 1
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7fffffe886e0:
+        Address: 0x7fffffe881c0
+        Contains descriptors: true
+        Size: 0x40
+          Buffer @7fffffe881c0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048336
+            Address: 0x7fffffea80f0
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+          Buffer @7fffffe881e0:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048272
+            Address: 0x7fffffea8130
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7fffffe886f0:
+        Address: 0x7fffffe88200
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7fffffe88200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7fffffe88700:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7fffffe88710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7fffffe88720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Fragment resources resource table @7fffffe88740
+      Entry 0 @7fffffe88740:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 1 @7fffffe88750:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 2 @7fffffe88760:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 3 @7fffffe88770:
+        Address: 0x7fffffe882a0
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7fffffe882a0:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Repeat
+            Wrap Mode T: Repeat
+            Wrap Mode S: Repeat
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7fffffe88780:
+        Address: 0x7fffffe88280
+        Contains descriptors: true
+        Size: 0x20
+          Texture @7fffffe88280
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGB1
+            Width: 64
+            Height: 64
+            Swizzle: 2696 (RGB1)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd100
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3f003f00004000
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 16384
+              Pointer: 0x7ffffffe0000
+              Row stride: 256
+              Slice stride: 16384
+              Width: 64
+              Height: 64
+      Entry 5 @7fffffe88790:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7fffffe887a0:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+Position FAU @7fffffe88260:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+Varying FAU @7fffffe88260:
+  42800000 42800000
+  42800000 42800000
+  3F000000 3F000000
+
+  Position shader Shader @7fffffffd020:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc000
+
+Shader 0xffffb9bf5000 (GPU VA 7fffffffc000) sz 4096
+7c 7d 01 32 08 80 66 08    LD_ATTR_IMM.v4.f32.slot0.wait0 @r0:r1:r2:r3, ^r60, ^r61, index:0x0, table:0x1
+43 00 00 00 00 c3 9c 00    FRCP.f32 r3, ^r3
+c0 00 00 00 c7 c4 10 01    IADD_IMM.i32 r4, 0x0, #0xC7000000
+43 44 03 00 00 c3 a4 00    FMAX.f32 r3, ^r3, ^r4
+c0 00 00 00 47 c4 10 01    IADD_IMM.i32 r4, 0x0, #0x47000000
+43 44 02 00 00 c3 a4 00    FMIN.f32 r3, ^r3, ^r4
+40 03 c0 00 04 c0 b2 00    FMA.f32 r0, ^r0, r3, 0x0.neg
+41 03 c0 00 04 c1 b2 00    FMA.f32 r1, ^r1, r3, 0x0.neg
+42 03 c0 00 04 c2 b2 00    FMA.f32 r2, ^r2, r3, 0x0.neg
+40 80 81 00 00 c0 b2 00    FMA.f32 r0, ^r0, u0, u1
+41 82 83 00 00 c1 b2 00    FMA.f32 r1, ^r1, u2, u3
+42 84 85 00 00 c2 b2 00    FMA.f32 r2, ^r2, u4, u5
+7b 0d 00 40 04 84 5e 10    LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0
+44 00 00 b9 08 40 61 78    STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0
+
+
+
+  Varying shader Shader @7fffffffd040:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: DX
+    Vertex warp limit: Full
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc080
+
+Shader 0xffffb9bf5080 (GPU VA 7fffffffc080) sz 3968
+7c 7d 11 12 04 80 66 00    LD_ATTR_IMM.v2.f32.slot0 @r0:r1, ^r60, ^r61, index:0x1, table:0x1
+7b 0d 00 40 04 82 5e 18    LEA_BUF_IMM.slot1.wait01 @r2:r3, ^r59, table:0xD, index:0x0
+42 00 00 aa 04 40 61 78    STORE.i64.estream.slot2.end @r0:r1, ^r2, offset:0
+
+
+
+  Fragment shader Shader @7fffffffd060:
+    Type: Shader
+    Stage: Fragment
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: true
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3000
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: false
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc100
+
+Shader 0xffffb9bf5100 (GPU VA 7fffffffc100) sz 3840
+7d 00 00 12 04 80 5c 00    LD_VAR_BUF_IMM.f32.slot0.v2.src_f32.center.store @r0:r1, ^r61, index:0x0
+c0 00 18 00 20 c2 10 01    IADD_IMM.i32 r2, 0x0, #0x20001800
+c0 00 00 00 00 c3 91 08    MOV.i32.wait0 r3, 0x0
+42 20 c0 53 94 00 28 41    TEX_SINGLE.slot1.skip.reserved.16.2d.computed.wait0126 @r0:r1, @r0:r1, ^r2
+7c 01 ea 08 02 bc 7d 48    ATEST.wait @r60, ^r60, r1.h1, atest_datum.w0
+f0 00 3c b3 04 40 7f 78    BLEND.slot2.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+c0 00 00 00 00 f0 10 01    IADD_IMM.i32 r48, 0x0, #0x0
+c0 f1 00 00 10 c1 2f 00    BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+
+
+  Position Local Storage @7fffffe88100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Varying Local Storage @7fffffe88100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Fragment Local Storage @7fffffe88100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Global attribute offset: 0
+  Index count: 6
+  Instance count: 1
+  Index offset: 0
+  Vertex offset: 0
+  Instance offset: 0
+  Tiler DCD flags2: 0
+  Index array size: 12
+  Tiler Heap:
+    Type: Buffer
+    Buffer type: Tiler heap
+    Chunk size: 256 KiB
+    Partitioning: Dynamic
+    Size: 2097152
+    Base: 0x800000a00000
+    Bottom: 0x800000a015c0
+    Top: 0x800000bff900
+  Tiler Context @7fffffe88340:
+    Polygon List: 0x8800000bff980
+    Hierarchy Mask: 254
+    Sample Pattern: Single-sampled
+    Sample test disable: false
+    First provoking vertex: false
+    FB Width: 128
+    FB Height: 128
+    Layer count: 1
+    Layer offset: 0
+    Heap: 0x7fffffffb000
+    Geometry buffer size: 65536
+    Geometry buffer: 0x7ffffffeb000
+    Completed top: 0x0
+    Completed bottom: 0x0
+    Private state:
+      Word0: 1
+      Word1: 0
+      Word2: 0
+      Word3: 0
+      Word4: 0
+      Word5: 0
+      Word6: 0
+      Word7: 0
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 127
+    Scissor Maximum Y: 127
+  Low depth clamp: 0.000000
+  High depth clamp: 1.000000
+  Occlusion: 0
+  Varying allocation: 16
+  Blend RT 0:
+    Load Destination: false
+    Alpha To One: false
+    Enable: true
+    sRGB: false
+    Round to FB precision: false
+    Constant: 0
+    Equation:
+      RGB:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Alpha:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Color Mask: 15
+    Internal:
+      Mode: Opaque
+      Shader:
+        PC: 970752
+      Fixed-Function:
+        Num Comps: 4
+        RT: 0
+        Conversion:
+          Format (v7): RGBA8 TB RGBA
+          Raw: false
+          Register Format: F16
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Equal
+    Front stencil fail: Keep
+    Front depth fail: Keep
+    Front depth pass: Keep
+    Back compare function: Equal
+    Back stencil fail: Keep
+    Back depth fail: Keep
+    Back depth pass: Keep
+    Stencil from shader: false
+    Stencil test enable: true
+    Front write mask: 0xff
+    Back write mask: 0xff
+    Front value mask: 0xff
+    Back value mask: 0xff
+    Front reference value: 0x0
+    Back reference value: 0x0
+    Shader read only Z/S: false
+    Depth cull enable: true
+    Depth clamp mode: [0, 1]
+    Depth source: Fixed function
+    Depth write enable: false
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Indices: 7fffffe88120
+  Primitive flags
+    Draw mode: Triangles
+    Index type: UINT16
+    Point size array format: None
+    Primitive Index Enable: false
+    Primitive Index Writeback: false
+    Allow rotating primitives: true
+    Low Depth Cull: true
+    High Depth Cull: true
+    Secondary Shader: true
+    Primitive restart: false
+    Layer index enable: false
+    Scissor array enable: false
+    Position FIFO format: Basic
+    View mask: 0x0
+  DCD Flags 0
+    Allow forward pixel to kill: true
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Force Early
+    ZS update operation: Force Early
+    Allow primitive reorder: false
+    Overdraw alpha0: true
+    Overdraw alpha1: true
+    Clean Fragment Write: false
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: true
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+  DCD Flags 1
+    Sample mask: 65535
+    Render target mask: 0x1
+  Primitive size
+    Constant: 1.000000
+    Size Array: 0x3f800000
+  00 00 00 00 00 00 00 09    FINISH_TILING
+  00 00 04 00 00 00 00 03    WAIT #4
+  00 00 00 00 01 00 00 31    HEAP_OPERATION.vt_end #0, #0
+  03 80 e8 ff ff 7f 28 01    MOVE d40, #0x7FFFFFE88003
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  7f 00 7f 00 00 00 2b 02    MOVE32 r43, #0x7F007F
+  00 00 00 00 00 00 2c 01    MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02    MOVE32 r46, #0x0
+  00 00 01 00 00 4c 4e 14    LOAD_MULTIPLE r78, [d76]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 00 4e 00 16    BRANCH.le r78, #1
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 127
+    Scissor Maximum Y: 127
+  Parameters:
+    Pre Frame 0: Never
+    Pre Frame 1: Early ZS always
+    Post Frame: Never
+    Downscale geometry: None
+    Internal layer index: 0
+    Frame argument: 0x0
+    Sample Locations: 0x7ffffffff000
+    Frame Shader DCDs: 0x7fffffe88800
+    Width: 128
+    Height: 128
+    Bound Min X: 0
+    Bound Min Y: 0
+    Bound Max X: 127
+    Bound Max Y: 127
+    Sample Count: 1
+    Sample Pattern: Single-sampled
+    Tie-Break Rule: MINUS_180_IN_0_OUT
+    Effective Tile Size: 1024
+    First provoking vertex: false
+    Point sprite coord origin max Y: false
+    Blend suppress Inf: false
+    Blend suppress NaN: false
+    Blend suppress denorm: false
+    Render Target Count: 1
+    Color Buffer Allocation: 4096
+    S Clear: 0
+    S Write Enable: false
+    S Preload Enable: false
+    S Unload Enable: false
+    Z Internal Format: D24
+    Z Write Enable: true
+    Z Preload Enable: false
+    Z Unload Enable: false
+    Has ZS CRC Extension: true
+    Empty Tile Read Enable: false
+    Empty Tile Write Enable: false
+    CRC Read Enable: false
+    CRC Write Enable: false
+    Z Clear: 0.000000
+    Tiler: 0x7fffffe88340
+  Sample locations @7ffffffff000:
+    (0, 0),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (0, 0),
+  Pre frame 1 @7fffffe88880:
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Always
+    Front stencil fail: Replace
+    Front depth fail: Replace
+    Front depth pass: Replace
+    Back compare function: Always
+    Back stencil fail: Replace
+    Back depth fail: Replace
+    Back depth pass: Replace
+    Stencil from shader: true
+    Stencil test enable: true
+    Front write mask: 0xff
+    Back write mask: 0xff
+    Front value mask: 0xff
+    Back value mask: 0xff
+    Front reference value: 0x0
+    Back reference value: 0x0
+    Shader read only Z/S: false
+    Depth cull enable: false
+    Depth clamp mode: [0, 1]
+    Depth source: Shader
+    Depth write enable: true
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Shader Shader @7fffffe88ac0:
+    Type: Shader
+    Stage: Fragment
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3000
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: false
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffe180
+
+Shader 0xffffb9bf9180 (GPU VA 7fffffffe180) sz 3712
+7d 00 00 12 04 80 54 68    LD_VAR_IMM.slot0.v2.f32.center.store.discard @r0:r1, ^r61, table:0x0, index:0x0
+c0 00 10 00 18 c2 10 01    IADD_IMM.i32 r2, 0x0, #0x18001000
+c0 00 00 00 00 c3 91 08    MOV.i32.wait0 r3, 0x0
+42 00 42 50 84 40 28 01    TEX_SINGLE.slot1.skip.reserved.32.r.2d.zero @r2, @r0:r1, ^r2
+c0 00 10 01 18 c3 10 01    IADD_IMM.i32 r3, 0x0, #0x18011000
+43 00 00 00 00 c4 91 00    MOV.i32 r4, ^r3
+c0 00 00 00 00 c5 91 00    MOV.i32 r5, 0x0
+44 00 80 90 84 40 28 41    TEX_SINGLE.slot2.skip.reserved.32.g.2d.zero.wait0126 @r0, @r0:r1, ^r4
+7c c0 ea 00 02 bc 7d 40    ATEST.wait0126 @r60, ^r60, 0x0, atest_datum.w0
+42 40 7c 03 02 bc 7e 78    ZS_EMIT.z.stencil.slot0.end @r60, ^r2, ^r0, ^r60
+
+
+
+  Resources resource table @7fffffe88a80
+      Entry 0 @7fffffe88a80:
+        Address: 0x7fffffe88a40
+        Contains descriptors: true
+        Size: 0x20
+          Attribute @7fffffe88a40:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: false
+            Format (v7): RGB32F RGB1
+            Table: 1
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 16
+            Attribute stride: 16
+            Packet stride: 0
+            Divisor D: 0
+      Entry 1 @7fffffe88a90:
+        Address: 0x7fffffe88a60
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7fffffe88a60:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 64
+            Address: 0x7fffffe887c0
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 2 @7fffffe88aa0:
+        Address: 0x7fffffe88a20
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7fffffe88a20:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: false
+            Clamp integer coordinates: false
+            Normalized Coordinates: false
+            Clamp integer array indices: true
+            Minify nearest: true
+            Magnify nearest: true
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 3 @7fffffe88ab0:
+        Address: 0x7fffffe88980
+        Contains descriptors: true
+        Size: 0x40
+          Texture @7fffffe88980
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): Z24X8 UNORM RGBA
+            Width: 128
+            Height: 128
+            Swizzle: 0 (RRRR)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffe889c0
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x7f007f00010000
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 65536
+              Pointer: 0x7ffffffc0000
+              Row stride: 512
+              Slice stride: 65536
+              Width: 128
+              Height: 128
+          Texture @7fffffe889a0
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): S8 GRBA
+            Width: 128
+            Height: 128
+            Swizzle: 0 (RRRR)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffe88a00
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R4G4B4A4
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: false
+                2D:
+                  Block width: XXX: INVALID
+                  Block height: 4
+                3D:
+                  Block width: 5
+                  Block height: 5
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: XXX: INVALID
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x7f007f00010000
+              Clump ordering: Linear
+              Clump format: X24S8
+              Size: 65536
+              Pointer: 0x7ffffffc0000
+              Row stride: 512
+              Slice stride: 65536
+              Width: 128
+              Height: 128
+  Local Storage:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Draw:
+    Allow forward pixel to kill: false
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Force Late
+    ZS update operation: Force Late
+    Allow primitive reorder: false
+    Overdraw alpha0: false
+    Overdraw alpha1: false
+    Clean Fragment Write: true
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: false
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+    Sample mask: 65535
+    Render target mask: 0x0
+    Vertex array:
+      Packet: false
+      Pointer: 0x0
+      Vertex packet stride: 0
+      Vertex attribute stride: 0
+    Flags 2:
+      Read mask: 0x0
+      Write mask: 0x0
+    Minimum Z: 0.000000
+    Maximum Z: 1.000000
+    Depth/stencil: 0x7fffffe88ae0
+    Blend count: 0
+    Blend: 0x0
+    Occlusion: 0x0
+    Shader:
+      Attribute offset: 0
+      FAU count: 0
+      Resources: 0x7fffffe88a84
+      Shader: 0x7fffffe88ac0
+      Thread storage: 0x7fffffe88100
+      FAU: 0x0
+  Framebuffer @7fffffe88000:
+    Parameters:
+      Pre Frame 0: Never
+      Pre Frame 1: Early ZS always
+      Post Frame: Never
+      Downscale geometry: None
+      Internal layer index: 0
+      Frame argument: 0x0
+      Sample Locations: 0x7ffffffff000
+      Frame Shader DCDs: 0x7fffffe88800
+      Width: 128
+      Height: 128
+      Bound Min X: 0
+      Bound Min Y: 0
+      Bound Max X: 127
+      Bound Max Y: 127
+      Sample Count: 1
+      Sample Pattern: Single-sampled
+      Tie-Break Rule: MINUS_180_IN_0_OUT
+      Effective Tile Size: 1024
+      First provoking vertex: false
+      Point sprite coord origin max Y: false
+      Blend suppress Inf: false
+      Blend suppress NaN: false
+      Blend suppress denorm: false
+      Render Target Count: 1
+      Color Buffer Allocation: 4096
+      S Clear: 0
+      S Write Enable: false
+      S Preload Enable: false
+      S Unload Enable: false
+      Z Internal Format: D24
+      Z Write Enable: true
+      Z Preload Enable: false
+      Z Unload Enable: false
+      Has ZS CRC Extension: true
+      Empty Tile Read Enable: false
+      Empty Tile Write Enable: false
+      CRC Read Enable: false
+      CRC Write Enable: false
+      Z Clear: 0.000000
+      Tiler: 0x7fffffe88340
+    Tiler Heap:
+      Type: Buffer
+      Buffer type: Tiler heap
+      Chunk size: 256 KiB
+      Partitioning: Dynamic
+      Size: 2097152
+      Base: 0x800000a00000
+      Bottom: 0x800000a015c0
+      Top: 0x800000bff900
+    Tiler Context @7fffffe88340:
+      Polygon List: 0x8800000bff980
+      Hierarchy Mask: 254
+      Sample Pattern: Single-sampled
+      Sample test disable: false
+      First provoking vertex: false
+      FB Width: 128
+      FB Height: 128
+      Layer count: 1
+      Layer offset: 0
+      Heap: 0x7fffffffb000
+      Geometry buffer size: 65536
+      Geometry buffer: 0x7ffffffeb000
+      Completed top: 0x0
+      Completed bottom: 0x0
+      Private state:
+        Word0: 1
+        Word1: 0
+        Word2: 0
+        Word3: 0
+        Word4: 0
+        Word5: 0
+        Word6: 0
+        Word7: 0
+  
+  ZS CRC Extension:
+    ZS Write Format: D24S8
+    ZS Block Format: Linear
+    ZS MSAA: Single
+    CRC Render Target: 0
+    S Write Format: XXX: INVALID
+    S Block Format: No Write
+    S MSAA: Single
+    AFBC Reverse Issue Order: false
+    ZS Clean Pixel Write Enable: false
+    CRC Row Stride: 0
+    CRC Clear Color: 0x0
+    CRC Base: 0x0
+    ZS Writeback Base: 0x7ffffffc0000
+    ZS Writeback Row Stride: 512
+    ZS Writeback Surface Stride: 0
+    ZS AFBC Body Offset: 0
+    S Writeback Base: 0x7ffffffc0000
+    S Writeback Row Stride: 0
+    S Writeback Surface Stride: 0
+    S AFBC Body Offset: 0
+  
+  Color Render Targets @7fffffe880c0:
+    Color Render Target 0:
+      YUV:
+        Swizzle: YUVA
+        Full Range: false
+        Conversion Mode: No Conversion
+        Cr Siting: Co-Sited
+        Unsigned Cr Range: false
+        Plane 0 Base: 0x0
+        Plane 1 Base: 0x0
+        Plane 2 Base: 0x7fffffe98000
+        Plane 0 Stride: 512
+        Plane 1 2 Stride: 0
+      AFBC:
+        YUV Transform: false
+        Split block: false
+        Wide block: false
+        Reverse issue order: false
+        Front buffer: false
+        Alpha hint: false
+        Compression mode: R8
+        Header: 0x7fffffe98000
+        Row stride: 512
+        Body offset: 0
+      AFRC:
+        Writeback Format: XXX: INVALID
+        Block Size: XXX: INVALID
+        Format: R8 SCAN
+      Writeback Mode: Compat
+      Internal Buffer Offset: 0
+      YUV Enable: false
+      Dithered Clear: false
+      Internal Format: R8G8B8A8
+      Write Enable: true
+      Writeback Format: R8G8B8A8
+      Writeback Block Format: Linear
+      Writeback MSAA: Single
+      sRGB: false
+      Dithering Enable: true
+      Swizzle: 2184 (RGB0)
+      Clean Pixel Write Enable: true
+      RGB:
+        Base: 0x7fffffe98000
+        Row Stride: 512
+        Surface Stride: 0
+      Clear:
+        Color 0: 4294901760
+        Color 1: 4294901760
+        Color 2: 4294901760
+        Color 3: 4294901760
+  
+  00 00 04 00 00 00 00 03    WAIT #4
+  40 83 e8 ff ff 7f 5a 01    MOVE d90, #0x7FFFFFE88340
+  28 00 0f 00 00 5a 56 14    LOAD_MULTIPLE r86:r87:r88:r89, [d90 + 40]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 58 56 00 0b    FINISH_FRAGMENT.frag_end d88, d86, #0, #0
+  00 00 ff 00 00 00 00 03    WAIT #ff
+  a0 8f e8 ff ff 7f 5a 01    MOVE d90, #0x7FFFFFE88FA0
+  00 00 00 00 03 5a 00 28    STORE_STATE.ERROR_STATE d90, #0, #0, #0
+  00 00 00 00 00 00 4a 02    MOVE32 r74, #0x0
+  11 02 00 00 00 4a 00 24    FLUSH_CACHE2.clean_l2.clean_lsc.invalidate_other r74, #0, #0
+  00 00 01 00 00 00 00 03    WAIT #1
+Buffer: memory_7ffffffff000 gpu 7ffffffff000
+
+000000  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  40 00 40 00 C0 00 40 00 40 00 C0 00 C0 00 C0 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000190  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  60 00 20 00 E0 00 60 00 20 00 A0 00 A0 00 E0 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000280  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000290  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000300  90 00 50 00 70 00 B0 00 D0 00 90 00 50 00 30 00 
+000310  30 00 D0 00 10 00 70 00 B0 00 F0 00 F0 00 10 00 
+000320  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000380  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000390  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000400  90 00 90 00 70 00 50 00 50 00 A0 00 C0 00 70 00 
+000410  30 00 60 00 A0 00 D0 00 D0 00 B0 00 B0 00 30 00 
+000420  60 00 E0 00 80 00 10 00 40 00 20 00 20 00 C0 00 
+000430  00 00 80 00 F0 00 40 00 E0 00 F0 00 10 00 00 00 
+000440  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000480  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffe000 gpu 7fffffffe000
+
+000000  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000010  C0 00 00 00 00 C3 91 08 42 00 40 50 84 40 28 41 
+000020  7C C0 EA 00 02 BC 7D 40 40 C0 7C 02 02 BC 7E 78 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000090  C0 00 00 00 00 C3 91 08 42 00 80 50 84 40 28 41 
+0000A0  7C C0 EA 00 02 BC 7D 40 C0 40 7C 01 02 BC 7E 78 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000110  C0 00 00 00 00 C3 91 08 42 00 C0 53 B4 40 28 49 
+000120  F0 00 3C B2 08 40 7F 78 C0 00 00 00 00 F0 10 01 
+000130  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+000140  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000190  C0 00 00 00 00 C3 91 08 42 00 42 50 84 40 28 01 
+0001A0  C0 00 10 01 18 C3 10 01 43 00 00 00 00 C4 91 00 
+0001B0  C0 00 00 00 00 C5 91 00 44 00 80 90 84 40 28 41 
+0001C0  7C C0 EA 00 02 BC 7D 40 42 40 7C 03 02 BC 7E 78 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffd000 gpu 7fffffffd000
+
+000000  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000020  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000040  38 00 00 80 00 38 00 00 80 C0 FF FF FF 7F 00 00 
+000050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000060  28 01 00 90 00 30 00 00 00 C1 FF FF FF 7F 00 00 
+000070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000080  1A 02 00 02 00 40 00 00 00 40 FE FF FF 7F 00 00 
+000090  00 01 00 00 00 00 00 00 00 40 00 00 3F 00 3F 00 
+0000A0  28 01 00 80 00 30 00 00 80 C1 FF FF FF 7F 00 00 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000C0  38 01 00 80 00 38 00 00 00 C2 FF FF FF 7F 00 00 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000E0  38 01 00 80 00 38 00 00 00 C2 FF FF FF 7F 00 00 
+0000F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000100  1A 02 00 02 00 40 00 00 00 00 FE FF FF 7F 00 00 
+000110  00 01 00 00 00 00 00 00 00 40 00 00 3F 00 3F 00 
+000120  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffc000 gpu 7fffffffc000
+
+000000  7C 7D 01 32 08 80 66 08 43 00 00 00 00 C3 9C 00 
+000010  C0 00 00 00 C7 C4 10 01 43 44 03 00 00 C3 A4 00 
+000020  C0 00 00 00 47 C4 10 01 43 44 02 00 00 C3 A4 00 
+000030  40 03 C0 00 04 C0 B2 00 41 03 C0 00 04 C1 B2 00 
+000040  42 03 C0 00 04 C2 B2 00 40 80 81 00 00 C0 B2 00 
+000050  41 82 83 00 00 C1 B2 00 42 84 85 00 00 C2 B2 00 
+000060  7B 0D 00 40 04 84 5E 10 44 00 00 B9 08 40 61 78 
+000070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000080  7C 7D 11 12 04 80 66 00 7B 0D 00 40 04 82 5E 18 
+000090  42 00 00 AA 04 40 61 78 00 00 00 00 00 00 00 00 
+0000A0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  7D 00 00 12 04 80 5C 00 C0 00 18 00 20 C2 10 01 
+000110  C0 00 00 00 00 C3 91 08 42 20 C0 53 94 00 28 41 
+000120  7C 01 EA 08 02 BC 7D 48 F0 00 3C B3 04 40 7F 78 
+000130  C0 00 00 00 00 F0 10 01 C0 F1 00 00 10 C1 2F 00 
+000140  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  EA 00 00 00 00 C0 91 40 7C 83 40 00 02 BC 7D 08 
+000190  82 00 00 00 00 C2 91 68 83 00 00 00 00 C3 91 00 
+0001A0  80 00 00 00 00 C0 91 00 81 00 00 00 00 C1 91 48 
+0001B0  F0 00 3C 30 08 40 7F 78 C0 00 00 00 00 F0 10 01 
+0001C0  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  7C 7D 01 32 08 80 66 08 43 00 00 00 00 C3 9C 00 
+000210  C0 00 00 00 C7 C4 10 01 43 44 03 00 00 C3 A4 00 
+000220  C0 00 00 00 47 C4 10 01 43 44 02 00 00 C3 A4 00 
+000230  40 03 C0 00 04 C0 B2 00 41 03 C0 00 04 C1 B2 00 
+000240  42 03 C0 00 04 C2 B2 00 40 80 81 00 00 C0 B2 00 
+000250  41 82 83 00 00 C1 B2 00 42 84 85 00 00 C2 B2 00 
+000260  7B 0D 00 40 04 84 5E 10 44 00 00 B9 08 40 61 78 
+000270  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffb000 gpu 7fffffffb000
+
+000000  29 00 00 00 00 00 20 00 00 00 A0 00 00 80 00 00 
+000010  C0 15 A0 00 00 80 00 00 00 F9 BF 00 00 80 00 00 
+000020  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffeb000 gpu 7ffffffeb000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffea000 gpu 7ffffffea000
+
+000000  00 50 01 00 00 80 48 01 00 00 00 00 00 48 00 30 
+000010  00 90 FE FF FF 7F 56 01 40 01 00 00 00 00 58 02 
+000020  02 00 00 00 58 56 00 19 00 00 00 00 00 00 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe9000 gpu 7ffffffe9000
+
+000000  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000010  00 00 FF FF 00 5E 28 15 00 00 01 00 00 00 00 03 
+000020  00 00 01 00 00 4C 2F 14 00 00 01 00 00 00 00 03 
+000030  02 00 00 00 00 2F 00 16 1C 00 03 00 00 4C 28 14 
+000040  01 00 00 60 00 00 00 16 0C 00 03 00 00 4C 28 14 
+000050  34 00 01 00 00 4C 2A 14 38 00 01 00 00 4C 2B 14 
+000060  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000070  00 00 01 00 00 00 00 03 03 00 00 00 00 00 00 17 
+000080  00 00 00 00 00 00 00 07 00 00 08 00 00 00 00 03 
+000090  01 00 00 00 00 2F 2F 10 00 00 01 00 00 4C 2F 15 
+0000A0  3C 00 03 00 00 4C 32 14 00 00 01 00 00 00 00 03 
+0000B0  28 00 0F 00 00 32 34 14 00 00 01 00 00 00 00 03 
+0000C0  00 00 00 00 36 34 00 0B 00 00 00 00 00 00 30 01 
+0000D0  00 00 03 00 00 32 30 15 28 00 03 00 00 32 30 15 
+0000E0  30 00 03 00 00 32 30 15 00 02 00 00 00 30 00 24 
+0000F0  00 00 01 00 00 00 00 03 02 00 00 00 00 00 00 17 
+000100  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000110  00 00 FF FF 00 5E 28 14 00 00 01 00 00 00 00 03 
+000120  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe8000 gpu 7ffffffe8000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe4000 gpu 7ffffffe4000
+
+000000  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+*
+003FF0  FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 
+
+
+Buffer: memory_7ffffffe0000 gpu 7ffffffe0000
+
+000000  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+003FF0  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+
+
+Buffer: memory_7ffffffc0000 gpu 7ffffffc0000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+004E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+004F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+005E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+005F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+006E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+006F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+007F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+008E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+008F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009A80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009C80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009D80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+009E80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+009F80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00A880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00A980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AA80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AB80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AC80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AD80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00AE80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00AF80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B080  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B280  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B380  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B480  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B580  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B680  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00B880  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00B980  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BA80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BB80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BC80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BD80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00BE80  00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 
+*
+00BF80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffa8000 gpu 7ffffffa8000
+
+000000  0F 00 00 00 00 00 00 22 02 00 00 00 00 00 00 17 
+000010  E0 82 E8 FF FF 7F 4C 01 00 00 00 00 00 00 00 31 
+000020  C7 86 E8 FF FF 7F 00 01 60 82 E8 FF 00 00 08 02 
+000030  FF 7F 00 03 00 00 09 02 20 D0 FF FF FF 7F 10 01 
+000040  47 87 E8 FF FF 7F 04 01 00 00 00 00 00 00 0C 01 
+000050  60 D0 FF FF FF 7F 14 01 40 D0 FF FF FF 7F 12 01 
+000060  00 81 E8 FF FF 7F 18 01 00 81 E8 FF FF 7F 1E 01 
+000070  00 00 00 00 00 00 20 02 00 00 00 00 00 00 25 02 
+000080  00 00 00 00 00 00 26 02 40 83 E8 FF FF 7F 28 01 
+000090  00 00 00 00 00 00 2A 02 7F 00 7F 00 00 00 2B 02 
+0000A0  00 00 00 00 00 00 2C 02 00 00 80 3F 00 00 2D 02 
+0000B0  10 00 00 00 00 00 30 02 61 81 E8 FF FF 7F 32 01 
+0000C0  40 81 E8 FF FF 7F 34 01 20 81 E8 FF FF 7F 36 01 
+0000D0  00 80 43 00 00 00 38 02 83 21 00 00 00 00 39 02 
+0000E0  FF FF 01 00 00 00 3A 02 00 00 80 3F 00 00 3C 01 
+0000F0  06 00 00 00 00 00 21 02 01 00 00 00 00 00 22 02 
+000100  00 00 00 00 00 00 23 02 00 00 00 00 00 00 24 02 
+000110  0C 00 00 00 00 00 27 02 08 02 04 00 42 00 00 06 
+000120  00 00 00 00 00 00 00 09 00 00 04 00 00 00 00 03 
+000130  00 00 00 00 01 00 00 31 03 80 E8 FF FF 7F 28 01 
+000140  00 00 00 00 00 00 2A 02 7F 00 7F 00 00 00 2B 02 
+000150  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000160  00 00 01 00 00 4C 4E 14 00 00 01 00 00 00 00 03 
+000170  01 00 00 00 00 4E 00 16 C3 85 E8 FF FF 7F 28 01 
+000180  00 00 00 00 00 00 00 07 00 00 04 00 00 00 00 03 
+000190  40 83 E8 FF FF 7F 5A 01 28 00 0F 00 00 5A 56 14 
+0001A0  00 00 01 00 00 00 00 03 01 00 00 00 58 56 00 0B 
+0001B0  00 00 FF 00 00 00 00 03 A0 8F E8 FF FF 7F 5A 01 
+0001C0  00 00 00 00 03 5A 00 28 00 00 00 00 00 00 4A 02 
+0001D0  11 02 00 00 00 4A 00 24 00 00 01 00 00 00 00 03 
+0001E0  04 00 00 00 00 00 21 02 01 00 00 00 00 00 22 02 
+0001F0  00 00 00 00 00 00 23 02 00 00 00 00 00 00 24 02 
+000200  00 00 00 00 00 00 27 02 0C 00 00 00 42 00 00 06 
+000210  00 00 00 00 00 00 00 09 00 00 04 00 00 00 00 03 
+000220  00 00 00 00 01 00 00 31 03 00 FB FF FF 7F 28 01 
+000230  00 00 00 00 00 00 2A 02 7F 00 7F 00 00 00 2B 02 
+000240  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000250  00 00 01 00 00 4C 4E 14 00 00 01 00 00 00 00 03 
+000260  01 00 00 00 00 4E 00 16 C3 05 FB FF FF 7F 28 01 
+000270  00 00 00 00 00 00 00 07 00 00 04 00 00 00 00 03 
+000280  40 03 FB FF FF 7F 5A 01 28 00 0F 00 00 5A 56 14 
+000290  00 00 01 00 00 00 00 03 01 00 00 00 58 56 00 0B 
+0002A0  00 00 FF 00 00 00 00 03 60 0E FB FF FF 7F 5A 01 
+0002B0  00 00 00 00 03 5A 00 28 00 00 00 00 00 00 4A 02 
+0002C0  11 02 00 00 00 4A 00 24 00 00 01 00 00 00 00 03 
+0002D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffea8000 gpu 7fffffea8000
+
+000000  00 00 80 BF 00 00 80 BF 00 00 00 00 00 00 80 3F 
+000010  00 00 80 BF 00 00 80 3F 00 00 00 00 00 00 80 3F 
+000020  00 00 80 3F 00 00 80 BF 00 00 00 00 00 00 80 3F 
+000030  00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 80 3F 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000050  00 00 80 3F 00 00 00 00 00 00 80 3F 00 00 80 3F 
+000060  00 00 00 BF 00 00 00 3F 00 00 80 3F 00 00 80 3F 
+000070  00 00 00 00 00 00 00 00 00 00 80 3F 00 00 00 00 
+000080  00 00 00 00 00 00 00 3F 00 00 00 3F 00 00 80 3F 
+000090  00 00 80 3F 00 00 00 00 00 00 00 00 00 00 80 3F 
+0000A0  00 00 00 00 00 00 00 00 00 00 00 3F 00 00 00 BF 
+0000B0  00 00 80 3F 00 00 80 3F 00 00 00 00 00 00 00 00 
+0000C0  00 00 80 3F 00 00 00 00 00 00 00 00 00 00 00 BF 
+0000D0  00 00 00 BF 00 00 80 3F 00 00 80 3F 00 00 00 00 
+0000E0  00 00 00 00 00 00 80 3F 00 00 00 00 00 00 00 00 
+0000F0  00 00 80 BF 00 00 80 BF 00 00 80 3F 00 00 80 3F 
+000100  00 00 80 BF 00 00 80 3F 00 00 00 00 00 00 80 3F 
+000110  00 00 80 3F 00 00 80 BF 00 00 00 00 00 00 80 3F 
+000120  00 00 80 3F 00 00 80 3F 00 00 80 BF 00 00 80 3F 
+000130  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000140  00 00 80 3F 00 00 00 00 00 00 80 3F 00 00 80 3F 
+000150  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0FFFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffe98000 gpu 7fffffe98000
+
+000000  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+004E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+004F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+005E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+005F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+006E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+006F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+007E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+007F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+008E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+008F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009A80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009B80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009C80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009D80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+009E80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+009F80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00A080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00A180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00A280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00A380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00A480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00A580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00A680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00A780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00A880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00A980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00AA80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00AB80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00AC80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00AD80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00AE80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00AF80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00B080  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00B180  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00B280  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00B380  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00B480  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00B580  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00B680  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00B780  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00B880  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00B980  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00BA80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00BB80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00BC80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00BD80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00BE80  00 00 FF 00 00 00 FF 00 00 00 FF 00 00 00 FF 00 
+*
+00BF80  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+*
+00FFF0  00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 00 
+
+
+Buffer: memory_7fffffe88000 gpu 7fffffe88000
+
+000000  18 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F0 FF FF FF 7F 00 00 00 88 E8 FF FF 7F 00 00 
+000020  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+000030  00 00 25 00 00 00 00 00 40 83 E8 FF FF 7F 00 00 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000A0  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0000B0  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0000C0  00 00 00 04 99 82 88 88 00 00 00 00 00 00 00 00 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000E0  00 80 E9 FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0000F0  00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 
+000100  00 00 00 00 1F 00 00 00 00 00 00 00 00 00 00 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000120  00 00 01 00 02 00 02 00 01 00 03 00 00 00 00 00 
+000130  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000140  27 00 02 80 FF FF FF FF 00 00 00 00 00 00 00 00 
+000150  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+000160  00 02 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 00 
+000170  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000180  15 01 C0 2F 02 00 00 00 00 00 00 00 00 00 00 00 
+000190  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001A0  15 41 C0 2B 02 00 00 00 00 00 00 00 01 00 00 00 
+0001B0  08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001C0  19 00 00 00 10 FF 0F 00 F0 80 EA FF FF 7F 00 00 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001E0  19 00 00 00 D0 FE 0F 00 30 81 EA FF FF 7F 00 00 
+0001F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000200  01 99 A9 06 00 00 00 00 00 00 00 00 00 00 00 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000220  00 00 80 42 00 00 80 42 00 00 00 3F 00 00 00 00 
+000230  00 00 80 42 00 00 80 42 00 00 00 3F 40 00 00 00 
+000240  19 00 00 00 20 00 00 00 20 82 E8 FF FF 7F 00 00 
+000250  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000260  00 00 80 42 00 00 80 42 00 00 80 42 00 00 80 42 
+000270  00 00 00 3F 00 00 00 3F 00 00 00 00 00 00 00 00 
+000280  22 40 C0 2E 3F 00 3F 00 88 0A 00 00 00 00 00 00 
+000290  00 D1 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0002A0  01 88 A8 46 00 00 FF 1F 00 00 00 00 00 00 00 00 
+0002B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0002E0  00 00 00 00 C0 13 CA AC FF FF 00 00 C3 83 E8 FF 
+0002F0  FF 7F 00 00 C0 14 CA AC FF FF 00 00 C3 84 E8 FF 
+000300  FF 7F 00 00 C0 15 CA AC FF FF 00 00 C3 85 E8 FF 
+000310  FF 7F 00 00 00 00 00 00 7F 00 7F 00 40 83 E8 FF 
+000320  FF 7F 00 00 00 80 FE FF FF 7F 00 00 00 00 00 00 
+000330  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000340  80 F9 BF 00 00 80 08 00 FE 00 00 00 7F 00 7F 00 
+000350  00 00 00 00 00 00 00 00 00 B0 FF FF FF 7F 00 00 
+000360  10 B0 FE FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000370  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003A0  01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0003B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0003C0  18 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0003D0  00 F0 FF FF FF 7F 00 00 00 88 E8 FF FF 7F 00 00 
+0003E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0003F0  00 00 25 00 00 00 00 00 40 83 E8 FF FF 7F 00 00 
+000400  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000440  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000450  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000460  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000470  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000480  00 00 00 04 99 82 88 88 00 00 00 00 00 00 00 00 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0004A0  00 80 E9 FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0004B0  00 00 FF FF 00 00 FF FF 00 00 FF FF 00 00 FF FF 
+0004C0  1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0004D0  00 F0 FF FF FF 7F 00 00 40 8B E8 FF FF 7F 00 00 
+0004E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0004F0  00 00 25 00 00 00 00 00 40 83 E8 FF FF 7F 00 00 
+000500  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000540  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000550  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000560  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000570  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000580  00 00 00 04 99 82 88 08 00 00 00 00 00 00 00 00 
+000590  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005A0  00 80 E9 FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0005B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005C0  1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005D0  00 F0 FF FF FF 7F 00 00 40 8B E8 FF FF 7F 00 00 
+0005E0  7F 00 7F 00 00 00 00 00 7F 00 7F 00 80 14 00 04 
+0005F0  00 00 25 00 00 00 00 00 40 83 E8 FF FF 7F 00 00 
+000600  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000640  25 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000650  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000660  00 00 FC FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+000670  00 00 FC FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000680  00 00 00 04 99 82 88 08 00 00 00 00 00 00 00 00 
+000690  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0006A0  00 80 E9 FF FF 7F 00 00 00 02 00 00 00 00 00 00 
+0006B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0006C0  40 82 E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+0006D0  80 81 E8 FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+0006E0  C0 81 E8 FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+0006F0  00 82 E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000700  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000770  A0 82 E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000780  80 82 E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000790  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0007C0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+0007D0  00 00 00 43 00 00 00 00 00 00 00 00 00 00 80 3F 
+0007E0  00 00 00 00 00 00 00 43 00 00 00 00 00 00 80 3F 
+0007F0  00 00 00 43 00 00 00 43 00 00 00 00 00 00 80 3F 
+000800  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000880  3E 02 00 00 FF FF 00 00 00 00 00 00 00 00 00 00 
+000890  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+0008A0  00 00 00 00 00 00 00 00 E0 8A E8 FF FF 7F 00 00 
+0008B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0008E0  84 8A E8 FF FF 7F 00 00 C0 8A E8 FF FF 7F 00 00 
+0008F0  00 81 E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000900  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000980  22 00 40 13 7F 00 7F 00 00 00 00 00 00 00 00 00 
+000990  C0 89 E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0009A0  22 08 40 17 7F 00 7F 00 00 00 00 00 00 00 00 00 
+0009B0  00 8A E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0009C0  1A 02 00 02 00 00 01 00 00 00 FC FF FF 7F 00 00 
+0009D0  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+0009E0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000A00  1A 02 00 14 00 00 01 00 00 00 FC FF FF 7F 00 00 
+000A10  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000A20  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+000A30  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A40  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000A50  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A60  19 00 00 00 40 00 00 00 C0 87 E8 FF FF 7F 00 00 
+000A70  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A80  40 8A E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000A90  60 8A E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000AA0  20 8A E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000AB0  80 89 E8 FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+000AC0  28 01 00 80 00 30 00 00 80 E1 FF FF FF 7F 00 00 
+000AD0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000AE0  F7 24 4F C2 FF FF FF FF 00 00 00 00 00 00 00 00 
+000AF0  00 00 80 EE 00 00 00 00 00 00 00 00 00 00 00 00 
+000B00  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000B10  00 00 00 43 00 00 00 00 00 00 00 00 00 00 80 3F 
+000B20  00 00 00 00 00 00 00 43 00 00 00 00 00 00 80 3F 
+000B30  00 00 00 43 00 00 00 43 00 00 00 00 00 00 80 3F 
+000B40  03 02 00 00 FF FF 01 00 00 00 00 00 00 00 00 00 
+000B50  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000B60  00 00 00 00 00 00 00 00 80 8F E8 FF FF 7F 00 00 
+000B70  61 8F E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000B80  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000BA0  04 8F E8 FF FF 7F 00 00 40 8F E8 FF FF 7F 00 00 
+000BB0  00 81 E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000BC0  3E 02 00 00 FF FF 00 00 00 00 00 00 00 00 00 00 
+000BD0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000BE0  00 00 00 00 00 00 00 00 20 8E E8 FF FF 7F 00 00 
+000BF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000C20  C4 8D E8 FF FF 7F 00 00 00 8E E8 FF FF 7F 00 00 
+000C30  00 81 E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000C40  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000CC0  22 00 40 13 7F 00 7F 00 00 00 00 00 00 00 00 00 
+000CD0  00 8D E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000CE0  22 08 40 17 7F 00 7F 00 00 00 00 00 00 00 00 00 
+000CF0  40 8D E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000D00  1A 02 00 02 00 00 01 00 00 00 FC FF FF 7F 00 00 
+000D10  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000D20  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000D40  1A 02 00 14 00 00 01 00 00 00 FC FF FF 7F 00 00 
+000D50  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000D60  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+000D70  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000D80  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000D90  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000DA0  19 00 00 00 40 00 00 00 00 8B E8 FF FF 7F 00 00 
+000DB0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000DC0  80 8D E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DD0  A0 8D E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DE0  60 8D E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000DF0  C0 8C E8 FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+000E00  28 01 00 80 00 30 00 00 80 E1 FF FF FF 7F 00 00 
+000E10  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000E20  F7 24 4F C2 FF FF FF FF 00 00 00 00 00 00 00 00 
+000E30  00 00 80 EE 00 00 00 00 00 00 00 00 00 00 00 00 
+000E40  22 40 C0 2E 7F 00 7F 00 88 06 00 00 00 00 00 00 
+000E50  80 8E E8 FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000E60  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000E80  1A 02 00 02 00 00 01 00 00 80 E9 FF FF 7F 00 00 
+000E90  00 02 00 00 00 00 00 00 00 00 01 00 7F 00 7F 00 
+000EA0  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+000EB0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000EC0  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000ED0  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000EE0  19 00 00 00 40 00 00 00 00 8B E8 FF FF 7F 00 00 
+000EF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000F00  C0 8E E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000F10  E0 8E E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000F20  A0 8E E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000F30  40 8E E8 FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000F40  28 01 00 80 00 30 00 00 00 E1 FF FF FF 7F 00 00 
+000F50  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000F60  00 0A 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 01 
+000F70  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000F80  F7 24 4F C2 FF FF FF FF 00 00 00 00 00 00 00 00 
+000F90  00 00 80 EE 00 00 00 00 00 00 00 00 00 00 00 00 
+000FA0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
