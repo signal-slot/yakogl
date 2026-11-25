@@ -224,8 +224,8 @@ verdict c1 "six session directories of $sha8, --check-cover of $mustpass exits 0
 
 # ---- c2 ------------------------------------------------------------------
 doc=docs/es2-cts-failures.md
-BEGIN='<!-- mali-deqp-tally begin -->'
-END='<!-- mali-deqp-tally end -->'
+BEGIN='<!-- mali-deqp-tally begin imx95 -->'
+END='<!-- mali-deqp-tally end imx95 -->'
 how=
 if [ ! -f "$doc" ]; then
 	add "$doc is not a file"
