@@ -97,4 +97,7 @@ check "an unknown board without --prefix exits 2" test $? -eq 2
 python3 -I "$TOOL" --mustpass "$MP" --prefix OB "$tmp"/mix/x/*/ | grep -q '^# image OB001:'
 check "an unknown board with --prefix works" test $? -eq 0
 
+check "the table tool and its self-test are executable" \
+  test -x "$TOOL" -a -x "$0"
+
 if [ "$fails" -eq 0 ]; then echo "mali-rerun-tree-selftest: $n checks passed"; else echo "mali-rerun-tree-selftest: $fails of $n checks FAILED"; exit 1; fi

@@ -894,6 +894,10 @@ def self_test():
          "--no-git", mp, *rpair("absent"))
     rc, _o, _e = run("--check-cover", "--no-git", mp, *rpair("combo"))
     chk("replaces with reruns: Lost row rerun and a chunk replaced", rc == 0)
+    rc, o, e = run("--tally", "--no-git", rpair("ok")[1])
+    chk("tally: a replaces naming a slice not given is RULE replace-target "
+        "(exit 1), not TOTAL 0", rc == 1 and "RULE replace-target" in o + e
+        and "TOTAL" not in o)
     rc, o, _e = run("--tally", "--no-git", *rpair("combo"))
     chk("replaces with reruns tally: total 8, 6 Pass, 2 Fail, no Lost",
         rc == 0 and re.search(r"^TOTAL +8$", o, re.M) is not None
@@ -1135,6 +1139,11 @@ def main(argv):
             mix = board_mix(s)
             if mix:
                 return report(mix)
+            # a reruns= or replaces= naming a slice not given drops the
+            # slice from the tally: say so (exit 1), not "TOTAL 0"
+            rerr = resolve(s)[3]
+            if rerr:
+                return report(rerr)
             sys.stdout.write(render_markdown(s, per_case) if markdown
                              else render_text(s, per_case))
             return 0

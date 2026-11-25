@@ -17,7 +17,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-build
 BUILD_SH=$HERE/mali-deqp-build.sh
-EXPECT=29
+EXPECT=30
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-build-selftest-XXXXXX")
 cleanup() {
   if [ "${MALI_DEQP_SELFTEST_KEEP-}" = 1 ]; then echo "mali-deqp-build-selftest: kept $tmp"; else rm -rf "$tmp"; fi
@@ -166,6 +166,9 @@ check "ver_le: at the floor and below pass, one above fails" \
 check "the floor constants are the board's" \
   bash -c "grep -q '^GLIBC_FLOOR=2.41\$' '$BUILD_SH' && grep -q '^GLIBCXX_FLOOR=3.4.33\$' '$BUILD_SH' && grep -q '^CXXABI_FLOOR=1.3.15\$' '$BUILD_SH'"
 check "the fakes were never called by any check" bash -c "[ ! -e '$tmp/called.log' ]"
+
+check "the build script and its self-test are executable (a worktree checkout must run them by path)" \
+  bash -c "[ -x '$BUILD_SH' ] && [ -x '$HERE/mali-deqp-build-selftest.sh' ]"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then
