@@ -445,7 +445,7 @@ impl Case {
     /// dEQP's name below `functional.transform_feedback.`.
     fn name(&self) -> String {
         let group = match (self.interp, self.a) {
-            (Some(i), _) => return format!("interpolation.{i}.{}_{}", format!("{}_vec4", self.prec), self.mode_prim()),
+            (Some(i), _) => return format!("interpolation.{i}.{}_vec4_{}", self.prec, self.mode_prim()),
             (_, 0) => "basic_types",
             _ => "array",
         };
