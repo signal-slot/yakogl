@@ -247,3 +247,27 @@ commit:
 
 The covered shapes (`loop_bound_product` 44, `uapi_int` 15, the two loop
 forms 12) are lowered with their own references and tests.
+
+## 7. At the tip after `5e1feec9` (`repin-vsunif`)
+
+The refusal this note takes, `MaliError::UniformType` in the vertex walk,
+is gone at the tip (`696d5be3`): plan #387's `5e1feec9` (`intval-vs16`,
+step vs16-2) removed the vertex walk's `int` refusal. None of the eight
+references is refused with it now, and `tests/mali_deqp_vsunif.rs` pins
+their new states. HOST-ONLY:
+
+| reference | state | detail |
+|---|---|---|
+| `random_dead_int` | byte-equal (MATCHED) | |
+| `struct_local` | byte-equal (MATCHED) | |
+| `vec_subscript` | compiles, differs | FAU words of `vs.position`; instruction 1: ours `FMA.f32`, Mesa `V2F32_TO_V2F16` (fp16 `MUX.v2i16` tree) |
+| `tmp_array` | compiles, differs | last FAU word (`0x3e000000` / `0x30003000`); instruction 0: ours lacks `.wait0` on `LD_ATTR_IMM`, then an f32 `CSEL` tree against Mesa's fp16 tree |
+| `struct_dynidx` | compiles, differs | FAU words; instruction 0: `MOV.i32 0x0` against `0x3020100`, select tree against `LSHIFT_OR`/`IADD_IMM` addressing |
+| `struct_cmp` | refused | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` |
+| `struct_int` | refused | `Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet` |
+| `varying_array` | refused | `Valhall: a varying lane left unwritten is not lowered yet` |
+
+What `lower-vsunif` has left is therefore the three differing references
+(Mesa's fp16 narrowing of the attribute and its select tree, the struct
+array addressing) and the three refusals above, not the int uniform type
+check. The references are unchanged.

@@ -11,6 +11,14 @@
 //! it, and `refusals_pinned` (not ignored) holds each refusal's exact text,
 //! so a lowering moves its pin in the same commit.
 //!
+//! Since `5e1feec9` (plan #387 `intval-vs16`, step vs16-2) the vertex walk
+//! no longer refuses these with `UniformType`, so the pins were repinned
+//! (HOST-ONLY, at `696d5be3`): `random_dead_int` and `struct_local` are
+//! byte-equal ([`MATCHED`]); `vec_subscript`, `tmp_array` and
+//! `struct_dynidx` compile but differ ([`DIFFERS`]; the first difference is
+//! in the comment of each test); `struct_cmp`, `struct_int` and
+//! `varying_array` are refused with other texts ([`REFUSED`]).
+//!
 //! The shapes, HOST-ONLY at `e65567ea` (`tools/mali/deqp-host-measure.sh
 //! --cases` over the 463 cases whose `refusals.tsv` text in the four slices
 //! `tools/cts/log/2026-11-24-t6-gles2-S{1..4}-8ff01055/` holds the refusal;
@@ -54,31 +62,26 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The refusal every reference here was taken for: a vertex shader `int`
-/// uniform read other than as a uniform array's index, a loop head's
-/// compare operand or a conversion to float (`nir.rs` `index_only`,
-/// `int_compare_only`, `int_float_only`), or a struct uniform whose int
-/// members are read so.
-const UNIFORM_TYPE: &str = "Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet";
+/// `struct_cmp`: the struct compare is not lowered (the refusal every
+/// reference here was taken for, `UniformType`, is gone since `5e1feec9`).
+const ARITHMETIC: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+
+/// `struct_int`: the nested struct's members are not highp (Mesa's fp16 uniform).
+const VS_UNIFORM_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
+
+/// `varying_array`: the dynamically written varying array leaves lanes unwritten.
+const VARYING_LANE: &str = "Valhall: a varying lane left unwritten is not lowered yet";
 
 /// The references the compiler makes byte-equal, without the
 /// `deqp_vsunif_` prefix.
-const MATCHED: &[&str] = &[];
+const MATCHED: &[&str] = &["random_dead_int", "struct_local"];
 
 /// The references that compile with other words than Mesa's.
-const DIFFERS: &[&str] = &[];
+const DIFFERS: &[&str] = &["struct_dynidx", "tmp_array", "vec_subscript"];
 
 /// Every refused reference with its whole `MaliError` message.
-const REFUSED: &[(&str, &str)] = &[
-    ("random_dead_int", UNIFORM_TYPE),
-    ("struct_cmp", UNIFORM_TYPE),
-    ("struct_dynidx", UNIFORM_TYPE),
-    ("struct_int", UNIFORM_TYPE),
-    ("struct_local", UNIFORM_TYPE),
-    ("tmp_array", UNIFORM_TYPE),
-    ("varying_array", UNIFORM_TYPE),
-    ("vec_subscript", UNIFORM_TYPE),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("struct_cmp", ARITHMETIC), ("struct_int", VS_UNIFORM_PRECISION), ("varying_array", VARYING_LANE)];
 
 /// The references with a struct uniform, drawn with its members set.
 const STRUCT: &[&str] = &["struct_cmp", "struct_dynidx", "struct_int"];
@@ -139,49 +142,61 @@ fn differences_pinned() {
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (an int uniform read only by dead code, which Mesa removes before it lays out the uniforms), lowered by lower-vsunif"]
 fn random_dead_int() {
     assert_matches("random_dead_int");
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (the int index of a vec4's dynamic subscript read), lowered by lower-vsunif"]
-fn vec_subscript() {
-    assert_matches("vec_subscript");
-}
-
-#[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (the int index of a local vec4 array's dynamic read), lowered by lower-vsunif"]
-fn tmp_array() {
-    assert_matches("tmp_array");
-}
-
-#[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (the int index of a varying array's dynamic write), lowered by lower-vsunif"]
-fn varying_array() {
-    assert_matches("varying_array");
-}
-
-#[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (an int uniform stored in a local struct's int member, read as a float), lowered by lower-vsunif"]
 fn struct_local() {
     assert_matches("struct_local");
 }
 
+/// Compiles. The last FAU word of `vs.position` differs (`0x3e000000` ours,
+/// `0x30003000` Mesa's fp16 pair). The first differing instruction is `[0]`:
+/// ours `LD_ATTR_IMM` lacks the `.wait0` Mesa's has; then Mesa narrows with
+/// `V2F32_TO_V2F16` and an fp16 `MUX.v2i16` tree where ours is an f32
+/// `ICMP_OR.u32.eq` / `CSEL.u32.eq` tree.
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (struct uniforms compared whole, an int member among them), lowered by lower-vsunif"]
+#[ignore = "compiles but differs: vs.position FAU word 15, instruction 0 (LD_ATTR_IMM without .wait0; fp16 MUX.v2i16 tree against our f32 CSEL tree)"]
+fn tmp_array() {
+    assert_matches("tmp_array");
+}
+
+/// Compiles. The FAU words of `vs.position` differ. The first differing
+/// instruction is `[1]`: ours `FMA.f32` of the attribute, Mesa's
+/// `V2F32_TO_V2F16` and a `MUX.v2i16` tree on `ICMP_OR.s32.lt`. The varying
+/// is 34 words ours, 44 Mesa's.
+#[test]
+#[ignore = "compiles but differs: vs.position FAU words, instruction 1 (FMA.f32 against V2F32_TO_V2F16 and a MUX.v2i16 tree)"]
+fn vec_subscript() {
+    assert_matches("vec_subscript");
+}
+
+/// Compiles. The FAU words of `vs.position` differ. The first differing
+/// instruction is `[0]`: ours `MOV.i32 r0, 0x0`, Mesa's `MOV.i32 r0,
+/// 0x3020100`; then Mesa addresses the struct array with `LSHIFT_OR.i32`
+/// and `IADD_IMM` where ours is an `ICMP_OR.u32.eq` / `CSEL.u32.eq` select
+/// tree. The varying is 42 words ours, 37 Mesa's.
+#[test]
+#[ignore = "compiles but differs: vs.position FAU words, instruction 0 (MOV 0x0 against 0x3020100; select tree against LSHIFT_OR / IADD_IMM addressing)"]
+fn struct_dynidx() {
+    assert_matches("struct_dynidx");
+}
+
+#[test]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (struct uniforms compared whole, an int member among them), lowered by lower-vsunif"]
 fn struct_cmp() {
     assert_matches("struct_cmp");
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (a nested struct uniform's int members added, then read as a float), lowered by lower-vsunif"]
+#[ignore = "refused: a vertex shader uniform that is not highp (a nested struct uniform's members, Mesa's fp16 uniform), lowered by lower-vsunif"]
 fn struct_int() {
     assert_matches("struct_int");
 }
 
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (a struct uniform array read at int uniform indices, its int members added), lowered by lower-vsunif"]
-fn struct_dynidx() {
-    assert_matches("struct_dynidx");
+#[ignore = "refused: a varying lane left unwritten (the int index of a varying array's dynamic write), lowered by lower-vsunif"]
+fn varying_array() {
+    assert_matches("varying_array");
 }
