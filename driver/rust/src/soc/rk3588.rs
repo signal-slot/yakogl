@@ -1464,6 +1464,197 @@ mod tests {
         assert_moved_to_cpll_over_5(&soc, r);
     }
 
+    /// The CRU words the T6's U-Boot prompt read on 2026-11-12 (note
+    /// nanopc-t6-uboot-handover.md section 4 (c), record
+    /// `20261112-184729-t6-uboot-reads`): `CLKSEL_CON(158)` 0x1f80 (SPLL,
+    /// divider field 0, bit 14 clear), `CLKSEL_CON(159)` 0, `CLKGATE_CON(66)`
+    /// 0x4, `MODE_CON0` 0x545, CPLL words 0xfa 0x42 0 0 0 0 0x9c00, GPLL
+    /// 0xc6 0x42 0 0 0 0 0x9400; PD_GPU off: `PWR_GATE` 0xfff9, request 0,
+    /// ack and state 0x21fff, `REPAIR_STATUS` 0xfff70001. `sel158`,
+    /// `sel159` and `gate66` replace the measured words.
+    fn u_boot_state(sel158: u32, sel159: u32, gate66: u32) -> Soc {
+        let soc = Soc::t6_suspended(0);
+        {
+            let mut r = soc.regs.borrow_mut();
+            for (a, v) in [
+                (SEL158, sel158),
+                (SEL159, sel159),
+                (CRU_BASE + clkgate_con(66), gate66),
+                (CRU_BASE + MODE_CON0, 0x545),
+                (CRU_BASE + pll_con(104), 0xfa),
+                (CRU_BASE + pll_con(105), 0x42),
+                (CRU_BASE + pll_con(106), 0),
+                (CRU_BASE + pll_con(110), 0x9c00),
+                (CRU_BASE + pll_con(112), 0xc6),
+                (CRU_BASE + pll_con(113), 0x42),
+                (CRU_BASE + pll_con(114), 0),
+                (CRU_BASE + pll_con(118), 0x9400),
+                (PMU + pd_gpu::PWR_GATE, 0xfff9),
+                (PMU + pd_gpu::BUS_IDLE_REQ, 0),
+                (PMU + pd_gpu::BUS_IDLE_ACK, 0x0002_1fff),
+                (PMU + pd_gpu::BUS_IDLE_ST, 0x0002_1fff),
+                (PMU + pd_gpu::REPAIR_STATUS, 0xfff7_0001),
+            ] {
+                r.insert(a, v);
+            }
+        }
+        soc
+    }
+
+    fn u_boot_set(soc: &Soc) -> Result<ClockSet, ClockRefusal> {
+        let found = gpu_clock(soc, CRU_BASE);
+        gpu_clock_set(soc, CRU_BASE, &found)
+    }
+
+    #[test]
+    fn u_boot_state_as_measured_is_read_as_the_spll_with_no_rate_and_a_cpll_at_1500_mhz() {
+        let soc = u_boot_state(0x1f80, 0, 0x4);
+        let c = gpu_clock(&soc, CRU_BASE);
+        assert_eq!(gpu_src(c.sel158), (GpuSrc::Spll, 1));
+        assert_eq!((c.sel158, c.sel159, c.gate66, c.mode_con0), (0x1f80, 0, 0x4, 0x545));
+        assert_eq!(c.src_hz, 0, "the SPLL has no rate this reads");
+        assert_eq!(pll_mode(c.mode_con0, CPLL), 1);
+        assert_eq!(pll_mode(c.mode_con0, GPLL), 1);
+        assert_eq!(pll_hz(0xfa, 0x42, 0), Some(SET_CPLL_HZ));
+    }
+
+    /// The prediction for the T6 from U-Boot: MOVE. Exactly one CRU write,
+    /// `SET_SEL158`; CLKSEL_CON(159) already reads 0 and is not written; the
+    /// bits outside `SET_MASK` (12:8 = 0x1f) keep their value.
+    #[test]
+    fn u_boot_state_as_measured_takes_move_with_one_write() {
+        let soc = u_boot_state(0x1f80, 0, 0x4);
+        let r = u_boot_set(&soc);
+        assert_moved_to_cpll_over_5(&soc, r);
+        assert_eq!(soc.get(SEL159), 0);
+        // the gates are not this function's: CLKGATE_CON(66) is as measured
+        assert_eq!(soc.get(CRU_BASE + clkgate_con(66)), 0x4);
+    }
+
+    #[test]
+    fn u_boot_state_writes_nothing_outside_clksel_158() {
+        let soc = u_boot_state(0x1f80, 0, 0x4);
+        u_boot_set(&soc).unwrap();
+        assert!(soc.writes.borrow().iter().all(|(a, _)| *a == SEL158));
+    }
+
+    #[test]
+    fn a_closed_gpu_gate_does_not_change_the_decision_or_get_written() {
+        // CLKGATE_CON(66) 0xd6 is Linux's runtime-suspended value: gates 1, 2, 4, 6, 7 closed
+        for gate in [0xd6, 0xffff, 0] {
+            // the SPLL: moved
+            let soc = u_boot_state(0x1f80, 0, gate);
+            let r = u_boot_set(&soc);
+            assert_moved_to_cpll_over_5(&soc, r);
+            assert_eq!(soc.get(CRU_BASE + clkgate_con(66)), gate);
+            // CPLL / 5: kept, nothing written
+            let soc = u_boot_state(0x1f24, 0, gate);
+            assert_eq!(u_boot_set(&soc).map(|s| (s.kept, s.src_hz)), Ok((true, 300_000_000)));
+            assert!(soc.writes.borrow().is_empty());
+        }
+    }
+
+    #[test]
+    fn a_different_parent_mux_from_u_boot_is_moved_unless_it_lands_on_the_table() {
+        // GPLL 1188 MHz / 1..32: no OPP rate for any divider
+        for div_field in [0u32, 1, 2, 3, 4, 5, 0x1f] {
+            let soc = u_boot_state(0x1f00 | div_field, 0, 0x4);
+            let r = u_boot_set(&soc);
+            assert_moved_to_cpll_over_5(&soc, r);
+        }
+        // AUPLL and NPLL are not modelled in U-Boot's measured words: not tested here
+        // SPLL at any divider: no rate
+        for div_field in [0u32, 4, 0x1f] {
+            let soc = u_boot_state(0x1f80 | div_field, 0, 0x4);
+            let r = u_boot_set(&soc);
+            assert_moved_to_cpll_over_5(&soc, r);
+        }
+        // CPLL as the parent: only /3 (500 MHz) and /5 (300 MHz) are table rates
+        for (div_field, kept) in [(0u32, false), (1, false), (2, true), (3, false), (4, true), (0x1f, false)] {
+            let soc = u_boot_state(0x1f20 | div_field, 0, 0x4);
+            let r = u_boot_set(&soc);
+            if kept {
+                assert_eq!(r.map(|s| s.kept), Ok(true), "div field {div_field}");
+                assert!(soc.writes.borrow().is_empty());
+            } else {
+                assert_moved_to_cpll_over_5(&soc, r);
+            }
+        }
+    }
+
+    #[test]
+    fn the_divider_at_its_limits_from_u_boot_is_moved_and_the_move_writes_both_fields_at_once() {
+        // field 0 (/1: 1500 MHz, over the table) and field 0x1f (/32: 46.875 MHz)
+        for sel in [0x1f20, 0x1f3f, 0x1f00, 0x1f1f, 0x1f80, 0x1f9f, 0x5f20 | 0x1f] {
+            let soc = u_boot_state(sel, 0, 0x4);
+            let r = u_boot_set(&soc);
+            assert_eq!(r.map(|s| (s.kept, s.wrote, s.src_hz)), Ok((false, [0x40ff_0024, 0], 300_000_000)), "{sel:#x}");
+            assert_eq!(soc.writes.borrow().len(), 1, "{sel:#x}");
+        }
+    }
+
+    #[test]
+    fn a_stacks_divider_other_than_1_in_u_boot_state_is_written_after_158() {
+        // U-Boot's 0 measured; a CPLL / 5 source with the stacks divider at its limits
+        for (sel159, kept_sel158) in [(0x1, 0x1f24), (0x1f, 0x1f24)] {
+            let soc = u_boot_state(kept_sel158, sel159, 0x4);
+            let r = u_boot_set(&soc);
+            assert_eq!(r.map(|s| (s.kept, s.wrote)), Ok((false, [0x40ff_0024, 0x001f_0000])));
+            assert_eq!(*soc.writes.borrow(), vec![(SEL158, 0x40ff_0024), (SEL159, 0x001f_0000)]);
+            assert_eq!(soc.get(SEL159), 0);
+        }
+    }
+
+    #[test]
+    fn a_cpll_out_of_normal_mode_or_off_rate_in_u_boot_state_refuses_without_a_write() {
+        // CPLL in slow mode: MODE_CON0 bits 9:8 = 0
+        let soc = u_boot_state(0x1f80, 0, 0x4);
+        soc.regs.borrow_mut().insert(CRU_BASE + MODE_CON0, 0x445);
+        assert_eq!(u_boot_set(&soc), Err(ClockRefusal::NoTableRate(0)));
+        assert!(soc.writes.borrow().is_empty());
+        // CPLL words at 1188 MHz (the GPLL's)
+        let soc = u_boot_state(0x1f80, 0, 0x4);
+        soc.regs.borrow_mut().insert(CRU_BASE + pll_con(104), 0xc6);
+        assert_eq!(u_boot_set(&soc), Err(ClockRefusal::NoTableRate(1_188_000_000)));
+        assert!(soc.writes.borrow().is_empty());
+    }
+
+    /// The QoS choice from U-Boot's reset values. PD_GPU is off at the
+    /// prompt, so the blocks were not read there (note section 4 (c)); the
+    /// values the image leaves are `QosPolicy::Reset`'s ([3, 0x12d, 0x40]).
+    /// From those, `Reset` rewrites the same words (the values do not move),
+    /// and `LinuxZero`, the policy `gpu_up` applies, zeroes exactly the
+    /// three policy words of each of the four blocks.
+    #[test]
+    fn qos_from_u_boot_reset_values_linux_zero_changes_three_words_and_reset_none() {
+        const MAPPED: usize = 0x7000_0000;
+        let build = || {
+            let q = Qos { regs: RefCell::new(Default::default()), writes: RefCell::new(vec![]) };
+            for i in 0..4 {
+                let b = MAPPED + 0x200 * i;
+                for (o, v) in [(0x08, 0x8000_0000), (0x0c, 3), (0x10, 0x12d), (0x14, 0x40), (0x18, 0)] {
+                    q.regs.borrow_mut().insert(b + o, v);
+                }
+            }
+            q
+        };
+        assert_eq!(QosPolicy::Reset.values(), [3, 0x12d, 0x40]);
+        let before = build().regs.borrow().clone();
+        let q = build();
+        qos_apply(&q, MAPPED, QosPolicy::Reset);
+        assert_eq!(*q.regs.borrow(), before, "Reset from reset values changes no word");
+        let q = build();
+        qos_apply(&q, MAPPED, QosPolicy::LinuxZero);
+        let after = q.regs.borrow().clone();
+        let changed: Vec<usize> = before.keys().filter(|a| before[*a] != after[*a]).copied().collect();
+        let mut want: Vec<usize> = (0..4).flat_map(|i| QOS_POLICY_WORDS.map(|o| MAPPED + 0x200 * i + o)).collect();
+        let mut changed = changed;
+        changed.sort();
+        want.sort();
+        assert_eq!(changed, want);
+        assert!(want.iter().all(|a| after[a] == 0));
+    }
+
     #[test]
     fn the_stacks_divider_is_set_to_1_after_the_source() {
         let soc = Soc::t6_suspended(0);
