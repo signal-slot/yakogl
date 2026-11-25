@@ -366,6 +366,11 @@ APPLIES = {
 }
 
 
+# Lines only the image prints (MP2:A/A1 never reach the RAM ring; MP2:B does).
+IMAGE_MARKS = [("MP2:A", r"^MP2:A EL\d"), ("MP2:A1", r"^MP2:A1$"),
+               ("MP2:B", r"^MP2:B console up"), ("Zephyr-boot", r"^\*\*\* Booting Zephyr")]
+
+
 def run(text, expect, only, ring=False):
     raw = text.replace("\0", "").replace("\r", "").split("\n")
     lost, no_ring, kept = 0, None, []
@@ -387,6 +392,12 @@ def run(text, expect, only, ring=False):
     log = Log(clean(text), ring)
     whole = Log(clean(text, last_run=False), ring)  # supply: also the BL2 lines
     results = []
+    # A log with no output from the image (a TF-A/U-Boot banner only, a dead or
+    # never-booted board) is no pass, whatever the banner's own lines say.
+    missing = [name for name, pat in IMAGE_MARKS if not whole.has(pat)]
+    ran = any(APPLIES[c](whole) for c in CHECKS if c != "supply")
+    if len(missing) == len(IMAGE_MARKS) and not ran:
+        results.append(("verdict image FAIL:no-image missing=" + ",".join(missing), True, True))
     if lost:
         results.append(("verdict ring FAIL:ring-wrapped:%d-bytes-lost" % lost, True, True))
     for c in CHECKS:

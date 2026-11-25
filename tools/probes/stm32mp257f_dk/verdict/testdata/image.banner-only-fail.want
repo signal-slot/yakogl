@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict image FAIL:no-image missing=MP2:A,MP2:A1,MP2:B,Zephyr-boot
+verdict supply boot1=PASS:Warm:PADRSTF,SYSC1RSTF
+2 checks, 1 failed

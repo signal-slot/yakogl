@@ -24,6 +24,20 @@ Output, e.g. `verdict return-trial banner=PASS psci-reset=PASS`, then
 `PASS:<value>`/`FAIL:<value>` when the reading matters (`FAIL:absent` = the
 line is not in the log), or a plain reading (`customer=0x...`, `el=2`).
 
+## No image output (`no-image`)
+
+A log in which the image printed nothing (a TF-A/U-Boot banner only: a dead or
+never-booted board) is never a pass. When none of `MP2:A EL<n>`, `MP2:A1`,
+`MP2:B console up` and `*** Booting Zephyr` is in the log, and no program line
+of any check but `supply` is either, the first output line is
+`verdict image FAIL:no-image missing=MP2:A,MP2:A1,MP2:B,Zephyr-boot` (the
+missing markers, comma separated) and the exit is 1, with or without
+`--expect`/`--only`. `supply` still prints its own reading of the banner's
+`Reset reason:` lines after it; that line alone is not evidence the image ran.
+A log cut off mid-run has image output, so it gets the checks' own FAILs
+(`testdata/image.cut-off-fail.*`: `FAIL:absent` for the lines never printed).
+The test data is `testdata/image.banner-only-fail.*`.
+
 ## Ring text (blind runs)
 
 Text decoded from the RAM ring (`../ramlog/ramlog_decode.py`, stdout, with
