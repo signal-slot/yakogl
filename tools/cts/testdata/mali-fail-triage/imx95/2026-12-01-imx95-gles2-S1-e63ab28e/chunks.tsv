@@ -1,0 +1,4 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	T6S1R01	3	done	12	0	0	yes	yes	yakogl-mali-exit: draws=6 refused=1 first_refused=ARITH
+2	T6S1R02	3	hang	360	0	0	yes	yes	verdin_imx95: WDOG3 feeding stopped
+3	T6S1R03	2	hang	300	0	0	yes	yes	verdin_imx95: lifetime over
