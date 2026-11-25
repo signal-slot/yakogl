@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2012-2017 Etnaviv Project
+// SPDX-FileCopyrightText: Wladimir J. van der Laan <laanwj@gmail.com>
+// SPDX-FileCopyrightText: Christian Gmeiner <christian.gmeiner@gmail.com>
+// SPDX-FileCopyrightText: Lucas Stach <l.stach@pengutronix.de>
+// SPDX-FileCopyrightText: Russell King <rmk@arm.linux.org.uk>
 //! The GC7000UL (i.MX8MP, `src/vivante`) words of a 4x multisample
 //! framebuffer object, as plain integers (docs/notes/es3-msaa-renderbuffers.md
 //! (b)2, (c3), (e)4, (f3), (f5)). Not wired: `gc-msaa-fbo` calls them from
