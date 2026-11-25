@@ -198,3 +198,148 @@ per-shader table is
 Recheck when `src/shaderc/online/mali/**`, `src/mali/backend.rs`
 (`DRAWS_WITHOUT_COLOUR`, `MIP_LEVEL_ALIGN`) or `src/gl/texture.rs`
 (`npot_mip_chains`) move.
+
+## 7. Verdin iMX95 (Mali-G310)
+
+Forecast of glmark2-es2 on the Verdin iMX95 (issue #7, B-items of
+`docs/notes/pre-study-imx95.md` section 8), current at main `d6646434`
+(2026-11-25). **Method: reading files and arithmetic on the host. Nothing
+was built for, run on or measured on the board, and no scene was
+rendered.** The compile verdicts of sections 1 and 2 carry over: the
+iMX95 runs the same in-process compiler (`src/shaderc/online/mali`) on arch
+major 10 as the G610, so the 16 clean and 17 refused scenes are the same
+list; only frame times and memory differ.
+
+### 7.1 Two build gaps in the Zephyr sample
+
+`driver/samples/zephyr/glmark2` (the Zephyr image; not
+`tools/cts/mali-glmark2-build.sh`, which builds the T6's Linux
+`glmark2-es2-mali` over panthor and has no iMX95 arm) is not set up for
+`verdin_imx95`. Two things are missing (found by reading the files; no
+`west build` was run):
+
+1. **`driver/samples/zephyr/glmark2/CMakeLists.txt`** has the board
+   includes for the STM32MP257F-DK (`^stm32mp257f_dk`) and the T6
+   (`^nanopc_t6`) but none for the iMX95. The dEQP sample has it
+   (`driver/samples/zephyr/deqp/CMakeLists.txt:39`):
+   `include("${CMAKE_CURRENT_SOURCE_DIR}/../common/verdin_imx95.cmake")`,
+   before `find_package(Zephyr)`. That file puts the board layer's
+   `driver/zephyr/lib/board/verdin_imx95/app.conf` and the sample's
+   `verdin_imx95.conf` into `EXTRA_CONF_FILE` (in that order) and the
+   board's `app.overlay` into `EXTRA_DTC_OVERLAY_FILE`, and stops with
+   `FATAL_ERROR` if the sample has no `verdin_imx95.conf`. Without the
+   include the image has no Mali board layer and no overlay.
+2. **`driver/samples/zephyr/glmark2/verdin_imx95.conf`** (new, beside the
+   `CMakeLists.txt`, modelled on `driver/samples/zephyr/deqp/verdin_imx95.conf`).
+   It is not a `boards/verdin_imx95*.conf`: Zephyr merges that before
+   `app.conf`, which would win over it (`common/verdin_imx95.cmake`). It
+   needs `CONFIG_YAKOGL_MALI_CARVEOUT_BYTES` for glmark2 (7.2),
+   `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=n` for a read-back first run (the
+   panel is B6), and a lifetime and hold for 33 scenes in one image
+   (`boards/nanopc_t6.conf` uses 900 s and 20 s; the dEQP file's 600 s and
+   0 are per row), with `ALIVE_S=60` and `HOLD_FAIL_S` as the dEQP file.
+   `prj.conf` is shared and already sets the 96 MiB libc heap
+   (`CONFIG_COMMON_LIBC_MALLOC_ARENA_SIZE=100663296`).
+
+### 7.2 Memory: the GL carve-out stays at 94 MiB or less
+
+The board's RAM is the 256 MiB window at `0xd0000000` (`zephyr,sram`,
+`driver/samples/zephyr/deqp/README.md`, "Memory"). The carve-out is
+`.noinit`, so it counts with the image. Two differences from the T6:
+
+- On the iMX95 `CONFIG_YAKOGL_MALI_CARVEOUT_BYTES` **includes** the board
+  layer's window memory, `CONFIG_YAKOGL_MALI_WINDOW_BYTES` 9,011,200
+  (8800 KiB; `driver/zephyr/lib/board/verdin_imx95/app.conf`: 32 MiB +
+  9,011,200 = 42,565,632). The dEQP file adds it by hand
+  (`67108864 + 9011200 = 76120064`). The T6's layer has no window, and its
+  100,663,296 is all GL memory.
+- The T6's glmark2 image is 261,111,808 bytes of 268,435,456
+  (`boards/nanopc_t6.conf`). Without its 96 MiB heap and 96 MiB carve-out
+  that is 59,785,216 bytes (57 MiB) of code, data, assets and bss. Assuming
+  the iMX95 image is no larger (same sources and Mali back end; its board
+  layer is the open figure): 59,785,216 + 100,663,296 (heap) + GL +
+  9,011,200 <= 268,435,456 gives **GL <= 98,975,744 bytes, 94.4 MiB**.
+
+So the GL part is **94 MiB (98,566,144) at most**, i.e.
+`CONFIG_YAKOGL_MALI_CARVEOUT_BYTES` <= 107,577,344 with the heap at 96 MiB,
+which leaves 409,600 bytes. **Suggested first value: 92 MiB of GL**
+(`96,468,992 + 9,011,200 = 105,480,192`, 2.5 MiB left); a build's AArch64
+header `image_size` then decides. The scenes need less: refract peaks at
+about 56 MB and terrain needs over 30 MB (`boards/rpi_4b.conf`), build and
+shading 18,932 KiB at most (T6 board run, 2026-11-23). The dEQP image's
+64 MiB would also hold them by those figures, with less room for refract's
+and shadow's 1600x1200 targets. Nobody has measured glmark2's heap use on
+the iMX95, so do not lower the heap on this note.
+
+### 7.3 Per-scene frame time against the T6
+
+**The T6 baseline is thin.** Its recorded timings are the Linux pbuffer
+run of 2026-11-11 (`tools/cts/RESULTS.md`, "Mali: NanoPC-T6 glmark2-es2"),
+where 31 scenes were refused: desktop shadow 0.96 ms (1042 FPS) is the one
+scene that compiled and drew; blur (1.15 ms) and `buffer` (0.36-0.71 ms)
+ran on after refusals, so their times are not shader costs. The Zephyr T6
+record (score 119, two scenes) is flip-bound, not GPU speed. Every figure
+below is therefore a scaling rule applied to that one number and the
+shader mix, not a prediction from a per-scene T6 measurement.
+
+| | T6 (G610) | Verdin iMX95 (G310) | factor |
+|---|---|---|---|
+| shader cores | 4 (`shader_present 0x50005`, `mali-g310-vs-g610.md`) | 1 (`SHADER_PRESENT 0x1`) | 4 |
+| GPU clock | 850 MHz (devfreq, 2026-11-11; 300 MHz on 2026-10-19; `driver/docs/nanopc-t6-mali.md`) | 500, 800 or 1000 MHz by SCMI performance level; the sequence of `imx95-gpu-power.md` selects index 2 = 800 MHz | 1.06 at 800 |
+| per-core rates | G610 row of the model table | G310 row (`mali-g310-vs-g610.md`, table line 54) | not compared here |
+
+- **GPU-bound scenes**: about 4 x 1.06 = **4.2x the T6's time at 800 MHz**
+  (3.4x at 1000 MHz, 6.8x at 500 MHz), assuming one core and the same
+  per-core pipelines.
+- **CPU/driver-bound scenes** (small meshes, many draws: `build`,
+  `buffer`, `ideas`, `pulsar`): bound by command generation and submit on
+  an A55 under Zephyr against the T6's A76 on Linux. No A55 figure exists
+  for this code; expect **1x to 3x**, not 4x.
+- **Desktop shadow** (0.96 ms): about 4 ms (250 FPS) if GPU-bound, 1 to 3
+  ms if CPU-bound. Either is below 16.7 ms, so with the panel (B6) the
+  score is the display's flip rule, as on the T6.
+
+| scenes | class | iMX95 vs T6 |
+|---|---|---|
+| 0, 1 `build`; 5 `shading=gouraud` | CPU/driver, low pixel cost | 1-3x |
+| 13 `effect2d` 5x5, 14 `pulsar`, 17-19 `buffer` | CPU / upload bound | 1-3x |
+| 15 blur, 16 shadow | fill and FBO (800x600), 56 and 107 draws | 3-4x |
+| 25-27 `conditionals`, 28 `function` low, 30, 31 `loop` | full-screen fragment ALU | about 4.2x |
+| the 17 refused scenes | stop in setup, as on the T6 | no frame time |
+
+Once the compiler lowering (section 2) lets them compile, `terrain`,
+`refract`, `shadow` and `jellyfish` would be the slowest: about 4.2x plus
+whatever the CPU resolve of the 1600x1200 depth costs (`D-NPOTMIP`,
+`D-DEPTHTEX`, section 3), possibly hundreds of ms a frame on an A55.
+
+### 7.4 Scenes most at risk
+
+- **Memory** (7.2): `refract` (1600x1200 colour target plus depth texture,
+  about 56 MB), `terrain` (nine FBO passes, over 30 MB) and `shadow`
+  (1600x1200 depth). They fit 92-94 MiB by those figures; `refract`'s
+  out-of-memory refusal on the Pi 4 at 48 MiB (`boards/rpi_4b.conf`) is the
+  precedent for a carve-out set too low. Watch `terrain` and `refract`.
+- **Tile buffer budget**: `mali-g310-vs-g610.md` section 5 says `TIB_BUDGET`
+  and `MEASURED_TILER_LEVELS` are gone (the budget comes from the GPU's
+  `CORE_FEATURES` and `TILER_FEATURES`); the plan text that still names them
+  as G610 constants is out of date against that note. On a G310v1-v3 the
+  halved tile buffer matters only for 12 bytes a pixel or more (3-4 targets
+  or 4x multisampling); at one sample the Z bound is 1024 pixels against
+  2048 on the G610, never below the 1024 clamp. glmark2 draws one RGBA8
+  target plus depth at 1x, so **no scene is expected to reach it**. The
+  board's G310 variant is unread, so this stays a forecast until B2's
+  `CORE_FEATURES` is known.
+- **FBO and depth scenes** (`desktop` blur and shadow, `shadow`, `refract`,
+  `terrain`) put second render passes and tile-size choices on the G310:
+  where a G310-only difference would show first.
+- **`GL_RENDERER`** reads `Arm Mali-G310vN (YakoGL)`; a record names it.
+- **Time**: one core makes long scenes about four times longer; 900 s must
+  cover 33 scenes at glmark2's default 10 s each plus setup.
+
+### 7.5 What it does not say
+
+No image was built, no memory figure measured on the iMX95, no scene ran,
+and the G310's variant is unread. The T6 has no frame times for the 16
+clean scenes yet, so the multipliers have only desktop shadow to act on.
+Redo this section from a build's `image_size` and one `-b` run per class
+once B6 and the T6's lowering allow it.
