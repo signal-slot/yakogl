@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014-2018 Broadcom
+//
+// `MESA_ROWS` transcribes the `FORMAT` rows of Mesa 26.2.1
+// src/gallium/drivers/v3d/v3dx_format_table.c (MIT, Copyright © 2014-2018
+// Broadcom).
 //! The V3D 7.1 TMU format answers per GL format (roadmap P10; the Pi 5's
 //! V3D 7.1.10).
 //!

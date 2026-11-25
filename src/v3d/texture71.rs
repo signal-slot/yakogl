@@ -1,5 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014-2017 Broadcom
+// SPDX-FileCopyrightText: 2012 Rob Clark
+//
+// `layout` transcribes `v3d_setup_slices` and `v3d_get_ub_pad` of Mesa 26.2.1
+// src/gallium/drivers/v3d/v3d_resource.c (MIT, Copyright © 2014-2017
+// Broadcom, Copyright (C) 2012 Rob Clark).
 //! The V3D 7.1 GL texture to texture-record composition (P10 of
 //! docs/notes/pre-study-rpi5.md; docs/notes/v3d71-gl-table.md section 3).
 //!
