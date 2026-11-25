@@ -563,6 +563,29 @@ passes ("ok: container 2 at 0xc3400, 3 images (bl31, bl33, tee), ends at
 0x256000"), and `build --base <dump> --image <imx95_wdog zephyr.bin>` gives
 a 4-image container 2 ending at 0x178400 that checks clean.
 
+**Host build status (2026-11-25).** The host build works as far as a build
+needs no board. `python3 -I tools/imx95_mkboot_selftest.py` passes (61
+checks, 0 failed). Toradex's public `imx-boot-sd` (`TZ:`) fetched from
+`artifacts.toradex.com` is 2449408 bytes with sha256 `675a8572...` as `TZ:`
+states; `check --limit 0x3FDE00` on it passes ("container 2 at 0xc3400, 3
+images (bl31, bl33, tee), ends at 0x256000"). `build --base imx-boot-sd
+--image X --limit boot1` with a 4096-byte placeholder X (an AArch64 Image
+header and zeros, not a Zephyr build) gives a 1486848-byte image, sha256
+`852b7048...` (the full sha256 is `852b70487137d8b2c10ca91eb4fa8844a73f371fe0bc0d65eec01efa7eebcd52`),
+whose container 2 has 4 images (bl31, the 0x400-byte trampoline, tee,
+`image@0xd0000000`), ends at 0x16b000 and passes `check` against the `boot1`
+limit 0x1F7DC00. That output carries Toradex's bytes and is neither committed
+nor written anywhere. Still missing before a board session can try it: (1) a
+real image, `imx95_wdog` or `gl_test` built from one origin/main commit, in
+place of the placeholder, and for the counted way back the second-stage
+loader of `driver/samples/zephyr/boot_stage2` with `--bl33` and the `count`
+record; (2) the board's own boot0 dump as `--base` (D1), since Toradex's
+`imx-boot-sd` is the published image, not necessarily the module's; (3) the
+board steps of section 9 (D2 onward), none of which has run. Without `--base`
+or `IMX95_BOOT_BASE` the tool refuses ("no base image"). `tools/board.sh
+imx95` support for the direct verbs (section 6) waits on #396 and #397; until
+they merge the route is typed by hand.
+
 ## 8. Recommendation
 
 (a1) for images that fit the boot partition uncompressed, (a2) for the GL
