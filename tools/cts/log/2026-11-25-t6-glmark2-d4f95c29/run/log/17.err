@@ -1,0 +1,4 @@
+yakogl-mali: loaded build=d4f95c29 lib=<home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/lib/libGLESv2.so.2
+glmark2-picture: [desktop] effect=shadow:windows=4: 800x600; probes c ffffffff, tl 919191ff, tr adadadff, bl fcfcfcff, br ffffffff; crc16 117c, crc16q 5ed6; mean 200 206 186; black no
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=269233 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

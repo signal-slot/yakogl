@@ -1,0 +1,197 @@
+mali-glmark2-session: session into <repo>/build/t6-glmark2-d4f95c29-out, board from BOARD_HOST (not printed)
+mali-glmark2-session: 1/6 preflight
+preflight: ssh: ok reachable
+preflight: os-release: ok Armbian 26.8.10 trixie
+preflight: uname: ok 6.18.55-current-rockchip64
+preflight: glibc: ok GLIBC_2.41 (floor 2.41)
+preflight: glibcxx: ok GLIBCXX_3.4.33 (floor 3.4.33)
+preflight: cxxabi: ok CXXABI_1.3.15 (floor 1.3.15)
+preflight: build-GLIBC: ok needs GLIBC_2.38, board has GLIBC_2.41 (BUILD-INFO)
+preflight: build-GLIBCXX: ok needs GLIBCXX_3.4.32, board has GLIBCXX_3.4.33 (BUILD-INFO)
+preflight: build-CXXABI: ok needs CXXABI_1.3.9, board has CXXABI_1.3.15 (BUILD-INFO)
+preflight: build-egl-names: ok lib/ holds libEGL.so and libGLESv2.so
+preflight: build-runpath: ok RUNPATH $ORIGIN/../lib
+preflight: render-node: ok /dev/dri/renderD128 belongs to panthor
+preflight: panthor-module: ok loaded
+preflight: stage-space: ok 9923 MiB free at <home>/yakogl-mali (or <home>)
+preflight: boot-space: ok 9923 MiB free at /boot
+preflight: dmesg: ok readable; kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+preflight: system-egl: ok present (libEGL.so libEGL.so.1 libGLESv2.so libGLESv2.so.2) but the build's lib/ holds libEGL.so/libGLESv2.so and RUNPATH $ORIGIN/../lib wins
+preflight: summary: 17 ok, 0 FAIL, 0 warn
+mali-glmark2-session: 2/6 snapshot before
+mali-board-state.sh: snapshot of 419 /boot files and 100 modules written to <repo>/build/t6-glmark2-d4f95c29-out/state-before.txt
+mali-glmark2-session: 3/6 runner
+mali-glmark2-run: holding the board lock (pid 42113, HOLD_MAX 36450 s)
+mali-glmark2-run: boot_id before ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d, kernel 6.18.55-current-rockchip64
+mali-glmark2-run: staged (299204 KiB with the margin, 10161856 free)
+mali-glmark2-run: scene 1/33 build:use-vbo=false
+mali-glmark2-run: scene 1: ok, ms/frame 0.736, kmsg 0, rc 0
+mali-glmark2-run: scene 2/33 build:use-vbo=true
+mali-glmark2-run: scene 2: ok, ms/frame 0.277, kmsg 0, rc 0
+mali-glmark2-run: scene 3/33 texture:texture-filter=nearest
+mali-glmark2-run: scene 3: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 4/33 texture:texture-filter=linear
+mali-glmark2-run: scene 4: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 5/33 texture:texture-filter=mipmap
+mali-glmark2-run: scene 5: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 6/33 shading:shading=gouraud
+mali-glmark2-run: scene 6: ok, ms/frame 0.337, kmsg 0, rc 0
+mali-glmark2-run: scene 7/33 shading:shading=blinn-phong-inf
+mali-glmark2-run: scene 7: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 8/33 shading:shading=phong
+mali-glmark2-run: scene 8: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 9/33 shading:shading=cel
+mali-glmark2-run: scene 9: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 10/33 bump:bump-render=high-poly
+mali-glmark2-run: scene 10: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 11/33 bump:bump-render=normals
+mali-glmark2-run: scene 11: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 12/33 bump:bump-render=height
+mali-glmark2-run: scene 12: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 13/33 effect2d:kernel=0,1,0;1,-4,1;0,1,0;
+mali-glmark2-run: scene 13: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 14/33 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;
+mali-glmark2-run: scene 14: ok, ms/frame 0.382, kmsg 0, rc 0
+mali-glmark2-run: scene 15/33 pulsar:quads=5:texture=false:light=false
+mali-glmark2-run: scene 15: ok, ms/frame 0.235, kmsg 0, rc 0
+mali-glmark2-run: scene 16/33 desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true
+mali-glmark2-run: scene 16: ok, ms/frame 1.408, kmsg 0, rc 0
+mali-glmark2-run: scene 17/33 desktop:windows=4:effect=shadow
+mali-glmark2-run: scene 17: ok, ms/frame 0.966, kmsg 0, rc 0
+mali-glmark2-run: scene 18/33 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false
+mali-glmark2-run: scene 18: ok, ms/frame 2.130, kmsg 0, rc 0
+mali-glmark2-run: scene 19/33 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false
+mali-glmark2-run: scene 19: ok, ms/frame 1.403, kmsg 0, rc 0
+mali-glmark2-run: scene 20/33 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true
+mali-glmark2-run: scene 20: ok, ms/frame 1.631, kmsg 0, rc 0
+mali-glmark2-run: scene 21/33 ideas:speed=duration
+mali-glmark2-run: scene 21: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 22/33 jellyfish
+mali-glmark2-run: scene 22: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 23/33 terrain
+bash: line 1: 2888609 Aborted                 setsid -w sh -c 'echo $$ > <home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/run/23.pgid; exec timeout -k 10 180 env LD_LIBRARY_PATH=<home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/lib YAKOGL_MALI_DEV=/dev/dri/renderD128 <home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/bin/glmark2-es2-mali --size 800x600 -b "$1"' glmark2 'terrain' > <home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/run/23.out 2> <home>/yakogl-mali-glmark2/d4f95c29-20261125-193308/run/23.err < /dev/null
+mali-glmark2-run: scene 23: crash, ms/frame -, kmsg 0, rc 134
+mali-glmark2-run: scene 23: probing the device with build:use-vbo=false (1/2, bound 60 s)
+mali-glmark2-run: scene 23: probe 1: pass (ok, kmsg 0)
+mali-glmark2-run: scene 24/33 shadow
+mali-glmark2-run: scene 24: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 25/33 refract
+mali-glmark2-run: scene 25: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 26/33 conditionals:vertex-steps=0:fragment-steps=0
+mali-glmark2-run: scene 26: ok, ms/frame 0.249, kmsg 0, rc 0
+mali-glmark2-run: scene 27/33 conditionals:vertex-steps=0:fragment-steps=5
+mali-glmark2-run: scene 27: ok, ms/frame 0.249, kmsg 0, rc 0
+mali-glmark2-run: scene 28/33 conditionals:vertex-steps=5:fragment-steps=0
+mali-glmark2-run: scene 28: ok, ms/frame 0.248, kmsg 0, rc 0
+mali-glmark2-run: scene 29/33 function:fragment-steps=5:fragment-complexity=low
+mali-glmark2-run: scene 29: ok, ms/frame 0.245, kmsg 0, rc 0
+mali-glmark2-run: scene 30/33 function:fragment-steps=5:fragment-complexity=medium
+mali-glmark2-run: scene 30: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: scene 31/33 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false
+mali-glmark2-run: scene 31: ok, ms/frame 0.249, kmsg 0, rc 0
+mali-glmark2-run: scene 32/33 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false
+mali-glmark2-run: scene 32: ok, ms/frame 0.252, kmsg 0, rc 0
+mali-glmark2-run: scene 33/33 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true
+mali-glmark2-run: scene 33: refused-draw, ms/frame -, kmsg 0, rc 0
+mali-glmark2-run: boot_id after ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d; run directory <repo>/build/t6-glmark2-d4f95c29-out/run (raw files <repo>/build/mali-glmark2-session/t6-glmark2-d4f95c29-out, never committed)
+mali-glmark2: 16/33 scenes ok, failed 17 (refused-draw 16, crash 1), commit d4f95c29
+mali-glmark2-session: runner exit 0
+mali-glmark2-session: 4/6 snapshot after and compare (runner exit 0)
+mali-board-state.sh: snapshot of 419 /boot files and 100 modules written to <repo>/build/t6-glmark2-d4f95c29-out/state-after.txt
+mali-board-state: /boot unchanged (419 files, sha256 7ebf21ccba82b8a4507a810a514711617b035d5b94c02a62307ef0b9e19e30c2)
+mali-board-state: modules unchanged (100 modules, sha256 65cd42a2de835b3dc84e98f610c15d81a56733d122d72e34ef834f16fd507e50)
+mali-board-state: U-Boot env unavailable in both snapshots (fw_printenv missing or needs root; not compared)
+mali-board-state: boot_id unchanged (ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d)
+mali-glmark2-session: 5/6 ssh reachability
+mali-glmark2-session: board reachable over ssh, boot_id same
+mali-glmark2-session: 6/6 tally
+glmark2-mali-tally: build d4f95c29
+run run: commit d4f95c2943787df0d65b8f34d8ac478551015f7a, board absent, kernel 6.18.55-current-rockchip64, pair sha256 absent
+#  scene                                                                                                  verdict    ms/frame   FPS  picture                      judgement    kmsg
+01 [build] use-vbo=false                                                                                  ok             0.74  1360  crc16 012a mean 12 12 12     no-reference 0
+02 [build] use-vbo=true                                                                                   ok             0.28  3605  crc16 012a mean 12 12 12     no-reference 0
+03 [texture] texture-filter=nearest                                                                       fail              -     -  -                            absent       0
+04 [texture] texture-filter=linear                                                                        fail              -     -  -                            absent       0
+05 [texture] texture-filter=mipmap                                                                        fail              -     -  -                            absent       0
+06 [shading] shading=gouraud                                                                              ok             0.34  2972  crc16 9243 mean 0 0 17       no-reference 0
+07 [shading] shading=blinn-phong-inf                                                                      fail              -     -  -                            absent       0
+08 [shading] shading=phong                                                                                fail              -     -  -                            absent       0
+09 [shading] shading=cel                                                                                  fail              -     -  -                            absent       0
+10 [bump] bump-render=high-poly                                                                           fail              -     -  -                            absent       0
+11 [bump] bump-render=normals                                                                             fail              -     -  -                            absent       0
+12 [bump] bump-render=height                                                                              fail              -     -  -                            absent       0
+13 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;                                                                  fail              -     -  -                            absent       0
+14 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;                                                       ok             0.38  2617  crc16 a972 mean 231 233 221  no-reference 0
+15 [pulsar] light=false:quads=5:texture=false                                                             ok             0.23  4253  crc16 4f6b mean 48 32 45     no-reference 0
+16 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4                                  ok             1.41   711  crc16 e413 mean 204 209 190  no-reference 0
+17 [desktop] effect=shadow:windows=4                                                                      ok             0.97  1036  crc16 117c mean 200 206 186  mismatch     0
+18 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map      ok             2.13   470  crc16 be99 mean 42 57 66     no-reference 0
+19 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata  ok             1.40   713  crc16 2541 mean 42 57 66     no-reference 0
+20 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map       ok             1.63   614  crc16 5de6 mean 42 57 65     no-reference 0
+21 [ideas] speed=duration                                                                                 fail              -     -  -                            absent       0
+22 [jellyfish] <default>                                                                                  fail              -     -  -                            absent       0
+23 [terrain] <default>                                                                                    crash             -     -  -                            absent       0
+24 [shadow] <default>                                                                                     fail              -     -  -                            absent       0
+25 [refract] <default>                                                                                    fail              -     -  -                            absent       0
+26 [conditionals] fragment-steps=0:vertex-steps=0                                                         ok             0.25  4015  crc16 1657 mean 56 56 56     no-reference 0
+27 [conditionals] fragment-steps=5:vertex-steps=0                                                         ok             0.25  4017  crc16 afb7 mean 49 49 49     no-reference 0
+28 [conditionals] fragment-steps=0:vertex-steps=5                                                         ok             0.25  4028  crc16 2b9f mean 55 55 55     no-reference 0
+29 [function] fragment-complexity=low:fragment-steps=5                                                    ok             0.24  4088  crc16 72a3 mean 56 56 56     no-reference 0
+30 [function] fragment-complexity=medium:fragment-steps=5                                                 fail              -     -  -                            absent       0
+31 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5                                             ok             0.25  4022  crc16 b231 mean 55 55 55     no-reference 0
+32 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5                                          ok             0.25  3970  crc16 b231 mean 55 55 55     no-reference 0
+33 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5                                           fail              -     -  -                            absent       0
+scenes run 33 of 33; crash 1, fail 16, ok 16; GL error lines 16, out of GPU memory lines 0, panthor kernel lines 0 (resets 0); 11.00 ms/frame summed over 16 scenes; score absent (not every scene has an FPS)
+pictures against column mali: 33 scenes, absent 17, mismatch 1, no-reference 15
+scene [texture] texture-filter=nearest: fail (fail: refused: link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)); also fail: set up failed
+scene [texture] texture-filter=linear: fail (fail: refused: link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)); also fail: set up failed
+scene [texture] texture-filter=mipmap: fail (fail: refused: link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)); also fail: set up failed
+scene [shading] shading=blinn-phong-inf: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)); also fail: set up failed
+scene [shading] shading=phong: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet)); also fail: set up failed
+scene [shading] shading=cel: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)); also fail: set up failed
+scene [bump] bump-render=high-poly: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)); also fail: set up failed
+scene [bump] bump-render=normals: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)); also fail: set up failed
+scene [bump] bump-render=height: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet)); also fail: set up failed
+scene [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than # look-ups, is not lowered yet)); also fail: set up failed
+scene [ideas] speed=duration: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)); also fail: set up failed
+scene [jellyfish] <default>: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet)); also fail: set up failed
+scene [terrain] <default>: crash (crash: no yakogl-mali-exit line (the process died before atexit)); also gl-error: GL error 0x501 in glGetAttribLocation, GL error 0x501 in glGetUniformLocation; also fail: no result line
+scene [shadow] <default>: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)); also fail: set up failed
+scene [refract] <default>: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet)); also fail: set up failed
+scene [function] fragment-complexity=medium:fragment-steps=5: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet)); also fail: set up failed
+scene [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: fail (fail: refused: compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet)); also fail: set up failed
+scene [build] use-vbo=false: picture no reference (no reference in glmark2-pictures.txt)
+scene [build] use-vbo=true: picture no reference (no reference in glmark2-pictures.txt)
+scene [texture] texture-filter=nearest: picture absent (no picture line)
+scene [texture] texture-filter=linear: picture absent (no picture line)
+scene [texture] texture-filter=mipmap: picture absent (no picture line)
+scene [shading] shading=gouraud: picture no reference (no reference in glmark2-pictures.txt)
+scene [shading] shading=blinn-phong-inf: picture absent (no picture line)
+scene [shading] shading=phong: picture absent (no picture line)
+scene [shading] shading=cel: picture absent (no picture line)
+scene [bump] bump-render=high-poly: picture absent (no picture line)
+scene [bump] bump-render=normals: picture absent (no picture line)
+scene [bump] bump-render=height: picture absent (no picture line)
+scene [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: picture absent (no picture line)
+scene [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: picture no reference (no reference in glmark2-pictures.txt)
+scene [pulsar] light=false:quads=5:texture=false: picture no reference (no reference in glmark2-pictures.txt)
+scene [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: picture no reference (no reference in glmark2-pictures.txt)
+scene [desktop] effect=shadow:windows=4: picture mismatch (probe tr adadad vs c0c0c0 (off 19); probe bl fcfcfc vs f3f3f3 (off 9))
+scene [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: picture no reference (no reference in glmark2-pictures.txt)
+scene [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: picture no reference (no reference in glmark2-pictures.txt)
+scene [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: picture no reference (no reference in glmark2-pictures.txt)
+scene [ideas] speed=duration: picture absent (no picture line)
+scene [jellyfish] <default>: picture absent (no picture line)
+scene [terrain] <default>: picture absent (no picture line)
+scene [shadow] <default>: picture absent (no picture line)
+scene [refract] <default>: picture absent (no picture line)
+scene [conditionals] fragment-steps=0:vertex-steps=0: picture no reference (no reference in glmark2-pictures.txt)
+scene [conditionals] fragment-steps=5:vertex-steps=0: picture no reference (no reference in glmark2-pictures.txt)
+scene [conditionals] fragment-steps=0:vertex-steps=5: picture no reference (no reference in glmark2-pictures.txt)
+scene [function] fragment-complexity=low:fragment-steps=5: picture no reference (no reference in glmark2-pictures.txt)
+scene [function] fragment-complexity=medium:fragment-steps=5: picture absent (no picture line)
+scene [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: picture no reference (no reference in glmark2-pictures.txt)
+scene [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: picture no reference (no reference in glmark2-pictures.txt)
+scene [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: picture absent (no picture line)
+mali-glmark2-session: tally exit 0; table and row drafts under <repo>/build/t6-glmark2-d4f95c29-out (tally-*.txt)
+mali-glmark2-session: exit 0 (all clean, board left as found)

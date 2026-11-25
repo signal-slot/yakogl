@@ -1,0 +1,11 @@
+commit=d4f95c2943787df0d65b8f34d8ac478551015f7a
+dev=no
+glmark2=22c527cb0556f3a1ac4445aaa52cc532760928d5
+flavour=pbuffer
+scenes=33
+timeout=180
+boot_id_before=ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d
+kernel=6.18.55-current-rockchip64
+started=2026-11-25T19:33:22Z
+boot_id_after=ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d
+ended=2026-11-25T19:37:42Z
