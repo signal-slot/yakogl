@@ -4,7 +4,7 @@
 """Print the hand-typed staging and U-Boot lines of Verdin iMX95 dEQP rows.
 
   python3 -I tools/cts/imx95-uboot-row.py --storage <dev:part> --stage <path>
-          [--conf <verdin_imx95.conf>] <img-dir> <LABEL | LABEL-LABEL>...
+          [--fs ext4|fat] [--mount <dir>] [--conf <verdin_imx95.conf>] <img-dir> <LABEL | LABEL-LABEL>...
 
 <img-dir> is what tools/cts/imx95-deqp-images.sh writes: <LABEL>/zephyr/
 zephyr.bin (with zephyr/.config) and <LABEL>.built. --storage (U-Boot's
@@ -16,6 +16,11 @@ decision. A range is two labels with the same prefix and a numeric tail
 placeholder for host and credentials. The run bound is the lifetime
 (CONFIG_YAKOGL_BOARD_LIFETIME_S of the image's .config, else of the conf
 file) plus the WDOG3 period (CONFIG_YAKOGL_BOARD_ALIVE_S).
+--fs ext4 (default) prints ext4load with the staged path. --fs fat prints
+fatload with the file name relative to the partition: --stage must lie under
+--mount (the partition's mount point in the module's Linux, default /boot) and
+the prefix is stripped (--stage /boot/ gives fatload mmc 0:1 0xd0000000
+<LABEL>.bin); the ssh-side lines keep the full path.
 A row whose AArch64 header image_size (offset 16) or file exceeds the 256 MiB
 window, or that has no header, is refused (exit 1); other rows still print.
 """
@@ -63,7 +68,7 @@ def expand(args):
     return out
 
 
-def row(img, label, storage, stage, conf):
+def row(img, label, storage, stage, conf, fs="ext4", mount="/boot"):
     d = os.path.join(img, label)
     zb = os.path.join(d, "zephyr", "zephyr.bin")
     if not os.path.isfile(zb):
@@ -89,6 +94,12 @@ def row(img, label, storage, stage, conf):
     md5 = hashlib.md5(data).hexdigest()
     size = len(data)
     f = posixpath.join(stage, label + ".bin") if stage.endswith("/") else stage
+    uf = f
+    if fs == "fat":
+        m = mount.rstrip("/") + "/"
+        if not f.startswith(m) or len(f) == len(m):
+            return None, "%s: --stage %s is not under --mount %s" % (label, f, mount)
+        uf = f[len(m):]
     built = ""
     try:
         with open(os.path.join(img, label + ".built")) as fh:
@@ -105,7 +116,7 @@ def row(img, label, storage, stage, conf):
           "$VI95_SSH 'cat > %s' < %s" % (f, zb),
           "$VI95_SSH 'md5sum %s'   # expect %s" % (f, md5),
           "# U-Boot prompt:",
-          "ext4load mmc %s 0x%x %s" % (storage, LOAD_ADDR, f),
+          "%sload mmc %s 0x%x %s" % (fs, storage, LOAD_ADDR, uf),
           "md5sum 0x%x 0x%x   # expect %s" % (LOAD_ADDR, size, md5),
           "dcache off; icache flush; go 0x%x" % LOAD_ADDR,
           "# run bound: %d s lifetime + %d s WDOG3 = %d s (from %s)"
@@ -119,6 +130,10 @@ def main():
     ap.add_argument("--storage", required=True, help="U-Boot <dev:part>")
     ap.add_argument("--stage", required=True,
                     help="staging path on the module (trailing / adds <LABEL>.bin)")
+    ap.add_argument("--fs", choices=("ext4", "fat"), default="ext4",
+                    help="file system of --storage: ext4load or fatload")
+    ap.add_argument("--mount", default="/boot",
+                    help="mount point of the partition, for --fs fat")
     ap.add_argument("--conf", default=DEFAULT_CONF)
     ap.add_argument("img_dir")
     ap.add_argument("labels", nargs="+")
@@ -134,7 +149,7 @@ def main():
                  " one file")
     bad = 0
     for l in labels:
-        txt, err = row(a.img_dir, l, a.storage, a.stage, a.conf)
+        txt, err = row(a.img_dir, l, a.storage, a.stage, a.conf, a.fs, a.mount)
         if err:
             print("refused: " + err, file=sys.stderr)
             bad += 1
