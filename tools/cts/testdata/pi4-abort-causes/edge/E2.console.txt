@@ -1,0 +1,6 @@
+10:00:01 deqp: case filter 'dEQP-GLES3.functional.y.*'
+10:00:02 Test case 'dEQP-GLES3.functional.y.a'..
+10:00:02 deqp: ResourceError dEQP-GLES3.functional.y.a
+10:00:02 v3d_deqp: case #0 R 5ms k2/8 c1/1 r1 dEQP-GLES3.functional.y.a
+10:00:03 refusals: 1 draws refused by the V3D backend (v3d_refused_draws), causes:
+10:00:03   r0 (first #0) a target larger than the tile memory is sized for (4096x4096)

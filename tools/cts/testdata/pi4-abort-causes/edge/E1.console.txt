@@ -1,0 +1,9 @@
+deqp: case filter 'dEQP-GLES3.functional.x.*'
+Test case 'dEQP-GLES3.functional.x.a'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+deqp: Pass dEQP-GLES3.functional.x.a
+Test case 'dEQP-GLES3.functional.x.b'..
+GL error 0x505 in glDrawArrays
+deqp: ResourceError dEQP-GLES3.functional.x.b
+Test run was ABORTED!
+deqp: done: 1 passed, 1 failed, 0 not supported, 0 warnings, complete=0
