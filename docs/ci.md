@@ -573,6 +573,18 @@ gate needs about 220 GB free without pruning (walk-fit, disk-map);
 `YAKOGL_GATE_MIN_FREE_GB` overrides that. A shortfall is `warn`, and `missing`
 (exit status 1) when the threshold is set explicitly or `GATE_FULL_RUN=1`.
 
+Run the check in the shell that starts the gate, after the exports the full
+gate is started with: `export $(tools/cts/deps-env.sh --present);
+tools/setup-gate-host.sh --check; tools/check.sh --jobs 2`. `--check` reads its
+inputs from the environment, like check.sh. A bare `--check` in a fresh shell
+reports `aarch64-cc` (the Zephyr SDK's `aarch64-zephyr-elf-gcc` is found
+through `ZEPHYR_SDK_INSTALL_DIR`) and `GLMARK2_SRC` as `missing` on a host
+whose inputs are prepared: false misses. The other inputs `deps-env.sh
+--present` prints (`ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
+`PCO_SPM_LOAD_CAPTURE`, `MESA_PAN_TREE`, `DEQP_GLES3_TEST_DIR`, `LZ4`,
+`MALI_CSFFW`) are read the same way; treat a `missing` for any of them from a
+bare shell as unconfirmed until it is repeated after the exports.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --no-clippy --changed <merge-base>`;
