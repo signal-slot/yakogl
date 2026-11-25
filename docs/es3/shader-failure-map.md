@@ -357,3 +357,423 @@ mixed with the ones below.
   EXT_color_buffer_float) and R-bucket `:1583` ("float render targets") should
   follow §2: the target is RGBA32UI (int-rt-*), plus 15 four-sample surfaces
   (no item).
+
+## 7. texture_functions.texturesize: the src/gl change behind 20 cube and 2D-array fails
+
+This section is the design for item texfn-gl-design (plan #400). It is not
+applied: plan #400 does not edit `src/gl` (plan #397 holds it), so the patch
+is for the plan that does. It was read at `bdd2ba1c`, and every `file:line`
+refers to that tree.
+
+### 7.1 The 20 cases
+
+All 38 `texturesize` names fail on the AM62P with "Got unexpected texture
+size" (`docs/es3/am62p-gles3-notpass.tsv`, the `ad2b5ed` run). Item
+texfn-s1-locate split them into three groups:
+
+- 10 `sampler2d`/`isampler2d`/`usampler2d`/`sampler2dshadow` cases (the 2D
+  bind, item pvr-texsize-base, in `src/pvr`).
+- 8 `sampler3d`/`isampler3d`/`usampler3d` cases (native 3D).
+- These 20: the cube and the 2D array, each in both stages.
+
+| sampler | fragment | vertex |
+|---|---|---|
+| samplercube_fixed | `texturesize.samplercube_fixed_fragment` | `texturesize.samplercube_fixed_vertex` |
+| samplercube_float | `texturesize.samplercube_float_fragment` | `texturesize.samplercube_float_vertex` |
+| isamplercube | `texturesize.isamplercube_fragment` | `texturesize.isamplercube_vertex` |
+| usamplercube | `texturesize.usamplercube_fragment` | `texturesize.usamplercube_vertex` |
+| samplercubeshadow | `texturesize.samplercubeshadow_fragment` | `texturesize.samplercubeshadow_vertex` |
+| sampler2darray_fixed | `texturesize.sampler2darray_fixed_fragment` | `texturesize.sampler2darray_fixed_vertex` |
+| sampler2darray_float | `texturesize.sampler2darray_float_fragment` | `texturesize.sampler2darray_float_vertex` |
+| isampler2darray | `texturesize.isampler2darray_fragment` | `texturesize.isampler2darray_vertex` |
+| usampler2darray | `texturesize.usampler2darray_fragment` | `texturesize.usampler2darray_vertex` |
+| sampler2darrayshadow | `texturesize.sampler2darrayshadow_fragment` | `texturesize.sampler2darrayshadow_vertex` |
+
+Each name is prefixed `dEQP-GLES3.functional.shaders.texture_functions.`.
+
+### 7.2 What dEQP does in the rows that still fail
+
+`TextureSizeCase::testTextureSize` (es3fShaderTextureFunctionTests.cpp,
+VK-GL-CTS main) sets up each texture as follows:
+
+- It allocates `lod + lodBase + 1` levels with glTexStorage2D/3D.
+- It sets `GL_TEXTURE_MIN_FILTER` and `GL_TEXTURE_MAG_FILTER` to
+  `GL_NEAREST`, and `GL_TEXTURE_BASE_LEVEL` to `lodBase`.
+- It compares `textureSize(u_sampler, u_lod)` with its table.
+
+The compiler-side sizes of every row with base level 0 are fixed and pinned
+on the host (`tests/es3_pvr_texsize.rs:362-401`,
+`docs/es3/shader-host-repro.md:145`). What is left are the table's three
+"with lod base" rows. All 20 cases run them; a cube runs only the square
+one:
+
+| texture | lod | lodBase | expected (array: z = layers) |
+|---|---|---|---|
+| 100x31x18 | 3 | 1 | 6, 1 (array: 6, 1, 18) |
+| 128x64x32 | 3 | 1 | 8, 4 (array: 8, 4, 32) |
+| 64x64x64 | 1 | 1 | 16, 16 (array: 16, 16, 64; the cube's only row) |
+
+A case fails if any one row is wrong, so these three rows account for all 20.
+
+### 7.3 The cause
+
+The draw carries the base level (`src/gl/draw.rs:5053`,
+`tb.base_level = bind_base_level(t)`; `bind_base_level` `:792-802`). But no
+cube or array bind that the PowerVR gets under a NEAREST filter can use it:
+
+- **Native cube.** This is the default (`PVR_NATIVE_CUBE_DEFAULT` 1,
+  `src/shaderc/mod.rs:282`), and a textureSize-only program sets the
+  record's bit 0 (`tests/es3_pvr_texsize.rs:14-16`).
+  - Without a mipmap filter the draw asks for a one-level copy
+    (`src/gl/draw.rs:4949-4951`, `single`).
+  - `native_cube::copy` then copies **level 0** alone
+    (`src/gl/native_cube.rs:174-175`, `:185`, `:254-266`), and the bind's
+    extent is set to level 0's (`src/gl/draw.rs:4956-4958`).
+  - The back end writes no base level, which is right because the copy
+    holds one level (`src/pvr/backend.rs:6371-6381`, `if !single`).
+  - The compiler computes the size as `word0 extent >> (lod + baselevel)`
+    (`src/shaderc/online/powervr/select.rs:3980-3999`, `tex_size_2d`). The
+    result is level 0's size at `lod`, one level too big.
+  - The copy also samples level 0's texels, where ES 3.0.6 3.8.9 says
+    level_base.
+- **Native array.** This is not the default (`PVR_NATIVE_ARRAY_DEFAULT` 0,
+  `src/shaderc/mod.rs:311`). It has the same fault at
+  `src/gl/draw.rs:4976-4985` and `src/gl/native_array.rs:175-179`,
+  `:249-262`, and in the back end's `if !single` at
+  `src/pvr/backend.rs:6443`.
+- **Stacked array and stacked cube.** This covers the default array and a
+  cube whose program does not ask for the native copy.
+  - The bind is one tall image that the shader addresses, bound from level 0
+    (`src/gl/draw.rs:4906-4917`).
+  - The back end describes it from level 0 whatever the base level
+    (`src/pvr/backend.rs:6224-6238`, `lod_from_base`: "theirs is the GL
+    core's").
+  - So the GL core must restate it. The doc comment at
+    `src/gl/draw.rs:3629` says the same: "the draw does not apply
+    GL_TEXTURE_BASE_LEVEL".
+
+The 2D bind (`texture_bind_2d`, `src/gl/draw.rs:804-833`) is not part of
+this problem. The back end applies its base level itself, with the
+baselevel word or with `rebase_stride_bind` (`src/pvr/texture.rs:124-153`).
+That is why its 10 cases are a `src/pvr` item.
+
+### 7.4 The patch
+
+The rule: a cube or 2D-array bind that the PowerVR samples at one level (no
+mipmap filter) is restated from the effective base level.
+`gl::native_vol::View` already does this for a 3D copy
+(`src/gl/native_vol.rs:158-210`).
+
+- The one-level native copy holds the base level.
+- A stacked bind gets the base level's address, extent and pitch.
+- A mipmapped bind is not touched. Its copy keeps the full chain, and the
+  back end writes baselevel (`src/pvr/backend.rs:6379`, `:6443`).
+- Compressed cubes and arrays, and a level the storage does not hold, keep
+  level 0's texels (see the decisions after the diff).
+
+```diff
+--- a/src/gl/native_cube.rs
++++ b/src/gl/native_cube.rs
+@@ struct Entry
+     bytes: u32,
+     /// Level 0 alone ([`copy`]'s `single`).
+     single: bool,
++    /// The level a one-level copy holds ([`copy_from`]'s `first`).
++    first: u32,
+     used: u32,
+ }
+@@ const EMPTY: Entry
+     bytes: 0,
+     single: false,
++    first: 0,
+     used: 0,
+ };
+@@ fn copy (:181)
+-pub fn copy(t: &GlTexture, target_kick: u32, single: bool) -> Option<(u64, u32)> {
++pub fn copy(t: &GlTexture, target_kick: u32, single: bool) -> Option<(u64, u32)> {
++    copy_from(t, target_kick, single, 0).map(|(gpu, bytes, _)| (gpu, bytes))
++}
++
++/// [`copy`], whose one-level copy (`single`) is level `first` -- the
++/// effective GL_TEXTURE_BASE_LEVEL (ES 3.0.6 3.8.9: without a mipmap filter
++/// level_base is sampled; GLSL ES 3.00 8.8: textureSize answers level_base
++/// + lod) -- in faces of that level's side, when the cube is uncompressed
++/// and its storage holds that level; else level 0, as [`copy`]. Returns the
++/// level copied as the third value.
++pub fn copy_from(t: &GlTexture, target_kick: u32, single: bool, first: u32) -> Option<(u64, u32, u32)> {
+     if !copyable(t) {
+         return None;
+     }
+-    let f = t.width;
++    let first = if single && t.block_bytes == 0 && super::texture::level_held(t, first) { first } else { 0 };
++    let f = (t.width >> first).max(1);
+     let bpp = gles_texfmt_bytes(t.texfmt);
+@@ the kept copy
+             && e.bytes == bytes
+             && e.single == single
++            && e.first == first
+         {
+-            return Some((e.mem.gpu, bytes));
++            return Some((e.mem.gpu, bytes, first));
+         }
+@@ the uncompressed face loop (:254)
+                 for y in 0..n {
+                     for x in 0..n {
+-                        let s = t.level_off[l as usize] + ((face * n + y) * pitch + x) * bpp;
++                        let s = t.level_off[(first + l) as usize] + ((face * n + y) * pitch + x) * bpp;
+@@ the entry's record
+     e.single = single;
++    e.first = first;
+     e.used = *tick;
+     // SAFETY: single-threaded by contract.
+     unsafe { *COPIES.get() = COPIES.get().wrapping_add(1) };
+-    Some((e.mem.gpu, bytes))
++    Some((e.mem.gpu, bytes, first))
+ }
+--- a/src/gl/native_array.rs
++++ b/src/gl/native_array.rs
+@@ struct Entry
+     /// Level 0 alone ([`copy`]'s `single`).
+     single: bool,
++    /// The level a one-level copy holds ([`copy_from`]'s `first`).
++    first: u32,
+     used: u32,
+ }
+@@ const EMPTY: Entry
+     single: false,
++    first: 0,
+     used: 0,
+ };
+@@ fn copy (:175)
+-pub fn copy(t: &GlTexture, target_kick: u32, single: bool) -> Option<(u64, u32)> {
++pub fn copy(t: &GlTexture, target_kick: u32, single: bool) -> Option<(u64, u32)> {
++    copy_from(t, target_kick, single, 0).map(|(gpu, bytes, _)| (gpu, bytes))
++}
++
++/// [`copy`], whose one-level copy is level `first` in layers of that
++/// level's extent, as `gl::native_cube::copy_from`. Returns the level copied.
++pub fn copy_from(t: &GlTexture, target_kick: u32, single: bool, first: u32) -> Option<(u64, u32, u32)> {
+     if !copyable(t) {
+         return None;
+     }
+-    let (w, h) = (t.width, t.height);
++    let first = if single && t.block_bytes == 0 && super::texture::level_held(t, first) { first } else { 0 };
++    let (w, h) = ((t.width >> first).max(1), (t.height >> first).max(1));
+@@ the kept copy
+             && e.single == single
++            && e.first == first
+         {
+-            return Some((e.mem.gpu, bytes));
++            return Some((e.mem.gpu, bytes, first));
+         }
+@@ the uncompressed layer loop (:249)
+-                let pitch = level_row_pitch(t, l, lw);
++                let pitch = level_row_pitch(t, first + l, lw);
+                 let lvl = k * layer + level_texel_off(pw, ph, l) * bpp;
+                 for y in 0..lh {
+                     for x in 0..lw {
+-                        let s = t.level_off[l as usize] + ((k * lh + y) * pitch + x) * bpp;
++                        let s = t.level_off[(first + l) as usize] + ((k * lh + y) * pitch + x) * bpp;
+@@ the entry's record
+     e.single = single;
++    e.first = first;
+     e.used = *tick;
+     // SAFETY: single-threaded by contract.
+     unsafe { *COPIES.get() = COPIES.get().wrapping_add(1) };
+-    Some((e.mem.gpu, bytes))
++    Some((e.mem.gpu, bytes, first))
+ }
+--- a/src/gl/draw.rs
++++ b/src/gl/draw.rs
+@@ after bind_base_level (:802)
++/// A stacked cube or 2D array on the PowerVR (the emulated cube, the
++/// stacked array: one tall image the shader addresses, which
++/// `pvr::backend` describes from level 0, its `lod_from_base`) sampled at
++/// one level (no mipmap filter): restated from GL_TEXTURE_BASE_LEVEL, as
++/// `gl::native_vol::View` restates a 3D copy -- the address, pitch and
++/// bytes of the base level (level b holds the `nlayers` images of
++/// max(w >> b, 1) x max(h >> b, 1), layer k's rows from k * (h >> b)), its
++/// extent, one level, base level 0. A level the storage does not hold (a
++/// NPOT array's levels above 0, `texture::npot_mip_chains`) gets the
++/// extent alone: textureSize is right, the texels are level 0's, which is
++/// all the storage has. Compressed images and a depth texture read from
++/// the depth buffer (`depth_id`) are left as they are.
++#[cfg(feature = "gpu-powervr")]
++fn rebase_stacked_bind(tb: &mut GlesTextureBind, t: &GlTexture, nlayers: u32) {
++    let b = u32::from(tb.base_level);
++    if b == 0
++        || tb.mip_filter != 0
++        || t.block_bytes != 0
++        || tb.depth_id != 0
++        || backend::native_layered_textures()
++        || !matches!(tb.type_, GLES_TEXTYPE_CUBE | GLES_TEXTYPE_2D_ARRAY)
++    {
++        return;
++    }
++    let (lw, lh) = super::texture::level_size(t, b);
++    if super::texture::level_held(t, b) {
++        let off = t.level_off[b as usize];
++        let pitch = if t.pot_chain { t.level_pitch_at(b) } else { t.level_pitch(lw) };
++        tb.base_gpu = t.mem.gpu + u64::from(off);
++        tb.cpu = (t.mem.cpu as *const u8).wrapping_add(off as usize).cast();
++        tb.stride_texels = pitch;
++        tb.bytes = pitch.saturating_mul(lh).saturating_mul(nlayers).saturating_mul(gles_texfmt_bytes(t.texfmt));
++    }
++    tb.width = lw;
++    tb.height = lh.saturating_mul(nlayers);
++    tb.mip_levels = 1;
++    tb.base_level = 0;
++}
++
+@@ the sampler loop, before the native cube (:4920)
++            /* the level a one-level native copy starts at (below) */
++            #[cfg(feature = "gpu-powervr")]
++            let mut from_level = 0u32;
+@@ the native cube (:4949-4959)
+                     let (_, _, mip_filter, mip_levels) = sampling_fields(t);
+                     let single = !(mip_filter != 0 && mip_levels > 1);
+-                    if let Some((gpu, bytes)) = super::native_cube::copy(t, rendered, single) {
++                    let first = if single { u32::from(bind_base_level(t)) } else { 0 };
++                    if let Some((gpu, bytes, first)) = super::native_cube::copy_from(t, rendered, single, first) {
+                         tb.type_ = GLES_TEXTYPE_CUBE_TWIDDLED_PROBE;
+                         tb.base_gpu = gpu;
+                         tb.content_gen = 0; /* a copy kept here: not the texture's stamp */
+                         tb.bytes = bytes;
+-                        tb.width = t.width;
+-                        tb.height = t.height;
+-                        tb.stride_texels = t.width;
++                        tb.width = (t.width >> first).max(1);
++                        tb.height = (t.height >> first).max(1);
++                        tb.stride_texels = tb.width;
++                        from_level = first;
+                     }
+@@ the native array (:4976-4987)
+                     let (_, _, mip_filter, mip_levels) = sampling_fields(t);
+                     let single = !(mip_filter != 0 && mip_levels > 1);
+-                    if let Some((gpu, bytes)) = super::native_array::copy(t, rendered, single) {
++                    let first = if single { u32::from(bind_base_level(t)) } else { 0 };
++                    if let Some((gpu, bytes, first)) = super::native_array::copy_from(t, rendered, single, first) {
+                         tb.type_ = GLES_TEXTYPE_2D_ARRAY_TWIDDLED;
+                         tb.base_gpu = gpu;
+                         tb.content_gen = 0; /* a copy kept here: not the texture's stamp */
+                         tb.bytes = bytes;
+-                        tb.width = t.width;
+-                        tb.height = t.height;
+-                        tb.stride_texels = t.width;
++                        tb.width = (t.width >> first).max(1);
++                        tb.height = (t.height >> first).max(1);
++                        tb.stride_texels = tb.width;
++                        from_level = first;
+                     }
+@@ the base level (:5053)
+             tb.base_level = bind_base_level(t);
++            /* a one-level native copy from the base level holds it as its
++             * level 0; a stacked one-level cube or array is restated from it
++             * (rebase_stacked_bind). After the sampler object's filters. */
++            #[cfg(feature = "gpu-powervr")]
++            if from_level != 0 {
++                tb.base_level = 0;
++            } else {
++                rebase_stacked_bind(tb, t, nlayers);
++            }
+             let incomplete = incomplete_reason(t);
+```
+
+The same commit should make two more changes:
+
+- The doc comment at `src/gl/draw.rs:3629` ("the draw does not apply
+  GL_TEXTURE_BASE_LEVEL") gains "except a one-level cube or array on the
+  PowerVR (`rebase_stacked_bind`, `native_cube::copy_from`)".
+- The test below replaces the "Not here" paragraph of
+  `tests/es3_pvr_texsize.rs:18-22`.
+
+The hunk headers name places (with their `bdd2ba1c` line) instead of line
+counts. The patch was written against `bdd2ba1c` and has not been compiled.
+
+Two decisions in the patch:
+
+- **When `single` is decided.** The native copies decide `single` from the
+  texture's own filters, before a sampler object is applied
+  (`src/gl/draw.rs:4949`, as today). The stacked restatement runs after the
+  sampler object is applied (`tb.mip_filter`, `:4997`). dEQP's texturesize
+  cases bind no sampler object, and the native copies' order is not changed
+  here.
+- **A level the storage does not hold.** It gets its extent and keeps level
+  0's texels. This makes `textureSize` right (the 100x31x18 array row) and
+  samples what the storage has. Holding the levels of an NPOT array is a
+  separate change (`npot_mip_chains`, `src/gl/texture.rs:1308`).
+
+### 7.5 Back ends and pinned files
+
+- **PowerVR**: the only back end that changes. All three edits are under
+  `feature = "gpu-powervr"`, and `copy_from` is only called from those
+  blocks. Only binds with base level > 0, no mipmap filter and a cube or
+  2D-array type change. Every bind with base level 0 keeps today's bytes:
+  `copy` is `copy_from(.., 0)`, and `rebase_stacked_bind` returns at
+  `b == 0`.
+- **V3D**: unchanged. It already applies `GlesTextureBind::base_level` in
+  its own TMU words and size words (`tests/gl_bind_base_level.rs:3-11`,
+  `tests/es3_texsize_base_*_v3d.rs`). Restating the bind there would apply
+  the base level twice, so the edits are PowerVR-only.
+- **Vivante (GC7000UL)** and **Mali**: unchanged, because the edits are not
+  compiled in for them. The GC7000UL refuses `textureSize` at a non-literal
+  level (`docs/es3/shader-host-repro.md:145`), so its texturesize cases
+  belong to a compiler item, not to this one.
+- **Compiler output and pinned references**: none change. Nothing was run;
+  this was checked by reading the code.
+  - The patch touches no `src/shaderc` file, so `tests/reference/*.rs`,
+    `src/pvr/internal.rs`, `src/vivante/internal.rs` and `tests/fixtures/`
+    (refusal lists, precompile counts, compiled-program pins) need no
+    regeneration.
+  - The PowerVR draw tests at the tip that go through these binds all use
+    base level 0 (`src/gl/draw.rs:13040-13135`, native cube and array
+    copies).
+  - Other tests call `copy(t, 0, single)` directly
+    (`tests/pvr_int_cube.rs:432-441`, `tests/es3_pvr_etc_array.rs:260-285`),
+    and that signature is kept.
+  - The PowerVR tests that set `GL_TEXTURE_BASE_LEVEL`
+    (`tests/pvr_tex_lod_words.rs`, `tests/pvr_native3d_sampler_words.rs`,
+    `tests/es3_pvr_3d_lod.rs`, `tests/es3_pvr_texsize.rs`) either build
+    `GlesTextureBind`s by hand or cover 3D and 2D. Their expectations do not
+    change.
+
+### 7.6 The host test that would prove it
+
+The test has two parts, both host-only
+(`host-test,gpu-powervr,shaderc-online`):
+
+1. **The binds**, in `src/gl/draw.rs`'s test module next to
+   `a_native_array_program_binds_the_twiddled_layer_major_copy` (`:13111`).
+   - It uses that test's helpers: `Gl::new`, `es3_prog`, `bind_new_tex`,
+     `draw_strip`, and setting `rfs.native_cube` to pick the copy.
+   - It makes the textures dEQP makes: glTexStorage, `lod + lodBase + 1`
+     levels, NEAREST/NEAREST, `GL_TEXTURE_BASE_LEVEL` 1.
+   - **Stacked array 128x64x32 RGBA8, 4 levels:** the bind is `width 64`,
+     `height 32 * 32`, `base_gpu == mem.gpu + level_off[1]`, `stride_texels`
+     level 1's pitch, `mip_levels 1`, `base_level 0`.
+   - **Stacked array 100x31x18:** `width 50`, `height 15 * 18`. The address
+     and pitch are level 1's when `level_held(t, 1)`, else level 0's.
+   - **Native cube 64x64 RGBA8, 3 levels** (`rfs.native_cube = 1`): type
+     `CUBE_TWIDDLED_PROBE`, `width == height == 32`,
+     `bytes == 6 * native_cube::face_bytes(32, 4, true)`, `base_level 0`. The
+     copy's face 0 holds level 1's texels (checked with `bytes_at`, as in
+     `native_cube.rs`'s tests).
+   - **Native array 128x64x32** (`rfs.native_cube = 2`): `width 64`,
+     `height 32`, `layers 32`.
+   - **Guards:** the same textures at base level 0, and with
+     `GL_NEAREST_MIPMAP_NEAREST` at base level 1, give exactly the bind they
+     give at `bdd2ba1c` (asserted field by field).
+2. **The sizes**, in `tests/es3_pvr_texsize.rs`.
+   - It adds the three "with lod base" rows of 7.2 next to `DEQP_TABLE`
+     (`:367`), over binds built by hand to match the ones part 1 asserts.
+   - It runs them in both stages through `pvr::backend::texture_descriptor`
+     and the byte model.
+   - The answers must be (6, 1, 18), (8, 4, 32) and, for the cube, (16, 16).
+
+```text
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --lib gl::draw::tests
+cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_texsize
+```
+
+A board run of `shaders.texture_functions.texturesize` (the AM62P tree image
+that holds it) then settles the 20.
