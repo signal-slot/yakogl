@@ -1,11 +1,39 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Check that the DK notes carry the P9 result lines (roadmap P9).
+"""Check the DK's P9 notes: the plan's acceptance lines (default) or docs-p9's.
 
-    tools/cts/mp2-p9-notes-check.py [--bringup FILE] [--p9 FILE]
-                                    [--prestudy FILE] [--only c1|c2|c3]
+    tools/cts/mp2-p9-notes-check.py [--strict] [--only c2|c3|c4] [--bringup FILE]
+        [--p9 FILE] [--prestudy FILE] [--shard-logs GLOB] [--p9-diff FILE]
+        [--p9-diff-opt OPT]...
+    tools/cts/mp2-p9-notes-check.py --docs-p9 [--only c1|c2|c3] [...]
 
+ACCEPTANCE MODE (default; plan #405, p9-report checks itself with it). One
+line per criterion "cN: ok", "cN: pending: <why>" or "cN: failed: <what>",
+then "mp2-p9-notes-accept: K ok, F failed, P pending" (last line). A
+criterion whose notes are absent (nothing recorded yet) is pending, not a
+failure; --strict turns every pending into a failure. Exit 0 when F is 0 (and
+P is 0 with --strict), 1 otherwise, 2 for an unreadable note or a bad option.
+
+  c2  the P9 note and the bring-up note each have a "mp2-gltest-diff: new
+      <digits>" line per gl_test shard, and each such line (or the line right
+      after it) gives a time against the lifetime: "<N> s of <M> s" (also
+      "/", "against", "within"). Pending while no line in either
+      note has a time yet. Once one has, a line with no time is a failure, and
+      so is a note with no line.
+  c3  the "mp2-p9-diff: shared S, new N, fixed F, missing M" line quoted in
+      the P9 note equals the last line of
+      `python3 -I tools/cts/mp2-p9-diff.py --report-only <shard logs>` (logs:
+      --shard-logs, default tools/cts/log/*-mp2-gles2-*/s*/shard-*.log), and
+      either M is 0 or each missing case that run lists is named on a note
+      line that also says "cause". Pending when no shard log exists or the
+      note quotes no such line.
+  c4  the "| Q11" row of the pre-study note says "Decided", names option A or
+      B ("option A|B", or "Decided: A|B") and gives a record name
+      records/stm32mp257f-dk/<YYYYMMDD-HHMM>-<name>-<sha8>. Pending when the
+      row has no "Decided" yet (an "Answered ..." or open row).
+
+DOCS-P9 MODE (--docs-p9; what docs-p9 ran before it landed the note edits).
 One line per criterion, in order ("cN: ok" or "cN: missing: <what>"), then
 the summary "mp2-p9-notes-check: K ok, M missing" (last line). Exit 0 when
 M is 0, 1 when a criterion is missing, 2 when a note cannot be read or an
@@ -38,8 +66,10 @@ The three notes are the defaults below. What each criterion wants:
       "width N" or "N wide").
 """
 import argparse
+import glob
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -98,13 +128,132 @@ def q11_named(lines):
     return any("Q11" in l and RECORD.search(l) and WIDTH.search(l) for l in lines)
 
 
+NUM = r"\d+(?:\.\d+)?"
+TIME_VS_LIFETIME = re.compile(
+    NUM + r"\s*s\b[^|\n]*?(?:\bof\b|/|\bagainst\b|\bwithin\b)[^|\n]*?" + NUM + r"\s*s\b", re.I)
+P9_SUMMARY = re.compile(r"mp2-p9-diff: shared \d+, new \d+, fixed \d+, missing \d+")
+Q11_ROW = re.compile(r"^\s*\|\s*Q11\b")
+DECIDED = re.compile(r"\bDecided\b")
+OPTION = re.compile(r"\boption\s+[AB]\b|\bDecided\W{0,3}(?:option\s+)?[AB]\b")
+Q11_RECORD = re.compile(
+    r"records/stm32mp257f-dk/\d{8}-\d{4}-[a-z0-9][a-z0-9_.-]*-[0-9a-f]{8}\b")
+
+
+def gltest_lines(lines):
+    """[(line, timed)] for every 'mp2-gltest-diff: new <digits>' line."""
+    out = []
+    for i, l in enumerate(lines):
+        if GLTEST_LINE.search(l):
+            window = l + "\n" + (lines[i + 1] if i + 1 < len(lines) else "")
+            out.append((l.strip(), bool(TIME_VS_LIFETIME.search(window))))
+    return out
+
+
+def accept_c2(bringup, p9, names):
+    """(state, text) with state ok|pending|failed."""
+    per = [(n, gltest_lines(lines)) for n, lines in zip(names, (p9, bringup))]
+    if not any(timed for _, r in per for _, timed in r):
+        return "pending", "no timed 'mp2-gltest-diff: new' line in %s yet" % " or ".join(names)
+    for n, r in per:
+        if not r:
+            return "failed", "no 'mp2-gltest-diff: new' line in %s" % n
+        for line, timed in r:
+            if not timed:
+                return "failed", ("%s: a 'mp2-gltest-diff: new' line without a time "
+                                  "against the lifetime ('N s of M s'): %s" % (n, line[:100]))
+    return "ok", ""
+
+
+def accept_c3(p9, logs, diff_tool, diff_opts, p9name):
+    quoted = [m.group(0) for l in p9 for m in P9_SUMMARY.finditer(l)]
+    if not logs:
+        return "pending", "no dEQP shard log under the shard-log glob yet"
+    if not quoted:
+        return "pending", "no 'mp2-p9-diff: shared ...' line quoted in %s yet" % p9name
+    cmd = [sys.executable, "-I", diff_tool, "--report-only"] + diff_opts + logs
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except OSError as e:
+        return "failed", "cannot run mp2-p9-diff.py: %s" % e
+    out = r.stdout.splitlines()
+    if r.returncode != 0 or not out:
+        return "failed", "mp2-p9-diff.py exited %d: %s" % (r.returncode, r.stderr.strip()[:100])
+    last = out[-1].strip()
+    if not P9_SUMMARY.fullmatch(last):
+        return "failed", "unexpected last line of mp2-p9-diff.py: %s" % last[:100]
+    if quoted[-1] != last:
+        return "failed", "%s quotes '%s' but the shard logs give '%s'" % (p9name, quoted[-1], last)
+    miss = int(MISSING_NUM.findall(last)[-1])
+    if miss == 0:
+        return "ok", ""
+    names, inside = [], False
+    for l in out:
+        if l.startswith("== "):
+            inside = "missing from the DK run" in l
+        elif inside and l.strip() and not l.startswith("mp2-p9-diff:"):
+            names.append(l.strip())
+    bare = [n for n in names if not any(n in l and re.search("cause", l, re.I) for l in p9)]
+    if bare:
+        return "failed", ("missing %d: %d case(s) without a line naming it and its cause, first %s"
+                          % (miss, len(bare), bare[0]))
+    return "ok", ""
+
+
+def accept_c4(prestudy, name):
+    rows = [l for l in prestudy if Q11_ROW.match(l)]
+    if not rows:
+        return "failed", "no '| Q11' row in %s" % name
+    row = rows[0]
+    if not DECIDED.search(row):
+        return "pending", "the Q11 row of %s does not say 'Decided' yet" % name
+    if not OPTION.search(row):
+        return "failed", "the Q11 row says Decided but names neither option A nor B"
+    if not Q11_RECORD.search(row):
+        return "failed", "the Q11 row names no records/stm32mp257f-dk/<YYYYMMDD-HHMM>-<name>-<sha8> record"
+    return "ok", ""
+
+
+def accept_main(a, bringup, p9, prestudy):
+    b = os.path.basename
+    logs = sorted(glob.glob(a.shard_logs))
+    res = {
+        "c2": accept_c2(bringup, p9, (b(a.p9), b(a.bringup))),
+        "c3": accept_c3(p9, logs, a.p9_diff, a.p9_diff_opt, b(a.p9)),
+        "c4": accept_c4(prestudy, b(a.prestudy)),
+    }
+    k = f = p = 0
+    for cid in ("c2", "c3", "c4"):
+        if a.only and cid != a.only:
+            continue
+        state, text = res[cid]
+        if state == "pending" and a.strict:
+            state, text = "failed", "pending (--strict): " + text
+        print("%s: %s" % (cid, "ok" if state == "ok" else "%s: %s" % (state, text)))
+        k += state == "ok"
+        f += state == "failed"
+        p += state == "pending"
+    print("mp2-p9-notes-accept: %d ok, %d failed, %d pending" % (k, f, p))
+    return 1 if f else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--bringup", default=os.path.join(NOTES, "stm32mp257f-dk-bringup.md"))
     ap.add_argument("--p9", default=os.path.join(NOTES, "stm32mp257f-dk-p9.md"))
     ap.add_argument("--prestudy", default=os.path.join(NOTES, "pre-study-stm32mp257f-dk.md"))
-    ap.add_argument("--only", choices=("c1", "c2", "c3"))
+    ap.add_argument("--only", choices=("c1", "c2", "c3", "c4"))
+    ap.add_argument("--docs-p9", action="store_true", help="the docs-p9 checks c1..c3")
+    ap.add_argument("--strict", action="store_true", help="pending counts as failed")
+    ap.add_argument("--shard-logs", default=os.path.join(
+        ROOT, "tools", "cts", "log", "*-mp2-gles2-*", "s*", "shard-*.log"))
+    ap.add_argument("--p9-diff", default=os.path.join(HERE, "mp2-p9-diff.py"))
+    ap.add_argument("--p9-diff-opt", action="append", default=[],
+                    help="extra option for mp2-p9-diff.py (repeatable)")
     a = ap.parse_args()
+    if (a.only == "c1" and not a.docs_p9) or (a.only == "c4" and a.docs_p9):
+        print("mp2-p9-notes-check: --only %s does not exist in this mode" % a.only,
+              file=sys.stderr)
+        return 2
     try:
         bringup = read_lines(a.bringup)
         p9 = read_lines(a.p9)
@@ -112,6 +261,9 @@ def main():
     except OSError as e:
         print("mp2-p9-notes-check: %s" % e, file=sys.stderr)
         return 2
+
+    if not a.docs_p9:
+        return accept_main(a, bringup, p9, prestudy)
 
     b = os.path.basename
     section_found, section = board_verdicts(bringup)
