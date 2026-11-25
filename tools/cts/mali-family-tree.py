@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""A tree table of the compile-refused cases of NanoPC-T6 dEQP-GLES2 slices, by family.
+"""A tree table of the compile-refused cases of Mali dEQP-GLES2 slices (NanoPC-T6 or Verdin iMX95), by family.
 
   python3 -I tools/cts/mali-family-tree.py [--mustpass FILE] [--max N]
                                            [--families FILE] [--refusal TEXT]...
                                            SLICE... > family.txt
 
-A slice is a tools/cts/log/<date>-t6-gles2-<session>-<sha8>/ directory with the
-refusals.tsv that mali-deqp-tally.py wrote (case<TAB>refusal). Which refusal
+A slice is a tools/cts/log/<date>-t6-gles2-<session>-<sha8>/ (T6) or
+<date>-imx95-gles2-<session>-<sha8>/ (Verdin iMX95) directory with the
+refusals.tsv that mali-deqp-tally.py wrote (case<TAB>refusal); only that file
+is read, so chunks.tsv/rows.tsv, kmsg/ and the directory name do not matter. A
+slice directory without refusals.tsv (no case was refused, or the row hung)
+counts as no refusal and gets a note on stderr. Which refusal
 belongs to which family is tools/cts/mali-family-refusals.txt (--families), one
 <family><TAB><text> line each; a case goes to the first line whose text its
 refusal contains, and a case with none is left out. --refusal TEXT (the flag
@@ -62,6 +66,10 @@ def read_families(path):
 def read_refusals(slice_dir):
     """{case: refusal} of one slice's refusals.tsv."""
     path = os.path.join(slice_dir.rstrip("/"), "refusals.tsv")
+    if os.path.isdir(slice_dir) and not os.path.exists(path):
+        print("mali-family-tree: %s: no refusals.tsv, no refusal counted" % slice_dir,
+              file=sys.stderr)
+        return {}
     try:
         with open(path, encoding="utf-8") as f:
             lines = f.read().split("\n")
