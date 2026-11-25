@@ -1,0 +1,16 @@
+am62p | [build] use-vbo=false | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1db9, crc16q e3cd; mean 12 12 12; black no
+am62p | [build] use-vbo=true | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 b333, crc16q 217f; mean 12 12 12; black no
+am62p | [shading] shading=gouraud | 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000012ff, br 00008eff; crc16 0252, crc16q 83c1; mean 0 0 17; black no
+am62p | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 a972, crc16q b3e9; mean 231 233 221; black no
+am62p | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 700170ff, tl 5a0313ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 5d01, crc16q d03c; mean 48 32 45; black no
+am62p | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 e022, crc16q c071; mean 204 209 190; black no
+am62p | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr b1b1b1ff, bl ffffffff, br ffffffff; crc16 d8f6, crc16q c6c3; mean 200 205 186; black no
+am62p | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 da7d, crc16q 2120; mean 42 57 65; black no
+am62p | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 d4e2, crc16q dfc6; mean 42 57 65; black no
+am62p | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a102, crc16q 4331; mean 42 57 65; black no
+am62p | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 1657, crc16q d89c; mean 56 56 56; black no
+am62p | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr c3c3c3ff, bl ebebebff, br 484848ff; crc16 afb7, crc16q 63ce; mean 49 49 49; black no
+am62p | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 030303ff, tr 000000ff, bl fefefeff, br f9f9f9ff; crc16 2b9f, crc16q 9f64; mean 55 55 55; black no
+am62p | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 72a3, crc16q 5b3f; mean 56 56 56; black no
+am62p | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 b231, crc16q a5b3; mean 55 55 55; black no
+am62p | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 b231, crc16q a5b3; mean 55 55 55; black no
