@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""A tree table of the Lost cases of NanoPC-T6 dEQP-GLES2 slices, for a rerun.
+"""A tree table of the Lost cases of Mali dEQP-GLES2 slices, for a rerun.
 
   python3 -I tools/cts/mali-rerun-tree.py [--mustpass FILE] [--max N]
-                                          [--reason R]... SLICE... > rerun.txt
+                                          [--prefix P] [--reason R]...
+                                          SLICE... > rerun.txt
 
 A slice is a tools/cts/log/<date>-t6-gles2-<session>-<sha8>/ directory (format:
 the docstring of mali-deqp-tally.py). The table holds every case that has
@@ -14,6 +15,22 @@ in mustpass order, in the form tools/cts/mali-deqp-run.sh reads with --tree
 
   # image T6RR<nnn>: <cases>
   <case>,<case>,...
+
+Board and label prefix: the board of a slice is the board= key of its
+meta.txt (mali-deqp-tally.py); no meta.txt or no key means the NanoPC-T6
+(nanopc-t6). The table takes its prefix from it: T6RR for the T6, I95RR for
+board=verdin-imx95 (tools/cts/imx95-deqp-images.sh builds one Zephyr image per
+row from such a table: its labels are [A-Za-z0-9]+ too, and neither T6S<s>R<r>
+of the first-run tree nor T6RR collide with I95RR<nnn>). Slices of different
+boards are refused (exit 2), and so is a board without a prefix of its own
+unless --prefix P is given; --prefix P ([A-Za-z0-9]+, not T6S<s>R<r>) sets
+the prefix whatever the board. On Zephyr a hang ends the whole image, so on
+the iMX95 the hang and crash rows stay one case each, as everywhere. --max
+on the iMX95 is at most 400 (the default): a row's cases run inside one
+image's lifetime (verdin_imx95.conf: 600 s, WDOG3), and the 64 MiB GL
+carve-out and the 256 MiB window do not grow with the case count, so the
+tree's own row size, which mali-gles2-tree.txt and its check already hold,
+is the one measured to fit; a larger --max exits 2.
 
 Labels are T6RR001, T6RR002, ...: [A-Za-z0-9]+ as the runner demands, and no
 label of mali-gles2-tree.txt (T6S<session>R<row>), so a rerun chunk never
@@ -31,6 +48,7 @@ refused (the filter syntax could not carry it). A Lost case missing from the
 mustpass list is an error (exit 1), a slice that cannot be read exits 2.
 """
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -69,7 +87,26 @@ def lost_cases(slice_dir):
     return out
 
 
-def build(slices, mustpass, max_cases=400, reasons=None):
+BOARD_PREFIX = {"nanopc-t6": "T6RR", "verdin-imx95": "I95RR"}
+MAX_ROW = {"verdin-imx95": 400}
+
+
+def slice_board(slice_dir):
+    """The board= of a slice's meta.txt; nanopc-t6 when there is none."""
+    path = os.path.join(slice_dir.rstrip("/"), "meta.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for ln in f.read().split("\n"):
+                if ln.startswith("board="):
+                    return ln[6:].strip() or "nanopc-t6"
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        raise Fatal("%s: %s" % (path, e.strerror))
+    return "nanopc-t6"
+
+
+def build(slices, mustpass, max_cases=400, reasons=None, prefix="T6RR"):
     """The table's text for the Lost cases of the slices (list of dicts)."""
     lost = {}
     for s in slices:
@@ -104,18 +141,18 @@ def build(slices, mustpass, max_cases=400, reasons=None):
            % (len(slices), len(order), len(rows)),
            "# One case per row for chunk-crash and chunk-hang; at most %d per row otherwise." % max_cases]
     for n, row in enumerate(rows, 1):
-        out.append("# image T6RR%03d: %d" % (n, len(row)))
+        out.append("# image %s%03d: %d" % (prefix, n, len(row)))
         out.append(",".join(row))
     return "\n".join(out) + "\n"
 
 
 def main(argv):
     mustpass = os.path.join(HERE, "gles2-mustpass.txt")
-    max_cases, reasons, slices = 400, [], []
+    max_cases, reasons, slices, prefix = 400, [], [], None
     i = 0
     while i < len(argv):
         a = argv[i]
-        if a in ("--mustpass", "--max", "--reason"):
+        if a in ("--mustpass", "--max", "--reason", "--prefix"):
             if i + 1 >= len(argv):
                 print("mali-rerun-tree: %s wants a value" % a, file=sys.stderr)
                 return 2
@@ -123,6 +160,11 @@ def main(argv):
             i += 2
             if a == "--mustpass":
                 mustpass = v
+            elif a == "--prefix":
+                if not re.fullmatch(r"[A-Za-z0-9]+", v) or re.fullmatch(r"T6S[0-9]+R[0-9]+", v):
+                    print("mali-rerun-tree: --prefix is [A-Za-z0-9]+ and not a T6S<s>R<r> label", file=sys.stderr)
+                    return 2
+                prefix = v
             elif a == "--reason":
                 if v not in LOST_REASONS:
                     print("mali-rerun-tree: --reason is one of %s" % ", ".join(LOST_REASONS), file=sys.stderr)
@@ -134,7 +176,7 @@ def main(argv):
                     return 2
                 max_cases = int(v)
         elif a.startswith("-"):
-            print("usage: mali-rerun-tree.py [--mustpass FILE] [--max N] [--reason R]... SLICE...", file=sys.stderr)
+            print("usage: mali-rerun-tree.py [--mustpass FILE] [--max N] [--prefix P] [--reason R]... SLICE...", file=sys.stderr)
             return 2
         else:
             slices.append(a)
@@ -146,14 +188,27 @@ def main(argv):
         with open(mustpass, encoding="utf-8") as f:
             names = [l.strip() for l in f if l.strip() and not l.startswith("#")]
         data = [lost_cases(s) for s in slices]
+        boards = sorted({slice_board(s) for s in slices})
     except OSError as e:
         print("mali-rerun-tree: %s: %s" % (e.filename, e.strerror), file=sys.stderr)
         return 2
     except Fatal as e:
         print("mali-rerun-tree: %s" % e, file=sys.stderr)
         return 2
+    if len(boards) > 1:
+        print("mali-rerun-tree: slices of different boards (%s)" % ", ".join(boards), file=sys.stderr)
+        return 2
+    board = boards[0]
+    if prefix is None:
+        prefix = BOARD_PREFIX.get(board)
+        if prefix is None:
+            print("mali-rerun-tree: board '%s' has no label prefix, give --prefix" % board, file=sys.stderr)
+            return 2
+    if board in MAX_ROW and max_cases > MAX_ROW[board]:
+        print("mali-rerun-tree: --max for %s is at most %d" % (board, MAX_ROW[board]), file=sys.stderr)
+        return 2
     try:
-        text = build(data, names, max_cases, reasons)
+        text = build(data, names, max_cases, reasons, prefix)
     except ValueError as e:
         print("mali-rerun-tree: %s" % e, file=sys.stderr)
         return 1

@@ -1238,9 +1238,10 @@ work; `driver/docs/nanopc-t6-mali.md` is the board note. The scripts:
   writes `SLICEDIR/README.md`, `--check` exits 1 unless that file equals the
   output; input with an address or `user@host` is refused (exit 2).
   `mali-slice-readme-selftest.sh` checks it on `testdata/mali-slice-readme/`.
-- `python3 -I mali-rerun-tree.py [--mustpass FILE] [--max N] [--reason R]...
-  SLICE... > rerun.txt`: a tree table (the form of `mali-gles2-tree.txt`,
-  labels `T6RR001`...) of the Lost cases of the slices, once each and in
+- `python3 -I mali-rerun-tree.py [--mustpass FILE] [--max N] [--prefix P]
+  [--reason R]... SLICE... > rerun.txt`: a tree table (the form of `mali-gles2-tree.txt`,
+  labels `T6RR001`..., `I95RR001`... for slices with `board=verdin-imx95`,
+  `--prefix P` overrides; a mix of boards exits 2) of the Lost cases of the slices, once each and in
   mustpass order, for a rerun session read with the runner's `--tree`. A
   `chunk-crash` or `chunk-hang` case is a row of its own; `board-lost` and
   `not-run` cases fill rows of at most `--max` (default 400); `--reason`
