@@ -702,3 +702,73 @@ read only) and checks w1 and w2 against the record.
 Order: 1 and 2 in parallel, then 3, then 4, then 5. Nothing here touches
 `tools/board.sh`, `board-stage.sh` or any default; none of it moves #351's
 stage-1 commit.
+
+## Result (item x2-ts-probe-session, 2026-11-25): stop before the first jump
+
+**No arm and no mode ran.** The session stopped at `tools/board.sh x2 run`'s
+readiness check, before the lease's tools were staged and before any jump:
+the Armadillo-X2 still runs the `slint-launcher` podman container, which
+autostarts at boot, and `x2_kexec_ready` refuses a crash-route jump while a
+container runs (the same stop as items x2-before-now and x2-session-a,
+`x2-glmark2-slow-scenes.md`). Stopping someone's application on the board is
+not this item's to do; the container's owner turning its autostart off (or
+stopping it for a session) is what the next attempt needs.
+
+- **Reachability, first**: from the leased worker the board answers over the
+  lease's ssh as root. `tools/board.sh x2 status`: board lease `none`,
+  runlevel `default`, `kexec_loaded 0`, `kexec_crash_loaded 0`, crash window
+  `268435456`, containers `1`, no files in the runner's tmpfs directory.
+- **Commit**: `bd687f62` (`origin/main` in this clone; it contains
+  probe-cases-build, `3f11747d`).
+- **Image**: `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh
+  tsprobe-bd687f62 246 -DCONFIG_GL_TEST_GC_TS_PROBE=y
+  -DCONFIG_GC_GL_TEST_DEADLINE_SECONDS=60`: `rc=0`,
+  `armadillo_x2/mimx8ml8/a53`, `zephyr.bin` sha256 `882db8375522b5a2...`
+  (2 815 576 bytes, footprint 60 350 464), `GC_BUILD_STAMP=2026-11-25T20:07:42Z`,
+  zephyr `af17c0c8aa2a`; `gc_wdog_arm: armed` once in `zephyr.elf`; the
+  `.config` has both `CONFIG_GL_TEST_GC_TS_PROBE=y` and
+  `CONFIG_GC_GL_TEST_DEADLINE_SECONDS=60`. `kexec_zephyr` and `snvs_lpgpr`
+  built on the worker with `clang --target=aarch64-none-elf -O2 -static
+  -nostdlib -ffreestanding -fno-stack-protector -c` and the Zephyr SDK's
+  `ld.bfd -static -e _start` (the SDK's `aarch64-zephyr-elf-gcc` alone does not
+  link `kexec_zephyr`: its default script's `ram` region overflows by 47 120
+  bytes).
+- **The run**: `SEL=0x10d0 tools/board.sh x2 run <img>/zephyr.bin <r>/d0
+  tsprobe-d0` (arm 0, the outcome page). `rc=3`. Its lines, as printed:
+
+  ```text
+  board.sh x2: tsprobe-d0: build bd687f62 boot kexec-dev (DEV) image sha256 882db8375522b5a2 footprint 60350464
+  board.sh x2: tsprobe-d0: image build: GC_BUILD_STAMP=2026-11-25T20:07:42Z; zephyr: af17c0c8aa2a
+  board.sh x2: something is running (containers 1)
+  ```
+
+  **No `verdict=` line**: the runner refuses before the jump, so it prints
+  none. Its `meta.txt`: `board_state=openrc settled uptime 202830s kexec=0
+  containers=1 crash_window=268435456 crash_loaded=0`, `who_sessions=0`,
+  `refused_rc=3`, `refused=something is running (containers 1)`. (An earlier
+  attempt of the same minute stopped on the host, `rc=3`, at the missing
+  `kexec_zephyr` binary, before any board read.) The rest of the session's
+  commands were not started: each stops at the same check.
+- **The record**: none. LPGPR1..3 were not read or written; no PERF page, no
+  console line (the console was not opened: nothing ran to print on it).
+  Record directory `records/x2/20261125-2010-tsprobe-bd687f62/` (gitignored:
+  the two `meta.txt` and the runner's output).
+- **The board as found**: afterwards uptime 202835 s (no reboot),
+  `kexec_crash_loaded 0`, the container up, no board lease. Nothing installed
+  or persisted; no character sent to the console.
+
+| page | selector | outcome |
+|---|---|---|
+| case 246 arm 0 (K0 control, K1 fill, K2 TS resolve), `0xd0` | `0x10d0` | **not run** (refused at readiness, `rc=3`) |
+| arm 0's K3 map and first difference, `0xd4`, `0xd8` | `0x10d4`, `0x10d8` | not run |
+| arms 1 to 3 (`AUTO_DISABLE`, 256B mode, super-tiled), `0xd1..0xdb` | | not run |
+| case 247 mode 3 (control), pages A/B/C `0xc3/0xc7/0xcb` | `0x10c3`.. | not run (the case is built on `origin/main`: 247 `dlayout`) |
+| case 247 mode 1 (SB(2), SUPER_TILED), `0xc1/0xc5/0xc9` | `0x10c1`.. | not run |
+| case 247 modes 0 and 2 | | not built (the hook refuses them, -3; "As built") |
+
+So **K0 is unanswered**: whether the GC7000UL RS reads a TILED source with
+the MMU off is still open, and every W4 knob-on number stays conditional on
+it. `gc-tiled-wire.md` W7, W8, W9 and W12 are marked "stop" on this record
+(not "stays off": the probe gave no outcome, so the table above is not
+entered). The same image and the same commands run unchanged once the board
+has no container at a session.
