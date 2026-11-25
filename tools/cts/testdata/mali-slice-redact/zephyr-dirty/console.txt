@@ -1,0 +1,4 @@
+ethaddr=00:00:5e:00:53:01
+Serial#: 12345678
+eth1addr=garbled
+serverip=192.0.2.7

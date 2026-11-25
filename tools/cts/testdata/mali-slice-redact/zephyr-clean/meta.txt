@@ -1,0 +1,2 @@
+board=verdin-imx95-zephyr
+rows=1-2
