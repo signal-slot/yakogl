@@ -756,6 +756,10 @@ stopping it for a session) is what the next attempt needs.
 - **The board as found**: afterwards uptime 202835 s (no reboot),
   `kexec_crash_loaded 0`, the container up, no board lease. Nothing installed
   or persisted; no character sent to the console.
+- **Recheck (same day, after the task moved to another worker)**: the board
+  still answers over the lease's ssh, and `podman ps` still lists
+  `slint-launcher`, so the readiness stop holds; no image was staged and no
+  jump made.
 
 | page | selector | outcome |
 |---|---|---|
