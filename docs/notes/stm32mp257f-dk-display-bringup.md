@@ -992,7 +992,127 @@ removed, no `preboot` or `yako_*` variable, `bootcmd` ST's own, stock boot
 files unchanged since install (runner lines above). Nothing else on the board
 was written.
 
+## Board scan-out record (board-display4, crc-driver, 2026-11-25)
+
+Fourth DK display session, after the first-frame wait was changed to what
+ST's r3.1 `ltdc.c` relies on (commit 21176f74: `IER.LIE` set for the wait,
+`ltdc_crtc_enable_vblank` :1454-1456, `ltdc_crtc_set_crc_source`
+:1488-1490; `CPSR.CYPOS` wrapping as a second witness, :1413-1415; the
+LTDC's `ISR`/`IER`/`CPSR` x2/`CDSR`/`GCR`/`L1RCR` read on a frame timeout).
+Both images built at 21176f74 with the READMEs' west lines for
+`stm32mp257f_dk/stm32mp257fxx/a35` (Zephyr af17c0c8aa2a, `-DYAKOGL_WERROR=ON`;
+`mp2_display_state` built too). Same procedure as board-display3: `install`
+(undo printed first), blind runs (`MP2_NO_CONSOLE=1`, `MP2_HOLD_S=30`), the
+console captured over the console resource's MCP server and handed to
+`judge` (an excerpt from BL2's reset line to the lifetime line, 136
+OP-TEE/SCMI frame lines left out, marked as such in the file), a KVM
+screenshot after each result line, then `status` and `uninstall`.
+
+**The first-frame timeout is gone: both probes bring the whole chain up
+(`chain step none err 0`, LTDC, DSI and ADV7535 `on`/`started` 1) and pass
+the frame wait, and the pictures reach HDMI: the KVM showed `mp2_display`'s
+eight colour bars (`colorbars: PASS`) and `mp2_gpu_scanout`'s GPU triangle
+(`triangle: PASS`) during the images' holds. Both probes still print `FAIL:
+crc -5`: their CRC self-check fails, so neither printed its `PASS` line and
+none is claimed.** The first run of each showed ST's held frame on the KVM
+because the NanoKVM needs about 20 s to lock on to a new signal and the
+screenshot was taken right after the result line; each probe was run a
+second time in the same session, from the same images, with screenshots
+taken through the hold (rows 3 and 4).
+
+| commit | image | runner | verdict lines | observation | stock boot files |
+| --- | --- | --- | --- | --- | --- |
+| 21176f74 | `mp2_display` (sha256 962b6ab0e7fa8d7d0ce81027795eb02c5fe8eaa9b924e323a24a22aa1569bb10, 119192 bytes) | `MP2_HOLD_S=30 MP2_NO_CONSOLE=1 tools/board-stm32mp2.sh run build/zephyr-werror/mp2_display/zephyr/zephyr.bin <rec> mp2_display`, then `judge` (record `20261125-1213-mp2_display-962b6ab0`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=192s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:mp2_display back_after=192s console=external` | chain up, 1920x1080@60 (VIC 16), every frame of the probe's frame loop came; CRC `0x00002fab` four times and again after two pixels changed: `mp2_display: crc: FAIL unchanged with changed pixels 0x00002fab`, `mp2_display: FAIL: crc -5`; `mp2: lifetime over: PSCI SYSTEM_RESET at 150000 ms` | staged image removed by the run |
+| 21176f74 | `mp2_gpu_scanout` (sha256 83b9adf2aed00244f9f194ece15867e8ec71cf29bc53beb1f65529bab7265e09, 160152 bytes) | the same call with `mp2_gpu_scanout` (record `20261125-1217-mp2_gpu_scanout-83b9adf2`) | `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=207s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=4 verdict=failed boot=uboot-sd row boot_verdict=image_started result=fail:mp2_gpu_scanout back_after=207s console=external` | the GPU render and its linear copy pass (`linear: PASS 1920x1080 pitch 7680 at GPU 0xfb04e000 phys 0xfb04e000 (0 failing checks)`), `I: chain up: ltdc 0x040101, 1920x1080 pitch 7680 at 0xb0000000`, the layer moved to 0xfb04e000; CRC `0x00007f01` then `0x0000da5b`: `mp2_gpu_scanout: crc: FAIL unstable 0x0000da5b vs 0x00007f01`, `mp2_gpu_scanout: FAIL: crc -5`, then `mp2_gpu_scanout: hold: 60 frames ok, 0 failed` and the lifetime reset (its line interleaved with the log thread: `: lifetime over: ...`, hence `boot_verdict=image_started`) | `status` before `uninstall`: `stock boot files: unchanged since install`, `left behind: nothing recorded`; `uninstall`: `stock boot files: unchanged since install`, `unhooked: no preboot of ours, no yako_* variable, bootcmd 'run bootcmd_stm32mp' (not written), /boot/yakogl removed. Nothing was rebooted.` |
+| 21176f74 | `mp2_display`, the same image (962b6ab0...), `install` again first | the same call (record `20261125-1223-mp2_display-962b6ab0`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=190s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=4 verdict=failed boot=uboot-sd row boot_verdict=image_started result=fail:mp2_display back_after=190s console=external` | the same console as row 1 (`crc: FAIL unchanged with changed pixels 0x00002fab`, `mp2_display: FAIL: crc -5`); KVM right after the result line: ST's held Weston frame; about 20 s later and 75 s later: **eight full-height vertical bars, white, yellow, cyan, green, magenta, red, blue, black, equal widths at 1920x1080**, judged `colorbars: PASS: 8 bars white yellow cyan green magenta red blue black` | staged image removed by the run |
+| 21176f74 | `mp2_gpu_scanout`, the same image (83b9adf2...) | the same call (record `20261125-1227-mp2_gpu_scanout-83b9adf2`) | `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=207s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=4 verdict=failed boot=uboot-sd row boot_verdict=image_started result=fail:mp2_gpu_scanout back_after=207s console=external` | `mp2_gpu_scanout: crc: FAIL unstable 0x0000da5b vs 0x00008895`, `mp2_gpu_scanout: FAIL: crc -5`, `hold: 60 frames ok, 0 failed`; KVM 25 s after the result line: row 3's bars still (the capture not yet re-locked); 45 s after it: **gc_triangle's picture, a Gouraud triangle on the dark blue-grey clear colour, red apex top centre, green bottom left, blue bottom right, filling the 1920x1080 frame**, judged `triangle: PASS: red apex top, green bottom left, blue bottom right, box 1530x858 at 195,111 (red(0.49,0.23) green(0.19,0.88) blue(0.82,0.88))` | `status`: `install: ok`, `left behind: nothing recorded`, `stock boot files: unchanged since install`; `uninstall`: `stock boot files: unchanged since install`, `unhooked: no preboot of ours, no yako_* variable, bootcmd 'run bootcmd_stm32mp' (not written), /boot/yakogl removed. Nothing was rebooted.` |
+
+What the board answered about the frame wait (`mp2_gpu_scanout` has
+`CONFIG_LOG`; `mp2_display` prints no log lines). Every frame boundary was
+the `CPSR` witness, never `LIF`, although `IER.LIE` was set for each wait:
+
+```
+I: adv7535: up, 1920x1080 at 148500000 Hz, 4 lanes
+I: chain up: ltdc 0x040101, 1920x1080 pitch 7680 at 0xb0000000
+mp2_gpu_scanout: layer at phys 0xfb04e000 (GPU 0xfb04e000)
+W: ltdc: frame seen by CPSR (line 1124 -> 3), ISR.LIF not set (ISR 0x0)
+W: ltdc: frame seen by CPSR (line 1124 -> 2), ISR.LIF not set (ISR 0x0)
+W: ltdc: frame seen by CPSR (line 1123 -> 1), ISR.LIF not set (ISR 0x0)
+  (33 such lines in the capture, the last value 1121 to 1124, the next 0 to 3)
+mp2_gpu_scanout: crc: base 0x00007f01
+mp2_gpu_scanout: crc: again 0x0000da5b
+mp2_gpu_scanout: crc: FAIL unstable 0x0000da5b vs 0x00007f01
+```
+
+Findings, in the order they constrain the next step:
+
+1. **The timing generator runs at the mode's frame.** `CPSR.CYPOS` counts to
+   1121..1124 and wraps to 0..3: `TWCR`'s total height is 1124 (1125 lines,
+   1080 + 4 + 5 + 36), so the pixel clock reaches the LTDC after the DSI
+   start. `SYSCFG DISPLAYCLKCR` 0x2 selects `ck_ker_ltdc`
+   (`clk-stm32mp25-syscfg.c:13-16`), the parent r3.1 `ltdc.c` sets for a
+   DSI encoder (`:1122-1130`, probe `:2809-2810`): no board-layer clock
+   change was needed or made.
+2. **`ISR` reads 0 throughout, with `IER.LIE` set**, and no error flag either
+   (no `FUWIF`, `TERRIF`, `FUEIF`). The 83 ms timeout of board-display3 was
+   therefore not the `LIE`-clear poll alone: on this block, as our image
+   drives it, `LIF` never shows. The next suspect is why `ISR` stays 0 (read
+   `IER` back after the write, `LIPCR`, and RM0457's LTDC interrupt chapter:
+   whether the MP25's flags need the interrupt line routed, or live in
+   another register for the non-secure side).
+3. **The CRC does not follow the picture.** `mp2_display`'s CPU-written bars
+   give a constant `0x2fab` that does not change when two pixels change;
+   `mp2_gpu_scanout`'s static GPU buffer gives two different values on
+   consecutive frames. Both are read at the `CPSR` wrap, not at `LIF` as
+   `ltdc_irq` does (`:1051-1054`). The layer is fetched (finding 4), so the
+   CRC is the check that is wrong, not the scan-out: the read point (`LIF`
+   never comes), the CRC's own update rule (RM0457), or both. Until that is
+   settled the probes' CRC self-check cannot pass on this board.
+4. **The picture reaches HDMI.** With screenshots taken through the hold,
+   the KVM showed the colour bars (`colorbars: PASS`) and the GPU triangle
+   (`triangle: PASS`), both full-frame at 1920x1080. The NanoKVM needs about
+   20 s after the signal changes (Linux's mode, then ours) before its
+   screenshot shows the new picture, and it keeps the last picture after the
+   signal changes back (the triangle was still on it after `uninstall`, with
+   ST's Linux answering). The first two runs' screenshots, taken right after
+   the result lines, therefore showed ST's held frame; board-display3's may
+   have had the same cause.
+
+The pictures, judged (JPEG converted to PPM with a stdlib baseline-JPEG
+decoder kept outside the tree): rows 1 and 2, screenshot right after the
+result line, `colorbars: FAIL: partial: 2 of 8 bars (white black)` and
+`triangle: FAIL: missing vertex colour: red, blue` (ST's held Weston
+launcher); row 3, about 20 s later,
+`colorbars: PASS: 8 bars white yellow cyan green magenta red blue black`;
+row 4, 45 s later, `triangle: PASS: red apex top, green bottom left, blue
+bottom right, box 1530x858 at 195,111 (red(0.49,0.23) green(0.19,0.88)
+blue(0.82,0.88))`. A KVM `PASS` is not the probe's: both probes printed
+`FAIL: crc -5`, and this session gives the note no probe `PASS` line.
+
+Supply. No hardware fault: all four images ran to the layer's own lifetime
+reset (`Reset reason: System reset (SYSRST) (0x2074). Warm boot.` in BL2
+before each return) and the board came back to ST's Linux in 190 s to
+207 s.
+
+Board state after the session: ST's Linux answering over ssh (the KVM still
+held the triangle at the end), `/boot/yakogl` removed, no `preboot` or `yako_*` variable, `bootcmd`
+ST's own, stock boot files unchanged since install (runner lines above).
+Nothing else on the board was written; no module loaded or unloaded.
+
 ## GPU buffer scan-out
+
+**board-display4 (21176f74, records `20261125-1217-mp2_gpu_scanout-83b9adf2`
+and `20261125-1227-mp2_gpu_scanout-83b9adf2`): the GPU-rendered buffer is
+on HDMI, but the probe does not pass.** The chain comes up, the layer is
+pointed at gc_triangle's linear copy at 0xfb04e000 (`linear: PASS ... 0
+failing checks`), and 45 s after the result line the KVM showed the
+triangle (red apex top centre, green bottom left, blue bottom right on the
+dark clear colour, full frame), judged `triangle: PASS: red apex top, green
+bottom left, blue bottom right, box 1530x858 at 195,111`. The probe itself
+printed `mp2_gpu_scanout: crc: FAIL unstable 0x0000da5b vs 0x00008895` and
+`mp2_gpu_scanout: FAIL: crc -5` (the LTDC CRC, see findings 2 and 3 of the
+board-display4 record): no PASS line from `mp2_gpu_scanout`, so c5 is not
+claimed.
 
 **board-display3 (368e7875, record `20261123-1910-mp2_gpu_scanout-e2626185`):
 not achieved.** The GPU half works on the board: gc_triangle's render at
