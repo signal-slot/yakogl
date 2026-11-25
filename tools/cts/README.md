@@ -1251,14 +1251,18 @@ credentials, set by the session; never in a file, a log or a commit).
 
    ```sh
    python3 -I tools/cts/imx95-uboot-row.py --storage <dev:part> \
-       --stage <stage-dir>/ [--conf <file>] <img-dir> <LABEL|LABEL-LABEL>...
+       --stage <stage-dir>/ [--fs ext4|fat] [--mount <dir>] [--conf <file>] \
+       <img-dir> <LABEL|LABEL-LABEL>...
    ```
 
    `--storage` is U-Boot's `<dev:part>` of the file system the module's Linux
    stages to (the eMMC's root file system); `--stage` is a path on the module
    (a trailing `/` adds `<LABEL>.bin`, needed for more than one label); a
    range is two labels with the same prefix (`T6S1R01-T6S1R12`). Per row it
-   prints the host's md5 and sizes, then in this order:
+   prints the host's md5 and sizes, then in this order (`--fs fat` for a FAT
+   boot-files partition prints `fatload mmc <dev:part> 0xd0000000 <name>` with
+   the name relative to the partition: `--stage` must lie under `--mount`,
+   default `/boot`; session S1a's route):
    - the ssh side: `$VI95_SSH 'rm -f <file>'`, `$VI95_SSH 'cat > <file>' <
      zephyr.bin`, `$VI95_SSH 'md5sum <file>'`;
    - the U-Boot side: `ext4load mmc <dev:part> 0xd0000000 <file>`, `md5sum
