@@ -58,4 +58,43 @@ head -4 "$MP" > "$tmp/short.txt"
 python3 -I "$TOOL" --mustpass "$tmp/short.txt" "${SL[@]}" > /dev/null 2>&1
 check "a Lost case outside the mustpass list exits 1" test $? -eq 1
 
+# Verdin iMX95: the same synthetic slices copied with board=verdin-imx95.
+mkdir -p "$tmp/i95/a" "$tmp/i95/b" "$tmp/mix/x" "$tmp/mix/y" "$tmp/t6meta"
+for s in "$D"/a/*/; do cp -r "$s" "$tmp/i95/a/"; done
+for s in "$D"/b/*/; do cp -r "$s" "$tmp/i95/b/"; done
+for s in "$tmp"/i95/a/*/ "$tmp"/i95/b/*/; do printf 'board=verdin-imx95\nsession=S1\n' > "$s/meta.txt"; done
+IS=("$tmp"/i95/a/*/ "$tmp"/i95/b/*/)
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "${IS[@]}" > "$tmp/i95.txt" 2> "$tmp/i95err.txt"
+check "iMX95 slices give a table (exit 0, no stderr)" test $? -eq 0 -a ! -s "$tmp/i95err.txt"
+sed 's/T6RR/I95RR/' "$D/expected.txt" > "$tmp/i95-expected.txt"
+check "the iMX95 table is expected.txt with the I95RR prefix" cmp -s "$tmp/i95.txt" "$tmp/i95-expected.txt"
+check "no T6 label in the iMX95 table" test "$(grep -c 'T6' "$tmp/i95.txt")" -eq 0
+python3 -I "$HERE/check-gles3-tree.py" --mustpass "$MP" --max 3 "$tmp/i95.txt" > "$tmp/i95chk.txt" 2>&1
+check "the iMX95 table passes check-gles3-tree.py" test $? -eq 0
+"$HERE/imx95-deqp-images.sh" --dry-run "$tmp/i95.txt" "$tmp/i95-img" > "$tmp/i95dry.txt" 2>&1
+check "imx95-deqp-images.sh --dry-run accepts the iMX95 table" test $? -eq 0
+rows=$(grep -c '^# image ' "$tmp/i95.txt")
+check "the dry run lists every row by its I95RR label" \
+  test "$(grep -c '^I95RR[0-9][0-9][0-9] ' "$tmp/i95dry.txt")" -eq "$rows"
+check "the dry run keeps the hang case in a row of its own" \
+  test "$(grep 'c.hang1' "$tmp/i95dry.txt" | grep -c ',')" -eq 0 -a "$(grep -c 'c.hang1' "$tmp/i95dry.txt")" -eq 1
+python3 -I "$TOOL" --mustpass "$MP" --prefix X95 "${IS[@]}" | grep -q '^# image X95001:'
+check "--prefix overrides the board's prefix" test $? -eq 0
+python3 -I "$TOOL" --mustpass "$MP" --prefix T6S1R01 "${IS[@]}" > /dev/null 2>&1
+check "--prefix naming a first-run label exits 2" test $? -eq 2
+python3 -I "$TOOL" --mustpass "$MP" --max 401 "${IS[@]}" > /dev/null 2>&1
+check "iMX95 --max above 400 exits 2" test $? -eq 2
+python3 -I "$TOOL" --mustpass "$MP" "${IS[0]}" "${SL[1]}" > /dev/null 2>&1
+check "a mix of iMX95 and T6 slices exits 2" test $? -eq 2
+cp -r "${SL[0]}" "$tmp/t6meta/"
+for s in "$tmp"/t6meta/*/; do printf 'board=nanopc-t6\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" "$tmp"/t6meta/*/ | grep -q '^# image T6RR001:'
+check "board=nanopc-t6 keeps the T6RR prefix" test $? -eq 0
+cp -r "${SL[0]}" "$tmp/mix/x/"
+for s in "$tmp"/mix/x/*/; do printf 'board=other-board\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" "$tmp"/mix/x/*/ > /dev/null 2>&1
+check "an unknown board without --prefix exits 2" test $? -eq 2
+python3 -I "$TOOL" --mustpass "$MP" --prefix OB "$tmp"/mix/x/*/ | grep -q '^# image OB001:'
+check "an unknown board with --prefix works" test $? -eq 0
+
 if [ "$fails" -eq 0 ]; then echo "mali-rerun-tree-selftest: $n checks passed"; else echo "mali-rerun-tree-selftest: $fails of $n checks FAILED"; exit 1; fi

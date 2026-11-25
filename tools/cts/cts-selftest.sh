@@ -940,7 +940,7 @@ malicheck 46 mali-slice-redact-selftest.sh 17
 # 47: mali-slice-readme.py writes and checks a slice's README.md.
 malicheck 47 mali-slice-readme-selftest.sh 25
 # 48: mali-rerun-tree.py builds the tree table of the Lost cases of slices.
-malicheck 48 mali-rerun-tree-selftest.sh 12
+malicheck 48 mali-rerun-tree-selftest.sh 26
 # 49: mali-rerun-tree.py output through mali-deqp-run.sh on the fake board.
 malicheck 49 mali-rerun-e2e-selftest.sh 16
 # 50: mali-fail-triage.py drafts the cause table and issue list from slices.
