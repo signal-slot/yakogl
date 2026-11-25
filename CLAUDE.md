@@ -17,15 +17,15 @@ Locally you run only what you added or changed (owner's decision of
   you touched, if it is quick. A docs-only change needs none of this.
 - Do **not** run `tools/check.sh` (`--changed`, `--quick`, `--local` or full)
   locally. A full or `--quick` run takes from tens of minutes to over an hour
-  and the pull request's CI runs the same rows. The only exception is a task
+  (a full run on a CI runner, about 2 h 45 min) and the pull request's CI runs the same rows. The only exception is a task
   whose stated purpose is a gate walk (for example an acceptance run of the
   gate itself).
 
 The check is the CI gate: `.github/workflows/gate.yml` runs `tools/check.sh`
 on every pull request (`--no-clippy --changed <merge base>`: the rows the
 diff reaches, no clippy),
-on each push to main as its header says, and nightly (every row). How to read
-its log:
+nightly on main's tip and when started by hand (every row); main is not run
+on each merge, as the workflow's header says. How to read its log:
 
 - Green is "N ok, 0 failed, 0 gap(s)". A `gap` row (Zephyr images, hal_nxp,
   pco_shc, aarch64) is a step that could not run; it is not a pass.
