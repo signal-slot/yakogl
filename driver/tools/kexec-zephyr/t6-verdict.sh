@@ -304,7 +304,24 @@ table_t6_gpu() {
 	e 't6_gpu: CRU at hand-over: CLKSEL_CON(158) 0x{x8} CLKSEL_CON(159) 0x{x8} CLKGATE_CON(66) 0x{x8} MODE_CON0 0x{x8} PLL_CON 0x{x8} 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
 	e 't6_gpu: SPI2 gates CLKGATE_CON(14) 0x{x8}, opened 0x{x}'
 	e 't6_gpu: SPI2 as found: CTRLR0 0x{x8} CTRLR1 0x{x8} SSIENR 0x{x} SER 0x{x} BAUDR 0x{x} SR 0x{x8} RXFLR 0x{x} VERSION 0x{x8}'
-	e 't6_gpu: RK806 at hand-over: POWER_EN0 0x{x} POWER_SLP_EN0 0x{x} BUCK1_CONFIG 0x{x} BUCK1_ON_VSEL 0x{x}: vdd_gpu_s0 on, {d} uV'
+	if [ "$ROUTE" = uboot ]; then
+		# From U-Boot nothing enabled DCDC1 (Linux is not there): the image
+		# reports the supply off and sends the enable frame, or finds it on
+		# and sends none. The clock-set line (kept 1 = keep, 0 = move; a
+		# refusal stops the run before the PASS line, which then fails).
+		local rk='t6_gpu: RK806 at hand-over: POWER_EN0 0x{x} POWER_SLP_EN0 0x{x} BUCK1_CONFIG 0x{x} BUCK1_ON_VSEL 0x{x}: vdd_gpu_s0'
+		if seen_line '^t6_gpu: RK806 at hand-over: .*: vdd_gpu_s0 off, '; then
+			e "$rk off, {d} uV"
+			e 't6_gpu: clock set: kept {d}, CPLL {d} Hz, wrote CLKSEL_CON(158) 0x{x8} (159) 0x{x8}, now 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
+			e 't6_gpu: vdd_gpu_s0 enable: frame sent; POWER_EN0 0x{x} BUCK1_ON_VSEL 0x{x} after, waited {d} us'
+		else
+			e "$rk on, {d} uV"
+			e 't6_gpu: clock set: kept {d}, CPLL {d} Hz, wrote CLKSEL_CON(158) 0x{x8} (159) 0x{x8}, now 0x{x8} 0x{x8}: clk_gpu_src {d} Hz'
+			e 't6_gpu: vdd_gpu_s0 enable: not sent; POWER_EN0 0x{x} BUCK1_ON_VSEL 0x{x} after, waited {d} us'
+		fi
+	else
+		e 't6_gpu: RK806 at hand-over: POWER_EN0 0x{x} POWER_SLP_EN0 0x{x} BUCK1_CONFIG 0x{x} BUCK1_ON_VSEL 0x{x}: vdd_gpu_s0 on, {d} uV'
+	fi
 	e 't6_gpu: GPU PLL on: PLL_CON6 0x{x8} at hand-over, was on {d}, waited {d} us, PLL_CON6 0x{x8}'
 	e 't6_gpu: PD_GPU on: gates opened 0x{x}, was on {d}, waited {d}/{d}/{d} us'
 	e 't6_gpu: PD_GPU after: PWR_GATE 0x{x8} STATUS 0x{x8} BUS_IDLE_REQ 0x{x8} ACK 0x{x8} ST 0x{x8} REPAIR_STATUS 0x{x8}: on'

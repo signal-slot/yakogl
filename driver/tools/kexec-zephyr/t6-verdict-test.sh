@@ -177,6 +177,48 @@ sed "/^$GA/s/, 16 word(s)/, 20 word(s)/" "$WORK/ext16.log" >"$WORK/ext20.log"
 check t6_hello-gic-words-extended 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$WORK/ext20.log"
 check t6_hello-gic-words-extended-missed 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/ext16.log"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
+# the U-Boot route (T6_ROUTE=uboot): DCDC1 may be off at U-Boot's hand-over
+# (nothing enabled it): the image reports it off and sends the enable frame
+# (supply-off), or finds it on and sends none (supply-on). The clock-set line
+# (kept 1 = keep, 0 = move) is judged too. The kexec route stays strict.
+UG=$((GPU + 2))
+check t6_gpu-uboot-supply-on 0 'VERDICT t6_gpu PASS' "$UG 0 0" t6_gpu "$D/t6_gpu-uboot-supply-on-pass.uart" T6_ROUTE=uboot
+check t6_gpu-uboot-supply-off 0 'VERDICT t6_gpu PASS' "$UG 0 0" t6_gpu "$D/t6_gpu-uboot-supply-off-pass.uart" T6_ROUTE=uboot
+# the off record on the kexec route: the supply line differs
+runs=$((runs + 1))
+out=$(bash "$V" t6_gpu "$D/t6_gpu-uboot-supply-off-pass.uart" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -q '^differs .*vdd_gpu_s0 off'; then
+	echo "ok   t6_gpu-uboot-supply-off-as-kexec: FAIL on the supply line"
+else
+	echo "FAIL t6_gpu-uboot-supply-off-as-kexec: rc $rc"
+	fails=$((fails + 1))
+fi
+# a supply line that says neither on nor off, and an enable line that does not
+# match the supply (off but "not sent", on but "frame sent")
+sed 's/vdd_gpu_s0 off, /vdd_gpu_s0 flaky, /' "$D/t6_gpu-uboot-supply-off-pass.uart" >"$WORK/us-wrong.log"
+runs=$((runs + 1))
+out=$(T6_ROUTE=uboot bash "$V" t6_gpu "$WORK/us-wrong.log" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && [[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT t6_gpu FAIL ('* ]]; then
+	echo "ok   t6_gpu-uboot-supply-wrong: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+else
+	echo "FAIL t6_gpu-uboot-supply-wrong: rc $rc"
+	fails=$((fails + 1))
+fi
+sed 's/enable: frame sent;/enable: not sent;/' "$D/t6_gpu-uboot-supply-off-pass.uart" >"$WORK/us-off-nosend.log"
+check t6_gpu-uboot-supply-off-not-sent 1 "VERDICT t6_gpu FAIL (1 of $UG)" "$((UG - 1)) 1 0" t6_gpu "$WORK/us-off-nosend.log" T6_ROUTE=uboot
+sed 's/enable: not sent;/enable: frame sent;/' "$D/t6_gpu-uboot-supply-on-pass.uart" >"$WORK/us-on-sent.log"
+check t6_gpu-uboot-supply-on-sent 1 "VERDICT t6_gpu FAIL (1 of $UG)" "$((UG - 1)) 1 0" t6_gpu "$WORK/us-on-sent.log" T6_ROUTE=uboot
+# refuse: gpu_clock_set refused (stop 9), the run ends on its stop line
+sed -e '/^t6_gpu: vdd_gpu_s0 enable: /,$d' "$D/t6_gpu-uboot-supply-on-pass.uart" >"$WORK/us-refuse.log"
+echo 't6_gpu: FAIL: stop 9 (the GPU clock has no rate), refusal 0, detail 0x0000000059682f00' >>"$WORK/us-refuse.log"
+runs=$((runs + 1))
+out=$(T6_ROUTE=uboot bash "$V" t6_gpu "$WORK/us-refuse.log" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && [[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT t6_gpu FAIL ('* ]]; then
+	echo "ok   t6_gpu-uboot-clock-refuse: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+else
+	echo "FAIL t6_gpu-uboot-clock-refuse: rc $rc"
+	fails=$((fails + 1))
+fi
 # the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
 TAKE=4
 check t6_gpu-crash-pass 0 'VERDICT t6_gpu PASS' "$((GPU + TAKE)) 0 0" t6_gpu "$D/t6_gpu-crash-pass.uart"
