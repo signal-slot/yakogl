@@ -1108,10 +1108,20 @@ pub const ADMITTED: u128 = {
          * `ffma(t0, 0.5, fmul(t1, 0.25))` */
         | prod(Tex, MulA)
         | prod(Tex, FmaA)
+        /* a uniform first in a sum: `mix(color1, color2, t)` of two vec3
+         * uniforms, `FADD.v2f16 r1, u2.w1, u2.w0.neg` (gm2_fsop_1,
+         * jellyfish fs 8ee5; docs/notes/mali-fs-operand.md) */
+        | prod(Uniform, AddA)
+        /* `mix`'s `b - a` of two uniforms, the negation a modifier of the
+         * uniform (`u2.w0.neg`, gm2_fsop_1) */
+        | prod(Uniform, NegSrc)
         | prod(Op, FmaC)
         /* case 75's `vec4(u_k.x - 0.5, u_k.y - 1.0, 1.0 - u_k.z, 1.0)`
          * (varyconst_75_immneg): the uniform's pair first in a sum */
         | prod(Uniform, AddA)
+        /* `mix`'s `b - a` of two uniforms, the negation a modifier of the
+         * uniform (`u2.w0.neg`, gm2_fsop_1) */
+        | prod(Uniform, NegSrc)
         /* case 166's `u_p[56].x * u_p[0]` (unitype_166a): a uniform's
          * component first in a product, `fmul %2.xx, %3.xy` */
         | prod(Uniform, MulA)

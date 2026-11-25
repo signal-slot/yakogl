@@ -4786,6 +4786,11 @@ fn the_fragment_productions_are_the_references() {
      * of two lanes (`Splat` at `MulA`, `FMA.v2f16 r1, r0.h00, u2.w0`), and a
      * product and an fneg packed (plan #377, misc) */
     fs.extend([td!("deqp_misc_constmat_mat4_mediump.frag"), td!("deqp_misc_constmat_mat2_mediump.frag")]);
+    /* glmark2 jellyfish 8ee5's `mix` of two vec3 uniforms: a uniform first
+     * in a sum (`Uniform` at `AddA`) and a uniform under the negation
+     * (`Uniform` at `NegSrc`), `FADD.v2f16 r1, u2.w1, u2.w0.neg`
+     * (plan #367 fsoperand) */
+    fs.push(td!("gm2_fsop_4.frag"));
     /* built for their vertex shaders' link constants and equal lanes: one
      * lane in both halves of an output word (gm2_arithconst_3's three
      * equal colour lanes) */
