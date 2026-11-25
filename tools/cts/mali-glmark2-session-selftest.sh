@@ -133,6 +133,9 @@ check "clean: output files" bash -c "cd '$tmp/clean/out' && ls state-before.txt 
 check "clean: the three scenes are in the tally table" bash -c "[ \$(grep -c 'build' '$tmp/clean/out/tally-table.txt') -ge 1 ]"
 check "clean: kept files have no host name or address" clean_out clean
 check "clean: the stage is gone from the board" test ! -e "$tmp/clean/board/home/yakogl-mali-glmark2"
+ACCEPT='([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|/home/|/dev/tty(USB|ACM)|@[a-z0-9-]+\.'
+accept_clean() { ! grep -rEn -- "$ACCEPT" "$tmp/$1/out"; }
+check "clean: the acceptance regex finds nothing in the outdir" accept_clean clean
 order_ok() { # preflight probes, then snapshot, then the runner's, then the second snapshot
   local f=$tmp/$1/session.log a b c d
   a=$(grep -n 'yakogl-preflight-ok' "$f" | head -1 | cut -d: -f1)
@@ -223,6 +226,29 @@ check "dry-run: ssh and scp never called" test ! -e "$tmp/dry/called"
 check "dry-run: nothing written" bash -c "[ ! -e '$tmp/dry/outdir' ] && [ -z \"\$(ls '$tmp/dry' | grep -vE '^(bin|bare|full|nohost|badopt)')\" ]"
 check "no BOARD_HOST: exit 2, says so" bash -c "[ \"\$(cat '$tmp/dry/nohost.rc')\" = 2 ] && grep -q 'set BOARD_HOST' '$tmp/dry/nohost.txt'"
 check "unknown option: exit 2" bash -c "[ \"\$(cat '$tmp/dry/badopt.rc')\" = 2 ]"
+
+echo "mali-glmark2-session-selftest: redaction of preflight.txt and tally-*.err"
+# a preflight and a tally that also print a home path, a UART path and a
+# user@host (invented names), around the real ones
+cat > "$tmp/fake-preflight.sh" <<EOF
+#!/bin/bash
+echo "run dir /home/tester/work/yakogl/build, console /dev/ttyUSB3 and /dev/ttyACM0, login tester@board-x.example, mesa-24.0.8"
+exec bash "$HERE/mali-glmark2-preflight.sh" "\$@"
+EOF
+cat > "$tmp/fake-tally.py" <<EOF
+import subprocess, sys
+r = subprocess.run([sys.executable, '-I', '$HERE/glmark2-mali-tally.py'] + sys.argv[1:])
+sys.stderr.write('tally: /home/tester/work/glmark2/src/terrain.cpp:42 on /dev/ttyUSB1 by tester@board-x.example\n')
+sys.exit(r.returncode)
+EOF
+MALI_GLMARK2_PREFLIGHT="$tmp/fake-preflight.sh" MALI_GLMARK2_TALLY="$tmp/fake-tally.py" run redact good --scenes 1-3
+check "redact: exit 0" rc_is redact 0
+check "redact: preflight.txt has the placeholders, the version number stays" grep -qF '<home>/work/yakogl/build, console <uart> and <uart>, login <user>@<host>, mesa-24.0.8' "$tmp/redact/out/preflight.txt"
+check "redact: tally-table.err is redacted" grep -qF 'tally: <home>/work/glmark2/src/terrain.cpp:42 on <uart> by <user>@<host>' "$tmp/redact/out/tally-table.err"
+check "redact: every tally-*.err is redacted" bash -c "ls '$tmp/redact/out'/tally-*.err > /dev/null && ! grep -l tester '$tmp/redact/out'/tally-*.err"
+check "redact: the tally-*.txt are as the tally wrote them (same as the clean run)" bash -c "for f in table results-row status-row picture-lines causes; do cmp -s '$tmp/clean/out/tally-'\$f.txt '$tmp/redact/out/tally-'\$f.txt || exit 1; done"
+check "redact: the acceptance regex finds nothing in the outdir" accept_clean redact
+check "redact: no invented user or host name is left in the outdir" bash -c "! grep -rE 'tester|board-x' '$tmp/redact/out'"
 
 echo "mali-glmark2-session-selftest: the wrapper's text"
 no_verbs() { ! grep -v '^ *#' "$1" | grep -qE '(^|[^[:alnum:]_-])(sudo|modprobe|rmmod|insmod|tee -a /|dd|mount|umount|fw_setenv|tailscale|sshd|systemctl)([^[:alnum:]_-]|$)'; }
