@@ -374,6 +374,51 @@ check_xcc() {
   fi
 }
 
+# The aarch64 GNU gcc the Pi 5 rows (xbuild71, E1) can use without a Zephyr
+# SDK. Reported on its own so the missing package is named; check_xcc above
+# decides whether any compiler builds a probe.
+check_aarch64_gcc() {
+  local out
+  out=$(aarch64-linux-gnu-gcc --version 2>&1) || {
+    line missing aarch64-linux-gnu-gcc "not on PATH (Debian gcc-aarch64-linux-gnu, Gentoo cross-aarch64-linux-gnu via crossdev, Fedora gcc-aarch64-linux-gnu): the xbuild71 row uses it when no Zephyr SDK or clang target compiler is there"
+    return
+  }
+  line ok aarch64-linux-gnu-gcc "${out%%$'\n'*}"
+}
+
+# ZEPHYR_SDK_INSTALL_DIR: the Zephyr SDK of the Zephyr image rows and of
+# xbuild71's first candidate (aarch64-zephyr-elf-gcc). Never installed here.
+check_zephyr_sdk() {
+  local d=${ZEPHYR_SDK_INSTALL_DIR:-} gcc
+  if [ -z "$d" ]; then
+    line missing ZEPHYR_SDK_INSTALL_DIR "not set (the Zephyr image rows would gap): tools/cts/deps-env.sh --build ZEPHYR_SDK_INSTALL_DIR, or export it as the Zephyr SDK 1.0.1 directory (docs/es3/zephyr-env.md)"
+    return
+  fi
+  for gcc in "$d/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc" \
+             "$d/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc"; do
+    if [ -x "$gcc" ]; then
+      line ok ZEPHYR_SDK_INSTALL_DIR "$d"
+      return
+    fi
+  done
+  line missing ZEPHYR_SDK_INSTALL_DIR "$d has no aarch64-zephyr-elf-gcc (SDK installed without the aarch64 toolchain): setup.sh -t aarch64-zephyr-elf, or tools/cts/deps-env.sh --build ZEPHYR_SDK_INSTALL_DIR"
+}
+
+# V3D_SHC: Mesa's v3d_shc, the V3D 7.1 shader tool tools/v3d/check71.d/
+# gltest_mesa71.sh runs (a gap without it). Resolved as that script does:
+# V3D_SHC, else MESA_V3D_TREE/build-v3d/src/broadcom/v3d_shc.
+check_v3d_shc() {
+  local shc=${V3D_SHC:-} tree=${MESA_V3D_TREE:-}
+  if [ -z "$shc" ] && [ -n "$tree" ]; then
+    shc=$tree/build-v3d/src/broadcom/v3d_shc
+  fi
+  if [ -n "$shc" ] && [ -x "$shc" ]; then
+    line ok V3D_SHC "$shc"
+  else
+    line missing V3D_SHC "no executable v3d_shc (V3D_SHC or MESA_V3D_TREE): build it in a Mesa 26.2.1 tree and export V3D_SHC (tools/v3d/README.md, Set up once: ninja -C build-v3d src/broadcom/v3d_shc); the gltest_mesa71 row would gap"
+  fi
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -665,6 +710,9 @@ run_checks() {
   check_lz4
   check_dtc
   check_xcc
+  check_aarch64_gcc
+  check_zephyr_sdk
+  check_v3d_shc
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
