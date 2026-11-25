@@ -11,7 +11,9 @@
 # printed, nothing made or run), the sweep (shard files, one slot image per
 # shard, one log per shard, the final diff call), the resume skip (a shard
 # whose log holds a result is not run again, a damaged one is), the shard
-# range, the default case list with its exclusions, and the refusals.
+# range, the default case list with its exclusions, and the refusals; the
+# stop on runner exit 5 and 7 and on SIGINT/SIGTERM (undo lines shown, no next
+# shard, no diff, exit 3 / 130 / 143) and the RUN_BOUND default (lifetime + 100 s).
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -103,6 +105,70 @@ out=$(bash "$SWEEP" --dry-run 2>&1); rc=$?
 chk "usage: exit 2" test $rc -eq 2
 out=$(sw "$D/nothere.bin" "$D/o5" 2>&1); rc=$?
 chk "no image: exit 2" test $rc -eq 2
+
+echo "stop: exit 5 and 7"
+cat >"$D/stop.sh" <<'EOS'
+#!/bin/bash
+echo "$2 $3 $4" >> "$FAKE_CALLS"
+echo "board-stm32mp2.sh: WARNING: left behind: the board was rebooted and is not back"
+echo "board-stm32mp2.sh: the undo, once the board answers: tools/board-stm32mp2.sh disarm (record: x)"
+exit "$STOP_RC"
+EOS
+chmod +x "$D/stop.sh"
+for rc in 5 7; do
+    : > "$D/calls.txt"
+    out=$(STOP_RC=$rc MP2_SWEEP_RUNNER=$D/stop.sh sw "$D/zephyr.bin" "$D/os$rc" 2>&1); r=$?
+    chk "exit $rc: sweep exit 3" test $r -eq 3
+    chk "exit $rc: only the first shard ran" test "$(wc -l < "$D/calls.txt")" -eq 1
+    chk "exit $rc: undo line printed" grep -q 'runner: .*tools/board-stm32mp2.sh disarm' <<<"$out"
+    chk "exit $rc: says a person is needed" grep -q 'board needs a person' <<<"$out"
+    chk "exit $rc: no diff" bash -c '! grep -q "^mp2-p9-diff" <<<"$1"' _ "$out"
+done
+: > "$D/calls.txt"
+out=$(STOP_RC=1 MP2_SWEEP_RUNNER=$D/stop.sh sw "$D/zephyr.bin" "$D/os1" 2>&1); r=$?
+chk "exit 1: still goes on to the next shard" test "$(wc -l < "$D/calls.txt")" -eq 3
+
+echo "stop: SIGINT and SIGTERM"
+cat >"$D/slow.sh" <<'EOS'
+#!/bin/bash
+echo "$2 $3 $4" >> "$FAKE_CALLS"
+trap 'echo "board-stm32mp2.sh: SIGINT: ending through the undo"; echo "board-stm32mp2.sh: the undo, once the board answers: tools/board-stm32mp2.sh disarm"; exit 130' INT TERM
+echo "fake runner started"
+while :; do sleep 0.1; done
+EOS
+chmod +x "$D/slow.sh"
+for sg in INT TERM; do
+    : > "$D/calls.txt"
+    ( set -m
+      MP2_SWEEP_RUNNER=$D/slow.sh bash "$SWEEP" --report-only --case-list "$D/cases.txt" --budget-ms 250 "$D/zephyr.bin" "$D/o$sg" > "$D/out$sg.txt" 2>&1 &
+      p=$!
+      for _ in $(seq 100); do grep -q 'fake runner started' "$D/o$sg/shard-0001.log" 2>/dev/null && break; sleep 0.1; done
+      kill -s $sg $p
+      wait $p; echo $? > "$D/rc$sg.txt" )
+    want=130; [ $sg = TERM ] && want=143
+    chk "SIG$sg: exit $want" test "$(cat "$D/rc$sg.txt")" -eq $want
+    chk "SIG$sg: only the first shard ran" test "$(wc -l < "$D/calls.txt")" -eq 1
+    chk "SIG$sg: runner's undo line shown" grep -q 'runner: .*the undo' "$D/out$sg.txt"
+    chk "SIG$sg: says a person is needed" grep -q 'board needs a person' "$D/out$sg.txt"
+    chk "SIG$sg: no diff" bash -c '! grep -q "^mp2-p9-diff" "$1"' _ "$D/out$sg.txt"
+done
+
+echo "RUN_BOUND"
+cat >"$D/rb.sh" <<'EOS'
+#!/bin/bash
+echo "RB=${RUN_BOUND-unset}" >> "$FAKE_CALLS"
+EOS
+chmod +x "$D/rb.sh"
+: > "$D/calls.txt"
+life=$(sed -n 's/^CONFIG_YAKOGL_STM32MP2_LIFETIME_S=//p' "$HERE/../../driver/samples/zephyr/deqp/boards/stm32mp257f_dk_stm32mp257fxx_a35.conf")
+out=$(env -u RUN_BOUND MP2_SWEEP_RUNNER=$D/rb.sh bash "$SWEEP" --report-only --case-list "$D/cases.txt" --first 1 --last 1 --budget-ms 250 "$D/zephyr.bin" "$D/orb1" 2>&1)
+chk "unset: lifetime $life + 100 given to the runner" grep -qx "RB=$((life + 100))" "$D/calls.txt"
+chk "unset: the value is printed" grep -q "RUN_BOUND=$((life + 100)) " <<<"$out"
+: > "$D/calls.txt"
+out=$(RUN_BOUND=77 MP2_SWEEP_RUNNER=$D/rb.sh bash "$SWEEP" --report-only --case-list "$D/cases.txt" --first 1 --last 1 --budget-ms 250 "$D/zephyr.bin" "$D/orb2" 2>&1)
+chk "set: the caller's value kept" grep -qx 'RB=77' "$D/calls.txt"
+out=$(env -u RUN_BOUND bash "$SWEEP" --dry-run "$D/zephyr.bin" "$D/orb3" 2>&1)
+chk "dry run prints RUN_BOUND" grep -q "RUN_BOUND=$((life + 100)) " <<<"$out"
 
 echo "default list"
 out=$(bash "$SWEEP" --dry-run "$D/zephyr.bin" "$D/o6" 2>&1)
