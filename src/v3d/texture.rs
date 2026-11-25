@@ -1,5 +1,11 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014-2017 Broadcom
+// SPDX-FileCopyrightText: 2012 Rob Clark
+//
+// `layout_compressed` transcribes `v3d_setup_slices` of Mesa 26.2.1
+// src/gallium/drivers/v3d/v3d_resource.c (MIT, Copyright © 2014-2017
+// Broadcom, Copyright (C) 2012 Rob Clark).
 //! The V3D's textures, from the GL core's `GlesTextureBind` to what the TMU
 //! reads (docs/online-shaderc/v3d-backend.md, "M6 textures", T2): where the
 //! GL core keeps each level, the tiled image the TMU samples instead (laid
