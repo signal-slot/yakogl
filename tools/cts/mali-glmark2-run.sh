@@ -213,11 +213,12 @@ DEFAULT_SCENES=(
   loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true
 )
 
-dry=0 dev=0 scenes_arg= limit=180 pos=()
+dry=0 dev=0 scenes_arg= limit=180 pos=() redact_files=()
 while [ $# -gt 0 ]; do
   case $1 in
     --dry-run) dry=1; shift ;;
     --dev) dev=1; shift ;;
+    --redact-files) shift; redact_files=("$@"); break ;; # the session wrapper's files: the same redaction, in place
     --scenes) scenes_arg=${2:?--scenes needs a file or a list}; shift 2 ;;
     --timeout) limit=${2:?--timeout needs seconds}; shift 2 ;;
     -h | --help) usage ;;
@@ -229,7 +230,7 @@ done
 [[ $limit =~ ^[1-9][0-9]*$ ]] || { echo "$me: --timeout wants whole seconds, not '$limit'" >&2; exit 1; }
 [ "${#pos[@]}" -le 2 ] || usage
 build=${pos[0]-} out=${pos[1]-}
-if [ "$dry" = 0 ] && { [ -z "$build" ] || [ -z "$out" ]; }; then usage; fi
+if [ "$dry" = 0 ] && [ "${#redact_files[@]}" = 0 ] && { [ -z "$build" ] || [ -z "$out" ]; }; then usage; fi
 
 # ---- the scenes ----------------------------------------------------------------
 SCENES=()
@@ -354,6 +355,7 @@ fi
 host=${BOARD_HOST:?set BOARD_HOST=<user@host> (the target:nanopc-t6 lease)}
 [[ $host == *@* ]] || [ -z "${BOARD_USER-}" ] || host=$BOARD_USER@$host
 read -r -a opts <<< "${BOARD_SSH_OPTS-}"
+if [ "${#redact_files[@]}" = 0 ]; then
 if [ -e "$out" ] && [ -n "$(ls -A "$out" 2>/dev/null)" ]; then
   echo "$me: $out exists and is not empty: not overwriting a run" >&2
   exit 1
@@ -363,6 +365,7 @@ out=$(cd "$out" && pwd)
 raw=${RAW_DIR:-$REPO/build/mali-glmark2-run/$(basename "$out")}
 rm -rf "$raw/run" "$raw/kmsg" "$raw/pictures.txt" "$raw/meta.txt" "$raw/meta.full"
 mkdir -p "$raw/run" "$raw/kmsg" "$out/kmsg" "$out/log"
+fi
 
 # The names the run directory must not keep (redaction): the board's host and
 # login as BOARD_HOST spells them, this host's names and its user.
@@ -379,7 +382,9 @@ IPV4 = re.compile(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
 IPV6 = re.compile(r'\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\b'
                   r'|\b[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?\b')
 MAC = re.compile(r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b')
-HOME = re.compile(r'/(home|Users)/[^/\s]+')
+HOME = re.compile(r'/(?:home|Users)/[^/\s]+')
+UART = re.compile(r'/dev/tty(?:USB|ACM)\d*')
+USERHOST = re.compile(r'(?<![\w.@-])[\w.+-]+@(?=[A-Za-z0-9-]+\.)[A-Za-z0-9.-]+[A-Za-z0-9]')
 
 
 def redactor():
@@ -393,7 +398,9 @@ def redactor():
         s = MAC.sub('<mac>', s)
         s = IPV6.sub('<addr>', s)
         s = IPV4.sub('<addr>', s)
-        return HOME.sub(r'/\1/<user>', s)
+        s = UART.sub('<uart>', s)
+        s = USERHOST.sub('<user>@<host>', s)
+        return HOME.sub('<home>', s)
     return red
 
 
@@ -564,6 +571,13 @@ PYEOF
 )
 export MALI_GLMARK2_HERE=$HERE
 py() { python3 -I -c "$PY" "$@"; }
+if [ "${#redact_files[@]}" -gt 0 ]; then
+  for f in "${redact_files[@]}"; do
+    [ -f "$f" ] || continue
+    py redact "$f" "$f.redacting" && mv -f "$f.redacting" "$f" || { rm -f "$f.redacting"; exit 1; }
+  done
+  exit 0
+fi
 
 # ---- the board -----------------------------------------------------------------
 LOCK_WAIT=${LOCK_WAIT:-0}
