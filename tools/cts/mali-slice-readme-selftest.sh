@@ -22,7 +22,7 @@ bad() { printf '  FAIL  %s\n' "$1"; fail=$((fail + 1)); }
 work=$(mktemp -d "${TMPDIR:-/tmp}/mali-slice-readme.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT
 
-for n in clean faulty; do
+for n in clean faulty zephyr; do
     got=$(python3 -I "$TOOL" "$DATA/$n" 2>&1)
     if [ "$got" = "$(cat "$DATA/$n.expected")" ]; then ok "$n: output"; else bad "$n: output differs from $n.expected"; fi
 
@@ -77,6 +77,23 @@ else bad "board=verdin-imx95: the README does not name the board"; fi
 want=$(sed -e 's/NanoPC-T6/Verdin iMX95/g' -e 's/Mali-G610 over panthor, the board.s own Armbian/Mali-G310 over panthor, the board'"'"'s own Linux/' \
   -e 's/^BOARD_HOST=<board>/MALI_BOARD=verdin-imx95 BOARD_HOST=<board>/' -e 's/target:nanopc-t6/target:verdin-imx95/' "$DATA/clean.expected")
 if [ "$got" = "$want" ]; then ok "board=verdin-imx95: no other line differs from clean.expected"; else bad "board=verdin-imx95: other lines differ"; fi
+
+# The Zephyr Verdin iMX95 slice (board=verdin-imx95-zephyr, no kmsg/, rows.tsv)
+# never claims Linux, panthor, kmsg, ssh or a boot_id, and shows the rows.
+z=$DATA/zephyr.expected
+if ! grep -qiE 'linux|panthor|kmsg|ssh|boot_id|armbian|mali-deqp-run' "$z" &&
+   grep -q 'Mali-G310 under Zephyr, started from U-Boot' "$z" &&
+   grep -q '^## Rows' "$z"; then ok "zephyr: README claims no Linux, panthor or kmsg"; else bad "zephyr: README claims Linux, panthor or kmsg"; fi
+rm -rf "$work/z"; cp -r "$DATA/zephyr" "$work/z"
+sed -i 's/^1\tT6S9R01\t12\t360/1\tT6S9R01\t400\t360/; s/yes$/no/' "$work/z/rows.tsv"
+got=$(python3 -I "$TOOL" "$work/z" 2>&1)
+if grep -q '1 reached their lifetime' <<<"$got" && grep -q '^| no | 2 |' <<<"$got"; then ok "zephyr: rows over lifetime and bbm counted"; else bad "zephyr: rows.tsv not summarised"; fi
+printf 'row\tlabel\tseconds\n1\tx\t3\n' > "$work/z/rows.tsv"
+python3 -I "$TOOL" "$work/z" >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "zephyr: rows.tsv without lifetime_s or bbm is refused" || bad "zephyr: bad rows.tsv exit $rc"
+rm "$work/z/rows.tsv"
+python3 -I "$TOOL" "$work/z" >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "zephyr: rows.tsv is optional" || bad "zephyr: no rows.tsv exit $rc"
 
 # A missing file is refused too.
 rm -rf "$work/r"; cp -r "$DATA/clean" "$work/r"; rm "$work/r/chunks.tsv"
