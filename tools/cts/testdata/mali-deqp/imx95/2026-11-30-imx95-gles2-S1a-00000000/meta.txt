@@ -1,0 +1,11 @@
+commit=0000000000000000000000000000000000000000
+session=S1a
+board=verdin-imx95
+rows=1-2
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=-
+boot_id_after=-
+kernel=zephyr
+lib=yakogl: Mali-G310 (Zephyr, UART)
+started=2026-11-30T01:00:00Z
+ended=2026-11-30T02:00:00Z
