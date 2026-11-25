@@ -62,5 +62,33 @@ $PY "$TOOL" "$T/nonexistent.log" > /dev/null 2>&1; ck missing-log "$?" 2
 $PY "$TOOL" "$T/hms.log" --cases "$T/nonexistent" > /dev/null 2>&1; ck missing-cases "$?" 2
 $PY "$TOOL" "$T/hms.log" --bogus > /dev/null 2>&1; ck bad-option "$?" 2
 
+# legacy fixtures print no stamp lines: the output is the one summary line
+ck legacy-lines "$($PY "$TOOL" "$T/hms.log" "$T/ts.log" --cases "$T/cases.txt" | wc -l)" 1
+
+# quiet console: stamps, a 'HH:MM:SS' prefix on one, summary B=6
+printf '%s\n' \
+    "10:00:00 deqp: case filter 'q.*'" \
+    'deqp: stamp uptime_ms=1000 case=0 done=0 pass=0 fail=0 other=0' \
+    '10:00:05 deqp: stamp uptime_ms=6000 case=2 done=2 pass=2 fail=0 other=0' \
+    'deqp: stamp uptime_ms=26000 case=4 done=4 pass=3 fail=1 other=0' \
+    'deqp: stamp uptime_ms=31000 case=6 done=6 pass=3 fail=2 other=1' \
+    'deqp: summary: 6 cases begun, 6 with a result, 0 without' > "$T/q.log"
+out=$($PY "$TOOL" "$T/q.log"); rc=$?
+ck quiet-rc "$rc" 0
+ck quiet "$out" "mp2-case-times: cases 0, timed 0, missing 0, max_ms 0
+mp2-case-times: interval 1 uptime_ms 1000..6000 gap_ms 5000 cases 2 rate 0.400
+mp2-case-times: interval 2 uptime_ms 6000..26000 gap_ms 20000 cases 2 rate 0.100
+mp2-case-times: interval 3 uptime_ms 26000..31000 gap_ms 5000 cases 2 rate 0.400
+mp2-case-times: stamps 4, max_gap_ms 20000, last_done 6, shard_cases 6, truncated no"
+
+# truncated quiet console: no summary, last done 4 of --shard-cases 6; and without --shard-cases
+head -4 "$T/q.log" > "$T/qt.log"
+ck quiet-trunc "$($PY "$TOOL" "$T/qt.log" --shard-cases 6 | tail -1)" \
+    "mp2-case-times: stamps 3, max_gap_ms 20000, last_done 4, shard_cases 6, truncated yes"
+ck quiet-trunc-nosum "$($PY "$TOOL" "$T/qt.log" | tail -1)" \
+    "mp2-case-times: stamps 3, max_gap_ms 20000, last_done 4, shard_cases ?, truncated yes"
+ck quiet-shard-ok "$($PY "$TOOL" "$T/q.log" --shard-cases 6 | tail -1)" \
+    "mp2-case-times: stamps 4, max_gap_ms 20000, last_done 6, shard_cases 6, truncated no"
+
 [ "$fail" = 0 ] && echo "mp2_case_times_selftest: all ok"
 exit "$fail"
