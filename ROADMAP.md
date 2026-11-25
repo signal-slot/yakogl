@@ -83,7 +83,7 @@ Left for the criterion:
 
 Slow scenes, which the criterion does not judge: on the AM62P terrain,
 shadow and refract take 94, 353 and 376 ms a frame, mostly GL-call time on
-the CPU (#1199, #1006, #1198); on the Pi 4 terrain takes 162 ms (#1209); on
+the CPU (#1199, #1006, #1198); the Pi 4 terrain, 34.77 ms at `87881c78` (#1209, `docs/notes/pi4-slow-terrain.md`), is no longer a slow scene; on
 the i.MX8MP terrain, shadow and refract run at 4, 2 and 2 FPS (shadow and
 refract: #15), and the other scenes wait for the panel's VSYNC every frame
 (`docs/notes/imx8mp-frame-floor.md`). The gap list is
