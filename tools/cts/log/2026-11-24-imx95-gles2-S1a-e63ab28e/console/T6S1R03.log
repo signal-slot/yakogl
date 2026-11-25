@@ -1,0 +1,1504 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/171713 in 25763 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.*,dEQP-GLES2.functional.color_clear.*,dEQP-GLES2.functional.debug_marker.*,dEQP-GLES2.functional.default_vertex_attrib.*,dEQP-GLES2.functional.depth_range.*,dEQP-GLES2.functional.depth_stencil_clear.*,dEQP-GLES2.functional.dither.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 27 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y'..
+mali shaderc table 'IR values': high-water 6 of 2048
+mali shaderc table 'NIR instructions': high-water 37 of 1536
+mali shaderc table 'BIR instructions': high-water 70 of 1536
+mali shaderc table 'BIR values': high-water 41 of 1536
+mali arena 'desc': high-water 1200 of 1048576 bytes
+mali arena 'data': high-water 112 of 262144 bytes
+mali arena 'code': high-water 896 of 131072 bytes
+mali arena 'spds': high-water 128 of 32768 bytes
+mali arena 'cs': high-water 424 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_neg_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_neg_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_y_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_neg_z_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_y_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_x_pos_z_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_neg_z_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_neg_y_pos_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_neg_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_neg_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_y_pos_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_neg_z_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_y_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_x_pos_z_and_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_and_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_neg_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_two.clip_pos_y_pos_z_and_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.complex_rgb'..
+mali arena 'desc': high-water 3888 of 1048576 bytes
+mali arena 'data': high-water 768 of 262144 bytes
+mali arena 'cs': high-water 1408 of 393216 bytes
+mali arena 'desc': high-water 6144 of 1048576 bytes
+mali arena 'data': high-water 1632 of 262144 bytes
+mali arena 'cs': high-water 1904 of 393216 bytes
+mali arena 'desc': high-water 13888 of 1048576 bytes
+mali arena 'data': high-water 2592 of 262144 bytes
+mali arena 'cs': high-water 4624 of 393216 bytes
+mali arena 'desc': high-water 15296 of 1048576 bytes
+mali arena 'data': high-water 3168 of 262144 bytes
+mali arena 'cs': high-water 5128 of 393216 bytes
+mali arena 'data': high-water 3264 of 262144 bytes
+mali arena 'data': high-water 4512 of 262144 bytes
+mali arena 'desc': high-water 20928 of 1048576 bytes
+mali arena 'cs': high-water 7112 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.color_clear.complex_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.complex_rgba'..
+mali arena 'data': high-water 4704 of 262144 bytes
+deqp: Pass dEQP-GLES2.functional.color_clear.complex_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.long_masked_rgb'..
+mali arena 'desc': high-water 74288 of 1048576 bytes
+mali arena 'data': high-water 16512 of 262144 bytes
+mali arena 'cs': high-water 26208 of 393216 bytes
+mali arena 'desc': high-water 136384 of 1048576 bytes
+mali arena 'data': high-water 35712 of 262144 bytes
+mali arena 'cs': high-water 47776 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.color_clear.long_masked_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.long_masked_rgba'..
+mali arena 'desc': high-water 151168 of 1048576 bytes
+mali arena 'cs': high-water 52992 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.color_clear.long_masked_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.long_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.long_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.long_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.long_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.masked_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.masked_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.masked_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.masked_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.masked_scissored_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.masked_scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.masked_scissored_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.masked_scissored_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.multiple_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.multiple_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.multiple_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.multiple_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.scissored_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.scissored_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.scissored_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.short_scissored_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.short_scissored_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.single_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.single_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.single_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.single_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.subclears_rgb'..
+deqp: Pass dEQP-GLES2.functional.color_clear.subclears_rgb
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.color_clear.subclears_rgba'..
+deqp: Pass dEQP-GLES2.functional.color_clear.subclears_rgba
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.debug_marker.invalid'..
+deqp: Pass dEQP-GLES2.functional.debug_marker.invalid
+  Pass (All calls passed)
+
+Test case 'dEQP-GLES2.functional.debug_marker.random'..
+deqp: Pass dEQP-GLES2.functional.debug_marker.random
+  Pass (All calls passed)
+
+Test case 'dEQP-GLES2.functional.debug_marker.supported'..
+deqp: Pass dEQP-GLES2.functional.debug_marker.supported
+  Pass (GL_EXT_debug_marker is supported)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_1f'..
+mali shaderc table 'IR values': high-water 21 of 2048
+mali shaderc table 'locals': high-water 3 of 256
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_2f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_2f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_2fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_2fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_3f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_3f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_3fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_3fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_1f'..
+mali shaderc table 'NIR instructions': high-water 39 of 1536
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.mat3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_1f'..
+mali shaderc table 'IR values': high-water 24 of 2048
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_1f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_1fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_1fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_2f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_2f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_2fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_2fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_3f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_3f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_3fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_3fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_4f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_4f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_4fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.mat4.vertex_attrib_4fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec2.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_1f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_1f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_1fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_1fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_4f'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_4f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_4fv'..
+deqp: Pass dEQP-GLES2.functional.default_vertex_attrib.vec3.vertex_attrib_4fv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_1f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_1f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_1fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_1fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_2f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_2f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_2fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_2fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_3f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_3f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_3fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_3fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_4f'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_4f
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_4fv'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.default_vertex_attrib.vec4.vertex_attrib_4fv
+  Fail (could not build program)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.0_8_to_third'..
+mali: depth/stencil buffers: high-water 1 of 32
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.0_8_to_third
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.clamp_both'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.clamp_both
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.clamp_far'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.clamp_far
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.clamp_near'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.clamp_near
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.default'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.default
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.half_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.half_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.half_to_one'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.half_to_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.half_to_zero'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.half_to_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.one_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.one_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.one_to_one'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.one_to_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.reverse'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.third_to_0_8'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.third_to_0_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.zero_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.zero_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.compare.zero_to_zero'..
+deqp: Pass dEQP-GLES2.functional.depth_range.compare.zero_to_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.0_8_to_third'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.0_8_to_third
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.clamp_both'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.clamp_both
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.clamp_far'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.clamp_far
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.clamp_near'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.clamp_near
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.default'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.default
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.half_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.half_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.half_to_one'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.half_to_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.half_to_zero'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.half_to_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.one_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.one_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.one_to_one'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.one_to_one
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.reverse'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.third_to_0_8'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.third_to_0_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.zero_to_half'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.zero_to_half
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_range.write.zero_to_zero'..
+deqp: Pass dEQP-GLES2.functional.depth_range.write.zero_to_zero
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_scissored'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_scissored_masked'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_stencil'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_scissored'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_scissored_masked'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.stencil'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.stencil_masked'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.stencil_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.stencil_scissored'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.stencil_scissored
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.depth_stencil_clear.stencil_scissored_masked'..
+deqp: Pass dEQP-GLES2.functional.depth_stencil_clear.stencil_scissored_masked
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.gradient_alpha'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.gradient_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.gradient_blue'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.gradient_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.gradient_green'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.gradient_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.gradient_red'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.gradient_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.gradient_white'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.gradient_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.unicolored_quad_alpha'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.unicolored_quad_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.unicolored_quad_blue'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.unicolored_quad_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.unicolored_quad_green'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.unicolored_quad_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.unicolored_quad_red'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.unicolored_quad_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.disabled.unicolored_quad_white'..
+deqp: Pass dEQP-GLES2.functional.dither.disabled.unicolored_quad_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.gradient_alpha'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.gradient_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.gradient_blue'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.gradient_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.gradient_green'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.gradient_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.gradient_red'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.gradient_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.gradient_white'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.gradient_white
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.unicolored_quad_alpha'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.unicolored_quad_alpha
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.unicolored_quad_blue'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.unicolored_quad_blue
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.unicolored_quad_green'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.unicolored_quad_green
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.unicolored_quad_red'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.unicolored_quad_red
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.dither.enabled.unicolored_quad_white'..
+deqp: Pass dEQP-GLES2.functional.dither.enabled.unicolored_quad_white
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        333/349 (95.4%)
+  Failed:        16/349 (4.6%)
+  Not supported: 0/349 (0.0%)
+  Warnings:      0/349 (0.0%)
+  Waived:        0/349 (0.0%)
+deqp: done: 333 passed, 16 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 349 cases begun, 349 with a result, 0 without
+osal(mali): kicks 1070, completed 1070; pages 1007 (high-water 1077) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 14336 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 24078 ms
+�\x00

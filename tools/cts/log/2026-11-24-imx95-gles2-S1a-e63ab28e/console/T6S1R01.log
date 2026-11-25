@@ -1,0 +1,1021 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/162646 in 24403 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.attribute_location.*,dEQP-GLES2.functional.buffer.*,dEQP-GLES2.functional.clip_control.*,dEQP-GLES2.functional.clipping.line.*,dEQP-GLES2.functional.clipping.point.*,dEQP-GLES2.functional.clipping.polygon.*,dEQP-GLES2.functional.clipping.polygon_edge.*,dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.float'..
+mali shaderc table 'IR values': high-water 10 of 2048
+mali shaderc table 'locals': high-water 1 of 256
+mali arena 'desc': high-water 288 of 1048576 bytes
+mali arena 'cs': high-water 104 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.mat2'..
+mali shaderc table 'IR values': high-water 14 of 2048
+mali shaderc table 'locals': high-water 2 of 256
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+mali shaderc table 'BIR instructions': high-water 58 of 1536
+mali shaderc table 'BIR values': high-water 34 of 1536
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.mat3'..
+mali shaderc table 'IR values': high-water 15 of 2048
+mali shaderc table 'NIR instructions': high-water 33 of 1536
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.mat4'..
+mali shaderc table 'NIR instructions': high-water 34 of 1536
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.vec2'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind.vec2
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.vec3'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind.vec3
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind.vec4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_float'..
+mali shaderc table 'IR values': high-water 18 of 2048
+mali shaderc table 'NIR instructions': high-water 45 of 1536
+mali shaderc table 'BIR instructions': high-water 71 of 1536
+mali shaderc table 'BIR values': high-water 47 of 1536
+mali shaderc table 'FAU words': high-water 13 of 128
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_float
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat2'..
+mali shaderc table 'IR values': high-water 22 of 2048
+mali shaderc table 'NIR instructions': high-water 49 of 1536
+mali shaderc table 'BIR instructions': high-water 78 of 1536
+mali shaderc table 'BIR values': high-water 54 of 1536
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat2
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat2_offset_1'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat2_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat3'..
+mali shaderc table 'IR values': high-water 23 of 2048
+mali shaderc table 'NIR instructions': high-water 50 of 1536
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat3
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat3_offset_1'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat3_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat4'..
+mali shaderc table 'NIR instructions': high-water 51 of 1536
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat4
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat4_offset_1'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_mat4_offset_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec2'..
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec2
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec3'..
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec3
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec4'..
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.cond_vec4
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_float'..
+mali shaderc table 'IR values': high-water 198 of 2048
+mali shaderc table 'NIR instructions': high-water 127 of 1536
+mali shaderc table 'BIR instructions': high-water 180 of 1536
+mali shaderc table 'BIR values': high-water 156 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 2580 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_float
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat2'..
+mali shaderc table 'locals': high-water 17 of 256
+mali shaderc table 'NIR instructions': high-water 190 of 1536
+mali shaderc table 'BIR instructions': high-water 275 of 1536
+mali shaderc table 'BIR values': high-water 251 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 1352 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat2
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat3'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 908 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat3
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat4'..
+glLinkProgram(2): link error: the vertex shader with the program's attribute locations: online shaderc: the code generator refused this vertex shader: Mali(the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_mat4
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:728)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec2'..
+mali shaderc table 'IR values': high-water 326 of 2048
+mali shaderc table 'locals': high-water 33 of 256
+mali shaderc table 'NIR instructions': high-water 191 of 1536
+mali shaderc table 'BIR instructions': high-water 276 of 1536
+mali shaderc table 'BIR values': high-water 252 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 2922 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec2
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec3'..
+mali shaderc table 'NIR instructions': high-water 255 of 1536
+mali shaderc table 'BIR instructions': high-water 372 of 1536
+mali shaderc table 'BIR values': high-water 348 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 2922 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec3
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec4'..
+mali shaderc table 'NIR instructions': high-water 318 of 1536
+mali shaderc table 'BIR instructions': high-water 467 of 1536
+mali shaderc table 'BIR values': high-water 443 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (Encode)) [vertex stage, 2548 bytes]
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_aliasing.max_cond_vec4
+  Fail (Vertex shader compilation failed: 'vertexCompileOk' at glsAttributeLocationTests.cpp:445)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_float'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.float'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.mat2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.mat3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.mat4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.vec2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.vec3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_hole.vec4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.float'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_max_attributes.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.float'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec2'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec3'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec4'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_relink_hole.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_time.post_link'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_time.post_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_time.pre_attach'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_time.pre_attach
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_time.pre_link'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_time.pre_link
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_time.reattach'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a
+deqp: Fail dEQP-GLES2.functional.attribute_location.bind_time.reattach
+  Fail (Program link failed: 'getProgramLinkStatus(gl, program)' at glsAttributeLocationTests.cpp:772)
+
+Test case 'dEQP-GLES2.functional.attribute_location.bind_time.relink'..
+deqp: Pass dEQP-GLES2.functional.attribute_location.bind_time.relink
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.array_dynamic_draw'..
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'data': high-water 7820 of 262144 bytes
+mali arena 'code': high-water 512 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.array_dynamic_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.array_static_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.array_static_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.array_stream_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.array_stream_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.element_array_dynamic_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.element_array_dynamic_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.element_array_static_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.element_array_static_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic.element_array_stream_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic.element_array_stream_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.array_dynamic_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.array_dynamic_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.array_static_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.array_static_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.array_stream_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.array_stream_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_dynamic_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_dynamic_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_static_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_static_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_stream_draw'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.basic_subdata.element_array_stream_draw
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.high_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.high_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.high_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.high_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.high_3'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.high_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.low_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.low_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.low_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.low_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.low_3'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.low_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.middle_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.middle_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.middle_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.middle_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.middle_3'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.middle_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.whole_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.whole_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.whole_2'..
+mali arena 'data': high-water 13248 of 262144 bytes
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.whole_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.whole_3'..
+mali arena 'data': high-water 14904 of 262144 bytes
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.whole_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.partial_specify.whole_4'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.partial_specify.whole_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.0'..
+mali arena 'data': high-water 94208 of 262144 bytes
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.3'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.4'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.5'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.6'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.7'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.8'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.random.9'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.random.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.different_size'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.different_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.different_target_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.different_target_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.different_target_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.different_target_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.different_usage'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.different_usage
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.identical_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.identical_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.identical_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.identical_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.random_1'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.random_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.random_2'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.random_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.random_3'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.random_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.recreate_store.random_4'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.recreate_store.random_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.use.index_array.array'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.use.index_array.array
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.use.index_array.element_array'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.use.index_array.element_array
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.use.vertex_array.array'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.use.vertex_array.array
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.buffer.write.use.vertex_array.element_array'..
+deqp: Pass dEQP-GLES2.functional.buffer.write.use.vertex_array.element_array
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clip_control.depth_mode_one_to_one'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.depth_mode_one_to_one
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.depth_mode_zero_to_one'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.depth_mode_zero_to_one
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.errors'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.errors
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.face_culling'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.face_culling
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.initial'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.initial
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.modify_get'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.modify_get
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.origin'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.origin
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clip_control.viewport_bounds'..
+deqp: NotSupported dEQP-GLES2.functional.clip_control.viewport_bounds
+  NotSupported (Required extension EXT_clip_control is not supported)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_attrib_clip'..
+gl_fb_target: framebuffer 1 unknown (status 0x0)
+mali arena 'desc': high-water 1200 of 1048576 bytes
+mali arena 'code': high-water 896 of 131072 bytes
+mali arena 'spds': high-water 128 of 32768 bytes
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_attrib_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.line_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.line_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.long_line_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.long_line_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.long_wide_line_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.long_wide_line_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_attrib_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_attrib_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.point_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.point_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.point_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.point_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.point_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.point_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.large_poly_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.large_poly_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.large_poly_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.large_poly_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.large_poly_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_0'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_0_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_0_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_0_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_0_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_1'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_10'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_10_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_10_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_10_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_10_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_11'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_11_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_11_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_11_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_11_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_1_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_1_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_1_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_1_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_2'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_2_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_2_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_2_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_2_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_3'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_3_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_3_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_3_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_3_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_4'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_4_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_4_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_4_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_4_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_5'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_5_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_5_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_5_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_5_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_6'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_6_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_6_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_6_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_6_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_7'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_7_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_7_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_7_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_7_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_8'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_8_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_8_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_8_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_8_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_9'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_9_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_9_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.multiple_9_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.multiple_9_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_attrib_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_z_clip'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_z_clip
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_z_clip_viewport_center'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_z_clip_viewport_center
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon.poly_z_clip_viewport_corner'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon.poly_z_clip_viewport_corner
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.poly_fan'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.poly_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_0'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_1'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_2'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_3'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_4'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_at_origin_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_0'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_1'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_2'..
+deqp: Pass dEQP-GLES2.functional.clipping.polygon_edge.quad_near_edge_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_x_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y_neg_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y_neg_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_y_pos_z
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_z'..
+deqp: Pass dEQP-GLES2.functional.clipping.triangle_vertex.clip_one.clip_pos_z
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        199/224 (88.8%)
+  Failed:        17/224 (7.6%)
+  Not supported: 8/224 (3.6%)
+  Warnings:      0/224 (0.0%)
+  Waived:        0/224 (0.0%)
+deqp: done: 199 passed, 17 failed, 8 not supported, 0 warnings, complete=1
+deqp: summary: 224 cases begun, 224 with a result, 0 without
+osal(mali): kicks 594, completed 594; pages 962 (high-water 1345) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 21056 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 12530 ms
+�\x00

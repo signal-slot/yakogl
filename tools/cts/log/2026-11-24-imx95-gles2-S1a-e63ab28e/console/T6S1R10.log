@@ -1,0 +1,1681 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/171183 in 25683 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.state_query.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.blend_getboolean'..
+mali arena 'desc': high-water 288 of 1048576 bytes
+mali arena 'cs': high-water 104 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.blend_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.blend_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.blend_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.blend_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.blend_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.blend_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.blend_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.color_writemask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.color_writemask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.color_writemask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.color_writemask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.color_writemask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.color_writemask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.cull_face_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.cull_face_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.cull_face_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.cull_face_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.cull_face_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.cull_face_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.cull_face_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.cull_face_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_test_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_test_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_test_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_test_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_test_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_test_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_test_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_test_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_writemask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_writemask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_writemask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_writemask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.depth_writemask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.depth_writemask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.dither_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.dither_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.dither_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.dither_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.dither_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.dither_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.dither_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.dither_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.polygon_offset_fill_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_alpha_to_coverage_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_invert_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.sample_coverage_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.sample_coverage_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.scissor_test_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.scissor_test_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.scissor_test_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.scissor_test_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.scissor_test_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.scissor_test_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.scissor_test_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.scissor_test_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.shader_compiler_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.shader_compiler_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.shader_compiler_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.shader_compiler_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.shader_compiler_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.shader_compiler_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.stencil_test_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.stencil_test_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.stencil_test_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.stencil_test_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.stencil_test_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.stencil_test_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.boolean.stencil_test_isenabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.boolean.stencil_test_isenabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.buffer_object.buffer_size_getbufferparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.buffer_object.buffer_size_getbufferparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.buffer_object.buffer_usage_getbufferparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.buffer_object.buffer_usage_getbufferparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_object'..
+deqp: Pass dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_object
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_texture_cube_map_face'..
+deqp: Pass dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_texture_cube_map_face
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_texture_level'..
+deqp: Pass dEQP-GLES2.functional.state_query.fbo.framebuffer_attachment_texture_level
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.aliased_point_size_range_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.color_clear_value_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.color_clear_value_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.color_clear_value_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.color_clear_value_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.color_clear_value_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.color_clear_value_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_clear_value_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_clear_value_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_clear_value_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_clear_value_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_clear_value_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_clear_value_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_range_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_range_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_range_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_range_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.depth_range_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.depth_range_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.line_width_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.line_width_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.line_width_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.line_width_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.line_width_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.line_width_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_factor_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.polygon_offset_units_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.floats.sample_coverage_value_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.active_texture_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.active_texture_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.active_texture_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.active_texture_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.active_texture_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.active_texture_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.array_buffer_binding_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_alpha_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_dst_rgb_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_alpha_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_equation_rgb_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_alpha_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.blend_src_rgb_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.buffer_component_size_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.buffer_component_size_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.buffer_component_size_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.buffer_component_size_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.buffer_component_size_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.buffer_component_size_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.compressed_texture_formats_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.cull_face_mode_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.cull_face_mode_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.cull_face_mode_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.cull_face_mode_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.cull_face_mode_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.cull_face_mode_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.current_program_binding_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.current_program_binding_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.current_program_binding_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.current_program_binding_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.current_program_binding_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.current_program_binding_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.depth_func_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.depth_func_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.depth_func_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.depth_func_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.depth_func_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.depth_func_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.element_array_buffer_binding_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.framebuffer_binding_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.front_face_mode_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.front_face_mode_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.front_face_mode_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.front_face_mode_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.front_face_mode_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.front_face_mode_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.generate_mipmap_hint_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.implementation_color_read_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.implementation_color_read_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.implementation_color_read_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.implementation_color_read_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.implementation_color_read_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.implementation_color_read_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_combined_texture_image_units_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_combined_texture_image_units_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_combined_texture_image_units_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_combined_texture_image_units_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_cube_map_texture_size_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_cube_map_texture_size_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_cube_map_texture_size_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_cube_map_texture_size_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_fragment_uniform_vectors_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_fragment_uniform_vectors_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_fragment_uniform_vectors_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_fragment_uniform_vectors_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_renderbuffer_size_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_renderbuffer_size_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_renderbuffer_size_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_renderbuffer_size_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_texture_image_units_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_texture_image_units_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_texture_image_units_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_texture_image_units_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_texture_size_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_texture_size_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_texture_size_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_texture_size_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_varying_vectors_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_varying_vectors_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_varying_vectors_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_varying_vectors_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_attribs_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_attribs_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_attribs_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_attribs_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_texture_image_units_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_texture_image_units_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_texture_image_units_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_texture_image_units_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_uniform_vectors_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_uniform_vectors_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_vertex_uniform_vectors_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_vertex_uniform_vectors_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.max_viewport_dims_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.pack_alignment_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.pack_alignment_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.pack_alignment_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.pack_alignment_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.pack_alignment_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.pack_alignment_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.renderbuffer_binding_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.sample_buffers_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.sample_buffers_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.sample_buffers_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.sample_buffers_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.samples_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.samples_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.samples_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.samples_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.samples_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.samples_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.scissor_box_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.scissor_box_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.scissor_box_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.scissor_box_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.scissor_box_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.scissor_box_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.shader_binary_formats_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_fail_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_depth_pass_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_fail_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_func_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_ref_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_value_mask_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_back_writemask_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_clear_value_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_fail_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_depth_pass_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_fail_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_func_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_ref_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_value_mask_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_both_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.stencil_writemask_separate_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.subpixel_bits_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.subpixel_bits_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.subpixel_bits_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.subpixel_bits_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_2d_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.texture_binding_cube_map_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.unpack_alignment_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.unpack_alignment_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.unpack_alignment_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.unpack_alignment_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.unpack_alignment_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.unpack_alignment_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.viewport_getboolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.viewport_getboolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.viewport_getfloat'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.viewport_getfloat
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.integers.viewport_getinteger'..
+deqp: Pass dEQP-GLES2.functional.state_query.integers.viewport_getinteger
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.rbo.renderbuffer_component_size_color'..
+deqp: Pass dEQP-GLES2.functional.state_query.rbo.renderbuffer_component_size_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.rbo.renderbuffer_component_size_depth'..
+deqp: Pass dEQP-GLES2.functional.state_query.rbo.renderbuffer_component_size_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.rbo.renderbuffer_internal_format'..
+deqp: Pass dEQP-GLES2.functional.state_query.rbo.renderbuffer_internal_format
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.rbo.renderbuffer_size'..
+GL error 0x502 in glFramebufferRenderbuffer
+deqp: Pass dEQP-GLES2.functional.state_query.rbo.renderbuffer_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.active_attributes'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 28 of 1536
+mali shaderc table 'BIR instructions': high-water 62 of 1536
+mali shaderc table 'BIR values': high-water 38 of 1536
+deqp: Pass dEQP-GLES2.functional.state_query.shader.active_attributes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_float_to_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_float_to_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_initial'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.current_vertex_attrib_initial
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.delete_status'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.delete_status
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_highp_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_highp_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_lowp_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_lowp_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_mediump_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_fragment_mediump_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_fragment_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_highp_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_highp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_highp_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_highp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_lowp_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_lowp_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_lowp_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_lowp_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_mediump_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_mediump_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.precision_vertex_mediump_int'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.precision_vertex_mediump_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.program_active_uniform_name'..
+mali shaderc table 'IR values': high-water 8 of 2048
+mali shaderc table 'FAU words': high-water 14 of 128
+mali shaderc table 'uniform rows': high-water 3 of 256
+deqp: Pass dEQP-GLES2.functional.state_query.shader.program_active_uniform_name
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.program_active_uniform_types'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 94 bytes]
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a highp sampler (Mesa keeps its look-up 32-bit) is not lowered yet) [fragment stage, 134 bytes]
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 143 bytes]
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+deqp: Fail dEQP-GLES2.functional.state_query.shader.program_active_uniform_types
+  Fail (got invalid value)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.program_attached_shaders'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.program_attached_shaders
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.program_info_log_length'..
+glCompileShader(3): 0:1: 'broken' : expected a type [vertex stage, 34 bytes]
+glCompileShader(5): 0:1: 'broken' : expected a type [fragment stage, 34 bytes]
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+deqp: Pass dEQP-GLES2.functional.state_query.shader.program_info_log_length
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.program_validate_status'..
+glCompileShader(5): 0:1: 'broken' : expected a type [fragment stage, 34 bytes]
+glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+deqp: Pass dEQP-GLES2.functional.state_query.shader.program_validate_status
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.shader_compile_status'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.shader_compile_status
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.shader_info_log_length'..
+glCompileShader(3): 0:1: 'broken' : expected a type [vertex stage, 34 bytes]
+deqp: Pass dEQP-GLES2.functional.state_query.shader.shader_info_log_length
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.shader_source_length'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.shader_source_length
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.shader_type'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.shader_type
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_array'..
+mali shaderc table 'IR values': high-water 40 of 2048
+mali shaderc table 'NIR instructions': high-water 59 of 1536
+mali shaderc table 'BIR instructions': high-water 67 of 1536
+mali shaderc table 'BIR values': high-water 43 of 1536
+mali shaderc table 'FAU words': high-water 31 of 128
+mali shaderc table 'uniform rows': high-water 8 of 256
+deqp: Pass dEQP-GLES2.functional.state_query.shader.uniform_value_array
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_boolean'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.uniform_value_boolean
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_float'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.uniform_value_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_int'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 241 bytes]
+deqp: Fail dEQP-GLES2.functional.state_query.shader.uniform_value_int
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_matrix'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.uniform_value_matrix
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.uniform_value_sampler'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a highp sampler (Mesa keeps its look-up 32-bit) is not lowered yet) [fragment stage, 131 bytes]
+deqp: Fail dEQP-GLES2.functional.state_query.shader.uniform_value_sampler
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_array_buffer_binding'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_array_buffer_binding
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_array_enabled'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_array_enabled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_normalized'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_normalized
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_pointerv'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_pointerv
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_size'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_stride'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_stride
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.shader.vertex_attrib_type'..
+deqp: Pass dEQP-GLES2.functional.state_query.shader.vertex_attrib_type
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.string.extensions'..
+deqp: Pass dEQP-GLES2.functional.state_query.string.extensions
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.string.renderer'..
+deqp: Pass dEQP-GLES2.functional.state_query.string.renderer
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.string.shading_language_version'..
+deqp: Pass dEQP-GLES2.functional.state_query.string.shading_language_version
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.string.vendor'..
+deqp: Pass dEQP-GLES2.functional.state_query.string.vendor
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.string.version'..
+deqp: Pass dEQP-GLES2.functional.state_query.string.version
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_mag_filter_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_mag_filter_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_mag_filter_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_mag_filter_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_min_filter_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_min_filter_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_min_filter_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_min_filter_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_s_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_s_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_s_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_s_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_t_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_t_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_t_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_2d_texture_wrap_t_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_mag_filter_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_mag_filter_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_mag_filter_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_mag_filter_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_min_filter_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_min_filter_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_min_filter_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_min_filter_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_s_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_s_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_s_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_s_gettexparameteri
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_t_gettexparameterf'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_t_gettexparameterf
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_t_gettexparameteri'..
+deqp: Pass dEQP-GLES2.functional.state_query.texture.texture_cube_map_texture_wrap_t_gettexparameteri
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        393/396 (99.2%)
+  Failed:        3/396 (0.8%)
+  Not supported: 0/396 (0.0%)
+  Warnings:      0/396 (0.0%)
+  Waived:        0/396 (0.0%)
+deqp: done: 393 passed, 3 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 396 cases begun, 396 with a result, 0 without
+osal(mali): kicks 397, completed 397; pages 938 (high-water 1074) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 13568 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 7795 ms
+�\x00
