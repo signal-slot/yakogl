@@ -113,9 +113,15 @@ fn memory_windows_fit_the_image() {
     let carve = num(conf("YAKOGL_V3D_CARVEOUT_BYTES").expect("carve-out"));
     assert_eq!(carve, 48 << 20);
     // the carve-out is a static of the image: it leaves room for the code,
-    // the compiler's 2 MiB scratch and the libc arena
+    // the compiler's 4 MiB scratch (YAKOGL_SHADERC_SCRATCH_BYTES's default,
+    // which the image does not override) and the libc arena
+    assert!(conf("YAKOGL_SHADERC_SCRATCH_BYTES").is_none());
+    let scratch = num(defaults(ZEPHYR_KCONFIG, "YAKOGL_SHADERC_SCRATCH_BYTES")[0]);
+    assert_eq!(scratch, 4 << 20);
     let arena = num(conf("COMMON_LIBC_MALLOC_ARENA_SIZE").expect("arena"));
-    assert!(carve + (2 << 20) + arena < size);
+    assert!(carve + scratch + arena < size);
+    // the margin left for code, data and the arena
+    assert_eq!(size - carve - scratch, 44 << 20);
     // the firmware puts the DTB at 0x2efec600, above the image's end (the
     // window's end, 0x6200000), so the window never covers it
     assert_eq!(base + size, 0x620_0000);
