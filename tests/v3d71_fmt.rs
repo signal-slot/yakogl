@@ -23,6 +23,9 @@
 //! (the module and this test use no crate feature; any set that builds the
 //! tests runs it.)
 #[path = "../src/v3d/format71.rs"]
+// the view helpers (view_swizzle71, sample_row71, record_bits71) are
+// tests/v3d71_texfix.rs's, unused here
+#[allow(dead_code)]
 mod format71;
 
 use format71::*;

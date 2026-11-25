@@ -24,7 +24,8 @@
 //!   gallium never sets them: it composes the format's swizzle (the ZYXW
 //!   rows of the table) exactly as at 4.2 (v3d_tex71.h on `r_b_swap`).
 //!   [`Row71::r_b_swap`] and [`Row71::reverse`] are therefore `false` for
-//!   every row and the swizzle carries the swap. The Vulkan form (swap bit
+//!   every row and the swizzle carries the swap; the record's values per
+//!   revision are [`record_bits71`]'s. The Vulkan form (swap bit
 //!   set, the view's own swizzle) is Mesa's broadcom/vulkan/v3dvx_image.c:
 //!   137-157, a tree this repository does not vendor, so it is not
 //!   transcribed;
@@ -33,6 +34,12 @@
 //!
 //! A GL format with no row is refused by a [`Refusal71`] variant, never by a
 //! default answer.
+//!
+//! What the view adds to a row (the base-format swizzle of a depth texture,
+//! the sampled row of a packed depth-stencil one, and the record's
+//! per-revision transfer function and R/B swap) is in the last section,
+//! [`view_swizzle71`], [`sample_row71`] and [`record_bits71`] (stage71;
+//! tests/v3d71_texfix.rs).
 
 /// TEXTURE_SHADER_STATE's swizzle encoding (the same values as
 /// driver/src/v3d/v3d_tex.h V3D_SWIZZLE_*).
@@ -460,6 +467,128 @@ fn refusal_of(internal: u32) -> Refusal71 {
         0x8D48 => Refusal71::StencilTexturing,
         _ => Refusal71::UnknownFormat,
     }
+}
+
+// ---- what the view adds to the row (stage71 fixes 1, 2 and 4) -----------
+//
+// Mesa 26.2.1 (the tarball of third_party/mesa-26.2.1/UPSTREAM; gallium and
+// mesa/main are not vendored, the line numbers are the tarball's).
+
+/// Is the row a depth or packed depth-stencil format (the rows of
+/// v3dx_format_table.c:149-157 a GL depth texture samples)?
+pub fn pipe_is_depth(pipe: &str) -> bool {
+    matches!(pipe, "S8_UINT_Z24_UNORM" | "X8Z24_UNORM" | "Z32_FLOAT" | "Z16_UNORM" | "Z32_FLOAT_S8X24_UINT")
+}
+
+/// Fix 1: the GL core's base-format swizzle of a depth texture, as
+/// SWIZZLE_* source positions of the row (`SWIZZLE_RED` = the row's X).
+/// Mesa's core keeps a per-image "format swizzle"
+/// (`compute_texture_format_swizzle`, src/mesa/main/teximage.c:770-833)
+/// that `_mesa_update_texture_object_swizzle` (texobj.c:301-312) puts
+/// between the user's GL_TEXTURE_SWIZZLE_* and gallium's table swizzle
+/// (v3dx_state.c:1063-1071). For every colour row of this table that
+/// swizzle changes nothing (the row already has the 0s and 1s of its base
+/// format), but a depth or depth-stencil texture's is the depth mode's, and
+/// a GLES context's default depth mode is GL_LUMINANCE (texobj.c:395,
+/// `_mesa_is_desktop_gl_core(ctx) ? GL_RED : GL_LUMINANCE`), whose swizzle
+/// is X X X 1 (teximage.c:797-798). The row's own swizzle is XXXX
+/// (:149-157), so without it the record read the depth into alpha.
+/// `None` for a colour row.
+pub fn depth_view_swizzle(pipe: &str) -> Option<[u8; 4]> {
+    pipe_is_depth(pipe).then_some([SWIZZLE_RED, SWIZZLE_RED, SWIZZLE_RED, SWIZZLE_ONE])
+}
+
+/// `util_format_compose_swizzles(fmt, view)` over SWIZZLE_* values:
+/// `out[i] = fmt[view[i]]` for a channel, ZERO and ONE kept.
+pub fn compose_swizzles(fmt: [u8; 4], view: [u8; 4]) -> [u8; 4] {
+    view.map(|v| match v {
+        SWIZZLE_RED..=SWIZZLE_ALPHA => fmt[(v - SWIZZLE_RED) as usize],
+        other => other,
+    })
+}
+
+/// The row's swizzle with the view's base-format swizzle (fix 1) composed
+/// in: what the GL swizzle is composed with.
+pub fn view_swizzle71(row: &Row71) -> [u8; 4] {
+    match depth_view_swizzle(row.pipe) {
+        Some(v) => compose_swizzles(row.swizzle, v),
+        None => row.swizzle,
+    }
+}
+
+/// Fix 2: the row a texture of this storage row is *sampled* with. A packed
+/// GL_DEPTH24_STENCIL8 texture is stored as S8_UINT_Z24_UNORM (stencil in the
+/// low byte, depth in the high 24 bits: v3dx_format_table.c:149, the TMU
+/// type DEPTH24_X8 "X low, D high", v3d_packet.xml:357), but gallium
+/// demotes the sampler view to the depth-only X8Z24_UNORM (v3dx_state.c:
+/// 1083-1089, "If we're sampling depth from depth/stencil, demote the
+/// format to just depth"): the sampler variant and return size are that
+/// row's (:150). The record's texture type is taken from the view's own
+/// format (v3dx_state.c:1036), the same DEPTH24_X8 (24) and XXXX in both
+/// rows, so the words do not change; what changes is the row the table
+/// answers with. Every other row samples as it is stored.
+pub fn sample_row71(storage: Row71) -> Row71 {
+    if storage.pipe == "S8_UINT_Z24_UNORM" {
+        Row71 { transfer: storage.transfer, ..row71("X8Z24_UNORM") }
+    } else {
+        storage
+    }
+}
+
+/// The record's transfer function values (v3d_packet.xml:1697-1704).
+pub const TRANSFER_FUNC_NONE: u32 = 0;
+pub const TRANSFER_FUNC_SRGB: u32 = 1;
+
+/// Fix 4: the per-revision flag fields of the texture record for a row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecordBits71 {
+    /// "Transfer func" (bits 2..4): sRGB exactly when the view's format is
+    /// sRGB (v3dx_state.c:1023, :1027-1028 at V3D_VERSION >= 71)
+    pub transfer_func: u32,
+    /// "R/B swap" (bit 32, 7.1.5 and later): never set by gallium
+    pub r_b_swap: bool,
+    /// "Reverse" (bit 5): never set by gallium
+    pub reverse: bool,
+}
+
+/// Why a revision has no 7.1 record flags.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Revision71 {
+    /// not a 7.1 hub: 4.2 has the one-bit `srgb` field instead
+    /// (v3dx_state.c:1024-1025), no transfer function and no R/B swap
+    NotV3d71 { ver: u32 },
+    /// 7.1.2 to 7.1.4: no R/B swap bit, the array stride at bit 32
+    /// (v3d_packet.xml:1686-1690); Mesa packs the 7.1.5 layout only
+    BelowIprev5 { iprev: u32 },
+}
+
+/// Fix 4: the record's transfer function, R/B swap and reverse for a row at
+/// hub `ver`.`iprev`, with GL_TEXTURE_SRGB_DECODE_EXT `srgb_decode`.
+///
+/// * The transfer function is the 7.1 form of 4.2's sRGB bit
+///   (v3dx_state.c:1023-1029): `util_format_is_srgb` of the *view's* format.
+///   SKIP_DECODE makes the view's format linear first
+///   (src/mesa/state_tracker/st_sampler_view.c:359-361,
+///   `util_format_linear`), so it is NONE then. A depth view returns before
+///   that (:350-356) and no depth row is sRGB.
+/// * R/B swap and reverse: gallium has no assignment of either; the format's
+///   swizzle carries the B-first rows (v3dx_format_table.c:61-64, ZYXW).
+///   Both are false at every revision that has the bit.
+/// * A hub below 7.1.5 has another record layout (no R/B swap bit), which
+///   neither Mesa's XML nor this table packs: a named refusal.
+pub fn record_bits71(row: &Row71, srgb_decode: bool, ver: u32, iprev: u32) -> Result<RecordBits71, Revision71> {
+    if ver != 71 {
+        return Err(Revision71::NotV3d71 { ver });
+    }
+    if iprev < 5 {
+        return Err(Revision71::BelowIprev5 { iprev });
+    }
+    let srgb = row.transfer == Transfer::Srgb && srgb_decode;
+    Ok(RecordBits71 {
+        transfer_func: if srgb { TRANSFER_FUNC_SRGB } else { TRANSFER_FUNC_NONE },
+        r_b_swap: false,
+        reverse: false,
+    })
 }
 
 /// The 7.1 TMU answer for a GL texture's internal format and (for an unsized
