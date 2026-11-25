@@ -1,5 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2024 Imagination Technologies Ltd.
+// Derived from Mesa 26.2.1 src/imagination/pco/pco_nir_pvfio.c (MIT).
+// The upstream part stays under its licence (LICENSES/MIT.txt); our
+// changes are Apache-2.0. See NOTICE.
 //! The whole USC path for one shader, in one place: selection, preparation,
 //! allocation, the output writes and the bytes.
 //!
