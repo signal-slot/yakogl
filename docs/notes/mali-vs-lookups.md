@@ -440,14 +440,14 @@ refusal of section 3.3 step 4), never the compiler half alone.
   (`w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0)`).
   The same sampler at two different coordinates compiles (two
   `TEX_SINGLE` of one handle); no reference draws it.
-* **Frame half: not done** (step 4's fallback). `src/mali/backend.rs`
-  `sampled_texture` returns `NOT_BUILT_VERTEX_TEXTURES` ("a vertex shader that
-  reads more than one texture") when the vertex record names more than one
-  binding, so case 149 moves from `REFUSED compile` to `REFUSED draw`, not to
-  a descriptor read past the vertex tables. `sampler_bindings` now reads a
-  vertex record's `samplers` list too (one binding: as before). Step 4's
-  mirror of the fragment tables (`DrawCall::vs_textures`, the counts, the
-  literals) and step 5's board capture remain.
+* **Frame half: built** (#11308, `d6d93303`). `stage_textures` in
+  `src/mali/backend.rs:2258` builds both stages' textures, texture i at index
+  i of the stage's tables, and `DrawCall::vs_textures`
+  (`src/mali/frame.rs:1676`) carries the vertex stage's array. The frame
+  emits the vertex stage's texture descriptors first
+  (`src/mali/frame.rs:3443`) and its table count is `d.vs_textures.len()`
+  (`src/mali/frame.rs:3462`). `NOT_BUILT_VERTEX_TEXTURES` is no longer
+  raised. Step 5's board capture remains.
 
 ## 7. TEX_VERTEX: glmark2 terrain's two look-ups (plan #367 lower-tex-vertex)
 
@@ -561,6 +561,6 @@ an `f2f32`** (`uses_are_all_cvt`). So:
   fp16 is fp16 in both; Mesa compiles the IDVS variants from one NIR, so
   this is expected to agree, but no reference draws it.
 * Section 3.3 step 4 (N vertex textures in the frame) is unchanged.
-  Terrain draws two vertex samplers and so needs it on the board:
-  `src/mali/backend.rs` refuses the draw with `NOT_BUILT_VERTEX_TEXTURES`
-  (section 6), a separate item.
+  Terrain draws two vertex samplers; the frame half is built (`d6d93303`,
+  #11308): `DrawCall::vs_textures` (`src/mali/frame.rs:1676`) carries them
+  and `stage_textures` (`src/mali/backend.rs:2258`) builds them (section 6).
