@@ -267,7 +267,7 @@ select): `gc_debug_msaa` with `gc_debug_set_msaa` and the scratch probes
 the feature each reads as its default (MSAA, the flip study and the tiled
 targets off, the narrow store on) and none of the symbols is in the archive;
 `tools/check.sh` pins the exact set, `KNOB_VIVANTE_SYMBOLS`
-(`tools/check.sh:3772`), 18 names today. `gc_debug_rs_clear`
+(`tools/check.sh:3826`), 18 names today. `gc_debug_rs_clear`
 (`backend.rs:2834`) is a Rust-only function (no `no_mangle`, so the archive
 does not export it) that host tests use to switch the resolve-engine clear
 off.
@@ -301,7 +301,7 @@ off.
   counter, `gc_perf_cmd_words`, `gc_debug_fs_tiled`.
 
 The product archive defines no symbol of the knob namespace
-(`check_knobs_absent`, `tools/check.sh:4107`); with `test-knobs` it defines
+(`check_knobs_absent`, `tools/check.sh:4161`); with `test-knobs` it defines
 exactly `KNOB_VIVANTE_SYMBOLS` (above).
 
 ## What the hardware said, once the test was right
