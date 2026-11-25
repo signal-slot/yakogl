@@ -451,6 +451,13 @@ struct gles_draw {
 	const float *depth_texels;
 	/* Floats a row of depth_texels (at least ds_w). */
 	uint32_t depth_texels_pitch;
+	/* The channels (bit 0 R .. bit 3 A) targets[k]'s GL format does not
+	 * have though its surface stores them (an R or RG format kept in an
+	 * RGBA8888 or RGBA16F store, an RGB one without alpha): they must read
+	 * 0 (red, green, blue) or 1 (alpha) whatever the fragment wrote
+	 * (ES 3.0 4.3.2). 0 where the surface is exactly the format. The
+	 * PowerVR writes the constants with the PBE swizzle. */
+	uint8_t target_missing_channels[GLES_MAX_TARGETS];
 };
 
 /* One-time backend init (after OSAL init: allocates persistent GPU objects,
