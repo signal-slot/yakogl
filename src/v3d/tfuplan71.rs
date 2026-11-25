@@ -1,5 +1,13 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014-2017 Broadcom
+// SPDX-FileCopyrightText: 2012 Rob Clark <robclark@freedesktop.org>
+// SPDX-FileCopyrightText: 2022 Raspberry Pi Ltd
+//
+// The TFU job fields follow Mesa 26.2.1 src/gallium/drivers/v3d/v3dx_tfu.c
+// (MIT, Copyright © 2022 Raspberry Pi Ltd), and `mesa_levels` transcribes
+// `v3d_setup_slices` of v3d_resource.c in the same directory (MIT, Copyright
+// © 2014-2017 Broadcom, Copyright (C) 2012 Rob Clark).
 //! V3D 7.1 glGenerateMipmap plan through the TFU with IOC (pure, no `crate::`
 //! imports so a test can include it with `#[path]`). It mirrors
 //! `driver/src/v3d/v3d_tfu71.{h,c}` (Mesa 26.2.2 `v3dx_tfu.c`, 7.1 branch):
