@@ -24,9 +24,10 @@ CI, a review, then the merge. Never push main by hand.
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
    runs `tools/check.sh --no-clippy --changed <merge base>` on the pull
    request (the merge of the branch into main), and every row nightly on
-   main's tip and when started by hand; main is not run on each merge. It runs on
-   self-hosted runners that have the environment below. The file's header
-   says which rows each event runs.
+   main's tip and when started by hand; main is not run on each merge. It
+   runs on self-hosted runners that have the environment below. The file's
+   header says which rows each event runs. (`pages.yml` only publishes the
+   website on a push to main that touches `website/`; it checks nothing.)
    A pull request's run leaves out the clippy rows (owner, 2026-11-13: they
    doubled the build of each feature set); the nightly run on main runs
    them and is clippy's gate. Run clippy on the crates you touched when it
@@ -56,11 +57,14 @@ pull request (step 1 above).
   a pull request's run leaves the clippy rows to the nightly,
   `--no-clippy`), the tests in every
   feature configuration, the C check programs, the generated files, the
-  product archives, the Python tools, and the Zephyr image builds. It takes
-  35 to 80 minutes, depending on the host (measured: 36 minutes from a cold
-  tree and 49 minutes on another host, `docs/release/readme-walkthrough.md`;
-  76 minutes on 4 cores with two compiler slots, after a `--quick` in the
-  same clone of `e3e8d777`, 2026-11-08).
+  product archives, the Python tools, and the Zephyr image builds. On a CI
+  runner (8 cores, 3 compiler slots) a run that reaches every scope takes
+  about 2 h 45 min (`gate.yml`, comment above `timeout-minutes`). The
+  durations below were measured with `--quick` or with older, smaller plans:
+  35 to 80 minutes depending on the host (36 minutes from a cold tree and
+  49 minutes on another host, `docs/release/readme-walkthrough.md`; 76
+  minutes on 4 cores with two compiler slots, after a `--quick` in the same
+  clone of `e3e8d777`, 2026-11-08).
 - A self-test (a tracked file named `*selftest.sh` or `*selftest.py`) needs
   no row of its own: the gate gives one to each that no row names
   (`tools/check_selftests.py` lists them), under the scope of its path. The
@@ -112,7 +116,7 @@ pull request (step 1 above).
   canonical path (`cd "$(pwd -P)"` first), not through a symbolic link, until
   that is fixed; from a linked path the two artefact rows "no table" and "no test knob in
   the artefact" fail (`dep_info_within` compares the physical dep-info paths
-  with the logical `$PWD`; `cd -P` at `tools/check.sh:107` is the fix, not
+  with the logical `$PWD`; `cd -P` at `tools/check.sh:115` is the fix, not
   applied, `docs/notes/gate-symlinked-path.md`).
 - `tools/check.sh --quick` runs most of the full plan's rows (the CI does
   not use it). `YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` and
@@ -141,9 +145,10 @@ pull request (step 1 above).
   0 gap(s)" in 2334 s with two compiler slots (4 cores) at `e3e8d777`
   (2026-11-08), "170 ok, 0 failed, 0 gap(s)" in 2309 s from a fresh clone of
   `14e93e64` (2026-11-06), and "146 ok, 0 failed, 0 gap(s)" in 2747 s at
-  `8198a56f` (2026-10-25). It takes minutes on a warm tree (190 s on four lanes,
-  `tools/check.sh` header, 2026-10-25) and up to an hour from a cold one (59
-  minutes with two compiler slots, `CLAUDE.md`). If `MESA_V3D_TREE` is set on
+  `8198a56f` (2026-10-25). On a warm tree it took minutes when it had 147 rows (190 s on four
+  lanes, 2026-10-25, the figure in the `tools/check.sh` header); the dated
+  runs above are the measures for the larger plans, up to an hour or more
+  from a cold tree. If `MESA_V3D_TREE` is set on
   your host to a Mesa tree without `build-v3d`, the three v3d rows (tex_check,
   cl_golden, job_check) become one `gap` naming `MESA_V3D_TREE`, and a gap
   keeps the run red: unset it (`env -u MESA_V3D_TREE tools/check.sh --quick`)
