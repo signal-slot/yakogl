@@ -629,9 +629,9 @@ and `tools/cts/deps.toml` entry land; the script takes it as the
 ### What of 7.1 is on main
 
 The tools above, and these (commits `2671baec`, `3762ec20`, `7bd8a8e9`,
-`8471ff8b`, `55e3550d`). The 7.1 packet encoders, the 7.1 frame builder, the
-register mock and the `v3d71` gate row are being added (issue #7) and are not
-described here.
+`8471ff8b`, `55e3550d`). The 7.1 packet encoders, the 7.1 frame builder and the
+register mock are not described here. The `v3d71` gate row of `tools/check.sh`
+runs `tools/v3d/check71.sh` (`tools/v3d/check71.d/README.md`).
 
 - **`v3d_shc --device 71`** (`v3d_shc.c`): the 7.1 device flag described under
   H2. `qpu_corpus.py --device 71` runs it over the corpus programs and writes
