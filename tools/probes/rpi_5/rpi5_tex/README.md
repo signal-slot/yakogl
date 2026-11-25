@@ -185,3 +185,35 @@ Nothing runs afterwards. The board layer's PM watchdog
 the SoC, and tryboot brings Linux back.
 
 ## On the board
+
+Built from origin/main `a6f49077` (west build -p always, `-DYAKOGL_WERROR=ON`,
+inside the real path of the workspace; image sha256 `4822a8ba`, 786432 bytes
+footprint), run once with `tools/board.sh pi5 run` on 2026-11-25:
+
+```
+board.sh pi5 rpi5_tex rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_tex_pass resets=0 record=absent back_after=203s
+```
+
+`get_throttled` `0x0` before and after; the staged image was removed and
+`tryboot.txt` put back, read back (cleanup line in `meta.txt`). The console
+lines:
+
+```
+rpi5_tex: build a6f49077, shaders ours (our 7.1 online compiler, src/shaders_ours.h)
+rpi5_tex: rpi_5, V3D 7.1, T1 2D RGBA8 64x64 NEAREST, C1 cube 4x4 LINEAR, target 64x64 raster RGBA8888, watchdog armed at boot
+v3d_tex: PASS 0 of 4096 px wrong
+v3d_cube: PASS seamless=yes 0 of 54 samples wrong
+rpi5_tex: done (both parts ran)
+```
+
+T1: the 7.1.10 TMU, with our compiler's texture program and `v3d_tex71`'s
+records, returns all 4096 texels exactly. C1: the 54 LINEAR samples at face
+centres, edges and corners all match the seamless prediction and none the
+non-seamless one, so the 7.1.10 TMU filters across cube edges. That answers
+U8 of `docs/notes/pre-study-rpi5.md` for the hardware. The GL path (gl_test
+case 115 through the 7.1 table) is `board71`'s.
+
+`rpi5_triangle_ours` was run from the same commit as a readiness check (image
+sha256 `4e23b31b`, `result=legacy:v3d_triangle_pass back_after=203s`,
+`v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside, 2796
+outside, 288 edge, tol 3; shaders ours)`): the recorded PASS stands.
