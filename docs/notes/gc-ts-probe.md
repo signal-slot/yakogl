@@ -769,7 +769,9 @@ stopping it for a session) is what the next attempt needs.
   fifth worker, where `tools/board.sh` was refused by the task's tool policy,
   read the board over the lease's ssh directly: uptime 206920 s,
   `kexec_loaded` 0, `kexec_crash_loaded` 0, `podman ps` lists
-  `slint-launcher` (up 2 days). The stop's cause is the container's
+  `slint-launcher` (up 2 days). A sixth check from a sixth worker, over the
+  lease's ssh directly: uptime 208035 s, `kexec_loaded` 0,
+  `kexec_crash_loaded` 0, `slint-launcher` up 2 days. The stop's cause is the container's
   autostart, which only its owner can turn off; stopping it from a task would
   not leave the board as found.
 
