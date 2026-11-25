@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# SPDX-FileCopyrightText: 2014, 2015 The Android Open Source Project
 """Measure this shader pipeline against dEQP-GLES2's own shader cases.
 
 dEQP ships its `shaders.*` tests as data: `data/gles2/shaders/*.test` in a
