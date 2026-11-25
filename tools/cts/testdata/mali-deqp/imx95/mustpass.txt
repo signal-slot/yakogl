@@ -1,0 +1,9 @@
+dEQP-GLES2.functional.a.one
+dEQP-GLES2.functional.a.two
+dEQP-GLES2.functional.a.three
+dEQP-GLES2.functional.b.one
+dEQP-GLES2.functional.b.two
+dEQP-GLES2.functional.b.three
+dEQP-GLES2.functional.c.one
+dEQP-GLES2.functional.c.two
+dEQP-GLES2.functional.d.one
