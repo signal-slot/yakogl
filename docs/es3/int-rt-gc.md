@@ -305,3 +305,412 @@ Nothing here has run on the GPU. What a session should check, cheapest first:
    sequence), the shader output split of `docs/notes/gc-128bit-rt-shader.md`,
    and the multi-target shadow of `docs/notes/gc-int64-mixed-targets.md`;
    section 2 lists them.
+
+## 6. PowerVR (AM62P): fix designs for the fragment_out.array and fragment_out.random fails
+
+Item fix-fragout-design of plan #400. The clusters come from the
+tri-fragout triage (its report, 2026-11-25; probes at `31cdaefc`). The cases
+are the `fragment_out` lines of `docs/es3/am62p-gles3-notpass.tsv` (tree row
+13, ad2b5ed). Line numbers below are at `bdd2ba1c`. This section is a design:
+nothing in it is implemented or run. Every host test named here is new and
+uses the feature set `--no-default-features --features
+host-test,gpu-powervr,shaderc-online`, the one in the headers of
+`tests/pvr_f16_mrt_gl.rs` and `tests/es3_pvr_fragout_array.rs`. The GL-level
+tests follow the pattern of `tests/pvr_f16_mrt_gl.rs`: renderbuffers through
+the GL core, `glDrawElements` into the real `pvr_backend_draw`, then the
+recorded end-of-tile (PBE) words are read back.
+
+The triage's forecast at the tip, without any of the fixes below: 121 Fail
+(`array` 72, `random` 49) and 115 NotSupported (no
+`GL_EXT_color_buffer_float`; allowed). Cluster A,
+`array.float.{rg16f,rgba16f}` (24), is fixed by `f3409705` and `c558647b`
+(host tests `tests/es3_pvr_fragout_array.rs` and `tests/pvr_f16_mrt_gl.rs`),
+so it has no entry here.
+
+### 6.0 A GL-core change shared by B and E1 (named, not made)
+
+The draws of clusters B and E1 are dropped with **no GL error**. The variant
+compile fails, and `src/gl/draw.rs:1759-1765` logs `no fragment shader
+variant for blend key 0x…` once, marks the variant `missing` and returns
+`Err`. Later draws take the `missing` arm at `src/gl/draw.rs:1714`. The draw
+then returns without setting an error, so dEQP sees no error and reports
+"Image comparison failed".
+
+The change: where the draw path receives that `Err`, set
+`GL_INVALID_OPERATION`, as a back-end refusal (`-ENOTSUP`) does. It makes no
+case pass. It turns a silent drop into a named failure, so a host dEQP run
+shows these cases as GL-error failures. `src/gl/**` belongs to plan #397, so
+the change is not made here. Fixes B1, B2 and D2/E1 below make the compile
+succeed, so they do not wait on it.
+
+### 6.1 Cluster B1: `array.{int,uint}.{rg32i,rg32ui,rgba16i,rgba16ui}` (48 Fail)
+
+**Cause.** dEQP's array case writes three outputs into three attachments of
+one 2-dword integer format. That is 6 dwords, past the pixel's four output
+registers.
+
+- The GL core keys the draw with the one-layout integer key
+  `shc_blend_key_int_rt`. Every attachment has the same layout, so
+  `shc_blend_key_mixed` returns `None` (`src/target_key.rs:140`,
+  `all_same_int`).
+- The compiler packs every output into registers and refuses past four:
+  `src/shaderc/online/powervr/chain.rs:1470-1471` (`pack_int_output`,
+  "integer colour outputs past the pixel's four output registers").
+- If the shader did compile, the back end would refuse it too:
+  `src/pvr/backend.rs:6772-6775` (`int_targets_drawn`,
+  `REFUSE_ONE_LAYOUT_PAST_FOUR`).
+
+The layout itself already has a program. `mrt_layout::layout(&[2,2,2])` is
+r0-1, r2-3 and tile buffer 0: shape `(3,1)`, program `eot3_tb`
+(`src/pvr/mrt_layout.rs:193-199`). The emit loop already handles a spilled
+last attachment (`src/pvr/backend.rs:9790-9797`, `eot_doutu_src0_tb_n[3]`).
+
+**Change** (`src/shaderc/online/powervr/chain.rs`, `src/pvr/backend.rs`):
+
+1. `chain.rs`, `build_fragment_with` (`:790-812`): add an integer one-layout
+   arm beside the `replace_class` arm. It applies when all of these hold:
+   - `ShcIntRt::of_key(blend_key)` is `Some(rt)`, with no colour mask;
+   - the shader writes `n > 1` consecutive `FragColor` locations;
+   - `n <= MAX_PACK_TARGETS` and `n * rt.dwords() > 4`.
+
+   The draw then becomes the per-target list `[TargetPack::Int(rt); n]` with
+   blend key 0. The per-target path lays it out with the spill
+   (`target_layout`, `chain.rs:1700`) and stores target 2 to tile buffer 0
+   (`TargetOut::Packed`, `chain.rs:1243`). `pack_int_output` still serves
+   `n * dwords <= 4`, so no record pinned today changes.
+2. `backend.rs`, `int_targets_drawn` (`:6772-6780`): take the dword count
+   from `mrt_layout::layout(&[per; n])` (`output_regs`, `tile_buffers`). The
+   program check also asserts `fs.num_tile_buffers == lay.tile_buffers`. A
+   layout with no program (`Err`) keeps `REFUSE_ONE_LAYOUT_PAST_FOUR`.
+3. The clear of a spilled attachment. dEQP's executor clears every
+   attachment with `glClearBuffer{i,ui}v` in the same frame as the draw.
+   Today `mrt_clear_regs` (`backend.rs:2134`) returns 0 past four registers,
+   and `attachment_out_reg` (`:2336`) returns `None` for a spilled
+   attachment. So the clear of attachment 2 is either refused or goes through
+   `clear_by_target_quads`, which draws one quad per attachment, each with
+   its own program into registers. Let the host test below decide which. If
+   the clear is refused, make `clear_by_target_quads` the path for a list
+   with a spilled attachment: each quad draws one attachment as attachment 0
+   of its own emit, so the clear never spills.
+
+**Host test.** `tests/pvr_fragout_int_spill.rs` (new):
+
+- `three_rg32ui_outputs_spill_the_third`: compiles a fragment shader with
+  three `uvec2` outputs under `shc_blend_key_int_rt(RG32UI)`. It asserts that
+  the record has `num_outputs == 4` and `num_tile_buffers == 1`, one
+  tile-buffer store and four pixel-output writes.
+- `three_rgba16i_attachments_draw`: builds an FBO of three RGBA16I
+  renderbuffers, clears each with `glClearBufferiv` and draws with
+  `glDrawElements`. It asserts:
+  - `glGetError() == GL_NO_ERROR`, and no `draw refused` log line;
+  - the kick's end-of-tile `doutu` equals `eot_doutu_src0_tb_n[3]`;
+  - three PBE emits, with the RGBA16I `source_format` and packmode.
+- A negative test: three RGBA32UI attachments stay at
+  `REFUSE_ONE_LAYOUT_PAST_FOUR` until B2.
+
+Before the change the compile refuses, the draw sets no error and no kick is
+recorded, so the test fails; after the change it passes.
+
+**src/gl:** none.
+
+**Expected:** the 48 cases pass if the board draws a spilled integer target
+the way the host records it. `eot3_tb` with an integer spill has not run on
+the AM62P; so far only RGBA16F has used it (`f3409705`).
+
+**Overlap with pvr-modf-mrt.** This is the same code with a different shape.
+modf needs `[4,4]`, shape `(2,1)`, which also needs `eot2_tb1` uploaded as
+`tb_n[2]` (modf-mrt-locate's design, steps a-d). Steps 1 and 2 here are its
+steps c and d, generalised from `n == 2` to `n <= 3`. Implement them once, in
+pvr-modf-mrt, with `n` up to `MAX_PACK_TARGETS`, and add this section's
+GL-level test there. The alternative is to run B1 right after pvr-modf-mrt,
+since both hold `chain.rs` and `backend.rs`.
+
+### 6.2 Cluster B2: `array.{int,uint}.{rgba32i,rgba32ui}` (24 Fail)
+
+**Cause.** As in B1, but with three 4-dword attachments: 12 dwords, layout
+`[4,4,4]` = r0-3 plus tile buffers 0 and 1, shape `(3,2)`. Besides B1's two
+refusals (`chain.rs:1471`, `backend.rs:6774`), three more places have no
+program for this shape:
+
+- `mrt_layout::program_for` (`src/pvr/mrt_layout.rs:193-199`) has no `(3,2)`
+  arm;
+- `target_layout` returns `None` for `(2,1)` and `(3,2)` (`chain.rs:1717-1718`);
+- the emit loop lets only the last attachment come from a tile buffer
+  (`backend.rs:9790-9797`).
+
+The program exists: `pvr_usc_eot3_tb12_words` (`capture_usc eot 3 1 2`) is
+captured and generated (`driver/src/pvr_usc_eot_blob.h:26`, `:112`) but never
+uploaded.
+
+**Change** (`tools/pco_shc/gen_usc_blobs.py`, then the generated
+`driver/src/pvr_usc_eot_blob.h`; `driver/src/pvr_render.c`; `src/pvr/**`;
+`src/shaderc/online/powervr/chain.rs`):
+
+1. Upload `eot3_tb12` into a new `PvrRenderStatic` slot,
+   `eot_doutu_src0_tb3_k[2]` with its PDS info, shaped like `tb4_k`. This is
+   an ABI change: `src/abi_layout.rs`, `src/abi_layout_check.c` and the size
+   pins move in the same commit.
+2. `mrt_layout.rs`: add `EotProgram::Eot3Tb12` and a `(3,2)` arm in
+   `program_for`, with `spilled_mask` `0b110` and `doutu` and `pds_info` from
+   the new slot. The test that pins `(3,2)` as `NoProgram` flips.
+3. `chain.rs:1717`: drop `(3,2)` from the refusal. Leave `(2,1)` to
+   pvr-modf-mrt.
+4. `backend.rs` emit loop (`:9784-9812`): instead of the "only the last
+   attachment spills" rule, pick the program from `mrt_layout::layout` of the
+   attachments' `surf_out_dwords` (`:1041`), and emit each spilled attachment
+   from its tile buffer.
+
+**Host test.** In `tests/pvr_fragout_int_spill.rs`:
+
+- `three_rgba32ui_outputs_spill_two`: the record has `num_outputs` 4,
+  `num_tile_buffers` 2 and two tile-buffer stores.
+- `three_rgba32i_attachments_draw`: at GL level as in B1. No error, `doutu`
+  equal to the new slot's, three PBE emits, and attachments 1 and 2 emitted
+  from tile buffers 0 and 1.
+- `cargo test --lib pvr::mrt_layout` covers step 2.
+
+**src/gl:** none.
+
+**Overlap:** modf-mrt-locate left `(3,2)` refused because nothing it fixes
+needs it; B2 is the case that does. Its caveat applies here too: a continued
+frame cannot reload a spilled attachment (`attachment_out_reg`,
+`backend.rs:2336`). dEQP draws and reads back in one frame.
+
+### 6.3 Cluster C: `random` seeds with four draw buffers (26: 0 8 17 21 24 25 29 33 41 45 55 56 66 67 70 71 72 75 78 79 82 86 88 90 94 96)
+
+**Cause.** The seed asks for four draw buffers, but the PowerVR reports
+`GL_MAX_DRAW_BUFFERS` 3 (`DRAW_TARGETS` 3 under `gpu-powervr`,
+`src/backend.rs:901-913`; `src/gl/context.rs:231`). So `glDrawBuffers` fails
+and the case fails at `:286`: INVALID_ENUM at the tip, "Compile failed" at
+ad2b5ed, when the shader's fourth output was refused first.
+
+Even with four draw buffers the mixes would still be refused:
+
+- A mix has more targets than `SHC_MIXED_MAX_TARGETS` (3,
+  `src/target_key.rs:18`). The back end refuses it with `REFUSE_MIX_TARGETS`
+  (`src/pvr/target_keys.rs:56-57`), and the GL core's `draw_target_keys`
+  (`src/gl/target_keys.rs`) returns `None` at `n == SHC_MIXED_MAX_TARGETS`.
+- The 32-bit mixed key cannot carry a fourth slot. Slots are 5 bits at
+  `10 + 5 * i` (`src/target_key.rs:137`), so slot 3 would cover bit 25, the
+  mixed tag (`:21`).
+
+**Change**, in this order:
+
+1. Four draw buffers on the PowerVR: `DRAW_TARGETS` 4 under `gpu-powervr`
+   (`src/backend.rs:910-913`, which is not `src/gl`). The decision belongs
+   to tri-limits and to the board check of `e329c01a` (four colour targets);
+   the AM62P images do not set `CONFIG_PVR_DEQP_MRT4` today. On its own, this
+   step moves the 26 cases from INVALID_ENUM to the back end's
+   `REFUSE_MIX_TARGETS` (INVALID_OPERATION at `:810`), or to a draw for a
+   same-class list.
+2. Four-target mixes in the 64-bit multi key
+   (`docs/notes/pvr-blend-multi.md`, sections 3.2-3.4). `shc_blend_key_multi`
+   and its decoder already exist (`src/target_key.rs:243-265`). So does the
+   compiler's `build_fragment_multi` (`chain.rs:687`), which has no caller
+   outside `chain.rs`. In the back end:
+   - `draw_target_keys` in `src/pvr/target_keys.rs` runs over
+     `SHC_MULTI_SLOTS` (4);
+   - `int_targets_drawn` accepts a multi-keyed record;
+   - the emit loop changes as in B2 step 4, because a four-target mix spills
+     (`program_for` `(4,1..=3)` exists).
+3. Seeds 17, 67, 86 and 96 also need D1. All seeds except 24, 70 and 94 pass
+   four registers, so they also need the spill of 6.4.
+
+**Needs src/gl** (step 2; named, not made). This is the multi key's interface
+from `pvr-blend-multi.md` 3.4:
+
+- `ProgFsVariant::blend_key` and the program cache key become `u64`, and so
+  does `blend_variant`'s key parameter (`src/gl/draw.rs`,
+  `src/shaderc/mod.rs`);
+- `current_blend_key` (`src/gl/draw.rs:1470-1483`) returns
+  `shc_blend_key_multi` when four targets are present or no legacy key
+  expresses the draw (the rule in 3.3);
+- `draw_target_keys` in `src/gl/target_keys.rs` is sized by
+  `SHC_MULTI_SLOTS`;
+- `ShcShader::blend_key_hi` is added to the ABI (`src/abi_layout.rs`,
+  `src/abi_layout_check.c`, `include/gles_shaderc.h`).
+
+**Host test.**
+
+- Step 1: `tests/pvr_draw_buffers4.rs`. `glGetIntegerv(GL_MAX_DRAW_BUFFERS)`
+  returns 4, and `glDrawBuffers` of four attachments sets no error. This
+  moves pins of 3 like those in `tests/es3_caps.rs`; grep `tests/` for them.
+- Step 2: `tests/pvr_multi_key_mix4.rs`, for the formats of seeds 24, 70 and
+  94 (re-derived with dEQP's generator, as the triage did). The GL core's key
+  has the multi tag, the compile succeeds, and the draw sets no error and
+  records four PBE emits, each with its attachment's packing.
+
+### 6.4 Clusters D2 and E1: a mix past four registers (D2: random 9 11 18 31 50 53 62 85 89 92 97; E1: random 6 42 43 52 87 93 98)
+
+These are one cause with two symptoms.
+
+**Cause.** The draw mixes an integer target with another target, and their
+registers pass four. `shc_mixed_out_layout` (`src/target_key.rs:90-115`)
+returns `None` at `:105` instead of spilling, so `shc_blend_key_mixed`
+returns `None` (`:140`).
+
+- D2: attachment 0's own key compiles (a 1-dword target), so the draw reaches
+  the back end. `draw_target_keys` refuses it (`src/pvr/target_keys.rs:66-67`,
+  `REFUSE_FOUR_REGISTERS`): INVALID_OPERATION at `:810`.
+- E1: with no mixed key, the GL core falls back to attachment 0's key
+  (`src/gl/draw.rs:1480-1491`). Attachment 0 is an integer format of 2 or more
+  dwords, so the compiler packs every output under it and refuses
+  (`chain.rs:1470-1471`). The draw is dropped silently (6.0).
+- Seeds 50, 85 and 97 pass four registers only because of the alignment
+  gap: a 2-dword target after a 1-dword one starts at the next even register
+  (`:101-103`).
+
+**Change** (`src/target_key.rs`, `src/pvr/target_keys.rs`,
+`src/pvr/backend.rs`; `chain.rs` already lays out mixes with spills):
+
+1. `src/target_key.rs`: add `shc_mixed_out_places(targets) ->
+   Option<([Place; 3], output_regs, tile_buffers)>`. It follows the
+   `mrt_layout`/`target_layout` rule: each target goes in registers while it
+   fits, then it and every later target go to the next tile buffer. It
+   returns `None` only for a shape with no captured program: `(2,1)` and
+   `(3,2)`, until B2 and pvr-modf-mrt wire them.
+   - `shc_blend_key_mixed` and `src/pvr/target_keys.rs:66` call it.
+   - `shc_mixed_out_layout` keeps its signature and meaning ("fits in
+     registers"). So the GL core's test at `src/gl/draw.rs:8501` and the
+     tests at `src/pvr/backend_tests.rs:6116` and `:6183` do not change.
+2. `src/pvr/backend.rs`, the mix arm of `int_targets_drawn` (`:6788-6790`):
+   take the span and tile buffers from step 1, and add `num_tile_buffers` to
+   the record check. `attachment_out_reg` (`:2336`) and the emit loop follow
+   B2 step 4, so a spilled mix target is emitted from its tile buffer.
+3. The alignment gap (seeds 50, 85, 97) stays unfilled: with step 1 these
+   seeds spill instead. Filling the gap (putting a 1-dword target into it)
+   would change the emit order and the frame load (`attachment_out_reg`)
+   together, so it is not proposed.
+
+The GL core already keys through `shc_blend_key_mixed` (`draw_mixed_key` in
+`src/gl/target_keys.rs`). So once step 1 accepts these lists, the GL core
+keys these draws mixed with **no src/gl change**. Only the PowerVR uses the
+mixed key: its compiler builds it and its back end reads it (`grep -rl
+shc_blend_key_mixed src` finds only `src/gl`, `src/pvr` and
+`src/target_key.rs`). So accepting more lists changes nothing for the other
+back ends.
+
+**Host test.** `tests/pvr_mixed_key_spill.rs` (new). It covers each D2/E1
+seed's format list (from dEQP's generator), including at least one list with
+attachment 0 RG32UI, one with RGBA8 + RGBA32I, and seed 50's gap list. For
+each list it asserts:
+
+- the GL core's key is `shc_blend_key_mixed` of the list, not attachment 0's
+  key;
+- the compile succeeds with `num_tile_buffers` 1;
+- the draw sets no error and logs neither `draw refused` nor `no fragment
+  shader variant`;
+- the spilled attachment's PBE emit reads the tile buffer.
+
+`src/target_key.rs` gets unit tests for `shc_mixed_out_places`: every list of
+up to three keys goes to registers and then spills, and the function returns
+`None` exactly for `(2,1)` and `(3,2)`. The change moves the pins in
+`tests/pvr_target_keys_refusals.rs` and `tests/pvr_mixed_key_spec.rs` that
+assert `REFUSE_FOUR_REGISTERS` for these shapes (grep for them).
+
+**Overlap with fbo-rint:** a seed with an R or RG integer attachment passes
+only once fbo-rint's R/RG integer fix (render and read back) is in as well.
+
+### 6.5 Cluster D1: SRGB8_ALPHA8 beside an integer attachment (random 1, 64, 69; with four targets also 17, 67, 86, 96)
+
+**Cause.** `src/pvr/target_keys.rs:53-54` refuses the draw (`REFUSE_SRGB`):
+INVALID_OPERATION at `:810`. An sRGB format has no per-target key:
+`gles_surf_target_key` returns `None` for it (`src/target_key.rs:65`), and
+the multi key reserves the sRGB slot codes 0x04, 0x08 and 0x0C
+(`multi_slot_ok`, `src/target_key.rs`, just above `:243`).
+
+**Change** (`src/target_key.rs`, `src/pvr/target_keys.rs`,
+`src/shaderc/online/powervr/chain.rs`):
+
+- Give SRGB8_ALPHA8 slot code 0x04, an RGBA8 class that encodes, in both the
+  mixed and the multi key.
+- The compiler encodes that slot's colour from linear to sRGB in the program
+  before packing it as RGBA8 bytes. The all-sRGB path already does this
+  (`srgb_targets_as_rgba8`, `src/pvr/backend.rs:4308`): the attachment is
+  stored as RGBA8 whose bytes are already encoded.
+- `draw_target_keys` drops the `REFUSE_SRGB` arm.
+
+The GL core gets the key through `gles_surf_target_key` and its own
+`draw_target_keys` (which applies `?` to it). So there is **no src/gl
+change** for up to three targets; four targets need the change in 6.3.
+
+**Host test.** `tests/pvr_mixed_key_srgb.rs`, on RGBA32UI + SRGB8_ALPHA8
+(seed 1's list). It asserts:
+
+- slot 1 of the key is 0x04;
+- the compiled record encodes slot 1: a pinned linear 0.5 gives byte 0xbc;
+- the draw sets no error;
+- the PBE emit of attachment 1 is RGBA8 with no sRGB conversion bit.
+
+### 6.6 Clusters D3 and E3: float-only mixes of different classes (D3: random 65, RGBA16F + R8; E3: random 3, R8 + R16F)
+
+**Cause.** No key describes a float-only mix. `shc_blend_key_mixed` requires
+an integer target (`src/target_key.rs:140`, `!any_int`), so the GL core keys
+the draw with attachment 0's class.
+
+- D3 (attachment 0 RGBA16F): the compiler lays out every output as RGBA16F
+  (`replace_class`, `chain.rs:727`, `:797-808`). The back end sees a
+  per-target float program beside another class and refuses it
+  (`src/pvr/backend.rs:6916-6931`, "several colour outputs of one float class
+  beside an attachment of another class"): INVALID_OPERATION.
+- E3 (attachment 0 RGBA8): the RGBA8 key is not a `replace_class` key, so
+  `per_target_float_class` (`backend.rs:6822-6830`) returns `None` and the
+  refusal above does not run. The program writes output 1 as RGBA8 bytes,
+  but the PBE of the R16F attachment reads register 1 as F16 (packmode 51,
+  `source_format` 0, probed). The result is a **silent wrong picture**.
+
+**Step 1** (`src/pvr/backend.rs` only): turn E3 into a named refusal. The
+case still fails, but with an error. Beside the `per_target_float_class`
+check (`:6916`), refuse by name any draw where all of these hold:
+
+- `ntargets > 1`, with no integer attachment and no mixed or multi key;
+- the attachments' `gles_surf_rt_class` values differ;
+- the program is keyed for one class, RGBA8 included.
+
+The refusal uses the same log line and returns `-ENOTSUP`.
+
+**Step 2** (draws these cases): the multi key of 6.3 step 2. By 3.3's rule, a
+draw of non-uniform class that no legacy key expresses gets a multi key.
+Dropping `!any_int` from the 32-bit mixed key instead is not proposed: the GL
+core would then key float-only mixes as mixed for every back end
+(`src/gl/draw.rs:1480`), and the V3D and GC7000 compilers do not accept that
+key.
+
+**Needs src/gl** for step 2: the same multi-key interface as 6.3 (named
+there). Step 1 needs no src/gl change.
+
+**Host test.**
+
+- Step 1: `tests/pvr_float_mix_refused.rs`. It uses R8 + R16F renderbuffers
+  (seed 3's list) and a two-output shader, drawn with `glDrawElements`.
+  - Before the change, the draw records a kick whose PBE 1 is F16 while the
+    program packs RGBA8.
+  - After it, `glGetError() == GL_INVALID_OPERATION`, the log line appears
+    once and no kick is recorded.
+  - Same-class lists (RGBA16F + RGBA16F, RGBA8 + RGBA8) still draw.
+- Step 2: in `tests/pvr_multi_key_mix4.rs` (6.3), R8 + R16F and RGBA16F + R8
+  draw with a multi key and per-attachment packing.
+
+### 6.7 Summary
+
+| cluster | cases | files | src/gl | host test (new) |
+|---|---|---|---|---|
+| B1 | 48 | `chain.rs`, `src/pvr/backend.rs` | none (6.0 optional) | `tests/pvr_fragout_int_spill.rs` |
+| B2 | 24 | `gen_usc_blobs.py`, blob header, `pvr_render.c`, ABI, `mrt_layout.rs`, `chain.rs`, `backend.rs` | none | `tests/pvr_fragout_int_spill.rs` |
+| C | 26 | `src/backend.rs` (`DRAW_TARGETS`), `src/pvr/target_keys.rs`, `backend.rs` | multi key (6.3) | `tests/pvr_draw_buffers4.rs`, `tests/pvr_multi_key_mix4.rs` |
+| D1 | 3 (+4) | `src/target_key.rs`, `src/pvr/target_keys.rs`, `chain.rs` | none | `tests/pvr_mixed_key_srgb.rs` |
+| D2 + E1 | 11 + 7 | `src/target_key.rs`, `src/pvr/target_keys.rs`, `backend.rs` | none (6.0 optional) | `tests/pvr_mixed_key_spill.rs` |
+| D3 + E3 | 1 + 1 | `backend.rs` (step 1); multi key (step 2) | step 2: multi key | `tests/pvr_float_mix_refused.rs` |
+
+Suggested order:
+
+1. B1, together with pvr-modf-mrt (same functions).
+2. 6.4, which shares the emit-loop change with B2.
+3. B2.
+4. D1.
+5. 6.6 step 1.
+6. The multi key (6.3 step 2 and 6.6 step 2). This is the only part that
+   needs `src/gl`.
+
+None of this is proven on the board. Each fix needs an AM62P run of row 13
+(`fragment_out`).
