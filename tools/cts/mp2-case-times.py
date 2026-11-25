@@ -35,6 +35,31 @@ order. --missing-out holds the --cases names without a result in any log.
 stdout ends with 'mp2-case-times: cases C, timed T, missing M, max_ms X'
 (C is the --cases count, or the number of cases with a result without --cases).
 Exit 0 ok, 2 for usage or input errors.
+
+Quiet consoles. A DK dEQP image built quiet prints no per-case result lines,
+only progress stamps, one line each (after the same optional time stamp):
+
+    deqp: stamp uptime_ms=<u64> case=<index> done=<n> pass=<p> fail=<f> other=<o>
+
+uptime_ms is the board's uptime (a decimal u64), case the index of the case in
+progress, done the cases finished so far, pass/fail/other their verdict counts
+(done = pass + fail + other). The image ends with 'deqp: summary: B cases
+begun, R with a result, W without' (unchanged). A log with stamp lines gets,
+after the usual 'mp2-case-times:' summary line, per stamp interval
+'mp2-case-times: interval <i> uptime_ms <a>..<b> gap_ms <g> cases <n>
+rate <cases per s>' (rate '-' for a zero gap) and one closing line
+
+    mp2-case-times: stamps S, max_gap_ms G, last_done D, shard_cases N, truncated yes|no
+
+G is the largest gap between two stamps of one log: the longest stretch the
+console was silent, to hold against the run lifetime (100 s). N is the shard's
+case count: --shard-cases when given, else B of the log's summary line, else
+'?'. truncated is yes when the last stamp's done is below N, or when N is '?'
+(no summary line: the console was cut); else no. An uptime that goes backwards
+(the board restarted) starts a new run: no interval across it. With several
+logs the closing line sums the stamps, takes the largest gap over all logs,
+and reports last_done and N of the last log with stamps. A log without stamp
+lines prints none of this: legacy output is byte for byte unchanged.
 """
 import argparse
 import re
@@ -92,6 +117,29 @@ def scan(text, floor_ms):
     return out
 
 
+STAMP = re.compile(r"^deqp: stamp uptime_ms=(\d+) case=(\d+) done=(\d+) pass=(\d+) "
+                   r"fail=(\d+) other=(\d+)\s*$")
+SUMMARY = re.compile(r"^deqp: summary: (\d+) cases begun")
+
+
+def scan_stamps(text):
+    """([(uptime_ms, done)], begun or None); complete stamp lines only"""
+    st, begun = [], None
+    raw = text.replace("\0", "").replace("\r", "").split("\n")
+    if raw and raw[-1] != "":
+        raw.pop()  # cut mid-line
+    for l in raw:
+        rest = stamp(l)[2]
+        m = STAMP.match(rest)
+        if m:
+            st.append((int(m.group(1)), int(m.group(3))))
+            continue
+        m = SUMMARY.match(rest)
+        if m:
+            begun = int(m.group(1))
+    return st, begun
+
+
 def read(path):
     with open(path, errors="replace") as fh:
         return fh.read()
@@ -119,6 +167,7 @@ def main():
     ap.add_argument("--cases")
     ap.add_argument("--times-out")
     ap.add_argument("--missing-out")
+    ap.add_argument("--shard-cases", type=int)
     ap.add_argument("--floor-ms", type=int, default=100)
     a = ap.parse_args()
     if a.floor_ms < 0:
@@ -126,8 +175,11 @@ def main():
     try:
         cases = names_of(a.cases) if a.cases else None
         got = {}
+        quiet = []
         for p in a.logs:
-            for k, v in scan(read(p), a.floor_ms).items():
+            text = read(p)
+            quiet.append(scan_stamps(text))
+            for k, v in scan(text, a.floor_ms).items():
                 got.pop(k, None)  # last log wins
                 got[k] = v
     except OSError as e:
@@ -150,7 +202,34 @@ def main():
     n = len(cases) if cases is not None else len(got)
     print("mp2-case-times: cases %d, timed %d, missing %d, max_ms %d"
           % (n, len(timed), len(missing), max([v for _, v in timed], default=0)))
+    quiet = [q for q in quiet if q[0]]
+    if quiet:
+        report_stamps(quiet, a.shard_cases)
     return 0
+
+
+def report_stamps(quiet, shard_cases):
+    n_stamps, max_gap, i = 0, 0, 0
+    for st, begun in quiet:
+        n_stamps += len(st)
+        for (u0, d0), (u1, d1) in zip(st, st[1:]):
+            if u1 < u0:
+                continue  # restart
+            i += 1
+            gap = u1 - u0
+            max_gap = max(max_gap, gap)
+            rate = "%.3f" % ((d1 - d0) * 1000.0 / gap) if gap else "-"
+            print("mp2-case-times: interval %d uptime_ms %d..%d gap_ms %d cases %d rate %s"
+                  % (i, u0, u1, gap, d1 - d0, rate))
+    st, begun = quiet[-1]
+    last = st[-1][1]
+    n = shard_cases if shard_cases is not None else begun
+    if n is None:
+        trunc = "yes"  # no summary: the console was cut
+    else:
+        trunc = "yes" if last < n else "no"
+    print("mp2-case-times: stamps %d, max_gap_ms %d, last_done %d, shard_cases %s, truncated %s"
+          % (n_stamps, max_gap, last, "?" if n is None else n, trunc))
 
 
 if __name__ == "__main__":
