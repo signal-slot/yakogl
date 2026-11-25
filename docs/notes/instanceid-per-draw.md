@@ -142,6 +142,19 @@ Related sites:
     }
 ```
 
+DRAW_INSTANCED carries 24-bit counts: the instance count is split over the
+header (low 16 bits, `src/vivante/regs.rs:33-35`) and the top byte of the count
+word, and the vertex count is the low 24 bits of that word
+(`src/vivante/regs.rs:37-39`, `& 0x00ff_ffff`). Counts above `0xffffff` used to
+be encoded modulo 2^24, an empty draw, silently. Since `ef5ce720`, `draw_parts`
+(`src/vivante/backend.rs`) decides before any state is emitted: instances above
+`0xffffff` are split by instance when no stream has a divisor and the program
+does not read `gl_InstanceID` (both restart at 0 in every part), else refused;
+vertices above `0xffffff` of one non-indexed instance are split on primitive
+boundaries (fans and loops refused); an indexed draw above `0xffffff` is
+refused. A refusal returns `-EINVAL` and is counted in `gc_refused_draws`.
+Tests: `tests/gc_instance_count_wide.rs`, `tests/gc_vertex_count_wide.rs`.
+
 Until V0 landed this check never fired for a GC7000UL program (section 4 is
 that world's scratch record):
 
