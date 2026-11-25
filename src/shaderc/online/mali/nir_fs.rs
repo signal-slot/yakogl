@@ -1297,6 +1297,130 @@ fn fold_const16(a: AluOp, p: u32, q: u32) -> Result<u32, MaliError> {
     Ok(super::select::f16_bits(r))
 }
 
+/// Lane `i` of IR source `s` as Mesa's GLSL front end folds a built-in call
+/// on constant expressions, at fp32 before lower_precision narrows it
+/// (ast_function.cpp:657-664, `constant_expression_value`;
+/// docs/notes/mali-nonfinite-const.md): `dot` as `result += a[c] * b[c]`
+/// from lane 0 (ir_constant_expression.cpp `dot_f`), `inversesqrt` as
+/// `1.0F / sqrtf(x)` and `sqrt` correctly rounded
+/// (ir_expression_operation.py:453, :455), and the products, sums and
+/// negations of the expansion (`normalize`'s `v * rsq(dot(v, v))`,
+/// `length`'s `sqrt(dot(v, v))`, `distance`'s `length(a - b)`). The value
+/// and whether its tree holds such a built-in; None: a leaf is not a
+/// constant of the IR (a local, a uniform), the tree is deeper than 8, or
+/// a value is not zero or a normal float.
+fn const_tree32(m: &Module<'_>, s: ir::Src, i: usize, depth: u8) -> Option<(f32, bool)> {
+    if depth > 8 {
+        return None;
+    }
+    let c = s.swizzle[i] as usize & 3;
+    let r = match *m.def(s.val)? {
+        ir::Op::ConstF32(bits) => (f32::from_bits(bits[c]), false),
+        ir::Op::Alu(a @ (AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4), x) => {
+            let n = match a {
+                AluOp::Fdot2 => 2,
+                AluOp::Fdot3 => 3,
+                _ => 4,
+            };
+            let mut sum = 0.0f32;
+            for k in 0..n {
+                sum += const_tree32(m, x[0], k, depth + 1)?.0 * const_tree32(m, x[1], k, depth + 1)?.0;
+            }
+            (sum, true)
+        }
+        ir::Op::Alu(AluOp::Frsq, x) => {
+            let (v, _) = const_tree32(m, x[0], c, depth + 1)?;
+            (f32::from_bits(crate::shaderc::online::fold::fold_float(AluOp::Frsq, v.to_bits(), 0, 0)?), true)
+        }
+        ir::Op::Alu(AluOp::Fsqrt, x) => {
+            let (v, _) = const_tree32(m, x[0], c, depth + 1)?;
+            if v < 0.0 {
+                return None;
+            }
+            (v.sqrt(), true)
+        }
+        ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), x) => {
+            let (p, bp) = const_tree32(m, x[0], c, depth + 1)?;
+            let (q, bq) = const_tree32(m, x[1], c, depth + 1)?;
+            (if a == AluOp::Fmul { p * q } else { p + q }, bp || bq)
+        }
+        ir::Op::Alu(AluOp::Fneg, x) => {
+            let (v, b) = const_tree32(m, x[0], c, depth + 1)?;
+            (-v, b)
+        }
+        /* a global `const` (glmark2's `const vec4 LightSourcePosition`):
+         * the front end's local, stored once, by a constant */
+        ir::Op::LoadLocal { local, index: None, .. } => {
+            let mut stores = m.instrs.iter().filter_map(|op| match *op {
+                ir::Op::StoreLocal { local: l, index, src, write_mask } if l == local => Some((index, src, write_mask)),
+                _ => None,
+            });
+            let (None, src, mask) = stores.next()? else { return None };
+            if stores.next().is_some() || mask >> c & 1 == 0 {
+                return None;
+            }
+            const_tree32(m, src, c, depth + 1)?
+        }
+        _ => return None,
+    };
+    nir::plain(r.0.to_bits()).then_some(r)
+}
+
+/// `a` of two constant lanes at fp32, the result rounded once to fp16
+/// ([`round16`]): a lone product or sum the GLSL front end folds. An
+/// operand or result that is not zero or a normal float is refused.
+fn fold_const32(a: AluOp, x: Val, y: Val) -> Result<u32, MaliError> {
+    let (Val::Const(p), Val::Const(q)) = (x, y) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+    if !nir::plain(p) || !nir::plain(q) {
+        return Err(MaliError::ConstantFold);
+    }
+    let (p, q) = (f32::from_bits(p), f32::from_bits(q));
+    let r = if a == AluOp::Fadd { p + q } else { p * q }.to_bits();
+    if !nir::plain(r) {
+        return Err(MaliError::ConstantFold);
+    }
+    round16(r)
+}
+
+/// IR value `id` of a mediump shader as [`const_tree32`] folds it, each
+/// lane rounded once ([`round16`]): Some when every lane folds, a built-in
+/// is in the tree and every rounded lane is a normal half; None leaves the
+/// operation to the walk's other arms. Two lanes of one half that are not
+/// one pair's (fsvec_nconst_mediump's `normalize(vec3(1.0, 2.0, 2.0)) *
+/// v.x`, y and z both 0x3955) are refused as the walk refused the built-in
+/// on a constant before (`inversesqrt` of a constant, [`MaliError::Arithmetic`]):
+/// the pair graph takes z's product as the x lane's half (so it does with
+/// the constant written out, a defect of its own).
+fn builtin16(m: &Module<'_>, id: u32) -> Option<Result<[Val; 4], MaliError>> {
+    let w = width_of(m, ir::ValueId(id));
+    let s = ir::Src::id(ir::ValueId(id));
+    let mut out = [Val::Undef; 4];
+    let mut any = false;
+    for (i, o) in out.iter_mut().enumerate().take(w) {
+        let (v, b) = const_tree32(m, s, i, 0)?;
+        any |= b;
+        *o = Val::Const(round16(v.to_bits()).ok()?);
+    }
+    if !any {
+        return None;
+    }
+    if (0..w).any(|i| (i + 1..w).any(|j| j / 2 != i / 2 && out[i] == out[j])) {
+        return Some(Err(MaliError::Arithmetic));
+    }
+    Some(Ok(out))
+}
+
+/// An fp32 constant rounded once to fp16 (lower_precision's constant,
+/// `_mesa_float_to_half`), returned as the fp32 bits of the half. A value
+/// out of fp16's normal range has no reference: refused.
+fn round16(bits: u32) -> Result<u32, MaliError> {
+    let h = f16_rtne(bits).ok_or(MaliError::ConstantFold)?;
+    if h & 0x7fff == 0 && bits & 0x7fff_ffff != 0 {
+        return Err(MaliError::ConstantFold);
+    }
+    Ok(super::select::f16_bits(h))
+}
+
 /// Which algebraic rule an `fmul` or `fadd`'s constant source makes for a
 /// 16-bit lane pair.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1696,10 +1820,11 @@ impl<'s> Fs<'s> {
              * (deqp_constop_op_minus: `FMA.v2f16 r0, r0^, 0x38000000.h11,
              * 0x38000000.h11`, the y lane `0.0 * 0.5 + 0.5`) */
             (AluOp::Fmul, _) if cx && cy && pair.is_some() => self.node(Alu::Fmul, [x, y, Val::Undef], at),
-            /* two constants alone: the front end folds them (a mediump
-             * `normalize` of a constant, which Mesa folds and a lane-wise
-             * product would not: glmark2's bump d442) */
-            (AluOp::Fmul, _) if cx && cy => Err(MaliError::ConstantFold),
+            /* two constants alone, outside a pair: the front end folds
+             * them at fp32 and lower_precision rounds the result once
+             * (a built-in on constants is [`const_tree32`]'s, before the
+             * lane walk; docs/notes/mali-nonfinite-const.md) */
+            (AluOp::Fmul, _) if cx && cy => Ok(Val::Const(fold_const32(AluOp::Fmul, x, y)?)),
             /* `* -1.0` is an fneg (nir_opt_algebraic.py:296) */
             (AluOp::Fmul, Rule::Negate) => self.neg(if cx { y } else { x }, at),
             /* `fmul(fneg(a), b)` is `fneg(fmul(a, b))` (nir_opt_algebraic.py:2387) */
@@ -1751,7 +1876,7 @@ impl<'s> Fs<'s> {
             }
             (AluOp::Fmul, _) => self.node(Alu::Fmul, [x, y, Val::Undef], at),
             (AluOp::Fadd, _) if cx && cy && pair.is_some() => self.node(Alu::Fadd, [x, y, Val::Undef], at),
-            (AluOp::Fadd, _) if cx && cy => Err(MaliError::ConstantFold),
+            (AluOp::Fadd, _) if cx && cy => Ok(Val::Const(fold_const32(AluOp::Fadd, x, y)?)),
             /* `fadd(fmul(a, b), fmul(a, c))` is `fmul(a, fadd(b, c))`
              * (nir_opt_algebraic.py's factoring), the constants' sum
              * folded and `fmul(a, 1.0)` `a`: cflow_68_armselect's `v * 0.5
@@ -6639,6 +6764,28 @@ fn walk_nodes(
                     *o = x.ok_or(MaliError::Defect(Defect::IrIndex))?;
                 }
             }
+            /* a built-in call on constants in a mediump shader (`normalize`,
+             * `length`, `dot`, `distance` of a `const` or a literal):
+             * Mesa's GLSL front end folds the call at fp32 before
+             * lower_precision, which rounds the result once to fp16
+             * ([`const_tree32`]; gm2_nonfin_2's `normalize(vec3(0.5, 0.5,
+             * 1.0)) * 0.5`, the FAU word 0x32883288, and gm2_nonfin_4's
+             * `length(LightPos)`, 0x45d5). Every lane of the operation is
+             * such a fold; an operation of constants with no built-in in
+             * its tree is the 16-bit fold below ([`fold_const16`]) */
+            ir::Op::Alu(
+                AluOp::Fdot2
+                | AluOp::Fdot3
+                | AluOp::Fdot4
+                | AluOp::Frsq
+                | AluOp::Fsqrt
+                | AluOp::Fmul
+                | AluOp::Fadd
+                | AluOp::Fneg,
+                _,
+            ) if !prec.highp && builtin16(m, id.0).is_some() => {
+                out = builtin16(m, id.0).ok_or(MaliError::Defect(Defect::IrIndex))??;
+            }
             /* fp32: one scalar node a lane, as the vertex stage builds it */
             ir::Op::Alu(a, s) if prec.highp => {
                 /* an operation on the mediump built-in itself is mediump
@@ -7317,6 +7464,17 @@ fn walk_nodes(
             ir::Op::Alu(AluOp::Frcp, s) => {
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
+                    /* `a / sqrt(b)`: `lower_fsqrt`'s `frcp(frsq(b))` under
+                     * the quotient's `frcp` is `frsq(b)` (nir_opt_algebraic.py
+                     * `frcp(frcp(a))`; gm2_nonfin_4's `length(LightPos) /
+                     * length(v)`, `FRSQ.f16 r0, r0^.h00` then `FMA.v2f16 r0,
+                     * u2.w1, r0^.h00, 0x0.neg`) */
+                    if let Some((Alu::Frcp, [r, ..])) = f.alu_of(lane(vals, s[0], i)) {
+                        if matches!(f.alu_of(r), Some((Alu::Frsq, _))) {
+                            *o = r;
+                            continue;
+                        }
+                    }
                     let Val::Const(c) = lane(vals, s[0], i) else { return Err(MaliError::Arithmetic) };
                     let r = (1.0 / f32::from_bits(c)).to_bits();
                     if f16_exact(c).is_none() || f16_exact(r).is_none() {
@@ -7549,6 +7707,12 @@ fn walk_nodes(
                     _ => 4,
                 };
                 let x = |f: &mut Fs<'_>, k: usize, i: usize| f.fp16_operand(lane(vals, s[k], i));
+                /* a dot of constants is the front end's fold ([`builtin16`]):
+                 * one that did not fold (a lane past fp16's range) has no
+                 * reference */
+                if (0..n).all(|i| (0..2).all(|k| matches!(lane(vals, s[k], i), Val::Const(_)))) {
+                    return Err(MaliError::ConstantFold);
+                }
                 let (p, q) = (x(f, 0, n - 1), x(f, 1, n - 1));
                 let mut acc = f.op(AluOp::Fmul, p, q, at, Rule::None, None)?;
                 for i in (0..n - 1).rev() {
