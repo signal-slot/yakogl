@@ -1,0 +1,1033 @@
+fatload mmc 0:1 0xd0000000 T6S1R16.bin; md5sum 0xd0000000 0xc2d550
+12768592 bytes read in 48 ms (253.7 MiB/s)
+md5 for d0000000 ... d0c2d54f ==> 2e7069022bd64bca09148e73e6a2a0e1
+Verdin iMX95 # dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/171078 in 25667 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.texture.specification.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_alpha'..
+GL error 0x500 in glGetIntegerv
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 28 of 1536
+mali shaderc table 'IR values': high-water 32 of 2048
+mali shaderc table 'locals': high-water 5 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_luminance'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_luminance
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_luminance_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_luminance_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_rgb'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_rgb
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_rgba'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.2d_rgba
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgb'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgb
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgba'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgba
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_luminance'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_luminance
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_luminance_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_luminance_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgb'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgb
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgba'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgba
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_alpha'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_luminance'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_luminance
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_luminance_alpha'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_luminance_alpha
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgb'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgb
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgba'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 248 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgba
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.a16f_2d'..
+mali arena 'desc': high-water 1456 of 1048576 bytes
+mali arena 'data': high-water 108 of 262144 bytes
+mali arena 'code': high-water 512 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+mali arena 'desc': high-water 2304 of 1048576 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.a16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.a16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.a16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.a8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.a8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.a8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.a8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.l16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.l16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.l16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.l16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.l8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.l8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.l8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.l8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.la16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.la16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.la16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.la16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.la88_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.la88_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.la88_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.la88_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb565_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb565_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb565_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb565_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgb888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba4444_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba4444_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba4444_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba4444_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba5551_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba5551_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba5551_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba5551_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba8888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba8888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba8888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_teximage2d.rgba8888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.a8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.l8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la88_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la88_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la88_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.la88_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb565_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb565_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb565_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb565_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgb888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba4444_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba4444_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba4444_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba4444_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba5551_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba5551_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba5551_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba5551_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba8888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba8888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba8888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba8888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_0'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_3'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_5'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_6'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_7'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_9'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.random_teximage2d.2d_9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_0'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_0
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_3'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_3
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_5'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_5
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_6'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_6
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_7'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_7
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_9'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.random_teximage2d.cube_9
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_4_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_4_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_l8_63_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgb888_39_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba4444_51_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.teximage2d_align.2d_rgba8888_47_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_4_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_4_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_l8_63_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgb888_39_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba8888_47_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_1_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_l8_63_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgb888_39_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba4444_51_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_1'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_2'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_4'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_8'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_align.2d_rgba8888_47_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_1_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_l8_63_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgb888_39_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba4444_51_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_1
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_2'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_2
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_4
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_align.cube_rgba8888_47_8
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.a8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l8_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l8_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l8_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.l8_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la88_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la88_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la88_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.la88_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb565_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb565_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb565_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb565_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgb888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba16f_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba16f_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba16f_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba16f_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba4444_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba4444_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba4444_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba4444_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba5551_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba5551_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba5551_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba5551_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba8888_2d'..
+deqp: Pass dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba8888_2d
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba8888_cube'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.texture.specification.texsubimage2d_empty_tex.rgba8888_cube
+  Fail (Compile failed at sglrGLContext.cpp:863)
+
+DONE!
+
+Test run totals:
+  Passed:        86/192 (44.8%)
+  Failed:        106/192 (55.2%)
+  Not supported: 0/192 (0.0%)
+  Warnings:      0/192 (0.0%)
+  Waived:        0/192 (0.0%)
+deqp: done: 86 passed, 106 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 192 cases begun, 192 with a result, 0 without
+osal(mali): kicks 251, completed 251; pages 941 (high-water 1197) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 11712 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9786 ms
+�\x00
+U-Boot SPL 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+SOC: 0xb0009500
+LC: 0x40010
+Trying to boot from MMC1
+Primary set selected
+Load image from MMC/SD 0xc3400
+NOTICE:  BL31: v2.10.0	(release):lf-6.6.52-2.2.1-dirty
+NOTICE:  BL31: Built : 06:40:36, Jul  7 2025
+
+
+U-Boot 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+
+CPU:   i.MX95 rev2.0 at 1800MHz
+CPU:   Extended Industrial temperature grade (-40C to 125C) at 59C
+LM Boot reason: sw, origin: 0, errid: 0
+LM shutdown reason: sw, origin: 0, errid: 0
+DRAM:  Delete node /pcie@4ca00000/ethernet@10,0
+7.8 GiB
+Core:  323 devices, 32 uclasses, devicetree: separate
+MMC:   FSL_SDHC: 0, FSL_SDHC: 1, FSL_SDHC: 2
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Model: Toradex 0089 Verdin iMX95 Hexa 8GB WB IT V1.1A
+Serial#: <module-serial>
+
+BuildInfo:
+  - SM firmware Build 574, Commit cc7a8d2d, Sep 24 2026 20:00:35
+  - ELE firmware version 2.0.5-fe6641ef
+
+flash target is MMC:0
+Net:   WARNING: no MAC address assigned for MAC0
+imx_get_mac_from_fuse: fuse read err: 0
+eth0: enetc-0 [PRIME]Could not get PHY for emdio-0: addr 7
+
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  1 \x08\x08\x08 0 
+\x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8MMC: no card present
+Card did not respond to voltage select! : -110
+No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+No EFI system partition
+Failed to persist EFI variables
+No EFI system partition
+Failed to persist EFI variables
+** Booting bootflow '<NULL>' with efi_mgr
+ERROR: invalid device tree
+Boot failed (err=-14)
+MMC: no card present
+MMC: no card present
+MMC: no card present
+MMC: no card present
+** Booting bootflow 'mmc@42850000.bootdev.part_1' with script
+Loading DeviceTree: imx95-verdin-wifi-dev.dtb
+99411 bytes read in 4 ms (23.7 MiB/s)
+100 bytes read in 3 ms (32.2 KiB/s)
+Working FDT set to 9c400000
+Applying Overlay: verdin-imx95_panel-cap-touch-10inch-lvds_overlay.dtbo
+4183 bytes read in 3 ms (1.3 MiB/s)
+Applying Overlay: verdin-imx95_spidev_overlay.dtbo
+534 bytes read in 3 ms (173.8 KiB/s)
+8355670 bytes read in 33 ms (241.5 MiB/s)
+Bootargs: root=PARTUUID=<root-partuuid> ro rootwait console=tty1 console=ttyLP2,115200
+   Uncompressing Kernel Image to 0
+## Flattened Device Tree blob at 9c400000
+   Booting using the fdt blob at 0x9c400000
+Working FDT set to 9c400000
+   Loading Device Tree to 00000000fce77000, end 00000000fceb2fff ... OK
+Working FDT set to fce77000
+Delete node /soc/pcie@4c380000
+Delete node /soc/pcie@4ca00000/ethernet@10,0
+
+Starting kernel ...
