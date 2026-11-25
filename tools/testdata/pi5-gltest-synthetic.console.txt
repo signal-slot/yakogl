@@ -1,0 +1,28 @@
+12:00:00 *** Booting Zephyr OS build synthetic ***
+12:00:00 v3d_gl_test: build 0123abcd (the record at the end or at 75 s)
+12:00:00 board: PM watchdog resets the SoC ~210 s after boot (tryboot -> Linux)
+12:00:01 v3d_gl_test: the list 5,58,59,66,67,102 (6 cases) on one context
+12:00:01 gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+12:00:02 gl_test: case 5 scissor: PASS
+12:00:02 gl_test: case 58 clearscis: PASS
+12:00:02 yakogl/v3d: draw refused: the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in
+12:00:02 gl_test: case 59 clearmask: FAIL
+12:00:03 gl_test: case 66 clearvp: PASS
+12:00:03 yakogl/v3d: draw refused: the draw reads depth an earlier job wrote, and the target has no depth/stencil buffer to keep it in
+12:00:03 gl_test: case 67 fbods: FAIL
+12:00:03 gl_test: case 102 maskclear: PASS
+12:00:03 gl_test: all: 2 of 6 cases failed (4 passed; 0 timed out; first failure case 59 at index 2)
+12:00:03 gl_test: done
+12:00:03 v3d_gl_test RECORD (the UART), build 0123abcd, 3 s after boot: DONE
+12:00:03 --- the OSAL ---
+12:00:03 --- the verdicts ---
+12:00:03
+12:00:03 v3d_gl_test: case 5 PASS
+12:00:03 v3d_gl_test: case 58 PASS
+12:00:03 v3d_gl_test: case 59 FAIL
+12:00:03 v3d_gl_test: case 66 PASS
+12:00:03 v3d_gl_test: case 67 FAIL
+12:00:03 v3d_gl_test: case 102 PASS
+12:00:03 v3d_gl_test: 4 of 6 cases passed (1500 ms)
+12:00:03 v3d_gl_test: build 0123abcd
+12:00:03 v3d_gl_test RECORD end, build 0123abcd
