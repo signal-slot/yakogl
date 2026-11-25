@@ -263,12 +263,13 @@ west build -p always -b rpi_5 -d build/rpi5_gl_test yakogl/driver/samples/zephyr
 #   west build -p always -b rpi_5 driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON
 ```
 
-Expected results of the six cases: 4 of 6 pass (5, 58, 66, 102); 59 and 67
-are refused by name, with the 4.2 strings (case 59: "the draw reads stencil
-an earlier job wrote, and the target has no depth/stencil buffer to keep it
-in"; case 67: "a colour format with fewer than 8 alpha bits";
-`docs/notes/v3d71-gl-table.md`, section 5). Any further refusal must carry
-a name too.
+Expected results of the six cases: 5 of 6 pass (5, 58, 66, 67, 102); case 59
+is refused by name, with the 4.2 string ("the draw reads stencil an earlier
+job wrote, and the target has no depth/stencil buffer to keep it in",
+`tests/v3d71_refuse.rs`). Case 67 is drawn with no refusal: the 7.1 job loads
+alpha as 1 and clears mask bit 3 for a target with no alpha
+(`docs/notes/v3d71-gl-table.md`, section 5; `tests/v3d71_refuse67.rs`). Any
+further refusal must carry a name too.
 
 The PM watchdog is armed for the run: `YAKOGL_RPI5_WDOG_HOLD_S` takes
 `V3D_GL_TEST_HOLD_S`, so the run and its record end before it fires. It
