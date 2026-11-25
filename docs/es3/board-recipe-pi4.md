@@ -803,6 +803,7 @@ refusals, by step 5 with `--refuse-file`.
    ```sh
    python3 -I tools/cts/pi4-session-readme.py --commit <full 40-hex sha> \
        [--times <TSV: LABEL run recoveries hangs, tab-separated>] \
+       [--causes <TSV: LABEL case cause issue>] \
        [--with tools/cts/log/<earlier dir>]... tools/cts/log/<session>/
    ```
 
@@ -811,7 +812,10 @@ refusals, by step 5 with `--refuse-file`.
    commit; another round's sha may appear only as prose, since the checker
    matches every line that starts `commit` against `--commit`. `--times`
    fills the table's run / GPU recoveries / hangs columns from the numbers
-   `pi4-console-scan.py` read (`-` for unknown; nothing is made up). The cut
+   `pi4-console-scan.py` read (`-` for unknown; nothing is made up).
+   `--causes` adds a 'Refusing cases' table (image, case, cause, issue;
+   issue is `-`, `#N` or `draft: <title>`); a label not in the tree is
+   refused. The cut
    is judged as `check-pi4-gles3-log.py` judges it and named in its words —
    `; cut after abort trigger <case> (<N> begun, <K> moved to <LABELS>)` —
    and a moved case's tally may sit in a directory of another round: pass
