@@ -1,0 +1,3 @@
+case	status	detail
+dEQP-GLES2.functional.d.one	Fail	Fail
+dEQP-GLES2.functional.d.two	Pass	Passed

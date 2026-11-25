@@ -1,0 +1,9 @@
+case	status	detail
+dEQP-GLES2.functional.a.one	Pass	Passed
+dEQP-GLES2.functional.a.two	Fail	Fail: refused ARITH
+dEQP-GLES2.functional.a.three	Pass	Passed
+dEQP-GLES2.functional.b.one	Lost	chunk-hang
+dEQP-GLES2.functional.b.two	Lost	chunk-hang
+dEQP-GLES2.functional.b.three	Pass	Passed
+dEQP-GLES2.functional.c.one	Timeout	Timeout
+dEQP-GLES2.functional.c.two	Pass	Passed
