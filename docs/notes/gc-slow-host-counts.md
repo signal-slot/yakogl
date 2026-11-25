@@ -482,8 +482,21 @@ cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online
   prediction's conclusion is unchanged: the 71 was the same off and on, so
   the knob's change (0 draws, +2 early-depth draws, +3 RS jobs, no extra
   kick or wait) stands on the committed counts. The RS fills of the "RS jobs,
-  fill" row are 9, not 11.2, since 4255adf1 (pinned by 98de1d8f); the rest of
-  the tables was not re-measured.
+  fill" row are 9, not 11.2, since 4255adf1 (pinned by 98de1d8f).
+
+  **Correction (RS-job totals, 2026-11-25).** Re-read at origin/main
+  00a07796 from `gc_scene_kicks_tiled_rt` (`StreamTally.rs_kicks`,
+  `rs_from_tiled`, `rs_to_tiled`; `--nocapture`, `Lag` and `Done` agree, the
+  figures are the same every frame): terrain 11 RS jobs knob off (9 fills,
+  2 linear-to-tiled) and 14 on (9, 3, 2 copy-backs), shadow 3 / 3, refract
+  4 / 4, draws 51 / 51 / 3 / 12, early-depth draws 0 / 2. The totals 13.2 and
+  16.2 of this section and the W10 / W11b figures derived from them (14.2,
+  12.2 to 11.2) were the 11.2-fill figures: now 11, 14, 12 and 10 to 9. Every
+  delta is unchanged (+3, +1, -2, -1 to -2). Unchanged and matching: shadow 3
+  and refract 4, kicks 11 / 2 / 3, tile-in 2 / 3, copy-back 0 / 2, the 51
+  draws, the predicted ms (they move with deltas only). Stream words (16378
+  / 16510) and the per-pass fill table of "The clears of one frame" were not
+  re-measured by these tests.
 
 ### What the counts say before any millisecond
 
@@ -500,10 +513,10 @@ refused is item tiled-qualify-census's, not traced here.
 |---|---:|---:|---:|
 | kicks (`Lag`, `Done`) | 11 | 11 | 0 |
 | waits outside the swap (`Lag`; `Done` 0) | 11 | 11 | 0 |
-| RS jobs, fill (colour and depth clears) | 11.2 | 11.2 | 0 |
+| RS jobs, fill (colour and depth clears; 9 at 00a07796, was 11.2) | 9 | 9 | 0 |
 | RS jobs, linear to tiled (off: the tiled copies of the two vertex-stage maps; on: and the tile-in of a shadow) | 2 | 3 | **+1** |
 | RS jobs, tiled to linear (the copy back) | 0 | 2 | **+2** |
-| RS jobs, all | 13.2 | 16.2 | **+3** |
+| RS jobs, all (11 / 14 at 00a07796, was 13.2 / 16.2) | 11 | 14 | **+3** |
 | draws in the streams (see the note under the table: 51 at 670913e1, not 71) | 51 | 51 | 0 |
 | draws taking early depth | 0 | 2 | **+2** |
 | stream words | 16378 | 16510 | +132 (0.5 KB) |
@@ -644,7 +657,7 @@ to 7.5 ms", figures of `gc-tiled-targets.md` change 4 that priced each clear
 as a **quad** at 3.9 ns a pixel (terrain's "four FBO clear quads at 800x600
 and the four 256x256 ones", 4.8 ms; refract's one fused 1600x1200 quad,
 7.5 ms). That is not the stream: plan #328 landed the RS fill clears
-(`rs_clear.rs`), and the "RS jobs, fill" rows above (terrain 11.2, shadow 3,
+(`rs_clear.rs`), and the "RS jobs, fill" rows above (terrain 9, shadow 3,
 refract 4 a frame) are RS jobs, not draws. What W7 to W9 can still remove is
 the **bytes** a fill writes, not a job: a TS fill is also one RS job. So
 every RS job count below is unchanged; the fill shrinks to the tile status
@@ -698,7 +711,7 @@ carry this section's byte-priced rows (item stale-figures).
 | terrain | bloom_h, bloom_v (no depth) | 2 x 256x256 | none | 2 | 0.52 MB |
 | terrain | tilt_h (no depth) | 800x600 | none | 1 | 1.92 MB |
 | terrain | tilt_v (window, `onscreen`, fused) | 800x600 | 800x600 | 2 | 3.84 MB |
-| terrain | total | | | 11 (11.2 measured) | 14.5 MB |
+| terrain | total | | | 11 (9 fills + 2 maps' tile-ins measured at 00a07796; the per-pass rows above are not re-attributed, the 14.5 MB is that older total) | 14.5 MB |
 | shadow | depth pass (depth texture, depth only) | none | 1600x1200 | 1 | 7.68 MB |
 | shadow | canvas clear | 800x600 | 800x600 | 2 | 3.84 MB |
 | shadow | total | | | 3 (3 measured) | 11.5 MB |
@@ -868,8 +881,8 @@ off with on inside this section only.
   taken (`gc-tiled-wire.md`, W4: a depth test is required). Its 2 copy-backs
   are `chain_gpu` reading level 0 linear after the terrain pass and the
   overlay; the third tile-in is not attributed here. Only deltas of RS jobs
-  are used below, because the cold run's base (11) is 2 under the older
-  section's warm mean (13.2).
+  are used below, because the cold run's base (11) was 2 under the older
+  section's warm mean (13.2); at 00a07796 every frame counts 11, the 13.2 is stale.
 - Costs used, all from the notes: 0.03 to 0.08 ms of GPU a kick boundary
   (`gc-slow-stream-diff.md` finding 3, `gc-slow-terrain.md` "The board
   timeline model"); a blocking `frame_open` wait wakes up to 1.1 ms late (the
@@ -946,7 +959,7 @@ and mipmapped colour (W12, W11b).
 | kicks | 11, 0 change | 2, 0 | 3, 0 |
 | RS jobs, linear to tiled | 3 to **1** (the two maps' RS copies go) | 0 | 0 |
 | RS jobs, tiled to linear | 2, 0 change (the maps' lazy resolves are not needed) | 0 | 0 |
-| RS jobs, all | 16.2 to **14.2** (against knob off, 13.2: +1) | 3, 0 | 4, 0 |
+| RS jobs, all | 14 to **12** (against knob off, 11: +1) | 3, 0 | 4, 0 |
 | RS bytes | -0.52 MB (2 x 0.26) | 0 | 0 |
 | CPU untile or copy bytes | **0 change**, 0 today | 0 | 0 |
 | draws taking a tiled shadow | 2 to 4 (the two maps' passes join) | 0 | 0 |
@@ -987,7 +1000,7 @@ terrain's 800x600 target go.
 | chains, level draws | 5, 43; 0 change (drawn into a tiled chain) | 0 | 1, 10; 0 change |
 | RS jobs, tiled to linear | 2 to **0** (terrain pass and overlay copy-backs) | 0 | 0 |
 | RS jobs, linear to tiled | 1, to **0 or 1** (the third tile-in, not attributed above, stays if it is the first draw into a target the shadow does not yet hold) | 0 | 0 |
-| RS jobs, all, against W10 14.2 | **12.2 to 11.2** (against knob off, 13.2: -1 to -2) | 3, 0 | 4, 0 |
+| RS jobs, all, against W10 12 | **10 to 9** (against knob off, 11: -1 to -2) | 3, 0 | 4, 0 |
 | RS bytes | -3.84 MB, up to -5.76 MB (1.92 MB a job) | 0 | 0 |
 | CPU untile or copy bytes | **0 change**, 0 today (the untile is lazy) | 0 | 0 |
 
