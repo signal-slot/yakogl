@@ -729,7 +729,7 @@ fi
 
 echo
 echo "== 30. imx8mp-console-scan-selftest.sh: the console scanner on a synthetic log"
-IMX8MP_SCAN_SELFTEST_CHECKS=22
+IMX8MP_SCAN_SELFTEST_CHECKS=30
 csout=$(bash "$HERE/imx8mp-console-scan-selftest.sh" 2>&1)
 csrc=$?
 csok=$(printf '%s\n' "$csout" | grep -c '^  ok ')
