@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The frag shader of the deqp_mixprec4_eq_vec4 shape, in the style of the dEQP-GLES2.functional.shaders.operator ShaderOperatorCase harness (VK-GL-CTS 93bca01, es2fShaderOperatorTests.cpp) as the deqp_mixcol_hp_bool and deqp_mixprec3_hp_bvec4 references show it, with the operator and width changed; written for docs/notes/mali-deqp-mixprec4.md. Not taken from a .qpa.
