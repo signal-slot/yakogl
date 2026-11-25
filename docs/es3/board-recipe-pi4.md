@@ -942,7 +942,7 @@ its cmake arguments and builds nothing:
 
 ```sh
 HEAD8=$(git rev-parse --short=8 HEAD)
-CASES=196,200,201,202,203,204,205      # the ES 3.0 cases to run; not 245
+CASES=41,42,43,44,45,46,47,48,49,51,52,54,55,57,141,196,199,200,201,202,203,204,205,206,218,221,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243      # 46 cases; not 245
 tools/cts/common-images.sh --dry-run --cases $CASES pi4 tools/cts/common-tree.txt build/gltest/pi4-$HEAD8 GT
 tools/cts/common-images.sh --cases $CASES pi4 tools/cts/common-tree.txt build/gltest/pi4-$HEAD8 GT
 tools/board.sh pi4 run build/gltest/pi4-$HEAD8/GT/zephyr/zephyr.bin records/pi4/gltest-$HEAD8 gltest
@@ -958,7 +958,24 @@ end line is `gl_test: all: ...`. Redact the records with
 anything is committed. Each run is its own tryboot; the ES 2.0 rows of
 section 8 run in the same session, before or after this image.
 
-**Case 245 (`mrt4`) is left out of the list.** It needs four draw buffers, and
+**The list and how it was derived.** The `GT` row builds the sample's default
+list (ES 2.0 cases), so the ES 3.0 cases are named by number. The list is the
+`gl_test.c` cases that need an ES 3.0 library (their header says ES 3.0 or
+`#version 300 es`, or the dEQP-GLES3 rows they copy): the `es3*` cases 41-49,
+51, 52, 54, 55, 57 and 141, then 196, 199-206, 218, 221 and 224-243, 46 cases in
+all (the sample takes at most 64). From it come out the cases with a result in
+a Pi 4 gl_test record of the b1b5b845 run or later: none. The only Pi 4 gl_test
+record, `tools/cts/log/2026-11-pi4-gltest/` (196, 200-205), is from 2026-11-04,
+before b1b5b845 (2026-11-05), and the b1b5b845 run (2026-11-23) did not run the
+`GT` row, so nothing is subtracted and 196 and 200-205 are run again. 244
+(`w128tex`) is not in the list: it is GC7000-only and prints `SKIP` here.
+Check the list against `driver/tools/pvrlab/gl_test.c` and the records of
+`tools/cts/log/` before a run, and drop any case a newer Pi 4 record covers. A
+case that crashes the context ends the run: rerun the cases after it from a
+new list and a new `<img-dir>`.
+
+**Case 245 (`mrt4`) is left out of the list; it waits for the 4-draw-target
+(mrt4) work, because it fails to link against V3D's 3 draw buffers.** It needs four draw buffers, and
 the Pi 4's V3D answers `GL_MAX_DRAW_BUFFERS` 3 (`DRAW_TARGETS` in
 `src/backend.rs`). The knob that would make it run, `V3D_GL_TEST_MRT4` (it
 depends on `YAKOGL_TEST_KNOBS`), calls `v3d_debug_set_draw_targets(4)`, which
