@@ -1,5 +1,16 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2012-2017 Etnaviv Project
+// SPDX-FileCopyrightText: 2012-2026 Wladimir J. van der Laan
+// SPDX-FileCopyrightText: 2012-2026 Christian Gmeiner
+// SPDX-FileCopyrightText: 2012-2026 Lucas Stach
+// SPDX-FileCopyrightText: 2012-2026 Russell King
+// The MIT part is derived from Mesa 26.2.1: etnaviv_rs.c, etnaviv_emit.c, etnaviv_emit.h and
+// etnaviv_clear_blit.c in src/gallium/drivers/etnaviv/ (Copyright (c)
+// 2012-2017 Etnaviv Project), and the register addresses of
+// src/etnaviv/hw/state_3d.xml.h (Copyright (C) 2012-2026 by the four authors
+// above). The upstream part
+// stays under its licence (LICENSES/MIT.txt); our changes are Apache-2.0.
 //! GC7000 (i.MX8MP): a full-target glClear as a resolve-engine (RS) fill,
 //! as a pure function (docs/notes/gc-slow-stream-diff.md, finding 1).
 //!
