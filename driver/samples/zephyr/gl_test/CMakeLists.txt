@@ -79,7 +79,35 @@ if(GL_TEST_ES100)
   message(STATUS "gl_test: GL ES 1.00 shader set (GL_TEST_ES100=ON)")
 endif()
 
-if(CONFIG_YAKOGL_GPU_V3D)
+if(CONFIG_YAKOGL_GPU_V3D71)
+  # ---- Raspberry Pi 5, V3D 7.1 ----------------------------------------------
+  # The 7.1 table (docs/notes/v3d71-gl-table.md) through the same GL core and
+  # in-process compiler. No screen: the console is the board's UART. The
+  # board layer (YAKOGL_GPU_V3D71 selects YAKOGL_RPI5_WDOG and
+  # YAKOGL_RPI5_MBOX, driver/zephyr/lib/board) builds rpi4/rpi_wdog.c and
+  # rpi4/rpi_mbox.c, so this branch adds neither; the watchdog's hold is
+  # YAKOGL_RPI5_WDOG_HOLD_S (boards/rpi_5.conf, the Kconfig).
+  if(NOT CONFIG_YAKOGL_RPI5_WDOG OR NOT CONFIG_YAKOGL_RPI5_MBOX)
+    message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_RPI5_WDOG and CONFIG_YAKOGL_RPI5_MBOX are off (YAKOGL_GPU_V3D71 selects them)")
+  endif()
+  execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
+                  OUTPUT_VARIABLE V3D_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  ERROR_QUIET RESULT_VARIABLE describe_rc)
+  if(NOT describe_rc EQUAL 0 OR V3D_BUILD STREQUAL "")
+    set(V3D_BUILD "unknown")
+  endif()
+  target_compile_definitions(app PRIVATE V3D_BUILD="${V3D_BUILD}")
+
+  target_sources(app PRIVATE src/main_rpi5.c)
+  target_include_directories(app PRIVATE
+    "${PVR_REPO}/zephyr/lib/board/rpi4"             # rpi_mbox.h, rpi_wdog.h
+    "${PVR_REPO}/src/v3d"
+    "${YAKOGL_DIR}/tools/v3d")                      # tex_linear_case.h (case 109)
+
+  # The GL ES 1.00 shader set, always: as the Pi 4.
+  target_compile_definitions(app PRIVATE GL_TEST_ES100=1)
+  target_compile_definitions(app PRIVATE GL_TEST_VTL_PASSES=${CONFIG_V3D_GL_TEST_VTL_PASSES})
+elseif(CONFIG_YAKOGL_GPU_V3D)
   # ---- Raspberry Pi 4, V3D 4.2 ---------------------------------------------
   # Through YakoGL's GL core, its in-process compiler and its V3D backend
   # (docs/online-shaderc/v3d-backend.md, "M6 step B"). The board support (the
