@@ -179,12 +179,12 @@ config GL_TEST_MP2_CASE
 
 config GL_TEST_MP2_SKIP
 	string "Cases the regression set leaves out (decimal, comma separated)"
-	default "10"
+	default ""
 	help
-	  Skipped cases count as neither pass nor failure. Default "10"
-	  (prims): its 3 px wide LINE_LOOP needs wide lines, which the
-	  part's WIDELINE_TRIANGLE_EMU core waits on (Q11). "" runs the
-	  i.MX8MP's whole set.
+	  Skipped cases count as neither pass nor failure. Default "" runs
+	  the i.MX8MP's whole set: case 10 (prims), left out while Q11 was
+	  open (its 3 px wide LINE_LOOP on the WIDELINE_TRIANGLE_EMU core),
+	  passes on the DK. "10" restores the old run.
 
 config GL_TEST_MP2_SET_HEAD
 	bool "Run only the first cases of the regression set"
