@@ -115,5 +115,44 @@ addr="192.0.2"".7"
 sed "s/\$/ host=$addr/" "$tmp/one.txt" > "$tmp/leak.txt"
 refuse "an address in a line" 1 --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/leak.txt"
 
+# 4. the optional inputs: the default output is the same file as before (section 1's README, without them), and a
+# draft with --artefacts, --preflight and --window has the What ran and Console sections, no path, and passes the
+# redact check and merge --check --partial
+pre=$tmp/ws"/out"
+{
+	printf '16443032 %064d %s/es3-9bc82915/zephyr/zephyr.bin\n' 1 "$pre"
+	printf '38164 %064d %s/es3-9bc82915.table.conf\n' 2 "$pre"
+	printf '132944 %064d %s/deqp-stage1-gles3/build/modules/gles3/libdeqp-gles3-package.a\n' 3 "$pre"
+	echo '# CONFIG_DEQP_REPORT_ES2 is not set'
+	echo 'Memory region         Used Size  Region Size  %age Used'
+	echo '             RAM:     222568 KB       256 MB     84.90%'
+} > "$tmp/art.txt"
+{ for i in 1 2 3; do echo "  ok   check $i ($pre/es3-9bc82915/zephyr/zephyr.bin)"; done; echo "preflight: all ok"; } > "$tmp/pre.txt"
+run --commit $full --rows 17-34 --date 2026-11-15 --lines "$tmp/stdout.txt" --results "$slice/results.tsv" \
+	--records "$tmp/a/runs" > "$tmp/plain.md" 2>&1
+cmp -s "$tmp/plain.md" "$tmp/a/slice/README.md" && ok "default output unchanged without the new options" \
+	|| bad "default output differs"
+grep -q '^## What ran\|^## Console' "$tmp/plain.md" && bad "default output has the new sections" || ok "default has no new sections"
+mkdir -p "$tmp/d"
+run --commit $full --rows 17-34 --date 2026-11-15 --lines "$tmp/stdout.txt" --results "$slice/results.tsv" \
+	--artefacts "$tmp/art.txt" --preflight "$tmp/pre.txt" --window 20:46/21:33 --out "$tmp/d" > "$tmp/d.log" 2>&1 \
+	&& ok "draft with the new options written" || bad "draft with the new options refused: $(cat "$tmp/d.log")"
+cp "$slice/results.tsv" "$slice/rows.md" "$tmp/d/"
+d=$tmp/d/README.md
+grep -q '^## What ran$' "$d" && grep -q '^## Console$' "$d" && ok "What ran and Console sections" || bad "sections missing"
+grep -q 'not captured, recoveries not observed' "$d" && ok "console: not captured" || bad "console text"
+grep -q '^Run 2026-11-15, 20:46-21:33 UTC' "$d" && ok "window written" || bad "window"
+grep -q '^16443032 0*1 es3-9bc82915/zephyr/zephyr.bin$' "$d" && grep -q '^132944 0*3 deqp-stage1-gles3/build/' "$d" \
+	&& ok "artefact lines cut below IMX8MP_OUT" || bad "artefact lines"
+grep -q 'RAM:     222568 KB' "$d" && ok "memory line kept" || bad "memory line"
+grep -q '3 `ok` lines, `preflight: all ok`' "$d" && ok "preflight result" || bad "preflight result"
+grep -q 'TREE_ROWS=16-33 TREE_IMAGE=\$IMX8MP_OUT/es3-9bc82915/' "$d" && ok "commands with knob names" || bad "commands"
+grep -qF "$pre" "$d" && bad "a path was copied" || ok "no path copied"
+python3 -I "$redact" --check "$d" > "$tmp/r.txt" 2>&1 && ok "new-options draft passes redact --check" || bad "redact: $(cat "$tmp/r.txt")"
+python3 -I "$merge" --check --partial "$tmp/d" > "$tmp/m.txt" 2>&1 && ok "new-options draft: merge --check passes" \
+	|| bad "new-options merge --check: $(cat "$tmp/m.txt")"
+refuse "bad window" 2 --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --window 25:00/26:00
+refuse "empty artefacts" 2 --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --artefacts "$tmp/pre.txt"
+
 echo "slice-selftest: $nok ok, $nfail failed"
 [ "$nfail" = 0 ]
