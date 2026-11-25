@@ -89,6 +89,25 @@ config DEQP_ECHO_QPA
 	  (random.texture.vertex.41, 2026-09-25). The V3D image has its own
 	  raw tee (CONFIG_V3D_DEQP_QPA_UART, the Pi 4).
 
+config DEQP_QUIET_STAMPS
+	bool "Quiet console: uptime progress stamps instead of per-case result lines"
+	depends on YAKOGL_BOARD_STM32MP2
+	default n
+	help
+	  For a dEQP run on the STM32MP257F-DK whose console is too slow or
+	  too small to carry one line per case. The image prints no
+	  "deqp: <status> <case>" lines; it prints
+	  "deqp: stamp uptime_ms=<u64> case=<index> done=<n> pass=<p> fail=<f>
+	  other=<o>" every DEQP_STAMP_EVERY finished cases and once more at the
+	  end, before the usual "deqp: summary" line. tools/cts/mp2-case-times.py
+	  reads the stamps. Off (the default) changes nothing.
+
+config DEQP_STAMP_EVERY
+	int "Finished cases between two stamps"
+	depends on DEQP_QUIET_STAMPS
+	range 1 100000
+	default 50
+
 config DEQP_PVR_NATIVE_CUBE
 	int "PowerVR: the native cube (pvr_native_cube): -1 the library's default, 0 off, 1 on"
 	depends on YAKOGL_GPU_POWERVR
