@@ -823,6 +823,66 @@ T6_ROUTE=tftp bash "$V" t6_hello "$D/t6_hello-pass.uart" >/dev/null 2>&1 || rc=$
 runs=$((runs + 1))
 if [ "$rc" = 2 ]; then echo "ok   unknown route: rc 2"; else echo "FAIL unknown route: rc $rc (want 2)"; fails=$((fails + 1)); fi
 
+# ---- the U-Boot route: triangle, and gpu_clock_set's move and refusal ------
+# triangle-uboot-{cold,adopt}-pass: the triangle's kexec Zephyr part
+# (triangle-{cold,adopt}-pass) behind U-Boot's header (t6_hello-uboot-pass,
+# with the image's WDT0 numbers: lifetime 300 s, alive 20 s). Every body line
+# is a printf of examples/triangle/src/main.c, the board layer
+# (t6_display_record.c, board_first_show) or the drivers crate, as the kexec
+# fixtures; a record from U-Boot's own state is still to be read on the board.
+check triangle-uboot-cold-pass 0 'VERDICT triangle PASS' "$TRI 0 0" triangle "$D/triangle-uboot-cold-pass.uart" T6_ROUTE=uboot
+check triangle-uboot-adopt-pass 0 'VERDICT triangle PASS' "$TRIA 0 0" triangle "$D/triangle-uboot-adopt-pass.uart" T6_ROUTE=uboot
+# the same record on the kexec route lacks the kexec boot lines: not a PASS
+runs=$((runs + 1))
+out=$(bash "$V" triangle "$D/triangle-uboot-cold-pass.uart" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ]; then
+	echo "ok   triangle-uboot-as-kexec: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+else
+	echo "FAIL triangle-uboot-as-kexec: rc $rc"
+	fails=$((fails + 1))
+fi
+# a failed check stays a FAIL on this route
+sed -e 's/inside wrong 0 /inside wrong 12 /' -e 's/^triangle: check PASS .*/triangle: check FAIL: inside pixels wrong (code 1)/' \
+	-e 's/^triangle: PASS$/triangle: FAIL/' "$D/triangle-uboot-cold-pass.uart" >"$WORK/tu-fail.log"
+runs=$((runs + 1))
+out=$(T6_ROUTE=uboot bash "$V" triangle "$WORK/tu-fail.log" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && [[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT triangle FAIL ('* ]]; then
+	echo "ok   triangle-uboot-check-fail: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+else
+	echo "FAIL triangle-uboot-check-fail: rc $rc"
+	fails=$((fails + 1))
+fi
+
+# t6_gpu from the state the T6's U-Boot prompt read (note
+# nanopc-t6-uboot-handover.md sections 1 and 4; rk3588.rs
+# the_clock_u_boot_leaves_is_moved_to_cpll_over_5): CLKSEL_CON(158) 0x1f80
+# (the SPLL, no rate), CLKGATE_CON(66) 4, MODE_CON0 0x545, PD_GPU off. The
+# lines are t6_z1_print_handover / t6_z1_print_record (tools/probes/nanopc_t6/
+# common/t6_z1.c); gpu_clock_set writes 0x40ff0024 and reads back 0x1f24.
+# (t6_cold is a display probe: it never calls gpu_up and prints none of
+# these lines, so the move is judged on t6_gpu, the probe that prints it.)
+check t6_gpu-uboot-clock-move 0 'VERDICT t6_gpu PASS' "$UG 0 0" t6_gpu "$D/t6_gpu-uboot-move-pass.uart" T6_ROUTE=uboot
+# the move that reads back the SPLL again is not a PASS line the run can reach:
+# the record is judged as written, so a wrong "now" word is a plain line check
+runs=$((runs + 1))
+if grep -q 'wrote CLKSEL_CON(158) 0x40ff0024 (159) 0x00000000, now 0x00001f24' "$D/t6_gpu-uboot-move-pass.uart"; then
+	echo "ok   t6_gpu-uboot-clock-move: wrote 0x40ff0024, read back 0x1f24"
+else
+	echo "FAIL t6_gpu-uboot-clock-move: fixture lost its move words"
+	fails=$((fails + 1))
+fi
+# stop 9 (Stop::ClockSetRefused): the clock is on no OPP rate and the CPLL is
+# not 1500 MHz, nothing written; judged FAIL on the FAIL line, with the reason
+runs=$((runs + 1))
+out=$(T6_ROUTE=uboot bash "$V" t6_gpu "$D/t6_gpu-uboot-clock-refused-stop9.uart" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -q '^differs .*t6_gpu: FAIL: stop 9 (the GPU clock is on no OPP rate' &&
+	[[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT t6_gpu FAIL ('* ]]; then
+	echo "ok   t6_gpu-uboot-clock-refused-stop9: FAIL on the stop 9 line, $(printf '%s\n' "$out" | tail -n 1)"
+else
+	echo "FAIL t6_gpu-uboot-clock-refused-stop9: rc $rc"
+	fails=$((fails + 1))
+fi
+
 if [ "$fails" -eq 0 ]; then
 	echo "t6-verdict-test: $runs ok"
 	exit 0
