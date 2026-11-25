@@ -372,3 +372,38 @@ cannot abort at the tip by their return codes (T14a's (c) is sized on the host b
 fail as one case each is for the board. Board sessions `board1` and `board2` of
 plan #398 confirm or move each entry: a case that still refuses there stays on
 its issue draft, not reported as fixed.
+
+## G. The 3 draw targets: the FR2 errors and the S03a link fails
+
+V3D draws three colour targets, not the four ES 3.0 asks for. This is not a
+refusal of a draw; it is a limit the GL core reports and checks, so the cases
+below end in a Fail (a link error or a GL error), never in an abort.
+
+- `DRAW_TARGETS` is 3 for `gpu-v3d` (`src/backend.rs:901`, the `gpu-v3d`
+  arm just below it; the comment above it says the TLB takes targets 0-3 and
+  the compiler writes four, but no board has drawn four).
+- `max_draw_buffers()` returns it (`src/gl/context.rs:236`) and
+  `max_color_attachments()` returns `max_draw_buffers()`
+  (`src/gl/context.rs:246`). So `GL_MAX_DRAW_BUFFERS` and
+  `GL_MAX_COLOR_ATTACHMENTS` are 3 here, below ES 3.0's minimum of 4.
+- The program link checks a fragment output's last location against it
+  (`src/gl/program.rs:1715`): `link error: fragment output at location 3 ends
+  at 4, beyond the 3 draw buffers`.
+
+| Image | Tree row (`tools/cts/pi4-gles3-tree.txt`) | Cases | Effect on the host v3d run | Why |
+| --- | --- | --- | --- | --- |
+| FR2 | `fragment_out.basic.*` and `fragment_out.random.*` | 520 | 26 errors | fragment outputs at location 3 and the 4 draw buffers the cases ask for |
+| S03a | `shaders.builtin_functions.precision.*` (S03a holds the rest of S03-S08) | 1141 | 54 cases fail at link | `matrixcompmult`, `outerproduct` and `transpose` of `mat4`, `mat4x2` and `mat4x3`: a mat4 output takes locations 0-3, so it ends at 4, beyond the 3 draw buffers |
+
+These 80 cases are Fails, not aborts, and stay Fails until V3D supports 4
+targets. They are not in the draw refusals of section A or the aborts of
+sections E and F.
+
+Raising the limit needs its own plan (mrt4), not a one-line change to
+`DRAW_TARGETS`: it reaches `fbo` (the attachment and completeness checks and
+the per-target clears), `fragment_out` (the output locations and the
+`glDrawBuffers` mapping), `draw_buffers` (the colour write masks and blend
+enables per target, which are already per-RT) and the 4096 memory budget (a
+fourth target of a 4096x4096 fbo adds a colour buffer to the carve-out sizing
+of `docs/notes/v3d-large-targets.md`). Every board result of those images
+moves with it, so the plan re-runs them.
