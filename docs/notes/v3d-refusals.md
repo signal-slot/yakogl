@@ -231,7 +231,7 @@ case.
 | TF1b | `transform_feedback.array.separate.lines.highp_mat3` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
 | TF2a | `transform_feedback.basic_types.interleaved.lines.lowp_mat4` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
 | TF2b | `transform_feedback.basic_types.separate.lines.highp_mat4` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
-| TF2c | `transform_feedback.random_full_array_capture.interleaved.lines.1` | same as TF1a | B3.9 | same as TF1a | `-ENOTSUP` at most (fails one case). No host test models `random_full_array_capture` | b7c1484e; 6581f22b likely | none for this group |
+| TF2c | `transform_feedback.random_full_array_capture.interleaved.lines.1` | same as TF1a | B3.9 | same as TF1a | `-ENOTSUP` at most (fails one case). `tests/es3_tf_random_capture_v3d.rs` (929a64a4) draws the 60 `random_full_array_capture` cases through the real job builder: none refused | b7c1484e; 6581f22b likely | none for this group |
 
 What the tip removes:
 
@@ -242,12 +242,14 @@ What the tip removes:
 - TF1a, TF1b, TF2a, TF2b and TF2c (B3.9): none of them can abort at the tip,
   because the job builder's catch-all is `-ENOTSUP`. On the host the four
   `array`/`basic_types` cases draw. One caveat: `es3_tf_v3d.rs` models the
-  failing cases with a 24-input cap. Its `lowp_mat4` (16 inputs) is under
-  that cap, yet TF2a's `lowp_mat4` was refused on the board. Its cause may
-  be something other than the input cap, and only a board run shows whether
-  these cases pass or fail as one case each.
-- T14a still aborts: the lost draw answers `-E2BIG`, which becomes
-  GL_OUT_OF_MEMORY.
+  failing cases with a 24-input cap. This paragraph first read TF2a's
+  `lowp_mat4` as 16 inputs, under that cap; `es3_tf_v3d.rs` counts it at 32
+  fragment inputs (2 x 16), over the old 24, so the cap explains it (F, row
+  (d)). Only a board run shows whether these cases pass or fail as one case
+  each.
+- T14a still aborts on `rpi_4b.conf`: the lost draw answers `-E2BIG`, which
+  becomes GL_OUT_OF_MEMORY. On the host it fits the sizing of
+  `texture-2048.conf` (F, row (c)); no board run with that file exists yet.
 
 ### E2. The image labels the post-b1b5b845 V3D changes reach
 
@@ -309,8 +311,12 @@ that image. It does not mean a row is known to move.
 
 ### E3. What is left, and the shape of a fix
 
-- T14a (lost draw, `-E2BIG`): a V3D-only fix is likely, but the code alone
-  does not give it. The eight cube units' kept copies (2-4 MiB each) do not
+- T14a (lost draw, `-E2BIG`): the sizing is found since (F, row (c)):
+  `texture-2048.conf`, a 117440512-byte carve-out and 33554432 bytes of
+  tiled copies, holds every T14/T14a cube and mixed case on the host
+  (3a9b0515, d3295967, a6219832). The text that follows is the earlier
+  analysis, kept for the code it names. A V3D-only fix was thought likely,
+  but the code alone did not give it. The eight cube units' kept copies (2-4 MiB each) do not
   find memory in the 48 MiB carve-out while 9.5 MiB of copies are live. The
   arena fallback cannot hold them, so the draw is lost. Candidates in
   `src/v3d` are freeing the kept copies no unit of this draw samples before
@@ -324,8 +330,8 @@ that image. It does not mean a row is known to move.
   one `V3D_JOB_REFUSED` for `draw_is_supported`, `record_draw` and a bad
   field alike (`v3d_job.c:1078`, `:1093`). Splitting that status would be a
   V3D-only change that names the cause; it needs no `src/gl` change.
-  TF2a's refused `lowp_mat4` (16 inputs, under the old cap) says a second
-  cause is possible.
+  TF2a's `lowp_mat4` is 32 inputs, over the old cap, so no second cause is
+  known (F, row (d)).
 - S03a, S07, T05ca, T05cb, T05cc, T17a: nothing is left on the V3D side
   for the abort. Their cases now produce results on the board.
 
@@ -346,10 +352,10 @@ ends. At the tip `-ENOTSUP` fails one case instead; `-E2BIG` still aborts.
 
 | Cause | Refusing cases (`dEQP-GLES3.functional.`) | Refusal string | Where at `35e03a2e` | Kind at the tip | Hardware or driver | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
-| (a) target past the tile memory | S03a `shaders.builtin_functions.precision.abs.highp_fragment.vec2` | a target larger than the tile memory is sized for (2048x2048), or empty (the tip's text: `(4096x4096)`) | `backend.rs:6826-6827` against `MAX_TARGET` = 4096 (`backend.rs:447`) | `-ENOTSUP` (was `-EINVAL`). The shader executor's 4096 x 2-6 targets are no longer refused | driver: the 2048 cap was the init sizing of the tile memory, not a V3D limit (`docs/notes/v3d-large-targets.md`) | #2 |
-| (b) ETC2 not sampled | T05ca `texture.format.compressed.etc2_eac_rgba8_cube_pot`; T05cb `...etc2_rgb8_cube_npot`; T05cc `...etc2_rgb8_cube_pot`; T17a `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | `texture.rs:390` (`NOT_SAMPLED`), `:439-440`; `GAPS` `texture.rs:404`, answered at `backend.rs:4497-4499`; the set is `V3D_SAMPLED_TEXFMTS`, `src/backend.rs:290-309` | `-ENOTSUP` for a format outside the set. The four ETC2 classes are in the set, so these cases are no longer refused | driver: the TMU has the types (below) | drafted: "V3D: ETC2/EAC texture formats outside the four GL-core classes (ETC2 RGB8 A1, EAC R11/RG11) are not sampled" |
-| (c) no GPU memory for an empty job | T14a `texture.units.8_units.only_cube.2` | no empty job holds the draw (its lists, or its client data with no memory of its own), after `osal(v3d): out of GPU memory` for 2,117,632, 3,149,824 and 4,206,592 bytes | `backend.rs:6214-6217` (`count_refusal` then `-E2BIG`); the kept copy finds no memory at `backend.rs:4878-4892`; the arena fallback `Attempt::Full` at `backend.rs:4768` | `-E2BIG`, **still aborts** (GL_OUT_OF_MEMORY). Not changed by any commit since `b1b5b845` | driver and board config: eight cube units of 2-4 MiB kept copies against a 48 MiB carve-out with 9.5 MiB live (`tiled_budget`, `backend.rs:1401`, `:4849`); V3D 4.2 itself addresses 32 bits | drafted: "V3D: eight cube units (texture.units.8_units.only_cube.2) lose the draw for lack of GPU memory and abort the image" |
-| (d) job builder catch-all | TF1a `transform_feedback.array.interleaved.lines.highp_mat3`; TF1b `...array.separate.lines.highp_mat3`; TF2a `...basic_types.interleaved.lines.lowp_mat4`; TF2b `...basic_types.separate.lines.highp_mat4`; TF2c `...random_full_array_capture.interleaved.lines.1` | the job builder refused the draw (a uniform, program or primitive it does not write) | `backend.rs:3988-3990` (`Attempt::Unsupported`) over `v3d_job_draw`'s one `V3D_JOB_REFUSED` (`driver/src/v3d/v3d_job.c:1077-1078`, `:1093`); `draw_is_supported`, `:868`, with the fragment-input cap `num_inputs > 64` at `:876` | `-ENOTSUP` at the tip (one Fail, no abort). `b1b5b845` capped inputs at 24 | driver for the 24-input cap (Mesa's `V3D_MAX_FS_INPUTS` is 64, `third_party/mesa-26.2.1/src/broadcom/common/v3d_limits.h:32`). TF2a's `lowp_mat4` (16 inputs) and TF2c are not explained by the cap: cause unknown | drafted: "V3D: split V3D_JOB_REFUSED so a refused draw names its cause" (first step); TF2a/TF2c cause after it |
+| (a) target past the tile memory | S03a `shaders.builtin_functions.precision.abs.highp_fragment.vec2` | a target larger than the tile memory is sized for (2048x2048), or empty (the tip's text: `(4096x4096)`) | `backend.rs:6826-6827` against `MAX_TARGET` = 4096 (`backend.rs:447`) | `-ENOTSUP` (was `-EINVAL`). The shader executor's 4096 x 2-6 targets are no longer refused; `tests/es3_precision_target_v3d.rs` (3d09273b) draws them through the real job builder for S03a and S07, with no refusal. Board-only: the job builder on hardware and the pass or fail of S03a and S07's cases | driver: the 2048 cap was the init sizing of the tile memory, not a V3D limit (`docs/notes/v3d-large-targets.md`) | #2 |
+| (b) ETC2 not sampled | T05ca `texture.format.compressed.etc2_eac_rgba8_cube_pot`; T05cb `...etc2_rgb8_cube_npot`; T05cc `...etc2_rgb8_cube_pot`; T17a `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | `texture.rs:390` (`NOT_SAMPLED`), `:439-440`; `GAPS` `texture.rs:404`, answered at `backend.rs:4497-4499`; the set is `V3D_SAMPLED_TEXFMTS`, `src/backend.rs:290-309` | `-ENOTSUP` for a format outside the set. The four ETC2 classes are in the set, so these cases are no longer refused; `tests/es3_etc2_cube_wrap_v3d.rs` (ffab15d4) draws the cube and wrap cases of T05ca-cc and T17a with no refusal. Board-only: the TMU decode of the texels | driver: the TMU has the types (below) | drafted: "V3D: ETC2/EAC texture formats outside the four GL-core classes (ETC2 RGB8 A1, EAC R11/RG11) are not sampled" |
+| (c) no GPU memory for an empty job | T14a `texture.units.8_units.only_cube.2` | no empty job holds the draw (its lists, or its client data with no memory of its own), after `osal(v3d): out of GPU memory` for 2,117,632, 3,149,824 and 4,206,592 bytes | `backend.rs:6214-6217` (`count_refusal` then `-E2BIG`); the kept copy finds no memory at `backend.rs:4878-4892`; the arena fallback `Attempt::Full` at `backend.rs:4768` | `-E2BIG`, **still aborts** (GL_OUT_OF_MEMORY). Not changed by any commit since `b1b5b845` | driver and board config: eight cube units of 2-4 MiB kept copies against a 48 MiB carve-out with 9.5 MiB live (`tiled_budget`, `backend.rs:1401`, `:4849`); V3D 4.2 itself addresses 32 bits. Sized on the host since: `tests/v3d_units_cube_mem.rs` (3a9b0515, d3295967) replays the T14/T14a cube and mixed cases; with `rpi_4b.conf` an 8_units.only_cube case fails to allocate, with `driver/samples/zephyr/deqp/texture-2048.conf` (a6219832: 117440512-byte carve-out, 33554432-byte tiled budget) every case allocates (the minimum is 105 MiB). Board-only: T14a with `texture-2048.conf` has not run, and the TMU decode | drafted: "V3D: eight cube units (texture.units.8_units.only_cube.2) lose the draw for lack of GPU memory and abort the image" |
+| (d) job builder catch-all | TF1a `transform_feedback.array.interleaved.lines.highp_mat3`; TF1b `...array.separate.lines.highp_mat3`; TF2a `...basic_types.interleaved.lines.lowp_mat4`; TF2b `...basic_types.separate.lines.highp_mat4`; TF2c `...random_full_array_capture.interleaved.lines.1` | the job builder refused the draw (a uniform, program or primitive it does not write) | `backend.rs:3988-3990` (`Attempt::Unsupported`) over `v3d_job_draw`'s one `V3D_JOB_REFUSED` (`driver/src/v3d/v3d_job.c:1077-1078`, `:1093`); `draw_is_supported`, `:868`, with the fragment-input cap `num_inputs > 64` at `:876` | `-ENOTSUP` at the tip (one Fail, no abort). `b1b5b845` capped inputs at 24 | driver for the 24-input cap (Mesa's `V3D_MAX_FS_INPUTS` is 64, `third_party/mesa-26.2.1/src/broadcom/common/v3d_limits.h:32`). TF2a's `lowp_mat4` is 32 fragment inputs (2 x 16), over the 24 of `b1b5b845`, so the cap explains it; TF2c's random programs are the same class. No cause is unknown on the host: `tests/es3_tf_v3d.rs` (78741eae) draws the TF1/TF2 mat3/mat4 line cases at lowp, mediump and highp, and `tests/es3_tf_random_capture_v3d.rs` (929a64a4) draws the 60 `random_full_array_capture` cases, through the real job builder with no refusal. Board-only: the job builder on hardware | drafted: "V3D: split V3D_JOB_REFUSED so a refused draw names its cause" (first step); TF2a/TF2c cause after it |
 
 Hardware side of (b), read in the vendored Mesa (read only): the v3d format
 table maps `ETC2_RGB8`, `ETC2_SRGB8` to `RGB8_ETC2`, `ETC2_RGBA8` and
@@ -362,7 +368,7 @@ TMU does have an ETC2 RGBA8 type. The refusal was a missing driver path, and
 the tip removes it for the four classes (455c3bb5).
 
 Which causes can still end an image on the board: only (c). (a), (b) and (d)
-cannot abort at the tip by their return codes; whether their cases pass or
+cannot abort at the tip by their return codes (T14a's (c) is sized on the host by `texture-2048.conf`, not yet run on the board); whether their cases pass or
 fail as one case each is for the board. Board sessions `board1` and `board2` of
 plan #398 confirm or move each entry: a case that still refuses there stays on
 its issue draft, not reported as fixed.
