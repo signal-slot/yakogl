@@ -50,6 +50,16 @@ check "--refusal keeps the cases of that text only" \
 python3 -I "$TOOL" --mustpass "$tmp/mp.txt" --families "$tmp/fam.txt" --refusal 'second' --refusal 'also' "$tmp/a" "$tmp/b" > "$tmp/g.txt"
 check "--refusal repeats: two texts keep both families" test "$(grep -c '^# image ' "$tmp/g.txt")" -eq 2
 
+# iMX95 slice: its own name, rows.tsv with a hang row, no kmsg/; and a hung row's
+# slice with no refusals.tsv at all (a note on stderr, no refusal counted).
+im=$tmp/2026-12-01-imx95-gles2-S1-e63ab28e; hg=$tmp/2026-12-01-imx95-gles2-S2-e63ab28e
+mkdir "$im" "$hg"
+cp "$tmp/b/refusals.tsv" "$im/refusals.tsv"
+printf 'row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line\n1\tT6S1R01\t3\tdone\t9\t0\t0\tyes\tyes\t-\n2\tT6S1R02\t2\thang\t360\t0\t0\tyes\tyes\tverdin_imx95: WDOG3 feeding stopped\n' > "$im/rows.tsv"
+python3 -I "$TOOL" --mustpass "$tmp/mp.txt" --families "$tmp/fam.txt" "$im" "$hg" > "$tmp/i.txt" 2> "$tmp/ierr.txt"
+check "iMX95 slice (rows.tsv, no kmsg/) builds a table; the slice without refusals.tsv is noted" \
+  test $? -eq 0 -a "$(grep -c 'no refusals.tsv' "$tmp/ierr.txt")" -eq 1 -a "$(grep -c '^# image T6RF001: 3$' "$tmp/i.txt")" -eq 1
+
 python3 -I "$TOOL" --mustpass "$tmp/mp.txt" --families "$tmp/fam.txt" "$tmp/nonesuch" > /dev/null 2>&1
 check "a slice that cannot be read exits 2" test $? -eq 2
 python3 -I "$TOOL" --mustpass "$tmp/mp.txt" --families "$tmp/fam.txt" > /dev/null 2>&1

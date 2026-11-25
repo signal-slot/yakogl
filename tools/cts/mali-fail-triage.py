@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Draft cause table and issue list from NanoPC-T6 dEQP-GLES2 slices.
+"""Draft cause table and issue list from Mali dEQP-GLES2 slices.
+
+The slices are those of the NanoPC-T6 (Linux, panthor) or of the Verdin iMX95
+(Zephyr, Mali-G310): the T6 layout, the kmsg/ directory optional, chunks.tsv
+read as rows.tsv when only that file exists (same columns).
 
   python3 -I tools/cts/mali-fail-triage.py [--forecast NOTE] [--mali-src FILE]...
                                            SLICE...
@@ -27,6 +31,10 @@ exactly one cause, the first that applies:
      chunk-hang) in a crash, hang or fault chunk: the chunk's kernel class
      (mali-kmsg.py: mmu_faults, fw_faults, gpu_faults, cs_faults, timeouts,
      resets, other_panthor, or none), row "<status> chunk: <class>".
+  4a. a Lost, Crash, Timeout, InternalError or ResourceError of a chunk whose
+     exit line or detail says "WDOG3 feeding stopped" (verdin_imx95) or
+     "lifetime over": row "hang: WDOG3 feeding stopped" / "hang: lifetime
+     over", a known cause that is not a Fail (the row was lost to the hang).
   5. Lost (board-lost, not-run): "not run", no cause (the cases are rerun).
   6. NotSupported, QualityWarning, CompatibilityWarning: not a Fail, no cause.
   7. any other: "unexplained <status> in <group at depth 3>" (the three
@@ -68,6 +76,9 @@ MSG_RE = re.compile(r"(Valhall: .*?is not lowered yet|mali frame: .*|mali: .*)")
 FIRST_REFUSED = re.compile(r"first_refused=(.*?)(?:\s+gpu_faults=\d+.*)?\s*$")
 IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b")
 USERHOST = re.compile(r"\b[\w.-]+@[\w.-]+\b")
+HANG_MARKERS = (("hang: WDOG3 feeding stopped", re.compile(r"WDOG3 feeding stopped", re.I)),
+                ("hang: lifetime over", re.compile(r"lifetime over", re.I)))
+HANG_STATUS = CHUNK_CAUSE_STATUS + ("Lost",)
 MAX_EXAMPLES = 3
 
 
@@ -178,6 +189,30 @@ def group_of(case):
         parts = parts[1:]
     parts = parts[:-1] or parts
     return ".".join(parts[:3])
+
+
+def load_slice(path):
+    """tally.load_slice, with rows.tsv read as chunks.tsv when only it exists."""
+    d = path.rstrip("/")
+    if os.path.exists(os.path.join(d, "chunks.tsv")) or \
+            not os.path.exists(os.path.join(d, "rows.tsv")):
+        return tally.load_slice(path)
+    meta = {}
+    try:
+        with open(os.path.join(d, "meta.txt"), encoding="utf-8") as f:
+            for ln in f.read().splitlines():
+                if "=" in ln:
+                    k, v = ln.split("=", 1)
+                    meta[k.strip()] = v.strip()
+    except OSError as e:
+        raise Fatal("%s/meta.txt: %s" % (d, e.strerror))
+    chunks = tally.read_tsv(os.path.join(d, "rows.tsv"), tally.CHUNK_COLS)
+    results = tally.read_tsv(os.path.join(d, "results.tsv"), ("case", "status", "detail"))
+    refusals = None
+    if os.path.exists(os.path.join(d, "refusals.tsv")):
+        refusals = tally.read_tsv(os.path.join(d, "refusals.tsv"), tally.REFUSAL_COLS)
+    return {"path": d, "name": os.path.basename(d), "meta": meta,
+            "chunks": chunks, "results": results, "refusals": refusals}
 
 
 def chunk_kmsg(s, label, row):
@@ -298,6 +333,13 @@ def triage(slices, fc):
                 add("MATRIX_ATTRIB", "matrix", True, hit[1] if hit else "see forecast",
                     s, case, status, detail)
                 continue
+            if status in HANG_STATUS:
+                hang = next((lab for lab, rx in HANG_MARKERS
+                             if rx.search(exit_line) or rx.search(detail)), None)
+                if hang:
+                    add(hang, "hang", True, "none (not a Fail: the row hung)", s, case,
+                        status, detail, first)
+                    continue
             lost_chunk = status == "Lost" and detail.strip() in ("chunk-crash", "chunk-hang")
             if cstatus in BAD_CHUNK and (status in CHUNK_CAUSE_STATUS or lost_chunk):
                 add("%s chunk: %s" % (cstatus, kmsg_class(r) if r else "none"), "kmsg",
@@ -414,7 +456,7 @@ def run(argv):
                 raise
     fc = Forecast(read_text(forecast), srcs)
     try:
-        slices = [tally.load_slice(p) for p in args]
+        slices = [load_slice(p) for p in args]
     except tally.Fatal as e:
         raise Fatal(str(e))
     return render(slices, triage(slices, fc)) + "\n", slices
@@ -481,6 +523,13 @@ def self_test():
     chk("mali-deqp/good: table sum equals the tally's non-Pass (%d)" % want, got == want)
     out3, _s = run(good)
     chk("default forecast note and sources load", "## Draft issues" in out3)
+    x = os.path.join(fx, "imx95")
+    if os.path.isdir(x):
+        out4, _s = run(base + [os.path.join(x, d) for d in sorted(os.listdir(x))])
+        chk("iMX95 WDOG3 hang row is a hang cause, not a Fail",
+            re.search(r"\| hang: WDOG3 feeding stopped \| 2 \|.*\| yes \|", out4) is not None)
+        chk("iMX95 lifetime row is a hang cause", "| hang: lifetime over | 1 |" in out4)
+        chk("iMX95 hang cause opens no draft issue", "Draft issue: Mali dEQP-GLES2: hang" not in out4)
     print("%d checks passed" % n_ok if not n_bad else
           "%d checks passed, %d FAILED" % (n_ok, n_bad))
     return 1 if n_bad else 0

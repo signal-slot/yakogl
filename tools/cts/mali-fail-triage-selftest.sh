@@ -36,6 +36,15 @@ for pat in 'refused MixedPrecision .*yes' 'refused CompareForm .*yes' 'made-up f
     grep -Eq "$pat" <<<"$got" && ok "row: $pat" || bad "no row: $pat"
 done
 
+# iMX95 (Zephyr) fixture: a WDOG3 hang row, a lifetime row, no kmsg/, one slice
+# with rows.tsv instead of chunks.tsv. The hang rows are causes that are not Fails.
+imx=$(run "$DATA"/imx95/* 2>&1)
+if [ "$imx" = "$(cat "$DATA/expected-imx95.md")" ]; then ok "iMX95 output equals expected-imx95.md"; else bad "iMX95 output differs from expected-imx95.md"; fi
+for pat in 'hang: WDOG3 feeding stopped \| 2 ' 'hang: lifetime over \| 1 '; do
+    grep -Eq "$pat" <<<"$imx" && ok "iMX95 row: $pat" || bad "no iMX95 row: $pat"
+done
+grep -q 'Draft issue: .*hang' <<<"$imx" && bad "a hang row opened a draft issue" || ok "no draft issue for a hang row"
+
 python3 -I "$TOOL" --forecast "$DATA/forecast.md" "$DATA/nope" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "unreadable slice exits 2" || bad "unreadable slice exited $rc"
 
