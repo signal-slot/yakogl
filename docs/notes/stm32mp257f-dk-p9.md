@@ -7,7 +7,8 @@ Roadmap item P9 (`docs/notes/pre-study-stm32mp257f-dk.md:979`): the DK's
 i.MX8MP's failures, and the line-width decision Q11 (`:890`). The DK's first
 triangle has run on the board (`docs/notes/stm32mp257f-dk-bringup.md:696`,
 2026-11-23). **Status: both suites and the Q11 board test have run on the board
-(2026-11-24), all from origin/main `a5f1dc8e`; results in section 6. Sections
+(2026-11-24), all from origin/main `a5f1dc8e`, and the gl_test set again on
+2026-11-25 from origin/main `670913e1`, timed; results in section 6. Sections
 1-5 are the procedure as written beforehand; section 6 corrects what the runs
 showed.**
 
@@ -336,26 +337,42 @@ checks and a failure of any is a defect in the emulation.
 - Run order: gl_test regression set (section 2, 3), then the dEQP shards.
 - The 17 wide-line names stay out of the first sweep (exclude file) and come
   back after step (1) of the recommendation.
-- Not verified: the DK's hardware behaviour for wide lines; whether the 49
-  default gl_test cases finish inside the 100 s lifetime; the time per dEQP
-  shard on the DK; the `state_query.floats.aliased_line_width_range_*` checks.
+- Not verified when this was written: the DK's hardware behaviour for wide
+  lines; whether the 49 default gl_test cases finish inside the 100 s
+  lifetime (answered in section 6: 14.4 s of 100 s for all 50); the time per
+  dEQP shard on the DK; the `state_query.floats.aliased_line_width_range_*`
+  checks.
 - A finished DK row replaces the current text in `tools/cts/RESULTS.md` and
   `tools/cts/STATUS.md` (CLAUDE.md) and gets an issue update on #1281 and #7;
   the Q11 decision goes back into the pre-study's Q11 row.
 
 ## 6. Results on the board (2026-11-24, built from `a5f1dc8e`)
 
-Every result below was built from `a5f1dc8e` (origin/main). Records are
-gitignored, under `records/stm32mp257f-dk/`, cited by name. Every run is judged
-on the serial console; the console has no time stamps, so there is no DK time
-table. After the runs `u-boot-env` and `/boot` were back byte for byte.
+Every result below was built from `a5f1dc8e` (origin/main), except the
+gl_test set rerun, which was built from origin/main `670913e1`. Records are
+gitignored under `records/stm32mp257f-dk/` and are cited by name. Every run is
+judged on the serial console. The console has no time stamps, so a run's time
+comes from the image's own lines: `gl_test: the suite took <n> ms` and the
+layer's `PSCI SYSTEM_RESET at <n> ms` of uptime. After the runs, `u-boot-env`
+and `/boot` were back byte for byte.
 
 ### gl_test
 
-The regression set (50 cases, case 10 included): 44 PASS, 5 FAIL (cases 6, 11,
-47, 182, 189), 1 SKIP (case 16), in `20261124-1044-gl_test_all-a5f1dc8e`. The
-per-case table and the diff (`mp2-gltest-diff: new 5, flaky 0, expected 0,
-missing 0`) are in the bring-up note, "Board verdicts". Case 10 passed.
+The regression set (50 cases, case 10 included) was rerun on 2026-11-25 from
+an origin/main `670913e1` image (record `20261125-1325-gltest-set-670913e1`).
+The result is the same as the `a5f1dc8e` run (`20261124-1044-gl_test_all-a5f1dc8e`):
+44 PASS, 5 FAIL (cases 6, 11, 47, 182, 189) and 1 SKIP (case 16). Case 10
+passed, and its check 11 (`loop: 3 px wide`) is included in that pass.
+`mp2-gltest-shards.py --skip "" --budget-ms 90000` plans one shard, and that
+shard ran in one run:
+
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (shard 0 of 1, 50 cases: 14.4 s of 100 s; `gl_test: the suite took 11431 ms`, `PSCI SYSTEM_RESET at 14407 ms`, no `mp2: lifetime` line, back on Linux after 70 s)
+
+There was no hang or refusal in the Vivante back end: `draws refused 0`,
+fences 173 of 173. The section 2 question is answered: the whole set fits
+the 100 s lifetime with 85 s to spare, so the lifetime and `RUN_BOUND` stay as
+they are. The per-case table and the failing checks are in the bring-up
+note, "Board verdicts".
 
 ### dEQP-GLES2 sweep
 
