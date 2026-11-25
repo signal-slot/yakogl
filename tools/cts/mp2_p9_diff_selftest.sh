@@ -85,6 +85,26 @@ deqp: Pass $P.a
 EOF
 run "$D/miss.log" >/dev/null; chk "log: missing alone exits 1" test $? -eq 1
 
+# --exclude: a Q11-style file (TAB reason, a group, a comment)
+printf '# header\n%s.d\tpending Q11\n%s.e*\tgroup\n' $P $P >"$D/excl.txt"
+cat >"$D/ex.log" <<EOF
+deqp: case filter '$P.*'
+deqp: Pass $P.a
+deqp: Fail $P.b
+deqp: Pass $P.c
+deqp: NotSupported $P.acc1
+deqp: Pass $P.acc2
+EOF
+out=$(run --report-only "$D/ex.log")
+chk "exclude: default summary unchanged" grep -qx 'mp2-p9-diff: shared 1, new 0, fixed 2, missing 2' <<<"$out"
+out=$(run "$D/ex.log" --exclude "$D/excl.txt"); rc=$?
+chk "exclude: missing 0, excluded 2" grep -qx 'mp2-p9-diff: shared 1, new 0, fixed 2, missing 0, excluded 2' <<<"$out"
+chk "exclude: exit 0" test $rc -eq 0
+printf '%s\n0\tf\t9\t6\t3\t0\t0\t0\t%s.a;%s.b;%s.d\n' "$H" $P $P $P >"$D/base2.tsv"
+out=$(python3 -I "$TOOL" --baseline "$D/base2.tsv" --accepted "$D/acc.txt" --mustpass "$D/must.txt" --exclude "$D/excl.txt" "$D/dk.tsv")
+chk "exclude tsv: d dropped from new and shared" grep -qx 'mp2-p9-diff: shared 1, new 0, fixed 1, missing 0, excluded 2' <<<"$out"
+run --exclude "$D/nonexistent" "$D/ex.log" >/dev/null; chk "exclude: missing file exits 2" test $? -eq 2
+
 # error exits
 run "$D/nonexistent" >/dev/null; chk "missing input exits 2" test $? -eq 2
 run "$D/dk.tsv" "$D/dk.log" >/dev/null; chk "mixed forms exit 2" test $? -eq 2
