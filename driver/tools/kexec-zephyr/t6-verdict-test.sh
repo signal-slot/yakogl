@@ -347,6 +347,72 @@ check t6_submit-pixels 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$((SUB - 1)) 0 1"
 sed '/Z3: rc 0/a t6_submit: Z3: stop 5 refusal 5 detail 0x0000000000000000 acked 0x00000000' "$D/t6_submit-pass.uart" >"$WORK/stop.log"
 check t6_submit-stop-line 1 "VERDICT t6_submit FAIL (1 of $SUB)" "$SUB 0 1" t6_submit "$WORK/stop.log"
 
+# T6_ROUTE=uboot for t6_fw and t6_submit, with the GPU supply (RK806 DCDC1,
+# vdd_gpu_s0) on or off at U-Boot's hand-over. A passing run prints none of
+# gpu_up's hand-over lines (these probes' on_handover only feeds the
+# watchdog; t6_z1_print_record runs on a Z1 stop only), so the two supply
+# states read alike on a pass; a stopped run prints Z1's record, whose
+# supply lines say which state it found. The fixtures are built here from
+# the kexec fixtures: U-Boot's header (t6_hello-uboot-pass) for the kexec
+# one, and for a stop the supply and clock lines of the state.
+mk_uboot() { # <kexec fixture> <out>: the U-Boot header, then the body after the kexec header
+	sed '/^board: watchdog armed/q' "$D/t6_hello-uboot-pass.uart" >"$2"
+	echo '*** Booting Zephyr OS build v4.2.0 ***' >>"$2"
+	sed '1,/^board: watchdog armed/d' "$1" >>"$2"
+}
+# <probe> <on|off> <in> <out>: Z1's supply lines as gpu_up leaves them from U-Boot
+mk_supply() {
+	local p=$1 st=$2
+	if [ "$st" = off ]; then
+		sed -e "s/^$p: RK806 at hand-over: POWER_EN0 0x0f POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x30: vdd_gpu_s0 on, 800000 uV/$p: RK806 at hand-over: POWER_EN0 0x0e POWER_SLP_EN0 0xe0 BUCK1_CONFIG 0xa4 BUCK1_ON_VSEL 0x1c: vdd_gpu_s0 off, 675000 uV/" \
+			-e "s/^$p: clock set: kept 1,.*/$p: clock set: kept 0, CPLL 1500000000 Hz, wrote CLKSEL_CON(158) 0x00001f24 (159) 0x00000000, now 0x00001f24 0x00000000: clk_gpu_src 300000000 Hz/" \
+			-e "s/^$p: vdd_gpu_s0 enable: not sent;.*/$p: vdd_gpu_s0 enable: frame sent; POWER_EN0 0x0f BUCK1_ON_VSEL 0x1c after, waited 412 us/" "$3" >"$4"
+	else
+		cp "$3" "$4"
+	fi
+}
+for pr in t6_fw:$FW:t6_fw-z1fail:10 t6_submit:$SUB:t6_submit-z3-stop:17; do
+	IFS=: read -r p n stop nd <<<"$pr"
+	mk_uboot "$D/$p-pass.uart" "$WORK/$p-uboot-pass.log"
+	# a pass reads alike with the supply on and off
+	for st in on off; do
+		check "$p-uboot-supply-$st-pass" 0 "VERDICT $p PASS" "$n 0 0" "$p" "$WORK/$p-uboot-pass.log" T6_ROUTE=uboot
+	done
+	# the same record judged as the kexec route's is not the U-Boot's
+	runs=$((runs + 1))
+	out=$(bash "$V" "$p" "$WORK/$p-uboot-pass.log" 2>&1) && rc=0 || rc=$?
+	if [ "$rc" = 1 ]; then
+		echo "ok   $p-uboot-as-kexec: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+	else
+		echo "FAIL $p-uboot-as-kexec: rc $rc"
+		fails=$((fails + 1))
+	fi
+	# a Z1 stop: judged as a stop with the supply on or off, never a PASS.
+	# Same counts as the kexec route's stop fixture (the same lines differ)
+	mk_uboot "$D/$stop.uart" "$WORK/$p-uboot-stop-base.log"
+	for st in on off; do
+		mk_supply "$p" $st "$WORK/$p-uboot-stop-base.log" "$WORK/$p-uboot-stop-$st.log"
+		if [ "$p" = t6_fw ]; then
+			want="$((FW + Z1 - 9)) 7 3"
+		else
+			want="$((28 + Z1)) 7 10"
+		fi
+		check "$p-uboot-supply-$st-z1-stop" 1 "VERDICT $p FAIL ($nd of $((n + Z1)))" "$want" "$p" "$WORK/$p-uboot-stop-$st.log" T6_ROUTE=uboot
+	done
+	# a PASS line over a stop record does not turn it into a pass
+	for st in on off; do
+		sed "/^$p: FAIL: /s/FAIL: .*/PASS/" "$WORK/$p-uboot-stop-$st.log" >"$WORK/$p-uboot-fakepass-$st.log"
+		runs=$((runs + 1))
+		out=$(T6_ROUTE=uboot bash "$V" "$p" "$WORK/$p-uboot-fakepass-$st.log" 2>&1) && rc=0 || rc=$?
+		if [ "$rc" = 1 ]; then
+			echo "ok   $p-uboot-supply-$st-stop-fake-pass: FAIL, $(printf '%s\n' "$out" | tail -n 1)"
+		else
+			echo "FAIL $p-uboot-supply-$st-stop-fake-pass: rc $rc"
+			fails=$((fails + 1))
+		fi
+	done
+done
+
 # t6_display (step D2): the line count is the table's, read from the pass
 # run (every line ok), not kept by hand here
 DISP=$(bash "$V" t6_display "$D/t6_display-pass.uart" | grep -c '^ok ' || true)
