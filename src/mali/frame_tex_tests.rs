@@ -2567,3 +2567,138 @@ fn a_vertex_shader_s_2d_and_cube_textures_are_mesa_s() {
     }
     eprintln!("mali vertex sampler2D + samplerCube: two descriptors a table, Mesa's samplers and dimensions");
 }
+
+/// cube-ref's drm-shim references of issue #7489 (tools/mali/testdata/
+/// vs_cube_edge_ref.sh): the vertex-stage cube of dEQP-GLES2
+/// texture.vertex.cube.filtering.linear_mipmap_linear_{linear,nearest}_repeat
+/// and .wrap.repeat_repeat near the +X face's edge (`vs_cube_edge`, M.1 row
+/// 5) and of shaders.texture_functions.vertex.texturecubelod (`cube_lod_vs`,
+/// row 11), each drawn by Mesa 26.2.1 in its ES 3 context (`es3`) and under
+/// `MESA_GLES_VERSION_OVERRIDE=2.0` (`es2`, no seamless filtering).
+const VS_CUBE_EDGE: [(&str, &str); 6] = {
+    macro_rules! cases {
+        ($($c:literal)*) => {
+            [$(($c, include_str!(concat!("../../tools/mali/testdata/", $c, ".desc"))),)*]
+        };
+    }
+    cases!(
+        "vs_cube_edge.lml_linear_repeat.edge.es2" "vs_cube_edge.lml_linear_repeat.edge.es3"
+        "vs_cube_edge.lml_nearest_repeat.edge.es2" "vs_cube_edge.lml_nearest_repeat.edge.es3"
+        "cube_lod_vs.lmn_linear_repeat.es2" "cube_lod_vs.lmn_linear_repeat.es3"
+    )
+};
+
+/// The raw words a `.desc`'s `words` block gives for entry `entry` of
+/// `table`: "  <table> entry <entry> <Kind> @<address>: w0 .. w7".
+fn desc_raw(desc: &str, table: &str, entry: u32) -> Vec<u8> {
+    let prefix = format!("  {table} entry {entry} ");
+    let line = desc.lines().find(|l| l.starts_with(&prefix)).unwrap_or_else(|| panic!("{table} entry {entry}'s words"));
+    quoted_words(line.split_once(": ").expect("the words").1)
+}
+
+/// Each plane's last word under the Position table's texture in a `.desc`'s
+/// `words` block ("    plane i: .."), the plane's extent less one, height in
+/// the high half.
+fn desc_plane_extents(desc: &str) -> Vec<(u32, u32)> {
+    desc.lines()
+        .skip_while(|l| !l.starts_with("  Position entry 4 "))
+        .skip(2)
+        .map_while(|l| l.strip_prefix("    plane "))
+        .map(|l| {
+            let w = u32::from_str_radix(l.split_whitespace().last().expect("a word"), 16).unwrap();
+            ((w & 0xffff) + 1, (w >> 16) + 1)
+        })
+        .collect()
+}
+
+/// The reference's cube as the back end describes it: the header's
+/// "cube WxH, N levels, RGB|RGBA" and the GL state [`vcube_texture`] reads,
+/// each level's six faces stacked at its row pitch (`face_gpu`), a GL_RGB
+/// map in RGBA8 storage read RGB1 (the GL core's storage).
+fn edge_cube(desc: &str) -> SampledTexture {
+    let head = desc.lines().next().expect("a header");
+    let (_, rest) = head.split_once(": cube ").expect("a cube header");
+    let mut parts = rest.split(", ");
+    let (w, h) = parts.next().unwrap().split_once('x').unwrap();
+    let levels: u32 = parts.next().unwrap().strip_suffix(" levels").unwrap().parse().unwrap();
+    let rgb = parts.next().unwrap().starts_with("RGB;");
+    let mut cube = SampledTexture {
+        width: w.parse().unwrap(),
+        height: h.parse().unwrap(),
+        levels,
+        swizzle: if rgb { SWIZZLE_RGB1 } else { SWIZZLE_RGBA },
+        ..vcube_texture(desc)
+    };
+    let mut at = TEXELS;
+    for l in 0..levels {
+        let (lw, lh) = cube.extent(l);
+        let stride = (4 * lw).max(ROW_STRIDE);
+        cube.level[l as usize] = TextureLevel { gpu: at, row_stride: stride };
+        at += 6 * u64::from(lh) * u64::from(stride);
+    }
+    cube
+}
+
+/// Issue #7489 (M.1 rows 5 and 11), pinned at the tip: the vertex cube's
+/// sampler, texture descriptor and planes are Mesa's in both contexts, word
+/// for word against the drm-shim's raw words, so the board's wrong pixels
+/// come from no word the Mali back end writes. In `es2` the sampler is
+/// `Seamless Cube Map` clear with GL's REPEAT on S, T and R
+/// (`sampler_with(false)`, this build's `sampler()` under `report-es2`), in
+/// `es3` seamless with all three clamped (`sampler_with(true)`). The texture
+/// descriptor is Mesa's field for field but for two by design: our storage is
+/// linear (`Texel interleave` clear, Mesa's planes are AFBC) and a GL_RGB map
+/// is RGBA8 read RGB1 (Mesa: RGB8 read RGB1); the swizzle, extent, levels,
+/// LOD range and `Array size` are equal. The planes are face-major and
+/// level-minor with Mesa's extents in Mesa's order.
+///
+/// What is left is the hardware: a cube that is not seamless does not wrap
+/// a LINEAR tap inside the face as ES 2.0 3.7.5 and dEQP-GLES2's reference
+/// do (cube-inv's host model; cube-seam-probe's board draw, where seamless
+/// filtering or a clamped R moves no case the right way). The fix reads such
+/// a cube as a six-layer 2D array (docs/notes/mali-cube-textures.md section
+/// (l)), which needs a keyed look-up in src/shaderc/online/mali and the key
+/// passed through src/gl; when it lands this pin changes with it.
+#[test]
+fn vertex_cube_edge_and_cube_lod_words_are_mesa_s_in_both_contexts() {
+    for (case, desc) in VS_CUBE_EDGE {
+        let es2 = case.ends_with(".es2");
+        let tex = edge_cube(desc);
+        assert!(tex.is_cube(), "{case}");
+        let s = tex.sampler_with(!es2);
+        for table in ["Position", "Varying"] {
+            assert_eq!(s.pack().unwrap()[..], desc_raw(desc, table, 3)[..], "{case}: the {table} table's sampler");
+        }
+        assert_eq!(s.seamless_cube_map, !es2, "{case}");
+        let wrap = if es2 { WrapMode::REPEAT } else { WrapMode::CLAMP_TO_EDGE };
+        assert_eq!((s.wrap_mode_s, s.wrap_mode_t, s.wrap_mode_r), (wrap, wrap, wrap), "{case}");
+        if es2 == crate::REPORT_ES2 {
+            assert_eq!(tex.sampler(), s, "{case}: this build's context");
+        }
+
+        let raw = desc_raw(desc, "Position", 4);
+        assert_eq!(raw, desc_raw(desc, "Varying", 4), "{case}: the two vertex tables");
+        let mesa = Texture::unpack(raw[..].try_into().unwrap()).unwrap();
+        let t = tex.texture(mesa.surfaces);
+        assert!(mesa.texel_interleave && !t.texel_interleave, "{case}: Mesa's AFBC, our linear rows");
+        if tex.swizzle == SWIZZLE_RGBA {
+            assert_eq!(t.format, mesa.format, "{case}: RGBA8 UNORM");
+        }
+        assert_eq!(
+            t,
+            Texture { texel_interleave: false, format: t.format, ..mesa },
+            "{case}: Mesa's texture descriptor but for the storage"
+        );
+        assert_eq!(t.dimension, TextureDimension::CUBE, "{case}");
+
+        let planes = desc_plane_extents(desc);
+        assert_eq!(planes.len(), tex.plane_count() as usize, "{case}: Levels x 6 planes");
+        for (i, extent) in planes.iter().enumerate() {
+            let (face, l) = (i as u32 / tex.levels, i as u32 % tex.levels);
+            let p = tex.plane(face, l);
+            assert_eq!((p.width, p.height), *extent, "{case}: plane {i} (face {face}, level {l})");
+            assert_eq!(p.pointer, tex.face_gpu(face, l), "{case}: plane {i}");
+        }
+    }
+    eprintln!("mali vertex cube edge and texturecubelod: {} references word for word", VS_CUBE_EDGE.len());
+}
