@@ -4,7 +4,7 @@
 """Split gl_test's regression set into runs that fit the DK's run lifetime.
 
     python3 -I tools/cts/mp2-gltest-shards.py --out DIR [--runner lib.rs]
-        [--skip 10] [--times times.tsv] [--budget-ms 15000]
+        [--skip LIST] [--times times.tsv] [--budget-ms 15000]
         [--default-ms 500] [--overhead-ms 0]
 
 One STM32MP257F-DK run is a one-shot from ST's U-Boot that lasts about 20 s
@@ -14,7 +14,8 @@ may not fit, so it runs as several shards, one image run each.
 
 The case set is read from the `SET_ORDER` array of the runner's lib.rs
 (default driver/tools/pvrlab/runner/src/lib.rs, found from this file), minus
---skip (decimal, comma separated; default "10", GL_TEST_MP2_SKIP's default).
+--skip (decimal, comma separated; default "", GL_TEST_MP2_SKIP's default: the
+whole set).
 --times is a TSV, case<TAB>ms ('#' comments ignored; cases not in the set are
 ignored, a case without a row costs --default-ms).
 
@@ -100,7 +101,7 @@ def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
     ap.add_argument("--runner", default=DEFAULT_RUNNER)
-    ap.add_argument("--skip", default="10")
+    ap.add_argument("--skip", default="")
     ap.add_argument("--times")
     ap.add_argument("--budget-ms", type=int, default=15000)
     ap.add_argument("--default-ms", type=int, default=500)

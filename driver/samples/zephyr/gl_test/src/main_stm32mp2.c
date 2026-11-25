@@ -18,10 +18,10 @@
  * i.MX8MP leaves its list empty; the DK's GCNanoUltra31 has the same shader
  * and register limits (src/vivante/profile.rs: 512 instructions, 64 temps,
  * 320 constants, 16 varyings, one pixel pipe), so nothing else is left out.
- * Left out, "10" (prims): its frame 2 draws a 3 px wide LINE_LOOP
- * (glLineWidth(3)), and the part has WIDELINE_TRIANGLE_EMU (profile.rs:138,
- * reported range 1.0..1.0) -- wide lines wait for the Q11 decision
- * (pre-study P9, Q11). Case 16 (msaa) skips itself by name without a 4x
+ * Nothing is left out by default: case 10 (prims) was skipped while Q11
+ * was open -- its frame 2 draws a 3 px wide LINE_LOOP on the part's
+ * WIDELINE_TRIANGLE_EMU core (profile.rs:138, pre-study P9, Q11) -- and
+ * passes on the DK. Case 16 (msaa) skips itself by name without a 4x
  * config, as on the i.MX8MP. Wide-line cases outside the set (103 maskdepth,
  * 231, 233, 235) are not walked here either; ask for one by number.
  * No case here needs a display window: gl_test_run() is called with panel 0
