@@ -5,7 +5,7 @@
 
 Usage:
   tools/cts/pi4-session-readme.py --commit <full sha> [--tree FILE]
-      [--times TSV] [--note TEXT]... [-o README.md] SESSION_DIR
+      [--times TSV] [--causes TSV] [--note TEXT]... [-o README.md] SESSION_DIR
   tools/cts/pi4-session-readme.py --self-test
 
 SESSION_DIR is tools/cts/log/<date>-pi4-gles3-<sha8>-rowsAA-BB/ with a
@@ -22,6 +22,15 @@ image: LABEL, run time (e.g. 22.0 s), GPU recoveries, hangs. A label or a
 field that is missing is '-' (unknown); nothing is made up. Paths in the
 README are relative to SESSION_DIR; the text carries no home path, host
 name, address or tty device.
+
+--causes TSV lists the refusing cases, one tab-separated line per refusal,
+four columns: LABEL, CASE (the dEQP case name), CAUSE (one line of text), ISSUE
+('-' when no issue covers it, an issue reference such as '#12', or a drafted
+title written 'draft: <title>'). Blank lines and lines starting with '#' are
+skipped. A line whose LABEL is not an image of the tree, or with other than
+four columns, or an empty LABEL, CASE or CAUSE, is refused. The README gets a
+'## Refusing cases' section (table: image, case, cause, issue) after the image
+table. Without --causes the README is unchanged.
 
 A cut (docs/es3/board-recipe-pi4.md section 6): an image dEQP aborted whose
 label the tree has since cut after the abort trigger, the cases it never
@@ -76,6 +85,25 @@ def read_times(path):
             c = [x.strip() or "-" for x in line.rstrip("\n").split("\t")]
             c += ["-"] * (4 - len(c))
             out[c[0]] = tuple(c[1:4])
+    return out
+
+
+def read_causes(path, labels):
+    """[(label, case, cause, issue)] from a TSV; a label not in the tree is refused."""
+    out = []
+    if not path:
+        return out
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            c = [x.strip() for x in line.rstrip("\n").split("\t")]
+            if len(c) != 4 or not (c[0] and c[1] and c[2]):
+                raise SystemExit("%s:%d: want LABEL, CASE, CAUSE, ISSUE (4 tab-separated "
+                                 "columns, the first three not empty)" % (path, n))
+            if c[0] not in labels:
+                raise SystemExit("%s:%d: label not in the tree: %s" % (path, n, c[0]))
+            out.append((c[0], c[1], c[2], c[3] or "-"))
     return out
 
 
@@ -155,7 +183,7 @@ def cuts(sessdir, commit, tree, have, others, mustpass):
     return out
 
 
-def build(sessdir, commit, tree, times, notes, others=(), mustpass=None):
+def build(sessdir, commit, tree, times, notes, others=(), mustpass=None, causes=()):
     labels = tree_labels(tree)
     if not labels:
         raise SystemExit("%s: no '# image <LABEL>:' lines" % tree)
@@ -206,6 +234,14 @@ def build(sessdir, commit, tree, times, notes, others=(), mustpass=None):
                 out.append("- %s: %s; %s %s." % (
                     lab, why, "tallies" if len(paths) > 1 else "tally",
                     ", ".join("`%s`" % p for p in paths) or "-"))
+    if causes:
+        out.append("")
+        out.append("## Refusing cases")
+        out.append("")
+        out.append("| image | case | cause | issue |")
+        out.append("|---|---|---|---|")
+        for row in causes:
+            out.append("| " + " | ".join(x.replace("|", "\\|") for x in row) + " |")
     if notes:
         out.append("")
         out.extend(notes)
@@ -327,6 +363,7 @@ def main():
     ap.add_argument("--commit", help="full 40-digit sha of the session's build")
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
     ap.add_argument("--times", help="TSV: LABEL, run time, GPU recoveries, hangs")
+    ap.add_argument("--causes", help="TSV: LABEL, CASE, CAUSE, ISSUE ('-' or 'draft: <title>')")
     ap.add_argument("--note", action="append", default=[], help="a line of text under the table")
     ap.add_argument("--with", dest="others", action="append", default=[], metavar="DIR",
                     help="another session directory of the commit (for cuts; the "
@@ -344,7 +381,8 @@ def main():
     sha = a.commit.lower()
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         ap.error("--commit needs a full 40-digit sha")
-    text = build(a.dir, sha, a.tree, read_times(a.times), a.note, a.others, a.mustpass)
+    text = build(a.dir, sha, a.tree, read_times(a.times), a.note, a.others, a.mustpass,
+                 read_causes(a.causes, tree_labels(a.tree)))
     if a.output == "-":
         sys.stdout.write(text)
     else:
