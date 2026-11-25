@@ -243,3 +243,76 @@ is not enough. A session (4 or 5 runs a scene, 3 scenes, 2 commits) needs
 the launcher's autostart off for the session, the owner's decision. Then
 build the two helpers and run the commands of "What is left" above, without
 the console lease.
+
+## Session A: stop, 2026-11-25 (plan #355, item x2-session-a)
+
+**No X2 measurement was made. No image was built for the board, nothing was
+staged or copied to it, no jump was made, the board was left as found, up on
+Linux.** The rows below are stop rows, not measurements, and carry no trust
+mark because they hold no number.
+
+Commit: `3c3fe33b` (`origin/main` as this task's clone shows it,
+`refs/connected/origin/remotes/origin/main`; `git fetch origin` failed here,
+access denied). It carries W1-W5 (`9cdeff6d` is its ancestor). The work
+started from the integration tip `ab919063`.
+
+Leases held: `target:x2`, `target:x2-console` and `target:x2-display`, the
+full set the run sheet names (`gc-tiled-wire.md`, "Session A: the run sheet").
+
+What held, run sheet step 2 (reachability from the leased worker, first):
+
+- ssh as root logs in from the leased worker (`uptime`: up 2 days 7 h).
+- `tools/board.sh x2 status` (with `BOARD_HOST` from the lease) read:
+  `board lease: none`, uptime 198066 s, runlevel `default`, `kexec_loaded 0`,
+  `kexec_crash_loaded 0`, crash window `268435456`, containers `1`.
+- The console resource opened (connected, 115200 8N1, read only; no character
+  was sent to it).
+
+What stopped it, unchanged since "Stop, 2026-11-24" above: **the podman
+container `slint-launcher` still runs on the board** (`podman ps`: `Up 2
+days`). `board.sh x2 run`'s readiness check (`x2_kexec_ready`,
+`tools/board.sh:2416-2425`) refuses a jump while a container runs
+(`something is running (containers 1)`, rc 3), and the status read's
+`containers 1` is that check's input. Stopping the container or turning its
+autostart off is the board owner's decision (leave the board as found,
+persist nothing), so no run was started: it would end at rc 3 before staging,
+as the 2026-11-24 terrain run did.
+
+Not run, and so not answered: the knob-on picture match (the trust rule),
+gl_test cases 3, 44 and 169, the RS rate for an 800x600 tiled to linear copy,
+early depth under a TILED colour target, and whether TS works with the MMU
+off (the W7-W9 gate stays closed). Case 243 was not run (a later session).
+
+Stop rows (ms a frame `-`):
+
+| commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line | trust |
+|---|---|---|---|---|---|---|
+| 3c3fe33b | gc_tiled_rt off | terrain | - | - | verdict= stop: not run (`something is running (containers 1)`, board.sh x2 status) | no number |
+| 3c3fe33b | gc_tiled_rt off | shadow | - | - | verdict= stop: not run (same cause) | no number |
+| 3c3fe33b | gc_tiled_rt off | refract | - | - | verdict= stop: not run (same cause) | no number |
+| 3c3fe33b | gc_tiled_rt on | terrain | - | - | verdict= stop: not run (same cause) | no number |
+| 3c3fe33b | gc_tiled_rt on | shadow | - | - | verdict= stop: not run (same cause) | no number |
+| 3c3fe33b | gc_tiled_rt on | refract | - | - | verdict= stop: not run (same cause) | no number |
+| 3c3fe33b | gc_tiled_rt on | gl_test 3, 44, 169 | - | - | verdict= stop: not run (same cause) | no CASE record |
+
+Re-check, same day, from a second leased worker (the task moved machines;
+`origin/main` there reads `d4f95c29`): ssh as root logs in, `uptime` up 2
+days 7 h 24 min, runlevel `default`, and `podman ps` still lists
+`slint-launcher  Up 2 days`. The stop holds unchanged; again no image was
+built, nothing was staged and no jump was made.
+
+Third re-check, same day, from a third leased worker (`origin/main` there
+also reads `d4f95c29`): ssh as root logs in, `uptime` up 2 days 7 h 41 min,
+runlevel `default`, `podman ps` still lists `slint-launcher Up 2 days`.
+`tools/board.sh x2 status` was not approved on that worker, so the ssh read
+is the evidence. The stop holds; no image, no staging, no jump.
+
+Fourth re-check, same day, from a fourth leased worker (`origin/main` there
+reads `3454235c`): ssh as root logs in, `uptime` up 2 days 7 h 58 min,
+runlevel `default`, `podman ps` still lists `slint-launcher Up 2 days`.
+`tools/board.sh` was refused by the tool layer on that worker, so the ssh
+read is the evidence. The stop holds; no image, no staging, no jump.
+
+To run it: the board with no container running for the whole session (each
+run ends with a SoC reset and the launcher autostarts at boot), then the run
+sheet in `gc-tiled-wire.md` from step 1.

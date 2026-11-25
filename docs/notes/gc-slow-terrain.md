@@ -420,3 +420,10 @@ container (`slint-launcher`) makes `board.sh x2 run` refuse
 (`something is running (containers 1)`); the 72972ba4 terrain run stopped with
 `no verdict line, rc=3`. Details: `x2-glmark2-slow-scenes.md`, "Stop,
 2026-11-24".
+
+Stop, 2026-11-25 (item x2-session-a, commit `3c3fe33b`, knob off and on):
+still empty, so no gain or loss is measured and no cause is confirmed on the
+board. The board answered from the leased worker and `tools/board.sh x2
+status` read `containers 1`: `slint-launcher` still runs, so `board.sh x2 run`
+would refuse the jump and none was made. Details: `x2-glmark2-slow-scenes.md`,
+"Session A: stop, 2026-11-25".
