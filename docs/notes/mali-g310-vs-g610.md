@@ -413,23 +413,72 @@ What stays G610-specific:
 
 ### Not measurable on the host
 
-The shim's G610 registers hide everything a raw register decides:
+What the board measured (`tools/cts/RESULTS.md`, row `imx95_ident`, record
+`records/verdin-imx95/20261125-0127-imx95_ident-9734aab3`): `GPU_ID`
+0xac740001 (arch 10.12 revision 7, product 4: Mesa's G310), `SHADER_PRESENT`
+0x1 (one shader core), `CORE_FEATURES` 0x1 (Mesa's G310v2), `TILER_FEATURES`
+0x809 (8 levels), `L2_FEATURES` 0x07110306, `MMU_FEATURES` 0x2830,
+`AS_PRESENT` 0xff, `COHERENCY_FEATURES` 0x0. The variant is therefore not
+unknown and the arch revision nibble 7 is not assumed: both are the board's
+reads, and the sweep's variant 1 (`g310v2`) is the board's variant.
 
-- the G310's `shader_present`, which drives the TLS/WLS sizes and the
-  query size through `core_id_range`;
-- `TILER_FEATURES`;
-- `TEXTURE_FEATURES_0`: the compressed formats, AFRC and ASTC;
-- `AFBC_FEATURES`;
-- `THREAD_FEATURES` and `MEM_FEATURES`;
-- `GPU_ID`'s arch revision and version fields;
-- the i.MX 95's variant.
+`G310_ASSUMED` is gone from `src/` (`grep -rn G310_ASSUMED src/` finds
+nothing). It remains in the kernel side's mock,
+`driver/rust/src/gpu/mali/mock.rs`, with `core_features: 0` and
+`shader_present: 0x3`; `imx95_ident` reports 1 of 9 mock words differing and
+reads `CORE_FEATURES` 0x1, so the mock's table is not the board's. It
+decides nothing but the mock.
 
-No public panthor probe log of an i.MX 95 was read for this note: this
-machine had no web access. The G310 register values that Mesa does not
-define are therefore not taken from a probe log: the arch revision nibble
-(7) in `drm_shim_ref.sh`'s header is the one assumed value. The sweep used
-variant 1 (`g310v2`). Variants 0 and 2 give the same frame bytes, because
-they have the same tile buffer.
+Still not measurable on the host, because the shim's G610 registers hide
+what a raw register decides and the board's reads above cover only the
+registers `imx95_ident` dumps:
+
+- what the one core's `shader_present` does to the TLS/WLS sizes and the
+  query size through `core_id_range` (the register is read; the sizes the
+  driver derives from it are not checked on the host);
+- `TEXTURE_FEATURES_0` (the compressed formats, AFRC and ASTC),
+  `AFBC_FEATURES`, `THREAD_FEATURES` and `MEM_FEATURES`: not in the
+  `imx95_ident` row;
+- the effect on the G310's output of the constants that still carry G610
+  values (`TIB_BUDGET`, `MEASURED_TILER_LEVELS`, the renderer name);
+- time: see the next subsection.
+
+Variants 0 and 2 give the same frame bytes as variant 1, because they have
+the same tile buffer.
+
+### Measured dEQP time scale (S1a)
+
+Session S1a ran rows T6S1R01-R12 of the dEQP-GLES2 tree on the Verdin iMX95
+at `e63ab28e` (`tools/cts/log/2026-11-24-imx95-gles2-S1a-e63ab28e/`, commit
+`81c25e26`; `rows.tsv`). The T6 (G610) baseline for the same rows is
+`tools/cts/log/2026-11-24-t6-gles2-S1-8ff01055/` (`chunks.tsv`, column
+`seconds`, whole seconds).
+
+Method: the iMX95's time of a row is the run time of its image up to PSCI
+SYSTEM_RESET (the ms in the `exit_line` of `rows.tsv`; the `seconds` column
+is the same figure truncated), so the U-Boot load is not in it. The pooled
+ratio is the iMX95's seconds summed over the 12 rows over the T6's: 156.1 s
+over 72 s = **2.17** (recomputed with a scratch script; the whole-second sum
+157 s gives 2.18). Per row it runs 0.12 (R08, 0.36 s over 3 s) to 5.28 (R12,
+42.2 s over 8 s), mean 1.88, standard deviation 1.30. R12 is the outlier.
+
+Caveats:
+
+- 12 rows of 76; the ratios differ by a factor of 40 between rows, so the
+  pooled figure is a scale, not a forecast of one row.
+- The T6's seconds are whole seconds from its chunk table, which may
+  include overhead the iMX95's image time does not; for a 3 s row one
+  second is a third.
+- `SHADER_PRESENT` 0x1 is one shader core against the G610's several
+  (0x50005 on the T6), so part of the ratio is the core count and not the
+  driver; the boards also run different systems (Zephyr, Linux).
+- The two sides ran at different compiler commits (`8ff01055` and
+  `e63ab28e`), so the draws refused can differ.
+- The earlier read-only item's forecast (not recomputed here): no
+  remaining row above 300 s of the 600 s lifetime; the slowest is T6S2R05,
+  34.7 s at the pooled ratio, 84.5 s at the high bound.
+
+Redo these figures after sessions S2 and S3, when all 76 rows have run.
 
 ## Sample
 
