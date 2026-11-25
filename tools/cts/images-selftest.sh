@@ -292,9 +292,14 @@ absent "pi4-full-tree.txt: no REPORT_ES2 argument" "REPORT_ES2" "$out"
     && ok "pi4-full-tree.txt: texture-2048.conf's argument on one image" || bad "pi4-full-tree.txt: texture-2048.conf lines: $out"
 out=$(DEQP_MODULE=gles3 "$P" --dry-run "$HERE/pi4-gles3-tree.txt" "$T/p0" 2>&1); rc=$?
 n=$(printf '%s\n' "$out" | grep -c .); m=$(grep -c '^# image ' "$HERE/pi4-gles3-tree.txt")
-k=$(printf '%s\n' "$out" | grep -c " dEQP-GLES3\..* \[$GLES3_ARGS\]$")
-[ "$rc" = 0 ] && [ "$n" = "$m" ] && [ "$k" = "$m" ] && ok "pi4-gles3-tree.txt: one line per image ($n), each a GLES3 filter with [$GLES3_ARGS]" \
-    || bad "pi4-gles3-tree.txt: rc=$rc, $n lines, $k with the gles3 arguments, for $m images"
+# the images whose '# image' line carries '(with texture-2048.conf)' (the
+# 8_units labels, board-recipe-pi4.md section 6) add that conf after the three
+k=$(printf '%s\n' "$out" | grep -c " dEQP-GLES3\..* \[$GLES3_ARGS\( -DEXTRA_CONF_FILE=texture-2048\.conf\)\{0,1\}\]$")
+c=$(printf '%s\n' "$out" | grep -c " \[$GLES3_ARGS -DEXTRA_CONF_FILE=texture-2048\.conf\]$")
+w=$(grep -c '^# image [A-Za-z0-9]*:.*(with texture-2048\.conf)' "$HERE/pi4-gles3-tree.txt")
+[ "$rc" = 0 ] && [ "$n" = "$m" ] && [ "$k" = "$m" ] && [ "$c" = "$w" ] &&
+    ok "pi4-gles3-tree.txt: one line per image ($n), each a GLES3 filter with [$GLES3_ARGS], texture-2048.conf on the $w marked" \
+    || bad "pi4-gles3-tree.txt: rc=$rc, $n lines, $k with the gles3 arguments, $c with texture-2048.conf of $w marked, for $m images"
 
 # 7c. the gles2 build: BOARD rpi_4b, the filter, no module argument, the ES 2.0 conformance check
 out=$(CHECK_LOG=$T/check2.log "$P" "$T/pi4-es2.txt" "$T/p2" 2>/dev/null); rc=$?
