@@ -1112,7 +1112,7 @@ It is tracked here so a baseline is reproducible against a fixed list.
 checkout — not the list to use.) The binary knows 19825 cases in all; the
 `accuracy`, `performance` and `stress` groups are outside the mustpass.
 
-## 5. Raspberry Pi 4 (V3D 4.2, Zephyr only)
+## 5. Raspberry Pi 4 (V3D 4.2) and Verdin iMX95 (Mali-G310), Zephyr only
 
 The Pi 4 boots Raspberry Pi OS by default. Each Zephyr image runs once through
 the firmware's tryboot and ends with its PM watchdog reset, which brings the
