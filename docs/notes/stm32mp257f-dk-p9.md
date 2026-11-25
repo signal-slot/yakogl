@@ -157,24 +157,52 @@ wide-line cases (section 4) before counting.
   registers do on this part"; the i.MX8MP's is `[1.0, 16.0]`, `:130`). Mesa
   reports 1.0 on such a core (Mesa `etnaviv_screen.c:366-368`, cited at
   `src/vivante/profile.rs:63`).
-- **Nothing in `src/` reads that field** (the pins are
-  `tests/vivante_profile.rs:33` and `:58`). The GL core hard-codes
-  `GL_ALIASED_LINE_WIDTH_RANGE` as 1 to 16 (`src/gl/state.rs:1040-1044`; its
-  test at `:2615` and `:2631`, and the report guards pin the same values in
-  `tests/es2_report_guard.rs:433` and `tests/es3_caps.rs:574`) and
-  `glLineWidth` stores any positive width unclamped (`:783-790`). (The
-  pre-study still cites this as `:993-997`,
-  `docs/notes/pre-study-stm32mp257f-dk.md:431`; it has moved.)
+- **The range query is answered from the profile, but only the i.MX8MP row
+  is ever built.** `glGetFloatv`/`glGetIntegerv(GL_ALIASED_LINE_WIDTH_RANGE)`
+  returns `ALIASED_LINE_WIDTH_RANGE` (`src/gl/state.rs:1046-1051`), which is
+  `crate::vivante::backend::LINE_WIDTH_RANGE` under `gpu-vivante` and
+  `[1.0, 16.0]` otherwise (`src/gl/state.rs:197-202`).
+  `LINE_WIDTH_RANGE = line_width_range_of(super::profile::ACTIVE)`
+  (`src/vivante/backend.rs:1037`; the helper `:1030-1032`) and
+  `ACTIVE = &GC7000UL_IMX8MP` (`src/vivante/profile.rs:172`, documented at
+  `:17-19`: "nothing carries the GPU's identity to the backend at run time
+  yet, so the ST profile is data and its test, not a path"). So the query
+  returns `[1.0, 16.0]` for the i.MX8MP row (`profile.rs:130`) and would
+  return `[1.0, 1.0]` for the ST row (`:165`). **No cfg, feature or Kconfig
+  option makes a DK build pick the ST row:** `ACTIVE` is a plain constant,
+  and `grep ACTIVE src/` finds no `cfg` around it (the other readers are
+  `backend.rs:1027`, `:3987`, `src/vivante/state.rs:14-15`). The DK image
+  therefore reports 1 to 16 today. `wideline_triangle_emu` itself is still
+  read by nothing outside `profile.rs` and its tests.
+- **`glLineWidth` does not clamp.** It rejects `width <= 0` with
+  `GL_INVALID_VALUE` and stores any other width as given
+  (`src/gl/state.rs:789-797`, the store at `:796`); `GL_LINE_WIDTH` reads it
+  back (`:1031`). Nothing compares it with the reported range.
+- **Tests that pin the values:** `tests/vivante_profile.rs:33` (ST row
+  `[1.0, 1.0]`) and `:58` (i.MX8MP row `[1.0, 16.0]`);
+  `tests/vivante_st_profile.rs:18-24` (`line_width_range_of` per row) and
+  `:28-29` (`ACTIVE == GC7000UL_IMX8MP`, `LINE_WIDTH_RANGE == [1.0, 16.0]`);
+  `tests/es2_report_guard.rs:433` and `tests/es3_caps.rs:574` (the GL core
+  reports `[1.0, 16.0]`; `tests/es3_caps.rs:361-363` is the spec bound,
+  min at most 1 and max at least 1); and in `src/gl/state.rs` the unit test
+  `line_and_point_size_ranges` (`:2622`, `:2638`) and
+  `line_width_must_be_positive` (`:2574-2587`, which stores 2.5 unclamped).
+  The pre-study still cites the old location (`:993-997`,
+  `docs/notes/pre-study-stm32mp257f-dk.md:431`); it has moved.
+- **Option A in the tree now means two things only:** clamping `glLineWidth`
+  to the reported range, and making the DK build select the ST row as
+  `ACTIVE`; the profile-to-query path already exists.
 - The backend programs the wide-line registers on every draw, half the width:
-  `GC_PA_LINE_WIDTH` (`src/vivante/backend.rs:1608`) and
-  `GC_PA_WIDE_LINE_WIDTH0/1` (`:1676-1677`). Mesa's golden stream for the ST
+  `GC_PA_LINE_WIDTH` (`src/vivante/backend.rs:1618`) and
+  `GC_PA_WIDE_LINE_WIDTH0/1` (`:1686-1687`). Mesa's golden stream for the ST
   part writes `PA_LINE_WIDTH` 0.5, clamped, where the i.MX8MP writes 2.0
   (pre-study `:890`; `tools/vivante/README.md`, "Another part: the ST row"
   `:676`), so what the DK hardware draws for a programmed width above 1 is
   **unknown**: a board test.
 - The DK build's wide-line items: case 10 `prims` (skipped by default,
-  Kconfig `:180-187`), case 103 `maskdepth`, which draws at
-  `glLineWidth(6.0f)` (`driver/tools/pvrlab/gl_test.c:23946`, `:23964`; the run showed case 103 draws no line, the `glLineWidth(6.0f)` is the panel demo at `gl_test.c:24666`, section 6), and
+  Kconfig `:180-187`), case 103 `maskdepth` (`driver/tools/pvrlab/gl_test.c:24052`, dispatched
+  `:24270`; the run showed case 103 draws no line, the `glLineWidth(6.0f)` is
+  the panel demo at `gl_test.c:24666`, section 6), and
   the flat ES 3.0 cases 231/233/235 — none of them in `SET_ORDER`; the image
   runs one asked for by number (`driver/samples/zephyr/gl_test/src/main_stm32mp2.c:24-26`).
 
@@ -224,15 +252,16 @@ them wherever the hardware draws a width-1 line.
 
 ### Option A: report the hardware's range from the profile
 
-`GL_ALIASED_LINE_WIDTH_RANGE` reads `profile.line_width_range` (the ST row's
-1 to 1) and `glLineWidth` clamps to the reported maximum so the backend never
+`GL_ALIASED_LINE_WIDTH_RANGE` already reads `profile.line_width_range`
+(`src/gl/state.rs:197-202`, `src/vivante/backend.rs:1037`); with the ST row
+`ACTIVE` it gives 1 to 1, and `glLineWidth` clamps to the reported maximum so the backend never
 programs what it reports as unavailable. Effect: the 17 cases become
 NotSupported (the 34 NotSupported of section 1 grow to 51 on the DK); the four
 range queries and `aliased_line_width_range` are unaffected by the CTS bound
 quoted above (`[1,1]` contains `[1,1]`).
 
 For: Mesa reports the same on this core, so the CTS result matches the
-reference driver's; the change is a few lines in `src/gl/state.rs` and keeps
+reference driver's; the change is the clamp in `glLineWidth` (`src/gl/state.rs:789`) plus the DK build making the ST row `ACTIVE`, and it keeps
 `line_width_range` as the single place a board test later moves; the CTS
 accepts it (NotSupported is not a failure, `mp2-p9-diff.py` counts it as
 non-failing); and the i.MX8MP stays `[1, 16]`, unchanged. Against: wide lines
