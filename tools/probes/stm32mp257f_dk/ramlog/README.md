@@ -50,7 +50,9 @@ it, decodes it into `console.txt` and gives that to
 
 On the DK's boot chain (TF-A `v2.10-stm32mp2-r2.0(debug)`, OP-TEE
 `4.0.0-stm32mp-r3.1`, U-Boot `2023.10-stm32mp-r3.1`) the ring never comes
-back. Item ramlog-fix measured this with U-Boot's console attached:
+back. Item ramlog-fix settled this by measurement in commit c1a6a35d,
+with the serial console attached (the runner trial below is record
+`20261124-1118-mp2_hello-bb11a30b`):
 
 - Runner trial (`MP2_NO_CONSOLE=1 MP2_RAMLOG=1`, mp2_hello built with
   `../ramlog_conf/ramlog.conf`). The image printed its banner and
@@ -70,6 +72,12 @@ back. Item ramlog-fix measured this with U-Boot's console attached:
   (iwdgX_out_rst) (0x2134). Warm boot.`. The planted words at 0xb0100000
   and 0xd0000040 read `ffffffff`.
 
+The writer and the reader are not the cause: `ramlog.c`
+(`driver/zephyr/lib/board/common/`) writes the header fields, a dmb, and
+the magic last, stores each ring byte before updating head, and the host
+cross-check of it (below) passes — and after either reset no DDR address
+holds the magic.
+
 BL2 brings the DDR up again on every boot and the DRAM is not held in
 self-refresh across the reset, so no DDR address can carry the ring. The
 on-chip RAMs that do survive a system reset are all claimed in the boot
@@ -87,11 +95,18 @@ What the tools do about it:
   ` ramlog=missing:ddr_lost_in_warm_reset` and prints a NOTE. A ring that
   does come back (another boot chain) is decoded as before, with a NOTE
   that the limit did not hold.
-- The serial console (the farm's console resource) is the only console
-  text of a DK run; a blind run gets the return verdict alone.
+- The conclusion: on the DK, read every verdict from the serial console.
+  `MP2_RAMLOG=1` is fine for a blind run — the arm runs to its reset and
+  the runner gets its return verdict — but the ring cannot be read back
+  after a one-shot run, so it is not a source of console text; the serial
+  console (the farm's console resource) is the only one.
 
-The format, decoder and writer stay as they are, for a boot chain that
-keeps DDR (or a future one that leaves the ring alone).
+What would change this — unverified, not measured on the DK: a reset that
+keeps DDR contents across the warm reset (DRAM held in self-refresh), or
+a ring in SRAM that survives the reset. The measured boot chain leaves no
+SRAM range unclaimed for the A35's normal world, and neither route has
+been tried. The format, decoder and writer stay as they are for a boot
+chain that keeps DDR.
 
 ## Evidence rule
 
