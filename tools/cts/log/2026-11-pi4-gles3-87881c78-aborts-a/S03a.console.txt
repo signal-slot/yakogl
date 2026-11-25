@@ -1,0 +1,39 @@
+MESS:00:00:07.383393:0: brfs: File read: /mfs/sd/yakogl-S03a.bin
+MESS:00:00:07.386299:0: Loaded 'yakogl-S03a.bin' to 0x200000 size 0x1004f58
+MESS:00:00:07.392999:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.410325:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.vec2,...' (the row's filter, tools/cts/pi4-gles3-tree.txt)
+[condensed: the per-case lines #1-#276 are not kept; every one reads "Pass (Pass)"; see the totals below]
+v3d_deqp INCOMPLETE (the photo deadline came first): build 87881c78, filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.ve...
+  276 cases in 208927 ms, record at 210 s after boot, reset at ~250 s
+  totals: P 276  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  in progress: dEQP-GLES3.functional.shaders.builtin_functions.precision.cosh.lowp_vertex.vec3
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 11; slowest #142 4608 ms
+  carve-out (KiB, of 48636): after #0 20523, last 21664, high-water 22918
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 566 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 22197760 bytes used now, 23468800 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 3/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 889 calls, 66044 map reads (74 a call, at most 1153 in one); free runs 7, longest 25844736 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 566 jobs ended; emitted 5540, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3392000, GPU VA 0x181000..0x3100000
+v3d_deqp: build 87881c78 INCOMPLETE (the photo deadline came first): 276 cases, P 276 F 0 R 0 N 0 other 0

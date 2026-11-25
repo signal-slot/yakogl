@@ -1,0 +1,38 @@
+MESS:00:00:07.386299:0: Loaded 'yakogl-TF2b.bin' to 0x200000
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.transform_feedback.basic_types.separate.*'
+[condensed: the per-case lines #0-#188 are not kept; every one reads "Pass (Pass)", no refusal, no "Test run was ABORTED"]
+v3d_deqp: case #188 P 58ms k2/11 c20174/20262 r0 dEQP-GLES3.functional.transform_feedback.basic_types.separate.triangles.mediump_vec4
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        189/189 (100.0%)
+  Failed:        0/189 (0.0%)
+  Not supported: 0/189 (0.0%)
+  Warnings:      0/189 (0.0%)
+  Waived:        0/189 (0.0%)
+deqp: done: 189 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 189 cases begun, 189 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES3.functional.transform_feedback.basic_types.separate.*'
+  189 cases in 11043 ms, record at 11 s after boot, reset at ~250 s
+  totals: P 189  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 189 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 189 cases begun, 189 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 11; slowest #0 185 ms
+  carve-out (KiB, of 48636): after #0 20146, last 20174, high-water 20262
+  jobs: slow in 0 cases; no job hung or timed out
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+v3d_deqp: build 87881c78 DONE, all passed: 189 cases, P 189 F 0 R 0 N 0 other 0
