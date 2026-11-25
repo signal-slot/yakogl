@@ -26,7 +26,6 @@
 #[allow(dead_code)]
 mod format71;
 #[path = "../src/v3d/texstate71.rs"]
-#[allow(dead_code)]
 mod texstate71;
 
 use format71::*;
@@ -256,8 +255,8 @@ fn mesa_records_decode_to_the_pinned_values() {
     };
     // (type name, swizzle R G B A, transfer func, R/B swap, reverse,
     //  P0 return words, P1 output 32-bit)
-    let pinned: [(&str, [u32; 4], u32, u32, u32, u32, u32); 2] =
-        [("RGBA8", [2, 3, 4, 5], 1, 0, 0, 3, 0), ("RGB565", [2, 3, 4, 1], 0, 0, 0, 3, 0)];
+    type Pinned = (&'static str, [u32; 4], u32, u32, u32, u32, u32);
+    let pinned: [Pinned; 2] = [("RGBA8", [2, 3, 4, 5], 1, 0, 0, 3, 0), ("RGB565", [2, 3, 4, 1], 0, 0, 0, 3, 0)];
     for (i, (s, p)) in s.iter().zip(pinned).enumerate() {
         let r = &s.record;
         let ty = g(r, "Texture type");
