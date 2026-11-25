@@ -31,6 +31,8 @@ cat "$D"/a/shard-*.txt >"$D/a.all"
 chk "fixture: cases once, in order" test "$(tr '\n' ' ' <"$D/a.all")" = "1 2 3 22 11 "
 run --runner "$D/lib.rs" --out "$D/s" --budget-ms 100000 >/dev/null
 chk "fixture: default skip '' keeps case 10" test "$(cut -f4 "$D/s/manifest.tsv" | tail -n 1)" = "1,2,3,10,22,11"
+chk "fixture: knob fragments" test "$(cat "$D"/a/shard-*.conf | tr '\n' ' ')" = 'CONFIG_GL_TEST_MP2_CASES="1,2" CONFIG_GL_TEST_MP2_CASES="3,22" CONFIG_GL_TEST_MP2_CASES="11" '
+chk "fixture: manifest has five columns" test "$(head -n 1 "$D/a/manifest.tsv" | awk -F'\t' '{print NF}')" = 5
 run --runner "$D/lib.rs" --skip 10 --out "$D/b" --times "$D/times.tsv" --budget-ms 1000 --default-ms 100 >/dev/null
 chk "deterministic" diff -r "$D/a" "$D/b"
 run --runner "$D/lib.rs" --skip 10 --out "$D/o" --times "$D/times.tsv" --budget-ms 1000 --overhead-ms 50 >/dev/null
@@ -54,6 +56,16 @@ chk "real set: 50 cases (the default skip is empty)" test "$(wc -w <"$D/r.all")"
 chk "real set: no case twice" test "$(tr ' ' '\n' <"$D/r.all" | grep . | sort | uniq -d | wc -l)" = 0
 chk "real set: order matches lib.rs" test "$(cat "$D/r.all")" = "$want"
 chk "real set: no shard over 15000 ms" test "$(tail -n +2 "$D/r/manifest.tsv" | awk -F'\t' '$3 > 15000' | wc -l)" = 0
+
+fail_conf=
+for f in "$D"/r/shard-*.txt; do
+	c=${f%.txt}.conf
+	[ "$(sed -n 's/^CONFIG_GL_TEST_MP2_CASES="\(.*\)"$/\1/p' "$c")" = "$(paste -sd, "$f")" ] || fail_conf=1
+done
+chk "real set: every fragment is its shard's list" test -z "$fail_conf"
+chk "real set: one fragment per shard" test "$(ls "$D"/r/shard-*.conf | wc -l)" = "$(ls "$D"/r/shard-*.txt | wc -l)"
+chk "sample has the knob" grep -q 'config GL_TEST_MP2_CASES' "$HERE/../../driver/samples/zephyr/gl_test/Kconfig"
+chk "DK main prints the one-case tally" grep -q 'all: %u of 1 cases failed' "$HERE/../../driver/samples/zephyr/gl_test/src/main_stm32mp2.c"
 
 printf '%d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

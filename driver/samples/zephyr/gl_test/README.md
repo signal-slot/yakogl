@@ -16,7 +16,8 @@ the board layer's `stm32mp2/app.conf` for the DK, the board layer's
 for the Verdin iMX95, `../common/verdin_imx95.cmake`). The options of each GPU are in
 their own menu of `Kconfig`. Every case reads its pixels back and prints
 `gl_test: case N <name>: PASS/FAIL`; a run ends with
-`gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
+`gl_test: all: N of M cases failed` (the STM32MP257F-DK's one-case image
+prints it too, as `gl_test: all: <0|1> of 1 cases failed ...`). The header comment of `gl_test.c` lists
 every case. Current results are in `tools/cts/STATUS.md`.
 
 ```sh
@@ -168,6 +169,22 @@ Kconfig (`Kconfig`, the STM32MP257F-DK menu):
   (`gc_gl_triangle`, `docs/notes/pre-study-stm32mp257f-dk.md` row P7). 2 adds
   case 2 (texture), and so on; more than one case runs on one context as a
   list.
+- `GL_TEST_MP2_CASES` (default ""): a comma list of case numbers, e.g.
+  `-DCONFIG_GL_TEST_MP2_CASES=\"1,2,3\"`, one shard of the regression set
+  (`tools/cts/mp2-gltest-shards.py` writes one `shard-NNNN.conf` per shard).
+  It overrides `GL_TEST_MP2_CASE` and `GL_TEST_MP2_SET_HEAD`: one number runs
+  that case alone, more are walked on one context. Not a list of decimal
+  case numbers: the image prints `FAIL` and runs nothing. Empty: as before.
+
+A one-case run (the default `SET_HEAD` of 1, or a one-number
+`GL_TEST_MP2_CASES`) has no suite tally of its own, so `main_stm32mp2.c`
+prints the runner's `all:` line for it, same fields:
+`gl_test: all: <0|1> of 1 cases failed (<0|1> passed; 0 timed out; first
+failure case <N|-1> at index <0|-1>; second failure case -1; <0|1> skipped,
+first skip case <N|-1>); precompiled hits H, compiler runs R` (one line;
+0 failed is a pass, 1 a failure or a refusal, a skipped case counts as
+0 of 1 failed with 1 skipped). `tools/probes/stm32mp257f_dk/verdict/dk_verdict.py`
+reads the verdict from it.
 
 The console has every case's line and `gl_test: all:`; the record is the
 `yk-record:` line on USART2, kind CASE as on the i.MX8MP: one case gives

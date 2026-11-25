@@ -27,11 +27,15 @@ pass the budget), so cases keep the order the walk has on one context and the
 same inputs give the same bytes. A case that cannot fit alone is an error
 (exit 1, nothing written).
 
-What the DK's gl_test image can take (main_stm32mp2.c, read only): one case
-(GL_TEST_MP2_CASE, or at run time the SNVS selector 1..999) or the head of the
-set (GL_TEST_MP2_SET_HEAD_CASES). A shard of one case runs as it is; a shard
-that is a later slice of several cases needs a list knob the sample does not
-have yet.
+Every shard also gets shard-NNNN.conf, a Zephyr config fragment with the
+DK image's list knob (driver/samples/zephyr/gl_test/Kconfig):
+
+    CONFIG_GL_TEST_MP2_CASES="1,2,3"
+
+Build one image per shard with `-DEXTRA_CONF_FILE=<out>/shard-NNNN.conf` (or
+the line on the command line). A shard of one case runs that case alone and
+prints a one-case "gl_test: all: N of 1" tally; a longer shard is walked on
+one context and prints the runner's tally. manifest.tsv is unchanged.
 """
 import argparse
 import os
@@ -123,6 +127,8 @@ def main(argv):
         fn = "shard-%04d.txt" % i
         with open(os.path.join(a.out, fn), "w", encoding="utf-8", newline="\n") as f:
             f.write("".join("%d\n" % n for n in names))
+        with open(os.path.join(a.out, "shard-%04d.conf" % i), "w", encoding="utf-8", newline="\n") as f:
+            f.write('CONFIG_GL_TEST_MP2_CASES="%s"\n' % ",".join(map(str, names)))
         rows.append("%d\t%d\t%d\t%s\t%s" % (i, len(names), ms, ",".join(map(str, names)), fn))
     with open(os.path.join(a.out, "manifest.tsv"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(rows) + "\n")
