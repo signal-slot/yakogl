@@ -217,3 +217,54 @@ square and limited by tile count) gave the same counts in every image; a
 temporary log in that run showed the executor's targets, 4096 x 2, 4, 5 or 6
 at 1 to 3 colour targets, single-sampled (1,035 draws). The board session
 after the fix (plan #376 item 3) is the check on the Pi 4.
+
+## A 4096 x 4096 target: memory, not size (plan #399)
+
+With the size guard out of the way, the question a 4096-square target raises
+is not whether the back end refuses it but whether the image's carve-out
+holds it.
+
+- **The need.** A 4096 x 4096 RGBA8 colour target with a DEPTH24_STENCIL8
+  attachment, depth test on, peaks at **153,286,144 bytes** of allocator heap
+  with an unlimited heap (colour 64 MiB, depth 64 MiB, the rest tile
+  memory): a carve-out of at least **154,338,816 bytes, about 147.2 MiB**
+  (plan #399 item fbo4096-kind). The figure is granule-rounded with
+  fragmentation unmodelled, so it is a lower bound. The Pi 4 images' default
+  carve is 50,331,648 (48 MiB, `boards/rpi_4b.conf`); its allocator heap is
+  that less the GPU page table and scratch page (528,384) and the two 256
+  KiB overflow blocks (524,288) — 49,278,976. Colour alone is 64 MiB. The
+  executor's own 4096 x 4 target of S03-S08 fits this heap; the 4096 square
+  does not.
+- **The refusal kind.** Not the size refusal `-ENOTSUP` and not the
+  job-list refusal `-E2BIG`: with room the draw works with no `draw refused`
+  line at all. Where the carve is short, the memory runs out during storage
+  setup, before the draw reaches the back end: the colour renderbuffer path
+  answers `GL_OUT_OF_MEMORY` at `renderbuffer_storage`'s `gpu_alloc`
+  (`src/gl/framebuffer.rs`), and the depth/stencil side answers `-ENOMEM`
+  from `ds_retention::refuse_no_memory` ("no GPU memory for its N byte
+  depth/stencil buffer; the draw is not recorded (GL_OUT_OF_MEMORY)",
+  `src/ds_retention.rs`). Either answer reaches dEQP as
+  `GL_OUT_OF_MEMORY` and, by the chain of "The error chain" above, aborts
+  the image.
+- **Which fbo cases.** The mustpass lists at CTS 93bca01 hold no case that
+  allocates a 4096 or near-4096 target: `fbo.completeness.size`,
+  `fbo.render`, `fbo.color`, `fbo.blit` and `fbo.msaa` stay at 132 pixels a
+  side at most, and the max-size cases of `implementation_limits` and
+  `state_query` only query the limits. None of the run's fbo,
+  fragment_ops, fragment_out and draw images can abort from this cause. The
+  b1b5b845 records' only `out of GPU memory` images are T14 and T14a's
+  texture.units cases (kept tiled copies), sized by
+  `driver/samples/zephyr/deqp/texture-2048.conf`.
+- **No fbo conf fits.** A second conf doubling the carve the way
+  texture-2048.conf does for the texture images is not possible: the deqp
+  image's 256 MiB window (`boards/rpi_4b.overlay`) caps the carve-out at
+  about 145.9 MiB — the image stops linking past about 145 MiB — below the
+  147.2 MiB the 4096-square draw needs. So no new conf: every image keeps
+  the 48 MiB carve, except those texture-2048.conf names.
+- **The tests that pin this** (`tests/v3d_target_4096_mem.rs`, feature set
+  in its header): `a_4096x4_target_fits_the_default_carveout` (the executor
+  shape fits), `the_4096_square_target_needs` (measures the need with an
+  unlimited heap and asserts the default carve is short of it), and
+  `a_4096x4096_colour_depth_target_fits_the_default_carveout`, `#[ignore]`d
+  with the need in its reason — un-ignore it with `--include-ignored` if a
+  future carve holds it.
