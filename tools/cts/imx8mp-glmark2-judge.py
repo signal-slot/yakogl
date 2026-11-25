@@ -20,10 +20,15 @@ What it does (it never decides a verdict, that is for a person looking):
   2. compares that picture with <reference>/<slug>.png with glmark2-picdiff.py
      (<out>/<name>.picdiff.png) and writes <out>/<name>.sidebyside.png with
      glmark2-sidebyside.py;
-  3. finds the full commit (INDEX.txt or another small text file of the record
-     that has a 40-hex string starting with the sha8, else git rev-parse of
-     the sha8 in --repo) and prints whether it is an ancestor of --main
-     (default origin/main): yes, no or unknown;
+  3. finds the record's commit and prints whether it is an ancestor of --main
+     (default origin/main): yes, no or unknown. A record whose sha8 is its
+     commit: the full sha from INDEX.txt or another small text file of the
+     record, else git rev-parse in --repo. A record as tools/board.sh names it
+     (sha8 = the image's sha256, meta.txt image_sha256): the commit is the
+     image's YAKOGL_SAMPLE_TREE=<sha8> (meta.txt image_build, INDEX.txt) or the
+     console's `build tree=<sha8>` line; a -dirty build is named. Such a row's
+     record sha8 is not its commit, which the verdicts checker's rule (c)
+     refuses: the helper says so;
   4. prints the table row of docs/notes/imx8mp-glmark2-pictures-by-eye.md with
      the verdict `not yet looked at` (the placeholder; replace it by looking)
      and the opening of the scene's `- **[scene] args**` entry with the crc and
@@ -92,22 +97,52 @@ def scene_of_label(label):
     return None
 
 
-def full_sha(rec, sha8, repo):
-    pat = re.compile(r"\b(%s[0-9a-f]{32})\b" % sha8)
-    names = ["INDEX.txt"] + sorted(
-        n for n in os.listdir(rec) if n not in ("INDEX.txt",) and
+def _small_texts(rec):
+    """The record's small text files other than the console, INDEX.txt first."""
+    names = ["INDEX.txt", "meta.txt"] + sorted(
+        n for n in os.listdir(rec) if n not in ("INDEX.txt", "meta.txt") and
         not n.startswith("console") and n.endswith((".txt", ".meta", ".env", ".json")))
     for n in names:
         p = os.path.join(rec, n)
-        if not os.path.isfile(p) or os.path.getsize(p) > 1 << 20:
-            continue
-        with open(p, errors="replace") as f:
-            m = pat.search(f.read())
-        if m:
-            return m.group(1)
+        if os.path.isfile(p) and os.path.getsize(p) <= 1 << 20:
+            with open(p, errors="replace") as f:
+                yield f.read()
+
+
+def record_commit(rec, sha8, log, repo):
+    """(commit8 or None, full sha or None, dirty, named_by_image).
+
+    tools/board.sh names a record by the first 8 digits of the image's sha256
+    (meta.txt image_sha256); the commit of such a record is the image's build
+    id, YAKOGL_SAMPLE_TREE=<sha8>[-dirty] (meta.txt image_build, INDEX.txt) or
+    the console's `build tree=<sha8>` line. A record whose sha8 is not an
+    image sha256 is taken as named by its commit."""
+    texts = list(_small_texts(rec))
+    by_image = any(re.search(r"^image_sha256=%s[0-9a-f]{56}\s*$" % sha8, t, re.M)
+                   for t in texts)
+    commit, dirty = None, False
+    if by_image:
+        with open(log, errors="replace") as f:
+            con = f.read(1 << 20)
+        for t, rx in [(t, r"YAKOGL_SAMPLE_TREE=([0-9a-f]{7,40})(-dirty)?") for t in texts] + [
+                (con, r": build tree=([0-9a-f]{7,40})(-dirty)?")]:
+            m = re.search(rx, t)
+            if m:
+                commit, dirty = m.group(1), bool(m.group(2))
+                break
+        if not commit:
+            return None, None, False, True
+    else:
+        commit = sha8
+        pat = re.compile(r"\b(%s[0-9a-f]{32})\b" % sha8)
+        for t in texts:
+            m = pat.search(t)
+            if m:
+                return sha8, m.group(1), False, False
     rc, out = sh(["git", "-C", repo, "rev-parse", "--verify", "--quiet",
-                  sha8 + "^{commit}"])
-    return out.strip() if rc == 0 and re.fullmatch(r"[0-9a-f]{40}", out.strip()) else None
+                  commit + "^{commit}"])
+    full = out.strip() if rc == 0 and re.fullmatch(r"[0-9a-f]{40}", out.strip()) else None
+    return (full or commit)[:8], full, dirty, by_image
 
 
 def ancestor(sha, repo, main):
@@ -175,18 +210,28 @@ def judge(rec, ref, scene, out, repo, main):
                  "--label-ref", "llvmpipe"])
     print("== side by side: %s (%s)" % (os.path.basename(sbs), "written" if rc == 0
           else scrub(sb).strip()))
-    full = full_sha(rec, sha8, repo)
+    commit, full, dirty, by_image = record_commit(rec, sha8, log, repo)
     anc = ancestor(full, repo, main)
-    print("== commit %s%s: ancestor of %s: %s" % (sha8, " (" + full + ")" if full else "",
-                                                 main, anc))
+    print("== commit %s%s%s: ancestor of %s: %s" % (
+        commit or "unknown", " (" + full + ")" if full else "",
+        ", built from a dirty tree" if dirty else "", main, anc))
+    if by_image:
+        print("== note: the record's sha8 %s is the image's sha256 (tools/board.sh), "
+              "not the commit%s" % (sha8, "" if commit else
+                                    "; no YAKOGL_SAMPLE_TREE or build line gives the commit"))
+        if commit and commit != sha8:
+            print("== note: imx8mp-glmark2-verdicts.py rule (c) wants the record's sha8 "
+                  "to be the commit: it refuses this row once the verdict is filled in")
+    if dirty:
+        print("== note: a dirty build is not an origin/main commit: rebuild and rerun")
     recpath = "records/imx8mp/%s/" % dname
     print("== row for docs/notes/imx8mp-glmark2-pictures-by-eye.md "
           "(replace the verdict by looking)")
-    print("| %s | %s | %s | dump | %s |" % (scene, sha8, recpath, PLACEHOLDER))
+    print("| %s | %s | %s | dump | %s |" % (scene, commit or "-", recpath, PLACEHOLDER))
     print("== opening of the entry")
     print("- **%s** (%s, %s): dump %s, frame crc32 %s%s; picdiff against llvmpipe: %s. "
           "Seen: <by eye>." % (
-              scene, sha8, recpath, size.group(1) if size else "?",
+              scene, commit or "-", recpath, size.group(1) if size else "?",
               crc.group(1) if crc else "?", ", picture value agrees" if value else "",
               scrub(pd).strip().splitlines()[-1] if pd.strip() else "?"))
     return 0
@@ -282,6 +327,51 @@ def self_test():
             f.write("image build: zephyr " + side + "\n")
         rc, o = run(rec2, ref, "--repo", repo, "--out", os.path.join(tmp, "out2"))
         expect("commit past origin/main: ancestor no", "ancestor of origin/main: no" in o)
+        # all 33 rows in the helper's format, filled: --complete accepts them
+        note = os.path.join(tmp, "note-complete.md")
+        with open(note, "w") as f:
+            f.write("## Verdicts\n\n| scene | commit | record | route | verdict |\n"
+                    "|---|---|---|---|---|\n")
+            for s in allscenes:
+                f.write(row.replace(scene, s).replace(PLACEHOLDER, "right") + "\n")
+        r = subprocess.run([sys.executable, "-I", vp, note, "--complete"],
+                           capture_output=True, text=True)
+        expect("verdicts.py --complete accepts 33 rows of the helper's format (%s)"
+               % r.stdout.strip(),
+               r.returncode == 0 and "ok: 33 rows, 33 filled" in r.stdout)
+        # a record as tools/board.sh names it: sha8 = the image's sha256, the
+        # commit in meta.txt's image_build (and never in the directory name)
+        img = "feedc0de" + "5" * 56
+        for k, (tree, where) in enumerate(((head[:8], "meta"), (head[:8] + "-dirty", "meta"),
+                                           (head[:8], "console"), (None, None))):
+            recb = os.path.join(tmp, "records", "imx8mp",
+                                "20261120-154%d-gm01-build-feedc0de" % k)
+            shutil.copytree(os.path.join(here, "record"), recb)
+            with open(os.path.join(recb, "meta.txt"), "w") as f:
+                f.write("board=imx8mp\nimage_sha256=%s\n" % img)
+                if where == "meta":
+                    f.write("image_build=YAKOGL_SAMPLE_TABLE=6c5b8a70 "
+                            "YAKOGL_SAMPLE_TREE=%s\n" % tree)
+            if where == "console":
+                with open(os.path.join(recb, "console-live.txt")) as f:
+                    c = f.read()
+                with open(os.path.join(recb, "console-live.txt"), "w") as f:
+                    f.write("sample: build tree=%s table=6c5b8a70\n%s" % (tree, c))
+            rc, o = run(recb, ref, "--repo", repo, "--out", os.path.join(tmp, "outb%d" % k))
+            rowb = next((x for x in o.splitlines() if x.startswith("| [")), "")
+            what = "image-named record, commit %s in %s" % (tree, where)
+            if tree is None:
+                expect(what + ": commit cell '-', ancestor unknown",
+                       rc == 0 and "| - | records/imx8mp/" in rowb and
+                       "ancestor of origin/main: unknown" in o)
+                continue
+            expect(what + ": the row's commit is the build's, not the image sha8",
+                   rc == 0 and rowb.startswith("| %s | %s | " % (scene, head[:8])) and
+                   "feedc0de/ | dump |" in rowb and
+                   "ancestor of origin/main: yes" in o and "is the image's sha256" in o and
+                   "rule (c)" in o)
+            expect(what + ": dirty %s" % ("named" if "dirty" in tree else "not named"),
+                   ("dirty" in tree) == ("built from a dirty tree" in o))
         # a damaged dump: exit 1, no row, a note to rerun
         rec3 = os.path.join(tmp, "records", "imx8mp", "20261120-1532-gm01-build-" + head[:8])
         shutil.copytree(os.path.join(here, "record"), rec3)
