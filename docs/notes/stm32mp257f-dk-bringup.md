@@ -951,6 +951,12 @@ Proposed fix (not made here; code is outside this item). Choose one:
 The first is the smaller change. `result_of` already reads `gl_test: PASS`,
 so the runner's `result=` is right either way.
 
+Fixed (P9): `main_stm32mp2.c` prints the runner's `all_line` format for a
+one-case run (`one_case_tally`, `0 of 1` or `1 of 1`); the first option was
+taken. `CONFIG_GL_TEST_MP2_CASES` gives a shard's case list
+(`tools/cts/mp2-gltest-shards.py` writes `shard-NNNN.conf`). Not yet built
+on the board.
+
 ## What these runs answer
 
 Where the results are folded in: the pre-study's rows P6 and P7 (section 8),
