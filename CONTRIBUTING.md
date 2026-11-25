@@ -22,7 +22,7 @@ CI, a review, then the merge. Never push main by hand.
    in any mode: the CI gate is the check. The one exception is a task whose
    stated purpose is a gate walk (an acceptance run of the gate itself).
 2. Open the pull request. The CI is the gate: `.github/workflows/gate.yml`
-   runs `tools/check.sh --changed <merge base> --no-clippy` on the pull
+   runs `tools/check.sh --no-clippy --changed <merge base>` on the pull
    request (the merge of the branch into main), and every row nightly on
    main's tip and when started by hand; main is not run on each merge. It runs on
    self-hosted runners that have the environment below. The file's header
@@ -119,8 +119,12 @@ pull request (step 1 above).
   `YAKOGL_CHECK_PLAN=1 tools/check.sh` list the rows and run none; their
   summary lines give the counts, ok plus gaps (a row whose tool or file the
   host lacks is listed as a gap). No file keeps the count: a row added by
-  one pull request edits no number that another one edits too. The runs
-  below were made with 177 rows in `--quick`. Measured on
+  one pull request edits no number that another one edits too. The plan
+  at `ab919063` is 480 rows in `--quick` and 540 in the full run (the
+  summary lines of `YAKOGL_CHECK_PLAN=1`), and a docs-only change run as
+  `tools/check.sh --no-clippy --changed <parent>` reaches 4 rows; the dated runs below keep the
+  row counts they had then (177 in `--quick` at `570cd8c6` and `18353e05`).
+  Measured on
   2026-11-10 from a fresh clone of `0f020431` at a canonical path on a 4 core
   host with two compiler slots, the layout exported, `lz4` on PATH and the
   stale `CC_aarch64_unknown_none` unset: "177 ok, 0 failed, 0 gap(s)" in
