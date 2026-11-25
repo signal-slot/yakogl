@@ -40,8 +40,14 @@ ends on 58-60; a slice's log holds only its own rows, so absence is not an
 error). SPEC counts as the selector does; --one-based reads it as table
 line numbers from 1.
 
-Exit status: 0 every row seen finished; 1 a row ended without a finish line;
-2 bad input. The self-test:
+A capture that is empty, or holds only NUL and whitespace bytes (the farm's
+console bridge has so far delivered only NULs on this board), is not a clean
+console: it prints "-- console dark: N bytes, ...; recoveries and watchdog
+stops NOT observed" under its header, and a final "-- N of M capture(s) console
+dark" line follows when any was dark. --fail-dark makes that exit 1.
+
+Exit status: 0 every row seen finished; 1 a row ended without a finish line
+(or, with --fail-dark, a capture is dark); 2 bad input. The self-test:
 tools/cts/imx8mp-console-scan-selftest.sh.
 
 The patterns are the strings the code prints (quoted where they are used).
@@ -113,6 +119,13 @@ STAMP_UNIX = re.compile(r'^(\d{9,}(?:\.\d+)?) (.*)$')
 
 def clean(b):
     return b.replace(b'\r', b'').replace(b'\0', b'').decode('utf-8', 'replace')
+
+
+def dark_size(path):
+    """The size in bytes if the capture is empty or only NUL/whitespace, else None."""
+    with open(path, 'rb') as f:
+        data = f.read()
+    return len(data) if not data.strip(b'\0 \t\r\n\v\f') else None
 
 
 def resolve(path):
@@ -268,6 +281,8 @@ def main(argv=None):
     ap.add_argument('--watch', help='rows to mark, e.g. 13-15,57,95,122-127')
     ap.add_argument('--one-based', action='store_true', help='--watch counts table lines from 1')
     ap.add_argument('-q', '--quiet', action='store_true', help='only the per-row table')
+    ap.add_argument('--fail-dark', action='store_true',
+                    help='exit 1 when a capture is empty or NUL/whitespace only')
     a = ap.parse_args(argv)
     try:
         watch = parse_spec(a.watch, 1 if a.one_based else 0)
@@ -275,16 +290,21 @@ def main(argv=None):
         print('imx8mp-console-scan: bad --watch spec %r' % a.watch, file=sys.stderr)
         return 2
     bad = 0
+    dark = 0
     for path in a.log:
         try:
             path = resolve(path)
             lines = read_log(path)
+            dsz = dark_size(path)
         except OSError as e:
             print('imx8mp-console-scan: %s' % e, file=sys.stderr)
             return 2
         events = []
         rows, boots = scan(lines, watch, events)
         print('== %s (%d lines, %d boot banner(s), %d row(s))' % (path, len(lines), boots, len(rows)))
+        if dsz is not None:
+            dark += 1
+            print('-- console dark: %d bytes, all NUL/whitespace; recoveries and watchdog stops NOT observed' % dsz)
         if not a.quiet:
             print('\n'.join(events))
         print('-- rows: selector, start, elapsed board time, results, recoveries, end')
@@ -312,7 +332,10 @@ def main(argv=None):
         if missing:
             print('-- watched rows not in this log: %s' % ','.join(str(n) for n in missing))
         bad += len(unfinished)
-    return 1 if bad else 0
+    if dark:
+        print('-- %d of %d capture(s) console dark: recoveries and watchdog stops NOT observed' % (
+            dark, len(a.log)))
+    return 1 if bad or (dark and a.fail_dark) else 0
 
 
 if __name__ == '__main__':

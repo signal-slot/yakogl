@@ -124,5 +124,22 @@ python3 -I "$SCAN" "$D/missing.txt" > /dev/null 2>&1
 python3 -I "$SCAN" --watch x "$D/console.txt" > /dev/null 2>&1
 [ "$?" = 2 ] && ok "bad --watch: exit 2" || bad "bad --watch"
 
+# dark captures: all NUL, empty, NUL plus whitespace; text is unchanged
+mkdir "$D/dk"
+printf '\0\0\0\0\0\n\0\0' > "$D/dk/nul.txt"
+: > "$D/dk/empty.txt"
+darkline='^-- console dark: [0-9]+ bytes, all NUL/whitespace; recoveries and watchdog stops NOT observed$'
+for f in nul empty; do
+    o=$(python3 -I "$SCAN" "$D/dk/$f.txt" 2>&1); r=$?
+    if [ "$r" = 0 ] && grep -qE "$darkline" <<<"$o" && grep -qE '^-- 1 of 1 capture\(s\) console dark' <<<"$o"; then
+        ok "$f capture: console dark line and summary, exit 0"; else bad "$f capture (exit $r)"; fi
+    python3 -I "$SCAN" --fail-dark "$D/dk/$f.txt" > /dev/null 2>&1
+    [ "$?" = 1 ] && ok "$f capture: --fail-dark exits 1" || bad "$f capture: --fail-dark"
+done
+o=$(python3 -I "$SCAN" "$D/dk/nul.txt" "$D/finished.txt" 2>&1)
+grep -qE '^-- 1 of 2 capture\(s\) console dark' <<<"$o" && ok "mixed: 1 of 2 dark" || bad "mixed summary"
+o=$(python3 -I "$SCAN" --fail-dark "$D/finished.txt" 2>&1); r=$?
+if [ "$r" = 0 ] && ! grep -q 'console dark' <<<"$o"; then ok "text capture: no dark line, --fail-dark exit 0"; else bad "text capture (exit $r)"; fi
+
 printf '%d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
