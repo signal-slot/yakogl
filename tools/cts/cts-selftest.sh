@@ -1067,6 +1067,10 @@ fi
 # live repository is not checked here (its entries change with the Pi 4 rerun).
 gl3check 61 check-pi4-gles3-results-selftest.sh "the Pi 4 ES 3.0 entries checked against tree, mustpass and TSV, four wrong sets named"
 
+# 62: am62p-gltest-es3-verdicts.py on synthetic redacted serial logs of gl_test cases
+# 196-205: a clean run, a reset mid-case, a missing case and a wrong reading, each named.
+gl3check 62 am62p-gltest-es3-verdicts-selftest.sh "gl_test ES 3.0 case verdicts from synthetic AM62P logs, reset, missing and wrong reading named"
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
