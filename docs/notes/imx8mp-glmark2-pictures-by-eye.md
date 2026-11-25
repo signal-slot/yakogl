@@ -115,6 +115,12 @@ Verdict values: `right`, `wrong` (becomes an entry under "Wrong scenes"),
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | - | - | - | not yet looked at |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | - | - | - | not yet looked at |
 
+## What was looked at
+
+Each scene gets one `- **[scene]**: ...` bullet here (the scene cell of its
+table row, then what the picture shows against the llvmpipe reference) when its
+row in the table is filled in.
+
 ## Wrong scenes
 
 None yet. A scene judged wrong is not fixed in this work: it gets an issue text

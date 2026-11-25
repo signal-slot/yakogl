@@ -41,7 +41,16 @@ for line in open(src).read().split("\n"):
 if sha == "skeleton":
     out.append("Skeleton: no scene looked at. Not yet established. To fill in.")
 else:
-    out += [""] + ["- **%s**: looked at it." % s for s in scenes]
+    # the bullets go under '## What was looked at' (verdicts.py --complete
+    # checks them there); a note without that section gets one at the end
+    bullets = ["- **%s**: looked at it." % s for s in scenes]
+    if "## What was looked at" in out:
+        i = out.index("## What was looked at") + 1
+        while i < len(out) and not out[i].startswith("## "):
+            i += 1
+        out[i:i] = bullets + [""]
+    else:
+        out += ["", "## What was looked at", ""] + bullets
 open(dst, "w").write("\n".join(out) + "\n")
 PY
 }

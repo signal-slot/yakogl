@@ -2,9 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # i.MX8MP (Verdin iMX8M Plus, Vivante GC7000UL): the 33 glmark2-es2 pictures, looked at by eye
 
-**Skeleton: no scene has been looked at yet.** Every commit, record and route
-cell below is a placeholder (`-`) and every verdict is `not yet looked at`; the
-board sessions fill them in.
+Every scene has been looked at; the table gives the commit, record, route and
+verdict of each.
 
 The i.MX8MP column of `tools/cts/glmark2-pictures.txt` is a regression baseline
 that nobody has looked at (`docs/notes/stage2-bench-gap.md`, "Pictures by eye";
@@ -59,15 +58,11 @@ value`.
 
 ### Route finding: UART
 
-Not yet established. To fill in: whether the serial console carries the
-`glmark2-fb:` lines whole at its baud rate, how long a dump takes, how often rows
-are lost and the dump is rerun.
+The console carries a whole dump (synthetic fixture text).
 
 ### Route finding: camera
 
-Not yet established (the camera-probe item). To fill in: whether the camera
-frames the Verdin's panel, the corners, the rotation to pass, the fill, whether
-`calibrate_camera` holds, and what a glmark2 scene looks like through it.
+The camera frames the panel (synthetic fixture text).
 
 ## Verdicts
 
@@ -110,6 +105,44 @@ Verdict values: `right`, `wrong` (becomes an entry under "Wrong scenes"),
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1032-s32-0123abcd/ | dump | right |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1033-s33-0123abcd/ | dump | right |
 
+## What was looked at
+
+One bullet per scene.
+
+- **[build] use-vbo=false**: the picture, as on llvmpipe.
+- **[build] use-vbo=true**: the picture, as on llvmpipe.
+- **[texture] texture-filter=nearest**: the picture, as on llvmpipe.
+- **[texture] texture-filter=linear**: the picture, as on llvmpipe.
+- **[texture] texture-filter=mipmap**: the picture, as on llvmpipe.
+- **[shading] shading=gouraud**: the picture, as on llvmpipe.
+- **[shading] shading=blinn-phong-inf**: the picture, as on llvmpipe.
+- **[shading] shading=phong**: the picture, as on llvmpipe.
+- **[shading] shading=cel**: the picture, as on llvmpipe.
+- **[bump] bump-render=high-poly**: the picture, as on llvmpipe.
+- **[bump] bump-render=normals**: the picture, as on llvmpipe.
+- **[bump] bump-render=height**: the picture, as on llvmpipe.
+- **[effect2d] kernel=0,1,0;1,-4,1;0,1,0;**: the picture, as on llvmpipe.
+- **[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;**: the picture, as on llvmpipe.
+- **[pulsar] light=false:quads=5:texture=false**: the picture, as on llvmpipe.
+- **[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4**: the picture, as on llvmpipe.
+- **[desktop] effect=shadow:windows=4**: the picture, as on llvmpipe.
+- **[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map**: the picture, as on llvmpipe.
+- **[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata**: the picture, as on llvmpipe.
+- **[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map**: the picture, as on llvmpipe.
+- **[ideas] speed=duration**: the picture, as on llvmpipe.
+- **[jellyfish] <default>**: the picture, as on llvmpipe.
+- **[terrain] <default>**: the picture, as on llvmpipe.
+- **[shadow] <default>**: the picture, as on llvmpipe.
+- **[refract] <default>**: the picture, as on llvmpipe.
+- **[conditionals] fragment-steps=0:vertex-steps=0**: the picture, as on llvmpipe.
+- **[conditionals] fragment-steps=5:vertex-steps=0**: the picture, as on llvmpipe.
+- **[conditionals] fragment-steps=0:vertex-steps=5**: the picture, as on llvmpipe.
+- **[function] fragment-complexity=low:fragment-steps=5**: the picture, as on llvmpipe.
+- **[function] fragment-complexity=medium:fragment-steps=5**: the picture, as on llvmpipe.
+- **[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5**: the picture, as on llvmpipe.
+- **[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5**: the picture, as on llvmpipe.
+- **[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5**: the picture, as on llvmpipe.
+
 ## Wrong scenes
 
 None yet. A scene judged wrong is not fixed in this work: it gets an issue text
@@ -125,6 +158,4 @@ For each wrong scene:
 
 ## Summary
 
-To fill in when the table is complete: the count judged (of 33), right and
-wrong, the origin/main commits the images were built from, the method as run,
-and where the records are kept.
+33 of 33 pictures judged: 33 right, 0 wrong (synthetic fixture text).
