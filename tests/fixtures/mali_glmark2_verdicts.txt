@@ -87,7 +87,7 @@
 27 conditionals:vertex-steps=5:fragment-steps=0 vs a21c: ok
 28 function:fragment-steps=5:fragment-complexity=low fs c8ce: ok
 28 function:fragment-steps=5:fragment-complexity=low vs 0162: ok
-29 function:fragment-steps=5:fragment-complexity=medium fs 849c: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet
+29 function:fragment-steps=5:fragment-complexity=medium fs 849c: ok
 29 function:fragment-steps=5:fragment-complexity=medium vs 0162: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false fs e016: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false vs 3cb0: ok

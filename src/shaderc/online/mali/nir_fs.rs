@@ -3639,6 +3639,15 @@ impl<'s> Fs<'s> {
                     }
                 };
             }
+            /* `sqrt` and `inversesqrt` of one lane of the island's fp16
+             * arithmetic (glmark2 function fs 849c's `fract(sqrt(d))`):
+             * `lower_fsqrt`'s `frcp(frsq(a))`, `FRSQ.f16 r0, r0^.h00` then
+             * `FRCP.f16 r0, r0^.h00` (gm2_mploop_3.expect.json;
+             * docs/notes/mali-fragcoord-fp16-ops.md) */
+            AluOp::Fsqrt | AluOp::Frsq if w == 1 && self.lone16(x[0][0], Val::Undef) => {
+                let r = self.node16(Alu::Frsq, [x[0][0], u, u], 1, at)?;
+                out[0] = if a == AluOp::Fsqrt { self.node16(Alu::Frcp, [r, u, u], 1, at)? } else { r };
+            }
             /* one texel by a constant, an operation of one lane (gm2_texswz_2's
              * `t.a * 0.5`: `FMA.v2f16 r0, r0^.h00, 0x38000000.h11, 0x0.neg`
              * of the texel the write mask packs alone) */
