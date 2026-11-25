@@ -1163,6 +1163,123 @@ mod tests {
         assert!(no_pmu_write(&t6));
     }
 
+    /// The T6 as U-Boot hands it over, the words read at its prompt on
+    /// 2026-11-12 (docs/notes/nanopc-t6-uboot-handover.md section 4): the GPU
+    /// clock on SPLL (CLKSEL_CON(158) 0x1f80, (159) 0), PD_GPU off and in bus
+    /// idle, CPLL at 1500 MHz and GPLL locked, and the RK806 with BUCK1_ON_VSEL
+    /// 0x1c and DCDC1 on (`POWER_EN0` 0x0f) or off (0x0e).
+    fn handed_over_at_the_u_boot_prompt(dcdc1_on: bool) -> T6 {
+        let mut t6 = T6::handed_over();
+        t6.rk806.get_mut().insert(rk806::POWER_EN0, if dcdc1_on { 0x0f } else { 0x0e });
+        let cru = [
+            (clksel_con(158), 0x0000_1f80),
+            (clksel_con(159), 0),
+            (clkgate_con(66), 0x0000_0004),
+            (MODE_CON0, 0x0000_0545),
+            (pll_con(104), 0xfa),
+            (pll_con(105), 0x42),
+            (pll_con(106), 0),
+            (pll_con(107), 0),
+            (pll_con(108), 0),
+            (pll_con(109), 0),
+            (pll_con(110), 0x9c00),
+            (pll_con(112), 0xc6),
+            (pll_con(113), 0x42),
+            (pll_con(114), 0),
+            (pll_con(115), 0),
+            (pll_con(116), 0),
+            (pll_con(117), 0),
+            (pll_con(118), 0x9400),
+        ];
+        let pmu = [
+            (pd_gpu::PWR_GATE, 0x0000_fff9),
+            (pd_gpu::BUS_IDLE_REQ, 0),
+            (pd_gpu::BUS_IDLE_ACK, 0x0002_1fff),
+            (pd_gpu::BUS_IDLE_ST, 0x0002_1fff),
+            (pd_gpu::REPAIR_STATUS, 0xfff7_0001),
+        ];
+        let mut r = t6.regs.borrow_mut();
+        for (a, v) in cru {
+            r.insert(CRU_BASE + a, v);
+        }
+        for (a, v) in pmu {
+            r.insert(PMU_BASE + a, v);
+        }
+        drop(r);
+        t6
+    }
+
+    fn u_boot_prompt_state_moves_the_clock(dcdc1_on: bool) {
+        let t6 = handed_over_at_the_u_boot_prompt(dcdc1_on);
+        let mut seen = None;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |h| seen = Some((*h, t6.writes.borrow().len())));
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        // SPLL is no table clock: moved to CPLL / 5 = 300 MHz with the one
+        // masked write, and CLKSEL_CON(159) (already 0) is not written
+        assert_eq!(o.clock.sel158, 0x1f80);
+        assert_eq!(
+            o.clock_set,
+            ClockSet {
+                kept: false,
+                cpll_hz: 1_500_000_000,
+                wrote: [0x40ff_0024, 0],
+                sel: [0x1f24, 0],
+                src_hz: 300_000_000
+            }
+        );
+        let w = t6.writes.borrow();
+        let sel: Vec<_> = w.iter().filter(|w| w.0 == SEL158).copied().collect();
+        assert_eq!(sel, vec![(SEL158, 0x40ff_0024)], "{w:x?}");
+        assert!(w.iter().all(|w| w.0 != CRU_BASE + clksel_con(159)), "{w:x?}");
+        assert_eq!((t6.regs.borrow()[&SEL158], o.vdd_gpu_uv), (0x1f24, 675_000));
+        // the RK806: one enable frame with the supply off, none with it on
+        let frames = t6.rk806_writes.borrow();
+        if dcdc1_on {
+            assert!(frames.is_empty() && !o.supply_enabled);
+        } else {
+            assert_eq!(*frames, vec![vec![0x80, 0x00, 0x00, 0x11]]);
+            assert!(o.supply_enabled);
+        }
+        assert_eq!(rk806_write_starts(&w).len(), frames.len());
+        // PD_GPU: powered through pd_gpu_on, and usable after
+        assert!(!o.pd_on.was_on);
+        assert!(o.pd_after.usable());
+        assert!(t6.gpu_powered());
+        assert!(w.contains(&(PMU_BASE + pd_gpu::PWR_GATE, 1 << 16)));
+        assert_eq!(o.ident.gpu_id, 0xa867_0005);
+        // the twelve LinuxZero QoS writes: three words in each of four blocks
+        assert_eq!(o.qos_policy, QosPolicy::LinuxZero.id());
+        let qos: Vec<_> = w.iter().filter(|w| (QOS..QOS + 0x800).contains(&w.0) && w.1 == 0).collect();
+        assert_eq!(qos.len(), 12, "{w:x?}");
+        for blk in 0..4 {
+            for off in rk3588::QOS_POLICY_WORDS {
+                assert!(w.contains(&(QOS + 0x200 * blk + off, 0)), "block {blk} word {off:#x}");
+            }
+        }
+        // the report comes before any PMU, GPU or QoS write and before the
+        // RK806 enable frame
+        let (h, writes_then) = seen.expect("on_handover was not called");
+        assert_eq!((h.rk806[0], h.vdd_gpu_uv, h.clock.sel158), (if dcdc1_on { 0x0f } else { 0x0e }, 675_000, 0x1f80));
+        assert!(
+            w[..writes_then].iter().all(|w| !(PMU_BASE..PMU_BASE + 0x400).contains(&w.0)
+                && !(GPU..GPU + 0x10000).contains(&w.0)
+                && !(QOS..QOS + 0x800).contains(&w.0)),
+            "{:x?}",
+            &w[..writes_then]
+        );
+        assert!(rk806_write_starts(&w).iter().all(|&i| i >= writes_then), "an RK806 write before the report: {w:x?}");
+    }
+
+    #[test]
+    fn the_state_read_at_the_u_boot_prompt_moves_the_clock_and_powers_on_supply_on() {
+        u_boot_prompt_state_moves_the_clock(true);
+    }
+
+    #[test]
+    fn the_state_read_at_the_u_boot_prompt_moves_the_clock_and_powers_on_supply_off() {
+        u_boot_prompt_state_moves_the_clock(false);
+    }
+
     /// The T6 with CLKSEL_CON(158) as given, run to the end.
     fn run_from(sel158: u32) -> (T6, GpuUp) {
         let t6 = T6::handed_over();
