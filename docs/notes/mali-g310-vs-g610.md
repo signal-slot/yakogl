@@ -387,6 +387,27 @@ define are therefore not taken from a probe log: the arch revision nibble
 variant 1 (`g310v2`). Variants 0 and 2 give the same frame bytes, because
 they have the same tile buffer.
 
+### Measured on the board: dEQP-GLES2 S4
+
+On 2026-11-25 rows 69-76 of the tree (S4, 2,675 mustpass cases) ran on the
+Verdin iMX95 under Zephyr, from images built at `e63ab28e`
+(`tools/cts/log/2026-11-25-imx95-gles2-S4-e63ab28e/`,
+`docs/es2-cts-failures.md` section N). The image reported `gpu_id 0xac740001
+(G310v2, core_features 0x1)`. The result is 2,107 Pass, 537 Fail and 31
+NotSupported. There was no hang, no GPU restart, no tiler OOM and no refused
+draw. Every non-Pass case but one is an online-compiler refusal, the same
+kinds as on the G610.
+
+By name against the T6's S4 at `8ff01055`, 163 cases differ, and all of them
+are better on the G310. 550 of the 568 cases non-Pass on both stop on the
+same refusal. The runs are 283 commits apart, and the differences are
+compiler statuses. This bears out section 5 for the compiler (no G310 path)
+in these rows. The frame builder's tile-buffer budget and tiler levels
+(`src/mali/frame.rs`) and the renderer name (`src/mali/backend.rs`) left no
+visible mark: S4 has no `info.*` case, so the renderer string was not
+printed. Still unmeasured: rows that stress the tile buffer and the tiler,
+the S1 `fbo`, `texture` and `multisample` rows.
+
 ## Sample
 
 `tools/mali/testdata/g310v2-frames/` (its `README.md` says how each was

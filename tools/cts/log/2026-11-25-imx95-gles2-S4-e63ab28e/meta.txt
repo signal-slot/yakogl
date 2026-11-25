@@ -1,0 +1,14 @@
+commit=e63ab28e30ae913f06bb595bc10f972fc1c2ff77
+session=S4
+rows=69-76
+tree=tools/cts/mali-gles2-tree.txt
+board=verdin_imx95
+boot_id_before=none (Zephyr images started from U-Boot)
+boot_id_after=none (Zephyr images started from U-Boot)
+kernel=none: Zephyr af17c0c8aa2a, verdin_imx95/mimx9596/a55, started by U-Boot 2024.04-7.8.0+git.b7c747d8c084 (go 0xd0000000)
+lib=zephyr.bin per row, build e63ab28e (imx95-deqp-images.sh), CSF firmware sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b
+started=2026-11-25T05:48:40Z
+ended=2026-11-25T06:12:06Z
+route=U-Boot prompt by hand: ext4load mmc 0:2 0xd0000000 /var/yakogl/s4-e63ab28e/<label>.bin; md5sum; dcache off; icache flush; go 0xd0000000
+bbm_record=not read back: the module's kernel has no SCMI raw interface (tools/imx95_bbm_record.sh probe: exit 3)
+lifetime_s=600 (deqp/verdin_imx95.conf) + 60 (WDOG3)

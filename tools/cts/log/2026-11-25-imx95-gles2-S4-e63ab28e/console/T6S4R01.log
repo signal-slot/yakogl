@@ -1,0 +1,2085 @@
+U-Boot SPL 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+SOC: 0xb0009500
+LC: 0x40010
+Trying to boot from MMC1
+Primary set selected
+Load image from MMC/SD 0xc3400
+NOTICE:  BL31: v2.10.0	(release):lf-6.6.52-2.2.1-dirty
+NOTICE:  BL31: Built : 06:40:36, Jul  7 2025
+
+
+U-Boot 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+
+CPU:   i.MX95 rev2.0 at 1800MHz
+CPU:   Extended Industrial temperature grade (-40C to 125C) at 62C
+LM Boot reason: sw, origin: 0, errid: 0
+LM shutdown reason: sw, origin: 0, errid: 0
+DRAM:  Delete node <device-tree path>
+7.8 GiB
+Core:  323 devices, 32 uclasses, devicetree: separate
+MMC:   FSL_SDHC: 0, FSL_SDHC: 1, FSL_SDHC: 2
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Model: Toradex 0089 Verdin iMX95 Hexa 8GB WB IT V1.1A
+Serial#: <serial>
+
+BuildInfo:
+  - SM firmware Build 574, Commit cc7a8d2d, Sep 24 2026 20:00:35
+  - ELE firmware version 2.0.5-fe6641ef
+
+flash target is MMC:0
+Net:   WARNING: no MAC address assigned for MAC0
+imx_get_mac_from_fuse: fuse read err: 0
+eth0: enetc-0 [PRIME]Could not get PHY for emdio-0: addr 7
+
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  1 \x08\x08\x08 0
+Verdin iMX95 #  ext4load mmc 0:2 0xd0000000 /var/yakogl/s4-e63ab28e/T6S4R01.bin; md5sum 0xd0000000 ${filesize}
+12768592 bytes read in 41 ms (297 MiB/s)
+md5 for d0000000 ... d0c2d54f ==> d5a242b0a44ca567360bf872873b5f4d
+Verdin iMX95 # dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/167759 in 24159 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.algorithm.*,dEQP-GLES2.functional.shaders.builtin_variable.*,dEQP-GLES2.functional.shaders.conditionals.*,dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.*,dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.*,dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.*,dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.*,dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 27 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.algorithm.hsl_to_rgb_fragment'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+mali shaderc table 'IR values': high-water 143 of 2048
+mali shaderc table 'locals': high-water 20 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 923 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.algorithm.hsl_to_rgb_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.algorithm.hsl_to_rgb_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 1010 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.algorithm.hsl_to_rgb_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 844 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 931 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.depth_range_fragment'..
+mali shaderc table 'uniform rows': high-water 3 of 256
+mali shaderc table 'fragment pair nodes': high-water 3 of 255
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+yakogl: program 2 has no uniform 'uv4_two'
+yakogl: program 2 has no uniform 'uv4_black'
+yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: program 2 has no uniform 'uv4_white'
+mali arena 'desc': high-water 1072 of 1048576 bytes
+mali arena 'data': high-water 592 of 262144 bytes
+mali arena 'code': high-water 384 of 131072 bytes
+mali arena 'spds': high-water 64 of 32768 bytes
+mali arena 'cs': high-water 424 of 393216 bytes
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+yakogl: program 2 has no uniform 'uv4_two'
+yakogl: program 2 has no uniform 'uv4_black'
+yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: program 2 has no uniform 'uv4_white'
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+yakogl: program 2 has no uniform 'uv4_two'
+yakogl: program 2 has no uniform 'uv4_black'
+yakogl: program 2 has no uniform 'uv4_gray'
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.depth_range_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.depth_range_vertex'..
+mali shaderc table 'NIR instructions': high-water 37 of 1536
+mali shaderc table 'FAU words': high-water 14 of 128
+mali arena 'data': high-water 239952 of 262144 bytes
+mali arena 'code': high-water 512 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.depth_range_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.fragcoord_w'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 87 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.fragcoord_w
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.fragcoord_xyz'..
+mali shaderc table 'fragment pair nodes': high-water 7 of 255
+mali arena 'desc': high-water 1136 of 1048576 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.fragcoord_xyz
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.frontfacing'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 152 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.frontfacing
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_combined_texture_image_units_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 220 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_combined_texture_image_units_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_combined_texture_image_units_vertex'..
+mali shaderc table 'NIR instructions': high-water 40 of 1536
+mali arena 'data': a chunk of 262144 bytes for a block of 138384
+mali arena 'data': high-water 378336 of 524288 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_combined_texture_image_units_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_draw_buffers_fragment'..
+GL error 0x500 in glGetIntegerv
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 205 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_draw_buffers_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_draw_buffers_vertex'..
+GL error 0x500 in glGetIntegerv
+mali arena 'data': a chunk of 262144 bytes for a block of 138384
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_draw_buffers_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_fragment_uniform_vectors_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 218 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_fragment_uniform_vectors_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_fragment_uniform_vectors_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_fragment_uniform_vectors_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_texture_image_units_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 212 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_texture_image_units_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_texture_image_units_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_texture_image_units_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_varying_vectors_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 208 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_varying_vectors_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_varying_vectors_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_varying_vectors_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_attribs_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 208 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_attribs_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_attribs_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_attribs_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_texture_image_units_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 218 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_texture_image_units_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_texture_image_units_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_texture_image_units_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_uniform_vectors_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 216 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_uniform_vectors_fragment
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_uniform_vectors_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.max_vertex_uniform_vectors_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.builtin_variable.pointcoord'..
+mali shaderc table 'BIR instructions': high-water 62 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.builtin_variable.pointcoord
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.complex_condition_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 464 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.complex_condition_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.complex_condition_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 378 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.complex_condition_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.compound_statement_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 448 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.compound_statement_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.compound_statement_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 378 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.compound_statement_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.constant_conditional_assignment_to_matrix'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.constant_conditional_assignment_to_matrix
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_else_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.if_else_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_else_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.if_else_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_else_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_else_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_else_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 267 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_else_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 254 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.if_elseif_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.input_conditional_assignment_to_matrix'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.input_conditional_assignment_to_matrix
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.mixed_if_elseif_else_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.mixed_if_elseif_else_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.mixed_if_elseif_else_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 291 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.mixed_if_elseif_else_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.sequence_condition_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 435 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.sequence_condition_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.sequence_condition_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 378 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.sequence_condition_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.sequence_statements_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 428 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.sequence_statements_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.sequence_statements_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 378 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conditionals.if.sequence_statements_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.single_statement_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.single_statement_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.single_statement_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.single_statement_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.if.uniform_conditional_assignment_to_matrix'..
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.if.uniform_conditional_assignment_to_matrix
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 88 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 87 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_one_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 88 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_one_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_one_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 87 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_one_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_zero_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 88 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_zero_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_zero_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 87 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.float_zero_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 86 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 85 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_one_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 86 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_one_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_one_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 85 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_one_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_uniform_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 126 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_uniform_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_uniform_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 125 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_uniform_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_zero_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 86 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_zero_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_zero_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 85 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.int_zero_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.missing_parenthesis_fragment'..
+glCompileShader(5): 0:4: 'true' : expected '(' after 'if' [fragment stage, 87 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.missing_parenthesis_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.missing_parenthesis_vertex'..
+glCompileShader(3): 0:4: 'true' : expected '(' after 'if' [vertex stage, 86 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.missing_parenthesis_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.sampler_condition_fragment'..
+glCompileShader(5): 0:0: '' : a condition must be a bool [fragment stage, 109 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.sampler_condition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.sampler_condition_vertex'..
+glCompileShader(3): 0:0: '' : a condition must be a bool [vertex stage, 108 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.sampler_condition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.unclosed_parenthesis_fragment'..
+glCompileShader(5): 0:5: 'gl_FragColor' : expected ')' [fragment stage, 88 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.unclosed_parenthesis_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conditionals.invalid_if.unclosed_parenthesis_vertex'..
+glCompileShader(3): 0:5: 'gl_Position' : expected ')' [vertex stage, 87 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conditionals.invalid_if.unclosed_parenthesis_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.abs_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.ceil_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.clamp_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.floor_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.fract_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.max_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.min_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mix_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 237 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 238 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 237 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 238 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 237 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 238 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet) [vertex stage, 237 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.mod_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.sign_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.smoothstep_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.common.step_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 224 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 224 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 224 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp2_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 338 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 222 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.exp_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.inversesqrt_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 341 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 225 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 342 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 226 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 342 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 226 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 342 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 226 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log2_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 224 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 341 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 225 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 341 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 225 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 341 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 225 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.log_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 351 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 235 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 351 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 235 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 351 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 235 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 351 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 235 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.pow_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.exponential.sqrt_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.distance_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.dot_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.faceforward_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.length_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.normalize_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.reflect_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.matrix.compMult_mat4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_float_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec2_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec3_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec4_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.acos_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_float_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec2_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec3_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec4_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.asin_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 340 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_combined_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.atan_separate_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 338 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 222 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.cos_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.degrees_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.radians_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 338 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 222 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.sin_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 338 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_float_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 222 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_float_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec2_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec3_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 339 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec4_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 223 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.trigonometry.tan_vec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+DONE!
+
+Test run totals:
+  Passed:        271/395 (68.6%)
+  Failed:        124/395 (31.4%)
+  Not supported: 0/395 (0.0%)
+  Warnings:      0/395 (0.0%)
+  Waived:        0/395 (0.0%)
+deqp: done: 271 passed, 124 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 395 cases begun, 395 with a result, 0 without
+osal(mali): kicks 400, completed 400; pages 1159 (high-water 1229) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 14720 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 18816 ms
+�\x00
+U-Boot SPL 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+SOC: 0xb0009500
+LC: 0x40010
+Trying to boot from MMC1
+Primary set selected
+Load image from MMC/SD 0xc3400
+NOTICE:  BL31: v2.10.0	(release):lf-6.6.52-2.2.1-dirty
+NOTICE:  BL31: Built : 06:40:36, Jul  7 2025
+
+
+U-Boot 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+
+CPU:   i.MX95 rev2.0 at 1800MHz
+CPU:   Extended Industrial temperature grade (-40C to 125C) at 61C
+LM Boot reason: sw, origin: 0, errid: 0
+LM shutdown reason: sw, origin: 0, errid: 0
+DRAM:  Delete node <device-tree path>
+7.8 GiB
+Core:  323 devices, 32 uclasses, devicetree: separate
+MMC:   FSL_SDHC: 0, FSL_SDHC: 1, FSL_SDHC: 2
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Model: Toradex 0089 Verdin iMX95 Hexa 8GB WB IT V1.1A
+Serial#: <serial>
+
+BuildInfo:
+  - SM firmware Build 574, Commit cc7a8d2d, Sep 24 2026 20:00:35
+  - ELE firmware version 2.0.5-fe6641ef
+
+flash target is MMC:0
+Net:   WARNING: no MAC address assigned for MAC0
+imx_get_mac_from_fuse: fuse read err: 0
+eth0: enetc-0 [PRIME]Could not get PHY for emdio-0: addr 7
+
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  1 \x08\x08\x08 0 

@@ -673,3 +673,14 @@ read every limit through GL. What still carries a G610 constant is the back
 end (`src/mali/frame.rs` `TIB_BUDGET` and `MEASURED_TILER_LEVELS`,
 `src/mali/backend.rs`'s renderer name), `docs/notes/mali-g310-vs-g610.md`
 section 5.
+
+Board state of B8 (2026-11-25): session S4 (rows 69-76, 2,675 cases) ran
+from images built at `e63ab28e`. Each image was loaded at the module's
+U-Boot prompt from the root file system (`ext4load mmc 0:2`) and started
+with `go`, as in B5. The result is 2,107 Pass, 537 Fail and 31 NotSupported,
+with every row ended by PSCI in 7.3 to 18.8 s of its 600 s lifetime. There
+were no hangs, and every non-Pass case but one is a compiler refusal. The
+record in the BBM GPRs was not read back: the stock kernel has no SCMI raw
+interface, which leaves U2 open. Against the T6, nothing in S4 is worse on
+the G310 (`tools/cts/log/2026-11-25-imx95-gles2-S4-e63ab28e/`,
+`docs/es2-cts-failures.md` section N). S1-S3 (68 rows) remain.

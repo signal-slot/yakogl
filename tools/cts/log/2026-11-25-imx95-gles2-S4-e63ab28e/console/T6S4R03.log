@@ -1,0 +1,1850 @@
+U-Boot SPL 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+SOC: 0xb0009500
+LC: 0x40010
+Trying to boot from MMC1
+Primary set selected
+Load image from MMC/SD 0xc3400
+NOTICE:  BL31: v2.10.0	(release):lf-6.6.52-2.2.1-dirty
+NOTICE:  BL31: Built : 06:40:36, Jul  7 2025
+
+
+U-Boot 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+
+CPU:   i.MX95 rev2.0 at 1800MHz
+CPU:   Extended Industrial temperature grade (-40C to 125C) at 61C
+LM Boot reason: sw, origin: 0, errid: 0
+LM shutdown reason: sw, origin: 0, errid: 0
+DRAM:  Delete node <device-tree path>
+7.8 GiB
+Core:  323 devices, 32 uclasses, devicetree: separate
+MMC:   FSL_SDHC: 0, FSL_SDHC: 1, FSL_SDHC: 2
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Model: Toradex 0089 Verdin iMX95 Hexa 8GB WB IT V1.1A
+Serial#: <serial>
+
+BuildInfo:
+  - SM firmware Build 574, Commit cc7a8d2d, Sep 24 2026 20:00:35
+  - ELE firmware version 2.0.5-fe6641ef
+
+flash target is MMC:0
+Net:   WARNING: no MAC address assigned for MAC0
+imx_get_mac_from_fuse: fuse read err: 0
+eth0: enetc-0 [PRIME]Could not get PHY for emdio-0: addr 7
+
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  1 \x08\x08\x08 0
+Verdin iMX95 #  ext4load mmc 0:2 0xd0000000 /var/yakogl/s4-e63ab28e/T6S4R03.bin; md5sum 0xd0000000 ${filesize}
+12768592 bytes read in 40 ms (304.4 MiB/s)
+md5 for d0000000 ... d0c2d54f ==> 7ae235ed035a36e66efe7e6d51a5e666
+Verdin iMX95 # dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/167755 in 24162 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.conversions.vector_combine.*,dEQP-GLES2.functional.shaders.conversions.vector_illegal.*,dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.*,dEQP-GLES2.functional.shaders.conversions.vector_to_vector.*,dEQP-GLES2.functional.shaders.declarations.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 27 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_bvec4_fragment'..
+mali shaderc table 'IR values': high-water 10 of 2048
+mali shaderc table 'NIR instructions': high-water 35 of 1536
+mali shaderc table 'IR values': high-water 41 of 2048
+mali shaderc table 'locals': high-water 8 of 256
+mali arena 'desc': high-water 1392 of 1048576 bytes
+mali arena 'data': high-water 140 of 262144 bytes
+mali arena 'code': high-water 768 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_bvec4_vertex'..
+mali shaderc table 'NIR instructions': high-water 43 of 1536
+mali shaderc table 'BIR values': high-water 35 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_ivec4_fragment'..
+mali shaderc table 'IR values': high-water 44 of 2048
+mali shaderc table 'BIR values': high-water 36 of 1536
+mali arena 'code': high-water 896 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_ivec4_vertex'..
+mali shaderc table 'NIR instructions': high-water 47 of 1536
+mali shaderc table 'BIR instructions': high-water 59 of 1536
+mali shaderc table 'BIR values': high-water 39 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_vec4_fragment'..
+mali shaderc table 'IR values': high-water 54 of 2048
+mali shaderc table 'locals': high-water 9 of 256
+mali shaderc table 'NIR instructions': high-water 56 of 1536
+mali shaderc table 'BIR values': high-water 46 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_bool_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_bool_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 436 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 488
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_bool_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 386 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 438
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_int_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 389 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 441
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_float_ivec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 365 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_ivec2_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 409 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_bvec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 382 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_float_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 363 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 382 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_bool_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_float_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_float_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_float_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 336 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 388
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.float_int_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 362 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_bool_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 483 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_bvec4_vertex'..
+mali shaderc table 'BIR instructions': high-water 63 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_vec4_fragment'..
+mali shaderc table 'IR values': high-water 59 of 2048
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 5
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_int_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 426 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_int_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 369 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_int_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 429 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.int_ivec2_int_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 381 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 338 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 390
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_vec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_combine.vec3_float_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 168 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 207 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 168 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 207 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 168 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 207 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 168 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 207 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 166 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 205 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 166 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 205 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 175 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 214 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 175 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 214 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 173 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 212 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.bvec3_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 159 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 198 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 159 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 198 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 164 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 203 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 164 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 203 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 162 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 201 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.ivec3_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 163 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 202 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 163 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 202 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 163 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 202 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 163 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 202 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec3_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec3_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 161 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 200 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec2_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_bvec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 169 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_bvec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 208 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_ivec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 169 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_ivec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 208 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_ivec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_vec4_fragment'..
+glCompileShader(5): 0:0: '()' : not enough arguments for this constructor [fragment stage, 167 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_vec4_vertex'..
+glCompileShader(3): 0:0: '()' : not enough arguments for this constructor [vertex stage, 206 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_illegal.vec3_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 303 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 347 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 300 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec2_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 303 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 347 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 300 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec3_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 303 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 347 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 300 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.bvec4_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 312 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 309 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec2_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 312 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 309 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec3_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_bool_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 312 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_bool_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_float_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_float_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_int_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 309 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_int_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.ivec4_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_bool_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_bool_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_int_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_int_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec2_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_bool_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_bool_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_int_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_int_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec3_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_bool_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_bool_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_bool_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_bool_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_float_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_float_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_float_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_float_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_int_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_int_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_int_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_int_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 306 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 306 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 358 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec2_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec3_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 315 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec2_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec2_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec3_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec3_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec4_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 3
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec4_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec2_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec3_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_bvec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec2_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec2_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec3_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec3_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec4_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_ivec4_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec2_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec2_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec2_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec2_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec3_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec3_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec3_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec3_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec4_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec4_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.conversions.vector_to_vector.vec4_to_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.attribute_in_fragment'..
+glCompileShader(5): 0:1: 'val' : 'attribute' is not allowed in a fragment shader [fragment stage, 75 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.attribute_in_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.attribute_in_vertex_main'..
+glCompileShader(3): 0:3: 'val' : a local variable may only be qualified 'const' [vertex stage, 78 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.attribute_in_vertex_main
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.invariant_attribute'..
+glCompileShader(3): 0:1: 'val' : only a varying or a built-in variable may be invariant [vertex stage, 84 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.invariant_attribute
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.invariant_uniform'..
+glCompileShader(3): 0:1: 'val' : only a varying or a built-in variable may be invariant [vertex stage, 82 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.invariant_uniform
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.uniform_in_fragment_main'..
+glCompileShader(5): 0:3: 'val' : a local variable may only be qualified 'const' [fragment stage, 77 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.uniform_in_fragment_main
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.uniform_in_vertex_main'..
+glCompileShader(3): 0:3: 'val' : a local variable may only be qualified 'const' [vertex stage, 76 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.uniform_in_vertex_main
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.varying_in_fragment_main'..
+glCompileShader(5): 0:3: 'val' : a local variable may only be qualified 'const' [fragment stage, 77 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.varying_in_fragment_main
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.declarations.invalid_declarations.varying_in_vertex_main'..
+glCompileShader(3): 0:3: 'val' : a local variable may only be qualified 'const' [vertex stage, 76 bytes]
+deqp: Pass dEQP-GLES2.functional.shaders.declarations.invalid_declarations.varying_in_vertex_main
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        269/380 (70.8%)
+  Failed:        111/380 (29.2%)
+  Not supported: 0/380 (0.0%)
+  Warnings:      0/380 (0.0%)
+  Waived:        0/380 (0.0%)
+deqp: done: 269 passed, 111 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 380 cases begun, 380 with a result, 0 without
+osal(mali): kicks 1407, completed 1407; pages 944 (high-water 1014) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 13184 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 17598 ms
+�\x00
+U-Boot SPL 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+SOC: 0xb0009500
+LC: 0x40010
+Trying to boot from MMC1
+Primary set selected
+Load image from MMC/SD 0xc3400
+NOTICE:  BL31: v2.10.0	(release):lf-6.6.52-2.2.1-dirty
+NOTICE:  BL31: Built : 06:40:36, Jul  7 2025
+
+
+U-Boot 2024.04-7.8.0+git.b7c747d8c084 (Sep 04 2026 - 16:19:18 +0000)
+
+CPU:   i.MX95 rev2.0 at 1800MHz
+CPU:   Extended Industrial temperature grade (-40C to 125C) at 61C
+LM Boot reason: sw, origin: 0, errid: 0
+LM shutdown reason: sw, origin: 0, errid: 0
+DRAM:  Delete node <device-tree path>
+7.8 GiB
+Core:  323 devices, 32 uclasses, devicetree: separate
+MMC:   FSL_SDHC: 0, FSL_SDHC: 1, FSL_SDHC: 2
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Model: Toradex 0089 Verdin iMX95 Hexa 8GB WB IT V1.1A
+Serial#: <serial>
+
+BuildInfo:
+  - SM firmware Build 574, Commit cc7a8d2d, Sep 24 2026 20:00:35
+  - ELE firmware version 2.0.5-fe6641ef
+
+flash target is MMC:0
+Net:   WARNING: no MAC address assigned for MAC0
+imx_get_mac_from_fuse: fuse read err: 0
+eth0: enetc-0 [PRIME]Could not get PHY for emdio-0: addr 7
+
+Fastboot: Normal
+Normal Boot
+Hit any key to stop autoboot:  1 \x08\x08\x08 0 
