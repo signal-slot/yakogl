@@ -1,0 +1,6 @@
+E1	dEQP-GLES3.functional.x.b	job-builder	3: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+E2	dEQP-GLES3.functional.y.a	tile-memory	6:   r0 (first #0) a target larger than the tile memory is sized for (4096x4096)
+E3	dEQP-GLES3.functional.z.a	unknown	4: yakogl/v3d: draw refused: no empty job holds the draw (its lists, or its client data with no memory of its own)
+E4	dEQP-GLES3.functional.w.a	unknown	3: yakogl/v3d: draw refused: alpha-to-coverage is not implemented
+E5	-	unknown	-
+E6	dEQP-GLES3.functional.u.b	unknown	-

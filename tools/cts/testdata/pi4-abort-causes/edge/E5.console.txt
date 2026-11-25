@@ -1,0 +1,2 @@
+*** Booting Zephyr OS build v4.1.0 ***
+deqp: case filter 'dEQP-GLES3.functional.v.*'

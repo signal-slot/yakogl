@@ -1,0 +1,11 @@
+S03a dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.vec2
+T05ca dEQP-GLES3.functional.texture.format.compressed.etc2_eac_rgba8_cube_pot
+T05cb dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_npot
+T05cc dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_pot
+T14a dEQP-GLES3.functional.texture.units.8_units.only_cube.2
+T17a dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot
+TF1a dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3
+TF1b dEQP-GLES3.functional.transform_feedback.array.separate.lines.highp_mat3
+TF2a dEQP-GLES3.functional.transform_feedback.basic_types.interleaved.lines.lowp_mat4
+TF2b dEQP-GLES3.functional.transform_feedback.basic_types.separate.lines.highp_mat4
+TF2c dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.lines.1
