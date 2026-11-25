@@ -538,6 +538,34 @@ prints (read from the script). Steps 1-13 have been run three times on the board
 prints is what those runs recorded. The open board-side unknown is the console's **content** (the bridge
 delivered no text in all three sessions, nor in the probe of 2026-11-15), not the verdict lines, the records or the tallies.
 
+### Why the 9bc82915 campaign is finished, not restarted
+
+Decision (plan #410): finish the campaign at `9bc82915`; do not restart the 133 entries at a current
+`origin/main`. The reasons, as measured:
+
+- `git diff 9bc82915 HEAD -- tools/cts/imx8mp-gles3-tree.txt tools/cts/gles3-mustpass.txt tools/cts/imx8mp-gles3-gen.py`
+  prints nothing: the tree, the mustpass list and the generator are byte-identical between `9bc82915` and
+  `origin/main`, so the 133 entries and their cases are the same ones either way.
+- `imx8mp-gles3-merge.py --check` exits 1 when the inputs name different commits (its `--check` text: "the
+  inputs name different commits (or none)"; the problem line is `different commits: ...`). A slice from a
+  newer commit would never merge with the three recorded ones, so a restart discards the 48 recorded entries
+  (28,459 cases) and the board time of the three slices, 2,975 s by `imx8mp-gles3-times.py` over
+  `2026-11-imx8mp-gles3-9bc82915-rows01-13` (537 s), `-rows17-34` (1,469 s) and `-rows35-51` (969 s). Finishing
+  leaves 85 entries to run; a restart leaves 133.
+- `git merge-base --is-ancestor 9bc82915 HEAD` succeeds: `9bc82915` is on `origin/main`, so the rule that the
+  board image comes from an `origin/main` commit holds.
+
+The cost: the figures predate later work. `git rev-list --count 9bc82915..HEAD -- src/vivante src/gl` counts 145
+commits (at the snapshot of this decision), so some Fail cases may already be fixed on main. A second campaign at
+a current `origin/main` is follow-up work, tracked as a GitHub issue, not in this file.
+
+Plan for finishing: twelve slices, one session each (only one session holds the board at a time), each
+`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-<rows>` named after its rows:
+`rows14-16`, `rows52-57`, `rows58-61`, `rows62-67`, `rows68-75`, `rows76-83`, `rows84-94`, `rows95-107`,
+`rows108-117`, `rows118-122`, `rows123-128`, `rows129-133`.
+
+Status: three slices are recorded and the twelve above are planned (to be updated when they run).
+
 Rules that hold for every step:
 - **One commit.** All slices of a campaign come from the same `origin/main` commit, and the image is named after
   it (`es3-<hash8>`). `tools/cts/imx8mp-gles3-merge.py --check` fails when two slices name different commits.
