@@ -245,6 +245,7 @@
 #include "fb_flush.h"
 #include "hvs6_chan.h"
 #include "hvs6_dlist_write.h"
+#include "hvs6_vblank.h"
 
 /* Our list's start chosen here (first free fit from word 32). */
 #define HVS6S_AUTO 0xffffffffu
@@ -254,9 +255,7 @@
 #define HVS6S_FW_MAX 256u
 /* Words 0..31 Linux leaves to the bootloader (rpi:vc4_regs.h:1056). */
 #define HVS6S_KEPT 32u
-/* STATUS.FRCNT, bits 21:16 (rpi:vc4_regs.h:605). */
-#define HVS6S_FRCNT_SHIFT 16u
-#define HVS6S_FRCNT_MASK 0x3fu
+/* STATUS.FRCNT, bits 21:16: HVS6V_FRCNT_SHIFT/MASK of hvs6_vblank.h. */
 /* DISPx_DL.LACT, bits 11:0, the list the channel is scanning (scanout_alive.h's
  * SA_DL_LACT_MASK, rpi:vc4_regs.h:619). The pickup criterion of a swap and of
  * the restore (swap-lact-lib): LACT equal to the head just written. */
@@ -442,7 +441,7 @@ struct hvs6s_regs {
 
 static inline uint32_t hvs6s_frcnt(uint32_t status)
 {
-	return (status >> HVS6S_FRCNT_SHIFT) & HVS6S_FRCNT_MASK;
+	return hvs6v_frcnt(status);
 }
 
 static inline uint32_t hvs6s_mode(uint32_t status)
@@ -458,7 +457,7 @@ static inline uint32_t hvs6s_bgenb(uint32_t ctrl1)
 /* Frames from a to b on the 6-bit counter. */
 static inline uint32_t hvs6s_frdelta(uint32_t a, uint32_t b)
 {
-	return (b - a) & HVS6S_FRCNT_MASK;
+	return hvs6v_step(a, b);
 }
 
 /* D0 channel offsets (hvs6_chan.h). */
@@ -1155,26 +1154,47 @@ static inline uint32_t hvs6s_yline(uint32_t status)
  * the clock just after that read in *t; 0 when the budget ran out (*status
  * the last read).
  */
+struct hvs6s_vbctx {
+	const struct hvs6s_io *io;
+	unsigned int ch;
+	uint64_t t_last;
+};
+
+/* hvs6v reads channel 0's STATUS offset; this channel's register instead. */
+static inline uint32_t hvs6s_vb_read32(void *ctx, uint32_t off)
+{
+	struct hvs6s_vbctx *x = (struct hvs6s_vbctx *)ctx;
+
+	return x->io->read32(x->io->ctx, off == HVS6V_STATUS_OFF ? hvs6s_status_reg(x->ch) : off);
+}
+
+static inline uint64_t hvs6s_vb_now(void *ctx)
+{
+	struct hvs6s_vbctx *x = (struct hvs6s_vbctx *)ctx;
+
+	x->t_last = x->io->now_ns(x->io->ctx);
+	return x->t_last;
+}
+
 static inline int hvs6s_find_step(const struct hvs6s_io *io, unsigned int ch, uint32_t *budget,
 				  uint32_t *reads, uint32_t *status, uint64_t *t)
 {
-	uint32_t f0;
+	struct hvs6s_vbctx x = {io, ch, 0u};
+	struct hvs6v_io vio = {hvs6s_vb_read32, io->now_ns ? hvs6s_vb_now : 0, &x};
+	struct hvs6v_budget vb = {0u, 0u};
+	struct hvs6v_result vr;
 
 	if (!*budget)
 		return 0;
-	*status = io->read32(io->ctx, hvs6s_status_reg(ch));
-	(*budget)--;
-	(*reads)++;
-	f0 = hvs6s_frcnt(*status);
-	while (*budget) {
-		*status = io->read32(io->ctx, hvs6s_status_reg(ch));
-		*t = hvs6s_now(io);
-		(*budget)--;
-		(*reads)++;
-		if (hvs6s_frcnt(*status) != f0)
-			return 1;
-	}
-	return 0;
+	vb.max_polls = *budget - 1u; /* reads after the first */
+	vr = hvs6v_wait_frame(&vio, &vb);
+	*budget -= vr.reads <= *budget ? vr.reads : *budget;
+	*reads += vr.reads;
+	*status = vr.after_status;
+	if (!hvs6v_found(&vr))
+		return 0;
+	*t = x.t_last; /* the clock at the end of the wait: just after the step's read */
+	return 1;
 }
 
 /*
