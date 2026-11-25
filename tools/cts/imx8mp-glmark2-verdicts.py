@@ -20,8 +20,12 @@ NOTE defaults to the by-eye note. The '## Verdicts' table has the columns
       without a value`; photograph goes only with `seen without a value`, dump,
       both and photograph+probes never do; a `wrong` row has an
       entry (its scene text) under '## Wrong scenes' if that heading exists;
-  (d) with --complete every row is filled in: no `not yet looked at`, no `-`,
-      and acceptance criterion c2's grep counts 33.
+  (d) every `- **[scene]**` bullet under '## What was looked at' names a
+      scene of the table, at most once;
+  (e) with --complete every row is filled in (no `not yet looked at`, no `-`,
+      and acceptance criterion c2's grep counts 33), every scene has exactly
+      one bullet, and the note has none of the placeholder texts 'Not yet
+      established', 'To fill in', 'Skeleton: no scene'.
 
 One line per problem, exit 1 if any; otherwise `ok: N rows, M filled`, exit 0.
 """
@@ -39,6 +43,9 @@ DUMPS = os.path.join(HERE, "imx8mp-glmark2-dumps.sh")
 TESTDATA = os.path.join(HERE, "testdata/imx8mp-glmark2-verdicts")
 NROWS = 33
 TODO = "not yet looked at"
+LOOKED = "What was looked at"
+BULLET = re.compile(r"^- \*\*(\[[^\]]*\][^*]*)\*\*")
+PLACEHOLDERS = ("Not yet established", "To fill in", "Skeleton: no scene")
 VERDICTS = ("right", "wrong", "seen without a value", TODO)
 ROUTES = ("dump", "photograph", "both", "photograph+probes")
 RECORD = re.compile(r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |]+-([0-9a-f]{8})/?")
@@ -71,6 +78,19 @@ def read_rows(text):
         elif sect == "Verdicts" and line.startswith("| ["):
             rows.append((line, [c.strip() for c in line.strip().strip("|").split("|")]))
     return rows, wrong
+
+
+def read_bullets(text):
+    """The scene names of the '- **[scene]**' bullets under '## What was looked at'."""
+    out, sect = [], None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            sect = line[3:].strip()
+        elif sect == LOOKED:
+            m = BULLET.match(line)
+            if m:
+                out.append(m.group(1).strip())
+    return out
 
 
 def check(text, scenes, complete):
@@ -126,6 +146,22 @@ def check(text, scenes, complete):
         probs.append(f"{s}: scene is not in the dump script's list")
     if complete and c2 != NROWS:
         probs.append(f"c2 grep counts {c2}, want {NROWS}")
+    bullets = read_bullets(text)
+    nb = {}
+    for b in bullets:
+        nb[b] = nb.get(b, 0) + 1
+    for b, n in nb.items():
+        if n > 1:
+            probs.append(f"{b}: {n} bullets under '## {LOOKED}', want one")
+        if b not in seen:
+            probs.append(f"{b}: bullet under '## {LOOKED}' names no scene of the table")
+    if complete:
+        for s in sorted(seen - set(nb)):
+            probs.append(f"{s}: no bullet under '## {LOOKED}' (--complete)")
+        for ph in PLACEHOLDERS:
+            for n, line in enumerate(text.splitlines(), 1):
+                if ph in line:
+                    probs.append(f"line {n}: placeholder text '{ph}' (--complete)")
     return probs, len(rows), filled
 
 
@@ -172,6 +208,13 @@ CASES = [
     ("bad-dump-novalue.md", False, 1, "has a value, not 'seen without a value'"),
     ("bad-wrong-entry.md", False, 1, "wrong, but no entry under '## Wrong scenes'"),
     ("bad-dash.md", True, 1, "not filled in (--complete)"),
+    ("bad-bullet-missing.md", False, 0, "ok: 33 rows, 33 filled"),
+    ("skeleton.md", True, 1, "no bullet under '## What was looked at' (--complete)"),
+    ("skeleton.md", True, 1, "placeholder text 'Skeleton: no scene' (--complete)"),
+    ("bad-bullet-missing.md", True, 1, "no bullet under '## What was looked at' (--complete)"),
+    ("bad-bullet-duplicate.md", False, 1, "2 bullets under '## What was looked at', want one"),
+    ("bad-bullet-unknown.md", False, 1, "names no scene of the table"),
+    ("bad-placeholder.md", True, 1, "placeholder text 'To fill in' (--complete)"),
 ]
 
 
