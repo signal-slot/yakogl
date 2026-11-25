@@ -456,22 +456,44 @@ runner record directory name) and folds the findings into the pre-study
 | 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
 
-### The `gl_test` regression set (2026-11-24, `a5f1dc8e`): 5 FAIL, 1 SKIP, 44 PASS
+### The `gl_test` regression set (2026-11-25, `670913e1`): 5 FAIL, 1 SKIP, 44 PASS, one run of 100 s
 
 The whole 50-case `SET_ORDER` (`driver/tools/pvrlab/runner/src/lib.rs:53-54`)
-fits one run in the 100 s lifetime (back on Linux after 58-70 s). Images
-built from `a5f1dc8e` (origin/main). Two runs: `20261124-1038-gl_test_set-a5f1dc8e` (default
-image, case 10 skipped by `GL_TEST_MP2_SKIP`) and
-`20261124-1044-gl_test_all-a5f1dc8e` (`GL_TEST_MP2_SKIP=""`, the whole set; the
-reading below). Tally:
+is one run: `tools/cts/mp2-gltest-shards.py --skip "" --budget-ms 90000`
+plans 1 shard of 50 cases, and the run used 14.4 s of the 100 s lifetime.
+No lifetime or `RUN_BOUND` change is needed. The image was
+built from `670913e1` (origin/main; banner `sample: build tree=670913e1 table=6c5b8a70`,
+`zephyr.bin` sha256 `dd466b98…`). It is `driver/samples/zephyr/gl_test` with
+`-DYAKOGL_WERROR=ON -DCONFIG_GL_TEST_MP2_SKIP='""'` and no `SET_HEAD`
+(`.config`: `GL_TEST_MP2_CASE=7`, `GL_TEST_MP2_SKIP=""`,
+`YAKOGL_STM32MP2_LIFETIME_S=100`). It ran as a one-shot from the DK's U-Boot
+off the microSD with `tools/board-stm32mp2.sh` (`MP2_NO_CONSOLE=1`). The
+verdict comes from the A35 console, read through the farm's serial tools,
+with `judge`. Record: `20261125-1325-gltest-set-670913e1`.
+
+| shard | cases | `gl_test: the suite took` | `PSCI SYSTEM_RESET at` | lifetime | back on Linux after |
+| --- | --- | --- | --- | --- | --- |
+| 0 of 1 | 50 (49 counted, case 16 SKIP) | 11,431 ms | 14,407 ms of uptime | 100,000 ms | 70 s |
+
+The console has no `mp2: lifetime` line. The image ended on its own PSCI
+reset, and the next BL2 printed `Reset reason: System reset (SYSRST)
+(0x2074). Warm boot.` Tally:
 
 `gl_test: all: 5 of 49 cases failed (44 passed; 0 timed out; first failure case 6 at index 5; second failure case 11; 1 skipped, first skip case 16)`
 
-- runner: `board-stm32mp2.sh stm32mp257f-dk gl_test_all rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s`
-- judged on the captured serial console: `rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:gl_test`
-- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py`): new failures 6, 11, 47, 182, 189; flaky 0; expected 0; stale 1 (case 10); skip differences 0; case 16 counts as a verdict through its own SKIP line (commit `1e546068`). Last line:
+- runner: `board-stm32mp2.sh stm32mp257f-dk gltest_set rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=70s`
+- judged on the captured serial console: `board-stm32mp2.sh stm32mp257f-dk gltest_set rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:gl_test back_after=70s console=external`
+- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py`, with the defaults): new failures 6, 11, 47, 182, 189. Flaky 0, expected 0, stale 0, skip differences 0. Case 16 counts as a verdict through its own SKIP line (commit `1e546068`). Last line, with the shard's time:
 
-`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0`
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (shard 0 of 1: 14.4 s of 100 s, the suite 11.4 s of it)
+
+- no hang and no refusal in the Vivante back end: `yakogl: draws refused 0`, fences 173 of 173 completed, `irq errors 0`. The run ends with `gl_test: FAIL rc=-1` because the five cases fail, and the stall dump that follows shows the front end idle with nothing pending.
+- the five failing checks are the same as at `a5f1dc8e` (2026-11-24):
+  - 6 `fbo`, checks 1 and 6: `v0 red apex (31,12) = 0xff120fe7 want 0xff090fe7`.
+  - 11 `persist`, check 2: the same apex pixel.
+  - 47 `es3inst`, checks 4 and 9: `instance 3 half white (48,16)` reads `0x80b48080` and `0x80f18080`, want `0x80808080`. The arrays read was `0x80b58080` at `a5f1dc8e`.
+  - 182 `fsat`, check 2: `folded clamps, vertex (48,16) = 0x73fa7340 want 0x73bf7340`.
+  - 189 `mulone`, checks 2 and 3: `0xff5a3050` (want `0xff303050`) and `0xff782040` (want `0xff402040`).
 
 Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools/pvrlab/gl_test.c`):
 
@@ -528,9 +550,10 @@ Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools
 | 17 | ctx2 | PASS |
 | 18 | image | PASS |
 
-- Case 10 (`prims`) ran in the whole-set run and **passed**. It is on `tools/cts/mp2-gltest-expected.txt` as pending Q11, so the diff calls the entry stale. Its check 11 (`loop: 3 px wide`) passes, so the hardware draws width 3 as at least 2 px. The one-case Q11 runs and the decision are in `docs/notes/stm32mp257f-dk-p9.md` section 6 (record `20261124-1344-q11_case10-0eca6ffc`).
+- Case 10 (`prims`) ran in the whole-set run and **passed**, check 11 (`loop: 3 px wide (17,32) = 0xff00ff00 ... ok`) included, so the hardware draws width 3 as at least 2 px. The one-case Q11 runs and the decision are in `docs/notes/stm32mp257f-dk-p9.md` section 6 (record `20261124-1344-q11_case10-0eca6ffc`).
 - Case 16 (`msaa`) skips itself without a 4x config (`driver/tools/pvrlab/runner/src/lib.rs:65`), and prints a SKIP line, which `mp2-gltest-diff` (since `1e546068`) counts as its verdict; it is a SKIP, not a pass.
-- After the runs `u-boot-env` read back identical to the baseline digest and `/boot` was the same 25 files with no yakogl directory.
+- Board state: the card's `u-boot-env` and the `/boot` listing were read before `install`. After the run, `uninstall` removed the hook and `/boot/yakogl`. U-Boot's own `saveenv` had rewritten the environment copies, so the baseline bytes were then written back to the card's `u-boot-env`. That partition was resolved again after the reboot from the disk `/boot` is mounted from, and checked as type SD, label `u-boot-env`, 512 KiB. It reads back as the baseline sha256, and `/boot` has the same files and digest as before. The card came back as `mmcblk0` after being `mmcblk2` before the reboot (meta.txt `card_before`/`card_after`). A path written down before a reboot is therefore never reused, including the `dd of=/dev/mmcblk…` undo line that `install` prints.
+- The earlier set runs (2026-11-24, `a5f1dc8e`: `20261124-1038-gl_test_set-a5f1dc8e`, the default image with case 10 skipped, and `20261124-1044-gl_test_all-a5f1dc8e`, the whole set) gave the same verdicts, and the runs came back after 58-70 s.
 
 Ramlog, no console: board evidence, not a row (ramlog-trial, 2026-11-24, `384dd08d`; "The return trial through the RAM ring" above). These blind runs do not replace rows 1 and 2, which rest on the console:
 
