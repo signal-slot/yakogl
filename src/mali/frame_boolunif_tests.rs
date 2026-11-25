@@ -1,17 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! A true `bool` uniform is pushed as `~0` (0xffffffff), as Mesa 26.2.1
-//! panfrost uploads it, whichever setter loaded it: the GL core stores 0 or
-//! 1 and the compiled shader reads the word as a mask (`ICMP_OR.v2u16.eq.m1
-//! r, mask.h00, u.w.h00`; docs/notes/mali-deqp-boolpix.md cause BW, the
-//! 277 wrong-pixel dEQP bool/bvec cases of #11306). `tests/mali_ref` checks
+//! panfrost uploads it, whichever setter loaded it: the compiled shader
+//! reads the uniform's word as a mask (`ICMP_OR.v2u16.eq.m1 r, mask.h00,
+//! u.w.h00`; docs/notes/mali-deqp-boolpix.md cause BW, the 277 wrong-pixel
+//! dEQP bool/bvec cases of #11306). The `~0` reaches the push words in two
+//! layers: the GL core stores a true bool as its `UNIFORM_TRUE` (a `~0` in
+//! a gpu-mali build, src/gl/program.rs), and `program::mali_uniform_words`
+//! widens every non-zero word of the stage table's `bool` and `bvecN` rows
+//! to `~0` before the frame builder sees them (src/mali/program.rs);
+//! commits c9eb0307 and 397351b3 brought both in. `tests/mali_ref` checks
 //! the FAU word the reference holds, never what the driver writes: these
-//! tests draw GL programs on the OSAL mock and read the push block the frame
-//! names, for `bool`, `bvec2`, `bvec3` and `bvec4`, set through `glUniform1i`,
-//! `glUniform2i`, `glUniform3i`, `glUniform4i` and `glUniform1f` with true and
-//! false values; a bool array and a struct member (shapes the online compiler
-//! does not link yet) are pinned on the conversion over hand-made table rows,
-//! the same function the draw calls. A `float` uniform keeps its bits.
+//! tests draw GL programs on the OSAL mock and read the push block the
+//! frame names, for `bool`, `bvec2`, `bvec3` and `bvec4`, set through
+//! `glUniform1i`, `glUniform2i`, `glUniform3i`, `glUniform4i` and
+//! `glUniform1f` with true and false values. A `bool` array is pinned on
+//! the conversion over hand-made table rows, the same function the draws
+//! call: the online compiler refuses a uniform array of bools in both
+//! stages — `tests/mali_deqp_unif2.rs` pins `arr_bool_array` as "Valhall:
+//! a uniform array is not lowered yet" and `fs_bool_uniform` at the
+//! fragment's mediump uniform gate — so no draw carries an array row. A
+//! struct's `bool` member is not pinned: no pinned program compiles a
+//! struct with a `bool` member (the same test pins the refused
+//! `fs_struct_uniform`), and the table row of one is a plain `bool` leaf,
+//! which the pinned `bool` rows cover. A `float` uniform keeps its bits.
 //!
 //! Feature set: host-test,gpu-mali,shaderc-online,no-shader-table.
 
@@ -173,12 +185,14 @@ void main() { gl_FragColor = vec4(b, b.x == b.z ? 1.0 : 0.0); }
     assert!(w.windows(3).any(|x| x == [0, T, T]), "bvec3: {w:x?}");
 }
 
-/// The conversion the draw applies, on a table of the shapes the compiler
-/// does not yet link (a bool array, `deqp_unif2_arr_bool_array`: the online
-/// compiler refuses a uniform array, so no program draws one here): the
-/// bool rows' words become ~0 where non-zero, the float row and the padding
-/// word between them are not touched, and a table with no bool returns the
-/// words as they are.
+/// The conversion the draws apply, on hand-made rows of the shapes no draw
+/// here carries: a `bool` array (`deqp_unif2_arr_bool_array`: the online
+/// compiler refuses a uniform array of bools in both stages) and the plain
+/// `bool` leaf row a struct's `bool` member becomes (the pinned struct
+/// uniform whose members are `bool`/`bvec`, `fs_struct_uniform`, is
+/// refused too): the bool rows' words become ~0 where non-zero, the float
+/// row and the padding word between them are not touched, and a table with
+/// no bool returns the words as they are.
 #[test]
 fn the_conversion_covers_a_bool_array_and_leaves_floats_alone() {
     use crate::shaderc::{ShcUniform, SHC_UNIFORM_NO_BLOCK};
