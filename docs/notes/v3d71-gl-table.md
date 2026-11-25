@@ -157,9 +157,9 @@ The Pi 4's run, and the refusal strings the shared code produces:
 |---|---|---|
 | 5 scissor | PASS | pass; scissored draw through the 7.1 job (items 1 to 3, 5) |
 | 58 clear with scissor | PASS | pass; the clear quad (a draw) |
-| 59 clear with write masks | **refused**: "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in" (`src/v3d/backend.rs:3791`; the host pin `backend_tests.rs:6276`) | **refused, the same string**: `state.rs`/the shared decision, not the 7.1 builder. Stencil kept between jobs is a separate item |
+| 59 clear with write masks | **refused**: "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in" (`src/v3d/backend.rs:3821-3825`, in `fn record` `:3814`; the host pin `backend_tests.rs:6328`, test `:6320`) | **refused, the same string**: the shared decision, not the 7.1 builder. Its 7.1 twin is `ZsRefusal71::ReadLost(Plane71::Stencil).message()` (`src/v3d/zskeep71.rs:484-486`), pinned to the 4.2 string in `backend.rs` by `tests/v3d71_zskeep.rs:466-467`; `tests/v3d71_glue.rs:1117-1131` gives that refusal for case 59 on a window whose depth/stencil stays in the tile buffer. Stencil kept between jobs is a separate item |
 | 66 clear not bounded by viewport | PASS | pass |
-| 67 FBO limits | **refused**: "a colour format with fewer than 8 alpha bits" (`src/v3d/state.rs:969`, `backend_tests.rs:3359`: the GL_RGB frame) | **refused, the same string** |
+| 67 FBO limits | **refused** in that run: "a colour format with fewer than 8 alpha bits" (the GL_RGB frame). **That refusal is gone**: it is absent from the root commit `381b0f09` already (`git log -S'fewer than 8 alpha bits' -- src` names no later commit that removes it). At the tip a target with fewer than 8 alpha bits is drawn: `src/v3d/state.rs:1121-1136` (`a_format_with_fewer_alpha_bits_is_drawn_and_one_with_none_keeps_alpha`: no refusal, alpha masked) and `backend_tests.rs:3418-3456` (an RGB565 and an RGBA4 FBO drawn, alpha loaded as 1, `logs_with("alpha bits") == 0`). Case 67's stencil frames (6 to 8, `driver/tools/pvrlab/gl_test.c:8883-8960`) use a `GL_STENCIL_INDEX8` renderbuffer, so the framebuffer keeps a depth/stencil buffer (`src/gl/draw.rs:3113-3116`, `ds_persist`) and its stencil is `ZsKnown::Stored`, not `Written` (`src/v3d/backend.rs:475-481`, `:2804-2805`): the stencil refusal of 59 (`backend.rs:3821-3825`) is not reached | **drawn, no refusal expected**: `tests/v3d71_glue.rs:1149-1164` fills case 67 through glue71 with no refusal, its GL_RGB texture an RGBA8 target loaded with alpha 1. Not yet run on any board in this form (the Pi 4 row is the old run) |
 | 102 clear under partial colour mask | PASS (maskclear 0 of 4096 wrong) | pass; the clear quad under a partial mask, and its program compiles (below) |
 
 Two host answers bear on this table, both pinned in the tree:
@@ -210,13 +210,19 @@ Two host answers bear on this table, both pinned in the tree:
   stencil frames. Mesa stores the window's D24S8 as Z only (case 59's
   depth-only job) and as stencil only (case 59's stencil job, case 67's
   `GL_STENCIL_INDEX8`) and loads it as stencil only in the job after
-  (`tools/v3d/pi5/gl_writemask.clif`, `gl_fbods.clif`). The two cases are
-  still refused by the shared decision (the two rows above), because that
-  decision is in `state.rs`/`backend.rs`, not in the builder; when it is
-  lifted, the 7.1 builder will not be what stops them.
+  (`tools/v3d/pi5/gl_writemask.clif`, `gl_fbods.clif`). Case 59 is still
+  refused by the shared decision (its row above), because that decision is
+  in `backend.rs` (`:3821-3825`), not in the builder; when it is lifted, the
+  7.1 builder will not be what stops it. Case 67 meets no shared refusal at
+  the tip (its row above), so its stencil frames reach these packets.
 
-Expectation: **4 of 6 pass, 59 and 67 refused by the same names**, as the Pi 4
-started. Further refusals are allowed only with a name: a program the 7.1
+Expectation: **5 of 6 pass, 59 refused by the 4.2 stencil name**
+(`src/v3d/backend.rs:3821-3825`; 7.1 twin `src/v3d/zskeep71.rs:484-486`).
+Case 67 is expected to pass: the Pi 4's "fewer than 8 alpha bits" refusal is
+absent from the root commit `381b0f09` already, a target with fewer alpha bits is
+drawn (`src/v3d/state.rs:1121-1136`, `backend_tests.rs:3418-3456`), and its
+`GL_STENCIL_INDEX8` framebuffer keeps its stencil (`src/gl/draw.rs:3113-3116`),
+so `tests/v3d71_glue.rs:1149-1164` fills it with no refusal. Further refusals are allowed only with a name: a program the 7.1
 online compiler cannot emit yet falls back to Mesa's offline 7.1 binaries (as
 the Pi 4 started, `v3d_triangle` "Mesa's shaders" before "ours") and a case
 that needs a 7.1 packet the builder lacks (an 8-target frame, a non-raster
@@ -261,3 +267,4 @@ are not cited.
 | `Clear Render Targets` (item 5) | `X:485`; Mesa `v3dx_rcl.c:331-340`, `:646-655` | `v3d_job71.c:962`, `:1092`; `src/v3d/rt71.rs:49-51`; `src/v3d/frame71.rs:262`, `:594` (`tests/v3d71_frame.rs`) |
 | TFU `IOC` 0x00086061 (item 6) | `rpi5-v3d71-facts.md:70`, `:186`; Mesa `v3dx_tfu.c:165-202`; `tools/v3d/pi5/gl_mipgen.stdout:2` | `driver/src/v3d/v3d_tfu71.h:48-53`, `v3d_tfu71.c:171-181`; `tools/v3d/tfu71_check.c:579`; `check71.d/tfu71.sh:44,72`; board: `tools/cts/RESULTS.md:729` (`rpi5_tfu` PASS, same word) |
 | G1 (D24S8 Z-only / stencil-only) | Mesa `zs_buffer_from_pipe_bits`; `tools/v3d/pi5/gl_writemask.clif`, `gl_fbods.clif` | `v3d_job71.c:838-859`, `v3d_job71.h:236-238`; `check71.d/job71.sh:28-33`, `:214-216`; `tools/v3d/job71_check.c:1143,1185` |
+| Section 5 expectation: 5 of 6 pass, 59 refused (read on `2c4e802f`) | the Pi 4 run, `pi4-v3d-bringup.md:322-335` (67 refused there by the alpha-bits name, absent since `381b0f09`) | 59: `src/v3d/backend.rs:3821-3825`, `zskeep71.rs:484-486` (`tests/v3d71_zskeep.rs:466-467`, `tests/v3d71_glue.rs:1117-1131`); 67 drawn: `src/v3d/state.rs:1121-1136`, `backend_tests.rs:3418-3456`, `src/gl/draw.rs:3113-3116`, `tests/v3d71_glue.rs:1149-1164` |
