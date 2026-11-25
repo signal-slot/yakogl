@@ -767,3 +767,46 @@ Expected: each row's tally equal to the whole tree on `a27d69c0`
 (`records/pi4/deqp-1cf946a9/rows`: all pass), and nothing moved from Pass.
 The rows of the commands are verified against `pi4-full-tree.txt` at tip,
 0-based: D 1, FB1 4, T1 19, T3 21, TF 24.
+
+## 9. The ES 3.0 gl_test cases, the same session
+
+A GLES3 rerun also runs the ES 3.0 gl_test cases that the dEQP images do not
+cover. They are one `gl_test` image (row `GT` of `tools/cts/common-tree.txt`),
+built with `tools/cts/common-images.sh` and run with `tools/board.sh pi4 run`;
+`DEQP_WORK` and `BOARD_MUSTPASS` play no part (it is not a dEQP image). The
+environment is the west workspace of section 3 (`ZEPHYR_WS`,
+`ZEPHYR_SDK_INSTALL_DIR`, `RUSTUP_TOOLCHAIN`, optionally `WEST_VENV`) and the
+`BOARD_HOST` and `BOARD_UART` of section 4.
+
+`--cases` takes comma-separated case numbers of
+`driver/tools/pvrlab/gl_test.c` (digits and commas only; anything else is
+refused). With a comma the pi4 row gets `CONFIG_V3D_GL_TEST_CASES=<list>` (the
+cases in order on one context); with one number alone it gets
+`CONFIG_V3D_GL_TEST_CASE=<n>` (a fresh context). `--dry-run` prints the row and
+its cmake arguments and builds nothing:
+
+```sh
+HEAD8=$(git rev-parse --short=8 HEAD)
+CASES=196,200,201,202,203,204,205      # the ES 3.0 cases to run; not 245
+tools/cts/common-images.sh --dry-run --cases $CASES pi4 tools/cts/common-tree.txt build/gltest/pi4-$HEAD8 GT
+tools/cts/common-images.sh --cases $CASES pi4 tools/cts/common-tree.txt build/gltest/pi4-$HEAD8 GT
+tools/board.sh pi4 run build/gltest/pi4-$HEAD8/GT/zephyr/zephyr.bin records/pi4/gltest-$HEAD8 gltest
+```
+
+The image is `build/gltest/pi4-$HEAD8/GT/zephyr/zephyr.bin`; a complete build
+directory made with other `--cases` is refused (`rc=exists`), so use a new
+`<img-dir>` for each list. `run` writes
+`records/pi4/gltest-$HEAD8/<YYYYMMDD-HHMM>-gltest-<sha8>/` and prints one verdict
+line; the cases' own lines are `gl_test: case N <name>: PASS|FAIL|SKIP`, and the
+end line is `gl_test: all: ...`. Redact the records with
+`python3 -I tools/cts/console-redact.py <record dir>` (section 6) before
+anything is committed. Each run is its own tryboot; the ES 2.0 rows of
+section 8 run in the same session, before or after this image.
+
+**Case 245 (`mrt4`) is left out of the list.** It needs four draw buffers, and
+the Pi 4's V3D answers `GL_MAX_DRAW_BUFFERS` 3 (`DRAW_TARGETS` in
+`src/backend.rs`). The knob that would make it run, `V3D_GL_TEST_MRT4` (it
+depends on `YAKOGL_TEST_KNOBS`), calls `v3d_debug_set_draw_targets(4)`, which
+does not exist in `src/v3d` yet (the mrt4 work), so an image built with the
+knob would not link. Without the knob the case prints `SKIP`: if 245 is in the
+list anyway, count that line as a SKIP, not a Pass and not a Fail.
