@@ -168,6 +168,15 @@ Kconfig (`Kconfig`, the STM32MP257F-DK menu):
   (`gc_gl_triangle`, `docs/notes/pre-study-stm32mp257f-dk.md` row P7). 2 adds
   case 2 (texture), and so on; more than one case runs on one context as a
   list.
+- `GL_TEST_MP2_CASES` (default ""): an explicit comma list of cases
+  (`"1,2,3"`), walked on one context; it overrides `SET_HEAD`.
+  `tools/cts/mp2-gltest-shards.py` writes one `shard-NNNN.conf` fragment
+  with it per shard (`-DEXTRA_CONF_FILE=<out>/shard-NNNN.conf`). One number
+  runs that case alone.
+
+A one-case run (`GL_TEST_MP2_CASE`, a `SET_HEAD` of 1, a list of one) prints
+the runner's `gl_test: all:` line itself, `0 of 1` or `1 of 1` cases failed,
+as the walk does, so `dk_verdict.py` finds its tally.
 
 The console has every case's line and `gl_test: all:`; the record is the
 `yk-record:` line on USART2, kind CASE as on the i.MX8MP: one case gives

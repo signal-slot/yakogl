@@ -186,6 +186,16 @@ config GL_TEST_MP2_SKIP
 	  open (its 3 px wide LINE_LOOP on the WIDELINE_TRIANGLE_EMU core),
 	  passes on the DK. "10" restores the old run.
 
+config GL_TEST_MP2_CASES
+	string "Cases to run in order on one context, comma-separated (a shard)"
+	default ""
+	help
+	  When set, the listed case numbers are walked through
+	  gl_test_set_list on one context (one number: that case alone, with
+	  a one-case "gl_test: all:" tally), instead of GL_TEST_MP2_CASE or
+	  GL_TEST_MP2_SET_HEAD. tools/cts/mp2-gltest-shards.py writes one
+	  list per shard of the regression set. Empty: as before.
+
 config GL_TEST_MP2_SET_HEAD
 	bool "Run only the first cases of the regression set"
 	help
