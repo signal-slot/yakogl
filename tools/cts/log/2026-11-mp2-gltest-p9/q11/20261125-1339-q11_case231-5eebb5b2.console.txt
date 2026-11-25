@@ -1,0 +1,58 @@
+yakogl-mp2: hook
+yakogl-mp2: once=q11_case231-5eebb5b2ad8300d3-1795613972
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+2844624 bytes read in 328 ms (8.3 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 x2=0xf8099c78 x3=0xa0000000 pc=0xa01fbd9c cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 154251758 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 100 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 100000 ms of uptime
+I: render service up: 30 events, pool 65152 KiB free
+yk-record: 594b0502 00000243 00000b15 00000002
+gl_test: start (case=231 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: osal(gc): ready
+gl_test:   flat lines_wide: line, near its first vertex ( 8,55) = 0xff00ff00  want 0xff00ff00  ok  [check 1]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,56) = 0xff00ff00  want 0xff00ff00  ok  [check 2]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,54) = 0xff00ff00  want 0xff00ff00  ok  [check 3]
+gl_test:   flat lines_wide: line, middle (32,55) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+gl_test:   flat lines_wide: line, middle (32,56) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+gl_test:   flat lines_wide: line, middle (32,54) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+gl_test:   flat lines_wide: line, near its last vertex (56,55) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+gl_test:   flat lines_wide: line, near its last vertex (56,56) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+gl_test:   flat lines_wide: line, near its last vertex (56,54) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,35) = 0xff00ffff  want 0xff00ffff  ok  [check 10]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,36) = 0xff00ffff  want 0xff00ffff  ok  [check 11]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,34) = 0xff00ffff  want 0xff00ffff  ok  [check 12]
+gl_test:   flat lines_wide: line, middle (32,35) = 0xff00ffff  want 0xff00ffff  ok  [check 13]
+gl_test:   flat lines_wide: line, middle (32,36) = 0xff00ffff  want 0xff00ffff  ok  [check 14]
+gl_test:   flat lines_wide: line, middle (32,34) = 0xff00ffff  want 0xff00ffff  ok  [check 15]
+gl_test:   flat lines_wide: line, near its last vertex (56,35) = 0xff00ffff  want 0xff00ffff  ok  [check 16]
+gl_test:   flat lines_wide: line, near its last vertex (56,36) = 0xff00ffff  want 0xff00ffff  ok  [check 17]
+gl_test:   flat lines_wide: line, near its last vertex (56,34) = 0xff00ffff  want 0xff00ffff  ok  [check 18]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,15) = 0xffff00ff  want 0xffff00ff  ok  [check 19]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,16) = 0xffff00ff  want 0xffff00ff  ok  [check 20]
+gl_test:   flat lines_wide: line, near its first vertex ( 8,14) = 0xffff00ff  want 0xffff00ff  ok  [check 21]
+gl_test:   flat lines_wide: line, middle (32,15) = 0xffff00ff  want 0xffff00ff  ok  [check 22]
+gl_test:   flat lines_wide: line, middle (32,16) = 0xffff00ff  want 0xffff00ff  ok  [check 23]
+gl_test:   flat lines_wide: line, middle (32,14) = 0xffff00ff  want 0xffff00ff  ok  [check 24]
+gl_test:   flat lines_wide: line, near its last vertex (56,15) = 0xffff00ff  want 0xffff00ff  ok  [check 25]
+gl_test:   flat lines_wide: line, near its last vertex (56,16) = 0xffff00ff  want 0xffff00ff  ok  [check 26]
+gl_test:   flat lines_wide: line, near its last vertex (56,14) = 0xffff00ff  want 0xffff00ff  ok  [check 27]
+gl_test: case 231 flat_lines_wide: PASS
+gl_test: done
+gl_test: the suite took 307 ms
+osal(gc): pending frees: high-water 0/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept), held peak 0 KiB
+osal(gc): ds surfaces peak 1/32, ds bytes peak 16384, ds given up 0, ds refused 0 (all live 0, no surface 0)
+osal(gc): log: 0 causes logged once, 0 repeats not printed
+yk-record: 594b0103 00e7ff01 0000001b 00000000
+shaderc: keep high-water 6016 of 1048576 bytes (6016 held now)
+yakogl: draws refused 0
+gl_test: PASS
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 3193 ms

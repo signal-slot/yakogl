@@ -1,0 +1,42 @@
+Q11 board test on the STM32MP257F-DK, 2026-11-25 (docs/notes/stm32mp257f-dk-p9.md section 4).
+Built from origin/main db9ceaac: driver/samples/zephyr/gl_test for stm32mp257f_dk/stm32mp257fxx/a35,
+-DYAKOGL_WERROR=ON -DCONFIG_GL_TEST_MP2_CASE=<N>, one image per case (banner "sample: build tree=db9ceaac").
+Each ran alone with tools/board-stm32mp2.sh run (one-shot from the DK's U-Boot off the microSD,
+back to ST's Linux by PSCI SYSTEM_RESET), MP2_NO_CONSOLE=1. The USART2 text was read through
+connected's serial tools; the *.console.txt files are excerpts of it: U-Boot's hook lines through the
+image's end line, with BL2/OP-TEE boot lines, the gc_power optee/scmi hex dumps, the GPU bring-up
+lines and gl_test's px picture rows left out. Verdicts: tools/board-stm32mp2.sh judge <record> <console>.
+Record names are records/stm32mp257f-dk/<name> (gitignored); the sha8 in a name is the image's sha256.
+
+case 249 linewidth  20261125-1336-q11_case249-a8bbc9e4
+  gl_test: linewidth: GL_ALIASED_LINE_WIDTH_RANGE 1.00 16.00
+  gl_test: linewidth: req 1 h 1 v 1
+  gl_test: linewidth: req 2 h 2 v 2
+  gl_test: linewidth: req 3 h 3 v 3
+  gl_test: linewidth: req 4 h 4 v 4
+  gl_test: linewidth: req 5 h 5 v 5
+  gl_test: linewidth: req 6 h 6 v 6
+  gl_test: linewidth: req 8 h 8 v 8
+  gl_test: linewidth: req 16 h 16 v 16
+  gl_test: case 249 linewidth: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case249 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=45s console=external
+case 10 prims  20261125-1337-q11_case10-39deadfd
+  gl_test:   loop: 3 px wide              (17,32) = 0xff00ff00  want 0xff00ff00  ok  [check 11]
+  gl_test: case 10 prims: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case10 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=62s console=external
+case 231 flat_lines_wide  20261125-1339-q11_case231-5eebb5b2
+  gl_test: case 231 flat_lines_wide: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case231 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=46s console=external
+case 233 flat_line_strip_wide  20261125-1341-q11_case233-e0cd2abf
+  gl_test: case 233 flat_line_strip_wide: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case233 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=60s console=external
+case 235 flat_line_loop_wide  20261125-1343-q11_case235-5ae1dc55
+  gl_test: case 235 flat_line_loop_wide: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case235 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=52s console=external
+case 103 maskdepth (control, draws no line)  20261125-1345-q11_case103-d9c6e8e1
+  gl_test: case 103 maskdepth: PASS
+  board-stm32mp2.sh stm32mp257f-dk q11_case103 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=49s console=external
+
+No image printed a "gl_test: all:" tally (the one-case tally fix is not on main at db9ceaac).
+After the runs the card's u-boot-env read back with the sha256 it had before install and /boot had
+its 25 files with the same listing digest; /boot/yakogl was removed; status: install absent.

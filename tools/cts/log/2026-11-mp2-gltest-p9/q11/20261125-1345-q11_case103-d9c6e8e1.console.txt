@@ -1,0 +1,31 @@
+yakogl-mp2: hook
+yakogl-mp2: once=q11_case103-d9c6e8e1b20cdac3-1795614334
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+2844624 bytes read in 330 ms (8.2 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 x2=0xf8099c78 x3=0xa0000000 pc=0xa01fbd9c cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 155906991 ticks
+I: render service up: 30 events, pool 65152 KiB free
+yk-record: 594b0502 00000243 00000b15 00000002
+gl_test: start (case=103 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: osal(gc): ready
+gl_test:   maskdepth: under B, R from A and G from B (32,32) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+gl_test:   maskdepth: A only            ( 8, 8) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+gl_test: case 103 maskdepth: PASS
+gl_test: done
+gl_test: the suite took 75 ms
+osal(gc): pending frees: high-water 0/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept), held peak 0 KiB
+osal(gc): ds surfaces peak 1/32, ds bytes peak 16384, ds given up 0, ds refused 0 (all live 0, no surface 0)
+osal(gc): log: 0 causes logged once, 0 repeats not printed
+yk-record: 594b0103 0067ff01 00000002 00000000
+shaderc: keep high-water 6144 of 1048576 bytes (6144 held now)
+yakogl: draws refused 0
+gl_test: PASS
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 2962 ms
