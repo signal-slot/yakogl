@@ -106,7 +106,35 @@ have them.
    image does itself"), arms WDT0, prints its record on the same UART and
    resets at its end. `bootflow scan -lb` then boots Armbian: no one-shot
    variable is needed. `prompt-go.py` judges the record with
-   `t6-verdict.sh <probe>` (`T6_ROUTE=uboot`) and waits for Linux's login.
+   `t6-verdict.sh <probe>` (`T6_ROUTE=uboot`), or for `gl_test` and `deqp`
+   itself (below), and waits for Linux's login.
+
+The probes `prompt-go.sh` takes: `t6_hello`, `t6_gpu`, `t6_mmu`, `t6_fw`,
+`t6_submit`, `t6_cold` and `triangle`, judged by `t6-verdict.sh`'s table for
+each; and `gl_test` (`driver/samples/zephyr/gl_test` built for `nanopc_t6`)
+and `deqp` (a dEQP-GLES2 row image, `tools/cts/t6-deqp-images.sh`), which
+`t6-verdict.sh` has no table for and `prompt-go.py` (`judge_sample`) judges
+by their own summary lines, in order:
+
+1. `T6:A`'s SCTLR_EL2 with M, C and I clear, and `T6:G`'s value as found
+   with one of them set and its value read back with all three clear and
+   equal to `T6:A`'s (the same checks as `t6-verdict.sh`'s uboot route);
+2. `gl_test`: its one `gl_test: all: F of T cases failed (P passed; X timed
+   out; ...)` line with F 0, X 0 and T above 0 (the 50/50 record: `gl_test:
+   all: 0 of 50 cases failed (50 passed; 0 timed out; ...)`). `deqp`:
+   `deqp: done: ...` and then `deqp: summary: ...`; the cases' outcomes are
+   not the verdict, they are tallied later from `image.log`, as under
+   kexec;
+3. the board glue's `t6: <probe> done: PSCI SYSTEM_RESET at N ms (F feeds)`
+   (`t6_reset_to_linux`, called by the sample's own end).
+
+`verdict.txt` then has one `ok`, `differs` or `missing` line per expected
+line and `VERDICT <probe> PASS` or `VERDICT <probe> FAIL (<n> of <m>)` last,
+as `t6-verdict.sh` writes it, so the exit codes below mean the same for
+every probe. The wait for the image is its own bound, from its marker:
+WDT0's lifetime plus one period (or one period on a proof image), plus 60 s
+for U-Boot; a `gl_test` image (fed for 300 s) waits 383 s and a dEQP row
+image (600 s) 683 s.
 
 No script file, no `mkimage`, no `source`: the checks are the runner's, on
 the host, where they are tested without a board (`prompt-go.py
@@ -141,7 +169,8 @@ is cut; 6 an answer differed, `reset` entered, and no sign of Linux; 7 a
 command made U-Boot reset the board; 8 an answer differed: no `go`, `reset`
 entered, Armbian back; 9 `go` not answered (no "## Starting application");
 10 the image started, and no sign of Linux: the board needs a hand; 11 the
-verdict FAIL, Armbian back. "No sign of Linux" is no login on the UART and
+verdict FAIL, Armbian back (for `gl_test` also a case failed or timed out,
+for `deqp` no `deqp: done:` or no `deqp: summary:` line). "No sign of Linux" is no login on the UART and
 no new boot_id over ssh ("When the UART stream stops"). `prompt-go.sh` adds
 1 the board did not come back into Armbian otherwise, 2 usage, 3 refused before anything changed (only that: the board
 was not rebooted), and with an RFC 2217 address 40 (the line could not be

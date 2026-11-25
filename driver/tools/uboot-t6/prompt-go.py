@@ -22,7 +22,10 @@
         The image's output and what follows go to image.log until Linux's
         login (IMAGE_WAIT seconds for the image, then 180 s for Linux), and
         t6-verdict.sh PROBE judges image.log (T6_ROUTE=uboot) into
-        verdict.txt. An answer that differs stops before `go`: `reset` is
+        verdict.txt; PROBE gl_test or deqp is judged here instead
+        (judge_sample: the T6:A and T6:G lines as t6-verdict.sh's uboot
+        route has them, the sample's summary lines, the board glue's PSCI
+        reset line), with the same last line. An answer that differs stops before `go`: `reset` is
         entered and the board boots Armbian.
         SIZE is decimal bytes, CRC eight hex digits (zlib's CRC-32, the one
         U-Boot's crc32 prints). RECORD_DIR also gets uart.log, typed.log and
@@ -70,7 +73,9 @@ came back. 9 `go`
 entered and U-Boot did not answer it ("## Starting application" never
 came): nothing more was written. 10 the image started, its verdict was
 taken, no Linux login on the UART in time. 11 Linux's login came back
-and the verdict is FAIL (verdict.txt names the lines).
+and the verdict is FAIL (verdict.txt names the lines; for gl_test that is
+also a case failed or timed out, for a dEQP row no "deqp: done:" or no
+"deqp: summary:" line).
 """
 
 import importlib.util
@@ -99,7 +104,12 @@ STARTED = b"## Starting application at 0x%08X" % LOAD
 NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\.bin")
 # The probes t6-verdict.sh judges that U-Boot can start (prompt-go.sh's
 # list; t6_display is not one: it adopts a picture only Linux leaves).
-TYPES = ("t6_hello", "t6_gpu", "t6_mmu", "t6_fw", "t6_submit", "t6_cold", "triangle")
+VERDICT_TYPES = ("t6_hello", "t6_gpu", "t6_mmu", "t6_fw", "t6_submit", "t6_cold", "triangle")
+# The samples judged here by their own summary lines (judge_sample): gl_test
+# (driver/samples/zephyr/gl_test, main_mali.c) and a dEQP row image
+# (driver/samples/zephyr/deqp, tools/cts/t6-deqp-images.sh).
+SAMPLE_TYPES = ("gl_test", "deqp")
+TYPES = VERDICT_TYPES + SAMPLE_TYPES
 
 
 def commands(name, size):
@@ -160,8 +170,97 @@ class Refused(Exception):
     pass
 
 
+# SCTLR_EL2's M (bit 0), C (bit 2) and I (bit 12): the entry turns them off
+# (t6-verdict.sh's SCTLR_MCI).
+SCTLR_MCI = 0x1005
+X16 = r"[0-9a-f]{16}"
+T6A_RE = re.compile(r"T6:A EL2 HCR_EL2 0x%s -> 0x%s SCTLR_EL2 0x(%s) VBAR_EL2 0x%s -> 0x%s" % (X16, X16, X16, X16, X16))
+T6G_RE = re.compile(r"T6:G go: SCTLR_EL2 0x(%s) -> 0x(%s) \(MMU, D-cache, I-cache off\); 0x10000000-0x20000000 "
+                    r"cleaned and invalidated to PoC, TLB and I-cache invalidated" % (X16, X16))
+# gl_test.c's "gl_test: all: F of T cases failed (P passed; X timed out; ..." (the
+# 50/50 record: "gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...")
+GL_ALL_RE = re.compile(r"gl_test: all: (-?\d+) of (\d+) cases failed \((\d+) passed; (\d+) timed out(;.*)?\)")
+# deqp/src/main.cpp's "deqp: done: ...", then deqp_log.c's "deqp: summary: ..."
+DEQP_DONE_RE = re.compile(r"deqp: done: -?\d+ passed, -?\d+ failed, -?\d+ not supported, -?\d+ warnings, "
+                          r"complete=-?\d+")
+DEQP_SUMMARY_RE = re.compile(r"deqp: summary: \d+ cases begun, \d+ with a result, \d+ without")
+# nanopc_t6.c, t6_reset_to_linux: "t6: <why>: PSCI SYSTEM_RESET at N ms (F feeds)"
+RESET_PFX = re.compile(r"t6: [^:]+: PSCI SYSTEM_RESET at ")
+
+
+def judge_sample(probe, log, out):
+    """gl_test or deqp: image.log judged by the go route's two boot lines,
+    the sample's own summary lines and the board glue's reset line, in that
+    order, into out in t6-verdict.sh's form: one line per expected line
+    ("ok", "differs" or "missing"), then "VERDICT <probe> PASS" or
+    "VERDICT <probe> FAIL (<n> of <m>)". Returns (rc, last line), rc 0 on PASS.
+
+    The boot lines are the ones t6-verdict.sh checks with T6_ROUTE=uboot:
+    T6:A's SCTLR_EL2 (SA) with M, C and I clear; T6:G's value as found (GF)
+    with one of them set and its value read back (GL) with all three clear
+    and equal to SA. gl_test then needs its one "gl_test: all:" line with 0
+    failed, 0 timed out and at least one case; a dEQP row needs "deqp: done:"
+    and then "deqp: summary:" (its cases' outcomes are tallied later from
+    image.log, not here). Last the reset line "t6: <probe> done: PSCI
+    SYSTEM_RESET at N ms (F feeds)", which the sample's own end calls."""
+    with open(log, "rb") as f:
+        lines = f.read().replace(b"\r", b"").replace(b"\0", b"").decode("latin-1").split("\n")
+    res = []
+    cur = [0]
+    v = {}
+
+    def step(what, pfx, full, test=None):
+        """The first line at or after cur that starts with pfx (a string, or
+        a compiled pattern matched at the start) is the candidate; "ok" when
+        full matches all of it and test(match) is true."""
+        for j in range(cur[0], len(lines)):
+            l = lines[j]
+            if (l.startswith(pfx) if isinstance(pfx, str) else pfx.match(l)):
+                cur[0] = j + 1
+                m = full.fullmatch(l)
+                ok = m is not None and (test is None or test(m))
+                res.append((ok, '%s expected %s; seen "%s" (line %d)' % (
+                    "ok      " if ok else "differs ", what, l, j + 1)))
+                return
+        res.append((False, "missing  expected %s; seen nothing after line %d" % (what, cur[0])))
+
+    def t6a(m):
+        v["SA"] = m.group(1)
+        return int(m.group(1), 16) & SCTLR_MCI == 0
+
+    def t6g(m):
+        gf, gl = m.group(1), m.group(2)
+        return int(gf, 16) & SCTLR_MCI != 0 and int(gl, 16) & SCTLR_MCI == 0 and gl == v.get("SA")
+
+    step("T6:A with SCTLR_EL2's M, C and I clear", "T6:A EL", T6A_RE, t6a)
+    step("T6:G: SCTLR_EL2 found with M, C or I set, left with all three clear and equal to T6:A's", "T6:G ",
+         T6G_RE, t6g)
+    if probe == "gl_test":
+        n_all = sum(1 for l in lines if l.startswith("gl_test: all: "))
+
+        def all_ok(m):
+            # one such line only: a second is a second boot (or a defect)
+            return int(m.group(1)) == 0 and int(m.group(4)) == 0 and int(m.group(2)) > 0 and n_all == 1
+
+        step("one \"gl_test: all: 0 of T cases failed (P passed; 0 timed out; ...)\" line, T > 0", "gl_test: all: ",
+             GL_ALL_RE, all_ok)
+    else:
+        step('"deqp: done: ... complete=C"', "deqp: done: ", DEQP_DONE_RE)
+        step('"deqp: summary: N cases begun, M with a result, K without"', "deqp: summary: ", DEQP_SUMMARY_RE)
+    step('"t6: %s done: PSCI SYSTEM_RESET at N ms (F feeds)"' % probe, RESET_PFX,
+         re.compile(r"t6: %s done: PSCI SYSTEM_RESET at \d+ ms \(\d+ feeds\)" % probe))
+    bad = sum(1 for ok, _ in res if not ok)
+    last = "VERDICT %s PASS" % probe if bad == 0 else "VERDICT %s FAIL (%d of %d)" % (probe, bad, len(res))
+    with open(out, "w") as f:
+        f.write("".join(t + "\n" for _, t in res) + last + "\n")
+    return (0 if bad == 0 else 1), last
+
+
 def judge(probe, log, out):
-    """t6-verdict.sh PROBE LOG with T6_ROUTE=uboot into out: (rc, last line)."""
+    """t6-verdict.sh PROBE LOG with T6_ROUTE=uboot into out: (rc, last line).
+    gl_test and deqp are judge_sample's."""
+    if probe in SAMPLE_TYPES:
+        return judge_sample(probe, log, out)
     env = dict(os.environ, T6_ROUTE="uboot", LC_ALL="C")
     r = subprocess.run(["bash", VERDICT, probe, log], env=env, capture_output=True, text=True)
     with open(out, "w") as f:
@@ -275,6 +374,40 @@ def image_lines():
     return lines[lines.index("## Starting application at 0x10000000 ...") + 1:]
 
 
+def sample_lines(probe, how="ok"):
+    """A made-up go record of a gl_test or dEQP row image: the fixture's boot
+    lines up to Zephyr's banner, then the sample's lines and its reset line.
+    how: "ok"; "fail1" (gl_test, one case failed); "nodone" (deqp, no
+    "deqp: done:" line); "caches" (T6:G read back with the D-cache on)."""
+    lines = image_lines()
+    boot = lines[:[i for i, l in enumerate(lines) if l.startswith("*** Booting Zephyr")][0] + 1]
+    if how == "caches":
+        boot = [l.replace("-> 0x0000000030c50830 (MMU", "-> 0x0000000030c50834 (MMU") for l in boot]
+    if probe == "gl_test":
+        failed = 1 if how == "fail1" else 0
+        own = ["t6_gl_test: build 51e4a974",
+               "t6_gl_test: WDT0 period 22369 ms, fed until 300000 ms of uptime, alive window 20 s",
+               "gl_test: the list mali_regress (50 cases) on one context",
+               "gl_test: case 1 clear: PASS",
+               "gl_test: case 2 triangle: %s" % ("FAIL" if failed else "PASS"),
+               "gl_test: all: %d of 50 cases failed (%d passed; 0 timed out; first failure case %d at index %d)"
+               % (failed, 50 - failed, 2 if failed else -1, 1 if failed else -1),
+               "gl_test: %s (rc=%d)" % ("FAILED" if failed else "OK", failed),
+               "t6: gl_test done: PSCI SYSTEM_RESET at 81234 ms (81 feeds)"]
+    else:
+        # a row with a failed case still PASSes: the cases are tallied later
+        own = ["deqp_mali: build 51e4a974",
+               "deqp: Pass dEQP-GLES2.info.vendor",
+               "deqp: Fail dEQP-GLES2.functional.prerequisite.read_pixels",
+               "deqp: done: 1 passed, 1 failed, 0 not supported, 0 warnings, complete=1",
+               "deqp: summary: 2 cases begun, 2 with a result, 0 without",
+               "deqp: FAILED (rc=-1)",
+               "t6: deqp done: PSCI SYSTEM_RESET at 412345 ms (412 feeds)"]
+        if how == "nodone":
+            own = [l for l in own if not l.startswith("deqp: done: ")]
+    return boot + own
+
+
 class FakeGo(P.FakeBoard):
     """U-Boot that answers the go route's commands, then plays the image.
     A how that ends in "-kstop" plays the UART's stream stopping in the
@@ -341,7 +474,7 @@ def self_test():
     check = P.Checks(self_test)
     name, size, crc = "t6_hello.bin", 0x2a5c0, 0x1b2c3d4e
 
-    def case(how="ok", lines=None, back=False):
+    def case(how="ok", lines=None, back=False, probe="t6_hello"):
         """back: the runner's file (Armbian answers over ssh with a new
         boot_id) is there from the start."""
         master, slave = pty.openpty()
@@ -358,7 +491,7 @@ def self_test():
                 if back:
                     open(flag, "w").close()
                 fake.start()
-                rc = run(slave, d, name, size, crc, "t6_hello", 1, boot_wait=3, login_wait=2, gap=0, scale=0.03,
+                rc = run(slave, d, name, size, crc, probe, 1, boot_wait=3, login_wait=2, gap=0, scale=0.03,
                          back=flag if back else None)
             finally:
                 sys.stdout.close()
@@ -490,6 +623,56 @@ def self_test():
           and b"####" not in files.get("uart.log", b"####"),
           "ssh sees Linux, the UART alive: exit 0, verdict PASS, no line about a hole (rc %d)" % rc)
 
+    # 6f. The samples judged by their summary lines (judge_sample), through
+    # the whole route: gl_test PASS; one case failed; a dEQP row PASS (with a
+    # failed case: the cases are tallied later); a row without "deqp: done:";
+    # a gl_test image whose T6:G says the caches stayed on.
+    for probe, how, want, why in (
+            ("gl_test", "ok", 0, None),
+            ("gl_test", "fail1", 11, rb"differs  expected one \"gl_test: all: "),
+            ("deqp", "ok", 0, None),
+            ("deqp", "nodone", 11, rb"missing  expected \"deqp: done: "),
+            ("gl_test", "caches", 11, rb"differs  expected T6:G")):
+        rc, f, files = case(lines=sample_lines(probe, how), probe=probe)
+        v = files.get("verdict.txt", b"")
+        last = v.rstrip().splitlines()[-1] if v.strip() else b""
+        good = last == b"VERDICT %s PASS" % probe.encode() if want == 0 else (
+            re.fullmatch(rb"VERDICT %s FAIL \(1 of [0-9]+\)" % probe.encode(), last) is not None
+            and re.search(why, v) is not None)
+        check(rc == want and good and f.entered == cmds and f.shell == b"",
+              "%s %s: exit %d, verdict.txt's last line %r, nothing written after go (rc %d)" % (
+                  probe, how, want, last, rc))
+
+    # 6g. judge_sample alone on the records the route cannot fake: a gl_test
+    # case timed out, no reset line, a second "gl_test: all:" line, a kexec
+    # record (no T6:G line), the reset line of another sample, 0 cases.
+    with tempfile.TemporaryDirectory() as d:
+        log, out = os.path.join(d, "image.log"), os.path.join(d, "verdict.txt")
+
+        def judged(lines):
+            with open(log, "w") as f:
+                f.write("\r\n".join(lines) + "\r\n")
+            return judge("deqp" if any(l.startswith("deqp: ") for l in lines) else "gl_test", log, out)
+
+        gl = sample_lines("gl_test")
+        at = [i for i, l in enumerate(gl) if l.startswith("gl_test: all: ")][0]
+        for what, lines in (
+                ("a case timed out", gl[:at] + [gl[at].replace("(50 passed; 0 timed out", "(49 passed; 1 timed out")]
+                 + gl[at + 1:]),
+                ("no reset line", gl[:-1]),
+                ("two gl_test: all: lines", gl[:at + 1] + gl[at:]),
+                ("no T6:G line", [l for l in gl if not l.startswith("T6:G ")]),
+                ("another sample's reset line", gl[:-1] + [gl[-1].replace("gl_test done", "deqp done")]),
+                ("0 cases", gl[:at] + ["gl_test: all: 0 of 0 cases failed (0 passed; 0 timed out; first failure "
+                                       "case -1 at index -1)"] + gl[at + 1:]),
+                ("a dEQP row without its summary", [l for l in sample_lines("deqp")
+                                                    if not l.startswith("deqp: summary: ")])):
+            rc, last = judged(lines)
+            check(rc == 1 and last.startswith("VERDICT ") and " FAIL (1 of " in last,
+                  "judge_sample, %s: FAIL (rc %d, %r)" % (what, rc, last))
+        rc, last = judged(gl)
+        check(rc == 0 and last == "VERDICT gl_test PASS", "judge_sample, the 50/50 record: PASS (%r)" % last)
+
     # 7. What may be typed.
     ok = go_allowed(name, size)
     for c in cmds + ["reset"]:
@@ -507,7 +690,7 @@ def self_test():
 
     # 8. Every probe taken here is one t6-verdict.sh has a table for: an
     # empty record FAILs (exit 1); a name it does not know is usage (2).
-    for t in TYPES + ("t6_nonesuch",):
+    for t in VERDICT_TYPES + ("t6_nonesuch",):
         r = subprocess.run(["bash", VERDICT, t, os.devnull], env=dict(os.environ, T6_ROUTE="uboot", LC_ALL="C"),
                            capture_output=True)
         want = 2 if t == "t6_nonesuch" else 1
