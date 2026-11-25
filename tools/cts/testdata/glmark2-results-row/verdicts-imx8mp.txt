@@ -1,0 +1,6 @@
+GM glmark2 rc=0 verdict=done result=record:GLMARK2 record=11111111,22222222,33333333,44444444; resets absent; image=cccccccccccccccc build=YAKOGL_SAMPLE_TREE=12345678
+    glmark2 score 42; scenes ran 33, failed 0, unsupported 0; status 0 (pass)
+    glmark2 cell green (record and pages); scenes in glmark2-pages.txt 33, with an FPS 33, 1934.56 ms/frame summed (1000 / the integer FPS); per-scene table: common-tally.py --gm-table records/imx8mp/20261201-1100-GM-1234abcd/glmark2-pages.txt
+    not in record: FrameTime, the gl / swap / show / frame means, the glmark2-mem lines, the GL error lines (known-bad lines), the probes' alpha and low bits (RGB565 probes); the score is the GLMARK2 record's
+    glmark2 pictures against column imx8mp: 33 scenes, match 33
+    run records/imx8mp/20261201-1100-GM-1234abcd
