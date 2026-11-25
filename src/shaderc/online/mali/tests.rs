@@ -8182,7 +8182,9 @@ fn a_negative_zero_is_mesa_s_in_every_route() {
 /// and a negated position's lanes, whose fneg moves into the viewport
 /// transform (nir.rs `Nir::alu`). Guards that were equal: `* -1.0` (an
 /// fneg), a constant vector with a negative lane, `-x * 3.0`, a negated w.
-const NEGMUL_POPULATION: [(&str, &str, &str, &str); 18] = [
+/// The literal first, `-3.0 * a2` (negmul_first: the operand moved over the
+/// fneg's place, glsl.rs `Tree::hoist_operand`).
+const NEGMUL_POPULATION: [(&str, &str, &str, &str); 19] = [
     pair!("negmul_mediump"),
     pair!("negmul_mediump_two"),
     pair!("negmul_mediump_half"),
@@ -8201,6 +8203,7 @@ const NEGMUL_POPULATION: [(&str, &str, &str, &str); 18] = [
     pair!("negmul_mediump_vector"),
     pair!("negmul_mediump_negvalue"),
     pair!("negmul_vs_negw"),
+    pair!("negmul_first"),
 ];
 
 #[test]
@@ -8216,28 +8219,28 @@ fn a_product_with_a_negated_literal_is_mesa_s() {
         }
     }
     assert!(failed.is_empty(), "{} of {} differ:\n{}", failed.len(), NEGMUL_POPULATION.len(), failed.join("\n"));
+    /* the vertex stage's literal first: `fmul(fneg(a), b)` gives
+     * `fneg(fmul(a, b))` for either order of the operands
+     * (nir_opt_algebraic.py:2387, a commutative match), so `-3.0 *
+     * a_position` is negmul_vs's `a_position * -3.0` word for word */
+    let (_, _, fs, json) = pair!("negmul_vs");
+    check_linked("attribute highp vec4 a_position; void main() { gl_Position = -3.0 * a_position; }", fs, json);
 }
 
 /// The negated-literal products that compiled on main to words that are
-/// not Mesa's and have no transcription yet, refused by name: the literal
-/// first (`-3.0 * a2`: no place in the IR for the product between the
-/// operand and its user), a product of a product (`a2 * u * -3.0`, Mesa
-/// reassociates it to `(a2 * 3.0) * u`), and a mediump sum (`a2 * -3.0 +
-/// 0.25`, the fused negation's operand form). Their references are kept.
+/// not Mesa's and have no transcription yet, refused by name: a product of
+/// a product (`a2 * u * -3.0`, Mesa reassociates it to `(a2 * 3.0) * u`),
+/// and a mediump sum (`a2 * -3.0 + 0.25`, the fused negation's operand
+/// form). Their references are kept.
 #[test]
 fn a_negated_literal_product_without_a_transcription_is_refused() {
-    for (name, _, fs, json, e) in [
-        (pair!("negmul_first"), MaliError::ArithConstant),
-        (pair!("negmul_three"), MaliError::ArithConstant),
-        (pair!("negmul_mediump_sum"), MaliError::FsOperandForm),
-    ]
-    .map(|((n, v, f, j), e)| (n, v, f, j, e))
+    for (name, _, fs, json, e) in
+        [(pair!("negmul_three"), MaliError::ArithConstant), (pair!("negmul_mediump_sum"), MaliError::FsOperandForm)]
+            .map(|((n, v, f, j), e)| (n, v, f, j, e))
     {
         assert!(region(json, "fs.fragment").is_some(), "{name}: the reference");
         assert_eq!(gap(SHC_STAGE_FRAGMENT, fs), e, "{name}");
     }
-    let vs = "attribute highp vec4 a_position; void main() { gl_Position = -3.0 * a_position; }";
-    assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::ArithConstant);
 }
 
 /// A mediump discard that compares two varying lanes, of one varying
