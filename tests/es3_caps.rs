@@ -312,9 +312,9 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
             ("MAX_FRAGMENT_INPUT_COMPONENTS", "32 = 8 vectors * 4, ES 3.0 needs 60 (gl/context.rs)"),
         ]);
     }
-    // the V3D reports 64 vertex output components (gl/context.rs); the GC7000 and the PowerVR report
+    // the V3D and the PowerVR report 64 vertex output components (gl/context.rs); the GC7000 reports
     // 15 varyings but 60, and Mali 32
-    if cfg!(feature = "gpu-v3d") {
+    if cfg!(any(feature = "gpu-v3d", feature = "gpu-powervr")) {
         // none: 64
     } else {
         v.push(("MAX_VERTEX_OUTPUT_COMPONENTS", if fifteen { "60 = 15 * 4, ES 3.0 needs 64" } else { "32 = 8 * 4" }));

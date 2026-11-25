@@ -256,9 +256,18 @@ pub fn max_color_attachments() -> usize {
 /// what the fragment shader reads (the coordinate/vertex shader writes only
 /// the components the linked fragment shader asks for), so a vertex shader
 /// may declare 16 vec4 outputs as long as 15 are read.
-#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+///
+/// PowerVR: 64 as well. Its vertex output record is also sized by what the
+/// fragment shader reads, and a `ShcShader` carries 16 varying rows
+/// (src/shaderc/mod.rs), so the online compiler and the back end already
+/// take a vertex shader of 16 vec4 outputs beside gl_Position and
+/// gl_PointSize; a 17th is refused when it compiles ("more varyings than the
+/// record holds", src/shaderc/online/powervr/assemble.rs). The 60 it used to
+/// report was a software choice below ES 3.0's minimum (table 6.33), not a
+/// hardware limit (tests/pvr_vertex_outputs_64.rs).
+#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
-#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the
