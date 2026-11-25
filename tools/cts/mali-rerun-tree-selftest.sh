@@ -86,6 +86,16 @@ python3 -I "$TOOL" --mustpass "$MP" --max 401 "${IS[@]}" > /dev/null 2>&1
 check "iMX95 --max above 400 exits 2" test $? -eq 2
 python3 -I "$TOOL" --mustpass "$MP" "${IS[0]}" "${SL[1]}" > /dev/null 2>&1
 check "a mix of iMX95 and T6 slices exits 2" test $? -eq 2
+# board=verdin_imx95 (the Zephyr spelling) is the same board, also mixed.
+mkdir -p "$tmp/us/a" "$tmp/us/b"
+for s in "$D"/a/*/; do cp -r "$s" "$tmp/us/a/"; done
+for s in "$D"/b/*/; do cp -r "$s" "$tmp/us/b/"; done
+for s in "$tmp"/us/a/*/ "$tmp"/us/b/*/; do printf 'board=verdin_imx95\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "$tmp"/us/a/*/ "$tmp"/us/b/*/ > "$tmp/us.txt" 2>/dev/null
+check "board=verdin_imx95 gives the I95RR table" cmp -s "$tmp/us.txt" "$tmp/i95-expected.txt"
+for s in "$tmp"/us/b/*/; do printf 'board=verdin-imx95\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "$tmp"/us/a/*/ "$tmp"/us/b/*/ > "$tmp/usmix.txt" 2>/dev/null
+check "slices mixing verdin_imx95 and verdin-imx95 are one board" cmp -s "$tmp/usmix.txt" "$tmp/i95-expected.txt"
 cp -r "${SL[0]}" "$tmp/t6meta/"
 for s in "$tmp"/t6meta/*/; do printf 'board=nanopc-t6\n' > "$s/meta.txt"; done
 python3 -I "$TOOL" --mustpass "$MP" "$tmp"/t6meta/*/ | grep -q '^# image T6RR001:'

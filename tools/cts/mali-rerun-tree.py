@@ -98,7 +98,8 @@ def slice_board(slice_dir):
         with open(path, encoding="utf-8") as f:
             for ln in f.read().split("\n"):
                 if ln.startswith("board="):
-                    return ln[6:].strip() or "nanopc-t6"
+                    # verdin_imx95 (the Zephyr name) is verdin-imx95
+                    return ln[6:].strip().replace("_", "-") or "nanopc-t6"
     except FileNotFoundError:
         pass
     except OSError as e:
