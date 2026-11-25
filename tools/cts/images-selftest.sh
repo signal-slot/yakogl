@@ -52,7 +52,7 @@ mkdir -p "$R/tools/cts" "$R/driver/src/fw" "$R/driver/samples/zephyr/deqp" \
     "$R/driver/samples/zephyr/gl_test" "$T/bin" "$T/ws/zephyr" \
     "$T/ws/modules/fs/fatfs" "$T/work/cts" "$T/work/build/modules/gles2" "$T/venv/bin"
 cp "$HERE/am62p-deqp-images.sh" "$HERE/imx8mp-gltest-build.sh" "$HERE/imx8mp-deqp-build.sh" "$HERE/imx8mp-env.sh" \
-    "$HERE/zephyr-modules.sh" "$HERE/pi4-deqp-images.sh" "$HERE/t6-deqp-images.sh" "$HERE/imx95-deqp-images.sh" "$HERE/deqp-tree-images.sh" "$R/tools/cts/"
+    "$HERE/zephyr-modules.sh" "$HERE/pi4-deqp-images.sh" "$HERE/pi5-deqp-images.sh" "$HERE/t6-deqp-images.sh" "$HERE/imx95-deqp-images.sh" "$HERE/deqp-tree-images.sh" "$R/tools/cts/"
 # the fake conformance check passes, and appends its arguments to $CHECK_LOG
 # when that is set (section 7 reads which flags the Pi 4 builder gave it)
 printf 'import os, sys\nwith open(os.environ.get("CHECK_LOG", os.devnull), "a") as f:\n    f.write(" ".join(sys.argv[1:]) + "\\n")\nsys.exit(0)\n' \
@@ -400,8 +400,44 @@ check "nanopc_t6: A1.built's build= is still T6_DEQP_BUILD's" "build=fake-t6" "$
 rm -f "$R/driver/src/fw/mali_csffw_blob.h"
 # the Pi 4 arm does not get the T6's arguments
 absent "rpi_4b cmake: no -DYAKOGL_WERROR" "YAKOGL_WERROR" "$(cat "$T/p2/A1/cmake.args" 2>&1)"
-out=$("$R/tools/cts/deqp-tree-images.sh" rpi_5 --dry-run "$T/pi4-es2.txt" "$T/t3" 2>&1); rc=$?
-[ "$rc" = 2 ] && ok "deqp-tree-images.sh: a board without an arm is refused (rc 2)" || bad "board rpi_5: rc=$rc: $out"
+out=$("$R/tools/cts/deqp-tree-images.sh" rpi_3 --dry-run "$T/pi4-es2.txt" "$T/t3" 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "deqp-tree-images.sh: a board without an arm is refused (rc 2)" || bad "board rpi_3: rc=$rc: $out"
+# 7h. pi5-deqp-images.sh: the same builder with the board rpi_5 (V3D 7.1).
+# The dry run over the repository's pi5-full-tree.txt names every "# image"
+# label once, in table order, with the filter of its row; only T5 carries
+# texture-2048.conf's argument (the expected list is read from the table).
+PP=$R/tools/cts/pi5-deqp-images.sh
+PT=$HERE/pi5-full-tree.txt
+out=$(env -u ZEPHYR_WS -u DEQP_WORK "$PP" --dry-run "$PT" "$T/q0" 2>&1); rc=$?
+want=$(awk '/^# image / { l = $3; sub(/:$/, "", l); c = ($0 ~ /\(with texture-2048\.conf\)/) ? " [-DEXTRA_CONF_FILE=texture-2048.conf]" : ""; getline f; print l " " f c }' "$PT")
+[ "$rc" = 0 ] && [ -n "$want" ] && [ "$out" = "$want" ] \
+    && ok "pi5-full-tree.txt dry run: rc 0, every label with the filter of its row, in table order ($(grep -c . <<< "$out") images)" \
+    || bad "pi5-full-tree.txt dry run: rc=$rc: $(diff <(printf '%s\n' "$want") <(printf '%s\n' "$out") | head -4 | paste -sd';' -)"
+[ "$(grep -c . <<< "$out")" = "$(grep -c '^# image ' "$PT")" ] && ok "pi5-full-tree.txt dry run: one line per image" \
+    || bad "pi5-full-tree.txt dry run: $(grep -c . <<< "$out") lines for $(grep -c '^# image ' "$PT") images"
+dup=$(printf '%s\n' "$out" | cut -d' ' -f1 | sort | uniq -d)
+[ -z "$dup" ] && ok "pi5-full-tree.txt dry run: no label twice" || bad "pi5 labels twice: $dup"
+[ "$(printf '%s\n' "$out" | grep -c '\[-DEXTRA_CONF_FILE=texture-2048.conf\]$')" = 1 ] && check "pi5-full-tree.txt: texture-2048.conf's argument on T5 only" \
+    "T5 dEQP-GLES2.functional.texture.size.2d.2048x2048_l8," "$(printf '%s\n' "$out" | grep 'texture-2048.conf\]$')" \
+    || bad "pi5-full-tree.txt: texture-2048.conf lines: $(printf '%s\n' "$out" | grep -c 'texture-2048')"
+absent "pi5-full-tree.txt: no DEQP_MODULE argument" "DEQP_MODULE" "$out"
+[ ! -e "$T/q0" ] && ok "the Pi 5 dry run wrote nothing" || bad "the Pi 5 dry run wrote $T/q0"
+# the build: no Mali firmware needed, -Werror, BOARD rpi_5, the V3D build string
+out=$(CHECK_LOG=$T/check5.log "$PP" "$T/pi4-es2.txt" "$T/q1" A1 2>/dev/null); rc=$?
+[ "$rc" = 0 ] && ok "rpi_5 build without mali_csffw_blob.h: rc 0" || bad "rpi_5 build: rc=$rc: $out"
+check "rpi_5 build: the header line names the Pi 5 builder" "pi5-deqp-images: build from " "$out"
+check "rpi_5: A1.built says rc 0" "A1 rc=0 sha256=" "$(cat "$T/q1/A1.built" 2>&1)"
+check "rpi_5: A1.built's build= is V3D_BUILD's" "build=fake-1" "$(cat "$T/q1/A1.built" 2>&1)"
+[ ! -e "$T/q1/T5.built" ] && ok "rpi_5 build, A1 named: T5 not built" || bad "rpi_5: T5 built: $(cat "$T/q1/T5.built")"
+a=$(cat "$T/q1/A1/cmake.args" 2>&1)
+check "rpi_5 cmake: -DBOARD=rpi_5" "-DBOARD=rpi_5" "$a"
+check "rpi_5 cmake: -DYAKOGL_WERROR=ON" "-DYAKOGL_WERROR=ON" "$a"
+check "rpi_5 cmake: the filter" '-DCONFIG_DEQP_CASE="dEQP-GLES2.a.*"' "$a"
+absent "rpi_5 cmake: no DEQP_MODULE" "DEQP_MODULE" "$a"
+check "rpi_5: the conformance check ran on the resolved .config" "--config $T/q1/A1/zephyr/.config" "$(cat "$T/check5.log" 2>&1)"
+out=$(DEQP_MODULE=gles3 "$PP" "$T/pi4-es3.txt" "$T/q2" 2>&1); rc=$?
+[ "$rc" = 2 ] && [ ! -e "$T/q2" ] && check "rpi_5 gles3 against the gles2 stage 1: rc 2, names the board" "BOARD=rpi_5" "$out" \
+    || bad "rpi_5 gles3 on gles2 stage 1: rc=$rc: $out"
 
 echo
 echo "== 8. a rerun resumes: common-images.sh reuses a complete build, rebuilds an interrupted one; board-stage.sh clears a stale once-*.bin"
