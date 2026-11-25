@@ -5,8 +5,17 @@
 # baseline (tools/cts/mp2-gltest-diff.py --expected). One case number per
 # line, then a '#' reason. A listed case that fails on the DK is reported as
 # expected, not new; one that passes is reported too (the entry is stale).
-# Only what the code shows: the DK core has WIDELINE_TRIANGLE_EMU.
-10   # pending Q11: 3 px wide line check ("loop: 3 px wide"), gl_test.c case_prims
-231  # pending Q11: flat_lines_wide
-233  # pending Q11: flat_line_strip_wide
-235  # pending Q11: flat_line_loop_wide
+#
+# No entries as of the Q11 board test: the wide-line cases pass on the DK at
+# the core's reported 1..16: the build's ACTIVE profile is the i.MX8MP's
+# (src/vivante/profile.rs:172, its line_width_range at :130), reported
+# through src/gl/state.rs:197-202. Case 10 (prims, the "loop: 3 px wide"
+# check) passed in the whole-set run
+# 20261124-1044-gl_test_all-a5f1dc8e and alone in
+# 20261124-1344-q11_case10-0eca6ffc; cases 230-235, the flat_lines,
+# flat_line_strip and flat_line_loop pairs (width 1 and wide), passed in the
+# records 20261124-1347..1352-q11_case230..235; fd2069fd had already dropped
+# the width-1 entries 230, 232, 234. Q11's decision
+# (docs/notes/vivante-st-line-width.md section 5) reports the ST profile's
+# 1..1 and clamps: if that image lands, case 10's 3 px check fails again and
+# its entry comes back, while 231/233/235 pass at width 1 by design.
