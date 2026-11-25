@@ -89,6 +89,9 @@ tools/mali/panthor/uapi_pins.expected | Apache-2.0 | expected output of the pant
 tools/probes/stm32mp257f_dk/ramlog/crosscheck/expected/* | Apache-2.0 | decoded console text of the ramlog host cross-check; compared byte for byte, no header edit
 tools/mali/isa-ref/board-2026-10-18.txt | Apache-2.0 | disassembly of our board run
 tools/mali/board-dump/*.txt | Apache-2.0 | records of our board runs
+tools/mali/board-ref/*.pandecode | Apache-2.0 | pandecode records of our programs run through the board's Mesa (tools/mali/mesa-board-ref.sh)
+tools/mali/board-ref/*.stdout | Apache-2.0 | output of our programs on the board (tools/mali/mesa-board-ref.sh)
+tools/mali/board-ref/*.dmesg | Apache-2.0 | kernel messages of our board runs (tools/mali/mesa-board-ref.sh)
 tools/hostharness/glmark2/testdata/* | Apache-2.0 | fixtures of the host harness's report tools: logs and reports the harness wrote
 tools/hostharness/terrain-records/testdata/* | Apache-2.0 | synthetic console and INDEX.txt fixtures of parse.py, in the shape of our board runs
 tools/shaders/known-uncompilable-v3d.txt | Apache-2.0 | list of our own shader table

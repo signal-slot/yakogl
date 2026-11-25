@@ -1,0 +1,1990 @@
+  00 50 01 00 00 80 48 01    MOVE d72, #0x800000015000
+  00 00 00 00 00 48 00 30    HEAP_SET d72
+  00 90 fe ff ff 7f 56 01    MOVE d86, #0x7FFFFFFE9000
+  40 01 00 00 00 00 58 02    MOVE32 r88, #0x140
+  02 00 00 00 58 56 00 19    SET_EXCEPTION_HANDLER d86, r88
+  44 00 03 00 00 4c 5e 14      LOAD_MULTIPLE r94:r95, [d76 + 68]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 ff ff 00 5e 28 15      STORE_MULTIPLE [d94], r40:r41:r42:r43:r44:r45:r46:r47:r48:r49:r50:r51:r52:r53:r54:r55
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 01 00 00 4c 2f 14      LOAD_MULTIPLE r47, [d76]
+  00 00 01 00 00 00 00 03      WAIT #1
+  02 00 00 00 00 2f 00 16      BRANCH.le r47, #2
+  1c 00 03 00 00 4c 28 14      LOAD_MULTIPLE r40:r41, [d76 + 28]
+  01 00 00 60 00 00 00 16      BRANCH.always r0, #1
+  0c 00 03 00 00 4c 28 14      LOAD_MULTIPLE r40:r41, [d76 + 12]
+  34 00 01 00 00 4c 2a 14      LOAD_MULTIPLE r42, [d76 + 52]
+  38 00 01 00 00 4c 2b 14      LOAD_MULTIPLE r43, [d76 + 56]
+  00 00 00 00 00 00 2c 01      MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02      MOVE32 r46, #0x0
+  00 00 01 00 00 00 00 03      WAIT #1
+  03 00 00 00 00 00 00 17      SET_SB_ENTRY #3, #0
+  00 00 00 00 00 00 00 07      RUN_FRAGMENT.tile_order=zorder
+  00 00 08 00 00 00 00 03      WAIT #8
+  01 00 00 00 00 2f 2f 10      ADD_IMMEDIATE32 r47, r47, #1
+  00 00 01 00 00 4c 2f 15      STORE_MULTIPLE [d76], r47
+  3c 00 03 00 00 4c 32 14      LOAD_MULTIPLE r50:r51, [d76 + 60]
+  00 00 01 00 00 00 00 03      WAIT #1
+  28 00 0f 00 00 32 34 14      LOAD_MULTIPLE r52:r53:r54:r55, [d50 + 40]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 00 00 36 34 00 0b      FINISH_FRAGMENT d54, d52, #0, #0
+  00 00 00 00 00 00 30 01      MOVE d48, #0x0
+  00 00 03 00 00 32 30 15      STORE_MULTIPLE [d50], r48:r49
+  28 00 03 00 00 32 30 15      STORE_MULTIPLE [d50 + 40], r48:r49
+  30 00 03 00 00 32 30 15      STORE_MULTIPLE [d50 + 48], r48:r49
+  00 02 00 00 00 30 00 24      FLUSH_CACHE2.nop_l2.nop_lsc.invalidate_other r48, #0, #0
+  00 00 01 00 00 00 00 03      WAIT #1
+  02 00 00 00 00 00 00 17      SET_SB_ENTRY #2, #0
+  44 00 03 00 00 4c 5e 14      LOAD_MULTIPLE r94:r95, [d76 + 68]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 ff ff 00 5e 28 14      LOAD_MULTIPLE r40:r41:r42:r43:r44:r45:r46:r47:r48:r49:r50:r51:r52:r53:r54:r55, [d94]
+  00 00 01 00 00 00 00 03      WAIT #1
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  00 00 00 00 00 00 00 00      NOP
+  0f 00 00 00 00 00 00 22    REQ_RESOURCE.compute.fragment.tiler.idvs
+  02 00 00 00 00 00 00 17    SET_SB_ENTRY #2, #0
+  c0 22 fd ff ff 7f 4c 01    MOVE d76, #0x7FFFFFFD22C0
+  00 00 00 00 00 00 00 31    HEAP_OPERATION.vt_start #0, #0
+  c7 26 fd ff ff 7f 00 01    MOVE d0, #0x7FFFFFFD26C7
+  60 22 fd ff 00 00 08 02    MOVE32 r8, #0xFFFD2260
+  ff 7f 00 03 00 00 09 02    MOVE32 r9, #0x3007FFF
+  20 d0 ff ff ff 7f 10 01    MOVE d16, #0x7FFFFFFFD020
+  47 27 fd ff ff 7f 04 01    MOVE d4, #0x7FFFFFFD2747
+  00 00 00 00 00 00 0c 01    MOVE d12, #0x0
+  60 d0 ff ff ff 7f 14 01    MOVE d20, #0x7FFFFFFFD060
+  40 d0 ff ff ff 7f 12 01    MOVE d18, #0x7FFFFFFFD040
+  00 21 fd ff ff 7f 18 01    MOVE d24, #0x7FFFFFFD2100
+  00 21 fd ff ff 7f 1e 01    MOVE d30, #0x7FFFFFFD2100
+  00 00 00 00 00 00 20 02    MOVE32 r32, #0x0
+  00 00 00 00 00 00 25 02    MOVE32 r37, #0x0
+  00 00 00 00 00 00 26 02    MOVE32 r38, #0x0
+  40 23 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD2340
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 02    MOVE32 r44, #0x0
+  00 00 80 3f 00 00 2d 02    MOVE32 r45, #0x3F800000
+  10 00 00 00 00 00 30 02    MOVE32 r48, #0x10
+  41 21 fd ff ff 7f 32 01    MOVE d50, #0x7FFFFFFD2141
+  20 21 fd ff ff 7f 34 01    MOVE d52, #0x7FFFFFFD2120
+  00 00 43 00 00 00 38 02    MOVE32 r56, #0x430000
+  ab 21 00 00 00 00 39 02    MOVE32 r57, #0x21AB
+  ff ff 01 00 00 00 3a 02    MOVE32 r58, #0x1FFFF
+  00 00 80 3f 00 00 3c 01    MOVE d60, #0x3F800000
+  04 00 00 00 00 00 21 02    MOVE32 r33, #0x4
+  01 00 00 00 00 00 22 02    MOVE32 r34, #0x1
+  00 00 00 00 00 00 23 02    MOVE32 r35, #0x0
+  00 00 00 00 00 00 24 02    MOVE32 r36, #0x0
+  00 00 00 00 00 00 27 02    MOVE32 r39, #0x0
+  0a 00 04 00 42 00 00 06    RUN_IDVS.varying_srt0.varying_fau0.varying_tsd0.frag_srt1.frag_tsd0 r0, #4000a
+  Position resources resource table @7ffffffd26c0
+      Entry 0 @7ffffffd26c0:
+        Address: 0x7ffffffd2240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffd2240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffd2220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffd26d0:
+        Address: 0x7ffffffd2160
+        Contains descriptors: true
+        Size: 0x20
+          Attribute @7ffffffd2160:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffd26e0:
+        Address: 0x7ffffffd2180
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffd2180:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048576
+            Address: 0x7fffffeca000
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffd26f0:
+        Address: 0x7ffffffd21e0
+        Contains descriptors: true
+        Size: 0x40
+          Sampler @7ffffffd21e0:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Repeat
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: true
+            Magnify nearest: true
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+          Sampler @7ffffffd2200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: true
+            Magnify nearest: true
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffd2700:
+        Address: 0x7ffffffd21a0
+        Contains descriptors: true
+        Size: 0x40
+          Texture @7ffffffd21a0
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGBA
+            Width: 4
+            Height: 4
+            Swizzle: 1672 (RGBA)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd080
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe3000
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+          Texture @7ffffffd21c0
+          Texture:
+            Type: Texture
+            Dimension: Cube
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGBA
+            Width: 4
+            Height: 4
+            Swizzle: 1672 (RGBA)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd0c0
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2000
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 1:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2100
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 2:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2200
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 3:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2300
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 4:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2400
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 5:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2500
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+      Entry 5 @7ffffffd2710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffd2720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Varying resources resource table @7ffffffd26c0
+      Entry 0 @7ffffffd26c0:
+        Address: 0x7ffffffd2240
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffd2240:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 32
+            Address: 0x7ffffffd2220
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 1 @7ffffffd26d0:
+        Address: 0x7ffffffd2160
+        Contains descriptors: true
+        Size: 0x20
+          Attribute @7ffffffd2160:
+            Type: Attribute
+            Attribute type: 1D
+            Offset enable: true
+            Format (v7): RG32F RGB1
+            Table: 2
+            Frequency: Vertex
+            Divisor R: 0
+            Divisor E: 0
+            Offset: 0
+            Buffer index: 0
+            Stride: 8
+            Attribute stride: 8
+            Packet stride: 0
+            Divisor D: 0
+      Entry 2 @7ffffffd26e0:
+        Address: 0x7ffffffd2180
+        Contains descriptors: true
+        Size: 0x20
+          Buffer @7ffffffd2180:
+            Type: Buffer
+            Buffer type: Simple
+            Size: 1048576
+            Address: 0x7fffffeca000
+            Stride: 0
+            Packet stride: 0
+            Attribute stride: 0
+      Entry 3 @7ffffffd26f0:
+        Address: 0x7ffffffd21e0
+        Contains descriptors: true
+        Size: 0x40
+          Sampler @7ffffffd21e0:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Repeat
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: true
+            Magnify nearest: true
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+          Sampler @7ffffffd2200:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: true
+            Magnify nearest: true
+            Magnify cutoff: false
+            Mipmap Mode: None
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 31.996094
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffd2700:
+        Address: 0x7ffffffd21a0
+        Contains descriptors: true
+        Size: 0x40
+          Texture @7ffffffd21a0
+          Texture:
+            Type: Texture
+            Dimension: 2D
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGBA
+            Width: 4
+            Height: 4
+            Swizzle: 1672 (RGBA)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd080
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe3000
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+          Texture @7ffffffd21c0
+          Texture:
+            Type: Texture
+            Dimension: Cube
+            Sample corner position: false
+            Normalize coordinates: false
+            Format (v7): RGBA8 UNORM RGBA
+            Width: 4
+            Height: 4
+            Swizzle: 1672 (RGBA)
+            Texel interleave: false
+            Levels: 1
+            Minimum level: 0
+            Minimum LOD: 0.000000
+            Sample count: 1
+            Maximum LOD: 0.000000
+            Surfaces: 0x7fffffffd0c0
+            Array size: 1
+            Depth: 1
+            Plane 0:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2000
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 1:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2100
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 2:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2200
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 3:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2300
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 4:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2400
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+            Plane 5:
+              Type: Plane
+              Plane type: Generic
+              AFBC:
+                Superblock size: 64x4
+                YTR: false
+                Split block: false
+                Alpha hint: false
+                Tiled header: false
+                Prefetch: false
+                Compression mode: R8
+                Header stride: 0
+              ASTC:
+                Decode HDR: false
+                Decode Wide: true
+                2D:
+                  Block width: 4
+                  Block height: 4
+                3D:
+                  Block width: 4
+                  Block height: 4
+                  Block depth: 4
+              AFRC:
+                Codec arguments: 2
+                Block size: XXX: INVALID
+                Format: R8G8B8 SCAN
+              Two-Plane YUV Chroma:
+                Width: 1
+                Height: 1
+                Secondary Pointer: 0x3000300000100
+              Clump ordering: Linear
+              Clump format: RAW32
+              Size: 256
+              Pointer: 0x7ffffffe2500
+              Row stride: 64
+              Slice stride: 256
+              Width: 4
+              Height: 4
+      Entry 5 @7ffffffd2710:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffd2720:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+  Fragment resources resource table @7ffffffd2740
+      Entry 0 @7ffffffd2740:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 1 @7ffffffd2750:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 2 @7ffffffd2760:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 3 @7ffffffd2770:
+        Address: 0x7ffffffd2280
+        Contains descriptors: true
+        Size: 0x20
+          Sampler @7ffffffd2280:
+            Type: Sampler
+            Reduction mode: Average
+            Wrap Mode R: Clamp to Edge
+            Wrap Mode T: Clamp to Edge
+            Wrap Mode S: Clamp to Edge
+            Round to nearest even: true
+            sRGB override: false
+            Seamless Cube Map: true
+            Clamp integer coordinates: false
+            Normalized Coordinates: true
+            Clamp integer array indices: true
+            Minify nearest: false
+            Magnify nearest: false
+            Magnify cutoff: false
+            Mipmap Mode: Nearest
+            Minimum LOD: 0.000000
+            Compare Function: Never
+            Maximum LOD: 0.000000
+            LOD bias: 0.000000
+            Maximum anisotropy: 1
+            LOD algorithm: Isotropic
+            Border Color R: 0x0 (0.000000)
+            Border Color G: 0x0 (0.000000)
+            Border Color B: 0x0 (0.000000)
+            Border Color A: 0x0 (0.000000)
+      Entry 4 @7ffffffd2780:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 5 @7ffffffd2790:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+      Entry 6 @7ffffffd27a0:
+        Address: 0x0
+        Contains descriptors: false
+        Size: 0x0
+Position FAU @7ffffffd2260:
+  42000000 42000000
+  42000000 42000000
+  3F000000 00000000
+
+Varying FAU @7ffffffd2260:
+  42000000 42000000
+  42000000 42000000
+  3F000000 00000000
+
+  Position shader Shader @7fffffffd020:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc000
+
+Shader 0xffff92489000 (GPU VA 7fffffffc000) sz 4096
+7c 7d 01 12 04 80 66 08    LD_ATTR_IMM.v2.f32.slot0.wait0 @r0:r1, ^r60, ^r61, index:0x0, table:0x1
+40 80 81 00 00 c0 b2 00    FMA.f32 r0, ^r0, u0, u1
+41 82 83 00 00 c1 b2 00    FMA.f32 r1, ^r1, u2, u3
+84 00 00 00 00 c2 91 00    MOV.i32 r2, u4
+d0 00 00 00 00 c3 91 00    MOV.i32 r3, 0x3F800000
+7b 0d 00 40 04 84 5e 10    LEA_BUF_IMM.slot1.wait1 @r4:r5, ^r59, table:0xD, index:0x0
+44 00 00 b9 08 40 61 78    STORE.i128.istream.slot2.end @r0:r1:r2:r3, ^r4, offset:0
+
+
+
+  Varying shader Shader @7fffffffd040:
+    Type: Shader
+    Stage: Vertex
+    Fragment coverage bitmask type: DX
+    Vertex warp limit: Full
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x800
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: true
+      R60: false
+      R61: false
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc080
+
+Shader 0xffff92489080 (GPU VA 7fffffffc080) sz 3968
+c0 c0 d0 00 00 c0 c0 00    CUBEFACE1 r0, 0x0, 0x0, 0x3F800000
+40 00 00 00 00 c0 9c 00    FRCP.f32 r0, ^r0
+40 da c0 08 04 c0 b2 00    FMA.f32 r0, ^r0, 0x38000000.h1, 0x0.neg
+c0 c0 d0 00 00 c1 c1 00    CUBEFACE2_V9 r1, 0x0, 0x0, 0x3F800000
+d0 c0 01 00 00 c2 bc 00    CUBE_SSEL r2, 0x3F800000, 0x0, r1
+00 42 da 02 03 c2 b2 00    FMA.f32.clamp_0_1 r2, r0, ^r2, 0x38000000.h1
+c0 ff ff ff 1f c3 10 01    IADD_IMM.i32 r3, 0x0, #0x1FFFFFFF
+42 01 43 00 03 c2 b8 00    MUX.i32.bit r2, ^r2, r1, ^r3
+c0 d0 41 01 00 c1 bc 00    CUBE_TSEL r1, 0x0, 0x3F800000, ^r1
+40 41 da 02 03 c0 b2 00    FMA.f32.clamp_0_1 r0, ^r0, ^r1, 0x38000000.h1
+c0 00 00 00 3f c1 10 01    IADD_IMM.i32 r1, 0x0, #0x3F000000
+c0 00 18 00 20 c3 10 01    IADD_IMM.i32 r3, 0x0, #0x20001800
+01 00 00 00 00 c4 91 00    MOV.i32 r4, r1
+41 00 00 00 00 c5 91 00    MOV.i32 r5, ^r1
+43 00 00 00 00 c6 91 00    MOV.i32 r6, ^r3
+c0 00 00 00 00 c7 91 00    MOV.i32 r7, 0x0
+46 00 c4 13 14 04 28 01    TEX_SINGLE.slot0.reserved.16.2d.zero @r4:r5, @r4:r5, ^r6
+40 00 00 00 00 c3 91 00    MOV.i32 r3, ^r0
+c0 01 18 01 20 c0 10 01    IADD_IMM.i32 r0, 0x0, #0x20011801
+c0 00 00 00 00 c1 91 00    MOV.i32 r1, 0x0
+40 00 c0 73 14 02 28 09    TEX_SINGLE.slot1.reserved.16.cube.zero.wait0 @r0:r1, @r2:r3, ^r0
+05 da 00 0c 00 c2 a5 10    FADD.v2f16.wait1 r2, r5.h00, 0x38000000.h11
+45 01 00 3c 00 c3 a5 00    FADD.v2f16 r3, ^r5.h11, r1.h11
+42 41 00 00 00 c1 a5 00    FADD.v2f16 r1, ^r2.h00, ^r1.h00
+44 40 00 28 00 c0 a5 00    FADD.v2f16 r0, ^r4, ^r0
+43 00 0b 00 00 c2 90 00    F16_TO_F32 r2, ^r3.h0
+41 00 0b 00 00 c1 90 00    F16_TO_F32 r1, ^r1.h0
+00 00 0b 10 00 c3 90 00    F16_TO_F32 r3, r0.h1
+40 00 0b 00 00 c0 90 00    F16_TO_F32 r0, ^r0.h0
+7b 0d 00 80 04 84 5e 00    LEA_BUF_IMM.slot2 @r4:r5, ^r59, table:0xD, index:0x0
+40 00 00 00 00 c6 91 00    MOV.i32 r6, ^r0
+43 00 00 00 00 c7 91 00    MOV.i32 r7, ^r3
+41 00 00 00 00 c8 91 00    MOV.i32 r8, ^r1
+42 00 00 00 00 c9 91 20    MOV.i32.wait2 r9, ^r2
+44 00 00 00 00 c0 91 00    MOV.i32 r0, ^r4
+45 00 00 00 00 c1 91 00    MOV.i32 r1, ^r5
+40 00 00 3a 08 46 61 78    STORE.i128.estream.slot0.end @r6:r7:r8:r9, ^r0, offset:0
+
+
+
+  Fragment shader Shader @7fffffffd060:
+    Type: Shader
+    Stage: Fragment
+    Fragment coverage bitmask type: GL
+    Vertex warp limit: Half
+    Suppress NaN: false
+    Flush to zero mode: Preserve subnormals
+    Suppress Inf: false
+    Requires helper threads: false
+    Shader contains JUMP_EX: false
+    Register allocation: 32 Per Thread
+    Preload:
+      R48-R63: 0x3000
+      R55: false
+      R56: false
+      R57: false
+      R58: false
+      R59: false
+      R60: true
+      R61: true
+      R62: false
+      R63: false
+    Binary: 0x7fffffffc200
+
+Shader 0xffff92489200 (GPU VA 7fffffffc200) sz 3584
+7d 00 00 30 08 80 5c 08    LD_VAR_BUF_IMM.f32.slot0.v4.src_flat32.center.store.wait0 @r0:r1:r2:r3, ^r61, index:0x0
+40 41 04 00 00 c0 a5 68    V2F32_TO_V2F16.discard r0, ^r0, ^r1
+42 43 04 00 00 c1 a5 40    V2F32_TO_V2F16.wait0126 r1, ^r2, ^r3
+7c 01 ea 08 02 bc 7d 48    ATEST.wait @r60, ^r60, r1.h1, atest_datum.w0
+f0 00 3c 73 04 40 7f 78    BLEND.slot1.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0
+c0 00 00 00 00 f0 10 01    IADD_IMM.i32 r48, 0x0, #0x0
+c0 f1 00 00 10 c1 2f 00    BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1
+
+
+
+
+  Position Local Storage @7ffffffd2100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Varying Local Storage @7ffffffd2100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Fragment Local Storage @7ffffffd2100:
+    TLS Size: 0
+    WLS Instances: 2147483648
+    WLS Size Base: 0
+    WLS Size Scale: 0
+    TLS Base Pointer: 0x0
+    TLS Address Mode: Flat
+    WLS Base Pointer: 0x0
+  Global attribute offset: 0
+  Index count: 4
+  Instance count: 1
+  Vertex offset: 0
+  Instance offset: 0
+  Tiler DCD flags2: 0
+  Tiler Heap:
+    Type: Buffer
+    Buffer type: Tiler heap
+    Chunk size: 256 KiB
+    Partitioning: Dynamic
+    Size: 2097152
+    Base: 0x800000a00000
+    Bottom: 0x800000a008c0
+    Top: 0x800000bffe80
+  Tiler Context @7ffffffd2340:
+    Polygon List: 0x4800000bfff00
+    Hierarchy Mask: 254
+    Sample Pattern: Single-sampled
+    Sample test disable: false
+    First provoking vertex: false
+    FB Width: 64
+    FB Height: 64
+    Layer count: 1
+    Layer offset: 0
+    Heap: 0x7fffffffb000
+    Geometry buffer size: 65536
+    Geometry buffer: 0x7ffffffeb000
+    Completed top: 0x0
+    Completed bottom: 0x0
+    Private state:
+      Word0: 1
+      Word1: 0
+      Word2: 0
+      Word3: 0
+      Word4: 0
+      Word5: 0
+      Word6: 0
+      Word7: 0
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 63
+    Scissor Maximum Y: 63
+  Low depth clamp: 0.000000
+  High depth clamp: 1.000000
+  Occlusion: 0
+  Varying allocation: 16
+  Blend RT 0:
+    Load Destination: false
+    Alpha To One: false
+    Enable: true
+    sRGB: false
+    Round to FB precision: false
+    Constant: 0
+    Equation:
+      RGB:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Alpha:
+        A: Src
+        Negate A: false
+        B: Src
+        Negate B: false
+        C: Zero
+        Invert C: false
+      Color Mask: 15
+    Internal:
+      Mode: Opaque
+      Shader:
+        PC: 970752
+      Fixed-Function:
+        Num Comps: 4
+        RT: 0
+        Conversion:
+          Format (v7): RGBA8 TB RGBA
+          Raw: false
+          Register Format: F16
+  Depth/stencil    Type: Depth/stencil
+    Front compare function: Never
+    Front stencil fail: Keep
+    Front depth fail: Keep
+    Front depth pass: Keep
+    Back compare function: Never
+    Back stencil fail: Keep
+    Back depth fail: Keep
+    Back depth pass: Keep
+    Stencil from shader: false
+    Stencil test enable: false
+    Front write mask: 0x0
+    Back write mask: 0x0
+    Front value mask: 0x0
+    Back value mask: 0x0
+    Front reference value: 0x0
+    Back reference value: 0x0
+    Shader read only Z/S: false
+    Depth cull enable: true
+    Depth clamp mode: [0, 1]
+    Depth source: Fixed function
+    Depth write enable: false
+    Depth bias enable: false
+    Depth function: Always
+    Depth units: 0.000000
+    Depth factor: 0.000000
+    Depth bias clamp: 0.000000
+  Primitive flags
+    Draw mode: Triangle strip
+    Index type: None
+    Point size array format: None
+    Primitive Index Enable: false
+    Primitive Index Writeback: false
+    Allow rotating primitives: false
+    Low Depth Cull: true
+    High Depth Cull: true
+    Secondary Shader: true
+    Primitive restart: false
+    Layer index enable: false
+    Scissor array enable: false
+    Position FIFO format: Basic
+    View mask: 0x0
+  DCD Flags 0
+    Allow forward pixel to kill: true
+    Allow forward pixel to be killed: true
+    Pixel kill operation: Weak Early
+    ZS update operation: Weak Early
+    Allow primitive reorder: false
+    Overdraw alpha0: true
+    Overdraw alpha1: true
+    Clean Fragment Write: false
+    Primitive Barrier: false
+    Evaluate per-sample: false
+    Single-sampled lines: true
+    Occlusion query: Disabled
+    Front face CCW: false
+    Cull front face: false
+    Cull back face: false
+    Multisample enable: false
+    Shader modifies coverage: false
+    Alpha-to-coverage Invert: false
+    Alpha-to-coverage: false
+    Scissor to bounding box: false
+  DCD Flags 1
+    Sample mask: 65535
+    Render target mask: 0x1
+  Primitive size
+    Constant: 1.000000
+    Size Array: 0x3f800000
+  00 00 00 00 00 00 00 09    FINISH_TILING
+  00 00 04 00 00 00 00 03    WAIT #4
+  00 00 00 00 01 00 00 31    HEAP_OPERATION.vt_end #0, #0
+  01 20 fd ff ff 7f 28 01    MOVE d40, #0x7FFFFFFD2001
+  00 00 00 00 00 00 2a 02    MOVE32 r42, #0x0
+  3f 00 3f 00 00 00 2b 02    MOVE32 r43, #0x3F003F
+  00 00 00 00 00 00 2c 01    MOVE d44, #0x0
+  00 00 00 00 00 00 2e 02    MOVE32 r46, #0x0
+  00 00 01 00 00 4c 4e 14    LOAD_MULTIPLE r78, [d76]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 00 4e 00 16    BRANCH.le r78, #1
+  00 00 00 00 00 00 00 07    RUN_FRAGMENT.tile_order=zorder
+  Scissor
+    Scissor Minimum X: 0
+    Scissor Minimum Y: 0
+    Scissor Maximum X: 63
+    Scissor Maximum Y: 63
+  Parameters:
+    Pre Frame 0: Never
+    Pre Frame 1: Never
+    Post Frame: Never
+    Downscale geometry: None
+    Internal layer index: 0
+    Frame argument: 0x0
+    Sample Locations: 0x7ffffffff000
+    Frame Shader DCDs: 0x0
+    Width: 64
+    Height: 64
+    Bound Min X: 0
+    Bound Min Y: 0
+    Bound Max X: 63
+    Bound Max Y: 63
+    Sample Count: 1
+    Sample Pattern: Single-sampled
+    Tie-Break Rule: MINUS_180_IN_0_OUT
+    Effective Tile Size: 1024
+    First provoking vertex: false
+    Point sprite coord origin max Y: false
+    Blend suppress Inf: false
+    Blend suppress NaN: false
+    Blend suppress denorm: false
+    Render Target Count: 1
+    Color Buffer Allocation: 4096
+    S Clear: 0
+    S Write Enable: false
+    S Preload Enable: false
+    S Unload Enable: false
+    Z Internal Format: D24
+    Z Write Enable: false
+    Z Preload Enable: false
+    Z Unload Enable: false
+    Has ZS CRC Extension: false
+    Empty Tile Read Enable: false
+    Empty Tile Write Enable: false
+    CRC Read Enable: false
+    CRC Write Enable: false
+    Z Clear: 0.000000
+    Tiler: 0x7ffffffd2340
+  Sample locations @7ffffffff000:
+    (0, 0),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (-128, -128),
+    (0, 0),
+  Framebuffer @7ffffffd2000:
+    Parameters:
+      Pre Frame 0: Never
+      Pre Frame 1: Never
+      Post Frame: Never
+      Downscale geometry: None
+      Internal layer index: 0
+      Frame argument: 0x0
+      Sample Locations: 0x7ffffffff000
+      Frame Shader DCDs: 0x0
+      Width: 64
+      Height: 64
+      Bound Min X: 0
+      Bound Min Y: 0
+      Bound Max X: 63
+      Bound Max Y: 63
+      Sample Count: 1
+      Sample Pattern: Single-sampled
+      Tie-Break Rule: MINUS_180_IN_0_OUT
+      Effective Tile Size: 1024
+      First provoking vertex: false
+      Point sprite coord origin max Y: false
+      Blend suppress Inf: false
+      Blend suppress NaN: false
+      Blend suppress denorm: false
+      Render Target Count: 1
+      Color Buffer Allocation: 4096
+      S Clear: 0
+      S Write Enable: false
+      S Preload Enable: false
+      S Unload Enable: false
+      Z Internal Format: D24
+      Z Write Enable: false
+      Z Preload Enable: false
+      Z Unload Enable: false
+      Has ZS CRC Extension: false
+      Empty Tile Read Enable: false
+      Empty Tile Write Enable: false
+      CRC Read Enable: false
+      CRC Write Enable: false
+      Z Clear: 0.000000
+      Tiler: 0x7ffffffd2340
+    Tiler Heap:
+      Type: Buffer
+      Buffer type: Tiler heap
+      Chunk size: 256 KiB
+      Partitioning: Dynamic
+      Size: 2097152
+      Base: 0x800000a00000
+      Bottom: 0x800000a008c0
+      Top: 0x800000bffe80
+    Tiler Context @7ffffffd2340:
+      Polygon List: 0x4800000bfff00
+      Hierarchy Mask: 254
+      Sample Pattern: Single-sampled
+      Sample test disable: false
+      First provoking vertex: false
+      FB Width: 64
+      FB Height: 64
+      Layer count: 1
+      Layer offset: 0
+      Heap: 0x7fffffffb000
+      Geometry buffer size: 65536
+      Geometry buffer: 0x7ffffffeb000
+      Completed top: 0x0
+      Completed bottom: 0x0
+      Private state:
+        Word0: 1
+        Word1: 0
+        Word2: 0
+        Word3: 0
+        Word4: 0
+        Word5: 0
+        Word6: 0
+        Word7: 0
+  
+  Color Render Targets @7ffffffd2080:
+    Color Render Target 0:
+      YUV:
+        Swizzle: YUVA
+        Full Range: false
+        Conversion Mode: No Conversion
+        Cr Siting: Co-Sited
+        Unsigned Cr Range: false
+        Plane 0 Base: 0x0
+        Plane 1 Base: 0x0
+        Plane 2 Base: 0x7ffffffe4000
+        Plane 0 Stride: 256
+        Plane 1 2 Stride: 0
+      AFBC:
+        YUV Transform: false
+        Split block: false
+        Wide block: false
+        Reverse issue order: false
+        Front buffer: false
+        Alpha hint: false
+        Compression mode: R8
+        Header: 0x7ffffffe4000
+        Row stride: 256
+        Body offset: 0
+      AFRC:
+        Writeback Format: XXX: INVALID
+        Block Size: XXX: INVALID
+        Format: R8 SCAN
+      Writeback Mode: Compat
+      Internal Buffer Offset: 0
+      YUV Enable: false
+      Dithered Clear: false
+      Internal Format: R8G8B8A8
+      Write Enable: true
+      Writeback Format: R8G8B8A8
+      Writeback Block Format: Linear
+      Writeback MSAA: Single
+      sRGB: false
+      Dithering Enable: true
+      Swizzle: 1672 (RGBA)
+      Clean Pixel Write Enable: true
+      RGB:
+        Base: 0x7ffffffe4000
+        Row Stride: 256
+        Surface Stride: 0
+      Clear:
+        Color 0: 0
+        Color 1: 0
+        Color 2: 0
+        Color 3: 0
+  
+  00 00 04 00 00 00 00 03    WAIT #4
+  40 23 fd ff ff 7f 5a 01    MOVE d90, #0x7FFFFFFD2340
+  28 00 0f 00 00 5a 56 14    LOAD_MULTIPLE r86:r87:r88:r89, [d90 + 40]
+  00 00 01 00 00 00 00 03    WAIT #1
+  01 00 00 00 58 56 00 0b    FINISH_FRAGMENT.frag_end d88, d86, #0, #0
+  00 00 ff 00 00 00 00 03    WAIT #ff
+  e0 2a fd ff ff 7f 5a 01    MOVE d90, #0x7FFFFFFD2AE0
+  00 00 00 00 03 5a 00 28    STORE_STATE.ERROR_STATE d90, #0, #0, #0
+  00 00 00 00 00 00 4a 02    MOVE32 r74, #0x0
+  11 02 00 00 00 4a 00 24    FLUSH_CACHE2.clean_l2.clean_lsc.invalidate_other r74, #0, #0
+  00 00 01 00 00 00 00 03    WAIT #1
+Buffer: memory_7ffffffff000 gpu 7ffffffff000
+
+000000  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  40 00 40 00 C0 00 40 00 40 00 C0 00 C0 00 C0 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000190  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  60 00 20 00 E0 00 60 00 20 00 A0 00 A0 00 E0 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000280  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000290  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000300  90 00 50 00 70 00 B0 00 D0 00 90 00 50 00 30 00 
+000310  30 00 D0 00 10 00 70 00 B0 00 F0 00 F0 00 10 00 
+000320  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000380  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000390  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000400  90 00 90 00 70 00 50 00 50 00 A0 00 C0 00 70 00 
+000410  30 00 60 00 A0 00 D0 00 D0 00 B0 00 B0 00 30 00 
+000420  60 00 E0 00 80 00 10 00 40 00 20 00 20 00 C0 00 
+000430  00 00 80 00 F0 00 40 00 E0 00 F0 00 10 00 00 00 
+000440  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000480  80 00 80 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffe000 gpu 7fffffffe000
+
+000000  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000010  C0 00 00 00 00 C3 91 08 42 00 40 50 84 40 28 41 
+000020  7C C0 EA 00 02 BC 7D 40 40 C0 7C 02 02 BC 7E 78 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000090  C0 00 00 00 00 C3 91 08 42 00 80 50 84 40 28 41 
+0000A0  7C C0 EA 00 02 BC 7D 40 C0 40 7C 01 02 BC 7E 78 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  7D 00 00 12 04 80 54 68 C0 00 10 00 18 C2 10 01 
+000110  C0 00 00 00 00 C3 91 08 42 00 C0 53 B4 40 28 49 
+000120  F0 00 3C B2 08 40 7F 78 C0 00 00 00 00 F0 10 01 
+000130  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+000140  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffd000 gpu 7fffffffd000
+
+000000  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000020  38 01 00 80 00 38 00 00 00 C0 FF FF FF 7F 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000040  38 00 00 80 00 08 00 00 80 C0 FF FF FF 7F 00 00 
+000050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000060  28 01 00 80 00 30 00 00 00 C2 FF FF FF 7F 00 00 
+000070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000080  1A 02 00 02 00 01 00 00 00 30 FE FF FF 7F 00 00 
+000090  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+0000A0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0000C0  1A 02 00 02 00 01 00 00 00 20 FE FF FF 7F 00 00 
+0000D0  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+0000E0  1A 02 00 02 00 01 00 00 00 21 FE FF FF 7F 00 00 
+0000F0  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+000100  1A 02 00 02 00 01 00 00 00 22 FE FF FF 7F 00 00 
+000110  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+000120  1A 02 00 02 00 01 00 00 00 23 FE FF FF 7F 00 00 
+000130  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+000140  1A 02 00 02 00 01 00 00 00 24 FE FF FF 7F 00 00 
+000150  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+000160  1A 02 00 02 00 01 00 00 00 25 FE FF FF 7F 00 00 
+000170  40 00 00 00 00 00 00 00 00 01 00 00 03 00 03 00 
+000180  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffc000 gpu 7fffffffc000
+
+000000  7C 7D 01 12 04 80 66 08 40 80 81 00 00 C0 B2 00 
+000010  41 82 83 00 00 C1 B2 00 84 00 00 00 00 C2 91 00 
+000020  D0 00 00 00 00 C3 91 00 7B 0D 00 40 04 84 5E 10 
+000030  44 00 00 B9 08 40 61 78 00 00 00 00 00 00 00 00 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  C0 C0 D0 00 00 C0 C0 00 40 00 00 00 00 C0 9C 00 
+000090  40 DA C0 08 04 C0 B2 00 C0 C0 D0 00 00 C1 C1 00 
+0000A0  D0 C0 01 00 00 C2 BC 00 00 42 DA 02 03 C2 B2 00 
+0000B0  C0 FF FF FF 1F C3 10 01 42 01 43 00 03 C2 B8 00 
+0000C0  C0 D0 41 01 00 C1 BC 00 40 41 DA 02 03 C0 B2 00 
+0000D0  C0 00 00 00 3F C1 10 01 C0 00 18 00 20 C3 10 01 
+0000E0  01 00 00 00 00 C4 91 00 41 00 00 00 00 C5 91 00 
+0000F0  43 00 00 00 00 C6 91 00 C0 00 00 00 00 C7 91 00 
+000100  46 00 C4 13 14 04 28 01 40 00 00 00 00 C3 91 00 
+000110  C0 01 18 01 20 C0 10 01 C0 00 00 00 00 C1 91 00 
+000120  40 00 C0 73 14 02 28 09 05 DA 00 0C 00 C2 A5 10 
+000130  45 01 00 3C 00 C3 A5 00 42 41 00 00 00 C1 A5 00 
+000140  44 40 00 28 00 C0 A5 00 43 00 0B 00 00 C2 90 00 
+000150  41 00 0B 00 00 C1 90 00 00 00 0B 10 00 C3 90 00 
+000160  40 00 0B 00 00 C0 90 00 7B 0D 00 80 04 84 5E 00 
+000170  40 00 00 00 00 C6 91 00 43 00 00 00 00 C7 91 00 
+000180  41 00 00 00 00 C8 91 00 42 00 00 00 00 C9 91 20 
+000190  44 00 00 00 00 C0 91 00 45 00 00 00 00 C1 91 00 
+0001A0  40 00 00 3A 08 46 61 78 00 00 00 00 00 00 00 00 
+0001B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  7D 00 00 30 08 80 5C 08 40 41 04 00 00 C0 A5 68 
+000210  42 43 04 00 00 C1 A5 40 7C 01 EA 08 02 BC 7D 48 
+000220  F0 00 3C 73 04 40 7F 78 C0 00 00 00 00 F0 10 01 
+000230  C0 F1 00 00 10 C1 2F 00 00 00 00 00 00 00 00 00 
+000240  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffffb000 gpu 7fffffffb000
+
+000000  29 00 00 00 00 00 20 00 00 00 A0 00 00 80 00 00 
+000010  C0 08 A0 00 00 80 00 00 80 FE BF 00 00 80 00 00 
+000020  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffeb000 gpu 7ffffffeb000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffea000 gpu 7ffffffea000
+
+000000  00 50 01 00 00 80 48 01 00 00 00 00 00 48 00 30 
+000010  00 90 FE FF FF 7F 56 01 40 01 00 00 00 00 58 02 
+000020  02 00 00 00 58 56 00 19 00 00 00 00 00 00 00 00 
+000030  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe9000 gpu 7ffffffe9000
+
+000000  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000010  00 00 FF FF 00 5E 28 15 00 00 01 00 00 00 00 03 
+000020  00 00 01 00 00 4C 2F 14 00 00 01 00 00 00 00 03 
+000030  02 00 00 00 00 2F 00 16 1C 00 03 00 00 4C 28 14 
+000040  01 00 00 60 00 00 00 16 0C 00 03 00 00 4C 28 14 
+000050  34 00 01 00 00 4C 2A 14 38 00 01 00 00 4C 2B 14 
+000060  00 00 00 00 00 00 2C 01 00 00 00 00 00 00 2E 02 
+000070  00 00 01 00 00 00 00 03 03 00 00 00 00 00 00 17 
+000080  00 00 00 00 00 00 00 07 00 00 08 00 00 00 00 03 
+000090  01 00 00 00 00 2F 2F 10 00 00 01 00 00 4C 2F 15 
+0000A0  3C 00 03 00 00 4C 32 14 00 00 01 00 00 00 00 03 
+0000B0  28 00 0F 00 00 32 34 14 00 00 01 00 00 00 00 03 
+0000C0  00 00 00 00 36 34 00 0B 00 00 00 00 00 00 30 01 
+0000D0  00 00 03 00 00 32 30 15 28 00 03 00 00 32 30 15 
+0000E0  30 00 03 00 00 32 30 15 00 02 00 00 00 30 00 24 
+0000F0  00 00 01 00 00 00 00 03 02 00 00 00 00 00 00 17 
+000100  44 00 03 00 00 4C 5E 14 00 00 01 00 00 00 00 03 
+000110  00 00 FF FF 00 5E 28 14 00 00 01 00 00 00 00 03 
+000120  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe8000 gpu 7ffffffe8000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe4000 gpu 7ffffffe4000
+
+000000  40 80 80 FF 40 80 80 FF 40 80 80 FF 40 80 80 FF 
+*
+003FF0  40 80 80 FF 40 80 80 FF 40 80 80 FF 40 80 80 FF 
+
+
+Buffer: memory_7ffffffe3000 gpu 7ffffffe3000
+
+000000  40 00 00 FF 40 00 00 FF 40 00 00 FF 40 00 00 FF 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000040  40 00 00 FF 40 00 00 FF 40 00 00 FF 40 00 00 FF 
+000050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  40 00 00 FF 40 00 00 FF 40 00 00 FF 40 00 00 FF 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0000C0  40 00 00 FF 40 00 00 FF 40 00 00 FF 40 00 00 FF 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffe2000 gpu 7ffffffe2000
+
+000000  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000010  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000040  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0000C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0000D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000140  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000150  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000180  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000190  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0001C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0001D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000200  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000240  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000250  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000280  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000290  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0002C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0002D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000300  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000310  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000340  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000350  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000380  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000390  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0003D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000400  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000410  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000440  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000450  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000480  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000490  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0004C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0004D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000500  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000510  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000540  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000550  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000580  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+000590  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0005C0  00 80 00 FF 00 80 00 FF 00 80 00 FF 00 80 00 FF 
+0005D0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffd2000 gpu 7ffffffd2000
+
+000000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000010  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000020  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04 
+000030  00 00 01 00 00 00 00 00 40 23 FD FF FF 7F 00 00 
+000040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000080  00 00 00 04 99 82 88 86 00 00 00 00 00 00 00 00 
+000090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0000A0  00 40 FE FF FF 7F 00 00 00 01 00 00 00 00 00 00 
+0000B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000100  00 00 00 00 1F 00 00 00 00 00 00 00 00 00 00 00 
+000110  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000120  07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000130  00 00 C0 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+000140  00 02 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 00 
+000150  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000160  15 41 C0 2B 02 00 00 00 00 00 00 00 00 00 00 00 
+000170  08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000180  19 00 00 00 00 00 10 00 00 A0 EC FF FF 7F 00 00 
+000190  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0001A0  22 00 C0 2E 03 00 03 00 88 06 00 00 00 00 00 00 
+0001B0  80 D0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0001C0  02 00 C0 2E 03 00 03 00 88 06 00 00 00 00 00 00 
+0001D0  C0 D0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0001E0  01 98 A9 5E 00 00 FF 1F 00 00 00 00 00 00 00 00 
+0001F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000200  01 99 A9 5E 00 00 FF 1F 00 00 00 00 00 00 00 00 
+000210  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000220  00 00 00 42 00 00 00 42 00 00 00 3F 00 00 00 00 
+000230  00 00 00 42 00 00 00 42 00 00 00 3F 58 77 E3 6B 
+000240  19 00 00 00 20 00 00 00 20 22 FD FF FF 7F 00 00 
+000250  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000260  00 00 00 42 00 00 00 42 00 00 00 42 00 00 00 42 
+000270  00 00 00 3F 00 00 00 00 00 00 00 00 00 00 00 00 
+000280  01 99 A9 06 00 00 00 00 00 00 00 00 00 00 00 00 
+000290  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0002C0  00 00 00 00 C0 03 E4 84 FF FF 00 00 C1 23 FD FF 
+0002D0  FF 7F 00 00 C0 04 E4 84 FF FF 00 00 C1 24 FD FF 
+0002E0  FF 7F 00 00 C0 05 E4 84 FF FF 00 00 C1 25 FD FF 
+0002F0  FF 7F 00 00 00 00 00 00 3F 00 3F 00 40 23 FD FF 
+000300  FF 7F 00 00 00 80 FE FF FF 7F 00 00 00 00 00 00 
+000310  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000340  00 FF BF 00 00 80 04 00 FE 00 00 00 3F 00 3F 00 
+000350  00 00 00 00 00 00 00 00 00 B0 FF FF FF 7F 00 00 
+000360  10 B0 FE FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000370  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003A0  01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0003B0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0003D0  00 F0 FF FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0003E0  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04 
+0003F0  00 00 01 00 00 00 00 00 40 23 FD FF FF 7F 00 00 
+000400  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000440  00 00 00 04 99 82 88 86 00 00 00 00 00 00 00 00 
+000450  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000460  00 40 FE FF FF 7F 00 00 00 01 00 00 00 00 00 00 
+000470  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0004C0  02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0004D0  00 F0 FF FF FF 7F 00 00 00 28 FD FF FF 7F 00 00 
+0004E0  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04 
+0004F0  00 00 01 00 00 00 00 00 40 23 FD FF FF 7F 00 00 
+000500  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000540  00 00 00 04 99 82 88 06 00 00 00 00 00 00 00 00 
+000550  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000560  00 40 FE FF FF 7F 00 00 00 01 00 00 00 00 00 00 
+000570  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0005C0  02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+0005D0  00 F0 FF FF FF 7F 00 00 00 28 FD FF FF 7F 00 00 
+0005E0  3F 00 3F 00 00 00 00 00 3F 00 3F 00 80 14 00 04 
+0005F0  00 00 01 00 00 00 00 00 40 23 FD FF FF 7F 00 00 
+000600  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000640  00 00 00 04 99 82 88 06 00 00 00 00 00 00 00 00 
+000650  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000660  00 40 FE FF FF 7F 00 00 00 01 00 00 00 00 00 00 
+000670  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0006C0  40 22 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+0006D0  60 21 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+0006E0  80 21 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+0006F0  E0 21 FD FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+000700  A0 21 FD FF FF 7F 00 01 40 00 00 00 00 00 00 00 
+000710  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000770  80 22 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000780  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0007C0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+0007D0  00 00 80 42 00 00 00 00 00 00 00 00 00 00 80 3F 
+0007E0  00 00 00 00 00 00 80 42 00 00 00 00 00 00 80 3F 
+0007F0  00 00 80 42 00 00 80 42 00 00 00 00 00 00 80 3F 
+000800  03 02 00 00 FF FF 01 00 00 00 00 00 00 00 00 00 
+000810  00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 3F 
+000820  00 00 00 00 00 00 00 00 C0 2A FD FF FF 7F 00 00 
+000830  A1 2A FD FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000840  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000860  44 2A FD FF FF 7F 00 00 80 2A FD FF FF 7F 00 00 
+000870  00 21 FD FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+000880  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+000980  22 00 C0 2E 3F 00 3F 00 88 06 00 00 00 00 00 00 
+000990  C0 29 FD FF FF 7F 00 00 00 00 00 00 00 00 00 00 
+0009A0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0009C0  1A 02 00 02 00 40 00 00 00 40 FE FF FF 7F 00 00 
+0009D0  00 01 00 00 00 00 00 00 00 40 00 00 3F 00 3F 00 
+0009E0  01 99 29 1C 00 00 00 00 00 00 00 00 00 00 00 00 
+0009F0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A00  15 40 C0 2D 01 00 00 00 00 00 00 00 00 00 00 00 
+000A10  10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A20  19 00 00 00 40 00 00 00 C0 27 FD FF FF 7F 00 00 
+000A30  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000A40  00 2A FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000A50  20 2A FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000A60  E0 29 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000A70  80 29 FD FF FF 7F 00 01 20 00 00 00 00 00 00 00 
+000A80  28 01 00 80 00 30 00 00 00 E1 FF FF FF 7F 00 00 
+000A90  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000AA0  00 0A 00 00 22 21 12 F0 19 00 00 00 00 D0 0E 01 
+000AB0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+000AC0  F7 24 4F 02 FF FF FF FF 00 00 00 00 00 00 00 00 
+000AD0  00 00 80 E4 00 00 00 00 00 00 00 00 00 00 00 00 
+000AE0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+00FFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7ffffffca000 gpu 7ffffffca000
+
+000000  0F 00 00 00 00 00 00 22 02 00 00 00 00 00 00 17 
+000010  C0 22 FD FF FF 7F 4C 01 00 00 00 00 00 00 00 31 
+000020  C7 26 FD FF FF 7F 00 01 60 22 FD FF 00 00 08 02 
+000030  FF 7F 00 03 00 00 09 02 20 D0 FF FF FF 7F 10 01 
+000040  47 27 FD FF FF 7F 04 01 00 00 00 00 00 00 0C 01 
+000050  60 D0 FF FF FF 7F 14 01 40 D0 FF FF FF 7F 12 01 
+000060  00 21 FD FF FF 7F 18 01 00 21 FD FF FF 7F 1E 01 
+000070  00 00 00 00 00 00 20 02 00 00 00 00 00 00 25 02 
+000080  00 00 00 00 00 00 26 02 40 23 FD FF FF 7F 28 01 
+000090  00 00 00 00 00 00 2A 02 3F 00 3F 00 00 00 2B 02 
+0000A0  00 00 00 00 00 00 2C 02 00 00 80 3F 00 00 2D 02 
+0000B0  10 00 00 00 00 00 30 02 41 21 FD FF FF 7F 32 01 
+0000C0  20 21 FD FF FF 7F 34 01 00 00 43 00 00 00 38 02 
+0000D0  AB 21 00 00 00 00 39 02 FF FF 01 00 00 00 3A 02 
+0000E0  00 00 80 3F 00 00 3C 01 04 00 00 00 00 00 21 02 
+0000F0  01 00 00 00 00 00 22 02 00 00 00 00 00 00 23 02 
+000100  00 00 00 00 00 00 24 02 00 00 00 00 00 00 27 02 
+000110  0A 00 04 00 42 00 00 06 00 00 00 00 00 00 00 09 
+000120  00 00 04 00 00 00 00 03 00 00 00 00 01 00 00 31 
+000130  01 20 FD FF FF 7F 28 01 00 00 00 00 00 00 2A 02 
+000140  3F 00 3F 00 00 00 2B 02 00 00 00 00 00 00 2C 01 
+000150  00 00 00 00 00 00 2E 02 00 00 01 00 00 4C 4E 14 
+000160  00 00 01 00 00 00 00 03 01 00 00 00 00 4E 00 16 
+000170  C1 25 FD FF FF 7F 28 01 00 00 00 00 00 00 00 07 
+000180  00 00 04 00 00 00 00 03 40 23 FD FF FF 7F 5A 01 
+000190  28 00 0F 00 00 5A 56 14 00 00 01 00 00 00 00 03 
+0001A0  01 00 00 00 58 56 00 0B 00 00 FF 00 00 00 00 03 
+0001B0  E0 2A FD FF FF 7F 5A 01 00 00 00 00 03 5A 00 28 
+0001C0  00 00 00 00 00 00 4A 02 11 02 00 00 00 4A 00 24 
+0001D0  00 00 01 00 00 00 00 03 00 00 00 00 00 00 00 00 
+0001E0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+007FF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+Buffer: memory_7fffffeca000 gpu 7fffffeca000
+
+000000  00 00 80 BF 00 00 80 BF 00 00 80 3F 00 00 80 BF 
+000010  00 00 80 BF 00 00 80 3F 00 00 80 3F 00 00 80 3F 
+000020  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+*
+0FFFF0  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
