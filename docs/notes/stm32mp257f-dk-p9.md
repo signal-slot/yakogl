@@ -286,13 +286,14 @@ for. The decision stays a recommendation until step (1) has run.
   228`) already adapt: `es3flat_wide_width` clamps 5 to the reported range
   (`:141-152`), and the header says a range maximum of 1 runs the case at
   width 1 (`:43-46`). Under A they should **pass at width 1** when asked for
-  by number, and their entries in `tools/cts/mp2-gltest-expected.txt:11, :13,
-  :15` become stale (the diff will say so under `stale`, which is why it
+  by number, and their entries in `tools/cts/mp2-gltest-expected.txt:10, :11,
+  :12` become stale (the diff will say so under `stale`, which is why it
   reports them).
 - **Cases 230, 232, 234** (`flat_lines`, `flat_line_strip`, `flat_line_loop`)
   draw at width 1 (`driver/tools/pvrlab/gl_test_es3_flat.inc:210, 216, 225`):
-  their "pending Q11" entries in `mp2-gltest-expected.txt:10, :12, :14` have
-  no wide-line reason in the source and should be dropped whatever A decides.
+  their "pending Q11" entries had no wide-line reason in the source and were
+  dropped from `mp2-gltest-expected.txt` ("tools/cts: mp2-gltest-expected
+  drops the width-1 flat cases 230, 232, 234").
 - Case 127 `lines` (`case_lines`, `driver/tools/pvrlab/gl_test.c:13725-13794`)
   and the flat cases' header comment (`driver/tools/pvrlab/gl_test.c:485-490`)
   do not draw above width 1.
