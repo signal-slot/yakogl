@@ -16,11 +16,15 @@
 # whole chunks of the slices it names; a missing case or an absent slice
 # fails. --check-doc with --log takes the
 # slices from the block's own "Slices:" line; a block without it fails.
+# Verdin iMX95 Zephyr slices (imx95/: no ssh, no kmsg, a hang cut off by the
+# lifetime, a board that did not return) tally and cover; a mix of T6 and
+# iMX95 slices, a session or Lost reason outside the plan's, and a stale
+# iMX95 part of the doc fail.
 # Nothing here is a real run.
 set -u
 
 HERE=$(dirname "$0")
-WANT=68
+WANT=91
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"

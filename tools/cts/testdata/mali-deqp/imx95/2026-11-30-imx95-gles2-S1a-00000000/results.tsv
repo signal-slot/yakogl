@@ -1,0 +1,7 @@
+case	status	detail
+dEQP-GLES2.functional.a.one	Pass	Pass
+dEQP-GLES2.functional.a.two	Fail	Image comparison failed: max difference = (12, 0, 3)
+dEQP-GLES2.functional.a.three	Pass	Pass
+dEQP-GLES2.functional.b.one	Pass	Pass
+dEQP-GLES2.functional.b.two	Lost	chunk-hang
+dEQP-GLES2.functional.b.three	Lost	chunk-hang
