@@ -1,0 +1,4 @@
+# label	case	cause	issue
+S1	dEQP-GLES3.x.y	target larger than tile memory | 2048	#12
+S1a	dEQP-GLES3.x.z	ETC2 cube not sampled	draft: V3D: ETC2 cube
+S1c	dEQP-GLES3.q	job builder refused the draw	-
