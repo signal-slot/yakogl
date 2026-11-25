@@ -80,7 +80,11 @@ NotSupported and 12 other cases have no names, because the board's A53 console d
 three sessions (recipe, "What the three sessions measured"). e26 stops at its first `precision.reflect` case
 with an `other` status and never begins the 123 cases after it, the same record on a rerun: not a watchdog end.
 Entries 13-15 and 51-132 (14,351 mustpass cases) have not run. Per cause: "GC7000UL (i.MX8MP) failures
-by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`.
+by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`. The cause map
+`tools/cts/imx8mp-gles3-causes.tsv` gives every one of the 873 named fails a cause (0 unclassified): RC1 275,
+RC8 150, R and RG integer texture attachments 116, RC14 80, 16F targets 51, sRGB targets 46, RC17 28, narrow
+targets 27, RC13 25, `default_vertex_attrib` 24, the rest 51; 6 sit on `unexplained-*` lines and 4 are CRC pair
+mates that did not fail ("Per cause" below).
 
 ## Feature state
 
@@ -159,7 +163,7 @@ fails than that and were not paged, so 969 of the 1,851 fails have no name.
 
 | Group (entries) | Fail | NotSupported | Where the named fails are | Causes |
 |---|---:|---:|---|---|
-| shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8, e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`), RC13 (`random.texture`: the compiler refuses the shader on the host too); the rest is unnamed |
+| shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8, e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`; e27's `vec3`, `vec4` and `mat2`..`mat3x4` outputs, 120), RC14 (e27's `transpose` `mat4`, `mat4x2`, `mat4x3`, 18: the executor's fourth output, `GL_INVALID_ENUM` on its framebuffer), RC13 (`random.texture` 22 and `random.all_features` 3: the compiler refuses the shader on the host too), unexplained (`precision.tanh.highp` scalar and `vec2` 4, `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38`), 3 CRC pair mates; the rest is unnamed |
 | fbo (4-9) | 400 | 255 | `color` 116, `render` 80, `blit` 94 (`conversion` 48, `default_framebuffer` 30, `depth_stencil` 16), `invalidate` 29, `completeness` 34, `msaa` 34, `depth` 10, 3 CRCs of e8 outside the list | RC1 (RGBA32I/UI targets 36 + 16 + 12 + 8), R and RG integer texture attachments (below), RC7 (sRGB targets), 16F targets, RC8 (`msaa`, `depth_stencil`, blits from the window), `depth` clamp |
 | fragment_out (18-20) | 215 | 115 | `array.int`/`uint` 72, `basic.int`/`uint` 24 (RC1, host-predicted: 48 of them are the RGBA32I/UI outputs), `array.fixed` 12 and `basic.fixed` 13 (`srgb8_alpha8`, `r8_highp_float`), `array.float` 24 (`rg16f` 12, `rgba16f` 12) and `basic.float` 3 (`rg16f_*_vec4`), `random` 60; e20 also holds the 8 `implementation_limits` fails | RC1, RC7, 16F targets, RC14 (`random`: a fourth attachment is `GL_INVALID_ENUM` on the host, 26 of the 54 predicted) |
 | primitive_restart .. shader_api (24) | 26 (+7 other) | 26 | `read_pixels` 24 (every `rgba_int` and `rgba_uint` `alignment`, `rowlength` and `skip` case; host-predicted, RC1), `rasterization` lines 7 (`interpolation.basic.lines`, `line_strip`, `projected.lines`, `fbo.*.interpolation.lines`, `rbo_multisample_max.*.lines_wide`) | RC1, RC8, line rasterization |
@@ -184,7 +188,9 @@ integer targets (148: `fbo.blit.conversion` 36, `fragment_out` int/uint 48,
 `read_pixels` 24, `fbo.color` 16, `fbo.completeness` 12, `fbo.render` 8,
 `pbo` 4), the other int/uint `fragment_out` outputs (48, `GL_INVALID_OPERATION`
 on the draw), `builtin_functions.precision` (138, the executor's integer
-targets), `fragment_out.random` (54), `fbo.msaa` and the multisample cases
+targets: 120 `vec3`/`vec4`/`mat2`..`mat3x4` outputs with `GL_INVALID_OPERATION`
+on the draw, RC1, and 18 `transpose` `mat4*` with `GL_INVALID_ENUM` on its
+framebuffer, RC14), `fragment_out.random` (54), `fbo.msaa` and the multisample cases
 (35), `fbo.blit.depth_stencil` (16), `random.texture` and three `random`
 compile refusals (25), `fbo.invalidate.*.unbind_blit_*` (6), `negative_api`
 (3). Board-only, by cause (the host renders nothing, so every one is a
@@ -204,12 +210,50 @@ picture or read-back verdict the host could not see):
 | `draw.random` | 7 | e3 | above |
 | `fragment_out.random` beyond the host's 54 | 6 | e20 | `random.1`, `.44`, `.61`, `.64`, `.65`, `.69` |
 | `instanced.*.mixed.*` (T6) | 6 | e21 | above |
-| `rasterization` lines | 5 | e24 | `interpolation.basic.{lines,line_strip}`, `interpolation.projected.lines`, `fbo.rbo_singlesample.interpolation.lines`, `fbo.texture_2d.interpolation.lines` |
-| shaders, single cases | 9 | e27, e43, e45, e47 | `precision.tanh.highp_{fragment,vertex}.{scalar,vec2}` 4, `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38`, `random.scalar_conversion.combined.87` (a CRC pair with `random.texture.fragment.143`; the slice README resolves it to the texture case), `constant_expressions.builtin_functions.common.max_vec4_vertex` and `conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment` (CRC pairs of e27) |
+| `rasterization` lines | 5 | e24 | `interpolation.basic.{lines,line_strip}`, `interpolation.projected.lines`, `fbo.rbo_singlesample.interpolation.lines`, `fbo.texture_2d.interpolation.lines`: the line-interpolation family the i.MX8MP dEQP-GLES2 run lists as hardware-reference (major-axis weights; NXP's driver gives the same names, `docs/es2-cts-failures.md`), here judged Fail |
+| shaders, single cases | 9 | e27, e43, e45, e47 | `precision.tanh.highp_{fragment,vertex}.{scalar,vec2}` 4 (they build and draw on the host: not an RC13 refusal, unexplained), `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38` (unexplained), and 3 CRC pair mates that did not fail: `random.scalar_conversion.combined.87` (the pair with `random.texture.fragment.143`; the slice README resolves it to the texture case), `constant_expressions.builtin_functions.common.max_vec4_vertex` and `conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment` (the e27 pairs with `precision.transpose.highp_vertex.mat4x2` and `precision.step.lowp_vertex.vec3`, which the host fails with a GL error and which e27's names hold in full only with these slots) |
 | `negative_api` | 4 | e23 | `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`, `texture.texsubimage3d` |
 | RGBA32I/UI `fbo.invalidate.format` (RC1) | 2 | e8 | the host has no row for these two |
 | `lifetime.attach.deleted_output.buffer_transform_feedback` (RC3) | 1 | e22 | |
 | **total** | **400** | | |
+
+**Per cause (cause map).** `imx8mp-gles3-compare.py --causes tools/cts/imx8mp-gles3-causes.tsv` over the 873 named
+fails (the `--notpass` list of the three slices without its `NoResult` rows) against the HOST-ONLY GC7000UL column
+`docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv` (3,930 rows; the same 473 / 400 split as the `26d1c4a2`
+vivante rows). The first matching line of the map decides; 0 cases are unclassified.
+
+| Cause id | Host-predicted | Board-only | Total | Issue named in the tree |
+|---|---:|---:|---:|---|
+| `rc1-int-color-rt` | 268 | 7 | 275 | #335, #355 |
+| `rc8-blit-msaa` | 94 | 56 | 150 | #339 |
+| `gc-rg-int-attachment` | 0 | 116 | 116 | none |
+| `rc14-mrt-draw-buffers` | 72 | 8 | 80 | none |
+| `gc-16f-target` | 0 | 51 | 51 | none |
+| `gc-srgb-target` | 0 | 46 | 46 | none |
+| `rc17-fbo-completeness` | 14 | 14 | 28 | #335, #355, #354 |
+| `gc-narrow-target` | 0 | 27 | 27 | none |
+| `rc13-shader-compiler` | 25 | 0 | 25 | none |
+| `appendix-a-t1-default-vertex-attrib` | 0 | 24 | 24 | none |
+| `gc-depth-clamp` | 0 | 10 | 10 | none |
+| `gc-draw-int-byte-short-attrib` | 0 | 7 | 7 | none |
+| `rc10-limits-state` | 0 | 6 | 6 | none |
+| `appendix-a-t6-instanced` | 0 | 6 | 6 | none |
+| `gc-line-interpolation` | 0 | 5 | 5 | none |
+| `gc-negative-api-fixed` | 0 | 4 | 4 | none (fixed after `9bc82915`) |
+| `unexplained-precision-tanh-highp` | 0 | 4 | 4 | none |
+| `crc-pair-mate` (not a fail) | 0 | 4 | 4 | none |
+| `rc7-srgb` | 0 | 2 | 2 | none |
+| `unexplained-shader-single-case` | 0 | 2 | 2 | none |
+| `rc3-transform-feedback` | 0 | 1 | 1 | none |
+| **total** | **473** | **400** | **873** | |
+
+Against the earlier map, 151 cases moved: the 138 e27 `precision` cases from `rc13-shader-compiler` to
+`rc1-int-color-rt` (120) and `rc14-mrt-draw-buffers` (18), since the host reads a GL error on the executor's draw or
+framebuffer for them and not a compile refusal (the owners of `docs/es3/host-gles3-notpass.tsv` say RC1 and RC14
+too); the 4 `precision.tanh.highp` scalar and `vec2` cases from `rc13-shader-compiler` to
+`unexplained-precision-tanh-highp`; the 5 line-interpolation cases from `unexplained-rasterization` to
+`gc-line-interpolation`; and 4 CRC pair mates (e2 1, e27 2, e47 1) to `crc-pair-mate`. Cases on `unexplained-*`
+lines: 10 before, 6 now.
 
 **Not named: entries 25, 26 and 29 (969 fails).** Each has more fails than
 40 pages hold. e25 (`shaders.arrays`, `builtin_functions.common`,
