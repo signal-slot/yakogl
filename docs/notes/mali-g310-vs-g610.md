@@ -346,84 +346,56 @@ the recheck is a second, overlapping count, not a sum.
 - 2381 of 2381 regions are word-, FAU- and fact-identical.
 - No file of the compiler names the G610 except in comments.
 
-### `src/mali/`
+### `src/mali/` and the kernel side
 
-The frame builder now follows the GPU's tile buffer as Mesa 26.2.1 does
-(after this note was first written):
+The constants of this section's first draft (`TIB_BUDGET`,
+`MEASURED_TILER_LEVELS`, the renderer name, the core mask) are gone: no
+`src/` or `driver/` file defines `TIB_BUDGET` or `MEASURED_TILER_LEVELS`
+(`grep` at the branch tip). Each value now comes from a register the board
+reads, or from a table row that a register selects. Paths are at the branch
+tip; "tip" commits are the ones `git log -S` finds first.
 
-- **The budgets come from the GPU.** The OSAL's `OSAL_QUERY_MALI_GPU`
-  answer (`OsalMaliGpu`, `struct osal_mali_gpu`) carries `CORE_FEATURES`
-  beside `GPU_ID`: the panthor development OSAL from
-  `drm_panthor_gpu_info.core_features`, the Zephyr OSAL from the kernel
-  side's own read of the register (`gpu::mali::ident`, offset 0x8;
-  docs/notes/mali-gpu-model.md). The backend's `init` looks the model up as
-  `pan_get_model` does (`src/mali/model.rs`: the product id from `GPU_ID`,
-  the variant `CORE_FEATURES & 0xff`, against the G610 and G310v1-v5 rows of
-  `pan_model.c:88-99`) and refuses a GPU with no row
-  (`NOT_BUILT_GPU_MODEL`). The model's halved tile buffers
-  (`pan_props.h:47-72`) go into the frame context
-  (`frame::Context::tile_budget`). `TIB_BUDGET` is gone.
-- **The Z bound is built.** `tile_size_of` takes the minimum of the colour
-  budget's tile and the Z budget's for 4 bytes of depth a sample, as
-  `pan_desc.c:615-625` does (the Z bytes are counted whether or not the
-  frame has a depth buffer, `pan_desc.h:242-259`). The render targets'
-  offsets and the hierarchy mask follow the tile and needed no change.
-- **What it changed on the G610.** The Z bound reaches every 4x frame: 4x
-  RGBA8 (16 bytes a pixel) now has a 512-pixel tile and an 8192-byte
-  allocation, Mesa 26.2.1's, where the builder had followed the board's Mesa
-  25.0.7 (1024 and 16384). The split-kick tests against Mesa 26.2.1 on the
-  board (`src/mali/frame_split_tests.rs`) lost their named deviation and are
-  word-equal, and so is the backend's split kick
-  (`backend_tests.rs`, FBD w11 no longer excepted). The 25.0.7 board dumps
-  of a 4x frame now name their tile word as 25.0.7's
-  (`frame_msaa_tests.rs` `TILE_25_0_CAUSE`: the colour-only and the
-  depth/stencil MSRTT frames, `a_4x_target_is_the_board_s_...`,
-  `a_4x_depth_frame_...`, `a_4x_stencil_frame_...`; and
-  `frame_preload_tests.rs`'s colour and depth preloads of a 4x target).
-  The tiler hierarchy mask of a 512-pixel tile stays 254. No 1x frame
-  moved: at one sample the Z bound is 2048 pixels on the G610 and 1024 on a
-  G310v1-v3, never below the 1024-pixel clamp. On the board (Mesa 25.0.7
-  is what the T6 runs) a 4x frame now has half the tile it had; both are
-  legal tile sizes, and this is the size Mesa 26.2.1 draws with.
-- **Tests on the G310.** `tools/mali/testdata/tile-budget/` holds Mesa
-  26.2.1's three- and four-target frames and its 4x frame drawn as the
-  G310v1, the G310v4 and the G610 (`drm_shim_ref.sh run --gpu`); the
-  framebuffer parameters, the render targets and the tiler context of ours
-  equal them (`frame_mrt_tests.rs`
-  `three_and_four_targets_on_a_g310v1_are_mesa_s` and its G310v4 twin,
-  `frame_split_tests.rs` `a_4x_frame_s_tile_follows_the_gpu_s_tile_buffer`).
-- **`GL_RENDERER` names the model.** Each row of `src/mali/model.rs`
-  carries its string, `Arm Mali-<Mesa's name> (YakoGL)`; the GL core's
-  `glGetString` asks the backend for the string of the model `init` found
-  (`mali::backend::renderer`). The NanoPC-T6 keeps
-  `"Arm Mali-G610 (YakoGL)"` byte for byte; a G310 says
-  `"Arm Mali-G310v1 (YakoGL)"` .. `"Arm Mali-G310v5 (YakoGL)"`, so dEQP
-  results of the two boards differ in `info.renderer`. The backend table's
-  name, which nothing reads, is `"Arm Mali Valhall (arch 10)"`: no board
-  and no model.
+| Former constant | Now | Source | Commit |
+|---|---|---|---|
+| `TIB_BUDGET` | the model row's tile buffer (Mesa's `MODEL_TB_SIZES`: G610 and G310v4-v5 32768 / 16384, G310v1-v3 16384 / 8192), halved into `TileBudget`; G310v2 gets colour 8192, Z 4096. `init` finds the row from `GPU_ID` (product) and `CORE_FEATURES & 0xff` (variant) | `src/mali/model.rs:95-120` (rows, `model()`), `src/mali/backend.rs:1192` (lookup, refusal), `:1230` (`model.tile_budget()` into the context), `src/mali/frame.rs:379`, `:2017` (`tile_size_of`) | `cb8f5e38` (2026-11-21) |
+| `MEASURED_TILER_LEVELS` | `TILER_FEATURES` bits 11:8 (`max_levels`); 0 is refused, any other count goes through Mesa 26.2.1's hierarchy-mask rule | `src/mali/frame.rs:495` (`tiler_max_levels`), `:2678` (refusal), `:3793` (`hierarchy_mask`), `src/mali/backend.rs:1229` | `cb8f5e38` |
+| `CORE_FEATURES` reaching the backend | the OSAL's query answer carries it beside `GPU_ID`; the Zephyr side reads register 0x8 into `Ident` | `src/osal/mali.rs:57`, `driver/rust/src/gpu/mali/mod.rs:243,281`, `src/mali/backend.rs:1192` | `cb8f5e38` |
+| the renderer name | per-model string `Arm Mali-<Mesa's name> (YakoGL)`, made in the row macro; `glGetString(GL_RENDERER)` asks the backend for the string of the model `init` found; `"Arm Mali (YakoGL)"` before `init` | `src/mali/model.rs:85`, `src/mali/backend.rs:336-346`, `src/gl/state.rs:937` | `21ac93ad` (2026-11-22) |
+| shader core mask (firmware `core_en_mask`, group compute and fragment masks, core counts) | `SHADER_PRESENT` (register 0x100), read into `Ident` and passed on; no 0x50005 in the code but tests and comments | `driver/rust/src/gpu/mali/mod.rs:69,287`, `csf.rs:828` (`core_en_mask: cfg.shader_present`), `sched.rs:694-698` | `fa1e0c1b` (2026-10-28, firmware boot), `6b7839b5` (2026-11-03, group masks) |
 
-What remains G610-specific in `src/mali/`:
+What the board's registers give, and so what the code does on it:
 
-- **The tiler levels come from the GPU too.** `MEASURED_TILER_LEVELS = 8`
-  and its refusal are gone: the hierarchy mask is Mesa 26.2.1's
-  `GENX(pan_select_tiler_hierarchy_mask)` (`pan_desc.c:1745-1812`,
-  `frame::hierarchy_mask`) for any `TILER_FEATURES` max_levels, with the
-  bin-pointer budget of the heap chunk (`pan_csf.c:979-983`,
-  `Context::tiler_bin_budget`). At 8 levels and the frames built here it is
-  the 25.0.7 rule the board's dumps hold (254, and 255 for a 256-pixel
-  tile); only max_levels 0 is refused. The boot log quoted in
-  docs/notes/mali-gpu-model.md reads 0x809 (8 levels) on an i.MX 95.
-- `src/mali/backend.rs`: the query block's comment that derives
-  the G610's 19 from `shader_present 0x50005` (the block is sized for 64
-  core ids, `QUERY_BLOCK_BYTES`, so any core mask fits).
-- The frame tests other than the ones above stay the G610's
-  (`tiler_max_levels: 8`, `TileBudget::G610`).
-- Which G310 variant the i.MX 95 has is not known: Mesa's v1-v3 and v4-v5
-  differ in the tile buffer, and nothing public read here gives the
-  board's `CORE_FEATURES`. The code does not assume one; it takes the
-  variant from the register on the first boot (pre-study-imx95.md, B2), and
-  the kernel side's G310 mock's variant 0 (`mock::G310_ASSUMED`) decides
-  nothing but the mock.
+- `GPU_ID 0xac740001` with `CORE_FEATURES 0x1` is the row `G310v2`
+  (product `PAN_PROD_ID(10, 12, 4)`, variant 1): `TileBudget` colour 8192,
+  Z 4096 (`src/mali/model.rs:102-109`, tested at `:130`). A GPU with no
+  row (`NOT_BUILT_GPU_MODEL`, `src/mali/backend.rs:157`) is refused, not
+  drawn with the G610's numbers.
+- `TILER_FEATURES 0x809` is 8 levels, as on the G610, so the hierarchy
+  mask is the same as on the G610 for the same frame. The boot log quoted in
+  docs/notes/mali-gpu-model.md reads 0x809 on an i.MX 95.
+- `SHADER_PRESENT 0x1` is one shader core: `core_en_mask`, both group masks
+  and the core counts follow the register. The T6's 0x50005 survives only
+  as the G610 test fixture (`csf.rs:1243`, `sched.rs:2416`) and the mock (`mock.rs:27`) and in comments.
+- `GL_RENDERER` reports the G310 on a G310: `"Arm Mali-G310v2 (YakoGL)"`
+  here. The T6 keeps `"Arm Mali-G610 (YakoGL)"` byte for byte, so the
+  `info.renderer` of dEQP results tells the boards apart. The backend
+  table's name (`"Arm Mali Valhall (arch 10)"`, `src/mali/backend.rs:3765`)
+  is read by nothing.
+
+What stays G610-specific:
+
+- `src/mali/backend.rs:397-402`: the query block (`QUERY_BLOCK_BYTES`) is
+  sized for 64 core ids, so a comment derives the G610's 19 from
+  `shader_present 0x50005`; any core mask fits, the value is not used.
+- The frame tests other than the tile-budget ones use the G610
+  (`tiler_max_levels: 8`, `TileBudget::G610`, `src/mali/model.rs:48`).
+- The hierarchy rule gives the 25.0.7 mask (the board's dumps) at 8 levels
+  for the frames built here; the tile of a 4x frame follows Mesa 26.2.1,
+  half the 25.0.7 tile the T6's Mesa draws (`src/mali/frame_msaa_tests.rs`
+  `TILE_25_0_CAUSE`).
+- The kernel side's G310 mock (`driver/rust/src/gpu/mali/mock.rs:99`,
+  `G310_ASSUMED`, `shader_present: 0x3`) is an assumed variant 0 and two
+  cores; it decides nothing but the mock. The board's value is 0x1.
 
 ### Not measurable on the host
 
