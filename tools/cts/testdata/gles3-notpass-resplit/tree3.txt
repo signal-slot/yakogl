@@ -1,0 +1,6 @@
+# image A:
+dEQP-GLES3.a.*
+# image B:
+dEQP-GLES3.b.*
+# image C:
+dEQP-GLES3.c.*
