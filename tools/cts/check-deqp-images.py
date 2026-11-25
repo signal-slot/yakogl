@@ -349,11 +349,12 @@ def check_repo():
     for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '50331648'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '16777216')):
         if p.get(k) != v:
             bad.append('Pi 4 rpi_4b.conf: %s=%s, the sweeps ran %s' % (k, p.get(k), v))
-    # T5's carve-out: sweep 28's 64 MiB plus 6d2e7d0d's tile memory, 72 MiB
-    # (texture-2048.conf's header, tests/v3d_es2ctx_t5_mem.rs)
-    for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '75497472'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '25165824')):
+    # texture-2048.conf's carve-out: 112 MiB and 32 MiB of tiled copies since
+    # a6219832 (the gles3 T14/T14a cube cases, tests/v3d_units_cube_mem.rs);
+    # T5 shares the file and keeps its room there (tests/v3d_es2ctx_t5_mem.rs)
+    for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '117440512'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '33554432')):
         if t.get(k) != v:
-            bad.append('Pi 4 texture-2048.conf: %s=%s, T5 is measured at %s' % (k, t.get(k), v))
+            bad.append('Pi 4 texture-2048.conf: %s=%s, T5/T14 are measured at %s' % (k, t.get(k), v))
     if boards['i.MX8MP'].get('COMMON_LIBC_MALLOC_ARENA_SIZE') != '167772160':
         bad.append('i.MX8MP conf: the C heap is not 160 MiB (167772160)')
     if boards['AM62P'].get('KERNEL_VM_SIZE') != '0x20000000':
