@@ -43,6 +43,21 @@
 //!   `v3d_translate_pipe_swizzle` (v3dx_state.c:1031-1034), whatever the
 //!   return size.
 //!
+//! The stage71 fixes (Mesa's rules the first version left out, format71
+//! holds each with its citations):
+//!
+//! * fix 1, depth: the GL core's base-format swizzle sits between the row's
+//!   and GL's; a depth texture's is the GLES depth mode's X X X 1
+//!   ([`format71::view_swizzle71`]), so a depth look-up reads (d, d, d, 1),
+//!   not d in alpha;
+//! * fix 2, packed depth-stencil: a GL_DEPTH24_STENCIL8 texture is laid out
+//!   as its storage row (S8_UINT_Z24_UNORM, 4 bytes) and sampled as
+//!   X8Z24_UNORM ([`format71::sample_row71`]); [`Tex71::row`] is the
+//!   sampled row;
+//! * fix 4: transfer function, R/B swap and reverse come from
+//!   [`format71::record_bits71`] for the revision, not from the row's
+//!   constant fields.
+//!
 //! The sampler half (sampler71) is not merged yet: this module has no
 //! sampler record; the table wiring (mip71) adds it.
 //!
@@ -54,7 +69,7 @@
 
 use std::fmt;
 
-use super::format71::{self, Refusal71, Row71, Transfer};
+use super::format71::{self, Refusal71, Row71};
 use super::texstate71::{self, TexDesc};
 
 /// A GL texture target this module composes.
@@ -178,7 +193,8 @@ pub struct Tex71 {
     pub level_0_ub_pad: u32,
     pub array_stride_64: u32,
     // ---- beside the record ----
-    /// the format71 row (pipe format, Mesa line, return size)
+    /// the format71 row the view samples with (pipe format, Mesa line,
+    /// return size): the storage row but for D24S8 (fix 2)
     pub row: Row71,
     /// the look-up wants the TMU's 32-bit output (TMU Config Parameter 1)
     pub return_32: bool,
@@ -450,9 +466,19 @@ pub fn full_chain(width: u32, height: u32) -> u32 {
 /// The 7.1 texture record values for one GL texture.
 pub fn compose(t: &GlTex71) -> Result<Tex71, Refusal> {
     texstate71::check_revision(t.ver, t.iprev).map_err(Refusal::State)?;
-    let row = format71::tmu_format71(t.internal_format, t.ty).map_err(Refusal::Format)?;
-    let cpp = cpp_of(row.pipe)?;
-    let swizzle = compose_swizzle(row.swizzle, t.swizzle)?;
+    // the row the texture is stored as, and the one its view samples with
+    // (stage71 fix 2: a packed D24S8 samples as X8Z24, format71::sample_row71)
+    let storage = format71::tmu_format71(t.internal_format, t.ty).map_err(Refusal::Format)?;
+    let cpp = cpp_of(storage.pipe)?;
+    let row = format71::sample_row71(storage);
+    // stage71 fix 1: the base-format (depth mode) swizzle between the row's
+    // and GL's (format71::view_swizzle71)
+    let swizzle = compose_swizzle(format71::view_swizzle71(&row), t.swizzle)?;
+    // stage71 fix 4: transfer function, R/B swap and reverse per revision
+    let bits = format71::record_bits71(&row, t.srgb_decode, t.ver, t.iprev).map_err(|e| match e {
+        format71::Revision71::NotV3d71 { ver } => Refusal::State(texstate71::Refusal::NotV3d71 { ver }),
+        format71::Revision71::BelowIprev5 { iprev } => Refusal::State(texstate71::Refusal::RevisionBelow715 { iprev }),
+    })?;
     if t.width == 0 || t.height == 0 || t.levels == 0 {
         return Err(Refusal::ZeroSize);
     }
@@ -482,7 +508,6 @@ pub fn compose(t: &GlTex71) -> Result<Tex71, Refusal> {
     let s0 = l.slices[0];
     let base = t.bo_address.checked_add(s0.offset).ok_or(Refusal::AddressOverflow)?;
     t.bo_address.checked_add(l.size).ok_or(Refusal::AddressOverflow)?;
-    let srgb = row.transfer == Transfer::Srgb && t.srgb_decode;
     let st = texstate71::texture_state(&TexDesc {
         width: t.width,
         height: t.height,
@@ -490,8 +515,8 @@ pub fn compose(t: &GlTex71) -> Result<Tex71, Refusal> {
         levels: last - t.base_level + 1,
         base_level: t.base_level,
         cube,
-        srgb,
-        transfer_func: None,
+        srgb: bits.transfer_func == format71::TRANSFER_FUNC_SRGB,
+        transfer_func: Some(bits.transfer_func),
         bytes_per_texel: cpp,
         layer_stride: u64::from(l.layer_stride),
         base,
@@ -510,8 +535,8 @@ pub fn compose(t: &GlTex71) -> Result<Tex71, Refusal> {
         tex_type: row.tex_type,
         swizzle,
         transfer_func: st.transfer_func,
-        r_b_swap: st.r_b_swap || row.r_b_swap,
-        reverse: st.reverse || row.reverse,
+        r_b_swap: bits.r_b_swap,
+        reverse: bits.reverse,
         level_0_is_strictly_uif: uif,
         level_0_xor_enable: s0.tiling == Tiling::UifXor,
         extended: uif,
