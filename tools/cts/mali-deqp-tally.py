@@ -57,7 +57,10 @@ meta.txt carries one more, optional key
 
 and a slice of a board other than the NanoPC-T6 one more, optional key,
 board=<MALI_BOARD> (tools/mali/panthor/board-profile.sh), which the tally
-does not read.
+does not read. A slice made from Zephyr console logs
+(tools/cts/imx95-uart-slice.py, the Verdin iMX95) has os=zephyr: there is no
+kernel log and no ssh or boot_id between rows, so '-' is accepted in kmsg,
+resets, ssh_after and boot_same of every row of that slice.
 
 A case may then appear in the rerunning slice and in an earlier slice, and
 only so: that earlier slice is one of the names in reruns and has the case as
@@ -353,7 +356,8 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
             for i, col in enumerate(CHUNK_COLS):
                 if not f[i]:
                     errs.append("RULE chunk-field: %s: %s is empty" % (row, col))
-            unrun = f[CHUNK_COLS.index("status")] == "lost"
+            unrun = (f[CHUNK_COLS.index("status")] == "lost"
+                     or s["meta"].get("os") == "zephyr")
             for col in ("kmsg", "resets", "cases", "seconds"):
                 v = f[CHUNK_COLS.index(col)]
                 if unrun and v == "-" and col in ("kmsg", "resets"):
@@ -883,6 +887,23 @@ def self_test():
         chk("--no-git skips the ancestor rule",
             run("--check-cover", "--no-git", "--main-ref", "main", mp, n1, n2,
                 cwd=t)[0] == 0)
+        # os=zephyr (a console slice, imx95-uart-slice.py): '-' in kmsg,
+        # resets, ssh_after and boot_same of a run row; without the key the
+        # same row stays RULE chunk-field
+        for key in ("os=zephyr\n", ""):
+            z = os.path.join(t, "zephyr" + str(len(key)))
+            with_commit(lostd, a, z)
+            with open(os.path.join(z, "meta.txt"), "a", encoding="utf-8") as f:
+                f.write(key)
+            with open(os.path.join(z, "chunks.tsv"), "w", encoding="utf-8") as f:
+                f.write("\t".join(CHUNK_COLS) + "\n3\tc\t3\thang\t9\t-\t-\t-\t-\t-\n")
+            if key:
+                chk("os=zephyr: '-' in kmsg, resets, ssh_after, boot_same is "
+                    "accepted", run("--check-cover", "--no-git", mp, good[0],
+                                    z)[0] == 0)
+            else:
+                must("the same row without os=zephyr", "chunk-field",
+                     "--check-cover", "--no-git", mp, good[0], z)
     print("%d checks passed" % n_ok if not n_bad else
           "%d checks passed, %d FAILED" % (n_ok, n_bad))
     return 1 if n_bad else 0

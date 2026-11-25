@@ -14,13 +14,14 @@
 # (refusals/) gives each named case its own refusal as the cause; a row naming
 # a case the slice does not hold fails. A replaces= slice (replaces/) swaps
 # whole chunks of the slices it names; a missing case or an absent slice
-# fails. --check-doc with --log takes the
+# fails. A slice with os=zephyr in meta.txt (a Zephyr console slice) may have
+# '-' in kmsg, resets, ssh_after and boot_same. --check-doc with --log takes the
 # slices from the block's own "Slices:" line; a block without it fails.
 # Nothing here is a real run.
 set -u
 
 HERE=$(dirname "$0")
-WANT=68
+WANT=70
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"
