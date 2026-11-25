@@ -279,6 +279,12 @@ heuristic, to `t6-uart-rfc2217.py` for a defect of the adapter.
   COMP_PARAM_1, COMP_VERSION and COMP_TYPE. GLB_RST_CON decides whether a
   WDT0 timeout resets the SoC from this state; WDT0's soft reset line is not
   read (no source on this host names its CRU bit).
+  Decoding of these reads (which `CLKGATE_CON(15)` value lets WDT0 count,
+  what the code does and does not say about `GLB_RST_CON` and `GLB_RST_ST`)
+  and the rule for calling a WDT0 reset proven: docs/notes/nanopc-t6-uboot-handover.md,
+  section 6. `prompt-go` has no exit code of its own for a WDT0 return: an
+  image that ends by WDT0 or by PSCI exits 0 on a PASS verdict with Armbian
+  back, 11 on FAIL, 10 when no sign of Linux follows ("Exit codes").
 - **The GPU.** PD_GPU off and the GPU clock on the SPLL are both states
   `gpu_up` handles (docs/notes/nanopc-t6-uboot-handover.md, sections 1 and
   2); neither has run on the board from U-Boot's state.
