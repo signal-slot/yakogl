@@ -1,0 +1,5 @@
+dEQP Core vulkan-cts-<3.2.0-0>-555-gabcdef0 starting..
+  target implementation = 'Zephyr'
+Test case '@CASE@'..
+  Fail (Compile error)
+FATAL: dEQP ended the session early
