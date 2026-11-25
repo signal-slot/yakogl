@@ -94,9 +94,12 @@ while [ $# -gt 0 ]; do
 	case $1 in
 	--base) mode=base; shift ;;
 	--new) mode=new; shift ;;
-	--status) status=${2:?--status needs Fail[,NotSupported,...]}; shift 2 ;;
-	--cap) caps+=("${2:?--cap needs 'REASON=N'}"); shift 2 ;;
-	--fewer) fewer+=("${2:?--fewer needs 'REASON'}"); shift 2 ;;
+	--status) [ -n "${2:-}" ] || { echo "$me: --status needs Fail[,NotSupported,...]" >&2; usage; }
+		status=$2; shift 2 ;;
+	--cap) [ -n "${2:-}" ] || { echo "$me: --cap needs 'REASON=N'" >&2; usage; }
+		caps+=("$2"); shift 2 ;;
+	--fewer) [ -n "${2:-}" ] || { echo "$me: --fewer needs 'REASON'" >&2; usage; }
+		fewer+=("$2"); shift 2 ;;
 	-h | --help) sed -n '5,76p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	-*) echo "$me: unknown option '$1'" >&2; usage ;;
 	*)
