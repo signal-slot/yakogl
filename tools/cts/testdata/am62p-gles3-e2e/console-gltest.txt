@@ -1,0 +1,10 @@
+gl_test: case 196 es3_instancing: PASS
+gl_test: case 197 es3_ubo: PASS
+gl_test: case 198 es3_transform_feedback: PASS
+gl_test: case 199 es3_vao: PASS
+gl_test: case 200 es3_mrt: PASS
+gl_test: case 201 es3_sampler_objects: PASS
+gl_test: case 202 es3_3d_texture: PASS
+gl_test: case 203 es3_texture_array: PASS
+gl_test: case 204 es3_blit_msaa: PASS
+gl_test: case 205 es3_query: PASS
