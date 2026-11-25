@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2016 Etnaviv Project
+// Mesa part: tables copied from src/gallium/drivers/etnaviv/etnaviv_format.c of Mesa 26.2.1 (MIT).
 //! GC7000UL (i.MX8MP): every texture-format constant of src/vivante/regs.rs
 //! (`GC_TEX_FORMAT_*`) is the word Mesa's etnaviv assigns to the pipe
 //! formats it stands for, read by pipe-format name out of Mesa 26.2.1
