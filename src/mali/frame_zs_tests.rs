@@ -470,3 +470,200 @@ fn a_draw_with_no_colour_is_the_board_s_depth_only_draw() {
     let eq = BlendEquation::unpack(&ours[4..8].try_into().unwrap()).unwrap();
     assert_eq!((eq.color_mask, eq.rgb.a, eq.rgb.c), (0, BlendOperandA::SRC, BlendOperandC::ZERO));
 }
+
+/* ---- the colour rebind beside a stencil buffer (issue #11329) -----------
+ *
+ * dEQP-GLES2 fbo.render.recreate_colorbuffer.rebind_* with a colour buffer
+ * of a format without alpha (GL_RGB565, GL_RGB8) beside a stencil buffer
+ * (es2fFboRenderTest.cpp, RecreateBuffersTest::render). Commit 0c3a7729
+ * took alpha out of every draw's colour mask for such a format (the GL core
+ * keeps it in RGBA8 storage, which must read alpha 1); the colour preload
+ * of the frame that follows a rebind then loaded the new storage's zero
+ * alpha and the frame wrote 0 back (the board's difference 15876 = 126 *
+ * 126). c4df367f made the preload read alpha as 1
+ * (`TargetFormat::preload_swizzle`). The tests run the case's sequence
+ * through the GL core on the mock and read the last frame's descriptors. */
+mod rebind {
+    use crate::backend;
+    use crate::gl::consts::*;
+    use crate::gl::context;
+    use crate::gl::draw::glDrawArrays;
+    use crate::gl::framebuffer::{
+        glBindFramebuffer, glBindRenderbuffer, glCheckFramebufferStatus, glDeleteRenderbuffers,
+        glFramebufferRenderbuffer, glGenFramebuffers, glGenRenderbuffers, glRenderbufferStorage,
+    };
+    use crate::gl::program::{glAttachShader, glCreateProgram, glLinkProgram, glUseProgram};
+    use crate::gl::shader::{glCompileShader, glCreateShader, glGetShaderiv, glShaderSource};
+    use crate::gl::state::{
+        glClear, glClearColor, glClearStencil, glDisable, glEnable, glFinish, glGetError, glScissor, glStencilFunc,
+        glViewport,
+    };
+    use crate::gl::types::*;
+    use crate::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
+    use crate::mali::backend::tests::{fbd_at_fragment, regs_at_each_idvs, with, Rig};
+    use crate::mali::frame::{SWIZZLE_RGB1, SWIZZLE_RGBA};
+    use crate::mali::genxml::v10::{Draw, FramebufferParameters, PrePostFrameShaderMode, Resource, Texture, ZsTarget};
+    use std::ffi::CString;
+
+    const SIZE: GLsizei = 128;
+    const VS: &str = "attribute highp vec4 a_position; void main(){ gl_Position = a_position; }";
+    const FS: &str = "precision mediump float; void main(){ gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); }";
+    const ALL: GLbitfield = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+
+    fn shader(ty: GLenum, src: &str) -> GLuint {
+        let text = CString::new(src).unwrap();
+        // SAFETY: plain GL calls; one NUL-terminated source.
+        unsafe {
+            let s = glCreateShader(ty);
+            let p = [text.as_ptr()];
+            glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+            glCompileShader(s);
+            let mut ok: GLint = 0;
+            glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+            assert_eq!(ok, 1, "{src} did not compile");
+            s
+        }
+    }
+
+    /// sglr::drawQuad of the case: the corners' z z0, mid, mid, z1.
+    unsafe fn quad(z0: f32, z1: f32) -> GLenum {
+        let mid = 0.5 * (z0 + z1);
+        let corners = [[-1.0, -1.0, z0, 1.0], [-1.0, 1.0, mid, 1.0], [1.0, -1.0, mid, 1.0], [1.0, 1.0, z1, 1.0f32]];
+        let pos: Vec<f32> = [0, 2, 1, 2, 1, 3].iter().flat_map(|&i: &usize| corners[i]).collect();
+        // SAFETY: the caller's context; client arrays read at the draw.
+        unsafe {
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, pos.as_ptr().cast());
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glGetError()
+        }
+    }
+
+    /// What the last frame holds that the tests assert.
+    struct Last {
+        /// The colour preload texture's swizzle (None: no colour preload).
+        swizzle: Option<u32>,
+        /// The ZS extension's base: the stencil attachment's surface.
+        zs_base: u64,
+        /// The framebuffer's stencil clear value.
+        s_clear: u32,
+        /// The frame's draws.
+        draws: usize,
+    }
+
+    /// The case's sequence through the GL core with a `colour`
+    /// renderbuffer rebound beside the `(attachment, format)`
+    /// depth/stencil renderbuffers. The last frame is returned.
+    fn run(colour: GLenum, ds: &[(GLenum, GLenum)]) -> Last {
+        let _rig = Rig::new(true);
+        assert_eq!(backend::init(), 0);
+        // SAFETY: the rig serialises the library; plain GL calls.
+        unsafe {
+            let ctx = context::gl_context_create(SIZE as u32, SIZE as u32);
+            assert!(!ctx.is_null());
+            let p = glCreateProgram();
+            glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+            glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+            glLinkProgram(p);
+            glUseProgram(p);
+            let mut f = 0;
+            glGenFramebuffers(1, &mut f);
+            glBindFramebuffer(GL_FRAMEBUFFER, f);
+            let mut c = 0;
+            glGenRenderbuffers(1, &mut c);
+            let bind_colour = |c: GLuint| {
+                glBindRenderbuffer(GL_RENDERBUFFER, c);
+                glRenderbufferStorage(GL_RENDERBUFFER, colour, SIZE, SIZE);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, c);
+            };
+            bind_colour(c);
+            for &(attach, format) in ds {
+                let mut r = 0;
+                glGenRenderbuffers(1, &mut r);
+                glBindRenderbuffer(GL_RENDERBUFFER, r);
+                glRenderbufferStorage(GL_RENDERBUFFER, format, SIZE, SIZE);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, attach, GL_RENDERBUFFER, r);
+            }
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "0x{colour:x}");
+            glViewport(0, 0, SIZE, SIZE);
+            /* RecreateBuffersTest::render: the first frame */
+            glClearColor(1.0, 0.0, 0.0, 1.0);
+            glClear(ALL);
+            glEnable(GL_DEPTH_TEST);
+            assert_eq!(quad(0.0, 0.0), GL_NO_ERROR, "the first quad");
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(32, 32, 64, 64);
+            glClearStencil(1);
+            glClear(GL_STENCIL_BUFFER_BIT);
+            glDisable(GL_SCISSOR_TEST);
+            /* the colour buffer is recreated and rebound, then drawn again */
+            glDeleteRenderbuffers(1, &c);
+            bind_colour(c);
+            glClearColor(0.0, 0.0, 1.0, 0.0);
+            glClearStencil(0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glEnable(GL_STENCIL_TEST);
+            glStencilFunc(GL_EQUAL, 0, 0xff);
+            let kicks = with(|m| m.submits.len());
+            assert_eq!(quad(1.0, -1.0), GL_NO_ERROR, "the last quad");
+            glFinish();
+            let frames: Vec<Vec<u64>> = with(|m| m.submits[kicks..].iter().map(|s| s.1.clone()).collect());
+            assert_eq!(frames.len(), 1, "the last frame");
+            let words = &frames[0];
+            let fbd = fbd_at_fragment(words).expect("the last frame has a fragment job");
+            let params = FramebufferParameters::unpack(&with(|m| m.read(fbd, 64)).try_into().unwrap()).unwrap();
+            let swizzle = (params.pre_frame_0 != PrePostFrameShaderMode::NEVER).then(|| {
+                let dcd = with(|m| m.read(params.frame_shader_dcds, Draw::LENGTH));
+                let dcd = Draw::unpack(&dcd[..].try_into().unwrap()).unwrap();
+                let table = dcd.shader.resources & !63;
+                let entry = with(|m| m.read(table + 3 * Resource::LENGTH as u64, Resource::LENGTH));
+                let texture = Resource::unpack(&entry[..].try_into().unwrap()).unwrap().address;
+                let tex = with(|m| m.read(texture, Texture::LENGTH));
+                Texture::unpack(&tex[..].try_into().unwrap()).unwrap().swizzle
+            });
+            let zs = ZsTarget::unpack(&with(|m| m.read(fbd + 128, 64)).try_into().unwrap()).unwrap();
+            let last =
+                Last { swizzle, zs_base: zs.base, s_clear: params.s_clear, draws: regs_at_each_idvs(words).len() };
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_DEPTH_TEST);
+            assert_eq!(glGetError(), GL_NO_ERROR);
+            context::gl_context_destroy(ctx);
+            last
+        }
+    }
+
+    /// The case's last frame: (a) it preloads the new colour storage with
+    /// alpha read as 1 when the format has none, the stored alpha when it
+    /// has one; (b) the stencil attachment is still bound to it, the held
+    /// scissored stencil clear, the colour clear and the quad its draws.
+    fn check(colour: GLenum, ds: &[(GLenum, GLenum)], alpha: bool) {
+        let last = run(colour, ds);
+        let case = format!("colour 0x{colour:x}, depth/stencil {ds:x?}");
+        let want = if alpha { SWIZZLE_RGBA } else { SWIZZLE_RGB1 };
+        assert_eq!(last.swizzle, Some(want), "{case}: the colour preload's swizzle");
+        assert_ne!(last.zs_base, 0, "{case}: the stencil attachment stays bound");
+        assert_eq!(last.draws, 3, "{case}: the held stencil clear, the colour clear, the quad");
+        assert_eq!(last.s_clear, 0, "{case}: the frame's stencil clear value");
+    }
+
+    #[test]
+    fn an_rgb565_colour_rebind_beside_stencil8_preloads_alpha_1() {
+        check(GL_RGB565, &[(GL_STENCIL_ATTACHMENT, GL_STENCIL_INDEX8)], false);
+    }
+
+    #[test]
+    fn an_rgb8_colour_rebind_beside_stencil8_preloads_alpha_1() {
+        check(GL_RGB8, &[(GL_STENCIL_ATTACHMENT, GL_STENCIL_INDEX8)], false);
+    }
+
+    #[test]
+    fn an_rgb565_colour_rebind_beside_depth24_stencil8_preloads_alpha_1() {
+        check(GL_RGB565, &[(GL_DEPTH_STENCIL_ATTACHMENT, GL_DEPTH24_STENCIL8)], false);
+    }
+
+    /// The passing neighbour: a format with alpha preloads what is stored.
+    #[test]
+    fn an_rgba4_colour_rebind_beside_stencil8_preloads_the_stored_alpha() {
+        check(GL_RGBA4, &[(GL_STENCIL_ATTACHMENT, GL_STENCIL_INDEX8)], true);
+    }
+}
