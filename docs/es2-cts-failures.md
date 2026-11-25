@@ -570,12 +570,19 @@ do not depend on this subsection.
   `random_int` 35, `light_amount` 16, `fs_log2` 12, `fs_rcp16` 11,
   `constexpr_int` 9, `fs_atan` 4, `struct_loop` 2, by the
   `deqp_cfold2_*`, `deqp_constrnd_*` and `deqp_intval5_*` references).
-- **mediump FS uniform** (Fail 271, NotSupported 1): prefix
-  `deqp_fsunif` — references pending (plan #402).
-- **VS uniform array** (Fail 193): prefix `deqp_vsuniarr` — references
-  pending (plan #402).
-- **FS integer or boolean** (Fail 188, NotSupported 22): prefixes
-  `deqp_fsint` and `deqp_fsint2` — references pending (plan #402).
+- **mediump FS uniform** (Fail 271, NotSupported 1): references
+  `tools/mali/testdata/deqp_fsunif_*` (eight, `ec92aa92`), test
+  `tests/mali_deqp_fsunif.rs`, note `docs/notes/mali-deqp-fsunif.md`.
+- **VS uniform array** (Fail 193): references
+  `tools/mali/testdata/deqp_vsuniarr_*` (eight, `b08baac7`), test
+  `tests/mali_deqp_vsuniarr.rs`, note `docs/notes/mali-deqp-vsuniarr.md`.
+- **FS integer or boolean** (Fail 188, NotSupported 22): references
+  `tools/mali/testdata/deqp_fsint_*` (eight, `653694d2`), test
+  `tests/mali_deqp_fsint.rs`, note `docs/notes/mali-deqp-fsint.md`; and
+  `tools/mali/testdata/deqp_fsint2_*` (five, `c3760aee`, the extra
+  shapes design-fsint asked for), test `tests/mali_deqp_fsint2.rs`
+  (`deqp_fsint2` has no note of its own; `mali-deqp-fsint.md` does not
+  yet list its shapes).
 - **FS mixed precision and fragment varying load** (Fail 168; and the
   "fragment varying load or conversion" row, Fail 50): references
   `tools/mali/testdata/deqp_mixprec3_*` (eight, `465d5933`), test
