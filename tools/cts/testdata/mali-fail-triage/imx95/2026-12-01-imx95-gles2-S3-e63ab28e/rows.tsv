@@ -1,0 +1,2 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+7	T6S3R01	3	done	12	0	0	yes	yes	yakogl-mali-exit: draws=6 refused=1 first_refused=ARITH
