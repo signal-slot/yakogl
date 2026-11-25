@@ -747,6 +747,52 @@ in QEMU, a skip line where QEMU is absent), and
 `python3 -I tools/uboot_env_mp2_selftest.py` (the DK's environment layout
 against `uboot_env.py`).
 
+## mp2_tftp_preflight.sh — can this host serve the DK's TFTP route on UDP 69
+
+`tools/mp2_tftp_preflight.sh` answers that for the `uboot-tftp` route of the
+section above: ST's U-Boot ignores `tftpdstp`, so the server must own UDP port
+69 (`docs/notes/stm32mp257f-dk-uboot-boot.md`), and serving port 69 must work
+without root. It reports `net.ipv4.ip_unprivileged_port_start`, binds UDP 69
+once with an unprivileged `python3 -I` socket (released at once), and — when
+the bind worked — starts `tools/tftp_oneshot.py` on port 69 over a one-file
+directory and fetches that file with a localhost client before stopping the
+server. Last line `mp2_tftp_preflight: ready` (exit 0) or
+`mp2_tftp_preflight: not ready: <why>` (exit 1). It never changes a sysctl or
+the firewall and never calls sudo; the firewall cannot be read without root,
+so it leaves to the operator that the host's UDP 69 and ephemeral data ports
+pass to the board. `tools/mp2_tftp_preflight_selftest.sh` checks both verdicts
+through the overrides `MP2_PREFLIGHT_SYSCTL=<number|unreadable>`,
+`MP2_PREFLIGHT_BIND=ok|fail` and `MP2_PREFLIGHT_SERVE=ok|fail`, without
+binding anything itself. No board.
+
+## mp2_dt_overlap_check.py — memory claimed twice across devicetree files
+
+`python3 -I tools/mp2_dt_overlap_check.py [--range NAME=ADDR:SIZE]...
+FILE.dts|.dtsi|.overlay ...` merges the files in the order given as the
+devicetree compiler merges a board with its overlays (a quoted `#include` that
+resolves next to its file is read first, once; `&label { }` and `&{/path} { }`
+merge into the node they name, a node no file defines getting an empty node; a
+later `reg` replaces an earlier one; one built `zephyr.dts` works as the input
+too), and collects the memory regions they claim: a child of a
+reserved-memory node, a node with `device_type = "memory"`, a child of a memory
+node (the image's own section), any other node whose name or label contains
+`carveout` or `carve-out`/`carve_out`, and each `--range` (hex or decimal
+`ADDR:SIZE`, e.g. the DK's go window `--range go=0xa0000000:0x10000000`).
+`reg` is read by the parent's `#address-cells` / `#size-cells` (dtc's default
+2/1; 1/1 when the parent sets neither and the reg only fits that). An ancestor
+and its descendant are never a pair; a reserved or carveout region lying
+inside System RAM is how reserved memory is declared, so memory is compared
+only with memory, and an extra with reserved, carveout and other extras
+(against the image section or System RAM it would always match: the image is
+the window). It prints `overlap: <a> <b> <first>-<last>` per pair (hex,
+inclusive; names are a node's first label, else its path) and a
+`N region(s), M overlap(s)` count line, and exits 1 on any overlap, 0 on none,
+2 on a usage or parse error. `tools/mp2_dt_overlap_selftest.sh` runs it on
+fixtures it writes at run time: a double claim, adjacent ranges that do not
+overlap, a 2/2-cells chain, the go window clear of / one byte into a reserved
+region, two overlapping extras, a bad `--range`, a missing file. No board,
+python3 standard library only.
+
 ## land.sh — land one branch tip on main
 
 main moves through pull requests: a pull request, the full gate on it

@@ -857,6 +857,85 @@ with `lost=<n>` (rc 4; every other verdict keeps its meaning, and
 `tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt`, the deqp lines of the
 Pi 4 F1 rerun that lost 260 of 1923 cases (self-test and `board_selftest.sh`).
 
+### DK P9 chain
+
+Roadmap P9 (`docs/notes/stm32mp257f-dk-p9.md`): the STM32MP257F-DK's gl_test
+and dEQP-GLES2 sweep, diffed against the i.MX8MP. Each DK run is a one-shot
+that lasts about 20 s (the IWDG resets the board after about 32 s,
+`docs/notes/stm32mp257f-dk-uboot-boot.md` section 9), so the tree runs shard
+by shard; the diff side is host-only. Only `mp2-deqp-sweep.sh` touches a
+board, through the runner.
+
+- `mp2-p9-diff.py` diffs a DK dEQP-GLES2 run against the i.MX8MP baseline:
+  `tools/cts/mp2-p9-diff.py [--baseline results.tsv] [--accepted FILE]
+  [--mustpass FILE] [--report-only] RESULT...` — a RESULT is a DK results.tsv
+  (the per-row form `tools/board.sh` writes, last column the failing names) or
+  a UART log (`deqp: <Status> <case>` lines, read with `deqp-uart-tally.py`'s
+  own parser); several are merged, the last status of a case wins; the
+  defaults are the i.MX8MP files RESULTS.md cites. A failure is any status but
+  Pass, NotSupported, QualityWarning and CompatibilityWarning. Classes
+  `shared`, `new`, `fixed`, `accepted` (an `--accepted` name whose state
+  differs from the baseline) and `missing`, each with a count line and the
+  sorted names; last line `mp2-p9-diff: shared S, new N, fixed F, missing M`;
+  exit 1 when `new` or `missing` is nonzero — unless `--report-only`, which
+  always exits 0 — and 2 on a usage or input error.
+  `mp2_p9_diff_selftest.sh` checks every class on synthetic baselines, tsv
+  rows and logs. No board.
+- `mp2-gltest-diff.py` is the gl_test side: `tools/cts/mp2-gltest-diff.py
+  [--results RESULTS.md] [--set lib.rs] [--expected FILE] [--report-only]
+  RESULT...`, a RESULT a DK gl_test UART log (`gl_test: case N <name>:
+  PASS|FAIL|TIMEOUT|SKIP` verdict lines) or a result list read from one. The
+  baseline is the i.MX8MP gl_test cell of RESULTS.md (the regression set, its
+  skipped case, its flaky cases); `--expected` defaults to
+  `mp2-gltest-expected.txt` (one case number per line, then a `#` reason: the
+  DK's expected differences, currently the Q11 wide-line cases on its
+  WIDELINE_TRIANGLE_EMU core). Classes `new`, `flaky`, `expected`, `stale`
+  (expected but passing), `skipped` and `missing`; last line
+  `mp2-gltest-diff: new N, flaky F, expected E, missing M`; exit 1 when `new`
+  or `missing` is nonzero, unless `--report-only`. `mp2_gltest_diff_selftest.sh`
+  checks every class on synthetic logs. No board.
+- `mp2-deqp-shards.py` splits a case list into shards that fit the 20 s
+  lifetime: `python3 -I tools/cts/mp2-deqp-shards.py <cases> --out DIR
+  [--times times.tsv] [--budget-ms 15000] [--default-ms 100] [--overhead-ms 0]`
+  writes `shard-NNNN.txt` (case names, one per line, in input order) and
+  `manifest.tsv` (a header line, then `index`, `cases`, `est_ms` and `file`
+  per shard). Shards are greedy consecutive slices, so the split is stable:
+  the same inputs give the same bytes; a case that cannot fit the budget alone
+  is an error (exit 1, nothing written). The time table is `name<TAB>ms` rows
+  and can be extracted from an i.MX8MP results file.
+  `mp2_deqp_shards_selftest.sh` checks the fixtures in
+  `testdata/mp2-deqp-shards/` (every case once, every shard inside the budget,
+  the manifest matching the files, two runs equal) and the coverage of the
+  real `gles2-mustpass.txt`. No board.
+- `mp2-deqp-slot.py` reads or writes the case slot of the DK's dEQP image:
+  `show IMAGE` or `write IMAGE --selector N [--table TREE] | --filter
+  '...' | --case-list FILE | --clear [-o OUT]` — the fixed block
+  `driver/samples/zephyr/deqp` carries in `.rodata` (Kconfig `DEQP_CASE_SLOT`),
+  found by its magic and rewritten after the build, since the DK image has no
+  file system and its board layer has no SNVS record; every write is read back
+  and checked. `mp2_deqp_slot_selftest.sh` checks it on a synthetic image. No
+  board.
+- `mp2-deqp-sweep.sh [--dry-run] [--case-list FILE] [--exclude FILE]
+  [--first N] [--last N] [--budget-ms MS] [--times TSV] [--report-only]
+  <zephyr.bin> <outdir>` is the sweep: it expands the case list (default
+  `mp2-deqp-gles2.txt` minus `mp2-deqp-gles2-exclude.txt`, read the way
+  `mp2-deqp-list-check.sh` reads them) to `OUT/cases.txt`, splits it with
+  `mp2-deqp-shards.py`, writes each shard's list into a copy of the image with
+  `mp2-deqp-slot.py` and runs that through `MP2_SWEEP_RUNNER` (default
+  `tools/board-stm32mp2.sh`; `RUN_BOUND=600` or more is the caller's to set
+  for deqp), skips a shard whose log already holds a result line (`--first` /
+  `--last` resume or split a sweep), and ends with `mp2-p9-diff.py` over all
+  the shard logs — its exit 1 (new failures, missing cases) is the sweep's.
+  `mp2_deqp_sweep_selftest.sh` runs the chain against a fake runner, no board.
+- `mp2-deqp-compare.py [--strict] [--imx8mp FILE] [--quiet] DK_RESULT...`
+  diffs the DK's per-case dEQP-GLES2 results against the i.MX8MP's failures
+  (the same input forms; `--imx8mp` defaults to the full-tree results.tsv
+  RESULTS.md cites): three sorted lists — DK-only, i.MX8MP-only and common
+  failures — and the last line `mp2-deqp-compare: dk-only N, imx8mp-only M,
+  common K`; exit 0, with `--strict` exit 1 on any DK-only failure, 2 on a
+  usage or input error. `mp2-deqp-compare-selftest.sh` checks it on synthetic
+  inputs. No board.
+
 ## 2e. The AM62P dEQP-GLES3 tree
 
 `am62p-gles3-tree.txt` is generated (`tools/cts/gen-am62p-gles3-tree.py`; `--check`
