@@ -80,7 +80,7 @@ else bad "auto mode on a whole mp2_gpu log"; fi
 
 # Nothing recognisable: exit 1, "0 checks".
 got=$(printf 'U-Boot 2025.01\nLinux login:\n' | python3 -I "$tool"); rc=$?
-if [ "$rc" = 1 ] && [ "$got" = "0 checks, 0 failed" ]; then ok "unknown log is not a pass"
+if [ "$rc" = 1 ] && [ "$got" = "verdict image FAIL:no-image missing=MP2:A,MP2:A1,MP2:B,Zephyr-boot"$'\n'"1 checks, 1 failed" ]; then ok "unknown log is not a pass"
 else bad "unknown log is not a pass"; fi
 
 # An unknown check name is a usage error.

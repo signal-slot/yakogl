@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# args: --only supply
+NOTICE:  BL2: v2.10-stm32mp2
+NOTICE:  Reset reason: System reset (SYSRST) (0x44). Warm boot.
+U-Boot 2023.10-stm32mp-r3.1
+STM32MP257F-DK/DHCOM
+Linux login:
