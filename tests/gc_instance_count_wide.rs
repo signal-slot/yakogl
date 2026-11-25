@@ -4,14 +4,15 @@
 //! `Cmd::draw_instanced` (src/vivante/cmd.rs:122) puts the low 16 bits of the
 //! count in the header (`draw_instanced_hdr`, src/vivante/regs.rs:33) and the
 //! next 8 in bits 24..31 of the second word (`draw_instanced_count`,
-//! regs.rs:37): a 24-bit field, maximum 0xffffff. The back end calls it at
-//! src/vivante/backend.rs:2527 with the whole count and neither splits nor
-//! refuses a larger one, so 0x1000000 instances are encoded as 0.
+//! regs.rs:37): a 24-bit field, maximum 0xffffff. The back end calls it from
+//! `emit_draw` (src/vivante/backend.rs) through `draw_parts`, which splits a
+//! larger count by instance (none of the program's arrays at a divisor and
+//! no gl_InstanceID read) or refuses it; it never truncates.
 //!
 //! * counts 1, 0xffff, 0x10000 (crossing into the high byte) and 0xffffff
 //!   are one DRAW_INSTANCED with exactly those words;
-//! * 0x1000000 (field maximum + 1) is silently truncated: #[ignore]d until
-//!   fixed (the test states what a correct back end emits).
+//! * 0x1000000 (field maximum + 1) is two commands, 0xffffff and 1
+//!   instances, instead of one carrying the count modulo 2^24 (0).
 //!
 //! The stand-in OSAL executes nothing, so large counts cost no time.
 //!
@@ -339,15 +340,16 @@ fn count_0xffffff_is_the_field_maximum() {
     check(0xff_ffff);
 }
 
-/// 0x1000000 does not fit the 24-bit field: the back end emits the count
-/// modulo 2^24 (an empty draw). A correct back end splits it into draws
-/// that sum to 0x1000000 (or the GL core errors).
+/// 0x1000000 does not fit the 24-bit field. The program reads no
+/// gl_InstanceID and no array is at a divisor, so the draw is split by
+/// instance into commands that sum to 0x1000000. Revert check: without the
+/// split the back end emitted one command of 0 instances.
 #[test]
-#[ignore = "defect: counts above 0xffffff are silently truncated to count mod 2^24 (src/vivante/cmd.rs:127, backend.rs:2527)"]
 fn count_above_the_field_maximum_is_split_not_truncated() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let counts = draw(0x100_0000);
     let total: u64 = counts.iter().map(|&c| c as u64).sum();
-    assert!(counts.iter().all(|&c| c <= 0xff_ffff), "a draw above the field: {counts:?}");
+    assert!(counts.iter().all(|&c| c <= 0xff_ffff && c != 0), "a draw above the field or empty: {counts:?}");
     assert_eq!(total, 0x100_0000, "instances drawn, per command {counts:?}");
+    assert_eq!(counts, [0xff_ffff, 1], "split at the field maximum");
 }

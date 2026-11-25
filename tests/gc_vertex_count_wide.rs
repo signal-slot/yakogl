@@ -8,11 +8,15 @@
 //! * glDrawArrays and glDrawArraysInstanced (2 instances) of GL_POINTS with
 //!   1, 0xffff, 0x10000 and 0xffffff vertices are each ONE DRAW_INSTANCED
 //!   with exactly those words;
-//! * 0x1000000 vertices do not fit: the back end emits count mod 2^24 (an
-//!   empty draw). #[ignore]d until fixed. A correct back end emits either
-//!   several commands whose vertex counts add up to the total with `first`
-//!   advancing, or a counted refusal with no draw (a GL error and no
-//!   command); the test accepts both and rejects any truncated command.
+//! * 0x1000000 vertices do not fit. `draw_parts` (src/vivante/backend.rs)
+//!   splits glDrawArrays of points into 0xffffff + 1 vertices with `first`
+//!   advancing; the instanced draw cannot be split by vertex and is refused
+//!   (counted in `gc_refused_draws`, a GL error, no command). Never a
+//!   command carrying the count modulo 2^24 (an empty draw).
+//! * glDrawElements of 0x1000000 indices is refused the same way: the third
+//!   word of an indexed DRAW_INSTANCED is the index bias, not the start, so
+//!   a part could not start further into the index list. 0xffffff indices
+//!   are one command.
 //!
 //! No vertex buffer is built: attribute 0 stays DISABLED (the current value
 //! feeds the shader), so 16M vertices need no memory. The stand-in OSAL
@@ -29,7 +33,7 @@ use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::sync::Mutex;
 use yakogl::gl::consts::*;
-use yakogl::gl::draw::{glDrawArrays, glDrawArraysInstanced};
+use yakogl::gl::draw::{glDrawArrays, glDrawArraysInstanced, glDrawElements};
 use yakogl::gl::program::{
     glAttachShader, glBindAttribLocation, glCreateProgram, glGetProgramiv, glLinkProgram, glUseProgram,
 };
@@ -37,7 +41,7 @@ use yakogl::gl::shader::{glCompileShader, glCreateShader, glGetShaderiv, glShade
 use yakogl::gl::state::{glFinish, glGetError, glViewport};
 use yakogl::gl::types::*;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
-use yakogl::vivante::backend::{gc_init, gc_shutdown, yakogl_backend_vivante};
+use yakogl::vivante::backend::{gc_init, gc_refused_draws, gc_shutdown, yakogl_backend_vivante};
 use yakogl::vivante::kick::{GcKick, GC_KICK_MAGIC};
 use yakogl::vivante::regs::*;
 
@@ -290,10 +294,14 @@ fn draws(kicks: &[Vec<u32>]) -> Vec<Draw> {
     out
 }
 
-/// Draw `n` points (`inst` == 0: glDrawArrays, else glDrawArraysInstanced);
-/// the DRAW_INSTANCED commands emitted and the GL error of the draw.
-fn draw(n: GLsizei, inst: GLsizei) -> (Vec<Draw>, GLenum) {
-    let mut out = (Vec::new(), GL_NO_ERROR);
+/// What one draw call did: the DRAW_INSTANCED commands emitted, its GL
+/// error and how many draws the back end refused (`gc_refused_draws`).
+type Outcome = (Vec<Draw>, GLenum, u32);
+
+/// After the setup, call `issue(0)` .. `issue(calls - 1)` (one draw call
+/// each) in one context; the outcome of each.
+fn run(calls: usize, issue: impl Fn(usize)) -> Vec<Outcome> {
+    let mut out = Vec::new();
     with_backend(|| {
         // SAFETY: plain GL calls; attribute 0 stays disabled.
         unsafe {
@@ -301,25 +309,49 @@ fn draw(n: GLsizei, inst: GLsizei) -> (Vec<Draw>, GLenum) {
             glViewport(0, 0, 64, 64);
         }
         no_error("the setup");
-        let _ = take_kicks();
-        // SAFETY: plain GL calls.
-        let e = unsafe {
-            if inst == 0 {
-                glDrawArrays(GL_POINTS, 0, n);
-            } else {
-                glDrawArraysInstanced(GL_POINTS, 0, n, inst);
-            }
-            glFinish();
-            glGetError()
-        };
-        out = (draws(&take_kicks()), e);
+        for k in 0..calls {
+            let _ = take_kicks();
+            let base = gc_refused_draws();
+            issue(k);
+            // SAFETY: plain GL calls.
+            let e = unsafe {
+                glFinish();
+                glGetError()
+            };
+            out.push((draws(&take_kicks()), e, gc_refused_draws().wrapping_sub(base)));
+        }
     });
     out
 }
 
+/// Draw `n` points (`inst` == 0: glDrawArrays, else glDrawArraysInstanced).
+fn draw(n: GLsizei, inst: GLsizei) -> Outcome {
+    // SAFETY: plain GL calls.
+    let mut out = run(1, |_| unsafe {
+        if inst == 0 {
+            glDrawArrays(GL_POINTS, 0, n);
+        } else {
+            glDrawArraysInstanced(GL_POINTS, 0, n, inst);
+        }
+    });
+    out.remove(0)
+}
+
+/// glDrawElements of GL_UNSIGNED_SHORT points, every index 0, from a client
+/// array, once for each count in `counts` in one context (the GL core's
+/// index staging outlives a context, so it is not handed a fresh stand-in).
+fn draw_elements(counts: &[usize]) -> Vec<Outcome> {
+    let indices = vec![0u16; counts.iter().copied().max().unwrap_or(0)];
+    // SAFETY: `indices` holds at least `counts[k]` u16s and outlives the calls.
+    run(counts.len(), |k| unsafe {
+        glDrawElements(GL_POINTS, counts[k] as GLsizei, GL_UNSIGNED_SHORT, indices.as_ptr() as *const c_void)
+    })
+}
+
 fn check(n: GLsizei, inst: GLsizei) {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let (d, e) = draw(n, inst);
+    let (d, e, r) = draw(n, inst);
+    assert_eq!(r, 0, "{n:#x} vertices x {inst}: refused");
     assert_eq!(e, GL_NO_ERROR, "{n:#x} vertices x {inst}: GL error 0x{e:x}");
     assert_eq!(d.len(), 1, "{n:#x} vertices x {inst}: ONE DRAW_INSTANCED, got {d:?}");
     assert_eq!(d[0].vertices, n as u32, "{n:#x} vertices x {inst}: {d:?}");
@@ -351,29 +383,45 @@ fn count_0xffffff_is_the_field_maximum() {
     check(0xff_ffff, 2);
 }
 
-/// 0x1000000 vertices do not fit the 24-bit field. Correct: commands whose
-/// vertex counts sum to the total with `first` advancing, or a refusal (a GL
-/// error, no draw). Never a command carrying the truncated count.
+/// 0x1000000 vertices do not fit the 24-bit field. glDrawArrays of points
+/// is split on the field maximum with `first` advancing; the instanced draw
+/// cannot be split by vertex and is refused (a GL error, counted, no
+/// command). Never a command carrying the truncated count. Revert check:
+/// without `draw_parts` both emitted one command of 0 vertices and no error.
 #[test]
-#[ignore = "defect: vertex counts above 0xffffff are silently truncated to count mod 2^24 (src/vivante/regs.rs:37, cmd.rs:122)"]
 fn count_above_the_field_maximum_is_split_or_refused() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    for inst in [0, 2] {
-        let (d, e) = draw(0x100_0000, inst);
-        if d.is_empty() {
-            assert_ne!(e, GL_NO_ERROR, "inst {inst}: no draw and no error: silently dropped");
-            continue;
-        }
-        assert!(
-            d.iter().all(|c| c.vertices <= 0xff_ffff && c.vertices != 0),
-            "inst {inst}: truncated command in {d:?}"
-        );
-        let mut next = 0u64;
-        for c in &d {
-            assert_eq!(c.first as u64, next, "inst {inst}: `first` must advance, {d:?}");
-            assert_eq!(c.instances, inst.max(1) as u32, "inst {inst}: {d:?}");
-            next += c.vertices as u64;
-        }
-        assert_eq!(next, 0x100_0000, "inst {inst}: vertices drawn, per command {d:?}");
-    }
+    let (d, e, r) = draw(0x100_0000, 0);
+    assert_eq!((e, r), (GL_NO_ERROR, 0), "glDrawArrays: GL error 0x{e:x}, {r} refused");
+    assert_eq!(
+        d,
+        [Draw { instances: 1, vertices: 0xff_ffff, first: 0 }, Draw { instances: 1, vertices: 1, first: 0xff_ffff }],
+        "glDrawArrays: split at the field maximum"
+    );
+
+    let (d, e, r) = draw(0x100_0000, 2);
+    assert!(d.is_empty(), "instanced: no command, got {d:?}");
+    assert_ne!(e, GL_NO_ERROR, "instanced: no draw and no error: silently dropped");
+    assert_eq!(r, 1, "instanced: one counted refusal");
+}
+
+/// An indexed draw past the vertex field is refused end to end: a part
+/// would need its start in the index stream's base, which is written once
+/// per draw (the third word is the index bias). 0xffffff indices (the same
+/// staging, two bytes fewer) are one command, so the refusal is the
+/// count's, not the memory's. Revert check: with `d.first + v` in each
+/// part, the parts re-read the indices from 0 with a wrong bias.
+#[test]
+fn indexed_count_above_the_field_maximum_is_refused() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let mut out = draw_elements(&[0xff_ffff, 0x100_0000]).into_iter();
+    let (d, e, r) = out.next().unwrap();
+    assert_eq!((e, r), (GL_NO_ERROR, 0), "0xffffff indices: GL error 0x{e:x}, {r} refused");
+    assert_eq!(d.len(), 1, "0xffffff indices: ONE DRAW_INSTANCED, got {d:?}");
+    assert_eq!((d[0].vertices, d[0].instances), (0xff_ffff, 1), "{d:?}");
+
+    let (d, e, r) = out.next().unwrap();
+    assert!(d.is_empty(), "0x1000000 indices: no command, got {d:?}");
+    assert_ne!(e, GL_NO_ERROR, "0x1000000 indices: no draw and no error: silently dropped");
+    assert_eq!(r, 1, "0x1000000 indices: one counted refusal");
 }
