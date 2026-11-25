@@ -280,3 +280,12 @@ gm2_nonfin_2  gm2_nonfin_2.vert gm2_nonfin_2.frag triangles vs.position=equal vs
 gm2_nonfin_3  gm2_nonfin_3.vert gm2_nonfin_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:36:30aa836b3b78
 gm2_nonfin_4  gm2_nonfin_4.vert gm2_nonfin_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:9:81841d85a38d
 gm2_nonfin_5  gm2_nonfin_5.vert gm2_nonfin_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:38:ba754e5020d5
+# #367 lower-nonfinite-const step 2 (texcoord-425b): the texture scenes' fs 425b, its coordinate in lanes 1 and 2 of the
+# load whose lane 0 is Color's one component (docs/notes/mali-texcoord-varyings.md), drawn with --uniform-values. Our
+# compiler is byte-equal to gm2_tc425_1 and _4 (tests/mali_texcoord_425b.rs); _2 (highp) and _3 (the coordinate across
+# two slots) stay refused. pan_shc's SPIR-V path has no lower_precision and no link-time varying packing (`mediump`);
+# its vertex programs sum the matrix products from the last column and keep the dead lanes (`unanalysed`).
+gm2_tc425_1  gm2_tc425_1.vert gm2_tc425_1.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:16:b5d7d3546284
+gm2_tc425_2  gm2_tc425_2.vert gm2_tc425_2.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:18:b088ce173981
+gm2_tc425_3  gm2_tc425_3.vert gm2_tc425_3.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:23:97cc5c7f495d fs.fragment=differs:mediump:14:0b3fdebeca1a
+gm2_tc425_4  gm2_tc425_4.vert gm2_tc425_4.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:16:b5d7d3546284
