@@ -1,0 +1,14 @@
+S03a	dEQP-GLES3.functional.shaders.builtin_functions.precision.abs.highp_fragment.vec2	tile-memory	80: yakogl/v3d: draw refused: a target larger than the tile memory is sized for (2048x2048), or empty
+T05ca	dEQP-GLES3.functional.texture.format.compressed.etc2_eac_rgba8_cube_pot	texel-format	82: yakogl/v3d: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here)
+T05cb	dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_npot	texel-format	82: yakogl/v3d: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here)
+T05cc	dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_cube_pot	texel-format	82: yakogl/v3d: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here)
+T14a	dEQP-GLES3.functional.texture.units.8_units.only_cube.2	gpu-memory	115: yakogl/v3d: draw refused: no empty job holds the draw (its lists, or its client data with no memory of its own)
+T14b	DONE
+T17a	dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot	texel-format	80: yakogl/v3d: draw refused: a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here)
+T17b	DONE
+TF1a	dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3	job-builder	97: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+TF1b	dEQP-GLES3.functional.transform_feedback.array.separate.lines.highp_mat3	job-builder	122: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+TF1c	DONE
+TF2a	dEQP-GLES3.functional.transform_feedback.basic_types.interleaved.lines.lowp_mat4	job-builder	182: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+TF2b	dEQP-GLES3.functional.transform_feedback.basic_types.separate.lines.highp_mat4	job-builder	137: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+TF2c	dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.lines.1	job-builder	80: yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
