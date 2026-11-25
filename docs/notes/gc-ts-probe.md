@@ -762,7 +762,10 @@ stopping it for a session) is what the next attempt needs.
   jump made. A third check from a third worker found the same: `tools/board.sh
   x2 status` exit 1 (board lease none, uptime 204989 s, runlevel default,
   `kexec_crash_loaded` 0, crash window 268435456, containers 1), and `podman ps`
-  lists `slint-launcher` (up 2 days). The stop's cause is the container's
+  lists `slint-launcher` (up 2 days). A fourth check from a fourth worker:
+  `tools/board.sh x2 status` exit 1 (board lease none, uptime 205961 s,
+  runlevel default, `kexec_loaded` 0, `kexec_crash_loaded` 0, crash window
+  268435456, containers 1), `slint-launcher` still up. The stop's cause is the container's
   autostart, which only its owner can turn off; stopping it from a task would
   not leave the board as found.
 
