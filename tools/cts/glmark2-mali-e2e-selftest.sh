@@ -36,6 +36,9 @@
 # #332's gate items:
 #   bash tools/cts/glmark2-mali-e2e-selftest.sh
 set -uo pipefail
+# A known locale: the scripts run below inherit it, so a caller's LC_ALL that
+# is not installed makes no "setlocale" warning in the output checked.
+export LC_ALL=C LANG=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 RUNFIX=$HERE/testdata/mali-glmark2-run
@@ -43,7 +46,7 @@ FIX=$HERE/testdata/glmark2-mali-e2e
 BUILD_SH=$HERE/mali-glmark2-build.sh
 RUN=$HERE/mali-glmark2-run.sh
 TALLY=$HERE/glmark2-mali-tally.py
-EXPECT=31
+EXPECT=32
 base=${TMPDIR:-$REPO/build}
 case $base in /tmp | /tmp/* | /var/tmp | /var/tmp/*) base=$REPO/build ;; esac
 mkdir -p "$base"
@@ -227,6 +230,9 @@ tally --causes "$S" > "$tmp/causes.txt" 2> "$tmp/causes.err"
 check "--causes: draft issues for the GPU faults and the hang, none marked as plan #309's" \
   bash -c "[ ! -s '$tmp/causes.err' ] && grep -qi 'hang' '$tmp/causes.txt' && grep -qi 'gpu-fault\|GPU fault' '$tmp/causes.txt' &&
     ! grep -q '#309' '$tmp/causes.txt'"
+
+check "a child bash prints no setlocale warning (the locale is pinned, whatever the caller's LC_ALL)" \
+  bash -c '! bash -c : 2>&1 | grep -q setlocale'
 
 total=$((passed + failed))
 echo "glmark2-mali-e2e-selftest: $total checks: $passed ok, $failed failed"
