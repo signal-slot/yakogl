@@ -44,6 +44,8 @@ pub struct El2Entry {
     pub sctlr: u64,
     pub vbar_found: u64,
     pub vbar_now: u64,
+    /// `CNTFRQ_EL0` as found, in Hz (U-Boot's value may differ from Linux's).
+    pub cntfrq: u64,
 }
 
 /// What an exception taken to EL2 left in the EL2 registers.
@@ -74,6 +76,8 @@ pub fn banner_a_el2<M: Mmio>(tx: &mut Tx<'_, M>, e: &El2Entry) {
     tx.hex(e.vbar_found, 16);
     tx.str(b" -> ");
     tx.hex(e.vbar_now, 16);
+    tx.str(b" CNTFRQ_EL0 ");
+    tx.dec(e.cntfrq as i64);
     tx.str(b"\r\n");
 }
 
@@ -143,12 +147,13 @@ mod tests {
             sctlr: 0x30c5_0838,
             vbar_found: 0xffff_8000_8001_0800,
             vbar_now: 0x1000_8000,
+            cntfrq: 24_000_000,
         };
         let (s, u) = sent(|tx| banner_a_el2(tx, &e));
         assert_eq!(
             s,
             "T6:A EL2 HCR_EL2 0x0000000488000038 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c50838 \
-             VBAR_EL2 0xffff800080010800 -> 0x0000000010008000\r\n"
+             VBAR_EL2 0xffff800080010800 -> 0x0000000010008000 CNTFRQ_EL0 24000000\r\n"
         );
         // The register sequence: LCR once, then per byte LSR until THRE and
         // one THR store; nothing else (the model refuses any other access).
@@ -166,7 +171,8 @@ mod tests {
 
     #[test]
     fn banner_a_with_the_exit_off_says_kept() {
-        let e = El2Entry { hcr_found: HCR_LINUX_VHE_HOST, hcr_now: None, sctlr: 0, vbar_found: 0, vbar_now: 0 };
+        let e =
+            El2Entry { hcr_found: HCR_LINUX_VHE_HOST, hcr_now: None, sctlr: 0, vbar_found: 0, vbar_now: 0, cntfrq: 0 };
         let (s, _) = sent(|tx| banner_a_el2(tx, &e));
         assert!(s.starts_with("T6:A EL2 HCR_EL2 0x0000000488000038 kept (VHE exit off) SCTLR_EL2 "), "{s}");
     }
@@ -198,12 +204,13 @@ mod tests {
             sctlr: 0x30c5_1835,
             vbar_found: 0x0000_0000_0020_0800,
             vbar_now: 0x1000_8000,
+            cntfrq: 1_000_000_000,
         };
         let (s, _) = sent(|tx| banner_a_el2(tx, &e));
         assert_eq!(
             s,
             "T6:A EL2 HCR_EL2 0x0000000080000020 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c51835 \
-             VBAR_EL2 0x0000000000200800 -> 0x0000000010008000\r\n"
+             VBAR_EL2 0x0000000000200800 -> 0x0000000010008000 CNTFRQ_EL0 1000000000\r\n"
         );
         // With the exit configured off the found value is printed as is.
         let k = El2Entry { hcr_now: None, ..e };
