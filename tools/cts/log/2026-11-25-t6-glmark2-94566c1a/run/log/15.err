@@ -1,0 +1,4 @@
+yakogl-mali: loaded build=94566c1a lib=<home>/yakogl-mali-glmark2/94566c1a-20261125-144007/lib/libGLESv2.so.2
+glmark2-picture: [pulsar] light=false:quads=5:texture=false: 800x600; probes c 700170ff, tl 5a0313ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 afa5, crc16q 9464; mean 48 32 45; black no
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=216740 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

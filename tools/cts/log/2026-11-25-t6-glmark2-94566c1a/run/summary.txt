@@ -1,0 +1,1 @@
+mali-glmark2: 16/33 scenes ok, failed 17 (refused-draw 16, crash 1), commit 94566c1a

@@ -1,0 +1,4 @@
+yakogl-mali: loaded build=94566c1a lib=<home>/yakogl-mali-glmark2/94566c1a-20261125-144007/lib/libGLESv2.so.2
+glmark2-picture: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: 800x600; probes c ffffffff, tl 919191ff, tr b6b6b6ff, bl fdfdfdff, br ffffffff; crc16 582c, crc16q ba20; mean 204 209 190; black no
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=98616 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

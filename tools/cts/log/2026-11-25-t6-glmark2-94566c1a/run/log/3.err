@@ -1,0 +1,4 @@
+yakogl-mali: loaded build=94566c1a lib=<home>/yakogl-mali-glmark2/94566c1a-20261125-144007/lib/libGLESv2.so.2
+Error: Failed to link program created from files None and None:  link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=0 refused=1 first_refused=link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) gpu_faults=0 job_timeouts=0
