@@ -1,0 +1,32 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+# Pi 4 dEQP-GLES3 rows 93-118 (T14aa T14aaa T17aa T17aaa TF1aa TF1aaa TF1ba TF1baa TF2aa TF2aaa TF2ba TF2ca) at b1b5b845
+
+commit: b1b5b8456ec69247c64d1bd07e42461266dc5136
+
+Session `2026-11-pi4-gles3-b1b5b845-aborts2`: rows 93-118 of `tools/cts/pi4-gles3-tree.txt` (12 images: T14aa T14aaa T17aa T17aaa TF1aa TF1aaa TF1ba TF1baa TF2aa TF2aaa TF2ba TF2ca).
+Per-image files, relative to this directory: `<LABEL>.console.txt`, `<LABEL>.tally.txt`. Counts are the mustpass view of the tally's TOTAL line; '-' is unknown.
+
+| row | image | Pass | Fail | NotSupported | other | run | GPU recoveries | hangs | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 93 | T14aa | 0 | 0 | 0 | 1 | 1.0 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 94 | T14aaa | 0 | 0 | 0 | 1 | 0.5 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 100 | T17aa | 0 | 0 | 0 | 1 | 0.5 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 101 | T17aaa | 0 | 0 | 0 | 1 | 0.5 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 105 | TF1aa | 1 | 0 | 0 | 1 | 0.6 s | 0 | none | STOPPED after 2 cases (dEQP ended the session early); cut after abort trigger dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4 (2 begun, 178 moved to TF1aaa) |
+| 106 | TF1aaa | 0 | 0 | 0 | 1 | 0.5 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 108 | TF1ba | 1 | 0 | 0 | 1 | 0.6 s | 0 | none | STOPPED after 2 cases (dEQP ended the session early); cut after abort trigger dEQP-GLES3.functional.transform_feedback.array.separate.lines.highp_mat3x4 (2 begun, 178 moved to TF1baa) |
+| 109 | TF1baa | 0 | 0 | 0 | 1 | 0.5 s | 0 | none | STOPPED after 1 cases (dEQP ended the session early) |
+| 113 | TF2aa | 20 | 0 | 0 | 1 | 1.5 s | 0 | none | STOPPED after 21 cases (dEQP ended the session early); cut after abort trigger dEQP-GLES3.functional.transform_feedback.basic_types.interleaved.lines.mediump_mat4 (21 begun, 135 moved to TF2aaa) |
+| 114 | TF2aaa | 20 | 0 | 0 | 1 | 1.4 s | 0 | none | STOPPED after 21 cases (dEQP ended the session early) |
+| 116 | TF2ba | 20 | 0 | 0 | 1 | 1.6 s | 0 | none | STOPPED after 21 cases (dEQP ended the session early) |
+| 118 | TF2ca | 3 | 0 | 2 | 1 | 0.6 s | 0 | none | STOPPED after 6 cases (dEQP ended the session early) |
+
+Cut images (`docs/es3/board-recipe-pi4.md` section 6): the label keeps its cases up to the abort trigger; the cases dEQP never began after it moved to later labels and are counted there, not lost.
+- TF1aa: cut after abort trigger dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat3x4 (2 begun, 178 moved to TF1aaa); tally `TF1aaa.tally.txt`.
+- TF1ba: cut after abort trigger dEQP-GLES3.functional.transform_feedback.array.separate.lines.highp_mat3x4 (2 begun, 178 moved to TF1baa); tally `TF1baa.tally.txt`.
+- TF2aa: cut after abort trigger dEQP-GLES3.functional.transform_feedback.basic_types.interleaved.lines.mediump_mat4 (21 begun, 135 moved to TF2aaa); tally `TF2aaa.tally.txt`.
+
+Run 2026-11-25 on the Raspberry Pi 4 (V3D 4.2, tryboot), item pi4-aborts2 of plan #320 (issue #2, formerly #1261): the never-begun rest of the seven images the aborts session (../2026-11-pi4-gles3-b1b5b845-aborts/) left aborted. Each of T14a, T17a, TF1a, TF1b, TF2a, TF2b and TF2c was cut after its abort trigger (docs/es3/board-recipe-pi4.md section 6: the label keeps its begun cases up to and including the trigger; T14a, T17a and TF2c are now one-case images), and the rest moved to T14aa, T17aa, TF1aa, TF1ba, TF2aa, TF2ba and TF2ca. All seven stopped again on a refused draw, so the cut was repeated once, as the item allows: T14aa, T17aa, TF1aa, TF1ba and TF2aa were cut after their new triggers and T14aaa, T17aaa, TF1aaa, TF1baa and TF2aaa ran; they stopped again too. TF2ba and TF2ca were also cut once more at first, but their remainder images could not be run (the worker's dependency cache, stage 1 and images were lost in a worker restart), so the tree keeps TF2ba and TF2ca uncut, as they ran here. The tree went from 114 to 126 images.
+Remaining triggers (the case dEQP aborted on, each the last case begun in its console): T14aaa texture.units.8_units.only_cube.4 (glTexImage2D: out of GPU memory for the cube map), T17aaa texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_pot (ETC2 not sampled), TF1aaa transform_feedback.array.interleaved.lines.highp_mat4, TF1baa transform_feedback.array.separate.lines.highp_mat4, TF2aaa transform_feedback.basic_types.interleaved.points.highp_mat4, TF2ba transform_feedback.basic_types.separate.lines.lowp_mat4, TF2ca transform_feedback.random_full_array_capture.interleaved.lines.6 (the last five: the job builder refused the draw). They are V3D back-end limits, plan #184 (src/v3d); cutting further only moves one more case per cycle.
+Method. The 14 images of the two cuts (the 12 here plus TF2baa and TF2caa, not run) were built with DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh <cut pi4-gles3-tree.txt> <dir> <labels> from a worktree of b1b5b845 and the gles3 stage 1 of recipe section 2 built from it (each rc=0 build=b1b5b845, RAM 161,844-161,856 KB, 61.74 %); tools/cts/pi4-gles3-preflight.sh --commit b1b5b845 passed for the first seven. The leased serial console holds the Pi 4's one-client UART bridge, so tools/board.sh pi4's steps were done by hand in its order, one image (one GL client) at a time, T14aa alone first: prechecks over ssh (no staged image, no config-linux.txt, twice the image free on /boot/firmware), the image installed as /boot/firmware/yakogl-<LABEL>.bin with pi4_config's tryboot.txt lines, both read back, sudo reboot "0 tryboot", the console read up to the end line, Linux back (a new boot id), the image and tryboot.txt removed (the board had no tryboot.txt before the session) and read back (cycles.txt). The TF2aaa cycle was interrupted by the worker restart; its console was lost, the staged image (same sha256) was booted again, and the console here is from that second boot. Each console file holds the bytes from the firmware's first line to the image's end line, CRs and NULs dropped; its byte count was checked against the serial range it came from. 0 GPU recoveries, 0 job timeouts, 0 hung jobs, 0 MMU faults, 0 resets before the end (tools/cts/pi4-console-scan.py; its 'faults 1' per image is the refused case's ResourceError); Linux was back 296-311 s after each reboot.
