@@ -512,3 +512,109 @@ result, case by case.
   and M.1) has 5,706 Fail, 5,357 of them with a compiler refusal. The tree
   is rerun from one origin/main commit as the refusals move, and replaces
   the block, M.1 and M.2.
+
+### M.4 Plan #402's references and study notes, by refusal
+
+Plan #402 (issue #20, ROADMAP stage 5) lowers the block's refusal rows
+shape by shape. Each refusal it takes gets a reference prefix under
+`tools/mali/testdata/`, a test `tests/mali_deqp_<prefix>.rs` that
+byte-compares every reference against Mesa 26.2.1's drm-shim (a refused
+one pinned in `REFUSED`, its byte-compare `#[ignore]`d until a lowering
+takes the shape, which moves it to `MATCHED` in the same commit), and
+a study note in `docs/notes/` listing the cases, the shapes, what Mesa
+makes of each value, and what the walk lacks. This subsection names,
+per refusal, where those live on the tip and the shape counts of the
+note's table.
+
+**Every shape count below is HOST-ONLY**: a compile and link outcome
+measured on the host against the library, at the commit named in the
+line. None of it was measured on the NanoPC-T6. The board counts
+quoted in each entry are the block's, unchanged, named only to pair a
+row with its host measure. The board figures of the block, M.1 and M.2
+do not depend on this subsection.
+
+- **VS uniform type** (Fail 371, NotSupported 92): references
+  `tools/mali/testdata/deqp_vsunif_*` (eight, `cbb55860`), test
+  `tests/mali_deqp_vsunif.rs`, note `docs/notes/mali-deqp-vsunif.md`.
+  HOST-ONLY at `e65567ea`: of the 463 board cases with the text, 375
+  refuse with it first, 53 stop at another first refusal, 35 do not
+  refuse at all. The note's shapes (375 cases): new `random_dead_int`
+  111, `vec_subscript` 27, `struct_local` 26, `tmp_array` 24,
+  `varying_array` 16, `struct_cmp` 2, `struct_dynidx` 2, `struct_int`
+  2; covered 165 (`uapi_struct_int` 79, `loop_bound_product` 44,
+  `matrix_subscript` 15, `uapi_int` 15, `loop_select` 6,
+  `loop_vector_counter` 6, by existing `deqp_unif2_*`, `deqp_vs16ref_*`
+  and `deqp_loops*` references).
+- **VS loop** (Fail 176, NotSupported 20): references
+  `tools/mali/testdata/deqp_vsloop_*` (eight, `2eb983fb`, their sources
+  verbatim from the measure at `243d5f8a`), test
+  `tests/mali_deqp_vsloop.rs`, note `docs/notes/mali-deqp-vsloop.md`.
+  HOST-ONLY with the compiler at `e65567ea` (the note measures at its
+  own first reference commit, `63c6418d`): all 196 board cases began;
+  188 refused — 179 with the loop text, 8 with the VS uniform-type text
+  (the `deqp_vsunif` set), 1 with the non-finite-constant text (the
+  `deqp_vsconst` set); 8 compiled. The new references cover 54 Fail,
+  the earlier `deqp_loops*` references 139, and 3 cases have no
+  reference yet. The eight constant nested `for`/`while` cases compile
+  on the host since `4aadf854` and are expected to leave the row at the
+  next board run.
+- **VS non-finite constant** (Fail 144, NotSupported 73; the entry
+  also holds the 33 fragment-shader cases): references
+  `tools/mali/testdata/deqp_vsconst_*` (eight, `4ecdda2b`), test
+  `tests/mali_deqp_vsconst.rs`, note `docs/notes/mali-deqp-vsconst.md`.
+  HOST-ONLY at `e65567ea`: the 259 board cases (226 vertex, 33
+  fragment); 218 refuse with this text first (188 vertex, 30 fragment),
+  20 stop at #367's arithmetic or fused-multiply-add text, 2 at other
+  texts, 19 compile. The note's shapes (218 cases): new `dynloop` 33,
+  `mixloop` 25, `fsdiv_highp` 3; covered 157 (`staticloop` 68,
+  `random_int` 35, `light_amount` 16, `fs_log2` 12, `fs_rcp16` 11,
+  `constexpr_int` 9, `fs_atan` 4, `struct_loop` 2, by the
+  `deqp_cfold2_*`, `deqp_constrnd_*` and `deqp_intval5_*` references).
+- **mediump FS uniform** (Fail 271, NotSupported 1): prefix
+  `deqp_fsunif` — references pending (plan #402).
+- **VS uniform array** (Fail 193): prefix `deqp_vsuniarr` — references
+  pending (plan #402).
+- **FS integer or boolean** (Fail 188, NotSupported 22): prefixes
+  `deqp_fsint` and `deqp_fsint2` — references pending (plan #402).
+- **FS mixed precision and fragment varying load** (Fail 168; and the
+  "fragment varying load or conversion" row, Fail 50): references
+  `tools/mali/testdata/deqp_mixprec3_*` (eight, `465d5933`), test
+  `tests/mali_deqp_mixprec3.rs`, note `docs/notes/mali-deqp-mixprec3.md`.
+  HOST-ONLY at `e65567ea`, through `tools/mali/route.sh measure` (that
+  host had no dEQP build, so the 97 `shaders.random` and 11
+  `shaders.matrix` cases of the mixed-precision row and the 16 random
+  cases of the varying-load row were not re-measured): the 72 rebuilt
+  `shaders.operator` cases give the same first refusal as on the board,
+  case for case; the verbatim `deqp_mixcol_*` sources were run through
+  the same route, and two of them (`f2i_seq`, `f2i_dead`) and the
+  `mixprec_fs_mixed_other` shape compile at the tip.
+  The new references cover 40 board Fail (mixed precision 13:
+  `hp_vec3_fn` 5, `hp_dot` 3, `hp_bvec4` 5; varying load 27: `hp2_sum`
+  14, `hp_vec3_sum` 3, `mp_vec3_scale` 3, `lp_vec3_scale` 3,
+  `vary_array_static` 4); existing `deqp_mixcol_*` and `deqp_gaps_*`
+  references cover 54 (`hp_scale` 21, `hp_bool` 12, `hp_seq`/`f2i_seq`
+  5, `hp_param` 4, `int_uniform_struct` 4, `ck_scale_highp` 3,
+  `int_uniform` 1, `lz_rnd_other` 2, `return` 2).
+- **IrIndex, with LaneCycle and Encode** (IrIndex Fail 206; LaneCycle
+  Fail 9; Encode Fail 6): references `tools/mali/testdata/deqp_irindex_*`
+  (nine, plan #387's `irindex-ref`, `c08406ad`), test
+  `tests/mali_deqp_irindex.rs`, note `docs/notes/mali-deqp-irindex.md`.
+  HOST-ONLY at `3497799a` (the note measures the refused cases of the
+  `37305608` slices, not this tree's 206): 187 first-refusal cases,
+  nine shapes — `pair_hi_unread` 64, `pair_lo_unread` 60, `load_mat3`
+  18, `b2f16_pair` 15, `mat4_pair_unread` 10, `load_vec3_cmp` 6,
+  `val16_abs_fold` 6 (the one true regression, `0fd576ea`),
+  `sqrt_op_value` 5, `mat3_uniform_conv` 3 — each with its site and
+  root cause at `file:line`. At the tip the `sqrt_op_value` reference
+  is past the defect and refused as a mixed shader (`c3bb87fa`). Plan
+  #402's `fix-irindex` item takes all three defects from its
+  read-only `triage-irindex`, whose findings are a plan report, not a
+  file in the tree. The LaneCycle and Encode rows already have plan
+  #387's references `tools/mali/testdata/deqp_defects_*` (`e993036b`),
+  test `tests/mali_deqp_defects.rs`, note
+  `docs/notes/mali-deqp-defects.md` (HOST-ONLY at `f9b376511`: 6
+  `Defect(Encode)` vertex cases and the 2 lane-cycle SIGSEGVs, since
+  refused by name as `Defect(LaneCycle)` by `aca18ce0`).
+
+These host measures predate this tip (`e65567ea` and earlier); plan
+#402 keeps `remeasure-402` to re-measure the taken rows there.
