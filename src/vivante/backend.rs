@@ -2455,6 +2455,40 @@ fn program_key(k: &mut dedup::Key, d: &GcDraw) -> bool {
     true
 }
 
+/// How `emit_draw` fits `d` into DRAW_INSTANCED's 24-bit instance and
+/// vertex counts: (instances per part, vertices per part, vertices one part
+/// advances `first` by), or `None` when the draw cannot be split without
+/// changing what it draws (a counted refusal, never a truncated count).
+/// An instance split restarts gl_InstanceID and the per-instance fetch at 0
+/// in every part, so it needs neither; a vertex split keeps each part on a
+/// primitive boundary (a strip repeats the vertices it shares, an even step
+/// keeps a triangle strip's winding; a fan or a loop cannot be cut). An
+/// indexed draw's third word is the index bias, not the start (the start is
+/// the index stream's base, written once), so it is never split by vertex.
+fn draw_parts(d: &GcDraw) -> Option<(u32, u32, u32)> {
+    const MAX: u32 = 0xff_ffff;
+    let instances = d.instance_count.max(1);
+    if instances > MAX {
+        let n = (d.num_streams as usize).min(GC_MAX_VERTEX_ELEMENTS);
+        let per_instance = d.streams[..n].iter().any(|s| s.divisor != 0);
+        let splits = d.vertex_count <= MAX && !per_instance && d.vs.vs_instance_id_reg1 == 0;
+        return splits.then_some((MAX, d.vertex_count, 0));
+    }
+    if d.vertex_count <= MAX {
+        return Some((instances, d.vertex_count, d.vertex_count));
+    }
+    if instances > 1 || d.indexed {
+        return None;
+    }
+    match d.prim {
+        GC_PRIM_POINTS | GC_PRIM_TRIANGLES => Some((1, MAX, MAX)),
+        GC_PRIM_LINES => Some((1, MAX - 1, MAX - 1)),
+        GC_PRIM_LINE_STRIP => Some((1, MAX, MAX - 1)),
+        GC_PRIM_TRIANGLE_STRIP => Some((1, MAX - 1, MAX - 3)),
+        _ => None,
+    }
+}
+
 /// The depth surface's stride and base address are the backend's, not the
 /// frame's, so `emit_draw` is handed them rather than reaching for the global
 /// state while the frame is borrowed.
@@ -2471,6 +2505,10 @@ fn program_key(k: &mut dedup::Key, d: &GcDraw) -> bool {
 /// written at every draw, outside the groups; `emit_context_init` runs only
 /// at the start of a stream, where the groups are forgotten (`frame_open`).
 fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) -> i32 {
+    let Some((part_instances, part_vertices, vertex_step)) = draw_parts(d) else {
+        glog_once!("yakogl/vivante: draw refused: a count past DRAW_INSTANCED's 24 bits that cannot be split");
+        return -crate::util::EINVAL;
+    };
     emit_flushes(&mut f.w);
     /* after the flushes' RA->PE stall: the draws before are done when the
      * counter switches. A clear is never counted (ES 3.0 4.2.3). */
@@ -2534,7 +2572,22 @@ fn emit_draw(f: &mut GcFrame, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
     shader::emit_prefetch(&mut f.w);
     f.w.stall(GC_SYNC_RA, GC_SYNC_PE);
 
-    f.w.draw_instanced(d.indexed, d.prim, d.instance_count.max(1), d.vertex_count, d.first);
+    /* one DRAW_INSTANCED per part (draw_parts); most draws are one part */
+    let instances = d.instance_count.max(1);
+    let mut i = 0;
+    while i < instances {
+        let n = part_instances.min(instances - i);
+        let mut v = 0;
+        loop {
+            let nv = part_vertices.min(d.vertex_count - v);
+            f.w.draw_instanced(d.indexed, d.prim, n, nv, d.first + v);
+            if vertex_step == 0 || v + nv >= d.vertex_count {
+                break;
+            }
+            v += vertex_step;
+        }
+        i += n;
+    }
     0
 }
 

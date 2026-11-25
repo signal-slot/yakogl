@@ -722,6 +722,76 @@ fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_is_refused() {
     assert_eq!(gc_refused_draws().wrapping_sub(base), 1);
 }
 
+/// DRAW_INSTANCED holds 24 bits of instance and of vertex count. A larger
+/// count is split only where gl_InstanceID, the per-instance fetch and the
+/// primitive boundaries stay right, otherwise refused (`None`); never
+/// truncated. An indexed draw's third word is the index bias and its start
+/// the index stream's base (written once per draw), so an indexed draw is
+/// never split by vertex: every part would re-read the indices from 0.
+#[test]
+fn draw_parts_splits_on_primitive_boundaries_or_refuses() {
+    const MAX: u32 = 0xff_ffff;
+    let gl = GlesDraw::ZERO;
+    let vs = ShcShader::ZERO;
+    let fs = ShcShader::ZERO;
+    let mut reads_id = ShcShader::ZERO;
+    reads_id.vs_instance_id_reg1 = 1;
+    let draw = |prim: u32, vertices: u32, instances: u32| {
+        let mut d = GcDraw::new(&gl, &vs, &fs);
+        d.prim = prim;
+        d.vertex_count = vertices;
+        d.instance_count = instances;
+        d
+    };
+
+    /* within the fields: one part, whatever the primitive */
+    for prim in GC_PRIM_POINTS..=GC_PRIM_LINE_LOOP {
+        assert_eq!(draw_parts(&draw(prim, MAX, MAX)), Some((MAX, MAX, MAX)), "prim {prim}");
+        assert_eq!(draw_parts(&draw(prim, 3, 0)), Some((1, 3, 3)), "prim {prim}, not instanced");
+        let mut d = draw(prim, MAX, 2);
+        d.indexed = true;
+        assert_eq!(draw_parts(&d), Some((2, MAX, MAX)), "prim {prim}, indexed");
+    }
+
+    /* by vertex, one instance: whole primitives, strips overlapping */
+    let n = MAX + 1;
+    assert_eq!(draw_parts(&draw(GC_PRIM_POINTS, n, 1)), Some((1, MAX, MAX)));
+    assert_eq!(draw_parts(&draw(GC_PRIM_TRIANGLES, n, 0)), Some((1, MAX, MAX)));
+    assert_eq!(MAX % 3, 0, "a triangle-list part ends on a triangle");
+    assert_eq!(draw_parts(&draw(GC_PRIM_LINES, n, 1)), Some((1, MAX - 1, MAX - 1)));
+    assert_eq!(draw_parts(&draw(GC_PRIM_LINE_STRIP, n, 1)), Some((1, MAX, MAX - 1)));
+    let strip = draw_parts(&draw(GC_PRIM_TRIANGLE_STRIP, n, 1));
+    assert_eq!(strip, Some((1, MAX - 1, MAX - 3)));
+    assert_eq!(strip.unwrap().2 % 2, 0, "an even step keeps the winding");
+    assert_eq!(draw_parts(&draw(GC_PRIM_TRIANGLE_FAN, n, 1)), None, "a fan cannot be cut");
+    assert_eq!(draw_parts(&draw(GC_PRIM_LINE_LOOP, n, 1)), None, "a loop cannot be cut");
+    assert_eq!(draw_parts(&draw(GC_PRIM_POINTS, n, 2)), None, "by vertex and instanced");
+
+    /* indexed past the vertex field: refused, for every primitive */
+    for prim in GC_PRIM_POINTS..=GC_PRIM_LINE_LOOP {
+        let mut d = draw(prim, n, 1);
+        d.indexed = true;
+        assert_eq!(draw_parts(&d), None, "prim {prim}: indexed past 0xffffff");
+    }
+
+    /* by instance: the whole vertex range in every part */
+    assert_eq!(draw_parts(&draw(GC_PRIM_TRIANGLES, 3, n)), Some((MAX, 3, 0)));
+    let mut d = draw(GC_PRIM_TRIANGLES, 3, n);
+    d.indexed = true;
+    d.first = 7;
+    assert_eq!(draw_parts(&d), Some((MAX, 3, 0)), "indexed: the bias and base stay");
+    assert_eq!(draw_parts(&draw(GC_PRIM_POINTS, n, n)), None, "both fields past");
+    let mut d = draw(GC_PRIM_TRIANGLES, 3, n);
+    d.num_streams = 2;
+    d.streams[1].divisor = 1;
+    assert_eq!(draw_parts(&d), None, "a per-instance array restarts at 0 in each part");
+    d.num_streams = 1;
+    assert_eq!(draw_parts(&d), Some((MAX, 3, 0)), "a stream past num_streams is not read");
+    let mut d = draw(GC_PRIM_TRIANGLES, 3, n);
+    d.vs = &reads_id;
+    assert_eq!(draw_parts(&d), None, "gl_InstanceID restarts at 0 in each part");
+}
+
 /// The same refusal through the real online compiler, whose record `gc_draw`
 /// actually tests (`docs/notes/instanceid-per-draw.md`, V0). The GC7000UL
 /// compiler used to leave `vs_instance_id_reg1` at 0 for every program --
