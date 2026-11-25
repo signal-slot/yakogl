@@ -7,9 +7,20 @@
 console and the memory the image was linked into, then counts a few seconds on
 the system timer. No GPU code.
 
-Build-only: it has never run on a board. It carries no watchdog, so a hang
-would hold the Pi 5 until a person power-cycles it; `tools/board.sh` refuses
-it. `boards/rpi_5.overlay` resizes `sram0` to 32 MiB from 0x200000, as
+It carries the board layer's PM watchdog, the way every other
+`tools/probes/rpi_5` probe does: `CONFIG_YAKOGL_RPI5_WDOG=y` links
+`driver/zephyr/lib/board/rpi4/rpi_wdog.c`, which arms the BCM2712 PM watchdog
+in the first PRE_KERNEL_1 hook, feeds it every 3 s until 30 s after boot
+(`CONFIG_YAKOGL_RPI5_WDOG_HOLD_S=30`), and then stops — the SoC does a full
+reset within one watchdog period, and from a tryboot boot that reset brings
+Linux back with nobody at the power switch. A hang cannot hold the board. The
+console carries `board: watchdog armed` and the announce line
+`board: PM watchdog resets the SoC ~40 s after boot (tryboot -> Linux)` (the
+40 is the 30 s of feeding plus one 10 s watchdog period: the latest the reset
+can come). The announce's fixed prefix `board: PM watchdog resets` and the
+armed line are what `tools/board.sh pi5` greps the image for before booting,
+so it no longer refuses this image (its `NETBOOT_NO_WATCHDOG=1` override is
+not needed). `boards/rpi_5.overlay` resizes `sram0` to 32 MiB from 0x200000, as
 `driver/samples/zephyr/common/rpi_4b_sram.dtsi` does for the Pi 4.
 
 ## Verdicts
