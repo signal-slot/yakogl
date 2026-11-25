@@ -571,6 +571,31 @@ all 30 cases of image 21 pass in under 0.05 s.
   reaches the bound shows the RTI reset in its own capture, and `no_reset`
   means a reset that really never came.
 
+## 9. Host state at the origin/main tip (before the board run)
+
+Checked in the tree at the tip, before any board run of the new table.
+
+- **Native 3D textures exist, and are off by default.** Section 8's fix (a)
+  landed as `e179ad48` (NPOT level twiddle, integer and textureGrad volumes)
+  and `e90122b8` (BASE_LEVEL, MAX_LEVEL, MIN_LOD, MAX_LOD). But
+  `src/shaderc/mod.rs:339` has `PVR_NATIVE_3D_DEFAULT = 0`, so a stock image
+  still samples a 3D texture as the level-0 slice grid. Only an image built
+  with `CONFIG_DEQP_PVR_NATIVE_3D=1` (`DEQP_PVR_NATIVE_3D=1` for
+  `tools/cts/am62p-deqp-images.sh`) takes the native path.
+  `tests/pvr_native3d_sampler_words.rs` pins that path's sampler words.
+- **Host A/B.** `tools/cts/host-deqp-run.sh --native-3d=0` and `--native-3d=1`
+  on the 3D families changed no case's status; no case crashed or ran over
+  60 s.
+- **The tree.** `tools/cts/am62p-gles3-tree.txt` has 46 rows. The
+  `3d.formats` and `3d.sizes` `*_linear_mipmap_linear` cases are isolated in
+  rows 22-38 (rows 22 and 34 are the prefix images of the other `3d.formats`
+  and `3d.sizes` cases; the 15 single-case images sit between them). The old
+  images 20 and 21 map to those rows.
+
+### Board outcome (to be filled by docs-1285)
+
+Placeholder: no board result is recorded here yet.
+
 ## Appendix: scratch sources (not committed)
 
 ### `tests/zz_pvr3d_scratch.rs` (the host repro of section 2)
