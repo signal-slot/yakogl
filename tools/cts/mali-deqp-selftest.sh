@@ -22,7 +22,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=51
+EXPECT=55
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -290,6 +290,23 @@ check "a bad --reruns value is a usage error on a real run too, before any ssh" 
   bash -c "! PATH='$tmp/nobin':\$PATH bash '$RUN' --build '$FIX/fixture-build' --out '$tmp/rrd/o' --rows 1-1 --tree '$FIX/tree.txt' --reruns bad >/dev/null 2>&1 && [ ! -e '$tmp/rrd/o' ]"
 check "an empty --reruns value is treated as not given" \
   bash -c "bash '$RUN' --dry-run --rows 1-1 --tree '$FIX/tree.txt' --reruns '' | { ! grep -q reruns; }"
+
+echo "mali-deqp-selftest: --replaces"
+RUN_ARGS=(--reruns "$S2" --replaces "$S1")
+run rp clean 1-1
+RUN_ARGS=()
+check "--replaces A with --reruns B: exit 0 and meta.txt has reruns, replaces=A, then tree" \
+  bash -c "[ \"\$(cat '$tmp/rp/rc')\" = 0 ] && grep -qx 'replaces=$S1' '$tmp/rp/slice/meta.txt' &&
+    [ \"\$(cut -d= -f1 '$tmp/rp/slice/meta.txt' | paste -sd' ')\" = 'commit session rows reruns replaces tree boot_id_before boot_id_after kernel lib started ended' ]"
+check "without --replaces meta.txt has no replaces key" \
+  bash -c "! grep -q replaces '$tmp/clean/slice/meta.txt' && ! grep -q replaces '$tmp/rr/slice/meta.txt'"
+rrdry rp --replaces "$S1,$S2"
+check "the dry run prints replaces=A,B and none without the option" \
+  bash -c "[ \"\$(cat '$tmp/rrd/rp.rc')\" = 0 ] && grep -qx 'mali-deqp-run: replaces=$S1,$S2' '$tmp/rrd/rp.txt' &&
+    ! grep -q replaces '$tmp/rrd/none.txt'"
+rrdry rpbad --replaces "x/$S1"
+check "a bad --replaces value is a usage error (exit 1)" \
+  bash -c "[ \"\$(cat '$tmp/rrd/rpbad.rc')\" = 1 ] && grep -q -- '--replaces wants slice directory names' '$tmp/rrd/rpbad.txt'"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then

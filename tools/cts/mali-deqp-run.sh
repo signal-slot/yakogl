@@ -7,7 +7,7 @@
 # per row of a tree table, into one slice directory.
 #
 #   BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
-#       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--reruns NAME[,NAME...]] [--dry-run]
+#       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--reruns NAME[,NAME...]] [--replaces NAME[,NAME...]] [--dry-run]
 #   tools/cts/mali-deqp-run.sh --dry-run --rows A-B [--tree T] [--session S]
 #
 # --dry-run prints the plan and touches nothing: no ssh or scp, no board lock,
@@ -26,6 +26,14 @@
 # as reruns=NAME,NAME in meta.txt, which mali-deqp-tally.py reads to let this
 # slice replace those slices' Lost rows. Anything else is a usage error (exit
 # 1). The dry run prints it. Without the option meta.txt has no reruns key.
+#
+# --replaces NAME[,NAME...] is the same for a partial rerun of whole rows of
+# earlier slices from a newer commit: the list is written as replaces=NAME,NAME
+# in meta.txt, and mali-deqp-tally.py lets each chunk label this run ran
+# replace the chunk of the same label in those slices (replaces= of its
+# docstring), whatever the status of the old cases. Same NAME form and usage
+# error as --reruns; without the option meta.txt has no replaces key. Both
+# options may be given.
 #
 # BOARD_HOST comes from the lease (target:nanopc-t6), never from a file;
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp, as run-on-board.sh does.
@@ -73,7 +81,7 @@
 #
 # The slice (the format mali-deqp-tally.py reads), everything redacted (no
 # host names, addresses, user names or serials):
-#   meta.txt     commit, session, rows, [reruns,] tree, boot_id_before, boot_id_after,
+#   meta.txt     commit, session, rows, [reruns,] [replaces,] tree, boot_id_before, boot_id_after,
 #                kernel, lib, started, ended (key=value)
 #   chunks.tsv   row label cases status seconds kmsg resets ssh_after
 #                boot_same exit_line; status done|crash|hang|fault|lost,
@@ -148,7 +156,7 @@ usage() {
   exit 1
 }
 
-build= out= rows= reruns= tree=${MALI_DEQP_TREE:-$HERE/mali-gles2-tree.txt} session=adhoc dry=0
+build= out= rows= reruns= replaces= tree=${MALI_DEQP_TREE:-$HERE/mali-gles2-tree.txt} session=adhoc dry=0
 while [ $# -gt 0 ]; do
   case $1 in
     --build) build=${2:?}; shift 2 ;;
@@ -157,6 +165,7 @@ while [ $# -gt 0 ]; do
     --tree) tree=${2:?}; shift 2 ;;
     --session) session=${2:?}; shift 2 ;;
     --reruns) reruns=${2:?}; shift 2 ;;
+    --replaces) replaces=${2:?}; shift 2 ;;
     --dry-run) dry=1; shift ;;
     -h | --help) usage ;;
     *) echo "$me: unknown argument '$1'" >&2; usage ;;
@@ -170,14 +179,16 @@ case $session in
   S1 | S2 | S3 | S4 | smoke | adhoc) ;;
   *) echo "$me: --session is S1..S4 or smoke, not '$session'" >&2; exit 1 ;;
 esac
-if [ -n "$reruns" ]; then
-  # One anchored match of the whole value: a newline or a stray character fails.
-  rerun_re="[0-9]{4}-[0-9]{2}-[0-9]{2}-$MALI_BOARD_TAG-gles2-[A-Za-z0-9]+(-[A-Za-z0-9._]+)*"
-  if [[ $reruns == *$'\n'* ]] || ! [[ $reruns =~ ^$rerun_re(,$rerun_re)*$ ]]; then
-    echo "$me: --reruns wants slice directory names <YYYY-MM-DD>-$MALI_BOARD_TAG-gles2-<session>[-suffix], comma-separated, not '${reruns//$'\n'/ }'" >&2
+# One anchored match of the whole value: a newline or a stray character fails.
+rerun_re="[0-9]{4}-[0-9]{2}-[0-9]{2}-$MALI_BOARD_TAG-gles2-[A-Za-z0-9]+(-[A-Za-z0-9._]+)*"
+for opt in reruns replaces; do
+  val=${!opt}
+  [ -n "$val" ] || continue
+  if [[ $val == *$'\n'* ]] || ! [[ $val =~ ^$rerun_re(,$rerun_re)*$ ]]; then
+    echo "$me: --$opt wants slice directory names <YYYY-MM-DD>-$MALI_BOARD_TAG-gles2-<session>[-suffix], comma-separated, not '${val//$'\n'/ }'" >&2
     exit 1
   fi
-fi
+done
 [ -f "$tree" ] || { echo "$me: no tree table $tree (the default is tools/cts/mali-gles2-tree.txt; \$MALI_DEQP_TREE or --tree name another)" >&2; exit 1; }
 mustpass=${MALI_DEQP_MUSTPASS:-$HERE/gles2-mustpass.txt}
 [ -f "$mustpass" ] || { echo "$me: no mustpass list $mustpass" >&2; exit 1; }
@@ -530,6 +541,7 @@ if [ "$dry" = 1 ]; then
   echo "$me: library $lib_id"
   echo "$me: session $session, rows $row_a-$row_b of $tree_rel: $nrows row(s), $total case(s)"
   [ -z "$reruns" ] || echo "$me: reruns=$reruns"
+  [ -z "$replaces" ] || echo "$me: replaces=$replaces"
   while IFS=$'\t' read -r row lab n; do
     echo "$me:   row $row $lab: $n case(s), limit $(limit_for "$n") s a process"
   done < "$work/plan.tsv"
@@ -610,8 +622,8 @@ fix_meta() {
   local k
   [ -f "$raw/meta.txt" ] || return 0
   cp "$raw/meta.txt" "$raw/meta.kv"
-  for k in commit session rows reruns board tree boot_id_before boot_id_after kernel lib started ended; do
-    case $k in reruns | board) grep -q "^$k=" "$raw/meta.kv" || continue ;; esac
+  for k in commit session rows reruns replaces board tree boot_id_before boot_id_after kernel lib started ended; do
+    case $k in reruns | replaces | board) grep -q "^$k=" "$raw/meta.kv" || continue ;; esac
     printf '%s=%s\n' "$k" "$(sed -n "s/^$k=//p" "$raw/meta.kv" | tail -1)"
   done > "$raw/meta.txt"
 }
@@ -626,6 +638,7 @@ mkdir -p "$raw/qpa" "$raw/kmsg" "$raw/log" "$out"
   echo "session=$session"
   echo "rows=$row_a-$row_b"
   [ -z "$reruns" ] || echo "reruns=$reruns"
+  [ -z "$replaces" ] || echo "replaces=$replaces"
   [ "$MALI_BOARD" = nanopc-t6 ] || echo "board=$MALI_BOARD"
   echo "tree=$tree_rel"
   echo "lib=$lib_id"
