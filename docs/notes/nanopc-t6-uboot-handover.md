@@ -7,7 +7,8 @@ are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian and, on 2026-11-12, at the U-Boot prompt with
 the tool of section 3. The load route (section 5) is a tool
 (driver/tools/uboot-t6/stage.sh and prompt-go.sh, issue #4627) and has not
-run on the board. Its load addresses, from source, are confirmed on the board
+run on the board: the 2026-11-25 sessions staged and dry-ran the images and
+stopped before the prompt (section 5, "Board sessions"). Its load addresses, from source, are confirmed on the board
 twice: in the environment compiled into the booted binary (read under
 Armbian) and by `printenv` at the prompt. The entry audit (section 6) follows.
 
@@ -327,6 +328,23 @@ check the commands, `go`, record the image's output and judge it with
 `t6-verdict.sh` (`T6_ROUTE=uboot`). None of this has run on the board. (The
 script draft t6-zephyr.cmd, which needed `setexpr`, `icache` and `dcache`,
 was removed.)
+
+Board sessions (plan #408, item uboot-s1). On 2026-11-25 t6_cold, t6_gpu,
+t6_fw and t6_submit, built from origin/main 65af54b5, were staged with
+`stage.sh` (exit 0 each), and the dry runs of `prompt-reads.sh` and of
+`prompt-go.sh` for each image passed (exit 0: every staged copy byte-equal,
+the commands and answers printed). `prompt-reads.sh --go` then exited 40
+before anything was written or rebooted: the serial adapter answered
+`busy: another client is connected`. The client holding its one slot was
+the farm's console server for the serial lease, at the adapter's stored
+115200 baud where the T6's console runs at 1500000 (a line written to UART2
+from Armbian reached it as 3 bytes of garbage), so the prompt could not be
+reached by either route. `stage.sh undo` restored the stock /boot (exit 0);
+boot_id unchanged. An earlier attempt the same day at cbb55860 stopped at
+the same exit 40. So nothing of sections 1, 2, 6 and 7 was measured from
+U-Boot's state yet. Slice: tools/cts/log/2026-11-25-t6-uboot-65af54b5/. The
+next session needs the adapter's slot free for `t6-uart-rfc2217.py` (or a
+console server that opens it at 1500000) and a `T6_HAND`.
 
 Load addresses, from source (U-Boot v2026.07, file:line), and confirmed on the
 board twice:

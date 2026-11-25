@@ -16,6 +16,11 @@ Status:
   "The route") and has not run on the board (issue #4627). The script draft
   `t6-zephyr.cmd` is gone: it needed `setexpr`, `icache` and `dcache`, which
   this build lacks.
+- On 2026-11-25 (plan #408, slice `tools/cts/log/2026-11-25-t6-uboot-65af54b5/`)
+  `stage.sh` and all dry runs passed for t6_cold, t6_gpu, t6_fw and
+  t6_submit; `prompt-reads.sh --go` exited 40 because the adapter's one
+  client slot was held by the farm's serial console server (at 115200, not
+  the console's 1500000). A `--go` run needs that slot free.
 
 ## Prompt reads
 

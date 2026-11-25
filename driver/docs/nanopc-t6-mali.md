@@ -2907,7 +2907,9 @@ What is left needs a run from U-Boot or a job from Zephyr:
   (kept), a PVTPLL state, an out-of-table divider and an unknown mux). Not
   measured: the rates U-Boot itself believes, SCMI clock 5 included (the build has
   no `clk` command), and the move on the board (no image has run from U-Boot yet;
-  issue #4627).
+  issue #4627: the 2026-11-25 session at 65af54b5 staged and dry-ran t6_cold,
+  t6_gpu, t6_fw and t6_submit and stopped at exit 40, the serial adapter's one
+  slot held by the farm's console server; tools/cts/log/2026-11-25-t6-uboot-65af54b5/).
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the
