@@ -269,6 +269,29 @@ def judge(probe, log, out):
     return r.returncode, lines[-1] if lines else ""
 
 
+RETURN_RE = re.compile(rb"PSCI SYSTEM_RESET at \d+ ms")
+
+
+def note_return(log, out):
+    """Record how the image returned, as one line in verdict.txt just above
+    the VERDICT line (which stays last). The exit code does not change: a
+    PSCI SYSTEM_RESET is the image's own line; a WDT0 expiry prints nothing,
+    so the absence of that line is the only trace of it."""
+    with open(log, "rb") as f:
+        data = f.read().replace(b"\r", b"")
+    m = RETURN_RE.search(data)
+    if m:
+        ln = data[data.rfind(b"\n", 0, m.start()) + 1:].split(b"\n")[0].decode("latin-1")
+        note = "return: PSCI SYSTEM_RESET (%s)" % ln
+    else:
+        note = "return: no PSCI SYSTEM_RESET line in image.log (WDT0 expiry or another reset: the image printed none)"
+    with open(out) as f:
+        lines = f.read().splitlines()
+    lines.insert(max(len(lines) - 1, 0), note)
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=180, gap=0.003, scale=1.0,
         back=None):
     os.makedirs(rec, exist_ok=True)
@@ -329,6 +352,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
                 say("STOP (9): U-Boot did not answer %s in %d s; nothing more was written" % (go, 10 * scale))
                 return 9
             vrc, vline = judge(probe, log, os.path.join(rec, "verdict.txt"))
+            note_return(log, os.path.join(rec, "verdict.txt"))
             say("verdict: %s" % vline)
             if not back:
                 # Not "the board needs a hand": the UART may have stopped in
@@ -418,7 +442,7 @@ class FakeGo(P.FakeBoard):
         how = how[:-len("-kstop")] if kstop else how
         words = dict(P.PMU_OFF)
         words[LOAD + MAGIC_OFF] = 0x12345678 if how == "magic" else IMAGE_MAGIC
-        mode = "noautoboot" if how == "noautoboot" else "ok"
+        mode = how if how in ("noautoboot", "missed") else "ok"
         super().__init__(master, mode=mode, words=words, kernel_stop=kstop)
         self.name, self.size, self.crc, self.how = name, size, crc, how
         self.lines = image_lines() if lines is None else lines
@@ -444,6 +468,10 @@ class FakeGo(P.FakeBoard):
     def after_enter(self, cmd):
         if self.how == "lost" and cmd.startswith("ext4load "):
             return True                     # the prompt never comes back
+        if self.how == "uboot-boots" and cmd.startswith("ext4load "):
+            self.out("\r\nU-Boot SPL 2026.07\r\n")   # a command made U-Boot reset and boot Linux
+            self.linux()
+            return True
         if not cmd.startswith("go "):
             return False
         if self.how == "silent":
@@ -558,6 +586,27 @@ def self_test():
     check(rc == 5 and f.entered == cmds[:3] and f.got.endswith(cmds[2].encode() + b"\r"),
           "prompt lost: exit 5, nothing typed after ext4load (rc %d, %r)" % (rc, f.entered))
 
+    # 3a. Exit 4: the one space came too late, Linux booted, nothing typed.
+    rc, f, _ = case("missed")
+    check(rc == 4 and f.entered == [] and f.shell == b"", "autoboot missed: exit 4, nothing typed (rc %d, %r)" % (rc, f.entered))
+
+    # 3b. Exit 7: a command made U-Boot leave the prompt and start Linux.
+    rc, f, files = case("uboot-boots")
+    check(rc == 7 and f.entered == cmds[:3] and f.shell == b"" and b"STOP (7)" in files.get("typed.log", b""),
+          "U-Boot left the prompt: exit 7, nothing written after it (rc %d, %r)" % (rc, f.entered))
+
+    # 3c. Exit 2 is the usage code of main(): a bad NAME, SIZE, CRC or verb,
+    # before any port is opened. (1, 3, 40 and 41 are prompt-go.sh's.)
+    err, sys.stderr = sys.stderr, open(os.devnull, "w")
+    try:
+        bad = [main(["x", "plan", "../x.bin", "1", "00000000"]), main(["x", "plan", name, "0", "00000000"]),
+               main(["x", "plan", name, "1", "XYZ"]), main(["x", "bogus"]),
+               main(["x", "run", "/dev/null", "/nonexistent", name, "1", "00000000", "t6_nonesuch", "1"])]
+    finally:
+        sys.stderr.close()
+        sys.stderr = err
+    check(bad == [2] * 5, "usage: exit 2 for each bad argument (%r)" % bad)
+
     # 4. go answered by nothing: exit 9, nothing written after go.
     rc, f, _ = case("silent")
     check(rc == 9 and f.entered == cmds and f.shell == b"", "go silent: exit 9, nothing written after it (rc %d)" % rc)
@@ -567,6 +616,20 @@ def self_test():
     rc, f, files = case(lines=lines)
     check(rc == 11 and re.search(rb"VERDICT t6_hello FAIL \(1 of [0-9]+\)", files.get("verdict.txt", b"")),
           "verdict FAIL: exit 11, verdict.txt names it (rc %d)" % rc)
+
+    # 5a. WDT0 against PSCI: the image's own reset line is the only
+    # difference. With it cut (what a WDT0 expiry leaves) verdict.txt names
+    # the return apart from the PSCI case; the return line sits above VERDICT.
+    rc0, _, f0 = case()
+    v0 = f0.get("verdict.txt", b"").decode().splitlines()
+    wl = [l for l in image_lines() if "PSCI SYSTEM_RESET" not in l]
+    rc1, _, f1 = case(lines=wl)
+    v1 = f1.get("verdict.txt", b"").decode().splitlines()
+    check(rc0 == 0 and v0[-2].startswith("return: PSCI SYSTEM_RESET (t6: t6_hello done: PSCI SYSTEM_RESET at")
+          and v0[-1].startswith("VERDICT"), "return: PSCI reset is named, VERDICT stays last (%r)" % v0[-2:])
+    check(v1[-2].startswith("return: no PSCI SYSTEM_RESET line") and "WDT0" in v1[-2] and v1[-2] != v0[-2]
+          and v1[-1].startswith("VERDICT") and rc1 == (0 if v1[-1].endswith("PASS") else 11),
+          "return: WDT0-style return is named apart; its exit follows the verdict (rc %d, %r)" % (rc1, v1[-2:]))
 
     # 6. The image ran, no login after it: exit 10, nothing written.
     rc, f, files = case("nologin")
