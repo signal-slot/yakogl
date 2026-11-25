@@ -625,23 +625,6 @@ Splitting answers two different faults, and they split two different ways.
   at their ETC2 cube cases). There the fix is the back end taking the
   target, not the table.
 
-To cut or to re-split: edit the table — a cut shrinks the aborted label's
-filter to its cases up to and including the trigger and adds the new labels
-for the never-begun rest (two `# image` blocks in place of one, more when
-the rest is large) —, update each block's `# image <LABEL>: N` count and the
-header comment's image count, then
-
-```sh
-python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt
-```
-
-must end with `check-gles3-tree: tools/cts/pi4-gles3-tree.txt: <N> images,
-42810 matched once, 0 not matched, 0 matched more than once, 0 empty images`
-(N the new image count; `check-gles3-tree.py` pins each `# image` count to
-the mustpass names its filter selects, and the header comment's image count,
-now "114", follows it), and `tools/cts/cts-selftest.sh` check 19 and
-`check-deqp-images.py` say the same.
-
 After a cut both tools count each case once, under the label the current
 table gives it. The record checker (section 4) takes an aborted label as a
 cut — `info: <LABEL>: cut after abort trigger <case> (<n> begun, <m> moved
@@ -685,26 +668,198 @@ mid-image abort, fold the trigger back into the label's filter as the
 `b1b5b845` records have it. `tools/cts/pi4-gles3-resplit-selftest.sh` is
 its test.
 
-The rerun of #1261 uses it on the nine images that aborted at `b1b5b845`
-(S03a, S07, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c): each aborting case gets
-its own image, named by the rule above — `S03a1`, `T14a1`, `T17a1`, `TF1a1`,
-`TF1b1`, `TF2a1`, `TF2b1`, `TF2c1` — and the tree then has 122 images, not 114.
-A session builds them from the *re-split tree*, not from the 114-image one:
+### The abort rounds: run, re-split, run again
 
-```sh
-python3 tools/cts/pi4-gles3-resplit.py --at <sha8> tools/cts/pi4-gles3-tree.txt \
-    --refuse-file <LABEL-CASE-FILE> -o tools/cts/pi4-gles3-tree.txt.new   # or --tally <LABEL>.tally.txt...
-python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt.new
-```
+The rerun of #1261 (now #2) is this loop. The `b1b5b845` aborts round stopped
+again on eleven of the fourteen labels it introduced — S03a, T05ca, T05cb,
+T05cc, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c — each at its one refused
+case (named in
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/README.md`), leaving 1,978
+mustpass cases without a result: 1,140 `shaders` in S03a, 86 `texture` in
+T14a and T17a, 752 `transform_feedback` in TF1a, TF1b, TF2a, TF2b and TF2c
+(that record's `table.txt`, TOTAL row, `none` column). One abort leaves the
+rest of its label unbegun, so the loop is: run a round, scan and tally its
+consoles, read `none`; where `none` is not 0, re-split and run the new labels
+again; when it is 0, write the record. Round 1 re-splits at the eleven named
+refusals, by step 5 with `--refuse-file`.
 
-The tree the script writes (once reviewed and committed as
-`tools/cts/pi4-gles3-tree.txt`) is the table the session passes to
-`pi4-deqp-images.sh` in section 3, and the image count there and in
-`check-gles3-tree.py`'s last line is the script's, not this recipe's. Read the
-names and the count off the committed tree's `# image` lines before the build.
+1. **Build and run** — sections 2 and 3: the gles3 stage 1 as `DEQP_WORK`,
+   images built only from a commit on origin/main. Build the labels the tree
+   added since the last round — the names and counts are the committed
+   table's `# image` lines, not this recipe's, and the builder takes them
+   after the table and the image directory:
+
+   ```sh
+   DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh tools/cts/pi4-gles3-tree.txt build/deqp/pi4-gles3-$HEAD8 <the new LABELs>
+   tools/cts/pi4-gles3-preflight.sh --commit <full 40-hex sha> --img-dir build/deqp/pi4-gles3-$HEAD8 --rows <the new labels' rows>
+   ```
+
+   (`--commit` defaults to origin/main's tip and takes 8+ hex; `--rows`
+   counts rows from 0 in table order as `TREE_ROWS` does and may be a list
+   like `3,5-9`; leave it out to check every table label.) Run one image per
+   cycle in `tools/board.sh pi4`'s order (section 4, "On the farm": tryboot,
+   image and `tryboot.txt` read back, restored after each), and save each
+   boot's console in the session directory
+   `tools/cts/log/2026-11-pi4-gles3-<sha8>-aborts2/` as `<LABEL>.console.txt`.
+
+2. **Scan the consoles** — per image the recoveries, hung jobs, resets and
+   run times:
+
+   ```sh
+   python3 -I tools/cts/pi4-console-scan.py tools/cts/log/<session>/
+   ```
+
+   A directory names every `*.console.txt` in it. Per image it prints the
+   `finish` line — for an abort `record: STOPPED EARLY by dEQP (complete=0;
+   later cases never began)`, and its `faults 1` is the refused case's
+   `ResourceError` — and a last line `-- <N> image run(s): <N> finished, 0
+   without a finish line; ...`. It exits 1 for an image with no finish line,
+   printed `!! NO FINISH <LABEL>` with how being `fatal`, `photo deadline`,
+   `watchdog reset`, `reset` or `hang` — the *for time* overrun and the
+   crashes, the other fault above. Its `run`, `recoveries` and `hung`
+   columns, the refused case's `FAULT` line and the `cases in` line go to
+   `cycles.txt` (step 6). `python3 -I tools/cts/pi4-console-scan.py
+   --self-test` is its test.
+
+3. **Tally every label**:
+
+   ```sh
+   tools/cts/pi4-session-tally.sh tools/cts/log/<session>/
+   ```
+
+   runs `deqp-uart-tally.py --label` inside the directory on relative names
+   only and writes every `<LABEL>.tally.txt`, printing `<LABEL>: <p> pass,
+   <f> fail, <n> notsupported, <o> other` for a complete image and `<LABEL>:
+   aborted` for every STOPPED one. A console whose label is no `# image
+   <LABEL>:` line of the tree (`PI4_TREE`, default
+   `tools/cts/pi4-gles3-tree.txt`) is refused before anything is written, so
+   run this after the previous round's re-split tree is committed.
+   `tools/cts/pi4-session-tally-selftest.sh` is its test.
+
+4. **Read `none`**, the loop's finish number, from `table.txt`:
+
+   ```sh
+   (cd tools/cts/log/<session> && python3 ../../deqp-uart-tally.py \
+       --mustpass ../../gles3-mustpass.txt --table *.console.txt > table.txt)
+   awk '/^TOTAL/{print $NF}' tools/cts/log/<session>/table.txt
+   ```
+
+   `table.txt` is the tally output with three `#` lines on top: the SPDX
+   lines and a title naming every image of the session — the acceptance
+   script reads the session's labels from that title line, and a range like
+   `S03a1..S03a4` names only its ends, so list them. `none` counts the
+   mustpass cases a console filter of the campaign covers but no console
+   holds a result line for: cases behind an abort that never began, an
+   INCOMPLETE image. Not 0 means re-split (step 5); 0 means the record
+   (step 6). `python3 tools/cts/deqp-uart-tally.py --self-test` is the
+   tally's test.
+
+5. **Re-split the labels this round aborted**, and run again. A label was
+   aborted when the tree row's case count is larger than its tally's begun
+   count (`# image <LABEL>: N` against the tally's `deqp: summary: <n>
+   cases begun`). Do not re-split a label that is done: a one-case image
+   that refused its one case and a label already cut have a result for every
+   case, and splitting them again would send the board a refusal it already
+   recorded. Round 1 names its eleven refusals in a `--refuse-file` list
+   (one `LABEL CASE` per line, `#` lines skipped); from round 2 on pass the
+   round's aborted tallies (`--tally`, one per label — a STOPPED tally's
+   last `<Status> <case>` line is its refusing case, a DONE tally is read
+   and left alone; the same names stand in the console's `FAULT` line):
+
+   ```sh
+   python3 tools/cts/pi4-gles3-resplit.py --at <sha8> tools/cts/pi4-gles3-tree.txt \
+       --refuse-file <refusals> -o tools/cts/pi4-gles3-tree.txt.new   # or --tally <session>/<LABEL>.tally.txt...
+   python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt.new
+   ```
+
+   `--at <sha8>` names the commit the abort was seen at in the new rows'
+   notes. A mid-image abort needs a hand edit before the check: the record
+   checker reads a cut only when the trigger is the label's last case (its
+   rule says `the last case begun is not an abort trigger` otherwise), so
+   fold the refused case back as the old label's last case, the shape the
+   `b1b5b845` records have (`# image T14: 225 (... up to
+   units.8_units.only_cube.1, where dEQP stopped ...)`): append it to the
+   filter, raise the label's count by one, delete the one-case `<LABEL>1`
+   the tool wrote for it, and lower the header's image count by one. A
+   first-case refusal is left as the tool writes it: the label goes (its
+   tally later reads `superseded by re-split: <LABEL> -> <labels>`) and
+   `<LABEL>1` is the one-case image whose refusal the checker reads
+   `refused (one-case image)`. The check must end `check-gles3-tree: <the
+   table given>: <N> images, 42810 matched once, 0 not matched, 0 matched
+   more than once, 0 empty images` — `check-gles3-tree.py` pins each
+   `# image <LABEL>: N` count to the mustpass names its filter selects, the
+   header's `in <N> images` follows the new count (the acceptance's c1 reads
+   header and checker line against each other), and `cts-selftest.sh` check
+   19 and `check-deqp-images.py` run the same. Review the tree, commit it as
+   `tools/cts/pi4-gles3-tree.txt`, and go back to step 1 for the new labels.
+
+6. **When `none` is 0, write the record.** The session directory holds every
+   `<LABEL>.console.txt` and `<LABEL>.tally.txt` of every round, `table.txt`
+   (step 4, over all the campaign's consoles), `cycles.txt` (section 4's
+   per-image contract: image sha256, the Linux boot id before the reboot,
+   the reboot time, the seconds until Linux was back, the clean-up read-back,
+   the `cases in` line, the end line) and a README written from the tallies:
+
+   ```sh
+   python3 -I tools/cts/pi4-session-readme.py --commit <full 40-hex sha> \
+       [--times <TSV: LABEL run recoveries hangs, tab-separated>] \
+       [--with tools/cts/log/<earlier dir>]... tools/cts/log/<session>/
+   ```
+
+   The README carries the record's `commit: <sha>` line (the sha
+   `check-pi4-gles3-log.py` and `gles3-notpass.py --pi4` read) and names one
+   commit; another round's sha may appear only as prose, since the checker
+   matches every line that starts `commit` against `--commit`. `--times`
+   fills the table's run / GPU recoveries / hangs columns from the numbers
+   `pi4-console-scan.py` read (`-` for unknown; nothing is made up). The cut
+   is judged as `check-pi4-gles3-log.py` judges it and named in its words —
+   `; cut after abort trigger <case> (<N> begun, <K> moved to <LABELS>)` —
+   and a moved case's tally may sit in a directory of another round: pass
+   each as `--with` (by default the sibling `*-pi4-gles3-<sha8>-*`
+   directories are read). `tools/cts/pi4-session-readme-selftest.sh` is its
+   test.
+
+   ```sh
+   python3 tools/cts/check-pi4-gles3-log.py --commit <full 40-hex sha> \
+       --tree tools/cts/pi4-gles3-tree.txt tools/cts/log/<session> ...
+   ```
+
+   exits 1 for a label with no tally (`missing (<n>): <labels>`) or a tally
+   in two directories, a README commit line other than `--commit`, an
+   aborted label the cut rule does not cover (`aborted, no complete deqp
+   summary (<n>): <labels>`) and any file holding a home path, an IPv4
+   address, a `.ts.net` name or a tty device path; a cut reads
+   `info: <LABEL>: cut after abort trigger ...`, a dropped label `info:
+   superseded by re-split: <LABEL> -> <labels>`, a one-case refusal `info:
+   <LABEL>: refused (one-case image)`, and on success it prints `<N> images,
+   <N> with a tally, 0 missing, 0 duplicated, commit <sha8>`. Run over a
+   campaign that is not finished it is not green — it *names what is
+   missing*, and labels whose moved tallies live under another commit are
+   among them; the whole-tree merge is `gles3-notpass.py --pi4 <session-dir>
+   ...` (section 5). `python3 tools/cts/check-pi4-gles3-log.py --self-test`
+   is its test.
+
+   ```sh
+   tools/cts/pi4-gles3-aborts2-acceptance.sh --session tools/cts/log/<session>/ --selftests
+   ```
+
+   is plan #398's completion check, read-only (`--root <repo>` names another
+   repository's data): one `c<N> PASS|FAIL|SKIP <reason>` line per criterion
+   — c1 the tree (the checker's line and the header's count agree), c2 the
+   record (exactly one `tools/cts/log/2026-11-pi4-gles3-*-aborts2/`
+   directory, or the `--session` one, holding `README.md`, `table.txt`,
+   `cycles.txt` and a console and tally per label `table.txt` names, its
+   README commit an ancestor of origin/main), c3 `table.txt`'s TOTAL row
+   `none` column 0, c6 behind `--selftests` (`pi4-gles3-preflight-selftest.sh`,
+   `pi4-session-tally-selftest.sh`, `cts-selftest.sh`; SKIP without the
+   option) — and exit 0 only with no FAIL.
+   `tools/cts/pi4-gles3-aborts2-acceptance-selftest.sh` is its test.
+
+   Then the redaction pass below, before the record is committed.
 
 T14 and T14a need more GPU memory than the default image has (the
-texture-unit cases). The table's `# image` line for each of them carries
+texture-unit cases; after a re-split, the new labels holding the
+`8_units` cases are of this class too). The table's `# image` line for each of them carries
 the marker `(with texture-2048.conf)`, and `tools/cts/deqp-tree-images.sh`
 reads that marker per image and adds `-DEXTRA_CONF_FILE=texture-2048.conf` for
 it (its header, "<table>"); the conf is
