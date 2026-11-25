@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vertex shader of dEQP-GLES2.functional.uniform_api.random.74 as dEQP-GLES2 writes it: taken verbatim from the program sources of tools/mali/deqp-host-measure.sh at VK-GL-CTS 93bca01 (HOST-ONLY run at 670913e1).
