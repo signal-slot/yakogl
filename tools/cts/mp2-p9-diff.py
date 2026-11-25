@@ -4,7 +4,7 @@
 """Diff a STM32MP257F-DK dEQP-GLES2 run against the i.MX8MP baseline (roadmap P9).
 
     tools/cts/mp2-p9-diff.py [--baseline results.tsv] [--accepted FILE]
-                             [--mustpass FILE] [--report-only] RESULT...
+      [--mustpass FILE] [--exclude FILE] [--report-only] RESULT...
 
 RESULT is a DK results.tsv (the per-row form tools/board.sh writes, last
 column the ';'-separated failing names) or a UART log (read with
@@ -29,8 +29,22 @@ Classes, each with a count line and the sorted names:
             no result in a log. A results.tsv lists no passing names, so
             nothing can be missing there (said on the line).
 
-Last line: "mp2-p9-diff: shared S, new N, fixed F, missing M". Exit 1 when
+Last line: "mp2-p9-diff: shared S, new N, fixed F, missing M[, excluded E]". Exit 1 when
 N > 0 or M > 0, unless --report-only; 2 on a usage or input error.
+
+A warning (QualityWarning, CompatibilityWarning) is not a failure on the DK.
+A name the i.MX8MP baseline lists in its failing column (its results.tsv
+cannot tell a warning from a failure) and the DK log shows as a warning is
+therefore "fixed"; a warning on both boards, with the baseline not listing the
+name, appears in no class. Exclude such names if they are not wanted.
+
+--exclude FILE drops names before any class or count, from the baseline, the
+DK results, the accepted list and the mustpass scope alike. The syntax is
+tools/cts/mp2-deqp-gles2-exclude.txt's (as mp2-deqp-sweep.sh reads it): "#"
+comment lines, the name up to the first TAB (the reason follows), a name
+ending in "*" is a prefix (a group). The summary then ends ", excluded E": E is
+the number of distinct names of the baseline, the DK results, the accepted
+list and the mustpass list that the file covers.
 """
 import argparse
 import importlib.util
@@ -80,6 +94,24 @@ def names_of(path):
     return out
 
 
+def exclude_patterns(path):
+    out = []
+    with open(path) as fh:
+        for l in fh:
+            l = l.rstrip("\n")
+            if l.startswith("#") or not l.strip():
+                continue
+            out.append(l.split("\t", 1)[0].strip())
+    return out
+
+
+def covered(name, pats):
+    for g in pats:
+        if g == name or (g.endswith("*") and name.startswith(g[:-1])):
+            return True
+    return False
+
+
 def read(path):
     with open(path, errors="replace") as fh:
         return fh.read()
@@ -91,6 +123,7 @@ def main():
     ap.add_argument("--baseline", default=os.path.join(HERE, "imx8mp-full-tree-29460f96.results.tsv"))
     ap.add_argument("--accepted", default=os.path.join(HERE, "es2-accepted.txt"))
     ap.add_argument("--mustpass", default=os.path.join(HERE, "gles2-mustpass.txt"))
+    ap.add_argument("--exclude", metavar="FILE")
     ap.add_argument("--report-only", action="store_true")
     a = ap.parse_args()
     try:
@@ -98,6 +131,7 @@ def main():
         accepted = names_of(a.accepted)
         mustpass = names_of(a.mustpass)
         texts = [read(p) for p in a.result]
+        pats = exclude_patterns(a.exclude) if a.exclude else None
     except OSError as e:
         print("mp2-p9-diff: %s" % e, file=sys.stderr)
         return 2
@@ -122,6 +156,16 @@ def main():
             status.update(r["got"])
             filters.extend(r["filters"])
         dk_fail = {c for c, s in status.items() if s not in NONFAIL}
+
+    excluded = set()
+    if pats is not None:
+        pool = set(base_fail) | set(dk_fail) | set(status) | set(accepted) | set(mustpass)
+        excluded = {n for n in pool if covered(n, pats)}
+        base_fail = base_fail - excluded
+        dk_fail = dk_fail - excluded
+        status = {c: s for c, s in status.items() if c not in excluded}
+        accepted = [n for n in accepted if n not in excluded]
+        mustpass = [n for n in mustpass if n not in excluded]
 
     shared = sorted(base_fail & dk_fail)
     new = sorted(dk_fail - base_fail)
@@ -155,8 +199,9 @@ def main():
     show("i.MX8MP failures the DK passes (fixed)", fixed)
     show("accepted names that changed state", changed)
     show("mustpass names missing from the DK run", missing, mnote)
-    print("mp2-p9-diff: shared %d, new %d, fixed %d, missing %d"
-          % (len(shared), len(new), len(fixed), len(missing)))
+    print("mp2-p9-diff: shared %d, new %d, fixed %d, missing %d%s"
+          % (len(shared), len(new), len(fixed), len(missing),
+             ", excluded %d" % len(excluded) if pats is not None else ""))
     return 1 if (new or missing) and not a.report_only else 0
 
 
