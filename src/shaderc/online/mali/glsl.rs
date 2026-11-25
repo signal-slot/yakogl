@@ -341,6 +341,22 @@ fn block(nodes: &[IrNode], r: Range) -> &[IrNode] {
     nodes.get(r.first as usize..(r.first as usize).saturating_add(r.len as usize)).unwrap_or(&[])
 }
 
+/// Node places `a` and `b` lie in one block, `r` or one nested in it.
+fn same_block(nodes: &[IrNode], r: Range, a: usize, b: usize, depth: usize) -> bool {
+    let span = r.first as usize..(r.first as usize).saturating_add(r.len as usize);
+    if span.contains(&a) {
+        return span.contains(&b);
+    }
+    depth <= MAX_TREE
+        && block(nodes, r).iter().any(|nd| match *nd {
+            IrNode::If { then_, else_, .. } => {
+                same_block(nodes, then_, a, b, depth + 1) || same_block(nodes, else_, a, b, depth + 1)
+            }
+            IrNode::Loop { body } => same_block(nodes, body, a, b, depth + 1),
+            _ => false,
+        })
+}
+
 /// Each value of block `r` and its nested blocks once, in ascending order
 /// as the stage runs (the front end's numbering, which [`ilt_trees`]
 /// keeps).
@@ -1710,10 +1726,11 @@ impl Tree<'_, '_, '_> {
     /// rewritten here, in place: the fneg (read by the product alone)
     /// becomes the product of the literal and the other operand, and the
     /// product its negation. That needs the other operand made before the
-    /// fneg; a literal first (`-3.0 * x`) has no place for the product
-    /// between the operand and its user, and is refused
-    /// ([`MaliError::ArithConstant`]), unless it is 1.0, which both forms
-    /// make `fneg(x)` (:292, :296). A product read by `fmin` or `fmax` may be
+    /// fneg; for a literal first (`-3.0 * x`) the operand's instructions
+    /// move over the fneg's place first ([`Tree::hoist_operand`]), and one
+    /// that cannot move is refused ([`MaliError::ArithConstant`]); a 1.0
+    /// needs neither, both forms make it `fneg(x)` (:292, :296). A product
+    /// read by `fmin` or `fmax` may be
     /// GLSL's `clamp` that NIR sees as `fsat` (the rule's
     /// `is_used_by_non_fsat`), and a product of a product (`x * u * -3.0`)
     /// takes a reassociation next (`fmul(fmul(a, b), #c)`, measured: Mesa
@@ -1802,9 +1819,16 @@ impl Tree<'_, '_, '_> {
             if mediump_fragment && w == 1 && !placed && !clamped && !chain {
                 continue;
             }
-            if clamped || chain || !placed {
+            if clamped || chain {
                 return Err(MaliError::ArithConstant);
             }
+            /* a literal first (`-3.0 * x`): the operand's instructions move
+             * up one place, over the fneg's, and the place they leave
+             * before the product takes it ([`Tree::hoist_operand`]) */
+            let (nid, other) = match placed {
+                true => (nid, other),
+                false => self.hoist_operand(nid, other, p).ok_or(MaliError::ArithConstant)?,
+            };
             self.instrs[nid] = IrOp::Alu(AluOp::Fmul, [Src { val: c.val, swizzle }, other, other]);
             self.comps[nid] = self.comps[p];
             /* the product moves to the fneg's place: its class with it */
@@ -1819,6 +1843,53 @@ impl Tree<'_, '_, '_> {
             self.count();
         }
         Ok(())
+    }
+
+    /// Make a place for `fmul(c, x)` between `x` and its product `p` when
+    /// the fneg of the literal, `nid`, comes before `x` (`-3.0 * x`: the
+    /// front end gives the literal's fneg first, then the operand's
+    /// instructions, then the product). NIR's `fmul(fneg(a), b)` rule
+    /// (nir_opt_algebraic.py:2387) puts its new `fmul(a, b)` just before
+    /// the product it replaces (nir_search.c:700-750) whatever the order of
+    /// the operands, so `-3.0 * x` is the `fneg(fmul(3.0, x))` of `x *
+    /// -3.0`. Here the program order is `m.nodes`'s, and the values
+    /// `nid + 1 ..= x` each move down one id, each in its node's place:
+    /// the instruction at `nid`'s node is then the operand's first one, and
+    /// the one at `x`'s node is free for the product. Taken only when the
+    /// fneg is read by `p` alone and the moved values are one run of
+    /// consecutive nodes of one block, none an `if`'s condition (the nodes
+    /// do not change). Returns the product's place and the operand there.
+    fn hoist_operand(&mut self, nid: usize, other: Src, p: usize) -> Option<(usize, Src)> {
+        let x = other.val.0 as usize;
+        if self.uses[nid] != Use::Alu(p as u32) || x <= nid || x >= p {
+            return None;
+        }
+        let first = *self.pos.get(nid)? as usize;
+        if (nid..=x).any(|k| self.pos.get(k).is_none_or(|&q| q as usize != first + (k - nid))) {
+            return None;
+        }
+        if !same_block(self.m.nodes, self.m.body, first, first + (x - nid), 0) {
+            return None;
+        }
+        let moved = |v: ValueId| (nid..=x).contains(&(v.0 as usize));
+        if self.m.nodes.iter().any(|nd| matches!(*nd, IrNode::If { cond, .. } if moved(cond.val))) {
+            return None;
+        }
+        self.instrs[nid..=x].rotate_left(1);
+        self.comps[nid..=x].rotate_left(1);
+        if self.prec.len() == self.instrs.len() {
+            self.prec[nid..=x].rotate_left(1);
+        }
+        let down = |s: &mut Src| {
+            if (nid + 1..=x).contains(&(s.val.0 as usize)) {
+                s.val = ValueId(s.val.0 - 1);
+            }
+        };
+        for op in self.instrs.iter_mut() {
+            remap_srcs(op, &down);
+        }
+        self.count();
+        Some((x, Src { val: ValueId(x as u32 - 1), swizzle: other.swizzle }))
     }
 
     /// The instructions that read value `id`, with their places.

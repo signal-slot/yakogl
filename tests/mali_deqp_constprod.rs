@@ -28,11 +28,18 @@ const LOWERED: &[&str] = &[
     "fma_foldcall_refract_vs",
     "fma_matmul_const_vs",
     "fma_matmul_mat_vs",
+    "litfirst_vs",
 ];
 
 /// The references that compile with other words than Mesa's: each has an
 /// ignored byte-compare test.
-const DIFFERS: &[&str] = &[];
+const DIFFERS: &[&str] = &[
+    /* its product is dead (`a[3] = -3.0 * a[1]` in the copied-in array of
+     * which `func` returns `a[0]`); the words differ by the mediump global
+     * array's lanes, which Mesa narrows to fp16 and ours keep at fp32: the
+     * pair without the product compiles to the same words */
+    "litfirst_array_vs",
+];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
@@ -109,19 +116,11 @@ const REFUSED: &[(&str, &str)] = &[
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
     (
-        "litfirst_array_vs",
-        "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
-    ),
-    (
         "litfirst_mat_fs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
     (
         "litfirst_mat_vs",
-        "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
-    ),
-    (
-        "litfirst_vs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
     (
@@ -277,7 +276,7 @@ fn foldcall_reflect_fs() {
 }
 
 #[test]
-#[ignore = "refused: functions.array_arguments.global_in_float_vertex (pinned by refusals_pinned)"]
+#[ignore = "differs: functions.array_arguments.global_in_float_vertex (pinned by refusals_pinned)"]
 fn litfirst_array_vs() {
     mali_ref::assert_matches("deqp_constprod_litfirst_array_vs");
 }
@@ -295,7 +294,6 @@ fn litfirst_mat_vs() {
 }
 
 #[test]
-#[ignore = "refused: random.basic_expression.vertex.57 (pinned by refusals_pinned)"]
 fn litfirst_vs() {
     mali_ref::assert_matches("deqp_constprod_litfirst_vs");
 }
