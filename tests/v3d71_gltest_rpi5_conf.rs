@@ -157,9 +157,8 @@ fn watchdog_holds_for_the_run_and_the_record() {
     // the image does not set either hold itself
     assert!(conf("YAKOGL_RPI5_WDOG_HOLD_S").is_none());
     assert!(conf("V3D_GL_TEST_HOLD_S").is_none());
-    // the default hold is inside the board.sh window (a reboot takes ~150 s
-    // to ssh; the run's wait is 420 s) and above the sample's range floor
-    assert!(200 < 420);
+    // the default hold (200 s) is inside the board.sh window (a reboot takes
+    // ~150 s to ssh; the run's wait is 420 s) and above the sample's range floor
 }
 
 #[test]
