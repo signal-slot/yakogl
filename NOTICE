@@ -33,8 +33,8 @@ stays under the upstream licence; our changes are Apache-2.0.
 
 docs/source-form.md describes where each of these is going (third_party/ with
 the upstream files unmodified). Vendored so far: third_party/mesa-26.2.1/
-(item 1b), third_party/ti-img-rogue-ddk-25.2 (entry 4) and
-third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
+(entry 1), third_party/ti-img-rogue-ddk-25.2 (entry 4) and
+third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 10).
 
 
 1. Mesa 3D (https://gitlab.freedesktop.org/mesa/mesa), version 26.2.1
