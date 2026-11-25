@@ -97,6 +97,10 @@ sum to **187** (64 + 60 + 18 + 15 + 10 + 6 + 6 + 5 + 3).
 
 ### 2.1 Root causes, and the fix each needs
 
+At `3497799a`. Section 5 gives the root causes at `670913e1`, with the
+`Defect(LaneCycle)`, `Defect(Encode)` and `deqp_irindex2_op_val` ones and a
+host-checked minimal pair for each.
+
 **`pair_hi_unread`, `pair_lo_unread` (124): a two-lane conversion reads a lane
 the colour never reads.** `bvec2 in0 = bvec2(v_in0); out0 = in0.x;` (or
 `.yyyy`, `bool(in0)`, `ivec3(ivec4)`). Intval step 1 converts a varying
@@ -303,3 +307,275 @@ The 187 cases (prefix `dEQP-GLES2.functional.`), grouped by dEQP group.
 ### `mat3_uniform_conv` (3)
 
 - `shaders.matrix.mul`: `uniform_highp_mat3_float_fragment`, `uniform_lowp_mat3_float_fragment`, `uniform_mediump_mat3_float_fragment`
+
+## 5. Root causes
+
+**HOST-ONLY.** Plan #402 item `note-irindex` (criterion c6). This section
+covers every `Defect(IrIndex)`, `Defect(LaneCycle)` and `Defect(Encode)`
+root cause at the tip **`670913e1`**. Line numbers are that commit's. No
+compiler change.
+
+- **Sites.** The 14 references were compiled through `tests/mali_ref`'s
+  `compile_pair` in a scratch worktree of `670913e1` (not committed): the
+  nine `deqp_irindex_*`, `deqp_irindex2_op_val`, and the two
+  `deqp_defects_lanecycle_*`. The two `deqp_defects_encode_*` were checked
+  through a 17-attribute minimal pair instead (5.7). In that worktree every
+  `Defect::{IrIndex, LaneCycle, Encode}` construction was made lazy. It
+  prints its `file:line` and the `shaderc/online/mali` frames of a
+  backtrace. The rewrite was in place, so the line numbers are the tip's.
+  Each site below is the first one a compile raises, and it matches the
+  site that `tests/mali_deqp_irindex.rs`, `tests/mali_deqp_irindex2.rs` and
+  `tests/mali_deqp_defects.rs` quote.
+- **Pins at the tip.** Run with
+  `cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_irindex --test mali_deqp_irindex2 --test mali_deqp_defects -- --include-ignored`.
+  The three `refusals_pinned`/`defects_pinned` tests pass. Every byte-compare
+  fails with its pinned refusal. Six `deqp_irindex_*` references and
+  `deqp_irindex2_op_val` refuse with `Defect(IrIndex)`, the two `lanecycle`
+  references with `Defect(LaneCycle)`, and the two `encode` references with
+  `Defect(Encode)`. Three references are past the defect:
+  `load_vec3_cmp` and `sqrt_op_value` refuse with the mixed-precision text,
+  and `mat3_uniform_conv` with the algebraic-rewrite text.
+- **Minimal pairs.** Each pair was compiled the same way, through
+  `compile_pair` with the vertex shader shown. All fragment shaders begin
+  `precision mediump float;`, which is left out below. "Compiles" means
+  `compile_pair` returned `Ok`, not that the words equal Mesa's. The
+  vertex shaders are:
+  - `v2`: `attribute vec4 p; attribute vec2 a; varying vec2 v; void main() { gl_Position = p; v = a; }`
+  - `m3`: the same with `attribute vec3 a; varying mat3 m; ... m = mat3(a, a, a);`
+  - `v4w`: `attribute vec4 a; attribute float c; varying mediump vec4 m; varying mediump float w; ... m = a; w = c;`
+  - `f1`: `attribute float a; varying mediump float b; ... b = a;`
+  - `n`: `attribute vec4 p; void main() { gl_Position = p; }`
+- **Case counts.** The counts are the cases of the `8ff01055` slices'
+  `refusals.tsv` (`tools/cts/log/2026-11-24-t6-gles2-S{1..4}-8ff01055/`).
+  There, 206 cases have `Defect(IrIndex)` as their first refusal (204
+  directly in the fragment shader, 2 through a link), 9 `Defect(LaneCycle)`
+  and 6 `Defect(Encode)`. Each count is split by shape as the HOST-ONLY
+  re-measure of `tests/mali_deqp_irindex2.rs`'s header assigns them (at
+  `51af40b3`, whose sites are the same lines as `670913e1`'s).
+
+| Cause | Site (`670913e1`) | References | Cases (host, `51af40b3`) |
+|---|---|---|---|
+| 5.1 unread lane of a highp `V2F32_TO_V2F16` pair | `nir_fs.rs:9642` (`index`) from `src32` `:12701` or `load_lane` `:12481` | `pair_hi_unread`, `pair_lo_unread` | 64 + 60 |
+| 5.2 unread lane in `split_sum`'s test | `nir_fs.rs:9642` (`index`) from `split_lanes` `:9966`, `split_sum` `:9995`, `lane_tree` `:11206` | `mat4_pair_unread` | 20 |
+| 5.3 a second varying load never emitted | `nir_fs.rs:12702` (`src32`, `lv.raw`) | `load_mat3` | 18 |
+| 5.4 no `emit` arm for `B2f` at 16 bits, width 2 | `emit.rs:489` from `row` `nir_fs.rs:15205`, `select_highp` `:14750` | `b2f16_pair` | 15 |
+| 5.5 an fp16 `fabs` read by two readers has no value | `nir_fs.rs:12709` (`src32`, a 16-bit ALU's `val`) | `val16_abs_fold` | 5 |
+| 5.6 `lane_tree`/`vectorise` cycle | `nir_fs.rs:11173` (`pair_node`, `Defect(LaneCycle)`) | `deqp_defects_lanecycle_{fs,reduced}` | 8 (9 on the board) |
+| 5.7 `LD_ATTR_IMM` record past 15 | `pack.rs:180` (`Fill::done`, `Defect(Encode)`) | `deqp_defects_encode_{max_cond_float,reduced}` | 6 |
+| 5.8 an int uniform pair under `fneg` has no value | `nir_fs.rs:15732` (`operand`) from `op` `:15836`, `select` `:12271` | **`deqp_irindex2_op_val`** | 2 |
+| past the defect: a named refusal | `nir_fs.rs:14139` (mixed precision); `:7678` or none (algebraic rewrite); both as `tests/mali_deqp_irindex2.rs` gives them at `51af40b3`, not re-traced | `load_vec3_cmp`, `sqrt_op_value` (mixed precision); `mat3_uniform_conv` (algebraic rewrite) | 6 mixed precision; 8 algebraic rewrite (1 is `mat3_uniform_conv`'s shape, 7 the misc family) |
+| no refusal on the host | none (`compile_pair` succeeds) | none | 9 |
+
+Every shape of `tests/mali_deqp_irindex.rs` and `tests/mali_deqp_irindex2.rs`
+maps to one row. `load_vec3_cmp`, `sqrt_op_value` and `mat3_uniform_conv`
+are past their defect. They now refuse with the named texts their tests
+pin (`MIXED`, `ALGEBRAIC`), so the defect fix does not cover them. The
+lowerings of plan #402's `mixprec3` item and the misc family own them.
+
+### 5.1 An unread lane of a highp two-lane conversion (`pair_hi_unread`, `pair_lo_unread`; 124 cases)
+
+- **Site.** `index` (`nir_fs.rs:9642`) finds no `f.lane_of` entry for the
+  lane. With the second lane unread, it is called from `src32`
+  (`nir_fs.rs:12701`, in `select_highp`'s source loop `:14672`). With the
+  first lane unread, it is called from `load_lane` (`nir_fs.rs:12481`, in
+  `select_highp`'s load-block walk `:14353`).
+- **Root cause.** `bvec2(v)` makes one `F2f16` of width 2 over `v.x, v.y`
+  (`V2F32_TO_V2F16`). `select_highp` gives it arity 2 (`:14669`). The
+  varying layout gives `lane_of` only to the lanes the colour reads. So a
+  pair with one dead lane asks `index` for a lane that has no slot.
+- **Minimal pair** (`v2`). The only difference is converting the vector
+  versus the lane:
+
+  ```glsl
+  varying vec2 v; void main() { gl_FragColor = vec4(float(bvec2(v).x)); }  // Defect(IrIndex), :9642 from src32
+  varying vec2 v; void main() { gl_FragColor = vec4(float(bool(v.x))); }   // compiles
+  varying vec2 v; void main() { gl_FragColor = vec4(float(bvec2(v).y)); }  // Defect(IrIndex), :9642 from load_lane
+  varying vec2 v; void main() { gl_FragColor = vec4(float(bool(v.y))); }   // compiles
+  ```
+
+- **Fix direction.** Make the two-lane conversion only when both lanes are
+  read, and convert the read lane alone otherwise. Or give the dead lane the
+  slot Mesa's `LD_VAR` loads. Let the two references decide which.
+
+### 5.2 An unread lane in the mediump sum-split test (`mat4_pair_unread`; 20 cases)
+
+- **Site.** `index` (`nir_fs.rs:9642`) is called from `split_lanes`
+  (`:9966`: the `?` on `index(f, w, j)` for the reference and the pair
+  below, on `index(f, v, i)` for `.zwy`). `split_lanes` is called from `split_sum`
+  (`:9995`), and `split_sum` from `lane_tree` (`:11206`). At `3497799a` the
+  same shape failed in `vectorise`. It moved, but it is the same invariant
+  as 5.1, on the mediump colour path.
+- **Root cause.** `lane_tree` asks `split_sum` whether a lane pair of a wide
+  sum (`m + w`) is two sums kept one lane each. `split_lanes` looks up both
+  source lanes through `index`. When the swizzle reads the pair's other lane
+  nowhere (`.zwx` reads `x` but not `y`), that lookup fails with `?` instead
+  of answering "not split". This is a mediump vector, not something specific
+  to mat4: the vec4 pair below shows it.
+- **Minimal pair** (`v4w`). The two shaders differ in one swizzle lane:
+
+  ```glsl
+  varying mediump vec4 m; varying mediump float w;
+  void main() { gl_FragColor = vec4((m + w).zwx, 1.0); }   // Defect(IrIndex), :9642 from split_lanes
+  void main() { gl_FragColor = vec4((m + w).zwz, 1.0); }   // compiles
+  ```
+
+  `(m + 1.0).zwx` also hits it, and `m.zwx` compiles.
+- **Fix direction.** In `split_lanes`, a lane with no `lane_of` entry is not
+  a whole varying's lane, so answer `Ok(false)`. Then pair or split it as
+  5.1's fix does, and check against `deqp_irindex_mat4_pair_unread`.
+
+### 5.3 A conversion reads a varying load that was never emitted (`load_mat3`; 18 cases)
+
+- **Site.** `src32` (`nir_fs.rs:12702`). `lv.raw[k][l]` is `None` for the
+  input's load (`ok_or(defect)`; the `defect` is built at `:12696`).
+- **Root cause.** `select_highp` emits a varying's `LD_VAR` only for the
+  loads its load-block walk asked for. A compare that reads two columns of a
+  `mat3` varying, which are two compacted loads, reads the second load's raw
+  value before any path emitted it. The 3497799a DIAG (section 2.1) showed
+  it as `k=1`, `raw=[None; 4]`.
+- **Minimal pair** (`m3`). The two shaders differ in reading one column or
+  two:
+
+  ```glsl
+  varying mat3 m;
+  void main() { bool k = all(lessThanEqual(m[1], vec3(0.05)));        gl_FragColor = vec4(k, k, k, 1.0); }  // compiles
+  void main() { bool k = all(lessThanEqual(m[0] + m[1], vec3(0.05))); gl_FragColor = vec4(k, k, k, 1.0); }  // Defect(IrIndex), :12702
+  ```
+
+  `max(m[0], m[1])` in place of the sum also hits it.
+- **Fix direction.** Emit the load (`load(p, f, k, lv)`) wherever `src32`
+  reads a varying lane whose raw value is not there yet, as `conversion`
+  does. Place it in the order of `deqp_irindex_load_mat3`'s
+  `LD_VAR_BUF_IMM`.
+
+### 5.4 No encoding for a two-lane fp16 `B2f` (`b2f16_pair`; 15 cases)
+
+- **Site.** `emit::emit`'s fall-through `_ => Err(Defect(IrIndex))`
+  (`emit.rs:489`), reached through `row` (`nir_fs.rs:15205`) from
+  `select_highp` (`:14750`). The row is `(Alu::B2f, bits 16, width 2)`.
+- **Root cause.** `select_highp` keeps a `bvec2 -> vec2` conversion as one
+  two-lane fp16 `B2f`, and `emit`'s table has no arm for it. The same row
+  comes from `vec4(b.x, b.y, ..)` of a `bvec2 b` and from
+  `vec2(float(bool(v.x)), float(bool(v.y)))`: the front end vectorises the
+  two lanes into it.
+- **Minimal pair** (`v2`). The two shaders differ in the `bvec2` conversion:
+
+  ```glsl
+  varying vec2 v; void main() { gl_FragColor = vec4(vec2(bvec2(v)), 0.0, 1.0); }  // Defect(IrIndex), emit.rs:489
+  varying vec2 v; void main() { gl_FragColor = vec4(vec2(v), 0.0, 1.0); }         // compiles
+  ```
+
+- **Fix direction.** Add the arm Mesa's words in `deqp_irindex_b2f16_pair`'s
+  `fs.main` show, or split the row into two one-lane `B2f` in
+  `select_highp` if the reference draws two.
+
+### 5.5 An fp16 `fabs` read by two readers has no value (`val16_abs_fold`; 5 cases)
+
+- **Site.** `src32` (`nir_fs.rs:12709`). `val[n]` of a 16-bit `Kind::Alu`
+  node is `None` (`ok_or(defect)`; the `defect` is built at `:12696`).
+- **Root cause.** In `isOk`'s `abs(a-b) <= eps*abs(b) + eps`, the one
+  `fabs` node (CSE) is read by the compare and by the fused
+  `eps*abs(b) + eps`. One reader takes it as an `.abs` source modifier, so
+  `select_highp` never gives the node a value. The other reads it as a
+  value. The pair shows that both readers are needed. This is still the
+  regression of `0fd576ea` (section 2.2): the reference was byte-equal at
+  `ab9cde96`.
+- **Minimal pair** (`n`). The two shaders differ in `abs(r)` versus `r`
+  inside the product:
+
+  ```glsl
+  uniform float r;
+  void main() { bool k = abs(r) <= 0.05 * abs(r) + 0.05; gl_FragColor = vec4(k, k, k, 1.0); }  // Defect(IrIndex), :12709
+  void main() { bool k = abs(r) <= 0.05 * r + 0.05;      gl_FragColor = vec4(k, k, k, 1.0); }  // compiles
+  ```
+
+  `abs(r) <= abs(r) + 0.05` also hits it, and `r <= 0.05 * abs(r) + 0.05`
+  compiles.
+- **Fix direction.** Give a 16-bit node its value whenever any reader reads
+  it as a value, and fold it into a reader as a modifier only in addition.
+  The test is `deqp_irindex_val16_abs_fold` byte-equal again.
+
+### 5.6 The `lane_tree`/`vectorise` cycle (`Defect(LaneCycle)`; 8 cases on the host, 9 in the slices)
+
+- **Site.** `pair_node` (`nir_fs.rs:11173`) refuses a pair that is asked
+  for again while its own `vectorise` is open. The frames are
+  `select :11763 -> vectorise :10260 -> lane_tree :11208 -> pair_node
+  :11177 -> vectorise :10260 -> lane_tree :11208 -> pair_node :11173`.
+  This is the guard of `mali-deqp-defects.md` 4.1. The cycle itself is
+  still there.
+- **Root cause.** `mali-deqp-defects.md` 3.2 gives it. In `vectorise`'s
+  computed-lane-then-constant arm, a pair `(z, Const)` builds lane `z`
+  alone through `lane_tree`. `lane_tree` asks `Fs::pair_lane(z)` and gets
+  the same pair back, so the same `vectorise` is entered again.
+- **Minimal pair** (`f1`). The same value either way; the two shaders
+  differ in which factor holds the zero lanes:
+
+  ```glsl
+  varying mediump float b;
+  void main() { gl_FragColor = vec4(2.0) * b * vec4(0.0, 0.0, b, 0.0); }  // Defect(LaneCycle), :11173
+  void main() { gl_FragColor = vec4(0.0, 0.0, 2.0, 0.0) * b * vec4(b); }  // compiles
+  ```
+
+  `(b + b) * vec4(0.0, 0.0, b, 0.0)` also cycles. Written lane by lane,
+  `vec4(0.0, 0.0, (2.0 * b) * b, (2.0 * b) * 0.0)` compiles.
+- **Fix direction.** Build the computed lane alone without going back
+  through `Fs::pair_lane`, for example with a no-pair flag on that
+  `lane_tree` call. Then keep `2b * 0.0` as a product, as Mesa does
+  (`deqp_defects_lanecycle_reduced`, one `FMA.v2f16`).
+
+### 5.7 An attribute record past `LD_ATTR_IMM`'s 4 bits (`Defect(Encode)`; 6 cases)
+
+- **Site.** `Fill::done` (`pack.rs:180`) maps `isa::encode`'s
+  `TooWide { value: 16, bits: 4 }` on `attribute_index` to
+  `Defect(Encode)`. The frames are `pack_one :934 -> pack :1015 ->
+  finish_passes mod.rs:949 -> finish :905 -> compile_stage :1510`. This is
+  the vertex shader.
+- **Root cause.** This is `mali-deqp-defects.md` 2.2. The vertex shader is
+  compiled unbound (glCompileShader), and each read attribute location gets
+  a record. More than 16 read locations give record 16, which does not fit
+  the 4-bit field. Unlike the other back ends, the Mali back end does not
+  defer such a shader to the link.
+- **Minimal pair.** This is a vertex shader defect, so the pair differs in
+  the vertex shader. The fragment shader is `void main() { gl_FragColor =
+  vec4(1.0); }`.
+
+  ```glsl
+  attribute float a0; ... attribute float a15; void main() { gl_Position = vec4(a0 + ... + a15); }  // compiles
+  attribute float a0; ... attribute float a16; void main() { gl_Position = vec4(a0 + ... + a16); }  // Defect(Encode), pack.rs:180
+  ```
+
+- **Fix direction.** This is fix A of `mali-deqp-defects.md` 4. Past 16
+  locations, defer the compile to the link (`deferred_vertex`), and refuse
+  by name before the packer as a backstop. Then lower
+  `compile_vs_mapped_blocks` (fix B) for the bound program.
+
+### 5.8 An int uniform pair under a negation has no value (`deqp_irindex2_op_val`; 2 cases)
+
+- **Site.** `operand` (`nir_fs.rs:15732`, the `| P::Op(..)` arm's
+  `val[x].ok_or(..)`, which also serves `Leaf::IntWide`). It is called from
+  `op` (`:15836`, `s[k] = operand(..)`), from `select` (`:12271`). A print at
+  `:15836` in the scratch worktree showed the node: `x = Op(Fneg, [1])`
+  reads `y = Leaf(IntWide { base: 0, comp: 0 })`, whose `val` is `None`.
+  This holds for `deqp_irindex2_op_val` and for both minimal shaders.
+- **Root cause.** A `Leaf::IntWide` gets its value (two `I2f` and one
+  two-lane `F2f16`) only when it is a colour root (`nir_fs.rs:12315-12323`).
+  `op`'s operand set-up (`:15799-15833`) makes `Mk`, `Lanes`, `Wide`,
+  `WideLane`, `Zext`, `Lane` and `Pack` on demand, but not `IntWide`. So an
+  `fneg` of an int uniform pair, which is what `c - vec4(j, i, ..)` and
+  `-vec4(j, i, ..)` become, reads a value nobody made. This is the
+  `sqrt_op_value` site of `3497799a` (section 2.1), now reached by another
+  leaf kind.
+- **Minimal pair** (`n`). The two shaders differ by one operator:
+
+  ```glsl
+  uniform int j; uniform int i;
+  void main() { gl_FragColor = vec4(1.0) - vec4(j, i, 0.0, 0.0); }  // Defect(IrIndex), :15732
+  void main() { gl_FragColor = vec4(1.0) + vec4(j, i, 0.0, 0.0); }  // compiles
+  ```
+
+  `-vec4(j, i, 0.0, 0.0)` and `uniform ivec2 j; ... vec4(1.0) - vec4(j,
+  0.0, 0.0)` also hit it. `vec4(j, i, 0.0, 0.0)` and
+  `vec4(j, i, 0.0, 0.0) - vec4(1.0)` compile.
+- **Fix direction.** Add a `Leaf::IntWide` arm to `op`'s operand set-up that
+  makes the value as the root path at `:12315` does, if it is not there
+  yet. Check the result against `deqp_irindex2_op_val`.
