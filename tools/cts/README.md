@@ -66,6 +66,7 @@ tools/cts/
   check-es100-skips.py         the GL_TEST_ES100 skip list, checked against the code
   readme-glmark2-check.py      the README glmark2 table: one main commit, a RESULTS.md row per board
   glmark2-ms.py                a board's glmark2 console log -> per-scene ms a frame table
+  glmark2-results-row.py       GM verdict lines + glmark2-ms.py output -> one RESULTS.md glmark2 cell
   host-deqp-run.sh             dEQP on THIS host: compile/link outcomes only (2b)
   deqp-es2-programs.sh         every dEQP-GLES2 program of a host v3d run, deduplicated (2b)
 ```
@@ -100,6 +101,21 @@ and printed no result, a ran count that disagrees with the lines, no score, or
 (with `--cells`) one of the three scenes without a time; 2: no glmark2 output.
 `cts-selftest.sh` check 28 runs it on `testdata/glmark2-ms/` (a pass log in
 each board's format with its expected table and cells, and one log per exit).
+
+`glmark2-results-row.py --board B --commit SHA8 --record DIR --verdicts F --ms F
+[--pictures LINE] [--prior TEXT] [--allow-no-console]` prints the `glmark2-es2`
+cell of a board's `RESULTS.md` row from `common-tally.py`'s GM lines (verdict,
+score and scene counts, console cell, amber scenes, pictures) and
+`glmark2-ms.py`'s table or `--cells` line: the score, `33 scenes, 0 failed, 0
+unsupported, 0 GL errors, 0 out-of-memory scenes`, the commit, the record
+directory, the GM verdict and `**terrain X ms a frame, shadow Y ms, refract Z
+ms**`, in the form `readme-glmark2-check.py --scenes terrain,shadow,refract`
+reads. Exit 2, nothing on stdout, when an input is missing, the run is not 33
+ran / 0 failed / 0 unsupported with rc 0 and `verdict=done`, a scene has a GL
+error or out-of-memory line, a scene time is missing or the record directory is
+not at the commit. `glmark2-results-row-selftest.sh` (bash, no board; the gate
+runs it through `tools/check_selftests.py`) checks it on
+`testdata/glmark2-results-row/` (made-up numbers).
 
 ## 0. The dependencies outside the repository
 

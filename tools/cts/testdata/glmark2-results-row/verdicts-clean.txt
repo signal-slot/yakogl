@@ -1,0 +1,9 @@
+GM glmark2 rc=0 verdict=done result=record:GLMARK2 record=11111111,22222222,33333333,44444444; resets (record) 0; image=aaaaaaaaaaaaaaaa build=YAKOGL_SAMPLE_TREE=12345678
+    glmark2 score 123; scenes ran 33, failed 0, unsupported 0; status 0 (pass)
+    glmark2 cell amber; scenes in the console 33, clean 33, with known-bad lines 0
+    glmark2 pictures against column pi4: 33 scenes, match 32, mismatch 1
+    scene [terrain] <default>: picture mismatch (probe c off 12)
+    run records/pi4/20261201-1015-GM-1234abcd
+GT gl_test rc=0 verdict=done result=record:CASE record=55555555; resets (record) 0; image=bbbbbbbbbbbbbbbb build=YAKOGL_SAMPLE_TREE=12345678
+    gl_test passed 13 of 13; failing: none
+    run records/pi4/20261201-1025-GT-1234abcd
