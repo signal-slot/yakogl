@@ -1,0 +1,11 @@
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+host-deqp-run: library and harness from d8dcf734, GPU powervr, gles3 (HOST-ONLY: compile/link outcomes only)
+host-deqp-run: 45 of 45 cases began; process exits (a resumed chunk has several):
+      1 exit=1
+1 .qpa file(s), 0 compile refusal(s), 0 distinct reason(s)
+  on cases dEQP FAILED (real gaps)        : 0  in 0 reason(s)
+  on cases dEQP NOT SUPPORTED (excused)   : 0
+  on cases dEQP PASSED (correct refusals) : 0  in 0 reason(s)
+no refusal carried a `0:<line>:` reason. Either nothing was refused, or the refusals came from somewhere that does not name itself -- check a failure log before reading this as clean.
+host-deqp-run: groups, failures by message: /home/orion/connected-work/01a212f9-6557-76bf-a951-6f28aa96ed47/build/runB1/summary.txt
+host-deqp-run: results in /home/orion/connected-work/01a212f9-6557-76bf-a951-6f28aa96ed47/build/runB1 (HOST-ONLY: never quote a render verdict from them)
