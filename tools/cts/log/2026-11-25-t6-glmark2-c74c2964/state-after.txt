@@ -1,0 +1,7 @@
+boot_files=419
+boot_sha256=7ebf21ccba82b8a4507a810a514711617b035d5b94c02a62307ef0b9e19e30c2
+uboot_env=unavailable
+modules=100
+modules_sha256=65cd42a2de835b3dc84e98f610c15d81a56733d122d72e34ef834f16fd507e50
+boot_id=ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d
+kernel=6.18.55-current-rockchip64

@@ -1,0 +1,6 @@
+yakogl-mali: loaded build=c74c2964 lib=<home>/yakogl-mali-glmark2/c74c2964-20261125-161808/lib/libGLESv2.so.2
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+Error: Failed to set up the ground renderer
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=0 refused=1 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) gpu_faults=0 job_timeouts=0

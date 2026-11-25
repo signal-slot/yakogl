@@ -1,0 +1,16 @@
+yakogl-mali: loaded build=c74c2964 lib=<home>/yakogl-mali-glmark2/c74c2964-20261125-161808/lib/libGLESv2.so.2
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet)
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet)
+/home/<user>/.local/share/ccfarm/deps/yakogl/debian-trixie-arm64-cross/usr/aarch64-linux-gnu/include/c++/14/bits/stl_vector.h:1130: std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](size_type) [with _Tp = int; _Alloc = std::allocator<int>; reference = int&; size_type = long unsigned int]: Assertion '__n < this->size()' failed.

@@ -1,0 +1,18 @@
+preflight: ssh: ok reachable
+preflight: os-release: ok Armbian 26.8.10 trixie
+preflight: uname: ok 6.18.55-current-rockchip64
+preflight: glibc: ok GLIBC_2.41 (floor 2.41)
+preflight: glibcxx: ok GLIBCXX_3.4.33 (floor 3.4.33)
+preflight: cxxabi: ok CXXABI_1.3.15 (floor 1.3.15)
+preflight: build-GLIBC: ok needs GLIBC_2.38, board has GLIBC_2.41 (BUILD-INFO)
+preflight: build-GLIBCXX: ok needs GLIBCXX_3.4.32, board has GLIBCXX_3.4.33 (BUILD-INFO)
+preflight: build-CXXABI: ok needs CXXABI_1.3.9, board has CXXABI_1.3.15 (BUILD-INFO)
+preflight: build-egl-names: ok lib/ holds libEGL.so and libGLESv2.so
+preflight: build-runpath: ok RUNPATH $ORIGIN/../lib
+preflight: render-node: ok /dev/dri/renderD128 belongs to panthor
+preflight: panthor-module: ok loaded
+preflight: stage-space: ok 9922 MiB free at <home>/yakogl-mali (or <home>)
+preflight: boot-space: ok 9922 MiB free at /boot
+preflight: dmesg: ok readable; kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+preflight: system-egl: ok present (libEGL.so libEGL.so.1 libGLESv2.so libGLESv2.so.2) but the build's lib/ holds libEGL.so/libGLESv2.so and RUNPATH $ORIGIN/../lib wins
+preflight: summary: 17 ok, 0 FAIL, 0 warn
