@@ -24,7 +24,7 @@ online compiler accepts but that fail with `Image comparison failed`. The
 |---|--:|---|---|---|
 | **BW**: the bool uniform's word | 277 | no | our GL stores a true bool uniform as `1`; Mesa's words (and ours, which are the same) read it as the mask `~0` (`ICMP_OR.v2u16.eq.m1 r, mask.h00, u.w.h00`) | `src/gl/program.rs:2895`, `src/mali/frame.rs:3117`, record: `src/shaderc/online/mali/select.rs:603-611`, `:757` |
 | **LK**: a mediump struct member pushed as fp16 halves | 12 | the record, not the instructions | the words read the member as an fp32 FAU word (`V2F32_TO_V2F16 r0, u2.w1, u2.w0`); our record makes that word `UniformHalves` (`00004c00` where Mesa pushes `41800000`) | `src/shaderc/online/mali/mod.rs:1623`, `:1632` |
-| **D1**: `b2i32` of a 16-bit mask reads the low half for an odd lane | 10 | yes | `ivecN(bvecN)` widens `.h00` where Mesa widens `.h11` for lanes y and w | `src/shaderc/online/mali/nir_fs.rs:13867-13873` |
+| **D1**: `b2i32` of a 16-bit mask reads the low half for an odd lane | 10 | yes | `ivecN(bvecN)` widens `.h00` where Mesa widens `.h11` for lanes y and w | `src/shaderc/online/mali/nir_fs.rs:14142-14149` (fixed at `d3876279`) |
 
 263 of the 277 BW cases have fragment words **byte-equal** to Mesa's: 98
 whole pairs equal, 165 differing only in the vertex shader's varying
@@ -38,7 +38,8 @@ what is left is the board (section 7):
 
 1. BW, 277 cases. The driver writes Mesa's `~0`: step 2 (D1) of
    `docs/notes/mali-unif2-lowering.md` section 5. Landed at `c9eb0307`
-   and `397351b3`. Board: 277 rows to confirm.
+   and `397351b3`. Pinned by
+   `src/mali/frame_boolunif_tests.rs`. Board: 277 rows to confirm.
 2. LK, 12 cases. The mediump fp16 block keeps a struct member fp32 in the
    `bool_colour` and `int_colour16` routes, as every other route does.
    Landed at `9fa5bbe0`: the six non-`vec4` cases are byte-equal at the
@@ -47,7 +48,9 @@ what is left is the board (section 7):
    does.
 3. D1, 10 cases. The odd lane's half. Landed at `d3876279`: 9 of the 10
    to-`ivec` pairs are Mesa's words at the tip, `bvec3_float_to_ivec4`
-   left by the FP pairing (section 4).
+   left by the FP pairing (section 4), which is value-equal. Fixed in the
+   tree, no board result yet: its 10 cases are expected to pass in the plan
+   406 rerun.
 
 Host forecast: 299 of 299 pass once the three causes are settled, under
 the caveats of section 7; at the tip the six refused `*_vec4*` cases need
@@ -281,7 +284,7 @@ Shape dimensions, by section 4 of docs/notes/mali-deqp-families.md:
     `IADD.v2u16 r1, r0.h11, 0x0`.
   - Ours widens `.h00` for both (`IADD.v2u16 r0, r0^.h00, 0x0`), and the
     row CSE merges them, so `out0.y` is `in0.x`.
-- **Site.** `src/shaderc/online/mali/nir_fs.rs:13867-13873`: the `b2i32` of
+- **Site.** `src/shaderc/online/mali/nir_fs.rs:14142-14149`: the `b2i32` of
   a 16-bit mask matches `Val::Lane(c, _)`, drops the lane and builds
   `Vec2(s[0].swz(Swz::H00), …)`. This is the audit's D1
   (`docs/notes/mali-deqp-compiled-audit.md` section 4.1, then
@@ -375,7 +378,7 @@ read is refused (`MaliError::FsUniform`) until it draws Mesa's words.
 |--:|---|--:|---|---|---|
 | 1 | BW | 277 | `src/gl/program.rs:2895`; `src/mali/program.rs:108`; `src/mali/frame.rs:3117`; record: `src/shaderc/online/mali/fau.rs` (`FauWord`), `select.rs:603-611`, `:757` | `docs/notes/mali-unif2-lowering.md` section 5 / step 2 (D1): `FauWord::UniformBool { dword }` pushed for a `GL_BOOL*` dword, `PushWord::UniformBool` written as `if w != 0 { !0 } else { 0 }` (a `UboRow` `bool` flag for a block row). Needs a host test from `glUniform1i(b, 1)` to the push word (`src/mali/frame_tests.rs`): `tests/mali_ref` cannot see it. | none (BW is not in the words); board: 277 |
 | 2 | LK | 12 | `src/shaderc/online/mali/mod.rs:1623`, `:1632` | pass `fp32(name)` (the struct-member rule) as the other routes do, so `fs16` keeps a member fp32 (`select.rs:635-641`) | Done at `9fa5bbe0`: `lk_uniform_struct`, `_partial`, `_use_case_rip` are LOWERED; the two `lk_*_vec4` shapes are REFUSED (`FsUniform`), a two-member read narrowed as a pair until O lands |
-| 3 | D1 | 10 | `src/shaderc/online/mali/nir_fs.rs:13867-13873` | take the lane's own half (`H11` for an odd lane), as the audit's D1 fix candidate | Done at `d3876279`: `d1_conv_bvec2_to_ivec2_fs`, `d1_conv_bvec4_to_ivec4_fs` are LOWERED (and those of the audit's `deqp_audit_d1_*` with a `bvec` source); `d1_conv_bvec3_float_to_ivec4_fs` stays DIFFERS, left by FP |
+| 3 | D1 | 10 | `src/shaderc/online/mali/nir_fs.rs:14142-14149` | take the lane's own half (`H11` for an odd lane), as the audit's D1 fix candidate | Done at `d3876279`: `d1_conv_bvec2_to_ivec2_fs`, `d1_conv_bvec4_to_ivec4_fs` are LOWERED (and those of the audit's `deqp_audit_d1_*` with a `bvec` source); `d1_conv_bvec3_float_to_ivec4_fs` stays DIFFERS, left by FP |
 | later | V1, VL, A1, WT, FP, S1, NF, CF, O | 0 more board cases here | audit sections 4.2-4.8 | byte-equality only: the values are right already | the rest of DIFFERS |
 
 Steps 1 and 2 are independent of each other and of the open compiler
