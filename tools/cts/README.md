@@ -1230,6 +1230,82 @@ script, which has to provide (no `tools/board.sh` entry for the board yet):
   `VI95_DEQP_BUILD`), and the `vi95_deqp: build <describe>` line the image
   prints first (`vi95_gl_test: build ...` for gl_test).
 
+**The Verdin iMX95 dEQP tree by hand (U-Boot `ext4load`, one image per row).**
+No `tools/board.sh` entry runs it; the 76 rows of `mali-gles2-tree.txt` are
+typed at the module's U-Boot prompt on the UART_3 console, the files staged
+and read back over ssh. The session's addresses, the serial device and the
+credentials are environment only (`$VI95_SSH` is the ssh command with host and
+credentials, set by the session; never in a file, a log or a commit).
+
+1. Build, from one origin/main commit only (a detached checkout, section 2d),
+   stage 1 and the images as above: `tools/cts/deps-env.sh --build DEQP_WORK
+   --board verdin_imx95`, then `tools/cts/imx95-deqp-images.sh
+   tools/cts/mali-gles2-tree.txt <img-dir>` (76 rows, the 64 MiB GL carve-out,
+   about 191 MiB of the 256 MiB window). The lifetime is
+   `CONFIG_YAKOGL_BOARD_LIFETIME_S` of `deqp/verdin_imx95.conf`: 600 s per
+   dEQP row, plus WDOG3's 60 s. The console line `verdin_imx95: WDOG3 armed:
+   ... fed until N s of uptime` is the primary source of a row's lifetime;
+   the conf is only the default.
+2. Print the lines of the rows of the session (nothing is run; a row whose
+   image does not fit the window is refused, exit 1):
+
+   ```sh
+   python3 -I tools/cts/imx95-uboot-row.py --storage <dev:part> \
+       --stage <stage-dir>/ [--conf <file>] <img-dir> <LABEL|LABEL-LABEL>...
+   ```
+
+   `--storage` is U-Boot's `<dev:part>` of the file system the module's Linux
+   stages to (the eMMC's root file system); `--stage` is a path on the module
+   (a trailing `/` adds `<LABEL>.bin`, needed for more than one label); a
+   range is two labels with the same prefix (`T6S1R01-T6S1R12`). Per row it
+   prints the host's md5 and sizes, then in this order:
+   - the ssh side: `$VI95_SSH 'rm -f <file>'`, `$VI95_SSH 'cat > <file>' <
+     zephyr.bin`, `$VI95_SSH 'md5sum <file>'`;
+   - the U-Boot side: `ext4load mmc <dev:part> 0xd0000000 <file>`, `md5sum
+     0xd0000000 0x<size>` (both md5s must equal the host's), then
+     `dcache off; icache flush; go 0xd0000000`;
+   - the run bound (lifetime + WDOG3 period) and the undo line.
+3. Per row: stage over ssh, load at the U-Boot prompt, compare the md5, `go`,
+   and keep the console from `go` to the next row's `go` as that row's
+   capture (named after its label). The board comes back to U-Boot or Linux
+   by itself (PSCI SYSTEM_RESET, or WDOG3 within 60 s of a hang). The boot
+   partitions and the boot command are never written. When the row is over,
+   remove the staged file again (`$VI95_SSH 'rm -f <file>'`, the undo line);
+   no staged file stays on the module.
+4. The BBM record (U2): `tools/imx95_bbm_record.sh read` over ssh does not
+   work on the module's Linux (no SCMI raw mode), so a session has no
+   read-back and its `bbm` column is `not-read`. Whether a row passed or hung
+   is decided by the console: the `deqp: summary:` / `deqp: PASS|FAIL` /
+   `yk-record:` / `run over` lines, else `WDOG3 feeding stopped` or `lifetime
+   over`, and the `LM Boot reason` line of the next boot. Time per row: the
+   uptime in the run-over, lifetime-over or feeding-stopped line against the
+   lifetime.
+5. The session's table, then its check (exit 1 on any violation; one OK line
+   per directory):
+
+   ```sh
+   python3 -I tools/cts/imx95-rows-tsv.py --out <logdir>/rows.tsv \
+       --lifetime-s 600 [--seconds LABEL=N] [--bbm-dir <dir>] <captures-dir>
+   python3 -I tools/cts/imx95-rows-tsv.py --check <logdir>
+   ```
+
+   The columns are `row label cases status seconds lifetime_s bbm exit_line`;
+   the status is `done`, `lifetime`, `hang` or `noboot`. `--lifetime-s` is
+   used only for a capture with no `fed until` line, and `--seconds
+   LABEL=N` (host-timed) only for one with no end line; `--map LABEL=FILE`
+   names a capture whatever its file name. Without `--bbm-dir` or `--bbm`
+   every row is `not-read`.
+6. Where it goes: the logs under
+   `tools/cts/log/<date>-imx95-gles2-<Sx>-<sha8>/` (`<Sx>` the session,
+   `<sha8>` the commit the images were built from; redacted before they are
+   committed), the board records under the gitignored
+   `records/verdin-imx95/<YYYYMMDD-HHMM>-<name>-<sha8>/`.
+7. Redaction: see below (imx95-redact-check.py)
+   <!-- placeholder: the redaction step is written by a later item -->
+
+The tools' selftests are `imx95-uboot-row-selftest.sh` and
+`imx95-rows-tsv-selftest.sh` next to them.
+
 A dEQP image costs its lifetime (`CONFIG_V3D_DEQP_LIFETIME_S`, 240 s) plus
 the boots, whatever its case count: images D and E took 5 min 24 s and
 5 min 21 s from the start of the tryboot run to its end (2026-10-03).
