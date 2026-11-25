@@ -42,6 +42,8 @@
 # Check 59 runs gles3-rerun-rows.py (the TREE_ROWS of the AM62P GLES3 tree
 # that hold a case glob or a not-pass family) on a synthetic tree, mustpass
 # list, not-pass list and rule file.
+# Check 63 runs glmark2-log-check-selftest.sh (the layout and redaction checker
+# of a glmark2 board-session log directory), its count pinned.
 set -u
 
 HERE=$(dirname "$0")
@@ -1082,6 +1084,12 @@ else
     bad "glmark2-results-row-selftest.sh failed"
     printf '%s\n' "$gr_out" | tail -8 | sed 's/^/        | /'
 fi
+
+# 63: glmark2-log-check.sh on synthetic glmark2 log directories (c1: the three
+# tally/state files; c2: the redaction expression, one hit per class, matched
+# text masked in the output; usage errors exit 2). Run like checks 46-52, its
+# ok count pinned and its last line "<name>: N checks passed".
+malicheck 63 glmark2-log-check-selftest.sh 25
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
