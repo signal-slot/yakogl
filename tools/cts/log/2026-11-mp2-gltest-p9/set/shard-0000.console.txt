@@ -1,0 +1,215 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# STM32MP257F-DK gl_test regression set, shard 0 of 1 (50 cases), image from origin/main 2f020ffb: A35 console (USART2) excerpt, redacted (README.md)
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,stm32mp257f-dk)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: eth1@482c0000
+No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+yakogl-mp2: once=gltest_set-dfb2155585545015-1795606296
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+2844624 bytes read in 330 ms (8.2 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 x2=0xf8099c78 x3=0xa0000000 pc=0xa01fbd9c cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 154120022 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 100 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 100000 ms of uptime
+sample: build tree=2f020ffb table=6c5b8a70
+display_power: shm pa 0xa03ba000, ltdc clock 148500000 Hz
+display_power: rif refused 0x0, rimc 0x00000204 0x00000204 0x00000204, fb region 0 verdict 7
+display_power: optee smc 0xb2000009 0x0 0x0 0x0 -> 0x0 0x8074 0x45 0x4
+display_power: clock 90 on, 200000000 Hz
+display_power: clock 94 on, 200000000 Hz
+display_power: clock 12 on, 100000000 Hz
+display_power: clock 28 on, 27000000 Hz
+display_power: clock 27 on, 148500000 Hz
+display_power: rcc i2c2cfgr 0x00000006 -> 0x00000006
+display_power: rcc dsicfgr 0x00000006 -> 0x00000006
+display_power: rcc dsicfgr: PHY reference is not FLEXGEN_28 (kept as found)
+display_power: rcc ltdccfgr 0x00000006 -> 0x00000006
+display_power: syscfg displayclkcr 0x00000002
+display_power: powered: hdmi 5v 0 -> 7, supplies 0x7, rates gpiob 200000000 gpiof 200000000 i2c2 100000000 dsiphy 27000000 ltdc 148500000
+display_power: rcc i2c2 0x00000006 -> 0x00000006, dsi 0x00000006 -> 0x00000006, ltdc 0x00000006 -> 0x00000006, displayclkcr 0x2
+display_power: pins gpiob moder 0xffffdcff gpiof moder 0xffffffea afrl 0x000009a9 pb4 0
+display_power: adv7535 reset pulsed on PB6; pb4 0
+display_power: pins gpiob moder 0xffffdcff gpiof moder 0xffffffea afrl 0x000009a9, adv int 0
+display_power: up
+I: mp25_i2c: 400000 Hz from 100000000 Hz, TIMINGR 0x00c0727f
+gc_power: gpu at 0x48280000, rcc 0x44200000 at 0x44200000, shm pa 0xa03b7000
+gc_power: optee smc 0xb2000009 0x0 0x0 0x0 -> 0x0 0x8074 0x45 0x4
+gc_power: rcc gpucfgr 0x00000006 at entry
+gc_power: rcc gpucfgr 0x00000007 (reset held)
+gc_power: rcc gpucfgr 0x00000006
+gc_power: rcc reset released after 1 reads
+gc_power: gpu idle 0x7fffffff after 1 reads
+gc_power: powered: level 800000000 (found 800000000), rcc 0x00000006, idle 0x7fffffff after 1 reads
+gc_power: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+gc_power: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+gc_power: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+gc_power: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 table=1
+gc_power: ahb-reset-release off
+I: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+I: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+I: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+I: gc diag: reset-attempt n=1 004=0x7fffffff 000=0x00070100
+I: reset to idle: CLOCK_CONTROL=0x00070100 IDLE_STATE=0x7fffffff
+I: gc diag: after-reset 3a8=0xdeaddeac 10c=0x01590880
+I: GC8000 bring-up milestone 1 complete (Rust; core clock 800000000 Hz, carveout 0xfa800000+64M)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+gl_test: case 7 on the STM32MP257F-DK's GPU (lifetime 100000 ms)
+yk-record: 594b0501 00000240 00000ac1 00000001
+I: carveout: 0xfa800000 (64 MiB) at 0xac000000
+W: AHB_CONTROL (0x3a8) reads 0xdeaddeac: the interconnect's pattern for an address no slave decodes; writing the non-secure grant alone
+I: hw init: AXI_CONFIG 0x00000000 (write-only or absent) AHB_CONTROL 0xdeaddeae (absent: no slave at that address) INTR_ENBL 0xffffffff
+I: gc diag: after-init 3a8=0xdeaddeae 10c=0x015d0880
+I: mmu: MTLB at 0xfa800000, carveout 0xfa800000+65536K identity-mapped in 16 slave tables
+I: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0xa0 group=0 pend=0 active=0 gicd_ctlr=0x1 typer=0xfc2c secext=1 gicc_ctlr=0x41 pmr=0xf0 route=ours
+gc_irq: igroupr=0x00000000 (GICD_IGROUPR6) bit23=0 expect=1 mismatch
+I: mmu: on (PTA 0xfa801000 entry 0 -> MTLB 0xfa800000, safe page 0xfa802000)
+I: fe: running the idle loop at 0xfa844000 (WAIT 24414 cycles)
+I: render service up: 30 events, pool 65152 KiB free
+yk-record: 594b0502 00000243 00000b16 00000002
+gl_test: start (case=7 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: osal(gc): ready
+gl_test:   active attributes 2; [1] = a_color size 1 type 0x8b52
+gl_test:   bound a_pos -> 3, a_color -> 1 (link 1)
+gl_test:   active uniforms 2; [0] = u_mvp size 1 type 0x8b5c
+gl_test: case 1 uniform: PASS
+I: yakogl/vivante: the GPU made the 3-level chain of a 4x4 texture: glGenerateMipmap filters nothing
+gl_test: case 2 texture: PASS
+gl_test: case 3 depth: PASS
+gl_test: case 4 cull: PASS
+gl_test: case 5 scissor: PASS
+gl_test: FBO texture contents (via glReadPixels on the FBO):
+gl_test:   v0 red apex                  (31,12) = 0xff120fe7  want 0xff090fe7  MISMATCH  [check 1]
+gl_test: window contents (the texture sampled 1:1):
+gl_test:   v0 red apex                  (31,12) = 0xff120fe7  want 0xff090fe7  MISMATCH  [check 6]
+gl_test:   sampled == rendered          0 pixel(s) differ
+gl_test: case 6 fbo: FAIL
+gl_test: case 8 blend: PASS
+gl_test: case 9 stencil: PASS
+gl_test:   loop: 3 px wide              (17,32) = 0xff00ff00  want 0xff00ff00  ok  [check 11]
+gl_test: case 10 prims: PASS
+gl_test: case 22 vao: PASS
+gl_test:   earlier frame kept           (31,12) = 0xff120fe7  want 0xff090fe7  MISMATCH  [check 2]
+gl_test: case 11 persist: FAIL
+gl_test: case 34 unishare: PASS
+gl_test: case 12 stencil2: PASS
+gl_test: case 23 winding: PASS
+gl_test: case 13 zls: PASS
+gl_test: case 40 qtstrip: PASS
+gl_test: case 14 api: PASS
+I: yakogl: program 48 has no uniform 'u_tex0'
+gl_test: case 24 compact: PASS
+gl_test: case 58 clearscis: PASS
+gl_test: case 59 clearmask: PASS
+gl_test: case 60 wrapmode: PASS
+I: a texture on unit 0 is incomplete and samples (0,0,0,1): a mipmap min filter, but fewer levels uploaded than the chain needs (target 0xde1, 2x2, levels 1 of 2, min filter 0x2703, wrap 0x2901/0x2901)
+gl_test: case 61 texincomp: PASS
+gl_test: case 15 egl: PASS
+gl_test:   x1: inside 0xffff00ff outside 0xff000000 edge 0xffff00ff
+gl_test: case 16 msaa: 1x half done; SKIP the 4x half (no 4x EGL config offered)
+gl_test: case 19 es100: PASS
+gl_test: case 20 etc: ES 3.0 report, 11 compressed formats, sRGB ETC2 x2, decoded x6
+I: GL error 0x501 in glCompressedTexImage2D
+I: GL error 0x500 in glCompressedTexImage2D
+gl_test: case 20 etc: PASS
+gl_test: case 41 es3cube: PASS
+gl_test: case 42 es3array: PASS
+gl_test: case 43 es3vid: PASS
+gl_test: case 46 es3size: PASS
+gl_test:   arrays: instance 3 half white (48,16) = 0x80b58080  want 0x80808080  MISMATCH  [check 4]
+gl_test:   elements: instance 3 half white (48,16) = 0x80f18080  want 0x80808080  MISMATCH  [check 9]
+gl_test: case 47 es3inst: FAIL
+gl_test: case 48 es3vol: PASS
+gl_test: case 49 es3facing: PASS
+gl_test: case 45 es3dyn: PASS
+gl_test:   hdr probe arm 0 (RGBA16F  8 wide): 8 / 8 rows whole
+gl_test:   hdr probe arm 1 (RGBA16F  4 wide): 8 / 8 rows whole
+gl_test:   hdr probe arm 2 (RGBA16F 16 wide): 8 / 8 rows whole
+gl_test:   hdr probe arm 3 (RGBA16F 24 wide): 8 / 8 rows whole
+gl_test:   hdr probe arm 4 (RGBA16F 32 wide): 8 / 8 rows whole
+gl_test:   hdr probe arm 5 (RGBA8    8 wide): 8 / 8 rows whole
+gl_test: case 44 es3hdr: PASS
+gl_test: case 172 swapzs: PASS
+gl_test: case 173 splitzs: PASS
+gl_test: case 181 fusemad: PASS
+gl_test:   folded clamps, vertex        (48,16) = 0x73fa7340  want 0x73bf7340  MISMATCH  [check 2]
+gl_test: case 182 fsat: FAIL
+gl_test: unipad: 500 draws in 40 ms (80 us a draw)
+gl_test: case 183 unipad: PASS
+gl_test: case 188 predif: PASS
+gl_test:   M * vec3(0.5), no lane 1.0   (32,32) = 0xff5a3050  want 0xff303050  MISMATCH  [check 2]
+gl_test:   abs, negation, uniform, each * 1.0 (32,53) = 0xff782040  want 0xff402040  MISMATCH  [check 3]
+gl_test: case 189 mulone: FAIL
+gl_test: case 190 blendonce: PASS
+gl_test: case 191 varyfma: PASS
+gl_test: case 192 predlive: PASS
+gl_test: vtxgrid lod 0 (level 0, 16x16): 0 of 1024 pixels wrong
+gl_test: vtxgrid lod 1 (level 1, 8x8): 0 of 1024 pixels wrong
+gl_test: vtxgrid lod 2 (level 2, 4x4): 0 of 1024 pixels wrong
+gl_test: vtxgrid lod 3 (level 3, 2x2): 0 of 1024 pixels wrong
+gl_test: case 197 vtxgrid: PASS
+gl_test: case 199 es3trunc: PASS
+gl_test: case 21 rgb565: PASS
+gl_test: case 17 ctx2: PASS
+gl_test: case 18 image: PASS
+gl_test: all: 5 of 49 cases failed (44 passed; 0 timed out; first failure case 6 at index 5; second failure case 11; 1 skipped, first skip case 16); precompiled hits 0, compiler runs 190
+gl_test: done
+gl_test: the suite took 11436 ms
+osal(gc): pending frees: high-water 0/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept), held peak 0 KiB
+osal(gc): ds surfaces peak 4/32, ds bytes peak 65536, ds given up 0, ds refused 0 (all live 0, no surface 0)
+osal(gc): log: 0 causes logged once, 0 repeats not printed
+yk-record: 594b0103 00060107 000b002c 00100030
+E: === GC7000 stall dump: gl_test failed ===
+E: fences: next 174, completed 173; irq errors 0
+E: hi: CLOCK_CONTROL 0x00040100 IDLE_STATE 0x7ffffffe AXI_STATUS 0x000000bd INTR_ENBL 0xffffffff
+E: idle: BUSY -> FE (0x7ffffffe; a set bit means idle)
+E: pm: POWER_CONTROLS 0x00140021 MODULE_STATUS 0x002000fc PULSE_EATER 0x015d0880
+E: fe: DMA_ADDRESS 0xfa8480e0 DMA_DEBUG_STATE 0x00000800 (cmd state 0, dma state 0)
+E: fe: DMA_LOW 0x40000002 DMA_HIGH 0xfa8480e0 COMMAND_ADDRESS 0x00000000 IDLE_STATE 0x7ffffffe
+E: ring: 0xfa844000, pos 4156 dwords, idle-loop WAIT at 4152
+E: ring: NOTHING PENDING -- the front end has consumed every submitted command and is in its idle loop
+E:   ring[4148] 0x48000000
+E:   ring[4149] 0x00000701
+E:   ring[4150] 0x08010e01
+E:   ring[4151] 0x00000040
+E:   ring[4152] 0x38005f5e  <- FE
+E:   ring[4153] 0x00000000
+E:   ring[4154] 0x40000002
+E:   ring[4155] 0xfa8480e0
+E: mmu: SEC_STATUS 0x00000000 SEC_CONTROL 0x00000001 fault addr 0x00000000
+E: === 0 events in flight ===
+shaderc: keep high-water 97536 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+gl_test: FAIL rc=-1
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 14412 ms
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.
