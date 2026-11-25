@@ -868,7 +868,15 @@ hand; the dry run in section 3 shows it as the image's extra argument. If the
 tree's `# image T14` and `# image T14a` lines lack the marker, the dry run
 shows no extra argument for them: stop and add the marker to the tree
 (`tools/cts/pi4-full-tree.txt`'s `# image T5` line is the form) before
-building.
+building. The file's numbers are those of the commit the image is built
+from: at `b1b5b845` it gives 64 MiB of carve-out and 24 MiB of tiled copies,
+and T14aa built with it (RAM 178,236 KB, 67.99 %) still stopped on
+`texture.units.8_units.only_cube.3` (`no GPU memory for a tiled copy of
+2117632 bytes (16797696 of 25165824 bytes of copies live, a job open)`,
+then `no empty job holds the draw`;
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts2/`), as
+`tests/v3d_units_cube_mem.rs` predicts for less than the 112 MiB / 32 MiB
+the file holds since `a6219832`.
 
 ### Before a record directory is committed
 
