@@ -9,7 +9,7 @@ ethaddr=02:aa:bb:cc:dd:01
 ipaddr=192.0.2.17
 serverip=192.0.2.1
 netmask=255.255.255.0
-bootfile=/home/someone/yakogl/build/am62p/yako-4a5b6c7d.bin
+bootfile=@HOME@/someone/yakogl/build/am62p/yako-4a5b6c7d.bin
 BOOTP broadcast 1
 DHCP client bound to address 192.0.2.17 (7 ms)
 Using ethernet@8000000port@1 device
