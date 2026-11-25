@@ -141,7 +141,6 @@ fn constop_nz_shared_vs() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (past its constant operation), lowered by lower-mixprec"]
 fn constop_op_abs_highp_float_fs() {
     mali_ref::assert_matches("deqp_constop_op_abs_highp_float_fs");
 }
@@ -175,10 +174,8 @@ fn constop_struct_param_out_vs() {
 }
 
 /// Every ignored reference above, and the refusal the compiler gives it now.
-const REFUSED: &[(&str, &str)] = &[
-    ("deqp_constop_ce_atan_separate_fs", "a constant product in a shape Mesa's algebraic rules move or fold"),
-    ("deqp_constop_op_abs_highp_float_fs", "a fragment shader that mixes highp and mediump or lowp float values"),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("deqp_constop_ce_atan_separate_fs", "a constant product in a shape Mesa's algebraic rules move or fold")];
 
 #[test]
 fn refusals_pinned() {

@@ -254,3 +254,114 @@ the step and compared with section 2's counts.
 - `tests/mali_deqp_fclane.rs`: byte-compare per reference (`#[ignore]`d),
   `refusals_pinned`.
 - Run: `cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_fclane`.
+
+## 7. Landed: mechanisms A, B and D's `tex_coord_ramp` (plan #387, item fclane-lower-1)
+
+HOST-ONLY. Mechanism letters are `mali-fclane-lowering.md` section 4's.
+Every "byte-equal" below is `tests/mali_ref`'s compare with the Mesa 26.2.1
+reference, in every region (vertex and fragment words, FAU, facts). The
+case counts are section 2's first-refusal counts at `9ac31f30`; they were
+**not re-measured**: `tools/mali/deqp-host-measure.sh` needs a complete
+VK-GL-CTS checkout and a host `deqp-gles2` build, and the machine this item
+ran on had only the sparse GLES3 shader corpus. Each count is therefore an
+upper bound of what its shape forecasts, never a board result.
+
+### 7.1 What is byte-equal now
+
+| Reference | Mech | Cases (sec. 2) | What landed (`nir_fs.rs`) |
+|---|:-:|--:|---|
+| `op_pair_yz` | A | 112 | the highp varying's island, `Fs::hp32`: float arithmetic on a highp varying's lanes in a mediump shader is the highp path's fp32 operation (`walk_nodes`' arm, `hp32_op`), narrowed where a declared mediump local takes it (`narrow_stored` at `StoreLocal`), then the colour's fp16 pair arithmetic of the integer route (`int_colour16`, `Fs::alu16`) |
+| `op_pair_xyzw` | A | 115 | the same |
+| `op_pair_xyz` | A | 49 | the same |
+| `mat_cols_sum` | A | 51 | the all-highp path: a matrix local is not grafted (`grafted_locals`: one GLSL variable, read once per column), and a slot holding a matrix varying's lanes stands first before `move_loads` sinks it (`matrix_slot`) |
+| `mat_elem_pairs` | A | 42 | the same |
+| `mat_vec_lanes` | A | 6 | the same (the load order: `v_coords` at 0x10 before the matrix at 0x0) |
+| `varying_merged` | B | 18 | `vectorise`: the colour's (z, w) of a varying whose w the link merged with x is `Leaf::Pack` of z alone and x's half of the pair (x, y) |
+| `struct_fields` | B | 14 | `Leaf::MkInt`: a varying's lane converted at the store and an int uniform's float (`S32_TO_F32` and its narrowing, after the store's conversions) as the colour's second word |
+| `tex_zw_lane` | B | 4 | already byte-equal before this item |
+| `tex_coord_ramp` | D | 20 | `scalar_pair`: two colour lanes two scalar operations compute are each their own tree, packed; `Fs::op`'s reassociation `fadd(#a, fneg(fadd(b, #c)))` -> `fadd(#(a - c), fneg(b))`; the late `ffma` fusion's condition is `is_only_used_by_fadd` (`Fs::only_used_by_fadd`: through `fneg`, any number of sums), and a sum of a negated product fuses with the negated first factor |
+
+10 of the 20 references; 431 of the 821 cases by section 2's counts (A 375
+of 406, B 36 of 36, D 20 of 138).
+
+The same lowering made these other families' references byte-equal (their
+pins moved in the same commit): `deqp_arith_op_binary_div_fs_highp`,
+`_div_assign_fs_highp`, `_common_ceil_`, `_floor_`, `_min_`, `_max_`,
+`_clamp_fs_highp` (53 cases by `mali_deqp_arith.rs`'s counts);
+`deqp_constop_op_abs_highp_float_fs`; `deqp_mixprec3_hp_dot`,
+`_hp_vec3_fn`; `deqp_mixcol_hp_scale`, `_ck_scale_highp`;
+`deqp_unif2_fs_mat_uniform`; `deqp_fsunif_highp_mat4_add_float`. The
+harness without its scale (`color.x = res; gl_FragColor = color`, 62 of
+the 292 operator cases by section 2's sub-shape counts) is
+`deqp_arith_op_binary_div_fs_highp`'s form: the narrowed lane stored as it
+is, `U16_TO_U32` or `MKVEC.v2i16`.
+
+### 7.2 The references drawn again
+
+`deqp_fclane_mat_cols_sum` and `deqp_fclane_mat_elem_pairs` declare
+`a_coords` after a matrix attribute. `gl_ref.py` without `--mat-columns`
+gives a matrix one location, so `a_coords` took the matrix's second
+column's location and Mesa's vertex program read that column for it (one
+`LD_ATTR_IMM` fewer, `STORE ... @r4` of the matrix's lane). dEQP enables
+every column. Both were drawn again with
+
+```sh
+tools/mali/drm_shim_ref.sh run "$CONNECTED_DEPS_DIR/mesa-shim" <vert> <frag> <out> \
+    --prim triangles --uniform-values --mat-columns
+python3 -I tools/mali/pan_ref_diff.py extract <out>.trace --draw > <ref>.expect.json
+```
+
+on a drm-shim built the documented way (it reproduces
+`deqp_fclane_mat4_swz_sum.expect.json` byte for byte). Only `vs.varying`
+changed (21 and 42 words for 20 and 41); `vs.position` and `fs.fragment`
+are the same bytes as before. `mat_vec_lanes` declares `a_coords` first
+and regenerates unchanged.
+
+### 7.3 What stays refused, and why
+
+| Reference | Mech | Cases | Refusal now | Why it is not lowered here |
+|---|:-:|--:|---|---|
+| `mat4_swz_sum` | A | 23 | `ArithConstant` (was the colour-lane text) | a constant matrix plus a scalar: once the sums are scalar Mesa folds `s + 0.0` and reassociates the equal lanes (`fadd(a, fadd(a, b))`, nir_opt_algebraic.py:275, then :246): `FMA.f32 r1, r1^, 0x44000000.h1, 0x0.neg` of four equal lanes, `FMA.f32 r0, r0^, 0x40000000, r0^`. The highp path's rules do not transcribe that (the constant-product family, plan item constprod-lower-1). `unfolded_zero_sum` refuses it by name rather than compile other words; `deqp_arith_matrix_storeout_fs_highp` (11 cases) is the same shape and takes the same text |
+| `op_pair_x` | A | 8 | `Arithmetic` (was the colour-lane text) | its lane is `exp`, the arith family's (`FMA_RSCALE.f32`, `F32_TO_S32`, `FEXP.f32`); the lane source is lowered |
+| `rnd_vec4` | D | 66 | colour lane (`vectorise`'s last arm) | `vec4(e, 6.5, d, 1.5) + vec4(f, e, d, c)` needs three forms no arm has: the pair conversion with its odd lane low (`V2F32_TO_V2F16 r0, r1^, r0^`, which `conversion_order` refuses for want of a reference: this is one), `Leaf::Mk` reading a lane that is a half of that pair (`MKVEC.v2i16 r2, r0.h0, u2.w0.h0`), and `x + x` of a load's lane beside two constants (`vectorise`'s arm takes a computed `x` only). Each reference of this shape is one arrangement of many (section 5, step 4) |
+| `vec3_local` | D | 52 | colour lane (`vectorise`, two lanes of one load that are no pair) | the unrolled `coords = coords.yzwx * 0.5` reads a pair across the two conversions (`FMA.v2f16 r2, r0.h10, ..`, then `MKVEC.v2i16 r2, r2^.h0, r3.h0`): a leaf of one half of each of two conversions, which the pair graph does not have |
+| `op_pair_other` | E | 8 | colour lane | not part of this item |
+| `bcast_*` (5) | C | 233 | colour lane | not part of this item |
+
+The fp32 island takes `+`, `-`, `*`, `/`, `abs`, a negation, `min`, `max`,
+`floor`, `ceil`, a dot product and `inversesqrt` (`hp32_op`). `mod`,
+`smoothstep`, `reflect` (the front end's `ffma`), `sqrt` and `sign` compile
+to other words than Mesa's on the highp path (`FMA.f32 r0, r1^.neg, r2^,
+r0^` against ours' negated second factor; three `FRSQ.f32` before the three
+`FRCP.f32`), so they are outside the island and stay refused
+(`deqp_arith_op_common_mod_fs_highp`, `_smoothstep_`,
+`deqp_arith_op_geometric_reflect_fs_highp`, `deqp_irindex_sqrt_op_value`).
+A value of the island stored to `gl_FragColor` with no mediump variable
+between (`gl_FragColor = a + b` of highp varyings) has no reference and is
+still mixed.
+
+Two layouts Mesa makes that `layout` does not are refused by name, not
+compiled: a highp varying kept whole (a swizzle of two or more of its
+lanes, `kept_whole`'s `vector_hp`: `op_pair_yz` loads `.v4`) beside a
+varying whose read lanes alone are kept (`deqp_mixprec3_hp_vec3_sum`: Mesa
+packs the whole one's lanes right after the other's; `FsVaryingLoad`), and
+the narrowed lane of a sum the link moved into the vertex shader
+(`deqp_mixprec3_hp2_sum`, the colour-lane text).
+
+The `degrees` factor: Mesa's is the literal 57.29578 (0x42652EE1), the
+front end's `180.0 / PI` one ulp below. Only the island's fp32 product
+takes Mesa's word (the fp16 walk rounds both to one half); a shader that
+writes the literal 57.295776 itself would get the same word.
+
+### 7.4 Checks
+
+`cargo test --no-default-features --features
+host-test,gpu-mali,shaderc-online,no-shader-table`: `--test mali_deqp_fclane
+--test mali_deqp_fclane2 --test mali_deqp_mixcol --test mali_deqp_colourpair
+--test mali_glmark2_corpus` and `--lib -- shaderc::online::mali` pass. The
+glmark2 corpus was generated first (`tools/hostharness/glmark2/run.sh`), so
+its test compared the 69 shaders: 47 compile, 16 of 33 scenes are
+compile-clean, no verdict moved and the fixture is unchanged. Every
+reference pair under `tools/mali/testdata` (1,663 with a `.vert` and a
+`.frag`) was compiled before and after: 703 byte-equal before, 728 after,
+none that was byte-equal changed a word.

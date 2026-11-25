@@ -41,7 +41,8 @@
 //! Not re-measured (no dEQP build on this host): MIX matrix.* 11 and the
 //! random shaders (MIX 97, LOAD 16).
 //!
-//! Every reference is refused at the tip, so its test is `#[ignore]`d and
+//! `hp_vec3_fn` and `hp_dot` are byte-equal ([`MATCHED`]). Every other
+//! reference is refused, so its test is `#[ignore]`d and
 //! [`refusals_pinned`] (running) holds its refusal and checks that every
 //! `deqp_mixprec3_*` reference on disk is listed. The lowering that lifts
 //! one (plan #402 item `lower-mixprec3`) removes its `ignore`, moves it from
@@ -57,17 +58,20 @@
 mod mali_ref;
 
 const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
+const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
-/// The references byte-equal now, their tests running.
-const MATCHED: &[&str] = &[];
+/// The references byte-equal now, their tests running: a highp varying's
+/// arithmetic kept fp32 and narrowed where the mediump `color` takes it
+/// (plan #387 item fclane-lower-1, nir_fs.rs `Fs::hp32`).
+const MATCHED: &[&str] = &["hp_vec3_fn", "hp_dot"];
 
 /// Every refused reference with its whole refusal text.
 const REFUSED: &[(&str, &str)] = &[
-    ("hp_vec3_fn", MIX),
-    ("hp_dot", MIX),
     ("hp_bvec4", MIX),
-    ("hp2_sum", LOAD),
+    /* past its load: the narrowed lane of a sum the link moved into the
+     * vertex shader, as the colour's lane */
+    ("hp2_sum", FORM),
     ("hp_vec3_sum", LOAD),
     ("mp_vec3_scale", LOAD),
     ("lp_vec3_scale", LOAD),
@@ -97,13 +101,11 @@ fn refusals_pinned() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn hp_vec3_fn() {
     mali_ref::assert_matches("deqp_mixprec3_hp_vec3_fn");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16); pinned by refusals_pinned"]
 fn hp_dot() {
     mali_ref::assert_matches("deqp_mixprec3_hp_dot");
 }
@@ -117,7 +119,7 @@ fn hp_bvec4() {
 /// Mesa's link moves `in0 + in1` into the vertex shader: the fragment
 /// shader loads one fp32 lane.
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn hp2_sum() {
     mali_ref::assert_matches("deqp_mixprec3_hp2_sum");
 }

@@ -27,7 +27,8 @@
 //! At the tip every reference is refused, so each byte-compare is
 //! `#[ignore]`d and `refusals_pinned` holds the refusal ([`REFUSED`]): the
 //! integer/boolean text, or for `sequence_bool_vec2_highp` the next one (its
-//! `in0 && in1` is dead, as in `intval3_opfs_sequence_bool_vec2_mediump`).
+//! `in0 && in1` is dead, as in `intval3_opfs_sequence_bool_vec2_mediump`;
+//! the varying load's text, [`VARYING_LOAD`]).
 //! The lowering that lifts one moves it to [`MATCHED`] (byte-equal) or
 //! [`DIFFERS`] (compiles with other words than Mesa's) in the same commit and
 //! drops its `#[ignore]`. `fs_words_pinned` checks each reference's
@@ -40,9 +41,6 @@
 mod mali_ref;
 
 const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet";
-/// The refusal after the integer one once the dead `in0 && in1` is left out.
-const FRAGCOLOR_LANE: &str =
-    "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
 /// The references the lowering makes byte-equal, without the `deqp_fsint_`
 /// prefix: each has a running byte-compare test below.
@@ -50,6 +48,11 @@ const MATCHED: &[&str] = &[];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
+
+/// `sequence_bool_vec2_highp`'s refusal since plan #387 item fclane-lower-1:
+/// its highp `v_in1.yx` is kept whole beside `v_in0`'s lane, a packing
+/// nir_fs.rs `layout` does not make.
+const VARYING_LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
 /// Every refused reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
@@ -59,7 +62,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("notequal_ivec4_highp", INT_VALUE),
     ("postdec_result_ivec3_mediump", INT_VALUE),
     ("predec_effect_ivec4_lowp", INT_VALUE),
-    ("sequence_bool_vec2_highp", FRAGCOLOR_LANE),
+    ("sequence_bool_vec2_highp", VARYING_LOAD),
     ("step_float_lowp", INT_VALUE),
 ];
 
@@ -162,7 +165,7 @@ fn postdec_result_ivec3_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (the fp32 b2f, sum and f2i); pinned by refusals_pinned"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (a highp varying kept whole beside another); pinned by refusals_pinned"]
 fn sequence_bool_vec2_highp() {
     mali_ref::assert_matches("deqp_fsint_sequence_bool_vec2_highp");
 }

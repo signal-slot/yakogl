@@ -254,3 +254,55 @@ them does not by itself make a case pass on the board.
 > tests/mali_deqp_mixcol.rs. Note: docs/notes/mali-deqp-mixcol.md (commit
 > <sha>). Forecast (host rewrites): hp narrowing up to 63, int uniform 19,
 > 243 at most for the three steps.
+
+## 6. Landed: MX1 and MX4 (plan #387, item fclane-lower-1)
+
+HOST-ONLY. MX1 and MX4 are steps 1 and 4 of `mali-mixcol-lowering.md`
+section 4. Counts are section 2's, not re-measured (no host `deqp-gles2`
+build on the machine of this item: `mali-deqp-fclane.md` section 7).
+
+**MX1 (the colour pair as an operand, the operator harness).** `ck_scale`
+and `lz_scale` were byte-equal before this item (plan #377's
+spike-colourpair-rest). The third reference of the step, `ck_scale_highp`,
+is byte-equal now: its highp varying's lanes are narrowed where the mediump
+`color` takes them (`nir_fs.rs` `Fs::hp32` at `StoreLocal`), the varying is
+kept whole (`kept_whole`'s `vector_hp`: a swizzle of two lanes loads `.v4`)
+and the colour is the integer route's pair arithmetic (`int_colour16`). No
+other shape belongs to MX1: the three references of step 1 are all
+byte-equal, and the remaining CK and LZ references are MX2's (random sums
+and products), unchanged:
+
+| reference | step | now |
+|---|:-:|---|
+| `ck_scale`, `lz_scale` | MX1 | byte-equal (before this item) |
+| `ck_scale_highp` | MX1 | **byte-equal** |
+| `ck_sum` | MX2 | byte-equal (before this item) |
+| `ck_rnd_other`, `lz_rnd` | MX2 | refused, colour lane (`lane_tree`'s last arm) |
+| `lz_rnd_other` | MX2 | refused, varying load (`conversion_order`: the pair's odd lane low) |
+
+**MX4 (an fp32 expression reading a raw mediump lane).** The walk's arm for
+a product or sum on an fp32 value takes a mediump varying's lane as loaded
+(`raw`): `int_uniform` is byte-equal (`S32_TO_F32 r1, u2.w0`, `FMA.f32 r0,
+r1^, r0^, 0x0.neg`, the constant lane's `FMA.f32 r1, 0x34000000.h1, r2^,
+0x0.neg`, each narrowed alone, two `U16_TO_U32`). Two rules came with it:
+the varying is kept whole (`kept_whole`'s `fp32_op`: `.v4` where x and z
+are read), and a product by a folded constant expression's -0.0 is 0.0
+(`folded_neg_zero`: `d = float(false) * -1.5`, the word's second half).
+`f2i_rnd` is byte-equal too: its products by 0.0 now fold as Mesa's, no
+conversion and no varying load left. `f2i_seq` was byte-equal before.
+`int_uniform_struct` (4) stays refused (MIX): it also reads two mediump
+float members Mesa widens (`F16_TO_F32 r, u.w0.h0`), which the arm does not
+take.
+
+`hp_scale` (23) is byte-equal as a side effect of the fclane island
+(`FADD.f32.discard r0.h0, r0^.neg, 0x0.neg`). `hp_bool`, `hp_param` and
+`hp_seq` stay refused (MIX).
+
+| | byte-equal | refused | differs |
+|---|--:|--:|--:|
+| before | 6 | 11 | 1 (`f2i_dead`) |
+| now | 10 | 7 | 1 (`f2i_dead`) |
+
+Forecast by section 2's counts: `int_uniform` 61 (19 of them compile alone
+by section 4's host rewrite, the others meet a later text), `f2i_rnd` 34
+with `f2i_dead`, `hp_scale` 23, `ck_scale_highp` in the 9 of `ck_scale`.

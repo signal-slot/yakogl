@@ -63,6 +63,10 @@ const LOWERED: &[&str] = &[
 const REFUSED: &[(&str, &str)] = &[
     /* two struct members' words apart, narrowed as a pair (tests/mali_deqp_structmember.rs) */
     ("o_linkage_uniform_struct_vec4", "a mediump fragment shader uniform other than"),
+    /* a highp varying kept whole beside one whose read lanes alone are
+     * kept: Mesa packs the whole one's lanes after the other's, a layout
+     * nir_fs.rs `layout` does not make (plan #387 item fclane-lower-1) */
+    ("l1_op_mul_highp_int_ivec2_fs", "a fragment varying load or conversion of a form no reference draws"),
 ];
 
 /// The references that compile with other words than Mesa's.
@@ -82,7 +86,6 @@ const DIFFERS: &[&str] = &[
     "f1_uniform_info_mat4_fs",
     "k1_cexpr_length_vec3_fs",
     "l1_op_greaterthan_mediump_ivec2_fs",
-    "l1_op_mul_highp_int_ivec2_fs",
     "m1_cexpr_greaterthan_ivec2_vs",
     "m1_matrix_mul_uniform_highp_mat2_vs",
     "m1_uniform_initial_mat4_vs",
@@ -332,7 +335,7 @@ fn m1_matrix_mul_uniform_highp_mat2_vs() {
 /// `dEQP-GLES2.functional.shaders.operator.binary_operator.mul.highp_int_ivec2_fragment` (cause L1): varying load `.v3` where Mesa keeps `.v4`.
 /// Rebuilt from es2fShaderOperatorTests.cpp `ShaderOperatorCase`.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws; pinned by differs_pinned"]
 fn l1_op_mul_highp_int_ivec2_fs() {
     mali_ref::assert_matches("deqp_audit_l1_op_mul_highp_int_ivec2_fs");
 }

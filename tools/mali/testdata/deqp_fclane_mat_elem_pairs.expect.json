@@ -88,7 +88,7 @@
     "0091c20000000089",
     "0091c300000000c0",
     "01abc20000070042",
-    "1866840452217d7c",
+    "1866840452213d3c",
     "006144029a000042",
     "0091c2000000008a",
     "0091c300000000c0",
@@ -96,8 +96,9 @@
     "006145021a000042",
     "0091c2000000008b",
     "0091c300000000c0",
-    "09abc00000074240",
-    "786144025a000040"
+    "01abc00000074240",
+    "1866820242317d7c",
+    "786142029a000040"
    ],
    "text": [
     "LEA_BUF_IMM.slot0 @r0:r1, r59^, table:0xD, index:0x0",
@@ -110,7 +111,7 @@
     "MOV.i32 r2, u4.w1",
     "MOV.i32 r3, 0x0",
     "SHADDX.s64 [r2:r3], [r2^:r3^], [r0:r1], shift:0x0",
-    "LD_ATTR_IMM.v2.f32.slot1.wait01 @r4:r5, r60^, r61^, index:0x2, table:0x1",
+    "LD_ATTR_IMM.v2.f32.slot1.wait01 @r4:r5, r60, r61, index:0x2, table:0x1",
     "STORE.i32.estream.slot2 @r4, [r2^:r3^], offset:0",
     "MOV.i32 r2, u5.w0",
     "MOV.i32 r3, 0x0",
@@ -118,8 +119,9 @@
     "STORE.i32.estream.slot0 @r5, [r2^:r3^], offset:0",
     "MOV.i32 r2, u5.w1",
     "MOV.i32 r3, 0x0",
-    "SHADDX.s64.wait0 [r0:r1], [r0^:r1^], [r2^:r3^], shift:0x0",
-    "STORE.i32.estream.slot1.end @r4, [r0^:r1^], offset:0"
+    "SHADDX.s64 [r0:r1], [r0^:r1^], [r2^:r3^], shift:0x0",
+    "LD_ATTR_IMM.f32.slot1.wait01 @r2, r60^, r61^, index:0x3, table:0x1",
+    "STORE.i32.estream.slot2.end @r2, [r0^:r1^], offset:0"
    ],
    "work_reg_count": 32,
    "preload": "0x3800000000000000",
