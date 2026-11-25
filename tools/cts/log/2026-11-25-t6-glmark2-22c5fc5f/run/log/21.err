@@ -1,0 +1,6 @@
+yakogl-mali: loaded build=22c5fc5f lib=<home>/yakogl-mali-glmark2/22c5fc5f-20261125-204609/lib/libGLESv2.so.2
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+Error: No valid program for normal logo rendering
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=0 refused=1 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
