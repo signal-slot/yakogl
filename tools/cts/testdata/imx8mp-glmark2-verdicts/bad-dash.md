@@ -110,6 +110,11 @@ Verdict values: `right`, `wrong` (becomes an entry under "Wrong scenes"),
 | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1032-s32-0123abcd/ | dump | right |
 | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 0123abcd | records/imx8mp/20261120-1033-s33-0123abcd/ | dump | right |
 
+## What was looked at
+
+Each scene gets one `- **[scene]**` bullet here when its row is filled: what
+the picture showed, against the llvmpipe reference.
+
 ## Wrong scenes
 
 None yet. A scene judged wrong is not fixed in this work: it gets an issue text

@@ -16,7 +16,7 @@ H=$(git -C "$ROOT" rev-parse --short=8 HEAD) || exit 2
 # synth NOTE-OUT COMMIT|skeleton: built from the real note, which board
 # sessions fill in over time (it may be a skeleton or finished). Its own
 # '- **[' bullets are dropped; then either every row is filled, the skeleton
-# phrases scrubbed and 33 bullets added, or every row is reset to the skeleton
+# phrases scrubbed and 33 bullets added under '## What was looked at', or every row is reset to the skeleton
 # and the skeleton phrases added.
 synth() {
     python3 - "$SKEL" "$1" "$2" <<'PY'
@@ -41,7 +41,8 @@ for line in open(src).read().split("\n"):
 if sha == "skeleton":
     out.append("Skeleton: no scene looked at. Not yet established. To fill in.")
 else:
-    out += [""] + ["- **%s**: looked at it." % s for s in scenes]
+    i = out.index("## What was looked at")
+    out[i + 1:i + 1] = [""] + ["- **%s**: looked at it." % s for s in scenes]
 open(dst, "w").write("\n".join(out) + "\n")
 PY
 }

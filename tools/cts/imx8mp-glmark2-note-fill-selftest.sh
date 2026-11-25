@@ -92,6 +92,18 @@ done < <(bash "$HERE/imx8mp-glmark2-dumps.sh" scenes)
 if [ "$n" = 33 ]; then ok "33 scenes listed"; else bad "$n scenes listed"; fi
 d=$(diff "$T/orig.md" "$T/n.md" | grep -c '^>')
 if [ "$d" = 33 ]; then ok "33 lines changed"; else bad "$d lines changed"; fi
+# --complete also wants one bullet per scene and no placeholder text: a
+# synthetic completion of the copy (the fills above only touch the table)
+python3 - "$T/n.md" <<'PY'
+import re, sys
+s = open(sys.argv[1]).read()
+scenes = re.findall(r"^\| (\[[a-z0-9]+\] [^|]*?) \|", s, flags=re.M)
+for ph in ("Not yet established", "To fill in", "Skeleton: no scene"):
+    s = s.replace(ph, "done")
+bul = "\n".join("- **%s**: looked at it." % x for x in scenes)
+s = s.replace("## What was looked at\n", "## What was looked at\n\n" + bul + "\n", 1)
+open(sys.argv[1], "w").write(s)
+PY
 if python3 "$HERE/imx8mp-glmark2-verdicts.py" "$T/n.md" --complete; then
   ok "verdicts.py --complete on the filled copy"
 else bad "verdicts.py --complete"; fi
