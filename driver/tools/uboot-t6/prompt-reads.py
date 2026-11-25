@@ -584,6 +584,64 @@ class FakeBoard(threading.Thread):
             self.done.set()
 
 
+# The replay of a captured prompt session (testdata/prompt-reads/): the
+# prediction of section 1 from the words first_commands() reads. A model of
+# soc::rk3588::gpu_clock_set's rule for the self-test only; the tool never
+# uses it.
+GPU_OPP_MHZ = (300, 400, 500, 600, 700, 800, 900, 1000)
+CPLL_SET_MHZ = 1500
+
+
+def parse_transcript(text):
+    """{command: output} of a captured session: lines `=> CMD`, then the
+    output up to the next `=> `; `#` lines before the first command are
+    the fixture's header and are dropped."""
+    answers, cmd = {}, None
+    for line in text.splitlines():
+        if line.startswith("=> "):
+            cmd = line[3:].strip()
+            answers[cmd] = ""
+        elif cmd is not None:
+            answers[cmd] += line + "\n"
+    return answers
+
+
+def md_words(answer, addr, count):
+    """The count words `md.l` printed from addr, or None."""
+    words = []
+    for line in answer.splitlines():
+        m = re.match(r"([0-9a-f]{8}): ((?:[0-9a-f]{8} ?)+)", line)
+        if m and int(m.group(1), 16) == addr + 4 * len(words):
+            words += [int(w, 16) for w in m.group(2).split()]
+    return words[:count] if len(words) >= count else None
+
+
+def pll_mhz(answers, base, mode_shift):
+    """A PLL's rate in MHz from its PLL_CON words and MODE_CON0 (normal mode
+    only), or None."""
+    w = md_words(answers.get(md(base, 7), ""), base, 7)
+    mode = md_word(answers.get(md(0xFD7C0280), ""), 0xFD7C0280)
+    if w is None or mode is None or (mode >> mode_shift) & 3 != 1:
+        return None
+    m, p, s = w[0] & 0x3ff, w[1] & 0x3f, (w[1] >> 6) & 7
+    return None if p == 0 or w[2] & 0xffff else (24 * m // p) >> s
+
+
+def clock_prediction(answers):
+    """'keep', 'move' or 'refuse', as section 1's rule for the words read."""
+    sel158 = md_word(answers.get(md(0xFD7C0578), ""), 0xFD7C0578)
+    sel159 = md_word(answers.get(md(0xFD7C057C), ""), 0xFD7C057C)
+    cpll = pll_mhz(answers, 0xFD7C01A0, 8)
+    gpll = pll_mhz(answers, 0xFD7C01C0, 2)
+    if sel158 is None or sel159 is None:
+        return "refuse"
+    div = (sel158 & 0x1f) + 1
+    parent = None if sel158 & 0x4000 else {0: gpll, 1: cpll}.get((sel158 >> 5) & 7)
+    if parent is not None and parent % div == 0 and parent // div in GPU_OPP_MHZ and sel159 & 0x1f == 0:
+        return "keep"
+    return "move" if cpll == CPLL_SET_MHZ else "refuse"
+
+
 class Checks:
     """A self-test's checks, with no count kept by hand: every line of the
     test function that calls check() must have run by the end (a check in a
@@ -790,6 +848,42 @@ def self_test():
           "probed_pmic: only a pmic with '+'")
     check(probed_pmic(" pmic          0  [ + ]   rk8xx   `-- a;reset\n") is None,
           "probed_pmic: a name that would not be an allowed command is not used")
+
+    # 11. Replay of captured prompt sessions: every command of a fixture is
+    # one the tool enters, and the decoded decisions are the expected ones.
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "prompt-reads")
+    plan_cmds = set(first_commands())
+    expect = {"section4-2026-11-12.txt": ("move", False, 0xa003, False),
+              "synthetic-keep-pd-on.txt": ("keep", True, 0xa000, True)}
+    for name, (clock, pd_on, gate15, open_) in expect.items():
+        with open(os.path.join(here, name)) as f:
+            text = f.read()
+        ans = parse_transcript(text)
+        pd = "on" if pd_on else "off"
+        check(set(ans) <= plan_cmds and all(allowed(c) for c in ans),
+              name + ": every command is in the plan and allowed")
+        check(clock_prediction(ans) == clock, name + ": gpu_clock_set predicted " + clock)
+        check(pd_gpu_on(ans) == pd_on, name + ": PD_GPU reads " + pd)
+        check(md_word(ans[md(CLKGATE_CON15)], CLKGATE_CON15) == gate15,
+              name + ": CLKGATE_CON(15) is 0x%08x" % gate15)
+        check(wdt0_clocked(ans) == open_, name + ": WDT0's gates read " + ("open" if open_ else "closed"))
+        cmds, _ = later_commands(ans)
+        check((md(WDT0, 2) in cmds) == open_, name + ": WDT0 is read only with both gates open")
+        check(("expect clock=%s pd_gpu=%s " % (clock, pd)) in text,
+              name + ": the header's expectation says the same")
+        check("SYNTHETIC" in text, name + ": the header marks synthetic words")
+        check(not re.search(r"(?i)/dev/|tty|serial|ethaddr|[0-9a-f]{2}(:[0-9a-f]{2}){5}|\.(local|lan)\b", text),
+              name + ": no tty path, serial or MAC in the fixture")
+    with open(os.path.join(here, "section4-2026-11-12.txt")) as f:
+        sec4 = parse_transcript(f.read())
+    check(pll_mhz(sec4, 0xFD7C01A0, 8) == 1500 and pll_mhz(sec4, 0xFD7C01C0, 2) == 1188,
+          "replay: CPLL 1500 MHz and GPLL 1188 MHz, both in normal mode")
+    off_rate = dict(sec4)
+    off_rate[md(0xFD7C01A0, 7)] = off_rate[md(0xFD7C01A0, 7)].replace("000000fa", "000000c8")
+    check(clock_prediction(off_rate) == "refuse", "replay: a CPLL at another rate predicts refuse")
+    pvt = dict(sec4)
+    pvt[md(0xFD7C0578)] = "fd7c0578: 00005f24\n"
+    check(clock_prediction(pvt) == "move", "replay: the PVTPLL bit predicts move")
 
     return check.summary("prompt-reads")
 
