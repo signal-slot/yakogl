@@ -240,7 +240,11 @@ row after the board session, not before.
   `driver/docs/rpi4-v3d.md:161`). The bit therefore does not say whether a
   7.x TFU exists; the table must not gate the TFU on it. What stays open is
   the GL path: the plan (`src/v3d/tfuplan71.rs:130`) is host-tested, but
-  `glGenerateMipmap` through the 7.1 table is item `mip71`.
+  `glGenerateMipmap` through the 7.1 table is item `mip71`: its job inputs
+  (`src/v3d/mip71.rs`, `plan`) are host-tested against `gl_mipgen`
+  (`tests/v3d71_mip.rs`: Mesa's 12 words, `IOC` 0x00086061); the call from
+  the 7.1 table is not wired yet. `mip71` takes no identity: the TFU is not
+  gated on `HUB_IDENT1` bit 17.
 - Seamless cube filtering (U8) and the transfer-function column of section 3
   need the board.
 

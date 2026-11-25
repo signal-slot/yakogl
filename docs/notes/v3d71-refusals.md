@@ -196,7 +196,7 @@ side halves `:144`, a stride that does not describe the image
 `side_stride` `:99-116`, an IOC stride over 16 bits `:152`. Case **118**
 (`glGenerateMipmap`) is the only one that reaches them.
 
-## 6. Texture and TFU planning: format71, texstate71, texture71, sampler71, texfill71, tfuplan71
+## 6. Texture and TFU planning: format71, texstate71, texture71, sampler71, texfill71, tfuplan71, mip71
 
 | Refusal | Where | Condition | GL feature | Case |
 |---|---|---|---|---|
@@ -246,6 +246,9 @@ side halves `:144`, a stride that does not describe the image
 | tfuplan71 `NoLevels` | `tfuplan71.rs:52` | nothing after the base | a 1x1 texture | none |
 | tfuplan71 `RasterDestination` | `tfuplan71.rs:54` | the destination is raster: "TFU requires UIF when generating mipmaps" | a small level kept as UBLINEAR or LINEARTILE (the open `slices71` question) | **118**: the first level that Mesa lays out non-UIF; to be read from the board run |
 | tfuplan71 `SourceNotBase` | `tfuplan71.rs:57` | the source is not the base level in the destination's layout | | none |
+| mip71 `Texture(r)` | `mip71.rs:67` (Display `:77`) | texture71's refusal of the texture, passed through | `glGenerateMipmap` | none (118: RGBA8, 64x64) |
+| mip71 `Tfu(r)` | `mip71.rs:69` (Display `:78`) | tfuplan71's refusal of the chain, passed through (a depth or 32-bit float texture is `UnsupportedType`) | `glGenerateMipmap` of RGBA32F, a depth texture | none |
+| mip71 `AddressOverflow` | `mip71.rs:71` (fires `:155-156`) | the buffer plus a face's base level passes 32 bits | | none |
 
 ## 7. Shared 4.2 refusals the six cases reach through the GL core
 
