@@ -16,6 +16,9 @@
 #
 # Host only, a few seconds.
 set -uo pipefail
+# A known locale: the scripts run below inherit it, so a caller's LC_ALL that
+# is not installed makes no "setlocale" warning in the output checked.
+export LC_ALL=C LANG=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-preflight
 SCRIPT=$HERE/mali-glmark2-preflight.sh
@@ -189,6 +192,10 @@ check "each mutant ran its probe (a mutant that sends nothing proves nothing)" \
 
 # --- no address or credential in the script or the testdata
 check "no address or credential in the files" bash -c '! grep -rEn "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|password|ts\.net" "$1" "$2"' _ "$SCRIPT" "$FIX"
+
+# --- the locale
+check "a child bash prints no setlocale warning (the locale is pinned, whatever the caller's LC_ALL)" \
+  bash -c '! bash -c : 2>&1 | grep -q setlocale'
 
 if [ "$failed" != 0 ]; then
   for f in "$tmp"/*.out; do
