@@ -35,6 +35,7 @@
 //! | [`prim`] | primitive, counts, instances, indices | [`prim71::Draw`] |
 //! | [`attrs`] | the vertex arrays, by GL location | [`attr71::Attr`]s |
 //! | [`ops`] | the whole draw: its fused clear first, then its geometry | [`fill71::Op`]s |
+//! | [`ops_textured`] | the same for a draw that samples textures, with the table's TMU tables ([`TexInputs`]) | [`TexOps`] for `fill71::fill_textured` |
 //!
 //! [`refusal`] checks what neither fill71 nor its modules can take before
 //! anything is mapped; every other value is decided where it already is
@@ -313,13 +314,19 @@ pub fn clear(d: &GlesDraw) -> Option<fill71::ClearReq> {
 /// What a GlesDraw carries that no 7.1 module takes yet (checked before
 /// anything else, so a refused draw leaves its fused clear unrecorded too).
 pub fn refusal(d: &GlesDraw) -> Option<Refusal> {
+    refusal_of(d, false)
+}
+
+/// [`refusal`]; `textured`: the table gives the draw's TMU tables
+/// ([`ops_textured`]), so sampling a texture is no refusal.
+fn refusal_of(d: &GlesDraw, textured: bool) -> Option<Refusal> {
     if d.samples > 1 {
         return Some(Refusal { module: "draw71", reason: draw71::Refusal71::Multisample.message().into() });
     }
     if d.index_count == 0 {
         return None; /* a clear alone: its state is the clear quad's own */
     }
-    if d.num_textures != 0 || d.num_vs_textures != 0 {
+    if !textured && (d.num_textures != 0 || d.num_vs_textures != 0) {
         return Some(refuse(REF_TEXTURES));
     }
     /* state.rs `unsupported` */
@@ -624,6 +631,11 @@ pub fn ops<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Re
     if let Some(r) = refusal(d) {
         return Err(r);
     }
+    mapped(d, fr, input)
+}
+
+/// The operations of a GlesDraw [`refusal_of`] let through.
+fn mapped<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Result<Vec<fill71::Op<'a>>, Refusal> {
     let mut out = Vec::with_capacity(2);
     if let Some(c) = clear(d) {
         out.push(fill71::Op::Clear(c));
@@ -646,4 +658,65 @@ pub fn ops<'a>(d: &GlesDraw, fr: &Frame71, input: Option<&DrawInputs<'a>>) -> Re
         })));
     }
     Ok(out)
+}
+
+/* ---- textured draws (P10) ------------------------------------------------------- */
+
+/// The refusals of [`ops_textured`] (module `glue71`).
+pub const GLUE71_TEX_REFUSALS: [&str; 1] = [REF_TEX_BINDINGS];
+
+const REF_TEX_BINDINGS: &str =
+    "V3D 7.1: the draw's TMU tables are not its sampler bindings (one entry per bound unit and stage)";
+
+/// What the table gives a draw that samples textures, besides
+/// [`DrawInputs`]: each stage's sampler bindings with the texture and
+/// sampler records it placed (`struct v3d_job71_tmu`, as backend71tex
+/// places them from texglue71 and texfill71), one entry per
+/// `GlesDraw::textures` (`fs`) and `vs_textures` (`vs`) binding, the same
+/// units. Empty: a draw that samples nothing.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TexInputs<'a> {
+    pub fs: &'a [ffi71::V3dJob71Tmu],
+    pub vs: &'a [ffi71::V3dJob71Tmu],
+}
+
+/// [`ops_textured`]'s result, for `fill71::fill_textured`: the operations
+/// and one TMU table pair per [`fill71::Op::Draw`] among them (none for a
+/// clear alone). A table concatenates both lists over the GlesDraws of a
+/// flush. `'a` is the draw inputs' lifetime, `'t` the TMU tables'.
+#[derive(Clone, Debug)]
+pub struct TexOps<'a, 't> {
+    pub ops: Vec<fill71::Op<'a>>,
+    pub tmu: Vec<fill71::DrawTmu<'t>>,
+}
+
+/// The tables name exactly the units the GlesDraw binds.
+fn same_units(binds: &[crate::backend::GlesTextureBind], table: &[ffi71::V3dJob71Tmu]) -> bool {
+    binds.len() == table.len() && binds.iter().all(|b| table.iter().any(|t| t.unit == u32::from(b.unit)))
+}
+
+/// [`ops`] for a draw that may sample textures: the draw's TMU tables come
+/// with it (`tex`), so `REF_TEXTURES` is not refused; every other refusal
+/// and every operation are [`ops`]'s. The tables must name the units the
+/// GlesDraw binds, stage by stage ([`GLUE71_TEX_REFUSALS`]); fill71 checks
+/// the words the program reads against them (`fill71::tmu_word`).
+pub fn ops_textured<'a, 't>(
+    d: &GlesDraw,
+    fr: &Frame71,
+    input: Option<&DrawInputs<'a>>,
+    tex: &TexInputs<'t>,
+) -> Result<TexOps<'a, 't>, Refusal> {
+    if let Some(r) = refusal_of(d, true) {
+        return Err(r);
+    }
+    if d.index_count != 0 {
+        let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+        let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+        if !same_units(fs, tex.fs) || !same_units(vs, tex.vs) {
+            return Err(refuse(REF_TEX_BINDINGS));
+        }
+    }
+    let ops = mapped(d, fr, input)?;
+    let draws = ops.iter().filter(|o| matches!(o, fill71::Op::Draw(_))).count();
+    Ok(TexOps { ops, tmu: vec![fill71::DrawTmu { fs: tex.fs, vs: tex.vs }; draws] })
 }
