@@ -167,7 +167,19 @@ expect usage-short 2 -- --sha abc
 expect usage-root 2 -- --root "$WORK/no-such-dir"
 
 # --- the checked-in tree: two builds today ----------------------------------
-expect current-tree 1 '^c1 FAIL .*2 builds' '^c3 PASS ' -- --root "$TOP"
+# c3 must pass on the checked-in tree. c1 must say 'N builds' while the TSV's
+# header names more than one build (today: ad2b5ed and b25997e4); once the
+# splice leaves one build the case only asks c1 not to report several.
+CUR_TSV="$TOP/docs/es3/am62p-gles3-notpass.tsv"
+CUR_NB=$(sed -n 's/^# rows [0-9a-z]*-[0-9a-z]*: build \([0-9a-fA-F]*\), run .*/\1/p' "$CUR_TSV" |
+	tr 'A-F' 'a-f' | sort -u | wc -l)
+if [ "$CUR_NB" -gt 1 ]; then
+	expect current-tree 1 "^c1 FAIL .*$CUR_NB builds" '^c3 PASS ' -- --root "$TOP"
+else
+	out=$(bash "$ACC" --root "$TOP" 2>/dev/null)
+	printf '%s\n' "$out" | grep -q '^c3 PASS ' || fail "current-tree: c3 does not pass: $out"
+	printf '%s\n' "$out" | grep -Eq '^c1 FAIL .*[0-9]+ builds' && fail "current-tree: c1 names several builds: $out"
+fi
 
 if [ $BAD -eq 0 ]; then
 	echo "am62p-gles3-acceptance self-test ok"
