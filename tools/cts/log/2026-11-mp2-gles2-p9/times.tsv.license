@@ -1,0 +1,4 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Per-shard times of the STM32MP257F-DK dEQP-GLES2 sweep (P9), read from the
+image uptime at its PSCI SYSTEM_RESET line on the serial console.

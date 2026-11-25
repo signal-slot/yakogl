@@ -1,0 +1,1958 @@
+board-stm32mp2.sh <board-host>: shard-0008: build 66fcaa3a boot uboot-sd image sha256 4a486beecc4fd272 footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0008 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=48s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0008/20261125-1749-shard-0008-4a486bee/INDEX.txt
+[   60.926287] reboot: Restarting system
+INFO:    PSCI Power Domain Map:
+INFO:      Domain Node : Level 4, parent_node 4294967295, State ON (0x0)
+INFO:      Domain Node : Level 3, parent_node 0, State ON (0x0)
+INFO:      Domain Node : Level 2, parent_node 1, State ON (0x0)
+INFO:      Domain Node : Level 1, parent_node 2, State ON (0x0)
+INFO:      CPU Node : MPID 0x0, parent_node 3, State ON (0x0)
+INFO:      CPU Node : MPID 0x1, parent_node 3, State ON (0x0)
+�NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.
+INFO:    PMIC2 version = 0x11
+INFO:    PMIC2 product ID = 0x20
+INFO:    FCONF: Reading TB_FW firmware configuration file from: 0xe011000
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_io
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_fuse
+INFO:    Using SDMMC
+INFO:      Instance 1
+INFO:    Boot used partition fsbl1
+NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL2: Built : 16:16:36, Oct  3 2025
+INFO:    BL2: Loading image id 26
+INFO:    Loading image id=26 at address 0xe041000
+INFO:    Image id=26 loaded: 0xe041000 - 0xe049650
+INFO:    BL2: Doing platform setup
+INFO:    RAM: LPDDR4 1x32Gbits 1x32bits 1200MHz
+INFO:    Memory size = 0x100000000 (4096 MB)
+INFO:    BL2: Loading image id 1
+INFO:    Loading image id=1 at address 0xe000000
+INFO:    Image id=1 loaded: 0xe000000 - 0xe000326
+INFO:    FCONF: Reading FW_CONFIG firmware configuration file from: 0xe000000
+INFO:    FCONF: Reading firmware configuration information for: dyn_cfg
+INFO:    FCONF: Reading firmware configuration information for: risaf_config
+INFO:    RISAF2: No configuration in DT, use default
+INFO:    BL31 max size = 0x17000 (94208B)
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=3 at address 0xe000000
+INFO:    Image id=3 loaded: 0xe000000 - 0xe0169f8
+INFO:    BL2: Loading image id 19
+INFO:    Loading image id=19 at address 0x81fc0000
+INFO:    Image id=19 loaded: 0x81fc0000 - 0x81fc39a4
+INFO:    BL2: Loading image id 4
+INFO:    Loading image id=4 at address 0x82000000
+INFO:    Image id=4 loaded: 0x82000000 - 0x8200001c
+INFO:    OPTEE ep=0x82000000
+INFO:    OPTEE header info:
+INFO:          magic=0x4554504f
+INFO:          version=0x2
+INFO:          arch=0x1
+INFO:          flags=0x0
+INFO:          nb_images=0x1
+INFO:    BL2: Loading image id 8
+INFO:    Loading image id=8 at address 0x82000000
+INFO:    Image id=8 loaded: 0x82000000 - 0x820fe7b8
+INFO:    BL2: Loading image id 2
+INFO:    Loading image id=2 at address 0x84400000
+INFO:    Image id=2 loaded: 0x84400000 - 0x8441d498
+INFO:    BL2: Loading image id 5
+INFO:    Loading image id=5 at address 0x84000000
+INFO:    Image id=5 loaded: 0x84000000 - 0x841c5b80
+NOTICE:  BL2: Booting BL31
+INFO:    Entry point address = 0xe000000
+INFO:    SPSR = 0x3cd
+INFO:    ARM GICv2 driver initialized
+NOTICE:  BL31: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL31: Built : 16:16:36, Oct  3 2025
+INFO:    BL31: Initializing runtime services
+INFO:    BL31: Initializing BL32
+I/TC: Early console on UART#2
+I/TC: 
+I/TC: Embedded DTB found
+I/TC: OP-TEE version: 4.0.0-dev (gcc version 13.4.0 (GCC)) #1 Fri Oct 20 18:29:31 UTC 2023 aarch64
+I/TC: WARNING: This OP-TEE configuration might be insecure!
+I/TC: WARNING: Please check https://optee.readthedocs.io/en/latest/architecture/porting_guidelines.html
+I/TC: Primary CPU initializing
+I/TC: WARNING: All debug access are allowed
+I/TC: Override the OTP 124: 0 to 0x18db6
+I/TC: WARNING: Embeds insecure stm32mp_provisioning driver
+I/TC: PMIC STPMIC REFID:2.@ V1.1
+I/TC: Platform stm32mp2: flavor PLATFORM_FLAVOR - DT <board-host>.dts
+I/TC: OP-TEE ST profile: secure_and_system_services
+[    0.000000] SCP-firmware 2.13.0-intree-optee-os-4.0.0-dev
+[    0.000000] 
+[    0.000000] [FWK] Module initialization complete!
+I/TC: Primary CPU switching to normal world boot
+INFO:    BL31: Preparing for EL3 exit to normal world
+INFO:    Entry point address = 0x84000000
+INFO:    SPSR = 0x3c9
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+
+
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,<board-host>)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: eth1@482c0000
+\x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+yakogl-mp2: once=shard-0008-4a486beecc4fd272-1795628976
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+10808384 bytes read in 660 ms (15.6 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 x2=0xf8099c98 x3=0xa0000000 pc=0xa0747eec cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 168205568 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 600 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 600000 ms of uptime
+sample: build tree=66fcaa3a table=6c5b8a70
+gc_power: gpu at 0x48280000, rcc 0x44200000 at 0x44200000, shm pa 0xa0b53000
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+gc_power: optee smc 0xb2000009 0x0 0x0 0x0 -> 0x0 0x8074 0x45 0x4
+gc_power: optee msg > 04000000000000000000000000000000000000000000000000000000010000000a020000000000000040b5a00000000000100000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 04000000000000000000000000000000000000000000000000000000010000000a020000000000000040b5a00000000000100000000000000100000000000000
+gc_power: optee msg > 00000000000000000000000000000000000000000000000000000000020000000101000000000000a8cfe406d4f54a2e9f8da25dc754c09900000000000000000101000000000000000000000000000000000000000000000000008000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 00000000000000000100000000000000000000000000000004000000020000000101000000000000a8cfe406d4f54a2e9f8da25dc754c09900000000000000000101000000000000000000000000000000000000000000000000008000000000
+gc_power: optee msg > 01000000030000000100000000000000000000000000000000000000010000000300000000000000000000000000000002000000000000000000000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 01000000030000000100000000000000000000000000000004000000010000000300000000000000000000000000000002000000000000000000000000000000
+gc_power: scmi > 004c0400
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000040000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000004000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 004c04000000000000000200
+gc_power: scmi > 084c040001000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 084c0400000000000008af2f
+gc_power: scmi > 074c0400010000000008af2f
+gc_power: optee msg > 01000000040000000100000000000000000000000000000000000000030000000100000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000c0000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 01000000040000000100000000000000000000000000000004000000030000000100000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000c0000000000000001000000000000000600000000000000800000000000000008000000000000000100000000000000
+gc_power: scmi < 074c040000000000
+gc_power: scmi > 084c040001000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 084c0400000000000008af2f
+gc_power: scmi > 00440400
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000040000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000004000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 004404000000000000000200
+gc_power: scmi > 04440400000000000000000000000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000100000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 0100000004000000010000000000000000000000000000000400000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000100000000000000001000000000000000600000000000000800000000000000008000000000000000100000000000000
+gc_power: scmi < 0444040000000000
+gc_power: scmi > 0544040000000000
+gc_power: optee msg > 0100000004000000010000000000000000000000000000000000000003000000010000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000080000000000000001000000000000000600000000000000800000000000000080000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 010000000400000001000000000000000000000000000000040000000300000001000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000008000000000000000100000000000000060000000000000080000000000000000c000000000000000100000000000000
+gc_power: scmi < 054404000000000000000000
+gc_power: rcc gpucfgr 0x00000006 at entry
+gc_power: rcc gpucfgr 0x00000007 (reset held)
+gc_power: rcc gpucfgr 0x00000006
+gc_power: rcc reset released after 1 reads
+gc_power: gpu idle 0x7fffffff after 1 reads
+gc_power: optee msg > 0200000000000000010000000000000000000000000000000000000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 0200000000000000010000000000000000000000000000000300000000000000
+gc_power: optee msg > 05000000000000000000000000000000000000000000000000000000010000000500000000000000000000000000000000000000000000000100000000000000
+gc_power: optee smc 0x32000039 0x0 0xa0b53000 0x0 -> 0x0 0x0 0x0 0x0
+gc_power: optee msg < 05000000000000000000000000000000000000000000000000000000010000000500000000000000000000000000000000000000000000000100000000000000
+gc_power: powered: level 800000000 (found 800000000), rcc 0x00000006, idle 0x7fffffff after 1 reads
+gc_power: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+gc_power: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+gc_power: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+gc_power: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 table=1
+gc_power: ahb-reset-release off
+I: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
+I: registers say: features 0xe0687ca5 minor0 0xc9799eff minor1 0xfefbfadb
+I: database: MMU v2 secure AHB yes, 2 shader cores, 1 pixel pipe(s)
+I: gc diag: reset-attempt n=1 004=0x7fffffff 000=0x00070100
+I: reset to idle: CLOCK_CONTROL=0x00070100 IDLE_STATE=0x7fffffff
+I: gc diag: after-reset 3a8=0xdeaddeac 10c=0x01590880
+I: GC8000 bring-up milestone 1 complete (Rust; core clock 800000000 Hz, carveout 0xfa800000+64M)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+deqp: slot filter, 10448 bytes
+deqp: case filter 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_tex,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_none,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_rbo,dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_tex,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth24_stencil8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component16,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component24,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component32,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_int,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_short,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_stencil_unsigned_int_24_8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r11f_g11f_b10f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10_a2,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb565,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb5_a1,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_10f_11f_11f_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_2_10_10_10_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_short_5_6_5,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba4,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_int_2_10_10_10_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_4_4_4_4,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_5_5_5_1,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.sr8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srg8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8_alpha8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_alpha_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.stencil_index8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth24_stencil8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component16,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component24,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component32,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_int,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_short,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_stencil_unsigned_int_24_8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r11f_g11f_b10f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10_a2,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb565,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb5_a1,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_10f_11f_11f_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_2_10_10_10_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_short_5_6_5,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba16f,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba4,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_float,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_half_float_oes,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_byte,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_int_2_10_10_10_rev,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_4_4_4_4,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_5_5_5_1,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.sr8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srg8_ext,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8_alpha8,dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb_alpha_unsigned_byte'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: carveout: 0xfa800000 (64 MiB) at 0xbbe00000
+W: AHB_CONTROL (0x3a8) reads 0xdeaddeac: the interconnect's pattern for an address no slave decodes; writing the non-secure grant alone
+I: hw init: AXI_CONFIG 0x00000000 (write-only or absent) AHB_CONTROL 0xdeaddeae (absent: no slave at that address) INTR_ENBL 0xffffffff
+I: gc diag: after-init 3a8=0xdeaddeae 10c=0x015d0880
+I: mmu: MTLB at 0xfa800000, carveout 0xfa800000+65536K identity-mapped in 16 slave tables
+I: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0xa0 group=0 pend=0 active=0 gicd_ctlr=0x1 typer=0xfc2c secext=1 gicc_ctlr=0x41 pmr=0xf0 route=ours
+gc_irq: igroupr=0x00000000 (GICD_IGROUPR6) bit23=0 expect=1 mismatch
+I: mmu: on (PTA 0xfa801000 entry 0 -> MTLB 0xfa800000, safe page 0xfa802000)
+I: fe: running the idle loop at 0xfa844000 (WAIT 24414 cycles)
+I: render service up: 30 events, pool 65152 KiB free
+I: osal(gc): ready
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+I: GL error 0x500 in glGetIntegerv
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_rbo_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.rbo_tex_tex_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_none_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_rbo_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_none_tex_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_none_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_rbo_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_rbo_tex_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_none_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_rbo_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_none'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_none
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_rbo'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_rbo
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_tex'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.attachment_combinations.tex_tex_tex_tex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.bgra8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth24_stencil8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component16'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component24'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component32'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_int'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_short'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_component_unsigned_short
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_stencil_unsigned_int_24_8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.depth_stencil_unsigned_int_24_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r11f_g11f_b10f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r11f_g11f_b10f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.red_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rg_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10_a2'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb565'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb5_a1'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_10f_11f_11f_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_10f_11f_11f_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_2_10_10_10_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_int_2_10_10_10_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_short_5_6_5'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgb_unsigned_short_5_6_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba4'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_int_2_10_10_10_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_int_2_10_10_10_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_4_4_4_4'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_4_4_4_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_5_5_5_1'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.rgba_unsigned_short_5_5_5_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.sr8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.sr8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srg8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srg8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8_alpha8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_alpha_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_alpha_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.srgb_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.stencil_index8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.color0.stencil_index8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.bgra8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth24_stencil8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component16'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component24'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component32'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_int'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_int
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_short'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_component_unsigned_short
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_stencil_unsigned_int_24_8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.depth_stencil_unsigned_int_24_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r11f_g11f_b10f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r11f_g11f_b10f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.red_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rg_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10_a2'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb565'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb5_a1'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_10f_11f_11f_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_10f_11f_11f_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_2_10_10_10_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_int_2_10_10_10_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_short_5_6_5'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgb_unsigned_short_5_6_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba16f'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba4'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_float'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_float
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_half_float_oes'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_half_float_oes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_byte
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_int_2_10_10_10_rev'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_int_2_10_10_10_rev
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_4_4_4_4'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_4_4_4_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_5_5_5_1'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.rgba_unsigned_short_5_5_5_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.sr8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.sr8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srg8_ext'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srg8_ext
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8_alpha8'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb_alpha_unsigned_byte'..
+deqp: Pass dEQP-GLES2.functional.fbo.completeness.renderable.renderbuffer.depth.srgb_alpha_unsigned_byte
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        125/125 (100.0%)
+  Failed:        0/125 (0.0%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 125 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 0 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 4148 ms
+INFO:    PSCI Power Domain Map:
+INFO:      Domain Node : Level 4, parent_node 4294967295, State ON (0x0)
+INFO:      Domain Node : Level 3, parent_node 0, State ON (0x0)
+INFO:      Domain Node : Level 2, parent_node 1, State ON (0x0)
+INFO:      Domain Node : Level 1, parent_node 2, State ON (0x0)
+INFO:      CPU Node : MPID 0x0, parent_node 3, State ON (0x0)
+INFO:      CPU Node : MPID 0xffffffffffffffff, parent_node 3, State OFF (0x3)
+�NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Model: STMicroelectronics STM32MP257F-DK Discovery Board
+NOTICE:  Board: MB1605 Var1.0 Rev.C-01
+NOTICE:  Reset reason: System reset (SYSRST) (0x2074). Warm boot.
+INFO:    PMIC2 version = 0x11
+INFO:    PMIC2 product ID = 0x20
+INFO:    FCONF: Reading TB_FW firmware configuration file from: 0xe011000
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_io
+INFO:    FCONF: Reading firmware configuration information for: stm32mp_fuse
+INFO:    Using SDMMC
+INFO:      Instance 1
+INFO:    Boot used partition fsbl1
+NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL2: Built : 16:16:36, Oct  3 2025
+INFO:    BL2: Loading image id 26
+INFO:    Loading image id=26 at address 0xe041000
+INFO:    Image id=26 loaded: 0xe041000 - 0xe049650
+INFO:    BL2: Doing platform setup
+INFO:    RAM: LPDDR4 1x32Gbits 1x32bits 1200MHz
+INFO:    Memory size = 0x100000000 (4096 MB)
+INFO:    BL2: Loading image id 1
+INFO:    Loading image id=1 at address 0xe000000
+INFO:    Image id=1 loaded: 0xe000000 - 0xe000326
+INFO:    FCONF: Reading FW_CONFIG firmware configuration file from: 0xe000000
+INFO:    FCONF: Reading firmware configuration information for: dyn_cfg
+INFO:    FCONF: Reading firmware configuration information for: risaf_config
+INFO:    RISAF2: No configuration in DT, use default
+INFO:    BL31 max size = 0x17000 (94208B)
+INFO:    BL2: Loading image id 3
+INFO:    Loading image id=3 at address 0xe000000
+INFO:    Image id=3 loaded: 0xe000000 - 0xe0169f8
+INFO:    BL2: Loading image id 19
+INFO:    Loading image id=19 at address 0x81fc0000
+INFO:    Image id=19 loaded: 0x81fc0000 - 0x81fc39a4
+INFO:    BL2: Loading image id 4
+INFO:    Loading image id=4 at address 0x82000000
+INFO:    Image id=4 loaded: 0x82000000 - 0x8200001c
+INFO:    OPTEE ep=0x82000000
+INFO:    OPTEE header info:
+INFO:          magic=0x4554504f
+INFO:          version=0x2
+INFO:          arch=0x1
+INFO:          flags=0x0
+INFO:          nb_images=0x1
+INFO:    BL2: Loading image id 8
+INFO:    Loading image id=8 at address 0x82000000
+INFO:    Image id=8 loaded: 0x82000000 - 0x820fe7b8
+INFO:    BL2: Loading image id 2
+INFO:    Loading image id=2 at address 0x84400000
+INFO:    Image id=2 loaded: 0x84400000 - 0x8441d498
+INFO:    BL2: Loading image id 5
+INFO:    Loading image id=5 at address 0x84000000
+INFO:    Image id=5 loaded: 0x84000000 - 0x841c5b80
+NOTICE:  BL2: Booting BL31
+INFO:    Entry point address = 0xe000000
+INFO:    SPSR = 0x3cd
+INFO:    ARM GICv2 driver initialized
+NOTICE:  BL31: v2.10-stm32mp2-r2.0(debug):lts-v2.10.24-dirty(a07367a1)
+NOTICE:  BL31: Built : 16:16:36, Oct  3 2025
+INFO:    BL31: Initializing runtime services
+INFO:    BL31: Initializing BL32
+I/TC: Early console on UART#2
+I/TC: 
+I/TC: Embedded DTB found
+I/TC: OP-TEE version: 4.0.0-dev (gcc version 13.4.0 (GCC)) #1 Fri Oct 20 18:29:31 UTC 2023 aarch64
+I/TC: WARNING: This OP-TEE configuration might be insecure!
+I/TC: WARNING: Please check https://optee.readthedocs.io/en/latest/architecture/porting_guidelines.html
+I/TC: Primary CPU initializing
+I/TC: WARNING: All debug access are allowed
+I/TC: Override the OTP 124: 0 to 0x18db6
+I/TC: WARNING: Embeds insecure stm32mp_provisioning driver
+I/TC: PMIC STPMIC REFID:2.@ V1.1
+I/TC: Platform stm32mp2: flavor PLATFORM_FLAVOR - DT <board-host>.dts
+I/TC: OP-TEE ST profile: secure_and_system_services
+[    0.000000] SCP-firmware 2.13.0-intree-optee-os-4.0.0-dev
+[    0.000000] 
+[    0.000000] [FWK] Module initialization complete!
+I/TC: Primary CPU switching to normal world boot
+INFO:    BL31: Preparing for EL3 exit to normal world
+INFO:    Entry point address = 0x84000000
+INFO:    SPSR = 0x3c9
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+
+
+U-Boot 2023.10-stm32mp-r3.1 (Oct 02 2023 - 14:39:59 +0000)
+
+CPU: STM32MP257FAK Rev.Y
+Model: STMicroelectronics STM32MP257F-DK Discovery Board
+Board: stm32mp2 (st,<board-host>)
+Board: MB1605 Var1.0 Rev.C-01
+DRAM:  4 GiB
+optee optee: OP-TEE: revision 4.0 (2a5b1d12)
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+Core:  420 devices, 42 uclasses, devicetree: board
+WDT:   Started watchdog with servicing every 1000ms (32s timeout)
+NAND:  0 MiB
+MMC:   STM32 SD/MMC: 0, STM32 SD/MMC: 1
+Loading Environment from MMC... OK
+In:    serial
+Out:   serial
+Err:   serial
+Net:   eth0: eth1@482c0000
+\x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8No EFI system partition
+No EFI system partition
+Failed to persist EFI variables
+yakogl-mp2: hook
+Hit any key to stop autoboot:  1 \x08\x08\x08 0 
+Boot over mmc0!
+switch to partitions #0, OK
+mmc0 is current device
+Scanning mmc 0:8...
+Found /mmc0_extlinux/extlinux.conf
+Retrieving file: /mmc0_extlinux/extlinux.conf
+Retrieving file: /splash_landscape.bmp
+1:	OpenSTLinux
+Enter choice: 1:	OpenSTLinux
+Retrieving file: /Image.gz
+Retrieving file: /st-image-resize-initrd
+append: root=PARTUUID=e91c4e10-16e6-4c0e-bd0e-77becf4a3582 rootwait rw   earlycon console=ttySTM0,115200
+Retrieving file: /<board-host>.dtb
+   Uncompressing Kernel Image
+## Flattened Device Tree blob at 90000000
+   Booting using the fdt blob at 0x90000000
+Working FDT set to 90000000
+   Loading Ramdisk to 8f7c0000, end 8ffff41a ... OK
+   Loading Device Tree to 000000008f79f000, end 000000008f7bf24e ... OK
+Working FDT set to 8f79f000
+
+Starting kernel ...
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x411fd040]
+[    0.000000] Linux version 6.6.129 (oe-user@oe-host) (aarch64-ostl-linux-gcc (GCC) 13.4.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP PREEMPT Thu Mar  5 15:03:43 UTC 2026
+[    0.000000] KASLR disabled due to lack of seed
+[    0.000000] Machine model: STMicroelectronics STM32MP257F-DK Discovery Board
+[    0.000000] efi: UEFI not found.
+[    0.000000] Reserved memory: created CMA memory pool at 0x00000000f2800000, size 128 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000f2800000..0x00000000fa7fffff (131072 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x000000000a000000..0x000000000a01ffff (128 KiB) nomap non-reusable tfa-bl31@a000000
+[    0.000000] OF: reserved mem: 0x000000000a020000..0x000000000a02ffff (64 KiB) nomap non-reusable hpdma1-lli@a020000
+[    0.000000] OF: reserved mem: 0x000000000a030000..0x000000000a03dfff (56 KiB) nomap non-reusable hpdma2-lli@a030000
+[    0.000000] OF: reserved mem: 0x000000000a03e000..0x000000000a03ffff (8 KiB) nomap non-reusable hpdma3-lli@a03e000
+[    0.000000] OF: reserved mem: 0x000000000a040000..0x000000000a040fff (4 KiB) nomap non-reusable bsec-mirror@a040000
+[    0.000000] OF: reserved mem: 0x000000000a041000..0x000000000a041fff (4 KiB) nomap non-reusable scmi-cid2-s@a041000
+[    0.000000] OF: reserved mem: 0x000000000a042000..0x000000000a042fff (4 KiB) nomap non-reusable scmi-cid2-ns@a042000
+[    0.000000] OF: reserved mem: 0x000000000a043000..0x000000000a05ffff (116 KiB) nomap non-reusable cm33-sram1@a043000
+[    0.000000] OF: reserved mem: 0x000000000a060000..0x000000000a07ffff (128 KiB) nomap non-reusable cm33-sram2@a060000
+[    0.000000] OF: reserved mem: 0x000000000a080000..0x000000000a09efff (124 KiB) nomap non-reusable cm33-retram@a080000
+[    0.000000] OF: reserved mem: 0x000000000a09f000..0x000000000a09ffff (4 KiB) nomap non-reusable ddr-param@a09f000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c0000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node cm0-cube-fw@200C0000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c0000..0x00000000200c3fff (16 KiB) nomap non-reusable cm0-cube-fw@200C0000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c4000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node cm0-cube-data@200C4000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c4000..0x00000000200c5fff (8 KiB) nomap non-reusable cm0-cube-data@200C4000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000200c6000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node ipc-shmem-2@200C6000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000200c6000..0x00000000200c7fff (8 KiB) nomap non-reusable ipc-shmem-2@200C6000
+[    0.000000] OF: reserved mem: 0x0000000042000000..0x0000000042000fff (4 KiB) nomap non-reusable bl31-lowpower@42000000
+[    0.000000] OF: reserved mem: 0x0000000042001000..0x0000000042001fff (4 KiB) nomap non-reusable tfm-its@42001000
+[    0.000000] OF: reserved mem: 0x0000000060000000..0x000000006fffffff (262144 KiB) nomap non-reusable mm-ospi@60000000
+[    0.000000] OF: reserved mem: 0x0000000080000000..0x00000000800fffff (1024 KiB) nomap non-reusable tfm-code@80000000
+[    0.000000] OF: reserved mem: 0x0000000080100000..0x00000000808fffff (8192 KiB) nomap non-reusable cm33-cube-fw@80100000
+[    0.000000] OF: reserved mem: 0x0000000080900000..0x00000000809fffff (1024 KiB) nomap non-reusable tfm-data@80900000
+[    0.000000] OF: reserved mem: 0x0000000080a00000..0x00000000811fffff (8192 KiB) nomap non-reusable cm33-cube-data@80a00000
+[    0.000000] Reserved memory: created DMA memory pool at 0x0000000081200000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node ipc-shmem-1@81200000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x0000000081200000..0x00000000812f7fff (992 KiB) nomap non-reusable ipc-shmem-1@81200000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812f8000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0vring0@812f8000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812f8000..0x00000000812f8fff (4 KiB) nomap non-reusable vdev0vring0@812f8000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812f9000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0vring1@812f9000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812f9000..0x00000000812f9fff (4 KiB) nomap non-reusable vdev0vring1@812f9000
+[    0.000000] Reserved memory: created DMA memory pool at 0x00000000812fa000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node vdev0buffer@812fa000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x00000000812fa000..0x00000000812fffff (24 KiB) nomap non-reusable vdev0buffer@812fa000
+[    0.000000] OF: reserved mem: 0x0000000081300000..0x0000000081fbffff (13056 KiB) nomap non-reusable spare1@81300000
+[    0.000000] OF: reserved mem: 0x0000000081fc0000..0x0000000081ffffff (256 KiB) nomap non-reusable bl31-context@81fc0000
+[    0.000000] OF: reserved mem: 0x0000000082000000..0x0000000083ffffff (32768 KiB) nomap non-reusable op-tee@82000000
+[    0.000000] OF: reserved mem: 0x00000000fa800000..0x00000000fe7fffff (65536 KiB) nomap non-reusable gpu-reserved@fa800000
+[    0.000000] OF: reserved mem: 0x00000000fe800000..0x00000000feffffff (8192 KiB) nomap non-reusable ltdc-sec-layer@fe800000
+[    0.000000] OF: reserved mem: 0x00000000ff000000..0x00000000ffffffff (16384 KiB) nomap non-reusable ltdc-sec-rotation@ff000000
+[    0.000000] earlycon: stm32 at MMIO 0x00000000400e0000 (options '115200n8')
+[    0.000000] printk: bootconsole [stm32] enabled
+[    0.000000] NUMA: No NUMA configuration found
+[    0.000000] NUMA: Faking a node at [mem 0x0000000080000000-0x000000017fffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0x17f7a49c0-0x17f7a6fff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000080000000-0x00000000ffffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000017fffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x0000000083ffffff]
+[    0.000000]   node   0: [mem 0x0000000084000000-0x00000000fa7fffff]
+[    0.000000]   node   0: [mem 0x00000000fa800000-0x00000000ffffffff]
+[    0.000000]   node   0: [mem 0x0000000100000000-0x000000017fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x000000017fffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.4
+[    0.000000] psci: OSI mode supported.
+[    0.000000] percpu: Embedded 22 pages/cpu s49640 r8192 d32280 u90112
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: root=PARTUUID=e91c4e10-16e6-4c0e-bd0e-77becf4a3582 rootwait rw   earlycon console=ttySTM0,115200
+[    0.000000] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.000000] Fallback order for Node 0: 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 1032192
+[    0.000000] Policy zone: Normal
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] software IO TLB: area num 2.
+[    0.000000] software IO TLB: mapped [mem 0x00000000ee800000-0x00000000f2800000] (64MB)
+[    0.000000] Memory: 3724712K/4194304K available (15360K kernel code, 1680K rwdata, 6040K rodata, 3776K init, 475K bss, 338520K reserved, 131072K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for 4kB GICC access disabled
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv2m: range[mem 0x48090000-0x48090fff], SPI[362:392]
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 40.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x939a85c40, max_idle_ns: 440795202120 ns
+[    0.000000] sched_clock: 56 bits at 40MHz, resolution 25ns, wraps every 4398046511100ns
+[    0.009089] Console: colour dummy device 80x25
+[    0.012511] Calibrating delay loop (skipped), value calculated using timer frequency.. 80.00 BogoMIPS (lpj=160000)
+[    0.022795] pid_max: default: 32768 minimum: 301
+[    0.027478] LSM: initializing lsm=capability,integrity
+[    0.032634] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.039937] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.048637] cacheinfo: Unable to detect cache hierarchy for CPU 0
+[    0.054733] RCU Tasks: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.062613] RCU Tasks Trace: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.071960] rcu: Hierarchical SRCU implementation.
+[    0.076525] rcu: 	Max phase no-delay instances is 1000.
+[    0.084030] EFI services will not be available.
+[    0.086601] smp: Bringing up secondary CPUs ...
+I/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+[    0.104294] Detected VIPT I-cache on CPU1
+[    0.104388] CPU1: Booted secondary processor 0x0000000001 [0x411fd040]
+[    0.104505] smp: Brought up 1 node, 2 CPUs
+[    0.113486] SMP: Total of 2 processors activated.
+[    0.118172] CPU features: detected: 32-bit EL0 Support
+[    0.123313] CPU features: detected: 32-bit EL1 Support
+[    0.128424] CPU features: detected: CRC32 instructions
+[    0.133610] CPU: All CPU(s) started at EL2
+[    0.137656] alternatives: applying system-wide alternatives
+[    0.145563] devtmpfs: initialized
+[    0.168827] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.172977] futex hash table entries: 512 (order: 3, 32768 bytes, linear)
+[    0.183706] pinctrl core: initialized pinctrl subsystem
+[    0.185647] DMI not present or invalid.
+[    0.189560] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.195548] DMA: preallocated 512 KiB GFP_KERNEL pool for atomic allocations
+[    0.201842] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.209625] DMA: preallocated 512 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.217901] thermal_sys: Registered thermal governor 'step_wise'
+[    0.217909] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.223383] cpuidle: using governor menu
+[    0.233953] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.240600] ASID allocator initialised with 65536 entries
+[    0.246154] Serial: AMBA PL011 UART driver
+[    0.267307] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.273478] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.284622] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.295278] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.306990] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.317883] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.328807] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.340032] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.350163] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.361012] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.371670] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.381706] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.392913] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.403079] /soc@0/clock-controller@44200000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.412995] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.422890] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    0.433058] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    0.443226] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    0.453420] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.463927] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.474115] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.484628] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.495216] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    0.505815] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    0.516348] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.526888] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.537093] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.547254] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    0.558437] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.569167] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.580311] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.590984] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.602710] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.613577] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.624533] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.635760] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.645895] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.656743] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.667377] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.677454] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.688669] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.699203] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.710445] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.721962] /soc@0/bus@42080000/i2c@40130000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.731314] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.742047] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/audio-controller@400b0000
+[    0.753825] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.765935] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.775717] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.786989] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.797648] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.807750] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    0.818813] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dcmipp@48030000
+[    0.828780] /soc@0/bus@42080000/dcmipp@48030000: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    0.841441] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.850101] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.860694] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    0.871224] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/bus@42080000/display-controller@48010000
+[    0.882605] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.895472] /soc@0/bus@42080000/dsi@48000000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.903122] /soc@0/bus@42080000/display-controller@48010000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.913899] /soc@0/bus@42080000/i2c@40130000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.923532] /soc@0/bus@42080000/audio-controller@400b0000: Fixed dependency cycle(s) with /soc@0/clock-controller@44200000
+[    0.934830] /soc@0/clock-controller@44200000: Fixed dependency cycle(s) with /soc@0/bus@42080000/dsi@48000000
+[    0.947396] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    0.954499] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    0.964650] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    0.974818] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    0.985004] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    0.995506] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.005693] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    1.016203] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    1.026782] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    1.037384] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    1.047898] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    1.058430] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.068617] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.078767] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    1.089662] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    1.100481] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    1.112149] /soc@0/bus@42080000/mdf@404d0000/filter@84/mdf-dai: Fixed dependency cycle(s) with /dmic-0
+[    1.120276] /dmic-0: Fixed dependency cycle(s) with /soc@0/bus@42080000/mdf@404d0000/filter@84/mdf-dai
+[    1.129574] /soc@0/bus@42080000/mdf@404d0000/filter@104/mdf-dai: Fixed dependency cycle(s) with /dmic-1
+[    1.138975] /dmic-1: Fixed dependency cycle(s) with /soc@0/bus@42080000/mdf@404d0000/filter@104/mdf-dai
+[    1.148746] /soc@0/bus@42080000/i2c@40130000/hdmi@3d: Fixed dependency cycle(s) with /connector
+[    1.157018] /connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/hdmi@3d
+[    1.166256] Modules: 25872 pages in range for non-PLT usage
+[    1.166263] Modules: 517392 pages in range for PLT usage
+[    1.172061] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    1.183234] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    1.189487] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
+[    1.196263] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
+[    1.202523] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    1.209304] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
+[    1.215566] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
+[    1.222342] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    1.230377] ACPI: Interpreter disabled.
+[    1.233135] iommu: Default domain type: Translated
+[    1.237203] iommu: DMA domain TLB invalidation policy: strict mode
+[    1.243664] SCSI subsystem initialized
+[    1.247527] usbcore: registered new interface driver usbfs
+[    1.252625] usbcore: registered new interface driver hub
+[    1.257906] usbcore: registered new device driver usb
+[    1.263316] pps_core: LinuxPPS API ver. 1 registered
+[    1.267864] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <email>
+[    1.277004] PTP clock support registered
+[    1.281081] EDAC MC: Ver: 3.0.0
+[    1.284434] CPUidle PSCI: Initialized CPU PM domain topology using OSI mode
+[    1.291654] scmi_core: SCMI protocol bus registered
+[    1.296247] FPGA manager framework
+[    1.299350] Advanced Linux Sound Architecture Driver Initialized.
+[    1.306346] vgaarb: loaded
+[    1.308328] clocksource: Switched to clocksource arch_sys_counter
+[    1.314324] VFS: Disk quotas dquot_6.6.0
+[    1.318027] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    1.325230] pnp: PnP ACPI: disabled
+[    1.337107] NET: Registered PF_INET protocol family
+[    1.337371] IP idents hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    1.348686] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, linear)
+[    1.352316] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    1.359986] TCP established hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    1.368126] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, linear)
+[    1.376194] TCP: Hash tables configured (established 32768 bind 32768)
+[    1.381933] UDP hash table entries: 2048 (order: 4, 65536 bytes, linear)
+[    1.388548] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, linear)
+[    1.395869] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    1.401728] RPC: Registered named UNIX socket transport module.
+[    1.407164] RPC: Registered udp transport module.
+[    1.411834] RPC: Registered tcp transport module.
+[    1.416521] RPC: Registered tcp-with-tls transport module.
+[    1.421991] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    1.428426] PCI: CLS 0 bytes, default 64
+[    1.432580] kvm [1]: IPA Size Limit: 40 bits
+[    1.432586] Unpacking initramfs...
+[    1.441739] kvm [1]: vgic interrupt IRQ9
+[    1.443894] kvm [1]: Hyp mode initialized successfully
+[    1.450563] Initialise system trusted keyrings
+[    1.456472] workingset: timestamp_bits=42 max_order=20 bucket_order=0
+[    1.460275] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    1.468638] NFS: Registering the id_resolver key type
+[    1.470748] Key type id_resolver registered
+[    1.475010] Key type id_legacy registered
+[    1.478964] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    1.485801] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    1.493115] jffs2: version 2.2. (NAND) © 2001-2006 Red Hat, Inc.
+[    1.499472] fuse: init (API version 7.39)
+[    1.503331] 9p: Installing v9fs 9p2000 file system support
+[    1.561346] NET: Registered PF_ALG protocol family
+[    1.561398] Key type asymmetric registered
+[    1.564616] Asymmetric key parser 'x509' registered
+[    1.569631] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 246)
+[    1.576871] io scheduler mq-deadline registered
+[    1.581382] io scheduler kyber registered
+[    1.585448] io scheduler bfq registered
+[    1.589710] /soc@0/interrupt-controller@44220000: bank0
+[    1.594449] /soc@0/interrupt-controller@44220000: bank1
+[    1.599656] /soc@0/interrupt-controller@44220000: bank2
+[    1.605196] /soc@0/interrupt-controller@46230000: bank0
+[    1.610107] /soc@0/interrupt-controller@46230000: bank1
+[    1.615291] /soc@0/interrupt-controller@46230000: bank2
+[    1.621197] Registering stm32-rifsc firewall controller
+[    1.632129] EINJ: ACPI disabled.
+[    1.641236] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    1.645206] STM32 USART driver initialized
+[    1.652844] loop: module loaded
+[    1.653958] megasas: 192.0.2.1-rc1
+[    1.659919] thunder_xcv, ver 1.0
+[    1.660005] thunder_bgx, ver 1.0
+[    1.660806] nicpf, ver 1.0
+[    1.664033] hns3: Hisilicon Ethernet Network Driver for Hip08 Family - version
+[    1.670661] hns3: Copyright (c) 2017 Huawei Corporation.
+[    1.676082] hclge is initializing
+[    1.679290] e1000: Intel(R) PRO/1000 Network Driver
+[    1.684118] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    1.689953] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.694798] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.700789] igb: Intel(R) Gigabit Ethernet Network Driver
+[    1.706092] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    1.711775] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    1.717922] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    1.724163] sky2: driver version 1.30
+[    1.728506] VFIO - User Level meta-driver version: 0.3
+[    1.734317] usbcore: registered new interface driver usb-storage
+[    1.738961] usbcore: registered new device driver onboard-usb-hub
+[    1.747649] i2c_dev: i2c /dev entries driver
+[    1.750906] arm_smc_wdt watchdog: Watchdog registered (timeout=32 sec, nowayout=0)
+[    1.758470] sdhci: Secure Digital Host Controller Interface driver
+[    1.762727] sdhci: Copyright(c) Pierre Ossman
+[    1.767718] Synopsys Designware Multimedia Card Interface Driver
+[    1.773802] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.780048] ledtrig-cpu: registered to indicate activity on CPUs
+[    1.785689] SMCCC: SOC_ID: ID = jep106:0020:0505 Revision = 0x00000011
+[    1.792277] usbcore: registered new interface driver usbhid
+[    1.796717] usbhid: USB HID core driver
+[    1.802710] hw perfevents: enabled with armv8_cortex_a35 PMU driver, 7 counters available
+[    1.811082] optee: probing for conduit method.
+I/TC: Reserved shared memory is disabled
+I/TC: Dynamic shared memory is enabled
+I/TC: Normal World virtualization support is disabled
+I/TC: Asynchronous notifications are enabled
+[    1.813152] optee: revision 4.0 (2a5b1d12)
+[    1.837090] optee: Asynchronous notifications enabled
+[    1.840654] optee: dynamic shared memory is enabled
+[    1.848733] random: crng init done
+[    1.849313] optee: initialized driver
+[    1.854877] NET: Registered PF_PACKET protocol family
+[    1.857909] 9pnet: Installing 9P2000 support
+[    1.861959] Key type dns_resolver registered
+[    1.879624] registered taskstats version 1
+[    1.879924] Loading compiled-in X.509 certificates
+[    1.901302] scmi_protocol scmi_dev.1: Enabled polling mode TX channel - prot_id:16
+[    1.903459] arm-scmi firmware:scmi: SCMI Notifications - Core Enabled.
+[    1.909974] arm-scmi firmware:scmi: SCMI Protocol v2.0 'ST:ST' Firmware version 0x20d0000
+[    1.919484] cpu cpu0: EM: created perf domain
+[    1.923205] scmi-perf-domain scmi_dev.4: Initialized 2 performance domains
+[    1.924878] Freeing initrd memory: 8444K
+[    1.949694] scmi-regulator scmi_dev.7: Regulator vddio1 registered for domain [0]
+[    1.951690] scmi-regulator scmi_dev.7: Regulator vddio2 registered for domain [1]
+[    1.959187] scmi-regulator scmi_dev.7: Regulator vddio3 registered for domain [2]
+[    1.966634] scmi-regulator scmi_dev.7: Regulator vddio4 registered for domain [3]
+[    1.974120] scmi-regulator scmi_dev.7: Regulator reserved registered for domain [5]
+[    1.981761] scmi-regulator scmi_dev.7: Regulator vdda18adc registered for domain [7]
+[    1.989499] scmi-regulator scmi_dev.7: Regulator vddcore registered for domain [11]
+[    1.997170] scmi-regulator scmi_dev.7: Regulator v1v8 registered for domain [14]
+[    2.004548] scmi-regulator scmi_dev.7: Regulator v3v3 registered for domain [16]
+[    2.011937] scmi-regulator scmi_dev.7: Regulator vdd_emmc registered for domain [18]
+[    2.019687] scmi-regulator scmi_dev.7: Regulator vdd3v3_usb registered for domain [20]
+[    2.027594] scmi-regulator scmi_dev.7: Regulator v5v_hdmi registered for domain [21]
+[    2.035333] scmi-regulator scmi_dev.7: Regulator v5v_vconn registered for domain [22]
+[    2.043162] scmi-regulator scmi_dev.7: Regulator vdd_sdcard registered for domain [23]
+[    2.053995] stm32-ipcc 40490000.mailbox: ipcc rev:2.0 enabled, 16 chans, proc 0
+[    2.082154] Registering stm32mp25_rcc firewall controller
+[    2.084145] stm32-ipcc 46250000.mailbox: ipcc rev:2.0 enabled, 4 chans, proc 1
+[    2.090720] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOA bank added
+[    2.096841] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOB bank added
+[    2.102697] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOC bank added
+[    2.109315] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOD bank added
+[    2.115885] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOE bank added
+[    2.122494] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOF bank added
+[    2.129206] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOG bank added
+[    2.135757] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOH bank added
+[    2.142316] stm32mp257-pinctrl soc@0:pinctrl@44240000: GPIOI bank added
+[    2.148644] stm32mp257-pinctrl soc@0:pinctrl@44240000: Pinctrl STM32 initialized
+[    2.157752] stm32mp257-pinctrl soc@0:pinctrl@46200000: GPIOZ bank added
+[    2.162590] stm32mp257-pinctrl soc@0:pinctrl@46200000: Pinctrl STM32 initialized
+[    2.170527] stm32-dma3 40400000.dma-controller: created LLI gen_pool at 0x000000000a020000, size 64KiB
+[    2.181371] stm32-dma3 40400000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.186860] stm32-dma3 40410000.dma-controller: created LLI gen_pool at 0x000000000a030000, size 56KiB
+[    2.197714] stm32-dma3 40410000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.203277] stm32-dma3 40420000.dma-controller: created LLI gen_pool at 0x000000000a03e000, size 8KiB
+[    2.212418] stm32-dma3 40420000.dma-controller: STM32 DMA3 registered rev:1.3
+[    2.221492] stm32-usart 40330000.serial: Wakeup might not be available: No autonomous clock
+[    2.227765] 40330000.serial: ttySTM2 at MMIO 0x40330000 (irq = 55, base_baud = 4000000) is a stm32-usart
+[    2.237198] serial serial0: tty port ttySTM2 registered
+[    2.243712] stm32_rtc 46000000.rtc: registered as rtc0
+[    2.247272] stm32_rtc 46000000.rtc: setting system clock to 2000-01-05T10:40:41 UTC (947068841)
+[    2.257145] stm32_rtc 46000000.rtc: Date/Time must be initialized
+[    2.262016] stm32_rtc 46000000.rtc: registered rev:3.4
+[    2.269755] stm32-usart 400e0000.serial: Wakeup might not be available: No autonomous clock
+[    2.269974] mmci-pl18x 48240000.mmc: allocated mmc-pwrseq
+[    2.275573] stm32-usart 400e0000.serial: interrupt mode for rx (no dma)
+[    2.282765] mmci-pl18x 48220000.mmc: Got CD GPIO
+[    2.287603] stm32-usart 400e0000.serial: interrupt mode for tx (no dma)
+[    2.292859] mmci-pl18x 48240000.mmc: mmc0: PL180 manf 53 rev3 at 0x48240000 irq 58,0 (pio)
+[    2.300427] mmci-pl18x 48220000.mmc: mmc2: PL180 manf 53 rev3 at 0x48220000 irq 60,0 (pio)
+[    2.306956] mmci-pl18x 48230000.mmc: mmc1: PL180 manf 53 rev3 at 0x48230000 irq 59,0 (pio)
+[    2.323467] 400e0000.serial: ttySTM0 at MMIO 0x400e0000 (irq = 57, base_baud = 4000000) is a stm32-usart
+[    2.339638] printk: console [ttySTM0] enabled
+[    2.339638] printk: console [ttySTM0] enabled
+[    2.342703] printk: bootconsole [stm32] disabled
+[    2.342703] printk: bootconsole [stm32] disabled
+[    2.359268] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+[    2.361057] clk: Disabling unused clocks
+[    2.365678] ALSA device list:
+[    2.367210]   No soundcards found.
+[    2.377384] Freeing unused kernel memory: 3776K
+[    2.377472] Run /init as init process
+[    2.439795] mmc1: new HS200 MMC card at address 0001
+[    2.441081] mmcblk1: mmc1:0001 008GB1 7.28 GiB
+[    2.446697] mmc2: new ultra high speed SDR104 SDXC card at address aaaa
+[    2.450382]  mmcblk1: p1 p2 p3 p4 p5 p6 p7 p8
+[    2.451119] mmcblk2: mmc2:aaaa SN64G 59.5 GiB
+[    2.460033] mmcblk1boot0: mmc1:0001 008GB1 4.00 MiB
+[    2.466217] mmcblk1boot1: mmc1:0001 008GB1 4.00 MiB
+[    2.470524] mmcblk1rpmb: mmc1:0001 008GB1 4.00 MiB, chardev (240:0)
+[    2.478664]  mmcblk2: p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11
+[    2.519865] mmc0: new high speed SDIO card at address 0001
+Starting systemd-udevd version 255.21^
+[    3.500808] EXT4-fs (mmcblk2p10): mounted filesystem b18b558e-7a48-4cfd-a961-3f4c0f2d10cd r/w with ordered data mode. Quota mode: none.
+[    4.067991] stm32-rproc 0.m33: wdg irq registered
+[    4.068041] stm32-rproc 0.m33: pdds sys config not defined
+[    4.072952] stm32-rproc 0.m33: rsc tbl syscon not supported
+[    4.078528] stm32-rproc 0.m33: mbox_request_channel_byname() could not locate channel named "detach"
+[    4.090633] remoteproc remoteproc0: cannot get detach mbox
+[    4.093218] remoteproc remoteproc0: m33 is available
+[    4.102905] remoteproc remoteproc1: m0 is available
+[    4.133634] usb-stm32-dwc3 42080000.bus:usb@48300000: configured in usb3 mode
+[    4.138847] /ahb@1/i2c@2/typec@35/connector: Fixed dependency cycle(s) with /soc@0/bus@42080000/usb@48300000/usb@48300000
+[    4.146479] /soc@0/bus@42080000/usb@48300000/usb@48300000: Fixed dependency cycle(s) with /ahb@1/i2c@2/typec@35/connector
+[    4.239572] stm32-mdf 404d0000.mdf: No cache defaults, reading back from HW
+[    4.242729] st,stm32-i2s 400b0000.audio-controller: No cache defaults, reading back from HW
+[    4.254289] stm32-crc32 404c0000.crc: Initialized
+[    4.270370] mc: Linux media interface: v0.10
+[    4.273260] ehci-platform 482f0000.usb: EHCI Host Controller
+[    4.274732] ehci-platform 482f0000.usb: new USB bus registered, assigned bus number 1
+[    4.283214] ehci-platform 482f0000.usb: irq 72, io mem 0x482f0000
+[    4.305873] ehci-platform 482f0000.usb: USB 2.0 started, EHCI 1.00
+[    4.307703] hub 1-0:1.0: USB hub found
+[    4.310462] hub 1-0:1.0: 1 port detected
+[    4.392151] videodev: Linux video capture interface: v2.00
+[    4.423874] galcore: loading out-of-tree module taints kernel.
+[    4.436984] /soc@0/bus@42080000/csi@48020000: Fixed dependency cycle(s) with /soc@0/bus@42080000/i2c@40130000/camera@1a
+[    4.450192] stm32-cryp 42030000.crypto: will run requests pump with realtime priority
+[    4.454103] /soc@0/bus@42080000/i2c@40130000/camera@1a: Fixed dependency cycle(s) with /soc@0/bus@42080000/csi@48020000
+[    4.465490] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    4.474705] stm32-cryp 42030000.crypto: Initialized
+[    4.497463] stm32f7-i2c 40130000.i2c: STM32F7 I2C-0 bus adapter
+[    4.506089] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    4.507001] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    4.539449] Registering stm32-dbg-bus firewall controller
+[    4.555951] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.562395] Galcore version 6.4.21.1.1058597
+[    4.576406] usb 1-1: new high-speed USB device number 2 using ehci-platform
+[    4.583379] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    4.592822] stm32-dwmac 482c0000.eth1: IRQ eth_lpi not found
+[    4.595596] stm32-dwmac 482c0000.eth1: User ID: 0x1a, Synopsys ID: 0x53
+[    4.601276] Bluetooth: Core ver 2.22
+[    4.607324] stm32-dwmac 482c0000.eth1: 	DWMAC4/5
+[    4.608727] stm32-dwmac 482c0000.eth1: DMA HW capability register supported
+[    4.609093] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    4.615714] stm32-dwmac 482c0000.eth1: RX Checksum Offload Engine supported
+[    4.615719] stm32-dwmac 482c0000.eth1: TX Checksum insertion supported
+[    4.628676] NET: Registered PF_BLUETOOTH protocol family
+[    4.633086] stm32-dwmac 482c0000.eth1: Wake-Up On Lan supported
+[    4.644370] stm32-csi 48020000.csi: Probed CSI with 2 lanes
+[    4.645768] stm32-dwmac 482c0000.eth1: TSO supported
+[    4.661634] stm32-dwmac 482c0000.eth1: Enable RX Mitigation via HW Watchdog Timer
+[    4.669120] stm32-dwmac 482c0000.eth1: Enabled L3L4 Flow TC (entries=2)
+[    4.675798] stm32-dwmac 482c0000.eth1: Enabled RFS Flow TC (entries=10)
+[    4.676897] Bluetooth: HCI device and connection manager initialized
+[    4.682462] stm32-dwmac 482c0000.eth1: TSO feature enabled
+[    4.682469] stm32-dwmac 482c0000.eth1: Using 32/32 bits DMA host/device width
+[    4.689865] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    4.714436] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.722311] hantro-vpu 480d0000.vdec: registered st,stm32mp25-vdec-dec as /dev/video0
+[    4.732053] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.753996] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    4.761657] Bluetooth: HCI socket layer initialized
+[    4.763640] Bluetooth: L2CAP socket layer initialized
+[    4.769458] hub 1-1:1.0: USB hub found
+[    4.772731] hub 1-1:1.0: 2 ports detected
+[    4.777661] hantro-vpu 480e0000.venc: registered st,stm32mp25-venc-enc as /dev/video1
+[    4.785251] Bluetooth: SCO socket layer initialized
+[    4.788766] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.804484] dcmipp 48030000.dcmipp: Probe done
+[    4.815033] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.835937] /soc@0/bus@4a000000/tpiu@4a050000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.845930] /soc@0/bus@4a000000/etr@4a040000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.858086] /soc@0/bus@4a000000/etf@4a030000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/replicator@4a060000
+[    4.864191] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/tpiu@4a050000
+[    4.874238] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etr@4a040000
+[    4.884797] /soc@0/bus@4a000000/replicator@4a060000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etf@4a030000
+[    4.897011] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/stm@4a080000
+[    4.916201] /soc@0/bus@4a000000/stm@4a080000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    4.954203] Bluetooth: HCI UART driver ver 2.3
+[    4.954247] Bluetooth: HCI UART protocol H4 registered
+[    4.962977] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a240000
+[    4.971421] /soc@0/bus@4a000000/etm@4a240000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    5.004452] Bluetooth: HCI UART protocol LL registered
+[    5.004868] Bluetooth: HCI UART protocol Broadcom registered
+[    5.011747] /soc@0/bus@4a000000/funnel@4a020000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/etm@4a340000
+[    5.023710] /soc@0/bus@4a000000/etm@4a340000: Fixed dependency cycle(s) with /soc@0/bus@4a000000/funnel@4a020000
+[    5.032479] Bluetooth: HCI UART protocol QCA registered
+[    5.035605] Bluetooth: HCI UART protocol Marvell registered
+[    5.054165] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43439-sdio for chip BCM43439/5
+[    5.306495] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[    5.310570] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM43439/5 wl0: Apr 18 2024 01:55:03 version 7.95.86 (9a12fda CY) FWID 01-86edbd67
+[    5.400475] Bluetooth: hci0: BCM: chip id 147
+[    5.401117] Bluetooth: hci0: BCM: features 0x0e
+[    5.405570] Bluetooth: hci0: CYW4343A2
+[    5.407616] Bluetooth: hci0: BCM (001.003.016) build 0000
+[    5.414307] Bluetooth: hci0: BCM 'brcm/BCM.st,<board-host>.hcd' Patch
+[    5.422276]  cs_system_cfg: CoreSight Configuration manager initialised
+[    5.448739] imx335 0-001a: Error reading reg 0x3912: -6
+[    5.448785] imx335 0-001a: failed to find sensor: -6
+[    5.496250] coresight-tmc 4a040000.etr: Detected dma mask 32bits
+[    5.511458] CSCFG registered etm0
+[    5.511476] coresight etm0: CPU0: etm v4.0 initialized
+[    5.527251] stm32-mdf-adc 404d0084.filter: No cache defaults, reading back from HW
+[    5.531449] CSCFG registered etm1
+[    5.531467] coresight etm1: CPU1: etm v4.0 initialized
+[    5.537191] stm32-dwmac 482c0000.eth1 end0: renamed from eth0
+[    5.546347] stm32-mdf-adc 404d0104.filter: No cache defaults, reading back from HW
+[    5.569287] [drm] Initialized stm 1.0.0 20170330 for 48010000.display-controller on minor 0
+[    5.570554] coresight cti_sys0: CTI initialized
+[    5.591950] coresight stm0: STM500 initialized
+[    5.598751] coresight cti_sys1: CTI initialized
+[    5.602109] coresight cti_cpu0: CTI initialized
+[    5.603177] coresight cti_cpu1: CTI initialized
+ln: /etc/mtab: File exists
+[    5.981913] Bluetooth: hci0: BCM: features 0x0e
+[    5.983758] Bluetooth: hci0: UART 4343A2 wlbga_BU
+[    5.985692] Bluetooth: hci0: BCM (001.003.016) build 0000
+[    6.105706] systemd[1]: System time before build time, advancing clock.
+[    6.171841] NET: Registered PF_INET6 protocol family
+[    6.213954] Segment Routing with IPv6
+[    6.214030] In-situ OAM (IOAM) with IPv6
+[    6.257198] systemd[1]: systemd 255.21^ running in system mode (+PAM -AUDIT -SELINUX -APPARMOR +IMA -SMACK -SECCOMP -GCRYPT -GNUTLS -OPENSSL -ACL +BLKID -CURL -ELFUTILS -FIDO2 -IDN2 -IDN +IPTC +KMOD -LIBCRYPTSETUP +LIBFDISK -PCRE2 -PWQUALITY -P11KIT -QRENCODE -TPM2 -BZIP2 -LZ4 -XZ -ZLIB +ZSTD -BPF_FRAMEWORK -XKBCOMMON +UTMP +SYSVINIT default-hierarchy=unified)
+[    6.284479] systemd[1]: Detected architecture arm64.
+
+Welcome to \x1b[1mST OpenSTLinux - Weston - (A Yocto Project Based Distro) 5.0.17-openstlinux-6.6-yocto-scarthgap-mpu-v26.06.10 (scarthgap)\x1b[0m!
+
+[    6.313696] systemd[1]: Hostname set to <<board-hostname>>.
+[    6.373148] systemd[1]: Using hardware watchdog 'arm_smc_wdt', version 0, device /dev/watchdog0
+[    6.376544] systemd[1]: Watchdog running with a hardware timeout of 32s.
+[    6.877949] systemd[1]: Queued start job for default target Multi-User System.
+[    6.910751] systemd[1]: Created slice Slice /system/getty.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/getty\x1b[0m.
+[    6.930980] systemd[1]: Created slice Slice /system/modprobe.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/modprobe\x1b[0m.
+[    6.950774] systemd[1]: Created slice Slice /system/serial-getty.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mSlice /system/serial-getty\x1b[0m.
+[    6.970226] systemd[1]: Created slice User and Session Slice.
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mUser and Session Slice\x1b[0m.
+[    6.988981] systemd[1]: Started Dispatch Password Requests to Console Directory Watch.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mDispatch Password Requests to Console Directory Watch\x1b[0m.
+[    7.008873] systemd[1]: Started Forward Password Requests to Wall Directory Watch.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mForward Password Requests to Wall Directory Watch\x1b[0m.
+[    7.028732] systemd[1]: Expecting device /dev/dri/card0...
+         Expecting device \x1b[0;1;39m/dev/dri/card0\x1b[0m...
+[    7.044616] systemd[1]: Expecting device /dev/hwrng...
+         Expecting device \x1b[0;1;39m/dev/hwrng\x1b[0m...
+[    7.060583] systemd[1]: Expecting device /dev/tee0...
+         Expecting device \x1b[0;1;39m/dev/tee0\x1b[0m...
+[    7.076766] systemd[1]: Reached target Path Units.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPath Units\x1b[0m.
+[    7.092686] systemd[1]: Reached target Remote File Systems.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mRemote File Systems\x1b[0m.
+[    7.112647] systemd[1]: Reached target Slice Units.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSlice Units\x1b[0m.
+[    7.128703] systemd[1]: Reached target Swaps.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSwaps\x1b[0m.
+[    7.215552] systemd[1]: Listening on RPCbind Server Activation Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mRPCbind Server Activation Socket\x1b[0m.
+[    7.236871] systemd[1]: Reached target RPC Port Mapper.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mRPC Port Mapper\x1b[0m.
+[    7.253509] systemd[1]: Listening on Syslog Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mSyslog Socket\x1b[0m.
+[    7.276919] systemd[1]: Listening on Process Core Dump Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mProcess Core Dump Socket\x1b[0m.
+[    7.297047] systemd[1]: Listening on initctl Compatibility Named Pipe.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39minitctl Compatibility Named Pipe\x1b[0m.
+[    7.324257] systemd[1]: Journal Audit Socket was skipped because of an unmet condition check (ConditionSecurity=audit).
+[    7.330439] systemd[1]: Listening on Journal Socket (/dev/log).
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mJournal Socket (/dev/log)\x1b[0m.
+[    7.353551] systemd[1]: Listening on Journal Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mJournal Socket\x1b[0m.
+[    7.369621] systemd[1]: Listening on Network Service Netlink Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mNetwork Service Netlink Socket\x1b[0m.
+[    7.389589] systemd[1]: Listening on udev Control Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mudev Control Socket\x1b[0m.
+[    7.405269] systemd[1]: Listening on udev Kernel Socket.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mudev Kernel Socket\x1b[0m.
+[    7.448845] systemd[1]: Mounting Huge Pages File System...
+         Mounting \x1b[0;1;39mHuge Pages File System\x1b[0m...
+[    7.468664] systemd[1]: Mounting POSIX Message Queue File System...
+         Mounting \x1b[0;1;39mPOSIX Message Queue File System\x1b[0m...
+[    7.506611] systemd[1]: Mounting Kernel Debug File System...
+         Mounting \x1b[0;1;39mKernel Debug File System\x1b[0m...
+[    7.525210] systemd[1]: Kernel Trace File System was skipped because of an unmet condition check (ConditionPathExists=/sys/kernel/tracing).
+[    7.548972] systemd[1]: Mounting Temporary Directory /tmp...
+         Mounting \x1b[0;1;39mTemporary Directory /tmp\x1b[0m...
+[    7.573231] systemd[1]: Starting Create List of Static Device Nodes...
+         Starting \x1b[0;1;39mCreate List of Static Device Nodes\x1b[0m...
+[    7.621354] systemd[1]: Starting Load Kernel Module configfs...
+         Starting \x1b[0;1;39mLoad Kernel Module configfs\x1b[0m...
+[    7.645710] systemd[1]: Starting Load Kernel Module drm...
+         Starting \x1b[0;1;39mLoad Kernel Module drm\x1b[0m...
+[    7.701804] systemd[1]: Starting Load Kernel Module fuse...
+         Starting \x1b[0;1;39mLoad Kernel Module fuse\x1b[0m...
+[    7.725223] systemd[1]: Starting Mount partitions...
+         Starting \x1b[0;1;39mMount partitions\x1b[0m...
+[    7.749885] systemd[1]: Starting RPC Bind...
+         Starting \x1b[0;1;39mRPC Bind\x1b[0m...
+[    7.765166] systemd[1]: File System Check on Root Device was skipped because of an unmet condition check (ConditionPathIsReadWrite=!/).
+[    7.802351] systemd[1]: Starting Journal Service...
+         Starting \x1b[0;1;39mJournal Service\x1b[0m...
+[    7.829298] systemd[1]: Starting Load Kernel Modules...
+         Starting \x1b[0;1;39mLoad Kernel Modules\x1b[0m...
+[    7.847007] systemd-journald[333]: Collecting audit messages is disabled.
+[    7.865352] systemd[1]: Starting Generate network units from Kernel command line...
+         Starting \x1b[0;1;39mGenerate network units from Kernel command line\x1b[0m...
+[    7.918364] systemd[1]: Starting Remount Root and Kernel File Systems...
+         Starting \x1b[0;1;39mRemount Root and Kernel File Systems\x1b[0m...
+[    7.928906] tun: Universal TUN/TAP device driver, 1.6
+[    7.970211] systemd[1]: Starting Coldplug All udev Devices...
+         Starting \x1b[0;1;39mColdplug All udev Devices\x1b[0m...
+[    8.019731] systemd[1]: Started RPC Bind.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mRPC Bind\x1b[0m.
+[    8.038988] systemd[1]: Mounted Huge Pages File System.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mHuge Pages File System\x1b[0m.
+[    8.049703] EXT4-fs (mmcblk2p10): re-mounted b18b558e-7a48-4cfd-a961-3f4c0f2d10cd.
+[    8.062913] systemd[1]: Mounted POSIX Message Queue File System.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mPOSIX Message Queue File System\x1b[0m.
+[    8.085391] systemd[1]: Started Journal Service.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mJournal Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mKernel Debug File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mTemporary Directory /tmp\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate List of Static Device Nodes\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module configfs\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module drm\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Module fuse\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad Kernel Modules\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mGenerate network units from Kernel command line\x1b[0m.
+[    8.231758] EXT4-fs (mmcblk2p8): mounted filesystem 56a0347e-dc14-4f33-b71a-39cba4d394b7 r/w with ordered data mode. Quota mode: none.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mRemount Root and Kernel File Systems\x1b[0m.
+         Mounting \x1b[0;1;39mFUSE Control File System\x1b[0m...
+         Mounting \x1b[0;1;39mKernel Configuration File System\x1b[0m...
+         Starting \x1b[0;1;39mFlush Journal to Persistent Storage\x1b[0m...
+         Starting \x1b[0;1;39mApply Kernel Variables\x1b[0m...
+[    8.557061] systemd-journald[333]: Received client request to flush runtime journal.
+         Starting \x1b[0;1;39mCreate Static Device Nodes in /dev gracefully\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mFUSE Control File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39mKernel Configuration File System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mFlush Journal to Persistent Storage\x1b[0m.
+[    8.658039] EXT4-fs (mmcblk2p9): mounted filesystem 5583d621-d71b-4fee-a421-2f9fe7de4d4c r/w with ordered data mode. Quota mode: none.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mApply Kernel Variables\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate Static Device Nodes in /dev gracefully\x1b[0m.
+         Starting \x1b[0;1;39mCreate Static Device Nodes in /dev\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate Static Device Nodes in /dev\x1b[0m.
+[    8.856459] EXT4-fs (mmcblk2p11): mounted filesystem b87251a7-26c4-4a20-a129-4744138a6dd8 r/w with ordered data mode. Quota mode: none.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mMount partitions\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPreparation for Local File Systems\x1b[0m.
+         Starting \x1b[0;1;39mRule-based Manager for Device Events and Files\x1b[0m...
+         Mounting \x1b[0;1;39m/var/volatile\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mRule-based Manager for Device Events and Files\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Mounted \x1b[0;1;39m/var/volatile\x1b[0m.
+         Starting \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mLocal File Systems\x1b[0m.
+         Starting \x1b[0;1;39mAutomatic Boot Loader Update\x1b[0m...
+         Starting \x1b[0;1;39mCreate System Files and Directories\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mAutomatic Boot Loader Update\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mColdplug All udev Devices\x1b[0m.
+         Starting \x1b[0;1;39mWait for udev To Complete Device Initialization\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCreate System Files and Directories\x1b[0m.
+         Starting \x1b[0;1;39mNetwork Name Resolution\x1b[0m...
+         Starting \x1b[0;1;39mNetwork Time Synchronization\x1b[0m...
+         Starting \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Name Resolution\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Time Synchronization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mHost and Network Name Lookups\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Time Set\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/dri/card0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mStarts Psplash Boot screen\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/hwrng\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Found device \x1b[0;1;39m/dev/tee0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mLoad/Save RF Kill Switch Status /dev/rfkill Watch\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mHardware RNG Entropy Gathere[   11.830879] configfs-gadget.g1 gadget.0: HOST MAC <mac>
+r Daemon\x1b[0m.
+[   11.841376] configfs-gadget.g1 gadget.0: MAC <mac>
+         Starting \x1b[0;1;39mLoad/Save RF Kill Switch Status\x1b[0m...
+         Starting \x1b[0;1;39mVirtual Console Setup\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mLoad/Save RF Kill Switch Status\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mHardware activated USB gadget\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mVirtual Console Setup\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mWait for udev To Complete Device Initialization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Initialization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mServes stm32mp clocks calibration.\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mDaily Cleanup of Temporary Directories\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mTimer Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mAvahi mDNS/DNS-SD Stack Activation Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mD-Bus System Message Bus Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Listening on \x1b[0;1;39mdropbear.socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSocket Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mBasic System\x1b[0m.
+         Starting \x1b[0;1;39mST set alsa state configuration\x1b[0m...
+         Starting \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m...
+         Starting \x1b[0;1;39mBluetooth service\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mKernel Logging Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSystem Logging Service\x1b[0m.
+         Starting \x1b[0;1;39mD-Bus System Message Bus\x1b[0m...
+         Starting \x1b[0;1;39mIPv6 Packet Filtering Framework\x1b[0m...
+         Starting \x1b[0;1;39mIPv4 Packet Filtering Framework\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSeat for Weston user\x1b[0m.
+         Starting \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mCalibrates HSI/CSI clocks\x1b[0m.
+         Starting \x1b[0;1;39mResets System Activity Logs\x1b[0m...
+[   13.014757] Bluetooth: MGMT ver 1.22
+         Starting \x1b[0;1;39mUser Login Management\x1b[0m...
+         Starting \x1b[0;1;39mTEE Supplicant\x1b[0m...
+         Starting \x1b[0;1;39mCheck if the gpu are pres…the correct weston configuration\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mD-Bus System Message Bus\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mIPv6 Packet Filtering Framework\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mIPv4 Packet Filtering Framework\x1b[0m.
+[   13.285350] Default copro already stopped
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mUser Login Management\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mResets System Activity Logs\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST set alsa state configuration\x1b[0m.
+[   13.369231] remoteproc remoteproc0: powering up m33
+[   13.373588] remoteproc remoteproc0: Booting fw image USBPD_DRP_UCSI_CM33_NonSecure_stripped.elf, size 148256
+[   13.381955] rproc-virtio rproc-virtio.2.auto: assigned reserved memory node vdev0buffer@812fa000
+[   13.388195] rproc-virtio rproc-virtio.2.auto: registered virtio0 (type 7)
+[   13.395149] remoteproc remoteproc0: remote processor m33 is now up
+[   13.401691] Booting fw image for <board-host>
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mPreparation for Network\x1b[0m.
+[   13.430600] virtio_rpmsg_bus virtio0: rpmsg host is online
+         Starting \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m...
+         Starting \x1b[0;1;39mNetwork Configuration\x1b[0m...
+         Starting \x1b[0;1;39mTailscale node agent\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTEE Supplicant\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mBluetooth service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mBluetooth Support\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSound Card\x1b[0m.
+         Starting \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m...
+         Starting \x1b[0;1;39mHostname Service\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mCheck if the gpu are pres…t the correct weston configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mNetwork Configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mNetwork\x1b[0m.
+[   13.909619] stm32-dwmac 482c0000.eth1 end0: Register MEM_TYPE_PAGE_POOL RxQ-0
+[   13.911653] stm32-dwmac 482c0000.eth1 end0: Register MEM_TYPE_PAGE_POOL RxQ-1
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mIIO Daemon\x1b[0m.
+         Starting \x1b[0;1;39mReal time performance monitoring\x1b[0m...
+         Starting \x1b[0;1;39mST hostname\x1b[0m...
+         Starting \x1b[0;1;39mPermit User Sessions\x1b[0m...
+         Starting \x1b[0;1;39mTarget Communication Framework agent\x1b[0m...
+[   14.112643] stm32-dwmac 482c0000.eth1 end0: PHY [stmmac-0:01] driver [RTL8211F Gigabit Ethernet] (irq=POLL)
+[   14.132432] dwmac4: Master AXI performs any burst length
+[   14.132497] stm32-dwmac 482c0000.eth1 end0: No Safety Features support found
+[   14.139629] stm32-dwmac 482c0000.eth1 end0: IEEE 1588-2008 Advanced Timestamp supported
+[\x1b[0;32[   14.148372] stm32-dwmac 482c0000.eth1 end0: registered PTP clock
+m  OK  \x1b[0m] Finished \x1b[0;1;39mP[   14.156813] stm32-dwmac 482c0000.eth1 end0: FPE workqueue start
+[   14.162912] stm32-dwmac 482c0000.eth1 end0: configuring for phy/rgmii-id link mode
+ermit User Sessions\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mReal time performance monitoring\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mHostname Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTarget Communication Framework agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mST hostname\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mGetty on tty1\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSerial Getty on ttySTM0\x1b[0m.
+[   14.369680] virtio_rpmsg_bus virtio0: creating channel rpmsg-intc addr 0x400
+[   14.380299] virtio_rpmsg_bus virtio0: creating channel rpmsg_i2c addr 0x401
+[   14.382090] rpmsg_i2c virtio0.rpmsg_i2c.-1.1025: new channel: 0x401 -> 0x401!
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mLogin Prompts\x1b[0m.
+         Starting \x1b[0;1;39mWeston graphical session\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Created slice \x1b[0;1;39mUser Slice of UID 1000\x1b[0m.
+         Starting \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m.
+         Starting \x1b[0;1;39mUser Manager for UID 1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mTailscale node agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mUser Manager for UID 1000\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mSession c1 of User weston\x1b[0m.
+[   18.289367] stm32-dwmac 482c0000.eth1 end0: Link is Up - 1Gbps/Full - flow control rx/tx
+         Starting \x1b[0;1;39mAuthorization Manager\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Started \x1b[0;1;39mAuthorization Manager\x1b[0m.
+
+ST OpenSTLinux - Weston - (A Yocto Project Based Distro) 5.0.17-openstlinux-6.6-yocto-scarthgap-mpu-v26.06.10 <board-hostname> ttySTM0
+
+<board-hostname> login: root (automatic login)
+
+\x1b7\x1b[r\x1b[999;999H\x1b[6n[   23.521095] weston[1441]: memfd_create() called without MFD_EXEC or MFD_NOEXEC_SEAL set
+root@<board-hostname>:~# [   34.412422] vddio3: disabling
+[   34.412488] vddio4: disabling
+[   34.412863] v5v_vconn: disabling
+[   44.033512] tee (1665): drop_caches: 3
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSSH Per-Connection Server (192.0.2.2:54936)\x1b[0m.
+         Stopping \x1b[0;1;39mSession c2 of User root\x1b[0m...
+         Stopping \x1b[0;1;39mSession c3 of User weston\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mSlice /system/dropbear\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mSlice /system/modprobe\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mBluetooth Support\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mMulti-User System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mLogin Prompts\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mHost and Network Name Lookups\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mRPC Port Mapper\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSound Card\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mTimer Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mServes stm32mp clocks calibration.\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mDaily Cleanup of Temporary Directories\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSystem Time Set\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mHardware activated USB gadget\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mLoad/Save RF Kill Switch Status /dev/rfkill Watch\x1b[0m.
+         Stopping \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m...
+         Stopping \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m...
+         Stopping \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m...
+         Stopping \x1b[0;1;39mKernel Logging Service\x1b[0m...
+         Stopping \x1b[0;1;39mSystem Logging Service\x1b[0m...
+         Stopping \x1b[0;1;39mGetty on tty1\x1b[0m...
+         Stopping \x1b[0;1;39mIIO Daemon\x1b[0m...
+[   47.059749] unbind driver hci_uart
+         Stopping \x1b[0;1;39mReal time performance monitoring\x1b[0m...
+         Stopping \x1b[0;1;39mAuthorization Manager\x1b[0m...
+         Stopping \x1b[0;1;39mSerial Getty on ttySTM0\x1b[0m...
+         Stopping \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mResets System Activity Logs\x1b[0m.
+         Stopping \x1b[0;1;39mHostname Service\x1b[0m...
+         Stopping \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m...
+         Stopping \x1b[0;1;39mTailscale node agent\x1b[0m...
+         Stopping \x1b[0;1;39mTarget Communication Framework agent\x1b[0m...
+         Stopping \x1b[0;1;39mTEE Supplicant\x1b[0m...
+         Stopping \x1b[0;1;39mWeston graphical session\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mAvahi mDNS/DNS-SD Stack\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mKernel Logging Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSystem Logging Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mTEE Supplicant\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mHostname Service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mTarget Communication Framework agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mGetty on tty1\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSerial Getty on ttySTM0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mAuthorization Manager\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSave/Restore Sound Card State\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mBluetooth brcmfmac reboot hook\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mLoad/Save OS Random Seed\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSession c3 of User weston\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSession c2 of User root\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mSlice /system/getty\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mSlice /system/serial-getty\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mST set alsa state configuration\x1b[0m.
+[   47.735140] remoteproc remoteproc0: stopped remote processor m33
+[   47.743407] Stopping fw image <board-host>
+         Stopping \x1b[0;1;39mBluetooth service\x1b[0m...
+         Stopping \x1b[0;1;39mUser Login Management\x1b[0m...
+         Stopping \x1b[0;1;39mUser Manager for UID 0\x1b[0m...
+         Stopping \x1b[0;1;39mUser Manager for UID 1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mBluetooth service\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mIIO Daemon\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mST Load M33 firmware via remoteproc\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mUser Manager for UID 0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mUser Login Management\x1b[0m.
+         Stopping \x1b[0;1;39mUser Runtime Directory /run/user/0\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/run/user/0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mUser Runtime Directory /run/user/0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mUser Slice of UID 0\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mWeston graphical session\x1b[0m.
+         Stopping \x1b[0;1;39mSeat for Weston user\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mCheck if the gpu are prese…t the correct weston configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mSeat for Weston user\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mUser Manager for UID 1000\x1b[0m.
+         Stopping \x1b[0;1;39mPermit User Sessions\x1b[0m...
+         Stopping \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mPermit User Sessions\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/run/user/1000\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mUser Runtime Directory /run/user/1000\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mUser Slice of UID 1000\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mRemote File Systems\x1b[0m.
+         Stopping \x1b[0;1;39mD-Bus System Message Bus\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mD-Bus System Message Bus\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mReal time performance monitoring\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mNetwork\x1b[0m.
+         Stopping \x1b[0;1;39mNetwork Configuration\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mTailscale node agent\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mNetwork Configuration\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mPreparation for Network\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mIPv6 Packet Filtering Framework\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mIPv4 Packet Filtering Framework\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mBasic System\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mPath Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mDispatch Password Requests to Console Directory Watch\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mForward Password Requests to Wall Directory Watch\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSlice Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Removed slice \x1b[0;1;39mUser and Session Slice\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSocket Units\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mAvahi mDNS/DNS-SD Stack Activation Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mD-Bus System Message Bus Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mdropbear.socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSystem Initialization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mSyslog Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mNetwork Service Netlink Socket\x1b[0m.
+         Stopping \x1b[0;1;39mHardware RNG Entropy Gatherer Daemon\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mAutomatic Boot Loader Update\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mGenerate network units from Kernel command line\x1b[0m.
+         Stopping \x1b[0;1;39mNetwork Name Resolution\x1b[0m...
+         Stopping \x1b[0;1;39mNetwork Time Synchronization\x1b[0m...
+         Stopping \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mNetwork Name Resolution\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mHardware RNG Entropy Gatherer Daemon\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mApply Kernel Variables\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Closed \x1b[0;1;39mProcess Core Dump Socket\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mLoad Kernel Modules\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mRecord System Boot/Shutdown in UTMP\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mNetwork Time Synchronization\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mCreate System Files and Directories\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mLocal File Systems\x1b[0m.
+         Unmounting \x1b[0;1;39m/boot\x1b[0m...
+         Unmounting \x1b[0;1;39mTemporary Directory /tmp\x1b[0m...
+[   52.603554] EXT4-fs (mmcblk2p8): unmounting filesystem 56a0347e-dc14-4f33-b71a-39cba4d394b7.
+         Unmounting \x1b[0;1;39m/usr/local\x1b[0m...
+[   52.658847] EXT4-fs (mmcblk2p11): unmounting filesystem b87251a7-26c4-4a20-a129-4744138a6dd8.
+         Unmounting \x1b[0;1;39m/var/volatile\x1b[0m...
+         Unmounting \x1b[0;1;39m/vendor\x1b[0m...
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/boot\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39mTemporary Directory /tmp\x1b[0m.
+[   52.764217] EXT4-fs (mmcblk2p9): unmounting filesystem 5583d621-d71b-4fee-a421-2f9fe7de4d4c.
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/usr/local\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/var/volatile\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Unmounted \x1b[0;1;39m/vendor\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mPreparation for Local File Systems\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped target \x1b[0;1;39mSwaps\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mUnmount All Filesystems\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mRemount Root and Kernel File Systems\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mCreate Static Device Nodes in /dev\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Stopped \x1b[0;1;39mCreate Static Device Nodes in /dev gracefully\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Shutdown\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mLate Shutdown Services\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Finished \x1b[0;1;39mSystem Reboot\x1b[0m.
+[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mSystem Reboot\x1b[0m.
+[   53.022543] watchdog: watchdog0: watchdog did not stop!
+[   53.040934] systemd-shutdown[1]: Using hardware watchdog 'arm_smc_wdt', version 0, device /dev/watchdog0
+[   53.045161] systemd-shutdown[1]: Watchdog running with a hardware timeout of 32s.
+[   53.134184] systemd-shutdown[1]: Syncing filesystems and block devices.
+[   53.298927] systemd-shutdown[1]: Sending SIGTERM to remaining processes...
+[   53.320834] systemd-journald[333]: Received SIGTERM from PID 1 (systemd-shutdow).
+[   53.329159] systemd-shutdown[1]: Sending SIGKILL to remaining processes...
+[   53.350103] systemd-shutdown[1]: Unmounting file systems.
+[   53.353773] (sd-remount)[1933]: Remounting '/' read-only with options ''.
+[   53.382238] EXT4-fs (mmcblk2p10): re-mounted b18b558e-7a48-4cfd-a961-3f4c0f2d10cd ro.
+[   53.389735] systemd-shutdown[1]: All filesystems unmounted.
+[   53.390191] systemd-shutdown[1]: Deactivating swaps.
+[   53.395417] systemd-shutdown[1]: All swaps deactivated.
+[   53.400494] systemd-shutdown[1]: Detaching loop devices.
+[   53.414230] systemd-shutdown[1]: All loop devices detached.
+[   53.414275] systemd-shutdown[1]: Stopping MD devices.
+[   53.419782] systemd-shutdown[1]: All MD devices stopped.
+[   53.424662] systemd-shutdown[1]: Detaching DM devices.
+[   53.430159] systemd-shutdown[1]: All DM devices detached.
+[   53.435318] systemd-shutdown[1]: All filesystems, swaps, loop devices, MD devices and DM devices detached.
+[   53.470917] systemd-shutdown[1]: Syncing filesystems and block devices.
+[   53.473298] systemd-shutdown[1]: Rebooting.
+[   53.551086] stm32-dwmac 482c0000.eth1 end0: stmmac_dvr_remove: removing driver
+[   53.574290] stm32-dwmac 482c0000.eth1 end0: FPE workqueue stop
+[   53.653622] kvm: exiting hardware virtualization
