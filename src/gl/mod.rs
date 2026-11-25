@@ -20,6 +20,7 @@ pub mod context;
 pub mod blit;
 pub mod buffer;
 pub mod draw;
+pub mod draw_buffers_indexed;
 pub mod egl;
 pub mod es3;
 pub mod es3_formats;
