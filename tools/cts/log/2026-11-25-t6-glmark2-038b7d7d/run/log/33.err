@@ -1,0 +1,5 @@
+yakogl-mali: loaded build=038b7d7d lib=/root/yakogl-mali-glmark2/038b7d7d-20261125-124429/lib/libGLESv2.so.2
+Error: Failed to add fragment shader from file None:
+Error:   online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet)
+yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+yakogl-mali-exit: draws=0 refused=1 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) gpu_faults=0 job_timeouts=0
