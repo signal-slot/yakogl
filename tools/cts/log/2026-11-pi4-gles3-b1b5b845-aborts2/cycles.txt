@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, the tryboot cycles of the aborts2 record (first block 2026-11-25 first attempt, second block 2026-11-25 rerun of T14aa with texture-2048.conf and round 3): image sha256, Linux boot id before the reboot, reboot time, seconds to Linux, clean-up, run, jobs and end lines (README.md; a boot id this record lost is '-')
+== cycles
+T17aa sha256=b4bf053c107b73f73a3325d9b4e9ad6cf650c0b967886cc2970e57e2d57fef5a boot_before=dcd005ca-2545-456e-b51d-13e9d5ecef6b t_reboot=1795590215 back_after=311s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 504 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF1aa sha256=a5597de854372a09a2be335482f4ee5d7368c7263caaccd363290660ca83006b boot_before=e90cdd6f-8aab-40d4-95d2-15e61e0230c5 t_reboot=1795590548 back_after=302s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   2 cases in 623 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 2 cases, P 1 F 0 R 1 N 0 other 0
+TF1ba sha256=93de7ec6d1adf87e0014bc1830442a96dc45a99efaa97ebdd1e121aff96e1296 boot_before=- t_reboot=1795590868 back_after=302s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   2 cases in 609 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 2 cases, P 1 F 0 R 1 N 0 other 0
+TF2aa sha256=ed207decd7e6445d99286525f7b60b5c7309239308f6d33db14d0b9d6416880c boot_before=- t_reboot=1795591182 back_after=303s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   21 cases in 1530 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 21 cases, P 20 F 0 R 1 N 0 other 0
+TF2ba sha256=8cf6b71e25fe399c6ca4b7d3025133e2cdbbf588cd50a1af8f61b6be199af328 boot_before=- t_reboot=1795591499 back_after=302s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   21 cases in 1648 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 21 cases, P 20 F 0 R 1 N 0 other 0
+TF2ca sha256=88a87fcb6464ca30a147421d575a1288b917ea6db919bed485060cc418d84e49 boot_before=- t_reboot=1795591813 back_after=302s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   6 cases in 553 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 6 cases, P 3 F 0 R 1 N 2 other 0
+T17aaa sha256=ea4a57c365b09a15ae25ce5d872e148987a4e68a34f5292cdb13a92766c279bc boot_before=- t_reboot=1795592831 back_after=301s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 496 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF1aaa sha256=9c8e282165efba8dcd8516d3c3c1ffeedd0efc94bfc15e31c5d1f00182757e0c boot_before=- t_reboot=1795593145 back_after=306s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 518 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF1baa sha256=249d458d4ad79722fd07919e721c356de2ad87436a50d60399c058445b62018b boot_before=- t_reboot=1795593463 back_after=303s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 502 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF2aaa sha256=ea29bd884ab1d8e6b130270d5cc645b94ff8c95056be9c6e483e8e1d5f8f6855 boot_before=a733297b-1510-4424-b266-1f66b2bb3a5a t_reboot=1795599822 back_after=296s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   21 cases in 1379 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 21 cases, P 20 F 0 R 1 N 0 other 0
+== cycles, round 3 and the T14aa rerun
+T14aa sha256=5fe381ec760d377ebb59aa0d152760c211d75d555321ce9bd733eb7a85c58008 boot_before=a4d3d3f2-67df-4423-aa4f-7fe5560e377e t_reboot=1795639843 back_after=294s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   1 cases in 1111 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF2aaaa sha256=07c2a5a08a9e6ca1ddaef2b1724e99d61d2ea1103af6ec662c8cebc522398b57 boot_before=61aa030e-92cb-470c-b162-445d26e79885 t_reboot=1795640221 back_after=298s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   21 cases in 1677 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 21 cases, P 20 F 0 R 1 N 0 other 0
+TF2baa sha256=d9bd714c6aaceb3922e83a089788b82ac82ada9eae04175ef2dfd75f2037dcc2 boot_before=e9e5e442-5b55-4fc3-a783-78f422525b57 t_reboot=1795640550 back_after=298s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   21 cases in 1507 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 21 cases, P 20 F 0 R 1 N 0 other 0
+TF1aaaa sha256=4a75378a0ae07133324a92a7ef709b50d391750b97c3ccb34982209060ac503c boot_before=5bdece2d-5e66-4a2f-a62c-a59b451e6eea t_reboot=1795640887 back_after=300s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   2 cases in 607 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 2 cases, P 1 F 0 R 1 N 0 other 0
+TF1baaa sha256=8d2516bff9870231f889deb5b1ef9795e9d8f5cb82fe3f04e901270e345c371f boot_before=e1268a5f-4571-4a46-b9f9-92ba2380ad71 t_reboot=1795641212 back_after=298s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   2 cases in 592 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 2 cases, P 1 F 0 R 1 N 0 other 0
+TF2caa sha256=893b186190ec5f3c4210164f1d076ca6d860c5aaf600212773bc7df340f98340 boot_before=98c8dd8e-a0c6-4fb4-b027-fe054ecee31a t_reboot=1795641529 back_after=300s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   3 cases in 338 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 3 cases, P 2 F 0 R 1 N 0 other 0
+T17aaaa sha256=adb9696488422e0e2cb4a0552950eefd9c9a9092b16482f4490175511b66d825 boot_before=ed8e765b-14b7-480e-952f-469c89dac1aa t_reboot=1795641847 back_after=303s cleanup=staged image removed, the stock tryboot.txt put back from its backup (sha256 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b, read back), backup removed
+   1 cases in 657 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0

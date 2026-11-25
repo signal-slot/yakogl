@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image TF2caa: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt TF2caa.console.txt
+TF2caa.console.txt: deqp: done: 2 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 3 cases begun, 3 with a result, 0 without | STOPPED: dEQP ended the session early (complete=0); the cases after the last one here never began
+mustpass cases with a result: 3 (of 3 seen)
+group                                       pass   fail    n/s  other
+transform_feedback                             2      0      0      1
+TOTAL                                          2      0      0      1
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  TF2caa: deqp: summary 3 cases begun, 3 with a result; deqp: done 2 passed, 1 failed, 0 not supported, 0 warnings; 3 result lines seen
+ResourceError dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.lines.9
