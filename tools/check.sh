@@ -3656,6 +3656,9 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # resume, a hang, a panthor reset, lost ssh, --dry-run without ssh, the hold
   # deadline, a slice with no host name). Host only, about 20 s.
   step "tools   mali-deqp-selftest.sh (NanoPC-T6 dEQP-GLES2 runner, fake board)" tools/cts/mali-deqp-selftest.sh
+  # tools/cts/t6-uboot-rows.sh (T6 dEQP-GLES2 row images from U-Boot, resumable)
+  # against a fake prompt-go. Host only.
+  step "tools   t6-uboot-rows-selftest.sh (T6 U-Boot row runner, fake prompt-go)" no_board_env bash tools/cts/t6-uboot-rows-selftest.sh
   # tools/cts/mali-kmsg.py, the panthor kernel message classifier the runner
   # logs per chunk (resets, job timeouts, MMU and CS faults), on its fixtures.
   step "tools   mali-kmsg-selftest.sh (panthor kernel message classifier)" bash tools/cts/mali-kmsg-selftest.sh
