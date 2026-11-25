@@ -22,7 +22,8 @@
 #   - usage errors (exit 2, no "refused:" line, empty stdout): a
 #     non-numeric --free-bytes, an empty --require-marker.
 # Every verdict pins the streams: exit 0 keeps stdout's "ok:"/"skip:" lines
-# and an empty stderr; exit 2 puts the single "refused: <why>" line on
+# (the last one exactly one "ok: lifetime" or "skip: lifetime" line) and an
+# empty stderr; exit 2 puts the single "refused: <why>" line on
 # stderr with the pinned wording and stdout never says "refused".
 #
 # A tools/check.sh row for this selftest waits for plan #341, so it is run
@@ -71,12 +72,15 @@ expect_ok() {
 		local got_ok got_skip
 		got_ok=$(grep -c '^ok: ' "$T/out" || true)
 		got_skip=$(grep -c '^skip: ' "$T/out" || true)
+		local got_life
+		got_life=$(grep -cE '^(ok|skip): lifetime ' "$T/out" || true)
 		if [ "$got_ok" = "$want_ok" ] && [ "$got_skip" = "$want_skip" ] \
+			&& [ "$got_life" = 1 ] && tail -n 1 "$T/out" | grep -qE '^(ok|skip): lifetime ' \
 			&& ! grep -q '^refused' "$T/out" && [ ! -s "$T/err" ]; then
 			pass=$((pass + 1))
 			return
 		fi
-		report "$what (want $want_ok ok and $want_skip skip lines, empty stderr)"
+		report "$what (want $want_ok ok and $want_skip skip lines, one lifetime line last, empty stderr)"
 	else
 		report "$what (exit $?)"
 	fi
@@ -167,10 +171,12 @@ expect_ok "lifetime: 120" 5 2 "$L120"
 has "ok: lifetime 120 s" || report "lifetime 120 line"
 expect_ok "lifetime: 120 with --require-bounded" 5 2 "$L120" --require-bounded
 expect_ok "lifetime: two equal markers with --require-bounded" 5 2 "$LSAME" --require-bounded
+has "ok: lifetime 120 s" || report "two equal markers' lifetime line"
 expect_ok "lifetime: 0 without --require-bounded is reported" 5 2 "$L0"
 has "ok: lifetime 0 s" || report "lifetime 0 line"
 expect_refuse "lifetime: 0 with --require-bounded refused" "says 0 s" "$L0" --require-bounded
 expect_ok "lifetime: disagreeing markers without --require-bounded" 4 3 "$LBAD"
+has "skip: lifetime (markers disagree: 0, 120 s)" || report "disagreeing markers' skip line"
 expect_refuse "lifetime: disagreeing markers with --require-bounded refused" "disagree" "$LBAD" --require-bounded
 expect_refuse "lifetime: marker check comes first" "does not contain the marker" "$L0" --require-bounded --require-marker NOPE
 
