@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2012-2015 Etnaviv Project
+// The MIT part is derived from Mesa 26.2.1: the rule is etna_update_zsa in etnaviv_state.c, with
+// etnaviv_zsa.c and etnaviv_shader.c, in src/gallium/drivers/etnaviv/
+// (Copyright (c) 2012-2015 Etnaviv Project). The upstream part
+// stays under its licence (LICENSES/MIT.txt); our changes are Apache-2.0.
 //! The early-depth rule as a pure function (docs/notes/gc-tiled-targets.md,
 //! "(c) Early depth"). `emit_pe_state` and `emit_ra_state` call
 //! it through `draw_early_z` (a linear target, plus the program's `writes_z`),

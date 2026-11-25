@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2012-2017 Etnaviv Project
+// The MIT part is derived from Mesa 26.2.1: the shader link follows etnaviv_shader.c, etnaviv_state.c,
+// etnaviv_emit.c and etnaviv_translate.h in src/gallium/drivers/etnaviv/
+// (Copyright (c) 2012-2017 Etnaviv Project). The upstream part
+// stays under its licence (LICENSES/MIT.txt); our changes are Apache-2.0.
 //! The shader half of a Vivante draw: which registers the two stages read and
 //! write, where their code lives, and their uniforms.
 //!
