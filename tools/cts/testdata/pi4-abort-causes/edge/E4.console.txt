@@ -1,0 +1,4 @@
+deqp: case filter 'dEQP-GLES3.functional.w.*'
+Test case 'dEQP-GLES3.functional.w.a'..
+yakogl/v3d: draw refused: alpha-to-coverage is not implemented
+deqp: ResourceError dEQP-GLES3.functional.w.a

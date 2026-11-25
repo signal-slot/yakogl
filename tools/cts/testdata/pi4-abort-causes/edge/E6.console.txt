@@ -1,0 +1,7 @@
+deqp: case filter 'dEQP-GLES3.functional.u.*'
+Test case 'dEQP-GLES3.functional.u.a'..
+osal(v3d): out of GPU memory for 4096 bytes (0 frees held; this size refused 1 time)
+yakogl/v3d: draw refused: no empty job holds the draw (its lists, or its client data with no memory of its own)
+deqp: Pass dEQP-GLES3.functional.u.a
+Test case 'dEQP-GLES3.functional.u.b'..
+deqp: Pass dEQP-GLES3.functional.u.b
