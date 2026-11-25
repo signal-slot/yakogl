@@ -134,7 +134,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=237
+WANT_CHECKS=238
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -816,6 +816,13 @@ out=$(BOARD_END_RE='^never matches' "$B" tally "$d" 2>&1)
 check "BOARD_END_RE overrides the end line" grep -q "verdict=no_end_line" <<<"$out"
 out=$("$B" tally "$d" 2>&1)
 check "the layer's lifetime reset is an end line too (any <why>)" grep -q "verdict=done .*boot_verdict=complete result=pass:mp2_identify" <<<"$out"
+d="$S/runs/20261108-1210-trial-0123abcd"
+mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1070
+printf '%s\n%s\n12:00:06 mp2_identify: PASS: ok\n12:01:40 mp2: lifetime over: PSCI SYSTEM_RESET at 100012 ms\n' "$UBOOT" "$LAYER" > "$d/console.txt"
+out=$("$B" tally "$d" 2>&1)
+rc=$?
+check "a run that hits the lifetime: rc 8, verdict=lifetime, elapsed seconds" \
+    eval '[ "$rc" = 8 ] && grep -q " rc=8 verdict=lifetime boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=70s lifetime_after=100s$" <<<"$out"'
 HANG='12:00:03 mp2_hello: hanging on purpose with interrupts locked, the OP-TEE watchdog must reset'
 d="$S/runs/20261108-1212-wdog-0123abcd"
 mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1

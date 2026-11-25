@@ -212,6 +212,15 @@
 # image that does not arm the watchdog itself needs MP2_NO_WATCHDOG=1 (BL2's
 # IWDG is what resets it), as for any run. The record carries expect_wdog=1.
 #
+# verdict=lifetime (rc 8): the console has the layer's own line "mp2: lifetime
+# over: PSCI SYSTEM_RESET at <n> ms" (CONFIG_YAKOGL_STM32MP2_LIFETIME_S was
+# reached before the image ended by itself), so a truncated shard is not
+# "done" (not with --expect-watchdog, which keeps psci_reset_before_wdog).
+# The line then ends with lifetime_after=<n/1000>s. A fail result (rc 4,
+# failed) and a PSCI return (psci_returned) still come first; the board's
+# return and the restore paths are unchanged. rc 8 is distinct from 4
+# (failed), 5 (not_back), 6 (one-shot left), 7 (a person).
+#
 # MP2_RAMLOG=1: the console text of a run through the image's RAM ring
 # (driver/zephyr/lib/board/common/ramlog.c; the host side is
 # tools/probes/stm32mp257f_dk/ramlog/). For a blind run (MP2_NO_CONSOLE=1)
@@ -1143,6 +1152,7 @@ verdict_line() {
     t0=$(mget t_reboot "$dir"); t1=$(mget t_back "$dir"); cycle=$(mget rc_cycle "$dir")
     if [ -n "$t0" ] && [ -n "$t1" ] && [ "$back" = 1 ]; then after="$((t1 - t0))s"; else after=absent; fi
     con=$dir/console.txt
+    local lt=""
     res=none
     if [ "$blind" = 1 ] && [ -n "$ramlog" ]; then
         bv=unknown   # MP2_RAMLOG=1 and no ring came back (ramlog= says why)
@@ -1164,6 +1174,9 @@ verdict_line() {
         elif grep -qF 'yakogl-mp2: go ' <<<"$p"; then bv=uboot_go
         else bv=not_started; fi
         local l
+        # the layer's own lifetime line (stm32mp2.c lifetime_over): the image
+        # did not end by itself; the elapsed time comes from its uptime in ms
+        lt=$(sed -nE 's/^mp2: lifetime over: PSCI SYSTEM_RESET at ([0-9]+) ms.*/\1/p' <<<"$p" | head -n 1)
         l=$(result_of <<<"$p")
         [ -n "$l" ] && res=$l
     fi
@@ -1173,6 +1186,7 @@ verdict_line() {
     elif [ "$blind" = 1 ]; then v=returned; rc=0
     elif [ "${res%%:*}" = fail ]; then v=failed; rc=4
     elif [ "$bv" = psci_returned ]; then v=psci_returned; rc=4
+    elif [ -n "$lt" ] && [ "$expect" != 1 ]; then v=lifetime; rc=8; ext="$ext lifetime_after=$((lt / 1000))s"
     elif [ "$expect" = 1 ] && [ "$bv" = hung ]; then v=watchdog_reset; rc=0
     elif [ "$expect" = 1 ] && [ "$bv" = complete ]; then v=psci_reset_before_wdog; rc=4
     elif [ "$expect" = 1 ] && [ "$bv" = image_started ]; then v=no_hang; rc=4
