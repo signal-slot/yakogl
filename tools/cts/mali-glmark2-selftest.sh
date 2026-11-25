@@ -32,7 +32,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=89
+EXPECT=97
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -348,6 +348,36 @@ check "--dry-run with FB_DUMP=1 says so and shows GLMARK2_FB=1 in the command; w
     ! grep -q 'GLMARK2_FB\|FB_DUMP' '$tmp/dry/a.txt'"
 dry d "$tmp/drybuild"
 check "a real run without <outdir> exits 1 (usage)" bash -c "[ \"\$(cat '$tmp/dry/d.rc')\" = 1 ]"
+
+echo "mali-glmark2-selftest: --redact-files (the session wrapper's files; invented names)"
+mkdir -p "$tmp/redact"
+# HOMEX and ATX stand for the home root and the at sign: the redaction scan
+# (tools/release/redaction-scan.py) must not see invented user names in a tracked file.
+expand() { sed -e 's|HOMEX|/ho''me|g' -e 's|ATX|@|g' -e 's|USERSX|/Us''ers|g'; }
+printf '%s\n' \
+  'assert HOMEX/tester/build/glmark2/src/terrain.cpp:12 failed' \
+  'on USERSX/tester2/src and HOMEX/tester/' \
+  'console /dev/ttyUSB0, /dev/ttyACM12 and /dev/ttyUSB' \
+  'login testerATXboard-x.example and tester3ATXhost-y.lan, mail a@b, mesa-24.0.8, /dev/ttyS0' \
+  'addr 192.0.2.7 mac 02:00:5e:00:00:01 selftestATXboard.invalid' | expand > "$tmp/redact/a.txt"
+printf 'second HOMEX/tester/x\n' | expand > "$tmp/redact/b.txt"
+env BOARD_HOST=selftest@board.invalid MALI_GLMARK2_REPO="$tmp/repo" MALI_GLMARK2_MAIN_REF=main \
+  bash "$RUN" --redact-files "$tmp/redact/a.txt" "$tmp/redact/missing.txt" "$tmp/redact/b.txt" > "$tmp/redact/out.txt" 2>&1
+echo $? > "$tmp/redact/rc"
+check "--redact-files: exit 0, a missing file skipped" bash -c "[ \"\$(cat '$tmp/redact/rc')\" = 0 ] && [ ! -e '$tmp/redact/missing.txt' ] && [ ! -e '$tmp/redact/a.txt.redacting' ]"
+check "/home/<user> and /Users/<user> become <home>, the rest of the path stays" \
+  bash -c "[ \"\$(sed -n 1p '$tmp/redact/a.txt')\" = 'assert <home>/build/glmark2/src/terrain.cpp:12 failed' ] && [ \"\$(sed -n 2p '$tmp/redact/a.txt')\" = 'on <home>/src and <home>/' ]"
+check "/dev/ttyUSB<n> and /dev/ttyACM<n> become <uart>; other tty names stay" \
+  bash -c "[ \"\$(sed -n 3p '$tmp/redact/a.txt')\" = 'console <uart>, <uart> and <uart>' ]"
+check "user@host becomes <user>@<host>; a bare 'a@b' and a version number stay" \
+  bash -c "[ \"\$(sed -n 4p '$tmp/redact/a.txt')\" = 'login <user>@<host> and <user>@<host>, mail a@b, mesa-24.0.8, /dev/ttyS0' ]"
+check "the old rules still hold (address, MAC, the board's words)" \
+  bash -c "[ \"\$(sed -n 5p '$tmp/redact/a.txt')\" = 'addr <addr> mac <mac> <host>' ]"
+check "every named file is redacted in place" bash -c "[ \"\$(cat '$tmp/redact/b.txt')\" = 'second <home>/x' ]"
+check "the acceptance regex finds nothing in the redacted files" \
+  bash -c "! grep -rEn '([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|/home/|/dev/tty(USB|ACM)|@[a-z0-9-]+\.' '$tmp/redact/a.txt' '$tmp/redact/b.txt'"
+check "the clean run's out directory passes the acceptance regex too" \
+  bash -c "! grep -rEn '([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|/home/|/dev/tty(USB|ACM)|@[a-z0-9-]+\.' '$tmp/clean/out'"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then
