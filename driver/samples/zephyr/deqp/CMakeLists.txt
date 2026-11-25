@@ -115,6 +115,43 @@ target_include_directories(app PRIVATE src
 target_compile_definitions(app PRIVATE DE_OS=DE_OS_UNIX DE_CPU=DE_CPU_ARM_64
   DE_COMPILER=DE_COMPILER_GCC DE_PTR_SIZE=8)
 
+# Raspberry Pi 5 (V3D 7.1): src/v3d71_board.c (v3d_board.c's record and end
+# lines over the UART, no screen; the board layer's PM watchdog and mailbox,
+# YAKOGL_RPI5_WDOG and YAKOGL_RPI5_MBOX, which YAKOGL_GPU_V3D71 selects).
+# CONFIG_YAKOGL_GPU_V3D stays on for the library; the Pi 4 branch below is
+# for the Pi 4 alone (it links rpi4/rpi_mbox.c and rpi_wdog.c, which the board
+# layer already carries here), so this branch hides the symbol from it.
+if(CONFIG_YAKOGL_GPU_V3D71)
+  if(NOT CONFIG_YAKOGL_RPI5_WDOG OR NOT CONFIG_YAKOGL_RPI5_MBOX)
+    message(FATAL_ERROR "deqp: CONFIG_YAKOGL_GPU_V3D71 needs the board layer's watchdog and mailbox (YAKOGL_RPI5_WDOG, YAKOGL_RPI5_MBOX)")
+  endif()
+  if(NOT CONFIG_YAKOGL_RPI5_WDOG_HOLD_S EQUAL CONFIG_V3D_DEQP_LIFETIME_S)
+    message(FATAL_ERROR "deqp: CONFIG_YAKOGL_RPI5_WDOG_HOLD_S (${CONFIG_YAKOGL_RPI5_WDOG_HOLD_S}) must equal CONFIG_V3D_DEQP_LIFETIME_S (${CONFIG_V3D_DEQP_LIFETIME_S}): the record's deadline and the reset are one clock")
+  endif()
+  execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
+                  OUTPUT_VARIABLE V3D_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  RESULT_VARIABLE describe_rc)
+  if(NOT describe_rc EQUAL 0 OR V3D_BUILD STREQUAL "")
+    set(V3D_BUILD "unknown")
+  endif()
+  target_sources(app PRIVATE src/v3d71_board.c)
+  # The Pi 4's wraps but for the EGL default display, which passes through:
+  # the 7.1 OSAL gets its clock switch from the board layer (rpi5/rpi5_v3d.c).
+  zephyr_link_libraries(-Wl,--wrap=glGetShaderInfoLog -Wl,--wrap=glGetProgramInfoLog
+    -Wl,--wrap=glGetShaderiv -Wl,--wrap=glGetProgramiv)
+  if(CONFIG_V3D_DEQP_QPA_UART)
+    target_sources(app PRIVATE src/qpa_uart.c)
+    zephyr_link_libraries(-Wl,--wrap=fdevopen -Wl,--wrap=qpTestLog_createFileLog)
+  endif()
+  target_compile_definitions(app PRIVATE V3D_BUILD="${V3D_BUILD}")
+  target_include_directories(app PRIVATE
+    "${PVR_REPO}/zephyr/lib/board/common"    # sample_glue.h, gc_font8x16.h
+    "${PVR_REPO}/zephyr/lib/board/rpi4"      # rpi_mbox.h, rpi_wdog.h, fbcon.h
+    "${YAKOGL_DIR}/src/osal"                 # osal_internal.h
+    "${PVR_REPO}/src/v3d")                   # v3d.h
+  set(CONFIG_YAKOGL_GPU_V3D OFF)
+endif()
+
 # Raspberry Pi 4 (V3D 4.2): docs/online-shaderc/v3d-backend.md, "M8".
 if(CONFIG_YAKOGL_GPU_V3D)
   execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
