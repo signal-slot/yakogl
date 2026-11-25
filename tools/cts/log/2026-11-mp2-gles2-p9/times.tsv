@@ -1,0 +1,25 @@
+# slice 1, measured on the DK; run_ms is the layer's 'PSCI SYSTEM_RESET at <n> ms' (uptime of the image), lifetime_ms the image's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, back_after_s the runner's reboot-to-ssh time
+index	slice	cases	est_ms	run_ms	lifetime_ms	lifetime_used_pct	back_after_s	pass	fail	notsupported	other	noresult	verdict
+0	1	125	12500	7446	600000	1.2	49	117	0	8	0	0	rc=0 verdict=done result=pass:deqp
+1	1	125	12500	5583	600000	0.9	62	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+2	1	125	12500	6566	600000	1.1	57	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+3	1	125	12500	6381	600000	1.1	62	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+4	1	125	12500	5763	600000	1.0	48	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+5	1	125	12500	8823	600000	1.5	65	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+6	1	125	12500	19647	600000	3.3	63	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+7	1	125	12500	4320	600000	0.7	61	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+8	1	125	12500	4148	600000	0.7	48	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+9	1	125	12500	4095	600000	0.7	64	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+10	1	125	12500	8283	600000	1.4	57	113	12	0	0	0	rc=0 verdict=done result=none
+11	1	125	12500	12421	600000	2.1	71	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+12	1	125	12500	12520	600000	2.1	74	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+13	1	125	12500	159542	600000	26.6	207	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+14	1	125	12500	4902	600000	0.8	64	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+15	1	125	12500	5384	600000	0.9	48	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+16	1	125	12500	5037	600000	0.8	58	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+17	1	125	12500	5135	600000	0.9	65	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+18	1	125	12500	5938	600000	1.0	47	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+19	1	125	12500	6301	600000	1.1	64	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+20	1	125	12500	6420	600000	1.1	50	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+21	1	125	12500	12934	600000	2.2	76	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
+22	1	125	12500	16366	600000	2.7	58	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
