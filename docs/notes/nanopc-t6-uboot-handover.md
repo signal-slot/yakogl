@@ -477,8 +477,9 @@ different fact (WDT0 is clocked) and does not prove the reset either.
   by itself on every boot (`dm tree`, section 4 (c)), so the write is part of
   the state U-Boot hands over, not something a command at the prompt adds.
 - UART2: read from offset 4, because offset 0 pops a received byte.
-- `CNTFRQ_EL0` and the `SCTLR_EL2` bits are not printed by the early banner
-  (a small item after #341 that touches `driver/rust/src/ffi/rk3588.rs` and the header).
+- `CNTFRQ_EL0` is printed by the early banner's T6:A line, in decimal Hz, as
+  found at entry (so U-Boot's value shows up against Linux's); `SCTLR_EL2` is
+  printed there too. The value is not yet measured on the board.
 
 None of the changes the audit found was made by this plan.
 

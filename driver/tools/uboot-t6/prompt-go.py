@@ -174,7 +174,7 @@ class Refused(Exception):
 # (t6-verdict.sh's SCTLR_MCI).
 SCTLR_MCI = 0x1005
 X16 = r"[0-9a-f]{16}"
-T6A_RE = re.compile(r"T6:A EL2 HCR_EL2 0x%s -> 0x%s SCTLR_EL2 0x(%s) VBAR_EL2 0x%s -> 0x%s" % (X16, X16, X16, X16, X16))
+T6A_RE = re.compile(r"T6:A EL2 HCR_EL2 0x%s -> 0x%s SCTLR_EL2 0x(%s) VBAR_EL2 0x%s -> 0x%s CNTFRQ_EL0 (\d+)" % (X16, X16, X16, X16, X16))
 T6G_RE = re.compile(r"T6:G go: SCTLR_EL2 0x(%s) -> 0x(%s) \(MMU, D-cache, I-cache off\); 0x10000000-0x20000000 "
                     r"cleaned and invalidated to PoC, TLB and I-cache invalidated" % (X16, X16))
 # gl_test.c's "gl_test: all: F of T cases failed (P passed; X timed out; ..." (the

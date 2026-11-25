@@ -582,6 +582,7 @@ mod early {
             sctlr: aarch64::read_sctlr_el2(),
             vbar_found,
             vbar_now: aarch64::read_vbar_el2(),
+            cntfrq: aarch64::read_cntfrq_el0(),
         };
         banner::banner_a_el2(&mut tx, &e);
         go::print_go(&mut tx, go_sctlr, left, start, end);

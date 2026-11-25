@@ -667,7 +667,8 @@ pub fn current_el() -> u64 {
     (v >> 2) & 3
 }
 
-/// Readers of the EL2 registers the early banner prints. Only at EL2.
+/// Readers of the EL2 registers (and CNTFRQ_EL0, readable at EL2) the early
+/// banner prints. Only at EL2.
 macro_rules! el2_readers {
     ($($name:ident $reg:literal),* $(,)?) => {$(
         #[doc = concat!("`", $reg, "`. Only at EL2.")]
@@ -687,6 +688,7 @@ el2_readers!(
     read_hcr_el2 "hcr_el2",
     read_sctlr_el2 "sctlr_el2",
     read_vbar_el2 "vbar_el2",
+    read_cntfrq_el0 "cntfrq_el0",
     read_esr_el2 "esr_el2",
     read_elr_el2 "elr_el2",
     read_far_el2 "far_el2",
