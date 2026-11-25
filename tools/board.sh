@@ -1803,8 +1803,10 @@ uboot_on_exit() {
     fi
     # an eMMC copy staged for a boot that never came is removed again
     if [ -n "${MMC_STAGED:-}" ] && [ "${REBOOTED:-0}" = 0 ]; then
-        b "sudo -n rm -f $MMC_STAGED" && note "removed $MMC_STAGED (no reboot)" >&2
+        b "sudo -n rm -f $MMC_STAGED $MMC_STAGED.part" && note "removed $MMC_STAGED (no reboot)" >&2
     fi
+    # the directory made under /boot goes whenever it was made (a failed copy too)
+    if [ "${REBOOTED:-0}" = 0 ]; then stage_dir_rm; fi
     stop_cap
     lease_release
     rm -rf "$TMP"
@@ -1843,41 +1845,90 @@ for row in sys.stdin.buffer:      # bytes: a serial capture need not be valid UT
 # bind mount of a directory of the root filesystem
 # (/ostree/deploy/<os>/var), so the path U-Boot sees is the mount's FSROOT
 # plus the path below the mount point, both read from the board (findmnt).
+#
+# imx8mp with uboot-mmc (run, probe, stage, disarm, status): STAGE_DIR is
+# /boot/yakogl. The runner then changes only a file it stages under /boot and
+# removes again, the directory it makes for it, and its own yako_* variables;
+# every one of these is announced by an "UNDO:" line before it is written.
+# am62p and the default/nodefault verbs keep /var/yakogl.
 STAGE_DIR=/var/yakogl
+STAGE_BOOT=0
+if [ "$BOARD" = imx8mp ] && [ "$BOOT" = uboot-mmc ]; then
+    case "$VERB" in
+    run | probe | stage | disarm | status | uboot-status) STAGE_DIR=/boot/yakogl STAGE_BOOT=1 ;;
+    esac
+fi
 
 # mmc_where: sets UB_DIR (STAGE_DIR as U-Boot names it) after checking that
 # STAGE_DIR is on MMC_PART, the partition NB_MMC names; and MMC_FREE.
 mmc_where() {
-    local m src tgt root rel
-    bget m "sudo -n mkdir -p $STAGE_DIR && set -- \$(findmnt -n -v -o SOURCE,TARGET,FSROOT -T $STAGE_DIR) && echo \$(readlink -f \$1) \$2 \$3" \
-        "$MMC_PART /var /ostree/deploy/torizon/var" || die "cannot read the mount of $STAGE_DIR on the board"
+    local m src tgt root rel at=$STAGE_DIR mk="sudo -n mkdir -p $STAGE_DIR && "
+    if [ "$STAGE_BOOT" = 1 ]; then
+        # nothing is written here: the mount is read at /boot (the directory
+        # is made later, by mmc_stage), and a /boot/yakogl that exists is a
+        # leftover the runner did not make in this run
+        at=${STAGE_DIR%/*} mk=
+        if [ "$DRY" = 1 ]; then
+            echo "DRY board\$ test ! -e $STAGE_DIR   # a leftover refuses; nothing of /boot is touched before this"
+        else
+            b "test -e $STAGE_DIR" && die "$STAGE_DIR exists: a leftover of a run that did not clean up (or not the runner's): look at it, remove it by hand; nothing was written"
+        fi
+    fi
+    bget m "${mk}set -- \$(findmnt -n -v -o SOURCE,TARGET,FSROOT -T $at) && echo \$(readlink -f \$1) \$2 \$3" \
+        "$MMC_PART $([ "$STAGE_BOOT" = 1 ] && echo '/boot /' || echo '/var /ostree/deploy/torizon/var')" || die "cannot read the mount of $at on the board"
     read -r src tgt root <<<"$m"
     [ "$src" = "$MMC_PART" ] ||
-        die "$STAGE_DIR is on '$src', not $MMC_PART (U-Boot's mmc $NB_MMC): U-Boot would not find the image there"
+        die "$at is on '$src', not $MMC_PART (U-Boot's mmc $NB_MMC): U-Boot would not find the image there (nothing was written)"
     [ -n "$root" ] && [ -n "$tgt" ] || die "findmnt gave no mount point or FSROOT for $STAGE_DIR ('$m')"
     if [ "$tgt" = / ]; then rel=$STAGE_DIR; else rel=${STAGE_DIR#"$tgt"}; fi
     UB_DIR=${root%/}$rel
     meta mmc_where "$STAGE_DIR = mmc $NB_MMC $UB_DIR ($src)"
-    bget MMC_FREE "df -B1 --output=avail $STAGE_DIR | tail -1" 999999999999 || die "df on the board failed"
+    bget MMC_FREE "df -B1 --output=avail $at | tail -1" 999999999999 || die "df on the board failed"
     MMC_FREE=${MMC_FREE// /}
     [[ $MMC_FREE =~ ^[0-9]+$ ]] || die "cannot read the free space of $STAGE_DIR ('$MMC_FREE')"
     [ "$MMC_FREE" -ge $((2 * IMG_SIZE)) ] || die "$STAGE_DIR has $MMC_FREE bytes free, less than twice the image ($IMG_SIZE)"
+}
+
+# stage_dir_rm: the directory the runner made under /boot is removed again
+# (rmdir: it refuses a directory that still holds anything).
+MMC_DIR_MADE=0
+stage_dir_rm() {
+    [ "$MMC_DIR_MADE" = 1 ] || return 0
+    b "sudo -n rmdir $STAGE_DIR" && MMC_DIR_MADE=0
+}
+
+# arm_undo VAR...: before the runner writes its own variables, the line that
+# puts them back (their value now, or unset when they have none).
+arm_undo() {
+    local v old u=
+    for v in "$@"; do
+        bget old "sudo -n fw_printenv -n $v 2>/dev/null" ''
+        if [ -n "$old" ]; then u+="; sudo -n fw_setenv $v $(printf %q "$old")"; else u+="; sudo -n fw_setenv $v"; fi
+    done
+    echo "UNDO: ${u#; }"
 }
 
 # mmc_stage FILE: IMG copied to STAGE_DIR/FILE, read back from the eMMC (the
 # page cache dropped first) by sha256; sets MMC_STAGED. Removed on a mismatch.
 mmc_stage() {
     local dst=$STAGE_DIR/$1 got
+    if [ "$STAGE_BOOT" = 1 ]; then
+        # the directory is the runner's own: undo printed, then made (no -p:
+        # an existing one is a refusal); uboot_on_exit and the cleanup remove it
+        echo "UNDO: sudo -n rm -f $dst.part $dst; sudo -n rmdir $STAGE_DIR"
+        MMC_DIR_MADE=1
+        b "sudo -n mkdir $STAGE_DIR" || { MMC_DIR_MADE=0; die "cannot make $STAGE_DIR (nothing staged)"; }
+    fi
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync' < $IMG"
     else
         timeout 900 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "sudo -n sh -c 'cat > $dst.part && sync && mv $dst.part $dst && sync'" < "$IMG" ||
-            { b "sudo -n rm -f $dst.part $dst"; die "copying the image to $dst failed"; }
+            { b "sudo -n rm -f $dst.part $dst"; stage_dir_rm; die "copying the image to $dst failed"; }
     fi
     MMC_STAGED=$dst
     bget got "echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null && sha256sum $dst" "$IMG_SHA  $dst"
     got=${got%% *}
-    [ "$got" = "$IMG_SHA" ] || { b "sudo -n rm -f $dst"; MMC_STAGED=; die "the eMMC copy $dst reads back as '$got', not $IMG_SHA (removed)"; }
+    [ "$got" = "$IMG_SHA" ] || { b "sudo -n rm -f $dst"; MMC_STAGED=; stage_dir_rm; die "the eMMC copy $dst reads back as '$got', not $IMG_SHA (removed)"; }
     meta staged "$dst on the eMMC, read back equal"
 }
 
@@ -2077,6 +2128,7 @@ run_uboot() {
         else
             printf 'yako_once=%s\nyako_src=mmc\nyako_file=%s\n' "$TOKEN" "$UB_DIR/$file" > "$TMP/arm"
         fi
+        if [ "$src" = net ]; then arm_undo yako_once yako_src yako_file yako_server; else arm_undo yako_once yako_src yako_file; fi
         if [ "$DRY" = 0 ]; then ARMED=1; fi
         setenv_script "$TMP/arm" || die "fw_setenv (arm) failed" 5
         if [ "$DRY" = 0 ]; then
@@ -2108,7 +2160,10 @@ run_uboot() {
         if [ "$BOARD" != am62p ] && [ "$src" = net ]; then
             echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
         fi
-        [ "$src" = mmc ] && [ "$PROBE" = 0 ] && b "sudo -n rm -f $STAGE_DIR/$file"
+        if [ "$src" = mmc ] && [ "$PROBE" = 0 ]; then
+            b "sudo -n rm -f $STAGE_DIR/$file"
+            [ "$STAGE_BOOT" = 1 ] && b "sudo -n rmdir $STAGE_DIR"
+        fi
         echo "DRY host\$ the verdict line from the run directory (yakogl-tools record)"
         exit 0
     fi
@@ -2168,7 +2223,7 @@ run_uboot() {
     if [ -n "${MMC_STAGED:-}" ]; then
         if [ "$rcc" = 5 ]; then
             meta cleanup "not done: Linux not back ($MMC_STAGED left on the eMMC)"
-        elif b "sudo -n rm -f $MMC_STAGED && ! test -e $MMC_STAGED"; then
+        elif b "sudo -n rm -f $MMC_STAGED && ! test -e $MMC_STAGED" && { [ "$STAGE_BOOT" = 0 ] || b "sudo -n rmdir $STAGE_DIR && ! test -e $STAGE_DIR"; }; then
             meta cleanup "$MMC_STAGED removed (read back)"
         else
             meta cleanup "$MMC_STAGED NOT removed"
@@ -2679,7 +2734,7 @@ cmd_status() {
     uboot-tftp) nb_status ;;
     uboot-mmc)
         nb_status
-        b "ls -l $STAGE_DIR 2>/dev/null; findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var"
+        b "ls -l $STAGE_DIR 2>/dev/null; findmnt -n -v -o SOURCE,TARGET,FSROOT -T ${STAGE_DIR%/*}"
         ;;
     esac
     # the i.MX 95's record: the raw interface, then the BBM GPR words
@@ -2720,7 +2775,13 @@ cmd_setup() {
     uboot-*:uninstall) nb_uninstall ;;
     uboot-tftp:disarm) nb_disarm ;;
     uboot-mmc:disarm)
-        b "sudo -n rm -f $STAGE_DIR/once-*.bin; ls $STAGE_DIR 2>/dev/null"
+        if [ "$STAGE_BOOT" = 1 ]; then
+            # only the runner's own files, then its directory if nothing else is in it
+            echo "UNDO: nothing to undo: this removes the runner's own $STAGE_DIR/once-*.bin and (if empty) $STAGE_DIR"
+            b "sudo -n rm -f $STAGE_DIR/once-*.bin $STAGE_DIR/once-*.bin.part; sudo -n rmdir $STAGE_DIR 2>/dev/null; ls $STAGE_DIR 2>/dev/null"
+        else
+            b "sudo -n rm -f $STAGE_DIR/once-*.bin; ls $STAGE_DIR 2>/dev/null"
+        fi
         nb_disarm ;;
     tryboot:install | tryboot:uninstall)
         note "tryboot needs no install: config.txt stays the Linux default; each run writes tryboot.txt and puts it back" ;;
