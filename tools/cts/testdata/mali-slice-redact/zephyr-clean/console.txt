@@ -1,0 +1,5 @@
+vi95_deqp: build v0.1-100-gaaaabbbb
+ethaddr=<redacted>
+serial#=<redacted>
+serverip=<redacted>
+=> ext4load mmc 0:2 0xd0000000 img
