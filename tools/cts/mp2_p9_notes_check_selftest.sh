@@ -79,7 +79,7 @@ EOF
 run() {
   local w=$1
   shift
-  python3 -I "$TOOL" --bringup "$w/bringup.md" --p9 "$w/p9.md" \
+  python3 -I "$TOOL" --docs-p9 --bringup "$w/bringup.md" --p9 "$w/p9.md" \
            --prestudy "$w/prestudy.md" "$@" 2>&1
 }
 
@@ -188,17 +188,149 @@ chk "--only c2: no c3 line" nogrep "$out" '^c3:'
 out=$(run "$D/no-diffline" --only c1); rc=$?
 chk "--only c1 failing: exit 1" test $rc -eq 1
 chk "--only c1 failing: summary" grep -qx 'mp2-p9-notes-check: 0 ok, 1 missing' <<<"$out"
-run "$D/full" --only c4 >/dev/null; chk "bad --only exits 2" test $? -eq 2
+run "$D/full" --only c4 >/dev/null; chk "c4 in docs-p9 mode exits 2" test $? -eq 2
 
 # a note that cannot be read
-python3 -I "$TOOL" --bringup "$D/nope.md" >"$D/err.out" 2>&1
+python3 -I "$TOOL" --docs-p9 --bringup "$D/nope.md" >"$D/err.out" 2>&1
 chk "missing note exits 2" test $? -eq 2
 chk "error line" grep -q '^mp2-p9-notes-check: ' "$D/err.out"
 
 # the real notes: the summary line prints whatever the tree holds
-python3 -I "$TOOL" >"$D/real.out" 2>&1
+python3 -I "$TOOL" --docs-p9 >"$D/real.out" 2>&1
 tail -1 "$D/real.out" >"$D/real.last"
 chk "real notes: summary line" grep -Eqx 'mp2-p9-notes-check: [0-9]+ ok, [0-9]+ missing' "$D/real.last"
+
+# ---- acceptance mode (c2, c3, c4) ----
+A=$D/accept; mkdir -p "$A/log/x-mp2-gles2-1/s1"
+P=dEQP-GLES2.functional
+printf '%s.a\n%s.b\n' $P $P >"$A/must.txt"
+printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names\n' >"$A/base.tsv"
+: >"$A/acc.txt"
+SHARD=$A/log/x-mp2-gles2-1/s1/shard-1.log
+printf "deqp: case filter '%s.*'\n13:00:01 deqp: Pass %s.a\n" $P $P >"$SHARD"
+# case b has no result: missing 1
+DOPT=(--p9-diff-opt=--baseline="$A/base.tsv" --p9-diff-opt=--accepted="$A/acc.txt"
+      --p9-diff-opt=--mustpass="$A/must.txt")
+LOGS="$A/log/*-mp2-gles2-*/s*/shard-*.log"
+SUMLINE='mp2-p9-diff: shared 0, new 0, fixed 0, missing 1'
+
+# gen_acc <dir>: every acceptance criterion ok
+gen_acc() {
+  local w=$1; mkdir -p "$w"
+  cat >"$w/bringup.md" <<'EOF'
+## Board verdicts
+
+shard 1 (100 s lifetime): mp2-gltest-diff: new 0, flaky 0, expected 1, missing 0; 41 s of 100 s
+EOF
+  cat >"$w/p9.md" <<EOF
+# P9
+shard 1: mp2-gltest-diff: new 0, flaky 0, expected 1, missing 0
+took 41 s / 100 s
+    $SUMLINE
+- $P.b: missing, cause: the shard hit the lifetime
+EOF
+  cat >"$w/prestudy.md" <<'EOF'
+| Q11 | wide lines | **Decided (2026-11-25):** option A; `records/stm32mp257f-dk/20261125-1500-q11_wideline-9f8e7d6c` |
+EOF
+}
+arun() {
+  local w=$1; shift
+  python3 -I "$TOOL" --bringup "$w/bringup.md" --p9 "$w/p9.md" --prestudy "$w/prestudy.md" \
+    --shard-logs "$LOGS" "${DOPT[@]}" "$@" 2>&1
+}
+
+w=$D/acc-full; gen_acc "$w"
+out=$(arun "$w"); rc=$?
+chk "accept full: exit 0" test $rc -eq 0
+chk "accept full: c2 ok" grep -qx 'c2: ok' <<<"$out"
+chk "accept full: c3 ok" grep -qx 'c3: ok' <<<"$out"
+chk "accept full: c4 ok" grep -qx 'c4: ok' <<<"$out"
+chk "accept full: summary" grep -qx 'mp2-p9-notes-accept: 3 ok, 0 failed, 0 pending' <<<"$out"
+arun "$w" --strict >/dev/null; chk "accept full --strict: exit 0" test $? -eq 0
+
+# c2
+w=$D/acc-c2-untimed; gen_acc "$w"
+sed -i 's/; 41 s of 100 s//' "$w/bringup.md"
+out=$(arun "$w"); rc=$?
+chk "c2 no time: exit 1" test $rc -eq 1
+chk "c2 no time: failed, names the note" grep -q '^c2: failed: bringup.md: .*without a time' <<<"$out"
+w=$D/acc-c2-onenote; gen_acc "$w"
+sed -i '/mp2-gltest-diff: new/d' "$w/bringup.md"
+out=$(arun "$w")
+chk "c2 one note lacks lines: failed" grep -q "^c2: failed: no 'mp2-gltest-diff: new' line in bringup.md" <<<"$out"
+w=$D/acc-c2-pending; gen_acc "$w"
+sed -i '/mp2-gltest-diff: new/d' "$w/bringup.md" "$w/p9.md"
+out=$(arun "$w"); rc=$?
+chk "c2 absent: exit 0" test $rc -eq 0
+chk "c2 absent: pending" grep -q '^c2: pending' <<<"$out"
+out=$(arun "$w" --strict); rc=$?
+chk "c2 absent --strict: exit 1" test $rc -eq 1
+chk "c2 absent --strict: failed line" grep -q '^c2: failed: pending (--strict)' <<<"$out"
+
+w=$D/acc-c2-untimed-all; gen_acc "$w"
+sed -i 's/; 41 s of 100 s//; /took 41/d' "$w/bringup.md" "$w/p9.md"
+out=$(arun "$w")
+chk "c2 untimed everywhere: pending" grep -q '^c2: pending' <<<"$out"
+
+# c3
+w=$D/acc-c3-differs; gen_acc "$w"
+sed -i 's/missing 1$/missing 0/' "$w/p9.md"
+out=$(arun "$w"); rc=$?
+chk "c3 differs: exit 1" test $rc -eq 1
+chk "c3 differs: failed, both lines" grep -q '^c3: failed:.*missing 0.*missing 1' <<<"$out"
+w=$D/acc-c3-nocause; gen_acc "$w"
+sed -i '/cause/d' "$w/p9.md"
+out=$(arun "$w")
+chk "c3 missing without cause: failed" grep -q "^c3: failed: missing 1.*$P.b" <<<"$out"
+w=$D/acc-c3-nolog; gen_acc "$w"
+out=$(arun "$w" --shard-logs "$A/none/*.log"); rc=$?
+chk "c3 no logs: exit 0" test $rc -eq 0
+chk "c3 no logs: pending" grep -q '^c3: pending' <<<"$out"
+w=$D/acc-c3-noquote; gen_acc "$w"
+sed -i '/mp2-p9-diff: shared/d' "$w/p9.md"
+out=$(arun "$w")
+chk "c3 no quoted line: pending" grep -q '^c3: pending:.*quoted' <<<"$out"
+w=$D/acc-c3-zero; gen_acc "$w"
+printf "13:00:02 deqp: Pass %s.b\n" $P >>"$SHARD"
+sed -i 's/missing 1$/missing 0/; /cause/d' "$w/p9.md"
+out=$(arun "$w")
+chk "c3 missing 0 needs no cause: ok" grep -qx 'c3: ok' <<<"$out"
+sed -i '$d' "$SHARD"
+
+# c4
+w=$D/acc-c4-open; gen_acc "$w"
+sed -i 's/\*\*Decided (2026-11-25):\*\* option A; /**Answered:** /' "$w/prestudy.md"
+out=$(arun "$w"); rc=$?
+chk "c4 not decided: exit 0" test $rc -eq 0
+chk "c4 not decided: pending" grep -q '^c4: pending' <<<"$out"
+w=$D/acc-c4-nooption; gen_acc "$w"
+sed -i 's/option A; //' "$w/prestudy.md"
+out=$(arun "$w")
+chk "c4 no option: failed" grep -q '^c4: failed:.*neither option A nor B' <<<"$out"
+w=$D/acc-c4-norecord; gen_acc "$w"
+sed -i 's/`records[^`]*`/the board/' "$w/prestudy.md"
+out=$(arun "$w")
+chk "c4 no record: failed" grep -q '^c4: failed:.*record' <<<"$out"
+w=$D/acc-c4-optionB; gen_acc "$w"
+sed -i 's/option A/option B/' "$w/prestudy.md"
+out=$(arun "$w")
+chk "c4 option B: ok" grep -qx 'c4: ok' <<<"$out"
+w=$D/acc-c4-norow; gen_acc "$w"
+echo '| Q10 | other |' >"$w/prestudy.md"
+out=$(arun "$w")
+chk "c4 no row: failed" grep -q "^c4: failed: no '| Q11' row" <<<"$out"
+
+# --only and bad option
+w=$D/acc-full
+out=$(arun "$w" --only c3)
+chk "accept --only c3: one line, summary" grep -qx 'mp2-p9-notes-accept: 1 ok, 0 failed, 0 pending' <<<"$out"
+chk "accept --only c3: no c2 line" nogrep "$out" '^c2:'
+arun "$w" --only c1 >/dev/null; chk "accept --only c1 exits 2" test $? -eq 2
+
+# the real tree: pending, not failed
+python3 -I "$TOOL" >"$D/acc-real.out" 2>&1; rc=$?
+chk "real tree: exit 0 (pending is not failed)" test $rc -eq 0
+chk "real tree: no failed" grep -Eqx 'mp2-p9-notes-accept: [0-9]+ ok, 0 failed, [0-9]+ pending' <(tail -1 "$D/acc-real.out")
 
 echo "mp2_p9_notes_check selftest: $pass ok, $fail failed"
 [ "$fail" -eq 0 ]
