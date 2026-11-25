@@ -124,5 +124,22 @@ python3 -I "$SCAN" "$D/missing.txt" > /dev/null 2>&1
 python3 -I "$SCAN" --watch x "$D/console.txt" > /dev/null 2>&1
 [ "$?" = 2 ] && ok "bad --watch: exit 2" || bad "bad --watch"
 
+# dark captures: empty and NUL-only are reported, never a clean console
+printf '\0\0\0\0\n\0\0' > "$D/nul.txt"
+: > "$D/empty.txt"
+darkout=$(python3 -I "$SCAN" "$D/nul.txt" "$D/empty.txt" "$D/finished.txt" 2>&1)
+drc=$?
+grep -qF 'nul.txt' <<<"$darkout" && grep -qE '^-- console dark: 7 bytes, all NUL/whitespace; recoveries and watchdog stops NOT observed$' <<<"$darkout" &&
+    ok "NUL-only capture is dark" || bad "NUL-only capture"
+grep -qE '^-- console dark: 0 bytes, ' <<<"$darkout" && ok "empty capture is dark" || bad "empty capture"
+grep -qE '^-- console dark: 2 of 3 capture' <<<"$darkout" && ok "dark summary counts 2 of 3" || bad "dark summary"
+[ "$(grep -c '^-- console dark: [0-9]* bytes' <<<"$darkout")" = 2 ] && ok "the text capture is not dark" || bad "text capture marked dark"
+[ "$drc" = 0 ] && ok "dark without --fail-dark: exit 0" || bad "dark default exit $drc"
+python3 -I "$SCAN" --fail-dark "$D/nul.txt" > /dev/null 2>&1
+[ "$?" = 1 ] && ok "--fail-dark: exit 1 on a dark capture" || bad "--fail-dark on dark"
+python3 -I "$SCAN" --fail-dark "$D/finished.txt" > /dev/null 2>&1
+[ "$?" = 0 ] && ok "--fail-dark: exit 0 on a text capture" || bad "--fail-dark on text"
+grep -q 'console dark' <<<"$fout" && bad "text capture printed a dark line" || ok "text output has no dark line"
+
 printf '%d ok, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
