@@ -6,19 +6,25 @@
   imx8mp-glmark2-record-check.py RECORD_DIR
 
 RECORD_DIR is records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/ (gitignored): the
-layout of tools/board.sh (RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8", meta.txt
-with key=value lines) plus the camera pictures of the by-eye session.
+layout of tools/board.sh (RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8" with
+sha8=${IMG_SHA:0:8}, meta.txt with key=value lines including image_sha256=<64
+hex>) plus the camera pictures of the by-eye session. The record is named by
+the image, not by the commit (the Pi 4 note's convention, #17).
 
 Checks (one output line per problem, never the matched text of a redaction hit):
   name        <YYYYMMDD-HHMM>-<name>-<sha8>: sha8 is 8 lowercase hex digits
-  commit      the recorded origin/main commit (file `commit`, or a meta.txt line
-              commit=, origin_main= or build=) starts with the name's sha8
+  commit      a recorded origin/main commit is present (file `commit`, or a
+              meta.txt line commit=, origin_main= or build=); the commit is
+              checked on its own and need not share the name's sha8
   console     a text log (*.log, *.txt, *.out, *.err, any depth) holds a
               `glmark2-picture: <scene info>:` line for each of the 33 scenes
   photograph  one PNG per scene, valid (signature, chunk CRCs, IHDR first, IEND
               last, IDAT inflates), see the naming scheme below
   sha256      the image's sha256: a file `sha256`, `image.sha256` or `*.sha256`
               holding a 64-hex digest, or a meta.txt line image_sha256=<64 hex>
+  sha8        the name's sha8 equals the first 8 digits of the meta.txt
+              image_sha256=<64 hex> line tools/board.sh writes (mget: the last
+              line wins); a record without that line is a problem
   redaction   no text file holds an IPv4 address (dotted quads, version strings
               included, as imx8mp-gles3-redact.py), /home/, /Users/, /dev/tty,
               a user@host, or the host name in $HOSTNAME (if set, 3+ characters)
@@ -184,8 +190,6 @@ def check(rd):
     hexc = [c for c in commits if re.fullmatch(r"[0-9a-f]{8,40}", c)]
     if not hexc:
         probs.append("commit: no recorded origin/main commit (file commit, or commit=/origin_main=/build= in meta.txt)")
-    elif sha8 and not any(c.startswith(sha8) for c in hexc):
-        probs.append("commit: recorded commit does not start with the name's sha8")
 
     # console
     logs = [p for p in texts if p.lower().endswith(TEXT_EXT)]
@@ -217,14 +221,26 @@ def check(rd):
 
     # sha256
     ok = False
+    img = None
     for p, t in texts.items():
         b = os.path.basename(p)
         if (b in ("sha256", "image.sha256") or b.endswith(".sha256")) and HEX64.search(t):
             ok = True
-    if mt in texts and re.search(r"^image_sha256=[0-9a-f]{64}\s*$", texts[mt], re.M):
-        ok = True
+    if mt in texts:
+        vals = re.findall(r"^image_sha256=([0-9a-f]{64})\s*$", texts[mt], re.M)
+        if vals:
+            ok = True
+            img = vals[-1]  # board.sh's mget: meta.txt's last line wins
     if not ok:
         probs.append("sha256: no image sha256 (file sha256 / *.sha256 with a 64-hex digest, or image_sha256= in meta.txt)")
+
+    # sha8: tools/board.sh names the record by ${IMG_SHA:0:8} and writes meta
+    # image_sha256 "$IMG_SHA": the name's sha8 matches the image digest, not
+    # the commit.
+    if img is None:
+        probs.append("sha8: no 64-hex image_sha256= line in meta.txt (tools/board.sh writes it)")
+    elif sha8 and img[:8] != sha8:
+        probs.append("sha8: the name's sha8 is not the first 8 digits of meta.txt image_sha256")
 
     # redaction (file, line and pattern name only)
     host = os.environ.get("HOSTNAME") or ""
