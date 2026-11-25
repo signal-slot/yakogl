@@ -139,7 +139,7 @@ fn build(desc_base: u64, target: Target, zs: Option<ZsMode>) -> (Vec<u8>, u64, u
             front_cw: false,
             cull: Cull::None,
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             alpha_to_coverage: false,
             blend_shader: None,

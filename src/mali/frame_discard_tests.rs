@@ -148,7 +148,7 @@ fn build(s: State) -> (Vec<u8>, BTreeMap<u32, u32>) {
             front_cw: false,
             cull: Cull::None,
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: s.occlusion_query,
             alpha_to_coverage: false,
             blend_shader: None,

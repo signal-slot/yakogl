@@ -85,11 +85,10 @@ listed.
 | mip chain of a non-power-of-two texture | `NOT_BUILT_TEXTURE_NPOT_CHAIN` | `src/mali/backend.rs:268` | `src/mali/backend.rs:2307` |
 | draw samples the texture its own frame renders into (`texture_ready_one()`) | `NOT_BUILT_TEXTURE_FEEDBACK` | `src/mali/backend.rs:275` | `src/mali/backend.rs:2167` |
 | cube look-up whose unit has no complete cube map | `NOT_BUILT_CUBE_INCOMPLETE` | `src/mali/backend.rs:286` | `src/mali/backend.rs:2234` |
-| vertex shader that reads more than one texture (`sampled_texture()`) | `NOT_BUILT_VERTEX_TEXTURES` | `src/mali/backend.rs:288` | `src/mali/backend.rs:2212` |
 | frame without a colour clear and no preload program (`open_frame()`) | `NOT_BUILT_PRELOAD_PROGRAM` | `src/mali/backend.rs:291` | `src/mali/backend.rs:2891` |
 | varyings in different orders (outside `src/mali`) | `MALI_LAYOUTS_DIFFER` | `src/shaderc/online/mali/link.rs:35` | `src/shaderc/online/mali/link.rs:352` |
 
-Four of the cases this note was written for are built, and their constants are
+Five of the cases this note was written for are built, and their constants are
 gone from `src/mali`:
 
 - Occlusion queries (`NOT_BUILT_QUERY`): built. `query_begin` and
@@ -104,8 +103,12 @@ gone from `src/mali`:
   keeps its samples and reloads them (`913474c1`, `ea3424fc`, case 214).
 - 4x with depth/stencil: built; `NOT_BUILT_SAMPLES` now only refuses a target
   of other than 1 or 4 samples (`src/mali/frame.rs:1952`).
+- A vertex shader that reads more than one texture (`NOT_BUILT_VERTEX_TEXTURES`):
+  built (#11308). `stage_textures` in `src/mali/backend.rs` builds both stages'
+  textures, texture i at index i of the stage's tables, and
+  `DrawCall::vs_textures` carries the vertex stage's array.
 
-The three retired names are in no commit of this history's `src/mali`: the
+The first three retired names are in no commit of this history's `src/mali`: the
 history starts at `381b0f09` (the YakoGL 0.1.0 import, 2026-10-27), which
 already has all three built and names them only in this note and in a
 `gl_test.c` comment. The commit that removed them is in the history that import

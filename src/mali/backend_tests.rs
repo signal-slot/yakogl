@@ -1290,15 +1290,18 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
     // SAFETY: the texels the mock gave above; no frame holds them now.
     unsafe { m_free(&mut texels) };
     /* a vertex shader reading two samplers (vslookup_149_rank: `u_s2`,
-     * `u_s0`): the vertex tables hold one */
+     * `u_s0`): built, texture i at index i of the vertex tables as for the
+     * fragment stage (`stage_textures`; #11308), its `u_w` in the vertex
+     * uniform storage */
     let two_vs = include_str!("../../tools/mali/testdata/vslookup_149_rank.vert");
     let two_fs = include_str!("../../tools/mali/testdata/vslookup_149_rank.frag");
+    let weights: [f32; 4] = [0.5, 0.5, 0.0, 0.0];
     with_programs(two_vs, two_fs, |vs, fs| {
         let mut draw = base;
         (draw.vs, draw.fs) = (vs, fs);
+        (draw.vs_uniform_cpu, draw.vs_uniform_dwords) = (weights.as_ptr().cast(), 4);
         let got = why(&draw);
-        assert_eq!(got, not_built(NOT_BUILT_VERTEX_TEXTURES), "two vertex samplers");
-        reached.push(NOT_BUILT_VERTEX_TEXTURES);
+        assert_eq!(got, built, "two vertex samplers");
     });
     /* a cube look-up (fstex_cube_whole: `textureCube(u_s, v_dir)`, its
      * direction an attribute passed through): a complete cube of six faces
@@ -1378,7 +1381,6 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_TEXTURE_NPOT_CHAIN,
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
-        NOT_BUILT_VERTEX_TEXTURES,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];
