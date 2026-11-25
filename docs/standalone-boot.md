@@ -136,6 +136,12 @@ assuming it, and refuses unless the device is the partition U-Boot reads
 (`/dev/mmcblk0p1` = `mmc 0:1` on the AM62P, `/dev/mmcblk2p1` = `mmc 2:1` on
 the i.MX8MP).
 
+On the i.MX8MP with `uboot-mmc` the stage directory is `/boot/yakogl` instead
+(`findmnt -T /boot`, `/boot` on the same partition, else the run dies before any
+write): the runner prints an `UNDO:` line before each write, makes the directory
+itself, refuses a `/boot/yakogl` that already exists, and removes the file and
+the directory again, also on failure.
+
 `board.sh <board> install` writes the hook in one env write and saves the
 whole env first. If a board has a hook of another version, `install` replaces
 the strings in one write and leaves `bootcmd` as it is. `uninstall` restores

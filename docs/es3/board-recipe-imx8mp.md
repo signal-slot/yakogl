@@ -99,7 +99,7 @@ with it **unset**; the preflight reports that as `FAIL BOARD_UART is unset`, whi
 reason to stop. See "Capturing the console".
 
 **What the read-only probe of 2026-11-15 found.** The board answers over ssh (key login, `sudo -n`), and
-images are staged under `/var/yakogl` on the eMMC's user-area filesystem (`STAGE_DIR` in `board.sh`; U-Boot
+images are staged under `/boot/yakogl` on the eMMC's user-area filesystem (`STAGE_DIR` in `board.sh`, a directory the runner makes and removes again; U-Boot
 loads from it, see "Before a session: boot route check"). The farm now lists a console resource for the board,
 but in that probe it delivered no output. So `BOARD_UART` stays unset, nothing is captured, and the SNVS record
 ("How records are read") is the authority for every verdict. `BOARD_UART` is set only after a person confirms
@@ -490,7 +490,7 @@ after such a hold first confirms that the board still takes the route `board.sh`
 U-Boot of `docs/notes/imx8mp-netboot.md` reads its environment from boot0 (`bootcmd` = `run yako_hook; run
 cm_boot; run distro_bootcmd`, `yako_bootcmd_prev` = `run cm_boot; run distro_bootcmd`), the distro boot finds
 Torizon on eMMC partition 1 (U-Boot's `mmc 2:1`, Linux's `mmcblk2p1`), and the staged image lives in
-`/var/yakogl` on that partition. `BOARD_HOST` and `BOARD_BOOT=uboot-mmc` are set, `BOARD_UART` is not.
+`/boot/yakogl` on that partition (`/boot` is on it too). `BOARD_HOST` and `BOARD_BOOT=uboot-mmc` are set, `BOARD_UART` is not.
 
 ```sh
 tools/board.sh imx8mp status        # BOARD_BOOT=uboot-mmc
@@ -498,15 +498,15 @@ tools/board.sh imx8mp status        # BOARD_BOOT=uboot-mmc
 
 `status` runs, on the board: `cat /var/tmp/yakogl-board.lease`; `sudo -n fw_printenv bootcmd bootdelay yako_hook
 yako_dflt yako_net yako_mmc yako_addr yako_src yako_server yako_file yako_once yako_default yako_default_left
-yako_bootcmd_prev` and the install check (`install: ok`); `ls -l /var/yakogl`; `findmnt -n -v -o
-SOURCE,TARGET,FSROOT -T /var`. Besides, these single read-only commands on the board (the `findmnt`, `df` and
+yako_bootcmd_prev` and the install check (`install: ok`); `ls -l /boot/yakogl`; `findmnt -n -v -o
+SOURCE,TARGET,FSROOT -T /boot`. Besides, these single read-only commands on the board (the `findmnt`, `df` and
 `fw_printenv` forms are the ones `board.sh` runs before it stages an image):
 
 ```sh
 sudo -n fw_printenv ver                         # U-Boot as the record: 2024.07-7.7.0+git... (Toradex BSP 7.7)
-findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var/yakogl   # source /dev/mmcblk2p1, FSROOT below /ostree/deploy/torizon/var
-df -B1 --output=avail /var/yakogl | tail -1     # at least twice the image
-ls -l /boot /var/yakogl                         # the stock /boot files, and no once-*.bin left over
+findmnt -n -v -o SOURCE,TARGET,FSROOT -T /boot   # source /dev/mmcblk2p1, FSROOT below /ostree/deploy/torizon/var
+df -B1 --output=avail /boot | tail -1     # at least twice the image
+ls -l /boot /boot/yakogl                        # the stock /boot files, and no once-*.bin left over
 cat /proc/cmdline                               # the stock Torizon command line (tdxargs with crashkernel=)
 cat /sys/kernel/kexec_loaded /sys/kernel/kexec_crash_loaded   # both 0
 sudo -n fw_printenv -n yako_once; sudo -n fw_printenv -n yako_default   # both print nothing
