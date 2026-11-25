@@ -10897,7 +10897,9 @@ out:
 }
 #endif
 
-#ifdef GL_TEST_V3D
+/* Not in a V3D 7.1 image: v3d_tex_layout, v3d_tex_store_level and
+ * v3d_tex_tfu_pack come from the 4.2 v3d_tex.c, which that image does not link. */
+#if defined(GL_TEST_V3D) && !defined(CONFIG_YAKOGL_GPU_V3D71)
 /* ---- case 140: the TFU against our CPU tiling (tfuprobe) --------------------
  *
  * The measurement behind a decision (the TFU note, 2026-09-26): no product
@@ -24299,7 +24301,14 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 	case 136: rc = case_psizmax(); break;
 	case 135: rc = case_texnarrow(); break;
 	case 137: rc = case_psizmin(); break;
+#ifdef CONFIG_YAKOGL_GPU_V3D71
+	case 140:
+		pr_err("gl_test: case 140: tfuprobe needs the 4.2 TFU path\n");
+		rc = -3;
+		break;
+#else
 	case 140: rc = case_tfuprobe(); break;
+#endif
 	case 124: rc = case_binovf(); break;
 	case 125: rc = case_texsubfbo(); break;
 	case 129: rc = case_vstexlod(); break;
