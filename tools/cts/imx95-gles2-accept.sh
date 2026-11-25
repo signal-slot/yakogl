@@ -226,6 +226,8 @@ verdict c1 "six session directories of $sha8, --check-cover of $mustpass exits 0
 doc=docs/es2-cts-failures.md
 BEGIN='<!-- mali-deqp-tally begin -->'
 END='<!-- mali-deqp-tally end -->'
+BEGIN_IMX95='<!-- mali-deqp-tally begin imx95 -->'
+END_IMX95='<!-- mali-deqp-tally end imx95 -->'
 how=
 if [ ! -f "$doc" ]; then
 	add "$doc is not a file"
@@ -246,7 +248,11 @@ else
 	elif ! python3 -I "$TALLY" --tally "$@" >"$tmp/tally.txt" 2>"$tmp/tally.err"; then
 		cat "$tmp/tally.err" >&2
 		add "mali-deqp-tally.py --tally over the six slices fails: $(sed -n '1p' "$tmp/tally.err" | cut -c1-160)"
-	elif grep -qF -e "$BEGIN" "$tmp/part.md"; then
+	elif grep -qF -e "$BEGIN" -e "$BEGIN_IMX95" "$tmp/part.md"; then
+		# mali-deqp-tally.py opens a Verdin iMX95 tally with the imx95 pair
+		if grep -qF -e "$BEGIN_IMX95" "$tmp/part.md"; then
+			BEGIN=$BEGIN_IMX95 END=$END_IMX95
+		fi
 		python3 -I "$TALLY" --check-doc "$tmp/part.md" "$@" >"$tmp/doc.out" 2>&1
 		r=$?
 		if [ "$r" -eq 0 ]; then
