@@ -155,6 +155,8 @@ struct yd_mp25_ltdc_diag {
 	uint32_t cdsr;             /* bit 0 VDES, 1 HDES, 2 VSYNCS, 3 HSYNCS */
 	uint32_t gcr;
 	uint32_t rcr;              /* L1RCR */
+	uint32_t lipcr;            /* the line LIF is raised at */
+	uint32_t srcr;             /* the global reload register */
 };
 
 /* 0 and *out filled, -ENODEV (block does not probe), -EINVAL (null). */

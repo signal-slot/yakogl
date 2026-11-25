@@ -377,8 +377,13 @@ static int ltdc_chain_up(const struct device *dev)
 	}
 
 	(void)yd_mp25_ltdc_isr(&d->yd_cfg, &d->st.ltdc); /* the bring-up's bits cleared */
+	int64_t t_wait = k_uptime_get();
+
 	rc = yd_mp25_ltdc_wait_frame(&d->yd_cfg, &d->env);
 	if (rc < 0) {
+		int64_t waited_ms = k_uptime_get() - t_wait;
+		const struct yd_mp25_dsi_data *dd = stm32_dsi_data(c->dsi);
+
 		/* Why no frame: read before the teardown changes it. */
 		const struct yd_mp25_ltdc_diag *g = &d->st.frame_diag;
 
@@ -388,6 +393,14 @@ static int ltdc_chain_up(const struct device *dev)
 			LOG_ERR("ltdc: no frame (%d): isr 0x%08x ier 0x%08x cpsr 0x%08x 0x%08x (1 ms) "
 				"cdsr 0x%08x gcr 0x%08x l1rcr 0x%08x",
 				rc, g->isr, g->ier, g->cpsr0, g->cpsr1, g->cdsr, g->gcr, g->rcr);
+			LOG_ERR("ltdc: no frame: lipcr 0x%08x srcr 0x%08x after %lld ms",
+				g->lipcr, g->srcr, (long long)waited_ms);
+		}
+		if (dd != NULL) {
+			LOG_ERR("ltdc: no frame: dsi attached %u on %u failed_step %u errno %d "
+				"lanes %u lane_kbps %u",
+				dd->attached, dd->on, dd->failed_step, dd->failed_errno,
+				dd->lanes, dd->lane_kbps);
 		}
 		ltdc_chain_down(dev);
 		return fail(d, STM32_LTDC_STEP_FRAME, rc);
