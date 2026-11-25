@@ -460,10 +460,30 @@ No code or test is committed with it.
 cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test <local test> -- --nocapture
 ```
 
-  The first scene run of a process counted fewer draws (terrain 51, not 71)
-  and was discarded; the figures are of a warm run, the same in `Lag` and
-  `Done`. "Draws" are every draw op of the stream, clear quads included
-  (`gc_scene_kicks` has no draw count).
+  "Draws" are every draw op of the stream (`gc_scene_kicks` has no draw
+  count).
+
+  **Correction (draw count).** This section first gave terrain 71 draws a
+  frame, off and on, and said the first scene run of a process counted 51 and
+  was discarded as cold. The committed tests do not reproduce 71: at
+  670913e1 (`src/vivante` and the gc tests are the same as at ecde7db9),
+  `gc_scene_kicks_tiled_rt` (terrain off and on, `Lag` and `Done`),
+  `gc_scene_kicks_tiled` (`StreamCounts.draws`, pinned as 51 since c8c4a870,
+  2026-11-13, the day this section was written) and the harness tally of
+  `tests/common/gc_scenes.rs` all report **terrain 51 draws, knob off and
+  on** (shadow 3, refract 12, as before). The 71 came from the local,
+  uncommitted decoder named above, in the draft run of the note's day; no
+  commit moved it (`git log -S` finds the figure only in this note, added in
+  44259cb2; no test or `src/vivante` change between 44259cb2 and now changes
+  the 51). It was not reproduced, so what that decoder counted extra (20)
+  is not known; do not use 71. 51 is the 43 mipmap-level draws plus glmark2's
+  8 draw passes, with the clear quads no longer draws (RS fill clears, e.g. 11fb5f88,
+  2026-11-11), and it is Mesa's 51 of the "Terrain draws" line below. The
+  prediction's conclusion is unchanged: the 71 was the same off and on, so
+  the knob's change (0 draws, +2 early-depth draws, +3 RS jobs, no extra
+  kick or wait) stands on the committed counts. The RS fills of the "RS jobs,
+  fill" row are 9, not 11.2, since 4255adf1 (pinned by 98de1d8f); the rest of
+  the tables was not re-measured.
 
 ### What the counts say before any millisecond
 
@@ -484,7 +504,7 @@ refused is item tiled-qualify-census's, not traced here.
 | RS jobs, linear to tiled (off: the tiled copies of the two vertex-stage maps; on: and the tile-in of a shadow) | 2 | 3 | **+1** |
 | RS jobs, tiled to linear (the copy back) | 0 | 2 | **+2** |
 | RS jobs, all | 13.2 | 16.2 | **+3** |
-| draws in the streams | 71 | 71 | 0 |
+| draws in the streams (see the note under the table: 51 at 670913e1, not 71) | 51 | 51 | 0 |
 | draws taking early depth | 0 | 2 | **+2** |
 | stream words | 16378 | 16510 | +132 (0.5 KB) |
 | CPU tiled copies, CPU depth resolves | 0, 0 | 0, 0 | 0 |
