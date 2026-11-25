@@ -1,0 +1,6 @@
+dEQP Core git-93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+#beginTestCaseResult dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear
+  Pass (Pass)
+#endTestCaseResult
+Writing <home>
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
