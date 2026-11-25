@@ -42,11 +42,16 @@
 #include <stdint.h>
 
 #include "hvs6_dlist.h"
+#include "hvs6_fmt.h"
 
 enum hvs6w_format {
 	HVS6W_XRGB8888 = 1, /* RGBA8888 code, order ARGB */
 	HVS6W_ARGB8888,     /* same words as XRGB8888 */
 	HVS6W_RGB565,       /* RGB565 code, order RGBA */
+	/* R,G,B,A in memory (a V3D RGBA8 raster target): hvs6_fmt.h's XBGR8888,
+	 * RGBA8888 code, order ABGR. */
+	HVS6W_XBGR8888,
+	HVS6W_ABGR8888,     /* same words as XBGR8888 */
 };
 
 enum hvs6w_err {
@@ -84,6 +89,8 @@ static inline uint32_t hvs6w_bpp(enum hvs6w_format f)
 	switch (f) {
 	case HVS6W_XRGB8888:
 	case HVS6W_ARGB8888:
+	case HVS6W_XBGR8888:
+	case HVS6W_ABGR8888:
 		return 4;
 	case HVS6W_RGB565:
 		return 2;
@@ -118,6 +125,9 @@ static inline int hvs6w_write_plane(uint32_t *out, size_t out_words, const struc
 	if (p->format == HVS6W_RGB565) {
 		code = HVS6_FMT_RGB565;
 		order = HVS6_ORDER_RGBA;
+	} else if (p->format == HVS6W_XBGR8888 || p->format == HVS6W_ABGR8888) {
+		code = HVS6F_CODE_RGBA8888;
+		order = HVS6F_ORDER_ABGR;
 	} else {
 		code = HVS6_FMT_RGBA8888;
 		order = HVS6_ORDER_ARGB;

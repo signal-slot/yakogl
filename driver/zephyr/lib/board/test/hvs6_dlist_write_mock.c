@@ -81,6 +81,26 @@ int main(void)
 	p = base;
 	p.format = HVS6W_ARGB8888;
 	roundtrip(&p, HVS6_FMT_RGBA8888, HVS6_ORDER_ARGB, 32);
+	/* XBGR8888 / ABGR8888: code 7, order ABGR, 1920x1080 pitch 7680 */
+	p = base;
+	p.format = HVS6W_XBGR8888;
+	roundtrip(&p, HVS6_FMT_RGBA8888, HVS6_ORDER_ABGR, 0);
+	p.format = HVS6W_ABGR8888;
+	roundtrip(&p, HVS6_FMT_RGBA8888, HVS6_ORDER_ABGR, 32);
+	CHECK(HVS6W_XBGR8888 != HVS6W_XRGB8888 && HVS6W_XBGR8888 != HVS6W_ARGB8888);
+	CHECK(HVS6W_XRGB8888 == 1 && HVS6W_ARGB8888 == 2 && HVS6W_RGB565 == 3);
+	CHECK(hvs6w_bpp(HVS6W_XBGR8888) == 4 && hvs6w_bpp(HVS6W_ABGR8888) == 4);
+	CHECK(HVS6F_CODE_RGBA8888 == HVS6_FMT_RGBA8888 && HVS6F_ORDER_ABGR == HVS6_ORDER_ABGR);
+	p = (struct hvs6w_plane){HVS6W_XBGR8888, 0, 0, 1920, 1080, 7680, 0x3f800000};
+	CHECK(hvs6w_write_plane(buf, 16, &p) == 10);
+	CHECK(buf[0] == (0x40000000u | (9u << 24) | (3u << 18) | 0x8000u | (3u << 13) | 7u));
+	CHECK(buf[3] == ((1079u << 16) | 1919u));
+	CHECK(buf[5] == 0u && buf[6] == 0x3f800000u && buf[7] == 7680u);
+	p.addr = 0x2aabcd1000ull;
+	CHECK(hvs6w_write_plane(buf, 16, &p) == 10);
+	CHECK(buf[5] == 0x2au && buf[6] == 0xabcd1000u && buf[7] == 7680u);
+	p.pitch = 7676;
+	errcase(HVS6W_ERR_PITCH, p, 16);
 	p = (struct hvs6w_plane){HVS6W_RGB565, 100, 200, 640, 240, 1300 * 2 & ~3u, 0x1234567890ull};
 	roundtrip(&p, HVS6_FMT_RGB565, HVS6_ORDER_RGBA, 32);
 	/* the limits: smallest, largest, 40-bit address */
