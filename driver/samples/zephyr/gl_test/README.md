@@ -207,18 +207,19 @@ links once they have merged; default images never reference them
 
 ## Raspberry Pi 5 (V3D 7.1)
 
-**Not complete yet: the image does not link.** The board files are here, but
-the 7.1 table and the sample's 7.1 build branch are not merged yet (plan
-#384, P9; `docs/notes/v3d71-gl-table.md`). The suite will run through
-YakoGL's GL core, its in-process compiler and the V3D backend's 7.1 table
-(cargo feature `gpu-v3d71`) on the OSAL `src/osal/zephyr_v3d71.c`, with the
-GL ES 1.00 shader set. The table is chosen when the image is built, not at
-run time (`v3d71-gl-table.md`, section 4). `boards/rpi_5.conf` sets
-`CONFIG_YAKOGL_GPU_V3D` and `CONFIG_YAKOGL_GPU_V3D71`, which selects the
-board layer's PM watchdog (`YAKOGL_RPI5_WDOG`) and firmware mailbox
-(`YAKOGL_RPI5_MBOX`). It also sets the 48 MiB carve-out, as on the Pi 4.
-`boards/rpi_5.overlay` makes `sram0` 96 MiB from 0x200000. That range is
-below 4 GiB and below the DTB the firmware places at 0x2efec600.
+The suite runs through YakoGL's GL core, its in-process compiler (the GL ES
+1.00 shader set) and the V3D backend's 7.1 table (cargo feature `gpu-v3d71`)
+on the OSAL `src/osal/zephyr_v3d71.c`. The table is chosen when the image is
+built, not at run time (`docs/notes/v3d71-gl-table.md`, section 4).
+
+Board files: `boards/rpi_5.conf` sets `CONFIG_YAKOGL_GPU_V3D` and
+`CONFIG_YAKOGL_GPU_V3D71` and the 48 MiB carve-out, as on the Pi 4.
+`CONFIG_YAKOGL_GPU_V3D71` (`zephyr/Kconfig`; it depends on `YAKOGL_GPU_V3D`
+and `SOC_BCM2712`) selects the board layer's PM watchdog (`YAKOGL_RPI5_WDOG`)
+and firmware mailbox (`YAKOGL_RPI5_MBOX`, the V3D clock), both defined in
+`driver/zephyr/lib/board/Kconfig`. `boards/rpi_5.overlay` makes `sram0`
+96 MiB from 0x200000, below 4 GiB and below the DTB the firmware places
+above the image.
 
 The image has no screen. The console is uart10, as in the
 `tools/probes/rpi_5` probes, because the Pi 5's mailbox framebuffer
@@ -237,10 +238,36 @@ Pi 4's menu, with these differences:
 west build -p always -b rpi_5 -d build/rpi5_gl_test yakogl/driver/samples/zephyr/gl_test -- \
     "-DZEPHYR_MODULES=$(yakogl/tools/cts/zephyr-modules.sh "$PWD")" \
     "-DYAKOGL_DIR=$PWD/yakogl" -DYAKOGL_WERROR=ON
+# in short (module list and YAKOGL_DIR as the workspace sets them):
+#   west build -p always -b rpi_5 driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON
 ```
 
-On the board: not run yet. The session runs through `tools/board.sh pi5 run`
-(ssh and tryboot).
+Expected results of the six cases: 4 of 6 pass (5, 58, 66, 102); 59 and 67
+are refused by name, with the 4.2 strings (case 59: "the draw reads stencil
+an earlier job wrote, and the target has no depth/stencil buffer to keep it
+in"; case 67: "a colour format with fewer than 8 alpha bits";
+`docs/notes/v3d71-gl-table.md`, section 5). Any further refusal must carry
+a name too.
+
+The PM watchdog is armed for the run: `YAKOGL_RPI5_WDOG_HOLD_S` takes
+`V3D_GL_TEST_HOLD_S`, so the run and its record end before it fires. It
+then brings Linux back, about 210 to 230 s after the image started.
+
+The record is UART only (no file, no screen). A run ends with the line
+`v3d_gl_test RECORD end`, which `tools/board.sh pi5` waits for
+(`END_RE_DEFAULT`).
+
+Run (one shot through the Pi firmware's tryboot):
+
+```sh
+tools/board.sh pi5 run <image> <logdir>
+```
+
+The board's ssh host and console come from the environment only:
+`BOARD_HOST` and `BOARD_UART` (or `PI5_HOST` and `PI5_UART`). Never write a
+value into a file or a commit.
+
+On the board: pending: the first run (board71).
 
 ## NanoPC-T6 (Mali-G610)
 
