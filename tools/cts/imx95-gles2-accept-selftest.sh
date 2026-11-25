@@ -62,7 +62,7 @@ L="$R/tools/cts/log"
 slice() { # session prefix first last
 	d="$L/2026-11-25-imx95-gles2-$1-$SHA8"
 	mkdir -p "$d"
-	printf 'commit=%s\nsession=%s\nrows=%s-%s\ntree=tools/cts/mali-gles2-tree.txt\nboot_id_before=-\nboot_id_after=-\nkernel=zephyr\nlib=yakogl-mali\nstarted=2026-11-25T01:00:00Z\nended=2026-11-25T02:00:00Z\nboard=verdin_imx95\n' \
+	printf 'commit=%s\nsession=%s\nrows=%s-%s\ntree=tools/cts/mali-gles2-tree.txt\nboot_id_before=-\nboot_id_after=-\nkernel=zephyr\nlib=yakogl-mali\nstarted=2026-11-25T01:00:00Z\nended=2026-11-25T02:00:00Z\nboard=verdin-imx95\n' \
 		"$BASE" "$1" "$3" "$4" >"$d/meta.txt"
 	printf 'row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line\n' >"$d/chunks.tsv"
 	printf 'case\tstatus\tdetail\n' >"$d/results.tsv"
@@ -129,7 +129,7 @@ expect() {
 }
 
 run
-expect "the good tree: all three pass" 0 PASS PASS PASS "passes --check-doc"
+expect "the good tree: all three pass" 0 PASS PASS PASS "status rows equal --tally"
 run tools/cts/gles2-mustpass.txt
 expect "the mustpass list as an argument" 0 PASS PASS PASS
 (cd "$R" && out=$(sh "$A" --base "$BASE" --main-ref main 2>/dev/null) && [ "$(printf '%s\n' "$out" | grep -c ': PASS ')" -eq 3 ]) &&
@@ -166,6 +166,18 @@ fresh
 sed '$d' "$S4/rows.tsv" >"$T/rows" && cp "$T/rows" "$S4/rows.tsv"
 run
 expect "c1: rows.tsv lacks a row" 1 FAIL PASS PASS "T6S4R08"
+# the span guard of imx95-rows-tsv.py --check refuses the same truncation
+expect "c1: rows.tsv lacks a row: the guard of --check refuses it too" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
+fresh
+# a split table (S3b keeps session-wide numbers 16..30) without its last row
+sed '$d' "$S3B/rows.tsv" >"$T/rows" && cp "$T/rows" "$S3B/rows.tsv"
+run
+expect "c1: S3b table lacks T6S3R30" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
+fresh
+# a duplicate row of S3b
+tail -n 1 "$S3B/rows.tsv" >>"$S3B/rows.tsv"
+run
+expect "c1: S3b table repeats a row" 1 FAIL PASS PASS "imx95-rows-tsv.py --check exits 1"
 fresh
 awk -F '\t' -v OFS='\t' 'NR == 3 { $5 = "-" } { print }' "$S4/rows.tsv" >"$T/rows" && cp "$T/rows" "$S4/rows.tsv"
 run
@@ -185,7 +197,7 @@ sed 's/^| Pass | 70 |$/| Pass | 71 |/' "$R/docs/es2-cts-failures.md" >"$T/doc"
 cmp -s "$T/doc" "$R/docs/es2-cts-failures.md" && bad "fixture: the block has no '| Pass | 70 |' row"
 cp "$T/doc" "$R/docs/es2-cts-failures.md"
 run
-expect "c2: a stale block" 1 PASS FAIL PASS "differs from --tally --markdown"
+expect "c2: a stale block" 1 PASS FAIL PASS "differ from --tally"
 printf '%s\n' "$out" | grep -qF -e "$T" && bad "c2: the verdict names the scratch directory"
 fresh
 printf '# ES 2.0 CTS failure inventory\n\n## M. Mali-G610 (NanoPC-T6)\n\nVerdin iMX95 is only named in the text.\n' >"$R/docs/es2-cts-failures.md"
