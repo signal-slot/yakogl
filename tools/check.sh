@@ -3659,6 +3659,10 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/cts/mali-kmsg.py, the panthor kernel message classifier the runner
   # logs per chunk (resets, job timeouts, MMU and CS faults), on its fixtures.
   step "tools   mali-kmsg-selftest.sh (panthor kernel message classifier)" bash tools/cts/mali-kmsg-selftest.sh
+  # tools/cts/t6-uboot-handover-summary.py, the measured hand-over block of a
+  # NanoPC-T6 U-Boot session (prompt-reads and t6_cold records), on synthetic
+  # records. Host only.
+  step "tools   t6-uboot-handover-summary-selftest.sh (T6 U-Boot hand-over summary, synthetic records)" no_board_env bash tools/cts/t6-uboot-handover-summary-selftest.sh
   # The block of docs/es2-cts-failures.md that tools/cts/mali-deqp-tally.py
   # generates (section M) against the slices its own "Slices:" line names
   # under tools/cts/log/: a block edited by hand, a slice changed after it, or
