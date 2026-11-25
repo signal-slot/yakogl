@@ -86,7 +86,14 @@ writes the slot into `slot-NNNN.bin`, runs it, merges the run directory's
 over all logs. A shard whose log already holds a `deqp: <Status> <case>` line
 is skipped, and `--first`/`--last` bound the range: an interrupted sweep
 resumes. A shard cut by the lifetime shows as cases with no result and the
-diff reports them `missing`; split it and rerun.
+diff reports them `missing`; split it and rerun. The split is
+`tools/cts/mp2-group-resplit.py` (its docstring has the formats): it takes the
+group's case list or the sweep's `manifest.tsv`, the times and the missing
+list `tools/cts/mp2-case-times.py` writes, puts the case that was running when
+the run ended in a shard of its own, and cuts the rest to fit the 600 s
+lifetime and the 16,384-byte case slot. It writes shards in
+`mp2-deqp-shards.py`'s format, numbered from `--first-index` past the shards
+already run.
 
 **The runner** for every run is a one-shot of the board's own U-Boot; the
 verdict line is a row, never DEV. The sweep's default `MP2_SWEEP_RUNNER` is
