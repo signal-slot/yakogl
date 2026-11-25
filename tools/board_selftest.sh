@@ -1852,6 +1852,8 @@ pi5|rpi5_mbox: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=c
 pi5|rpi5_mbox: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_mbox_fail
 pi5|rpi5_dispregs: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_dispregs_done
 pi5|rpi5_dispregs: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_dispregs_fail
+pi5|rpi5_dlmap: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_dlmap_done
+pi5|rpi5_dlmap: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_dlmap_fail
 pi5|rpi5_mbox: feeding stopped, reset expected (selftest)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi5|rpi5_scanout16: PASS (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_pass
 pi5|rpi5_scanout16: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_fail
