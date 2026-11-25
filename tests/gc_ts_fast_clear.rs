@@ -378,7 +378,10 @@ fn ts_resolve_tiled_source_and_ts_mode() {
     assert_eq!(get(GC_TS_COLOR_SURFACE_BASE), 0xffff_7000);
     assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE), 0xff40_80bf);
     assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE_EXT), 0xff40_80bf);
-    assert_eq!(get(GC_RS_SOURCE_STRIDE), 0x400 | GC_RS_SOURCE_STRIDE_TILING);
+    // No stride TILING bit: Mesa sets it only for a super-tiled source
+    // (`etna_compile_rs_state`, `etnaviv_rs.c:103-110`).
+    assert_eq!(get(GC_RS_SOURCE_STRIDE), 0x400);
+    assert_eq!(get(GC_RS_SOURCE_STRIDE) & (GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW), 0);
     assert_eq!(get(GC_RS_CONFIG) & GC_RS_DEST_TILED, 0);
     assert_ne!(get(GC_RS_CONFIG) & GC_RS_SOURCE_TILED, 0);
     assert_eq!(get(GC_RS_DEST_STRIDE), 0x100);
