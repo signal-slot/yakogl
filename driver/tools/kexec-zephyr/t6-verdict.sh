@@ -149,7 +149,7 @@ table_boot() {
 	# banner_a_el2 with the VHE exit: HCR_EL2 found -> written (Z1 measured
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	# SCTLR_EL2 (SA) with M, C and I clear (hook t6a_sctlr)
-	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL' t6a_sctlr
+	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16} CNTFRQ_EL0 {d}' 'T6:A EL' t6a_sctlr
 	# U-Boot's go: found (GF) with one of M, C, I set; left (GL), read back,
 	# with all three clear and equal to T6:A's (hook t6g_sctlr)
 	if [ "$ROUTE" = uboot ]; then
