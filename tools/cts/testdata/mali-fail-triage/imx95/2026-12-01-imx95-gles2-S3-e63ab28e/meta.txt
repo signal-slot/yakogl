@@ -1,0 +1,11 @@
+commit=e63ab28e00000000000000000000000000000000
+session=S3
+rows=7-7
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=-
+boot_id_after=-
+kernel=zephyr verdin_imx95
+lib=yakogl-mali: Mali-G310
+started=2026-12-01T03:00:00Z
+ended=2026-12-01T04:00:00Z
+board=verdin_imx95

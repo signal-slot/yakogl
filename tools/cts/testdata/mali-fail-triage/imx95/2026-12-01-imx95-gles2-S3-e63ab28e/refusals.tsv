@@ -1,0 +1,2 @@
+case	refusal
+dEQP-GLES2.functional.e.two	link error: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a made-up form is not lowered yet)

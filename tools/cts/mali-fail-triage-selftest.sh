@@ -36,13 +36,16 @@ for pat in 'refused MixedPrecision .*yes' 'refused CompareForm .*yes' 'made-up f
     grep -Eq "$pat" <<<"$got" && ok "row: $pat" || bad "no row: $pat"
 done
 
-# iMX95 (Zephyr) fixture: a WDOG3 hang row, a lifetime row, no kmsg/, one slice
+# iMX95 (Zephyr) fixture: S3 has a refusals.tsv; a WDOG3 hang row, a lifetime row, no kmsg/, one slice
 # with rows.tsv instead of chunks.tsv. The hang rows are causes that are not Fails.
 imx=$(run "$DATA"/imx95/* 2>&1)
 if [ "$imx" = "$(cat "$DATA/expected-imx95.md")" ]; then ok "iMX95 output equals expected-imx95.md"; else bad "iMX95 output differs from expected-imx95.md"; fi
 for pat in 'hang: WDOG3 feeding stopped \| 2 ' 'hang: lifetime over \| 1 '; do
     grep -Eq "$pat" <<<"$imx" && ok "iMX95 row: $pat" || bad "no iMX95 row: $pat"
 done
+# refusals.tsv present: only the case listed there is refused, though its row's exit line says first_refused=ARITH
+grep -Eq 'unexplained Fail in functional.e \| 1 ' <<<"$imx" && grep -Eq 'made-up form is not lowered yet \| 1 ' <<<"$imx" \
+    && ok "refusals.tsv: refused counted per case" || bad "refusals.tsv: refused not counted per case"
 grep -q 'Draft issue: .*hang' <<<"$imx" && bad "a hang row opened a draft issue" || ok "no draft issue for a hang row"
 
 python3 -I "$TOOL" --forecast "$DATA/forecast.md" "$DATA/nope" >/dev/null 2>&1; rc=$?
