@@ -125,6 +125,19 @@ runner's 0xa0000000..0xb0000000.
 waits `RUN_BOUND` (120 s by default) for the end line: give a dEQP run
 `RUN_BOUND=600` or more.
 
+`CONFIG_DEQP_QUIET_STAMPS=y` (off by default, STM32MP2 only; add
+`-DCONFIG_DEQP_QUIET_STAMPS=y` to the stage 2 build) makes the console
+quiet: no `deqp: <status> <case>` line per case, but a progress stamp
+
+    deqp: stamp uptime_ms=<u64> case=<index> done=<n> pass=<p> fail=<f> other=<o>
+
+every `CONFIG_DEQP_STAMP_EVERY` finished cases (50 by default) and one at
+the end, then the usual `deqp: summary` line. `uptime_ms` is `k_uptime_get()`,
+`case` the index of the last case begun, `pass`/`fail` count Pass and Fail,
+`other` every other status. `tools/cts/mp2-case-times.py` reads the stamps
+(gaps and rates per interval); the names of non-Pass cases are not on the
+console in this mode, so a group that fails is rerun in the default image.
+
 The DK has no SNVS record, so it takes no run-time selector; its image
 carries a patch slot instead (`CONFIG_DEQP_CASE_SLOT=y` in its board conf).
 `tools/cts/mp2-deqp-slot.py` writes it in `zephyr.bin` after the build and
