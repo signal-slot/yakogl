@@ -4,7 +4,8 @@
 
 Forecast of the glmark2-es2 run of the `gpu-mali` back end on the
 NanoPC-T6 (issues #20, #7, #33), made on the host from the compiler's
-verdicts, current at main `b08baac7` (2026-11-25). **16 of 33 scenes
+verdicts, re-measured at main `8a173e38` (2026-11-25); the `b08baac7`
+reading stands and no scene verdict moved. **16 of 33 scenes
 compile-clean, 17 are refused.** Nothing here was rendered: a board run
 confirms or refutes it. The board's record is `tools/cts/RESULTS.md`
 (section "Mali: NanoPC-T6 glmark2-es2"); this note holds the design and the
@@ -12,9 +13,15 @@ causes, not the results of a session.
 
 - **Verdicts**: `tests/fixtures/mali_glmark2_verdicts.txt`, pinned by
   `tests/mali_glmark2_corpus.rs` (the first refusal of every shader and
-  program; the test fails if one moves back). The fixture last changed in
-  `17a30a20`; no commit since touches it, `src/mali/**` or
-  `src/shaderc/online/mali/**`.
+  program; the test fails if one moves back, prints without failing when a
+  refusal turns `ok`, and `MALI_GLMARK2_WRITE=1` regenerates the fixture).
+  The fixture last changed in `17a30a20`. Nine commits since (`759132f2`
+  … `950a5652`) touched `src/mali/**` or `src/shaderc/online/mali/**` —
+  dEQP shapes, licences and test-only files, none a glmark2 shape: the
+  corpus test, re-run at `8a173e38` on a freshly generated corpus,
+  measures 0 movement. It is now a gate row (the glmark2 corpus row of
+  `tools/check.sh`, scope `mali` since 2026-11-25): a Mali compiler change
+  is measured against this fixture by the CI.
 - **glmark2** `22c527cb0556f3a1ac4445aaa52cc532760928d5` (2023.01), the
   commit `tools/hostharness/glmark2/run.sh` pins. Its shader corpus is
   GPL-3.0 text and is never committed.
@@ -37,7 +44,9 @@ causes, not the results of a session.
    run on all 33 scenes at `eacc70f5` (an ancestor of `b08baac7` with the
    same fixture and the same `src/mali`). It runs the GL core, the online
    compiler and the back end's command generation; no stream is executed.
-   Its first refusal per scene agrees with the fixture. (The committed
+   Its first refusal per scene agrees with the fixture; `tests/mali_glmark2_corpus.rs`,
+   now a gate row, re-holds that agreement shader by shader and program by
+   program at the current tip (0 movement at `8a173e38`). (The committed
    `tools/hostharness/glmark2/FINDINGS-mali-allscenes.md` still reads 14
    clean scenes; a run without `GM2_WRITE=0` rewrites it.)
 
@@ -115,7 +124,7 @@ not a measurement: a lowering can uncover a later refusal behind the first):
 
 | step | family | scenes made clean | clean after |
 |---:|---|---|---:|
-| — | now (`b08baac7`) | 16 scenes | 16 |
+| — | now (`8a173e38`) | 16 scenes | 16 |
 | 1 | `NONFINITE_CONST` | 6, 8, 9, 10, 11 | 21 |
 | 2 | `TEX_COORD` `425b` | 2, 3, 4 | 24 |
 | 3 | `TEX_MULTI` | 12 | 25 |
