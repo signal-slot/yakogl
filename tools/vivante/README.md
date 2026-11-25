@@ -767,6 +767,38 @@ script without a tree. The gate (`tools/check.sh`, Vivante scope) runs the
 self-test only: the dependency layout carries no etnaviv Mesa tree, so the
 two checks would be a gap on every runner, and they are run by hand.
 
+`gate_st_table.sh` (no arguments) is the third host check of the ST row: it
+runs `gen_shader_table.py --st --check`, which regenerates
+`tests/reference/vivante_blobs_st.rs` from Mesa's `etna_shc` and compares it
+with the committed file byte for byte. Inputs: `MESA_ETNA_TREE`, whose
+`build-etnaviv/src/gallium/drivers/etnaviv/etna_shc` is the tool, or `ETNA_SHC`,
+an executable that replaces it (the tree is then not needed), and
+`glslangValidator` on `PATH`. Exit 0 the table matches; 1 it differs (the
+generator's output names the rows) or the generator failed; 2 a gap, one
+`gap:` line on stderr when the tree, `etna_shc` or `glslangValidator` is
+missing: the check was not run, and a gap is never a pass; 64 usage.
+`gate_st_table_selftest.sh` checks the script with stub tools and no tree: the
+gap cases (no tree, a missing directory, a tree without the tool, a
+non-executable `ETNA_SHC`, a missing `glslangValidator`), a match, a mismatch
+that names its rows, a generator crash (exit 1, neither a pass nor a gap), the
+usage exit, and `bash -n` of the scripts.
+
+To get a Mesa 26.2.1 tree with `etna_shc` and the cs-golden drm-shim build:
+`tools/vivante/mesa-etna-build.sh [--tarball <mesa-26.2.1.tar.xz>] [<dir>]`.
+It checks the Mesa tarball and five Python sdists against pinned sha256, makes
+a venv without pip, applies `mesa-etna_shc.patch` and `mesa-cs-golden.patch`,
+builds both directories and writes the marker `mesa-etna-build.done` last (a
+changed input makes the tree stale and a rebuild starts again). Without
+`<dir>` it uses `mesa-etna-26.2.1` under `tools/cts/deps-env.sh --layout`;
+put the tree in `$CONNECTED_DEPS_DIR` or another dependency directory, never
+in `/tmp`, and it cannot be moved afterwards (the build directories hold
+absolute paths). `--dry-run [<dir>]` prints the steps and changes nothing;
+`--check [<dir>]` prints `MESA_ETNA_TREE=<tree>` and exits 0 only on a
+complete tree, else exits 2 with a `gap:` line, which is a gap and not a pass;
+`--marker` prints the expected marker. `tools/cts/deps-env.sh --present` adds
+`MESA_ETNA_TREE` to its output when that `--check` of the layout's tree
+passes, so a host without the tree sees it unset.
+
 ### A tile-status fast clear: mode 29 and `testdata/ts-clear.golden`
 
 The host test of `docs/notes/gc-tiled-targets.md` step 0: what Mesa tells
