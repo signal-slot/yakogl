@@ -158,6 +158,76 @@ pub fn read_super_tiled(
     }
 }
 
+/// The tile-status entry that marks a tile cleared: the nibble of
+/// `ts::TS_CLEAR_VALUE` (`0x1111_1111`, the RS fill of a fast clear), the same
+/// code as `rs_interp::TS_CLEAR_CODE`. Kept here because this file is core
+/// only (see the module comment); tests/gc_depth_format_ts.rs checks the
+/// three agree.
+pub const TS_CLEAR_CODE: u8 = 0x1;
+
+/// The tile status of a depth surface, as Mesa's etnaviv lays it out on this
+/// core (`ts.rs`: CACHE128B256BPERLINE, one pixel pipe): one 4-bit entry per
+/// `tile_bytes` of surface memory, entry `n` in byte `n / 2`, the low nibble
+/// first. The tile of a pixel is its byte offset in the surface divided by
+/// `tile_bytes`, as `rs_interp`'s TS read finds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DepthTs<'a> {
+    /// The TS buffer (`TS_DEPTH_STATUS_BASE`'s bytes).
+    pub status: &'a [u8],
+    /// Bytes of surface per entry: `ts::tile_size(mode)`, 128 for
+    /// `TS_MODE_128B` or 256 for `TS_MODE_256B`.
+    pub tile_bytes: u32,
+    /// `TS_DEPTH_CLEAR_VALUE`, the word of a cleared tile
+    /// ([`DepthSurface::clear_value`]: D24S8 `depth << 8 | stencil`, D16 the
+    /// doubled half).
+    pub clear_value: u32,
+}
+
+/// [`read_super_tiled`] through the depth surface's tile status (W12b
+/// groundwork, docs/notes/gc-tiled-wire.md): a pixel whose tile's entry is
+/// [`TS_CLEAR_CODE`] reads as `ts.clear_value`'s depth, whatever the surface
+/// holds there; every other pixel reads as [`read_super_tiled`] reads it. An
+/// entry past the end of `ts.status` counts as not cleared; any entry other
+/// than [`TS_CLEAR_CODE`] reads memory (this core does not compress depth
+/// outside MSAA, so no other code is modelled). The same pixels are written
+/// and the same panics apply as for [`read_super_tiled`]; also panics if
+/// `ts.tile_bytes` is neither 128 nor 256.
+// The arguments are read_super_tiled's seven plus the tile status.
+#[allow(clippy::too_many_arguments)]
+pub fn read_super_tiled_ts(
+    format: PeDepthFormat,
+    surface: &[u8],
+    stride: u32,
+    w: u32,
+    h: u32,
+    dst: &mut [f32],
+    pitch: u32,
+    ts: &DepthTs,
+) {
+    assert!(ts.tile_bytes == 128 || ts.tile_bytes == 256, "tile_bytes {} is not 128 or 256", ts.tile_bytes);
+    read_super_tiled(format, surface, stride, w, h, dst, pitch);
+    let cleared = match format {
+        PeDepthFormat::D16 => ((ts.clear_value & 0xffff) as f64 / 65535.0) as f32,
+        PeDepthFormat::D24S8 => ((ts.clear_value >> 8) as f64 / 16_777_215.0) as f32,
+    };
+    let bpp = bytes_per_pixel(format);
+    let cols = w.min(stride / bpp as u32);
+    let rows = h.min(surface.len().div_ceil(stride.max(1) as usize) as u32);
+    for y in 0..rows {
+        for x in 0..cols {
+            let at = layout::offset(Layout::SuperTiled, x, y, bpp as u32, stride);
+            if at + bpp > surface.len() {
+                continue;
+            }
+            let tile = at / ts.tile_bytes as usize;
+            let code = ts.status.get(tile / 2).map(|b| (b >> (4 * (tile % 2))) & 0xf);
+            if code == Some(TS_CLEAR_CODE) {
+                dst[y as usize * pitch as usize + x as usize] = cleared;
+            }
+        }
+    }
+}
+
 /// The inverse of [`read_super_tiled`]: write `src` (`h` rows of `pitch`
 /// floats) into the SUPER_TILED surface. Depth is clamped to [0, 1], NaN is
 /// 0 and the value is rounded `+ 0.5`, as [`DepthSurface::clear_value`]. D24S8
@@ -366,5 +436,37 @@ mod super_tiled_tests {
     fn read_panics_when_w_exceeds_pitch() {
         let (s, stride, ..) = surface(PeDepthFormat::D16);
         read_super_tiled(PeDepthFormat::D16, &s, stride, 4, 1, &mut [0.0; 8], 3);
+    }
+
+    /// The TS-aware read on the 90x70 surface: tile 0 (the first 128 bytes,
+    /// the first 4x8 D24S8 pixels of the first super tile) cleared, tile 1
+    /// a non-clear code, the rest past the TS. tests/gc_depth_format_ts.rs
+    /// covers sizes, modes and TS patterns.
+    #[test]
+    fn read_ts_clears_only_the_cleared_tile() {
+        for format in [PeDepthFormat::D24S8, PeDepthFormat::D16] {
+            let (s, stride, ..) = fill(format);
+            let bpp = bytes_per_pixel(format);
+            let (w, h, pitch) = (90u32, 70u32, 91u32);
+            let status = [TS_CLEAR_CODE | 0xe << 4];
+            let clear_value = if format == PeDepthFormat::D16 { 0x4000_4000 } else { 0x4000_00a5 };
+            let t = DepthTs { status: &status, tile_bytes: 128, clear_value };
+            let mut plain = vec![7.5f32; (h * pitch) as usize];
+            read_super_tiled(format, &s, stride, w, h, &mut plain, pitch);
+            let mut got = vec![7.5f32; (h * pitch) as usize];
+            read_super_tiled_ts(format, &s, stride, w, h, &mut got, pitch, &t);
+            let cleared = linear_float(format, if format == PeDepthFormat::D16 { 0x4000 } else { 0x4000_00a5 });
+            let mut n = 0;
+            for y in 0..h {
+                for x in 0..pitch {
+                    let i = (y * pitch + x) as usize;
+                    let in_tile0 = x < w && layout::offset(Layout::SuperTiled, x, y, bpp as u32, stride) < 128;
+                    let want = if in_tile0 { cleared } else { plain[i] };
+                    n += in_tile0 as usize;
+                    assert_eq!(got[i].to_bits(), want.to_bits(), "{format:?} ({x}, {y})");
+                }
+            }
+            assert_eq!(n, 128 / bpp);
+        }
     }
 }
