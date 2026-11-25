@@ -13,9 +13,16 @@
 #   ... T6_UART=rfc2217://<host>:<port> ... --go     # the UART on a network serial adapter
 #
 # probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_cold or triangle
-# (t6-verdict.sh's table for the record). t6_display is not taken: it
-# adopts the picture Linux leaves after kexec --crash, and U-Boot leaves
-# none.
+# (t6-verdict.sh's table for the record), or gl_test or deqp (gl_test's
+# image, driver/samples/zephyr/gl_test; a dEQP-GLES2 row image,
+# tools/cts/t6-deqp-images.sh): those two are judged by prompt-go.py
+# (judge_sample) from the T6:A and T6:G lines as t6-verdict.sh's uboot
+# route checks them, the sample's own summary lines (gl_test: one
+# "gl_test: all:" line with 0 failed and 0 timed out; deqp: "deqp: done:"
+# then "deqp: summary:", the cases tallied later from image.log) and the
+# board glue's "t6: <probe> done: PSCI SYSTEM_RESET at N ms" line.
+# t6_display is not taken: it adopts the picture Linux leaves after kexec
+# --crash, and U-Boot leaves none.
 #
 # Without --go it checks the image on this host, checks over ssh (reads
 # only) that the board runs Armbian and holds the same bytes as
@@ -41,7 +48,8 @@
 # the start and at the end. record.txt (this script's lines), uart.log
 # (every byte read), typed.log (every byte written, with its time),
 # answers.txt (each command and its answer), image.log (the UART from `go`
-# to Linux's login), verdict.txt (t6-verdict.sh, T6_ROUTE=uboot). When the
+# to Linux's login), verdict.txt (t6-verdict.sh, T6_ROUTE=uboot; for
+# gl_test and deqp prompt-go.py's own, with the same last line). When the
 # login never came on the UART, uart.log ends with a "####" line that says
 # where the stream went silent.
 #
@@ -53,8 +61,9 @@
 # command made U-Boot reset the board; 8 an answer differed: no `go`,
 # `reset` entered, Armbian back; 9 `go` not answered; 10 the image
 # started, and no sign of Linux: the board needs T6_HAND; 11 the verdict
-# FAIL, Armbian back). "No sign of Linux" is no login on the UART and no
-# new boot_id over ssh: when the UART shows no login (its stream can stop in
+# FAIL, Armbian back: for gl_test also a case failed or timed out, for
+# deqp no "deqp: done:" or "deqp: summary:" line). "No sign of Linux" is
+# no login on the UART and no new boot_id over ssh: when the UART shows no login (its stream can stop in
 # the kernel's output, issue #11874) but ssh finds Armbian with a new
 # boot_id, the exit is the code of the login seen (6 becomes 8; 10 becomes
 # 0 or 11 by the verdict) and record.txt says so. 1 when the board did
@@ -97,7 +106,11 @@ for a in "$@"; do
 	esac
 done
 [ -n "$IMG" ] && [ -n "$PROBE" ] || die "usage: prompt-go.sh <zephyr.bin> <probe> [--go] (see the header)"
-case "$PROBE" in t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_cold | triangle) ;; *) die "probe $PROBE: not one of t6-verdict.sh's" ;; esac
+case "$PROBE" in
+t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_cold | triangle) JUDGE="$PROBE, T6_ROUTE=uboot" ;;
+gl_test | deqp) JUDGE="$PROBE, by its summary lines" ;;
+*) die "probe $PROBE: not one of t6-verdict.sh's, gl_test or deqp" ;;
+esac
 [ -f "$IMG" ] || die "$IMG: no such file"
 [ -n "${BOARD_HOST:-}" ] || die "set BOARD_HOST=root@<the T6>"
 # T6_UART=rfc2217://<host>:<port> (the debug UART on a network serial
@@ -139,7 +152,10 @@ grep -qF 'T6:G go: SCTLR_EL2' <<<"$(strings -n 8 "$IMG")" || refuse "$IMG has no
 [ "$top" -ge 11 ] && [ "$top" -le 15 ] || refuse "WDT0 TOP $top outside 11..15"
 period_s=$(( ((1 << (16 + top)) + 23999999) / 24000000 ))
 if [ "$proof" = 1 ]; then image_wait=$((period_s + 10)); else image_wait=$((lifetime + period_s)); fi
-# U-Boot, its prompt and the load take well under a minute.
+# The image's own bound, from its marker: gl_test's image is fed for 300 s
+# and a dEQP row's for 600 s (their boards/nanopc_t6.conf), so they wait
+# about 6 and 11 minutes. U-Boot, its prompt and the load take well under a
+# minute.
 image_wait=$((image_wait + 60))
 crc=$(python3 -I -c 'import sys, zlib; print("%08x" % zlib.crc32(open(sys.argv[1], "rb").read()))' "$IMG")
 sha=$(sha256sum "$IMG" | cut -d' ' -f1)
@@ -174,7 +190,7 @@ if [ "$GO" != 1 ]; then
 	echo "dry run: nothing was written to the UART and the board was not rebooted."
 	echo "--go would: take the board lock, read the state above again, start prompt-go.py on T6_UART,"
 	echo "  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the"
-	echo "  commands above, go, record the image's output and its verdict ($PROBE, T6_ROUTE=uboot),"
+	echo "  commands above, go, record the image's output and its verdict ($JUDGE),"
 	echo "  then wait for Armbian with a new boot_id."
 	uart_dry
 	[ -z "$(fact gpu_users)" ] || echo "--go would REFUSE now: processes hold the GPU device: $(fact gpu_users)"
@@ -243,8 +259,8 @@ rec "prompt-go.py exit $py_rc, $(( $(date +%s) - t0 )) s after the reboot comman
 [ ! -f "$REC/verdict.txt" ] || rec "verdict: $(tail -n 1 "$REC/verdict.txt")"
 # 6 and 10 say only that the UART showed no Linux login; Armbian back over
 # ssh gives the code of the login seen: 8 after a refusal, and after the
-# image 0 or 11 by its verdict (t6-verdict.sh's last line, "VERDICT <probe>
-# PASS" exactly when it exits 0).
+# image 0 or 11 by its verdict (t6-verdict.sh's or, for gl_test and deqp,
+# judge_sample's last line, "VERDICT <probe> PASS" exactly on a PASS).
 seen=11
 [ "$(tail -n 1 "$REC/verdict.txt" 2>/dev/null)" != "VERDICT $PROBE PASS" ] || seen=0
 exit_when_back 6:8 10:$seen

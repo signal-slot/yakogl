@@ -19,7 +19,8 @@
 #   /boot/yakogl), with no block device, dd, module or reboot in any.
 # - prompt-go.sh's dry run on a made-up image: refuses an image whose entry
 #   lacks T6:G, refuses one that is not staged, and on a staged one prints
-#   the commands and exits 0 without a reboot; --go refuses without T6_HAND
+#   the commands and exits 0 without a reboot; takes gl_test and deqp, and
+#   a dEQP image's wait is its own WDT0 bound; --go refuses without T6_HAND
 #   and with a T6_UART that is no tty.
 # - prompt-reads.sh (prompt-lib.sh is shared): its dry run and the same two
 #   refusals, with its own self-test answered by a fake python3.
@@ -92,12 +93,12 @@ fake_go() { SSH_LOG=$tmp/go.log fake bash "$here/prompt-go.sh" "$@"; }
 
 # A made-up image: the arm64 Image magic, the watchdog marker, the lines
 # prompt-go.sh looks for, as the real ones are in the image.
-mkimg() { # <file> [extra line]
+mkimg() { # <file> [extra line] [lifetime_s]
 	{
 		head -c 56 /dev/zero
 		printf 'ARM\x64'
 		head -c 4 /dev/zero
-		printf 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000\0'
+		printf 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s %s; alive_s 5; proof 0; load 0x10000000\0' "${3:-60}"
 		printf 'board: watchdog armed\0'
 		[ -z "${2:-}" ] || printf '%s\0' "$2"
 		head -c 4096 /dev/zero
@@ -137,6 +138,25 @@ for p in t6_cold triangle; do
 	check "prompt-go dry run: probe $p is taken (rc $rc)" \
 		"$([ "$rc" = 0 ] && grep -qF "its verdict ($p, T6_ROUTE=uboot)" <<<"$out"; echo $?)"
 done
+# gl_test and a dEQP row image are taken, judged by their summary lines
+for p in gl_test deqp; do
+	out=$(fake_go "$tmp/t6_hello.bin" "$p")
+	rc=$?
+	check "prompt-go dry run: probe $p is taken, judged by its summary lines (rc $rc)" \
+		"$([ "$rc" = 0 ] && grep -qF "its verdict ($p, by its summary lines)" <<<"$out" &&
+			grep -qF 'dry run: nothing was written' <<<"$out"; echo $?)"
+done
+# the wait is the image's own bound: a dEQP row image fed for 600 s (TOP 13,
+# a 23 s period) ends by 600 + 23 + 60 s after go; the staged copy is
+# swapped for it only for this dry run, then the staged image is put back
+mkdir "$tmp/life"
+mkimg "$tmp/life/t6_hello.bin" 'T6:G go: SCTLR_EL2 ' 600
+cp "$tmp/life/t6_hello.bin" "$root/boot/yakogl/t6_hello.bin"
+out=$(fake_go "$tmp/life/t6_hello.bin" deqp)
+rc=$?
+cp "$tmp/t6_hello.bin" "$root/boot/yakogl/t6_hello.bin"
+check "prompt-go dry run: a dEQP image fed for 600 s waits its own 683 s after go (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'lifetime 600 s, proof 0: the image ends by 683 s after go at the latest' <<<"$out"; echo $?)"
 out=$(fake_go "$tmp/t6_hello.bin" t6_display)
 rc=$?
 check "prompt-go: t6_display is not a probe of the go route (rc $rc)" "$([ "$rc" = 2 ]; echo $?)"
