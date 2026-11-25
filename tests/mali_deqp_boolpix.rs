@@ -10,16 +10,20 @@
 //! `tools/mali/deqp_ref.sh <vert> <frag> tools/mali/testdata/deqp_boolpix_<shape> --instrument shim`
 //! (Mesa 26.2.1's G610 drm-shim, `--uniform-values`). `tests/mali_ref` does
 //! the compare. A reference byte-equal at the tip is in [`LOWERED`] with a
-//! plain test; one that differs is in [`DIFFERS`] with an `#[ignore]`d test,
-//! and `differs_pinned` checks both lists. A fix that makes one byte-equal
-//! moves it to [`LOWERED`] and drops its `#[ignore]` in the same commit.
+//! plain test; one that compiles with other words is in [`DIFFERS`] with an
+//! `#[ignore]`d test; one the compiler refuses is in [`REFUSED`] with its
+//! refusal text pinned; and `differs_pinned` checks all three lists. A fix
+//! that makes one byte-equal moves it to [`LOWERED`] and drops its
+//! `#[ignore]` in the same commit.
 //!
 //! The cause tags are the note's section 3: BW the bool uniform's word (our
 //! GL stores 1, Mesa's words read `~0`; not in the words, so a byte-equal
-//! shape still draws wrong), D1 the odd-lane `b2i32` miscompile, LK a
-//! mediump struct member pushed as fp16 halves but read as an fp32 word, and
-//! the value-equal form differences next to them (V1, VL, A1, S1, FP, NF,
-//! CF, O; the note's section 4).
+//! shape still draws wrong), D1 the odd-lane `b2i32` miscompile (fixed at
+//! `d3876279`), LK a mediump struct member pushed as fp16 halves but read as
+//! an fp32 word (fixed at `9fa5bbe0`, which refuses the two `lk_*_vec4`
+//! shapes until their member read narrows as Mesa's does), and the
+//! value-equal form differences next to them (V1, VL, A1, S1, FP, NF, CF, O;
+//! the note's section 4).
 //!
 //! Where the shader text comes from: every pair is rebuilt from its `.test`
 //! row (`data/gles2/shaders/{swizzles,conversions,functions,linkage}.test`
@@ -45,6 +49,11 @@ const LOWERED: &[&str] = &[
     "bw_conv_vec4_to_bool_fs",
     "bw_swz_bvec3_zyx_fs",
     "bw_swz_bvec4_wzyx_fs",
+    "d1_conv_bvec2_to_ivec2_fs",
+    "d1_conv_bvec4_to_ivec4_fs",
+    "lk_uniform_struct",
+    "lk_uniform_struct_partial",
+    "lk_uniform_struct_use_case_rip",
 ];
 
 /// The references that compile with other words or facts than Mesa's.
@@ -63,15 +72,19 @@ const DIFFERS: &[&str] = &[
     "bw_swz_bvec2_grg_vs",
     "bw_swz_bvec2_r_vs",
     "bw_swz_bvec4_wzyx_vs",
-    "d1_conv_bvec2_to_ivec2_fs",
     "d1_conv_bvec3_float_to_ivec4_fs",
-    "d1_conv_bvec4_to_ivec4_fs",
-    "lk_uniform_struct",
-    "lk_uniform_struct_fragment_only_vec4",
-    "lk_uniform_struct_partial",
-    "lk_uniform_struct_use_case_rip",
-    "lk_uniform_struct_vec4",
 ];
+
+/// The refusal of a mediump fragment shader uniform of another form
+/// (`MaliError::FsUniform`, `src/shaderc/online/mali/mod.rs`), pinned whole
+/// as `tests/mali_deqp_intval3.rs` and `tests/mali_deqp_unif2.rs` pin it.
+const FS_UNIFORM: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
+
+/// The references the compiler refuses. The two `lk_*_vec4` shapes moved here
+/// at `9fa5bbe0`: reading two struct members' words apart, narrowed as a
+/// pair, is refused there rather than compiled with other words than Mesa's.
+const REFUSED: &[(&str, &str)] =
+    &[("lk_uniform_struct_fragment_only_vec4", FS_UNIFORM), ("lk_uniform_struct_vec4", FS_UNIFORM)];
 
 /// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_bvec2_fragment` (BW+FP): two scalar varyings narrowed one by one (`FADD.f32.discard r0.h0`) and compared in two one-lane `FCMP_OR.v2f16`, where Mesa pairs them (`V2F32_TO_V2F16`, one compare); the same values.
 #[test]
@@ -213,58 +226,53 @@ fn bw_swz_bvec4_wzyx_vs() {
     mali_ref::assert_matches("deqp_boolpix_bw_swz_bvec4_wzyx_vs");
 }
 
-/// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_fragment` (D1): the odd-lane miscompile: `ivec2(in0)` widens `.h00` for both lanes where Mesa widens `.h11` for `y` (`IADD.v2u16 r1, r0.h11, 0x0`).
+/// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_fragment` (D1): byte-equal since `d3876279` widened each lane from its own half (Mesa's `IADD.v2u16 r1, r0.h11, 0x0`).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec2_to_ivec2_fs() {
     mali_ref::assert_matches("deqp_boolpix_d1_conv_bvec2_to_ivec2_fs");
 }
 
-/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_fragment` (D1+FP): D1 (no `IADD.v2u16 .h11` for the odd lane), after a pairing of the lanes in another order.
+/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_fragment` (D1+FP): the lanes are paired in another order (ours narrows `r1`, `r2` as one `V2F32_TO_V2F16` where Mesa narrows `r1` alone); D1's own words are ours since `d3876279` (ours has Mesa's `IADD.v2u16 r2, r1.h11, 0x0`), and Mesa's `MKVEC.v2i16 r1, r1^.h0, r2^.h0` has no counterpart in ours.
 #[test]
 #[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec3_float_to_ivec4_fs() {
     mali_ref::assert_matches("deqp_boolpix_d1_conv_bvec3_float_to_ivec4_fs");
 }
 
-/// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_fragment` (D1): D1: `IADD.v2u16 r1, r1^.h00` where Mesa has `r1.h11`.
+/// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_fragment` (D1): byte-equal since `d3876279` widened each lane from its own half (Mesa's `IADD.v2u16 r2, r1.h11, 0x0`).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec4_to_ivec4_fs() {
     mali_ref::assert_matches("deqp_boolpix_d1_conv_bvec4_to_ivec4_fs");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct` (LK): the words are Mesa's, but our record pushes the struct members `val.a`, `val.b` as fp16 halves (FAU `00004c00`, `00005000`) where the words read fp32 words (Mesa `41800000`, `42000000`).
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct` (LK): byte-equal since `9fa5bbe0` kept `val.a`, `val.b` fp32 in the block (our FAU is Mesa's `41800000`, `42000000`).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn lk_uniform_struct() {
     mali_ref::assert_matches("deqp_boolpix_lk_uniform_struct");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4` (LK+O): as `lk_uniform_struct_vec4`, the struct read in the fragment shader only.
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4` (LK+O): as `lk_uniform_struct_vec4`, the struct read in the fragment shader only: the `val.b.y + val.a.x` read, two struct members' words narrowed as a pair where Mesa narrows each alone. Refused since `9fa5bbe0`.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
+#[ignore = "refused: two struct members' words apart, narrowed as a pair; pinned by differs_pinned"]
 fn lk_uniform_struct_fragment_only_vec4() {
     mali_ref::assert_matches("deqp_boolpix_lk_uniform_struct_fragment_only_vec4");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial` (LK): as `lk_uniform_struct`: `val.b` pushed as a half, read as fp32.
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial` (LK): byte-equal, as `lk_uniform_struct`.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn lk_uniform_struct_partial() {
     mali_ref::assert_matches("deqp_boolpix_lk_uniform_struct_partial");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_use_case_rip` (LK): as `lk_uniform_struct`: `val.quadraticAttenuation` pushed as a half, read as fp32.
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_use_case_rip` (LK): byte-equal, as `lk_uniform_struct`.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn lk_uniform_struct_use_case_rip() {
     mali_ref::assert_matches("deqp_boolpix_lk_uniform_struct_use_case_rip");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4` (LK+O): LK, and the uniform-only varying form of the audit's `o_linkage_uniform_struct_vec4` (`V2F32_TO_V2F16 r0, u2.w1, u2.w0` where Mesa has `FADD.f32.discard r0.h0, u2.w0`).
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4` (LK+O): LK, and the uniform-only varying form of the audit's `o_linkage_uniform_struct_vec4`: the `val.b.y + val.a.x` read, two struct members' words narrowed as a pair (`V2F32_TO_V2F16 r0, u2.w1, u2.w0`) where Mesa has `FADD.f32 r0.h0, u2.w0` and `FADD.f32 r1.h0, u2.w1`. Refused since `9fa5bbe0` until it draws Mesa's words.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
+#[ignore = "refused: two struct members' words apart, narrowed as a pair; pinned by differs_pinned"]
 fn lk_uniform_struct_vec4() {
     mali_ref::assert_matches("deqp_boolpix_lk_uniform_struct_vec4");
 }
@@ -303,11 +311,15 @@ fn region_words(json: &str, region: &str) -> Option<Result<usize, String>> {
 #[test]
 fn references_parse() {
     let names = on_disk();
-    let mut listed: Vec<&str> = LOWERED.iter().chain(DIFFERS).copied().collect();
+    let mut listed: Vec<&str> = LOWERED.iter().chain(DIFFERS).copied().chain(REFUSED.iter().map(|r| r.0)).collect();
     listed.sort_unstable();
     let before = listed.len();
     listed.dedup();
-    assert_eq!(before, listed.len(), "a deqp_boolpix_* shape is in both LOWERED and DIFFERS, or twice in one");
+    assert_eq!(
+        before,
+        listed.len(),
+        "a deqp_boolpix_* shape is in more than one of LOWERED, DIFFERS and REFUSED, or twice in one"
+    );
     assert_eq!(names, listed, "a deqp_boolpix_* reference on disk is not listed, or a listed one is missing");
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
     let mut bad = Vec::new();
@@ -338,8 +350,8 @@ fn references_parse() {
 }
 
 /// Each DIFFERS shape still compiles and still is not Mesa's words and
-/// facts; each LOWERED one is byte-equal. A fix that moves one changes the
-/// lists in the same commit.
+/// facts; each LOWERED one is byte-equal; each REFUSED one is refused with
+/// its text. A fix that moves one changes the lists in the same commit.
 #[test]
 fn differs_pinned() {
     let mut changed = Vec::new();
@@ -365,6 +377,9 @@ fn differs_pinned() {
             }
             Err(e) => changed.push(format!("{name}: now refused: {e}")),
         }
+    }
+    for (name, text) in REFUSED {
+        changed.extend(mali_ref::refusal_change(&format!("deqp_boolpix_{name}"), text));
     }
     assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
