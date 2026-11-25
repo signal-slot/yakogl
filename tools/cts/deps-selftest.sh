@@ -76,6 +76,9 @@ check "imx8mp adds IMX8MP_OUT" "IMX8MP_OUT=$L/imx8mp-out" "$out"
 out=$("$ENV_SH" rpi_4b 2>&1)
 absent "rpi_4b has no IMX8MP_OUT" IMX8MP_OUT "$out"
 absent "rpi_4b has no MALI_DEQP_TOOLCHAIN" MALI_DEQP_TOOLCHAIN "$out"
+out=$("$ENV_SH" rpi_5 2>&1)
+absent "rpi_5 has no IMX8MP_OUT" IMX8MP_OUT "$out"
+absent "rpi_5 has no MALI_DEQP_TOOLCHAIN" MALI_DEQP_TOOLCHAIN "$out"
 out=$("$ENV_SH" nanopc_t6 2>&1)
 check "nanopc_t6 adds MALI_DEQP_TOOLCHAIN" "MALI_DEQP_TOOLCHAIN=$L/debian-trixie-arm64-cross" "$out"
 out=$("$ENV_SH" --check 2>&1)
