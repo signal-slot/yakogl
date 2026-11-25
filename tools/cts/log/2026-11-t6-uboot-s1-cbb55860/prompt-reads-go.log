@@ -1,0 +1,4 @@
+T6_HAND set: no
+=== prompt-reads.sh --go
+t6-uart-rfc2217: REFUSED: the server closed the connection while COM-PORT-OPTION (RFC 2217) was awaited (it sent 'busy: another client is connected..'); the command was not started
+exit 40

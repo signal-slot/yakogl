@@ -1,0 +1,137 @@
+T6_HAND set: no
+=== prompt-reads.sh (dry)
+build cbb55860
+prompt-reads self-test: 115 checks run, 0 failed
+board: NanoPC-T6, up 57196.69 s, system running, boot_id <boot_id>
+board: GPU users '', remote sessions '', login on the UART: active
+at the U-Boot prompt, in this order (reads only):
+  version
+  help
+  printenv
+  bdinfo
+  dm tree
+  md.l 0xfd8d814c 1
+  md.l 0xfd8d810c 1
+  md.l 0xfd8d8118 1
+  md.l 0xfd8d8120 1
+  md.l 0xfd8d8290 1
+  md.l 0xfd7c0578 1
+  md.l 0xfd7c057c 1
+  md.l 0xfd7c0908 1
+  md.l 0xfd7c0280 1
+  md.l 0xfd7c01a0 7
+  md.l 0xfd7c01c0 7
+  md.l 0xfd7c083c 1
+  md.l 0xfd7c0c04 1
+  md.l 0xfd7c0c10 1
+  clk dump
+  wdt list
+  mmc list
+  mmc dev 0
+  mmc info
+  mmc part
+  ext4ls mmc 0:1 /
+  ext4ls mmc 0:1 /boot
+  # then, if CLKGATE_CON(15) reads both WDT0 gates open: md.l 0xfeaf0000 2; md.l 0xfeaf00f4 3
+  # then, if PD_GPU reads on: md.l 0xfdf35008 5; md.l 0xfdf35208 5; md.l 0xfdf35408 5; md.l 0xfdf35608 5
+  # then, if dm tree shows the pmic probed: pmic list; pmic dev <its name>; pmic dump
+  reset
+dry run: nothing was written to the UART and the board was not rebooted.
+--go would: take the board lock, read the state above again, start prompt-reads.py on T6_UART,
+  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the
+  commands above and reset, then wait for Armbian with a new boot_id.
+  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with
+  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give prompt-reads.py the pty it makes.
+exit 0
+=== prompt-go.sh t6_cold (dry)
+build cbb55860
+image: <checkout at cbb55860>s/t6_cold.bin, 127184 bytes, crc32 6266fb23, sha256 9befb087468187af3015de94713138e42fa766c7e2734ab82138d7dd61aa6900, linked at 0x10000000
+image: WDT0 TOP 13, lifetime 60 s, proof 0: the image ends by 143 s after go at the latest
+board: NanoPC-T6, up 57197.43 s, system running, boot_id <boot_id>
+board: /boot/yakogl/t6_cold.bin is this image (sha256), /boot on /dev/mmcblk0p1
+board: GPU users '', remote sessions ''
+at the U-Boot prompt, one at a time, each answer checked:
+  ext4size mmc 0:1 /boot/yakogl/t6_cold.bin        # no answer
+  printenv filesize                                # filesize=1f0d0
+  ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_cold.bin # 127184 bytes read in ... ms
+  md.l 0x10000038 1                                # 10000038: 644d5241
+  crc32 0x10000000 1f0d0                           # crc32 for 10000000 ... 1001f0cf ==> 6266fb23
+  go 0x10000000                                    # then nothing is typed again
+  # any other answer: reset, and the board boots Armbian
+dry run: nothing was written to the UART and the board was not rebooted.
+--go would: take the board lock, read the state above again, start prompt-go.py on T6_UART,
+  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the
+  commands above, go, record the image's output and its verdict (t6_cold, T6_ROUTE=uboot),
+  then wait for Armbian with a new boot_id.
+  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with
+  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give prompt-go.py the pty it makes.
+exit 0
+=== prompt-go.sh t6_gpu (dry)
+build cbb55860
+image: <checkout at cbb55860>s/t6_gpu.bin, 86224 bytes, crc32 e3846da5, sha256 0171334cff516d7a7fc13d1b672c69188ef3f1a2a542abf51fb8b9c2566b1a19, linked at 0x10000000
+image: WDT0 TOP 13, lifetime 60 s, proof 0: the image ends by 143 s after go at the latest
+board: NanoPC-T6, up 57198.10 s, system running, boot_id <boot_id>
+board: /boot/yakogl/t6_gpu.bin is this image (sha256), /boot on /dev/mmcblk0p1
+board: GPU users '', remote sessions ''
+at the U-Boot prompt, one at a time, each answer checked:
+  ext4size mmc 0:1 /boot/yakogl/t6_gpu.bin         # no answer
+  printenv filesize                                # filesize=150d0
+  ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_gpu.bin # 86224 bytes read in ... ms
+  md.l 0x10000038 1                                # 10000038: 644d5241
+  crc32 0x10000000 150d0                           # crc32 for 10000000 ... 100150cf ==> e3846da5
+  go 0x10000000                                    # then nothing is typed again
+  # any other answer: reset, and the board boots Armbian
+dry run: nothing was written to the UART and the board was not rebooted.
+--go would: take the board lock, read the state above again, start prompt-go.py on T6_UART,
+  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the
+  commands above, go, record the image's output and its verdict (t6_gpu, T6_ROUTE=uboot),
+  then wait for Armbian with a new boot_id.
+  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with
+  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give prompt-go.py the pty it makes.
+exit 0
+=== prompt-go.sh t6_fw (dry)
+build cbb55860
+image: <checkout at cbb55860>s/t6_fw.bin, 454752 bytes, crc32 157ff3a5, sha256 1f9b9a391863e14e1f10c13fa926365dc8d2ef2cc877da5aa148cad16966f2d6, linked at 0x10000000
+image: WDT0 TOP 13, lifetime 60 s, proof 0: the image ends by 143 s after go at the latest
+board: NanoPC-T6, up 57198.88 s, system running, boot_id <boot_id>
+board: /boot/yakogl/t6_fw.bin is this image (sha256), /boot on /dev/mmcblk0p1
+board: GPU users '', remote sessions ''
+at the U-Boot prompt, one at a time, each answer checked:
+  ext4size mmc 0:1 /boot/yakogl/t6_fw.bin          # no answer
+  printenv filesize                                # filesize=6f060
+  ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_fw.bin # 454752 bytes read in ... ms
+  md.l 0x10000038 1                                # 10000038: 644d5241
+  crc32 0x10000000 6f060                           # crc32 for 10000000 ... 1006f05f ==> 157ff3a5
+  go 0x10000000                                    # then nothing is typed again
+  # any other answer: reset, and the board boots Armbian
+dry run: nothing was written to the UART and the board was not rebooted.
+--go would: take the board lock, read the state above again, start prompt-go.py on T6_UART,
+  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the
+  commands above, go, record the image's output and its verdict (t6_fw, T6_ROUTE=uboot),
+  then wait for Armbian with a new boot_id.
+  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with
+  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give prompt-go.py the pty it makes.
+exit 0
+=== prompt-go.sh t6_submit (dry)
+build cbb55860
+image: <checkout at cbb55860>s/t6_submit.bin, 4178016 bytes, crc32 13c81fd2, sha256 379d28820d269a97217e01ea22e8b5e205a17235d9eb43c17ed65a09f61bf82e, linked at 0x10000000
+image: WDT0 TOP 13, lifetime 60 s, proof 0: the image ends by 143 s after go at the latest
+board: NanoPC-T6, up 57199.70 s, system running, boot_id <boot_id>
+board: /boot/yakogl/t6_submit.bin is this image (sha256), /boot on /dev/mmcblk0p1
+board: GPU users '', remote sessions ''
+at the U-Boot prompt, one at a time, each answer checked:
+  ext4size mmc 0:1 /boot/yakogl/t6_submit.bin      # no answer
+  printenv filesize                                # filesize=3fc060
+  ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_submit.bin # 4178016 bytes read in ... ms
+  md.l 0x10000038 1                                # 10000038: 644d5241
+  crc32 0x10000000 3fc060                          # crc32 for 10000000 ... 103fc05f ==> 13c81fd2
+  go 0x10000000                                    # then nothing is typed again
+  # any other answer: reset, and the board boots Armbian
+dry run: nothing was written to the UART and the board was not rebooted.
+--go would: take the board lock, read the state above again, start prompt-go.py on T6_UART,
+  reboot the board over ssh (systemctl reboot), stop the autoboot with one space, enter the
+  commands above, go, record the image's output and its verdict (t6_submit, T6_ROUTE=uboot),
+  then wait for Armbian with a new boot_id.
+  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with
+  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give prompt-go.py the pty it makes.
+exit 0
