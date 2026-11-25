@@ -1,0 +1,5 @@
+deqp: case filter 'dEQP-GLES3.functional.z.*'
+Test case 'dEQP-GLES3.functional.z.a'..
+yakogl/v3d: a draw does not fit an empty job (6 indices)
+yakogl/v3d: draw refused: no empty job holds the draw (its lists, or its client data with no memory of its own)
+deqp: ResourceError dEQP-GLES3.functional.z.a
