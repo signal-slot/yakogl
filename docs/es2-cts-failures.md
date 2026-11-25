@@ -545,6 +545,7 @@ do not depend on this subsection.
   `matrix_subscript` 15, `uapi_int` 15, `loop_select` 6,
   `loop_vector_counter` 6, by existing `deqp_unif2_*`, `deqp_vs16ref_*`
   and `deqp_loops*` references).
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 0 cases (board 371; plan #377 cap 362).
 - **VS loop** (Fail 176, NotSupported 20): references
   `tools/mali/testdata/deqp_vsloop_*` (eight, `2eb983fb`, their sources
   verbatim from the measure at `243d5f8a`), test
@@ -558,6 +559,7 @@ do not depend on this subsection.
   reference yet. The eight constant nested `for`/`while` cases compile
   on the host since `4aadf854` and are expected to leave the row at the
   next board run.
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 260 cases (board 176; cap 105, over).
 - **VS non-finite constant** (Fail 144, NotSupported 73; the entry
   also holds the 33 fragment-shader cases): references
   `tools/mali/testdata/deqp_vsconst_*` (eight, `4ecdda2b`), test
@@ -570,12 +572,15 @@ do not depend on this subsection.
   `random_int` 35, `light_amount` 16, `fs_log2` 12, `fs_rcp16` 11,
   `constexpr_int` 9, `fs_atan` 4, `struct_loop` 2, by the
   `deqp_cfold2_*`, `deqp_constrnd_*` and `deqp_intval5_*` references).
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 128 cases (board 144; cap 114, over).
 - **mediump FS uniform** (Fail 271, NotSupported 1): references
   `tools/mali/testdata/deqp_fsunif_*` (eight, `ec92aa92`), test
   `tests/mali_deqp_fsunif.rs`, note `docs/notes/mali-deqp-fsunif.md`.
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 283 cases (board 271).
 - **VS uniform array** (Fail 193): references
   `tools/mali/testdata/deqp_vsuniarr_*` (eight, `b08baac7`), test
   `tests/mali_deqp_vsuniarr.rs`, note `docs/notes/mali-deqp-vsuniarr.md`.
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 197 cases (board 193).
 - **FS integer or boolean** (Fail 188, NotSupported 22): references
   `tools/mali/testdata/deqp_fsint_*` (eight, `653694d2`), test
   `tests/mali_deqp_fsint.rs`, note `docs/notes/mali-deqp-fsint.md`; and
@@ -583,6 +588,7 @@ do not depend on this subsection.
   shapes design-fsint asked for), test `tests/mali_deqp_fsint2.rs`
   (`deqp_fsint2` has no note of its own; `mali-deqp-fsint.md` does not
   yet list its shapes).
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): 171 cases (board 188).
 - **FS mixed precision and fragment varying load** (Fail 168; and the
   "fragment varying load or conversion" row, Fail 50): references
   `tools/mali/testdata/deqp_mixprec3_*` (eight, `465d5933`), test
@@ -602,6 +608,7 @@ do not depend on this subsection.
   references cover 54 (`hp_scale` 21, `hp_bool` 12, `hp_seq`/`f2i_seq`
   5, `hp_param` 4, `int_uniform_struct` 4, `ck_scale_highp` 3,
   `int_uniform` 1, `lz_rnd_other` 2, `return` 2).
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): mixed precision 159 cases (board 168); fragment varying load or conversion 55 cases (board 50).
 - **IrIndex, with LaneCycle and Encode** (IrIndex Fail 206; LaneCycle
   Fail 9; Encode Fail 6): references `tools/mali/testdata/deqp_irindex_*`
   (nine, plan #387's `irindex-ref`, `c08406ad`), test
@@ -622,6 +629,9 @@ do not depend on this subsection.
   `docs/notes/mali-deqp-defects.md` (HOST-ONLY at `f9b376511`: 6
   `Defect(Encode)` vertex cases and the 2 lane-cycle SIGSEGVs, since
   refused by name as `Defect(LaneCycle)` by `aca18ce0`).
+  Baseline, HOST-ONLY at `789ee9bb` ([baseline note](notes/mali-deqp-402-baseline.md)): IrIndex 204 cases (board 206; +10 more as a link error naming the vertex shader's IrIndex), LaneCycle 10 (board 9), Encode 6 (board 6).
 
-These host measures predate this tip (`e65567ea` and earlier); plan
-#402 keeps `remeasure-402` to re-measure the taken rows there.
+The shape measures above predate this tip (`e65567ea` and earlier); plan
+#402 keeps `remeasure-402` to re-measure the taken rows there. The
+baseline lines are the `789ee9bb` first-refusal counts of the
+[baseline note](notes/mali-deqp-402-baseline.md); the board counts stay those of `8ff01055`.
