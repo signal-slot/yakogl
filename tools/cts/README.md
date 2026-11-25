@@ -55,6 +55,7 @@ tools/cts/
   gles3-mustpass.txt           the 42,810 cases of the GLES3 mustpass
   gen-gles3-mustpass.sh        writes gles3-mustpass.txt from a CTS checkout
   deqp-uart-tally.py           a captured console -> per-group tally and names, Lost in capture
+  deqp-precision-values.py     a dEQP log (.qpa or console) -> the out-of-bound got/expected values of builtin_functions.precision cases (`deqp-precision-values-selftest.sh`)
   qpa-from-uart.py             a captured console (DEQP_ECHO_QPA) -> .qpa
   cts-images.py                .qpa -> the result, reference and mask PNGs
   cts_resume.py                which cases still have no result, and why
