@@ -19,12 +19,12 @@
 //! `glDrawArrays(GL_TRIANGLES, 0, 6)` with the 24-byte `puv` vertex (pos4 at
 //! location 0, uv2 at location 1) and the texture on unit 0.
 //!
-//! What glue71 does today (pinned): it refuses any draw that samples a
-//! texture (`REF_TEXTURES`, `GLUE71_REFUSALS[4]`) before mapping it; with the
-//! texture taken out of the GlesDraw, fill71 refuses our program's TMU
-//! configuration words by uniform71's name; and the `v3d_job71_draw` fill71
-//! hands over has no TMU table (`tmu` null, `num_tmu` 0). So the textured
-//! draw does not reach a job, and what is compared with the clif is:
+//! What `glue71::ops` and `fill71::fill` do (pinned): `ops` refuses any draw
+//! that samples a texture (`REF_TEXTURES`, `GLUE71_REFUSALS[4]`) before
+//! mapping it; with the texture taken out of the GlesDraw, `fill` refuses
+//! our program's TMU configuration words by uniform71's name; and the
+//! `v3d_job71_draw` `fill` hands over has no TMU table (`tmu` null,
+//! `num_tmu` 0). Through that path, what is compared with the clif is:
 //!
 //! * the shader record of the same draw with our program's texture words
 //!   left out of its fragment stream (every field the clif prints, by name;
@@ -36,10 +36,14 @@
 //!   1, resolved by texuni71 with the record addresses Mesa used, are Mesa's
 //!   words.
 //!
-//! The textured draw through glue71 itself is the `#[ignore]`d test
-//! [`the_textured_draw_fills_through_glue71`]: glue71 has no texture input
-//! (no sampler binding, no texture or sampler record address in
-//! `DrawInputs`) and fill71 no TMU table to hand to `v3d_job71_draw`.
+//! The textured draw goes through `glue71::ops_textured` (the TMU table the
+//! table placed, `glue71::TexInputs`) and `fill71::fill_textured`
+//! ([`the_textured_draw_fills_through_glue71`]): it fills, the fragment
+//! stream v3d_job71 writes from the program's list and the table is Mesa's
+//! (P0 and P1), the shader record is the untextured draw's, and
+//! `v3d_job71_draw` gets one TMU entry for unit 0. The tables are checked by
+//! name ([`the_textured_draws_tables_are_checked_by_name`]); a draw without
+//! textures fills through that path as through `fill`.
 //!
 //! The program is linked by the online compiler's 7.1 back end, so the file
 //! builds only with `shaderc-online` and `gpu-v3d` (the gate's other feature
@@ -695,12 +699,113 @@ fn our_texture_uniforms_resolve_to_mesas_words() {
     }
 }
 
-/// The gap: glue71 takes no texture (P10). When it does, the textured draw
-/// fills, its fragment stream holds Mesa's P0/P1 words, and
-/// `v3d_job71_draw` gets one TMU entry for unit 0.
+/// Job `n`'s TMU table entry for unit 0: the records Mesa placed (the
+/// table's placement, read from the dump) and the base level's size.
+fn tmu_of_job(n: usize) -> ffi71::V3dJob71Tmu {
+    let mesa = jobs()[n].fs_stream();
+    ffi71::V3dJob71Tmu {
+        unit: 0,
+        tex_state: mesa[0] & !(texuni71::TEX_STATE_ALIGN - 1),
+        sampler: mesa[1] & !(texuni71::SAMPLER_STATE_ALIGN - 1),
+        width: SIZE,
+        height: SIZE,
+        depth: 1,
+        array_size: 1,
+    }
+}
+
+/// gl_tex2d's draw `linear` through `glue71::ops_textured` and
+/// `fill71::fill_textured` with the TMU table `fs`.
+fn fill_textured<'t>(
+    linear: bool,
+    fs: &'t [ffi71::V3dJob71Tmu],
+) -> Result<Vec<fill71::TexFilledJob<'t>>, fill71::Refusal> {
+    let d = tex2d_draw(linear);
+    let f = frame(&d);
+    let attrs = glue71::attrs(&d, &[])?;
+    let input = glue71::DrawInputs {
+        program: program(true),
+        attrs: &attrs,
+        vs_words: &[],
+        fs_words: &[],
+        dummy_addr: G_VTX,
+        oq_addr: 0,
+        indices: None,
+    };
+    let t = glue71::ops_textured(&d, &f, Some(&input), &glue71::TexInputs { fs, vs: &[] })?;
+    assert!(matches!(t.ops.as_slice(), [Op::Clear(_), Op::Draw(_)]));
+    assert_eq!(t.tmu.len(), 1, "one TMU table pair for the one draw");
+    fill71::fill_textured(&f.framebuffer(G_TILE), record71::BCM2712_D0, &History::NEW, &clear_quad(), &t.ops, &t.tmu)
+}
+
+/// P10: the textured draw fills through glue71, its fragment stream holds
+/// Mesa's P0/P1 words, and `v3d_job71_draw` gets one TMU entry for unit 0.
 #[test]
-#[ignore = "glue71 has no texture input: a draw with num_textures != 0 is REF_TEXTURES, DrawInputs carries no texture/sampler record addresses, fill71 hands v3d_job71_draw no TMU table (P10)"]
 fn the_textured_draw_fills_through_glue71() {
+    for (n, job) in jobs().iter().enumerate() {
+        let table = [tmu_of_job(n)];
+        let jobs = fill_textured(n == 1, &table).expect("glue71 and fill71 fill the textured draw");
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].job.draws.len(), 1, "the clear is fused: the GL draw alone, as Mesa's job");
+        let fd = &jobs[0].job.draws[0];
+        /* the stream v3d_job71 writes from the program's own list (the TMU
+         * words with their contents) and the table is Mesa's */
+        let vp = uniform71::Viewport { scale: fd.state.vp.scale, translate: fd.state.vp.translate };
+        let stream: Vec<u32> = fd
+            .fs_uniforms
+            .iter()
+            .map(|u| match fill71::tmu_word(u.contents, u.data, &table) {
+                Some(w) => w.unwrap(),
+                None => uniform71::word(uniform71::Word { contents: u.contents, data: u.data }, &vp, &[]).unwrap(),
+            })
+            .collect();
+        assert!(fd.fs_uniforms.iter().any(|u| u.contents == texuni71::TMU_CONFIG_P0));
+        assert!(fd.fs_uniforms.iter().any(|u| u.contents == texuni71::TMU_CONFIG_P1));
+        assert_eq!(stream, job.fs_stream(), "job {n}: the fragment stream, P0 and P1");
+        /* the record is the untextured draw's: the texture words change no
+         * field of it */
+        let r = record_of(fd, job);
+        let plain = fill_untextured(n == 1, program(false)).unwrap();
+        let p = record_of(&plain[0].draws[0], job);
+        for i in 0..record71::FIELDS.len() {
+            assert_eq!(r.value(i), p.value(i), "job {n}: {}", record71::FIELDS[i].name);
+        }
+        /* one TMU entry for v3d_job71_draw, none for the vertex stages */
+        let ffi = jobs[0].ffi(0);
+        assert_eq!(ffi.num_tmu, 1, "one sampler binding for v3d_job71_draw");
+        assert!(ffi.vs_tmu.is_null() && ffi.num_vs_tmu == 0);
+        // SAFETY: `num_tmu` entries of `table`, which outlives `ffi`.
+        let t = unsafe { *ffi.tmu };
+        let mesa = job.fs_stream();
+        assert_eq!((t.unit, t.tex_state, t.sampler), (0, mesa[0] & !31, mesa[1] & !7));
+        assert_eq!((t.width, t.height, t.depth, t.array_size), (SIZE, SIZE, 1, 1));
+    }
+}
+
+#[test]
+fn the_textured_draws_tables_are_checked_by_name() {
+    let table = [tmu_of_job(0)];
+    let own = |e: fill71::Refusal, module: &str, reasons: &[&str]| {
+        assert_eq!(e.module, module, "{}", e.reason);
+        assert!(reasons.contains(&e.reason.as_str()), "{}", e.reason);
+    };
+    /* no table, or one for another unit: glue71 names the bindings */
+    own(fill_textured(false, &[]).unwrap_err(), "glue71", &glue71::GLUE71_TEX_REFUSALS);
+    let mut other = table;
+    other[0].unit = 1;
+    own(fill_textured(false, &other).unwrap_err(), "glue71", &glue71::GLUE71_TEX_REFUSALS);
+    /* a record address with a field's bits set, a size of 0: v3d_job71's
+     * rules, named by fill71 */
+    let mut bad = table;
+    bad[0].sampler |= 4;
+    own(fill_textured(false, &bad).unwrap_err(), "fill71", &fill71::FILL71_TEX_REFUSALS);
+    let mut bad = table;
+    bad[0].tex_state = 0;
+    own(fill_textured(false, &bad).unwrap_err(), "fill71", &fill71::FILL71_TEX_REFUSALS);
+    assert!(fill71::tmu_word(texuni71::TEXTURE_WIDTH, 0, &[ffi71::V3dJob71Tmu { width: 0, ..table[0] }])
+        .unwrap()
+        .is_err());
+    /* fill71 wants one table pair per draw */
     let d = tex2d_draw(false);
     let f = frame(&d);
     let attrs = glue71::attrs(&d, &[]).unwrap();
@@ -713,19 +818,46 @@ fn the_textured_draw_fills_through_glue71() {
         oq_addr: 0,
         indices: None,
     };
-    let ops = glue71::ops(&d, &f, Some(&input)).expect("glue71 maps the textured draw");
-    assert!(matches!(ops.as_slice(), [Op::Clear(_), Op::Draw(_)]));
-    let jobs = fill71::fill(&f.framebuffer(G_TILE), record71::BCM2712_D0, &History::NEW, &clear_quad(), &ops)
-        .expect("fill71 fills the TMU configuration words");
-    let ffi = jobs[0].draws[0].ffi();
-    assert_eq!(ffi.num_tmu, 1, "one sampler binding for v3d_job71_draw");
-    // SAFETY: `num_tmu` entries the filled draw owns.
-    let t = unsafe { *ffi.tmu };
-    let mesa = jobs_ref_fs(0);
-    assert_eq!((t.unit, t.tex_state, t.sampler), (0, mesa[0] & !31, mesa[1] & !7));
-    assert_eq!((t.width, t.height, t.depth, t.array_size), (SIZE, SIZE, 1, 1));
+    let t = glue71::ops_textured(&d, &f, Some(&input), &glue71::TexInputs { fs: &table, vs: &[] }).unwrap();
+    let fb = f.framebuffer(G_TILE);
+    let e = fill71::fill_textured(&fb, record71::BCM2712_D0, &History::NEW, &clear_quad(), &t.ops, &[]).unwrap_err();
+    own(e, "fill71", &fill71::FILL71_TEX_REFUSALS);
+    let two = [t.tmu[0], t.tmu[0]];
+    let e = fill71::fill_textured(&fb, record71::BCM2712_D0, &History::NEW, &clear_quad(), &t.ops, &two).unwrap_err();
+    own(e, "fill71", &fill71::FILL71_TEX_REFUSALS);
 }
 
-fn jobs_ref_fs(n: usize) -> Vec<u32> {
-    jobs()[n].fs_stream()
+#[test]
+fn an_untextured_draw_fills_through_the_textured_path_as_through_fill() {
+    let mut d = tex2d_draw(false);
+    d.num_textures = 0;
+    let f = frame(&d);
+    let attrs = glue71::attrs(&d, &[]).unwrap();
+    let input = glue71::DrawInputs {
+        program: program(false),
+        attrs: &attrs,
+        vs_words: &[],
+        fs_words: &[],
+        dummy_addr: G_VTX,
+        oq_addr: 0,
+        indices: None,
+    };
+    let t = glue71::ops_textured(&d, &f, Some(&input), &glue71::TexInputs::default()).unwrap();
+    let fb = f.framebuffer(G_TILE);
+    let tex = fill71::fill_textured(&fb, record71::BCM2712_D0, &History::NEW, &clear_quad(), &t.ops, &t.tmu).unwrap();
+    let plain = fill_untextured(false, program(false)).unwrap();
+    assert_eq!(tex.len(), plain.len());
+    for (a, b) in tex.iter().zip(&plain) {
+        assert_eq!((a.job.target, a.job.clear, a.job.after), (b.target, b.clear, b.after));
+        assert_eq!(a.job.draws.len(), b.draws.len());
+        for (k, (x, y)) in a.job.draws.iter().zip(&b.draws).enumerate() {
+            assert_eq!(
+                (x.state, x.attrs.clone(), x.fs_uniforms.clone()),
+                (y.state, y.attrs.clone(), y.fs_uniforms.clone())
+            );
+            assert_eq!((x.prim, x.count, x.first, x.instances), (y.prim, y.count, y.first, y.instances));
+            let ffi = a.ffi(k);
+            assert!(ffi.tmu.is_null() && ffi.num_tmu == 0 && ffi.vs_tmu.is_null() && ffi.num_vs_tmu == 0);
+        }
+    }
 }

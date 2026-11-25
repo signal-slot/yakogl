@@ -78,6 +78,24 @@
 //! * The depth and stencil tests of a draw are off on a framebuffer without
 //!   that plane (ES 3.0 4.1.5, 4.1.4).
 //!
+//! # Textured draws (P10)
+//!
+//! [`fill`] refuses a program that reads a texture (`uniform71` names the
+//! TMU configuration and texture size words). [`fill_textured`] takes, next
+//! to the operations, one [`DrawTmu`] per [`Op::Draw`]: the draw's sampler
+//! bindings as `v3d_job71_draw` takes them (`struct v3d_job71_tmu`, the
+//! record addresses the table placed and the base level's size;
+//! backend71tex places them). It checks every texture word of the draw's
+//! streams against its table by v3d_job71.c's own rules (`tmu_config` and
+//! the `TEXTURE_*` cases of `write_uniforms`: a binding given, an address
+//! not 0 whose low bits are not a field of the word, no payload bit outside
+//! the fields, a size not 0), stated again here as [`tmu_word`] (this module
+//! reads no texuni71, whose P0 rule is Mesa's stricter 32-byte alignment),
+//! and leaves the words to the C builder: the filled lists are the
+//! program's own, texture words included, and [`TexFilledJob::ffi`] hands
+//! `v3d_job71_draw` the tables. A draw without textures fills through
+//! [`fill_textured`] exactly as through [`fill`] (with an empty [`DrawTmu`]).
+//!
 //! # Using the result
 //!
 //! For each [`FilledJob`]: `v3d_job71_begin(&job, &filled.target, ...)`,
@@ -125,6 +143,20 @@ const REF_SEPARATE_STENCIL: &str = "V3D 7.1: a DEPTH32F_STENCIL8 buffer (a separ
 const REF_COLOR_COUNT: &str = "V3D 7.1: more colour attachments than render targets";
 const REF_RGB_BLEND_ALPHA: &str =
     "V3D 7.1: a blend reading destination alpha on a format without alpha is not filled yet";
+
+/// The refusals of [`fill_textured`] (module `fill71`): the TMU table
+/// rules of v3d_job71.c (`tmu_config`, `write_uniforms`) and the table count.
+pub const FILL71_TEX_REFUSALS: [&str; 6] =
+    [REF_TMU_COUNT, REF_TMU_TWICE, REF_TMU_UNIT, REF_TMU_ADDRESS, REF_TMU_PAYLOAD, REF_TMU_SIZE];
+
+const REF_TMU_COUNT: &str = "V3D 7.1: the TMU tables are not one per draw of the flush";
+const REF_TMU_TWICE: &str = "V3D 7.1: a stage's TMU table binds the same sampler unit twice";
+const REF_TMU_UNIT: &str = "V3D 7.1: a texture uniform names a sampler unit the draw's TMU table does not bind";
+const REF_TMU_ADDRESS: &str =
+    "V3D 7.1: a TMU record address is 0 or has low bits that are a field of its configuration word";
+const REF_TMU_PAYLOAD: &str =
+    "V3D 7.1: a TMU configuration uniform has payload bits outside the word's fields (P0: 0..3, P1: 0..2)";
+const REF_TMU_SIZE: &str = "V3D 7.1: a texture size uniform reads a size the TMU table leaves 0";
 
 fn refuse(reason: &str) -> Refusal {
     Refusal { module: "fill71", reason: reason.to_string() }
@@ -638,6 +670,7 @@ fn build_draw(
     fb: &Framebuffer<'_>,
     rev: record71::Revision,
     d: &DrawIn<'_>,
+    tmu: Option<&DrawTmu<'_>>,
     open: &mut Open,
     is_clear: bool,
 ) -> Result<FilledDraw, Refusal> {
@@ -765,9 +798,20 @@ fn build_draw(
 
     /* the uniform streams: every word must be one 7.1 fills */
     let vp = uniform71::Viewport { scale, translate };
-    for (list, words) in [(p.fs_uniforms, d.fs_words), (p.vs_uniforms, d.vs_words), (p.cs_uniforms, d.vs_words)] {
+    let none: &[ffi71::V3dJob71Tmu] = &[];
+    let (fs_tmu, vs_tmu) = tmu.map_or((none, none), |t| (t.fs, t.vs));
+    for (list, words, table) in
+        [(p.fs_uniforms, d.fs_words, fs_tmu), (p.vs_uniforms, d.vs_words, vs_tmu), (p.cs_uniforms, d.vs_words, vs_tmu)]
+    {
         let mut out = vec![0u32; list.len()];
-        uniform71::fill(list, &vp, words, &mut out).map_err(named("uniform71"))?;
+        match tmu {
+            /* fill: the texture words are uniform71's refusal */
+            None => uniform71::fill(list, &vp, words, &mut out),
+            /* fill_textured: each texture word is checked against the
+             * table, the others are uniform71's */
+            Some(_) => uniform71::fill(&tex_resolved(list, table)?, &vp, words, &mut out),
+        }
+        .map_err(named("uniform71"))?;
     }
 
     let fs_uniforms = uniforms(p.fs_uniforms);
@@ -909,7 +953,7 @@ fn clear_quad(
         fs_words: &fs_words,
         oq_addr: 0,
     };
-    let mut fd = build_draw(fr, fb, rev, &d, open, true)?;
+    let mut fd = build_draw(fr, fb, rev, &d, None, open, true)?;
     fd.quad = Some([[x0, y0, z, 1.0], [x1, y0, z, 1.0], [x1, y1, z, 1.0], [x0, y1, z, 1.0]]);
     Ok(fd)
 }
@@ -968,16 +1012,41 @@ pub fn fill(
     quad: &ClearQuad<'_>,
     ops: &[Op<'_>],
 ) -> Result<Vec<FilledJob>, Refusal> {
+    Ok(fill_ops(fb, rev, hist, quad, ops, None)?.into_iter().map(|(job, _)| job).collect())
+}
+
+/// [`fill`] with the draws' TMU tables (`tex` given: one per [`Op::Draw`],
+/// in order) or without (`None`: [`fill`]'s refusal of every texture word).
+/// Each job comes with one [`DrawTmu`] per draw, empty for a clear quad.
+fn fill_ops<'t>(
+    fb: &Framebuffer<'_>,
+    rev: record71::Revision,
+    hist: &History,
+    quad: &ClearQuad<'_>,
+    ops: &[Op<'_>],
+    tex: Option<&[DrawTmu<'t>]>,
+) -> Result<Vec<(FilledJob, Vec<DrawTmu<'t>>)>, Refusal> {
     let fr = frame(fb)?;
     let nt = fb.colors.len();
     let mut jobs = Vec::new();
     let mut hist = *hist;
     let mut open = Open::new();
+    let mut open_tmu: Vec<DrawTmu<'t>> = Vec::new();
+    let mut next_tmu = 0usize;
     for op in ops {
         match op {
             Op::Draw(d) => {
-                let fd = build_draw(&fr, fb, rev, d, &mut open, false)?;
+                let t = match tex {
+                    None => None,
+                    Some(list) => {
+                        let t = list.get(next_tmu).copied().ok_or_else(|| refuse(REF_TMU_COUNT))?;
+                        next_tmu += 1;
+                        Some(t)
+                    }
+                };
+                let fd = build_draw(&fr, fb, rev, d, t.as_ref(), &mut open, false)?;
                 open.draws.push(fd);
+                open_tmu.push(t.unwrap_or_default());
             }
             Op::Clear(req) => {
                 let mut targets = [clearplan71::TargetIn { cleared: false, mask: 0 }; clearplan71::MAX_TARGETS];
@@ -1010,7 +1079,7 @@ pub fn fill(
                         if new_job {
                             let done = end_job(&fr, &hist, core::mem::replace(&mut open, Open::new()))?;
                             hist = done.after;
-                            jobs.push(done);
+                            jobs.push((done, core::mem::take(&mut open_tmu)));
                         }
                         let zk = |on: bool, v: u32| {
                             if on {
@@ -1061,13 +1130,120 @@ pub fn fill(
                         open.z.apply(route.z);
                         open.s.apply(route.s);
                         open.draws.push(fd);
+                        open_tmu.push(DrawTmu::default());
                     }
                 }
             }
         }
     }
+    if tex.is_some_and(|list| list.len() != next_tmu) {
+        return Err(refuse(REF_TMU_COUNT));
+    }
     if open.touched {
-        jobs.push(end_job(&fr, &hist, open)?);
+        jobs.push((end_job(&fr, &hist, open)?, open_tmu));
     }
     Ok(jobs)
+}
+
+/* ---- textured draws (P10) ------------------------------------------------------ */
+
+/// One draw's sampler bindings, as `v3d_job71_draw` takes them: the
+/// fragment stream's (`tmu`) and the vertex and coordinate streams'
+/// (`vs_tmu`). Empty: a draw that samples nothing.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DrawTmu<'a> {
+    pub fs: &'a [ffi71::V3dJob71Tmu],
+    pub vs: &'a [ffi71::V3dJob71Tmu],
+}
+
+/// One job of [`fill_textured`]: the job and, per draw of
+/// [`FilledJob::draws`], its sampler bindings (empty for a clear quad).
+#[derive(Debug)]
+pub struct TexFilledJob<'a> {
+    pub job: FilledJob,
+    pub tmu: Vec<DrawTmu<'a>>,
+}
+
+impl TexFilledJob<'_> {
+    /// Draw `n`'s `struct v3d_job71_draw` ([`FilledDraw::ffi`]) with its
+    /// TMU tables; the pointers point into `self` and the caller's tables.
+    pub fn ffi(&self, n: usize) -> V3dJob71Draw {
+        let mut d = self.job.draws[n].ffi();
+        let t = self.tmu[n];
+        let ptr = |v: &[ffi71::V3dJob71Tmu]| if v.is_empty() { core::ptr::null() } else { v.as_ptr() };
+        (d.tmu, d.num_tmu) = (ptr(t.fs), t.fs.len() as u32);
+        (d.vs_tmu, d.num_vs_tmu) = (ptr(t.vs), t.vs.len() as u32);
+        d
+    }
+}
+
+/// [`fill`] for draws that sample textures: `tmu` holds one [`DrawTmu`]
+/// per [`Op::Draw`] of `ops`, in order (an empty one for a draw without
+/// textures). See the module docs, "Textured draws (P10)".
+pub fn fill_textured<'t>(
+    fb: &Framebuffer<'_>,
+    rev: record71::Revision,
+    hist: &History,
+    quad: &ClearQuad<'_>,
+    ops: &[Op<'_>],
+    tmu: &[DrawTmu<'t>],
+) -> Result<Vec<TexFilledJob<'t>>, Refusal> {
+    for t in tmu {
+        for table in [t.fs, t.vs] {
+            if table.iter().enumerate().any(|(i, a)| table[..i].iter().any(|b| b.unit == a.unit)) {
+                return Err(refuse(REF_TMU_TWICE));
+            }
+        }
+    }
+    let jobs = fill_ops(fb, rev, hist, quad, ops, Some(tmu))?;
+    Ok(jobs.into_iter().map(|(job, tmu)| TexFilledJob { job, tmu }).collect())
+}
+
+/// The word v3d_job71 writes for a texture uniform (`contents` 40, 41 or
+/// 44 to 47) of a stream bound to `table`, or the refusal for what it would
+/// not write (v3d_job71.c `tmu_config` and `write_uniforms`). `None`: not a
+/// texture uniform.
+pub fn tmu_word(contents: u32, data: u32, table: &[ffi71::V3dJob71Tmu]) -> Option<Result<u32, Refusal>> {
+    use uniform71::{TEXTURE_ARRAY_SIZE, TEXTURE_DEPTH, TEXTURE_HEIGHT, TEXTURE_WIDTH, TMU_CONFIG_P0, TMU_CONFIG_P1};
+    let find = |unit: u32| table.iter().find(|t| t.unit == unit).ok_or_else(|| refuse(REF_TMU_UNIT));
+    Some(match contents {
+        TMU_CONFIG_P0 | TMU_CONFIG_P1 => find(data >> 24).and_then(|t| {
+            let p0 = contents == TMU_CONFIG_P0;
+            let fields = if p0 { 0xf } else { 0x7 };
+            let addr = if p0 { t.tex_state } else { t.sampler };
+            let payload = data & 0x00ff_ffff;
+            if addr == 0 || addr & fields != 0 {
+                Err(refuse(REF_TMU_ADDRESS))
+            } else if payload & !fields != 0 {
+                Err(refuse(REF_TMU_PAYLOAD))
+            } else {
+                Ok(addr | payload)
+            }
+        }),
+        TEXTURE_WIDTH | TEXTURE_HEIGHT | TEXTURE_DEPTH | TEXTURE_ARRAY_SIZE => find(data).and_then(|t| {
+            let v = match contents {
+                TEXTURE_WIDTH => t.width,
+                TEXTURE_HEIGHT => t.height,
+                TEXTURE_DEPTH => t.depth,
+                _ => t.array_size,
+            };
+            if v == 0 {
+                Err(refuse(REF_TMU_SIZE))
+            } else {
+                Ok(v)
+            }
+        }),
+        _ => return None,
+    })
+}
+
+/// `list` with each texture word as the `CONSTANT` v3d_job71 will write for
+/// it from `table` (the list uniform71 then checks the stream with).
+fn tex_resolved(list: &[uniform71::Word], table: &[ffi71::V3dJob71Tmu]) -> Result<Vec<uniform71::Word>, Refusal> {
+    list.iter()
+        .map(|w| match tmu_word(w.contents, w.data, table) {
+            None => Ok(*w),
+            Some(v) => Ok(uniform71::Word { contents: uniform71::CONSTANT, data: v? }),
+        })
+        .collect()
 }
