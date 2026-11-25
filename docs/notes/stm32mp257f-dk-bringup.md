@@ -459,8 +459,8 @@ runner record directory name) and folds the findings into the pre-study
 ### The `gl_test` regression set (2026-11-24, `a5f1dc8e`): 5 FAIL, 1 SKIP, 44 PASS
 
 The whole 50-case `SET_ORDER` (`driver/tools/pvrlab/runner/src/lib.rs:53-54`)
-fits one run in the 100 s lifetime (back on Linux after 58-70 s). Images from
-origin/main `a5f1dc8e`. Two runs: `20261124-1038-gl_test_set-a5f1dc8e` (default
+fits one run in the 100 s lifetime (back on Linux after 58-70 s). Images
+built from `a5f1dc8e` (origin/main). Two runs: `20261124-1038-gl_test_set-a5f1dc8e` (default
 image, case 10 skipped by `GL_TEST_MP2_SKIP`) and
 `20261124-1044-gl_test_all-a5f1dc8e` (`GL_TEST_MP2_SKIP=""`, the whole set; the
 reading below). Tally:
@@ -469,9 +469,9 @@ reading below). Tally:
 
 - runner: `board-stm32mp2.sh stm32mp257f-dk gl_test_all rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s`
 - judged on the captured serial console: `rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:gl_test`
-- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py`): new failures 6, 11, 47, 182, 189; flaky 0; expected 0; stale 1 (case 10); skip differences 0; no verdict 1 (case 16). Last line:
+- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py`): new failures 6, 11, 47, 182, 189; flaky 0; expected 0; stale 1 (case 10); skip differences 0; case 16 counts as a verdict through its own SKIP line (commit `1e546068`). Last line:
 
-`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 1`
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0`
 
 Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools/pvrlab/gl_test.c`):
 
@@ -528,14 +528,18 @@ Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools
 | 17 | ctx2 | PASS |
 | 18 | image | PASS |
 
-- Case 10 (`prims`) ran in the whole-set run and **passed**. It is on `tools/cts/mp2-gltest-expected.txt` as pending Q11, so the diff calls the entry stale. This is evidence for Q11, read in `docs/notes/stm32mp257f-dk-p9.md` section 4 (a later item updates that note).
-- Case 16 (`msaa`) skips itself without a 4x config (`driver/tools/pvrlab/runner/src/lib.rs:65`), so it has no verdict and the diff counts it as missing; it is a SKIP, not a pass.
+- Case 10 (`prims`) ran in the whole-set run and **passed**. It is on `tools/cts/mp2-gltest-expected.txt` as pending Q11, so the diff calls the entry stale. Its check 11 (`loop: 3 px wide`) passes, so the hardware draws width 3 as at least 2 px. The one-case Q11 runs and the decision are in `docs/notes/stm32mp257f-dk-p9.md` section 6 (record `20261124-1344-q11_case10-0eca6ffc`).
+- Case 16 (`msaa`) skips itself without a 4x config (`driver/tools/pvrlab/runner/src/lib.rs:65`), and prints a SKIP line, which `mp2-gltest-diff` (since `1e546068`) counts as its verdict; it is a SKIP, not a pass.
 - After the runs `u-boot-env` read back identical to the baseline digest and `/boot` was the same 25 files with no yakogl directory.
 
 Ramlog, no console: board evidence, not a row (ramlog-trial, 2026-11-24, `384dd08d`; "The return trial through the RAM ring" above). These blind runs do not replace rows 1 and 2, which rest on the console:
 
 - return trial, ends: `20261124-0242-mp2_hello-e47f2db8`, `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=58s`; the ring did not come back (`ramlog=missing`), and `dk_verdict.py --expect return-trial` on the empty text gives `verdict return-trial banner=FAIL psci-reset=FAIL` (no evidence, not a board fault).
 - return trial, watchdog-caught hang: `20261124-0247-mp2_hello_hang-e00ebc6d`, `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=76s`; `ramlog=missing`, and `dk_verdict.py --expect hang-trial` gives `verdict hang-trial banner=FAIL hang-line=FAIL no-psci-reset=FAIL` (the same: no evidence).
+
+RAM ring, settled (commit `c1a6a35d`, record `20261124-1118-mp2_hello-bb11a30b`, run with the serial console attached): the DK's warm reset, both the PSCI reset and the IWDG one, does not keep DDR, so nothing written to a RAM ring survives into U-Boot. The blind trials' empty ring was this, not a snippet or ordering fault. This is a documented limit: the runner reports `ramlog=missing:ddr_lost_in_warm_reset`, covered by the host selftest `tools/probes/stm32mp257f_dk/ramlog/selftest.sh`. A DK verdict needs the console.
+
+Records are gitignored, under `records/stm32mp257f-dk/` on the machine that ran them; they are cited by name only.
 
 ### How steps 1-4 were run and judged (2026-11-21)
 
