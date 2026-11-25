@@ -13,22 +13,35 @@ W=$(mktemp -d "$TMPDIR/accept-selftest.XXXXXX") || exit 2
 trap 'rm -rf "$W"' EXIT
 H=$(git -C "$ROOT" rev-parse --short=8 HEAD) || exit 2
 
-# synth NOTE-OUT COMMIT: fill every table row and add 33 bullets.
+# synth NOTE-OUT COMMIT|skeleton: built from the real note, which board
+# sessions fill in over time (it may be a skeleton or finished). Its own
+# '- **[' bullets are dropped; then either every row is filled, the skeleton
+# phrases scrubbed and 33 bullets added, or every row is reset to the skeleton
+# and the skeleton phrases added.
 synth() {
     python3 - "$SKEL" "$1" "$2" <<'PY'
 import sys
 src, dst, sha = sys.argv[1:4]
 out, scenes = [], []
 for line in open(src).read().split("\n"):
+    if line.startswith("- **["):
+        continue
     if line.startswith("| ["):
         c = [x.strip() for x in line.strip().strip("|").split("|")]
         scenes.append(c[0])
-        line = ("| %s | %s | records/imx8mp/20261124-1200-scene-%s/ | dump | right |"
-                % (c[0], sha, sha))
-    for k in ("Not yet established", "To fill in", "Skeleton: no scene"):
-        line = line.replace(k, "Established")
+        if sha == "skeleton":
+            line = "| %s | - | - | - | not yet looked at |" % c[0]
+        else:
+            line = ("| %s | %s | records/imx8mp/20261124-1200-scene-%s/ | dump | right |"
+                    % (c[0], sha, sha))
+    if sha != "skeleton":
+        for k in ("Not yet established", "To fill in", "Skeleton: no scene"):
+            line = line.replace(k, "Established")
     out.append(line)
-out +=[""] + ["- **%s**: looked at it." % s for s in scenes]
+if sha == "skeleton":
+    out.append("Skeleton: no scene looked at. Not yet established. To fill in.")
+else:
+    out += [""] + ["- **%s**: looked at it." % s for s in scenes]
 open(dst, "w").write("\n".join(out) + "\n")
 PY
 }
@@ -49,7 +62,8 @@ expect() { # label output pattern...
 }
 A() { bash "$ACC" --main HEAD --no-fetch --skip c2 "$@" 2>&1; }
 
-out=$(A --note "$SKEL"); st=$?
+synth "$W/skel.md" skeleton
+out=$(A --note "$W/skel.md"); st=$?
 expect "skeleton fails c1 and c4" "$out" '^c1 FAIL' '^c4 FAIL'
 if [ $st -eq 0 ]; then echo "FAIL  skeleton exits 0"; fail=1; fi
 
