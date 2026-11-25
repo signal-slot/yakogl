@@ -944,7 +944,7 @@ malicheck 48 mali-rerun-tree-selftest.sh 26
 # 49: mali-rerun-tree.py output through mali-deqp-run.sh on the fake board.
 malicheck 49 mali-rerun-e2e-selftest.sh 16
 # 50: mali-fail-triage.py drafts the cause table and issue list from slices.
-malicheck 50 mali-fail-triage-selftest.sh 15
+malicheck 50 mali-fail-triage-selftest.sh 16
 # 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
 malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
