@@ -568,17 +568,19 @@ needs no board. `python3 -I tools/imx95_mkboot_selftest.py` passes (61
 checks, 0 failed). Toradex's public `imx-boot-sd` (`TZ:`) fetched from
 `artifacts.toradex.com` is 2449408 bytes with sha256 `675a8572...` as `TZ:`
 states; `check --limit 0x3FDE00` on it passes ("container 2 at 0xc3400, 3
-images (bl31, bl33, tee), ends at 0x256000"). `build --base imx-boot-sd
---image X --limit boot1` with a 4096-byte placeholder X (an AArch64 Image
-header and zeros, not a Zephyr build) gives a 1486848-byte image, sha256
-`852b7048...` (the full sha256 is `852b70487137d8b2c10ca91eb4fa8844a73f371fe0bc0d65eec01efa7eebcd52`),
-whose container 2 has 4 images (bl31, the 0x400-byte trampoline, tee,
-`image@0xd0000000`), ends at 0x16b000 and passes `check` against the `boot1`
-limit 0x1F7DC00. That output carries Toradex's bytes and is neither committed
-nor written anywhere. Still missing before a board session can try it: (1) a
-real image, `imx95_wdog` or `gl_test` built from one origin/main commit, in
-place of the placeholder, and for the counted way back the second-stage
-loader of `driver/samples/zephyr/boot_stage2` with `--bl33` and the `count`
+images (bl31, bl33, tee), ends at 0x256000"). `build --base imx-boot-sd --image zephyr.bin --limit boot1` with a real
+`gl_test` image (`west build -b verdin_imx95/mimx9596/a55
+driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON` at main `bdd2ba1c`,
+full `bdd2ba1c9fe0567624b6fd945cfaa0ed3f4e9901`; `zephyr.bin` 4751520 bytes,
+sha256 `eb615b87d0cdcc8c6efedeb7ca8f33b39c7c7ac11a402ab4d85a69f94f34ad5c`,
+RAM 90888 KB of 256 MB) gives a 6235136-byte image, sha256
+`17c21a5d572d53ebbb457dcb529de7ed09b16eef55a9e4a975854d3eec80b05a`, whose
+container 2 has 4 images (bl31, the 0x400-byte trampoline, tee,
+`image@0xd0000000` of 0x488400 bytes), ends at 0x5f2400 and passes `check`
+against the `boot1` limit 0x1F7DC00 (the earlier build with a 4096-byte
+placeholder payload was 1486848 bytes). That output carries Toradex's bytes and is neither committed
+nor written anywhere. Still missing before a board session can try it: (1) for
+the counted way back, the second-stage loader of `driver/samples/zephyr/boot_stage2` with `--bl33` and the `count`
 record; (2) the board's own boot0 dump as `--base` (D1), since Toradex's
 `imx-boot-sd` is the published image, not necessarily the module's; (3) the
 board steps of section 9 (D2 onward), none of which has run. Without `--base`
