@@ -2,12 +2,17 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the wrong pixels of bool/bvec shaders on the NanoPC-T6 (issue #11306)
 
-**Status: investigation** (plan #387, item `fclane-lower-2`; issues #11306,
-#7). No compiler change. The item added the Mesa 26.2.1 references
-`tools/mali/testdata/deqp_boolpix_*` (29 shapes) and their pin test
-`tests/mali_deqp_boolpix.rs`. It also added the five `lk_*` names to
-`tests/mali_ref/mod.rs` `STRUCT_VALUES`: they are drawn with struct-member
-values. Sites are `file:line` at the tip `f70946ff`, read only.
+**Status: investigation; all three causes landed after the note's tip**
+(plan #387, item `fclane-lower-2`; issues #11306, #7). The item added the
+Mesa 26.2.1 references `tools/mali/testdata/deqp_boolpix_*` (29 shapes)
+and their pin test `tests/mali_deqp_boolpix.rs`, changed no compiler code,
+and added the five `lk_*` names to `tests/mali_ref/mod.rs` `STRUCT_VALUES`:
+they are drawn with struct-member values. Sites are `file:line` at the
+note's tip `f70946ff`, read only. Since then `c9eb0307` and `397351b3`
+landed BW, `d3876279` fixed D1 and `9fa5bbe0` fixed LK: five rows of
+section 5 are byte-equal now and moved to the test's LOWERED list, and the
+two `lk_*_vec4` rows are refused (`MaliError::FsUniform`) until their
+member read narrows as Mesa's does.
 
 ## 0. Summary
 
@@ -28,16 +33,25 @@ give the same values. So the words cannot be what draws them wrong. What is
 left is the value the words read: the uniform `ref_out0` (a `bool`/`bvecN`)
 that dEQP's `isOk` compares against.
 
-Fix order by cases (section 6):
+Fix order by cases (section 6). All three landed after the note's tip;
+what is left is the board (section 7):
 
 1. BW, 277 cases. The driver writes Mesa's `~0`: step 2 (D1) of
-   `docs/notes/mali-unif2-lowering.md` section 5.
+   `docs/notes/mali-unif2-lowering.md` section 5. Landed at `c9eb0307`
+   and `397351b3`. Board: 277 rows to confirm.
 2. LK, 12 cases. The mediump fp16 block keeps a struct member fp32 in the
    `bool_colour` and `int_colour16` routes, as every other route does.
-3. D1, 10 cases. The odd lane's half.
+   Landed at `9fa5bbe0`: the six non-`vec4` cases are byte-equal at the
+   tip; the six `uniform_struct{,_fragment_only}_vec4*` cases are refused
+   (`MaliError::FsUniform`) until their two-member read narrows as Mesa's
+   does.
+3. D1, 10 cases. The odd lane's half. Landed at `d3876279`: 9 of the 10
+   to-`ivec` pairs are Mesa's words at the tip, `bvec3_float_to_ivec4`
+   left by the FP pairing (section 4).
 
-Host forecast: 299 of 299 pass once all three land, under the caveats of
-section 7.
+Host forecast: 299 of 299 pass once the three causes are settled, under
+the caveats of section 7; at the tip the six refused `*_vec4*` cases need
+the mediump FS uniform lowering too before they draw anything.
 
 ## 1. Inputs and method
 
@@ -120,6 +134,11 @@ section 7.
 | | fragment | BW | fs form | 4 |
 | `linkage.uniform_struct*` (mediump struct uniforms, `float` output) | program | LK | FAU 6, FAU + fs form 6 | 12 |
 | **Total** | | BW 277, LK 12, D1 10 | | **299** |
+
+The table is the state at the note's tip `f70946ff`. Since then D1 and LK
+landed (section 0): the 10 `fs value` cases are byte-equal now
+(`bvec3_float_to_ivec4` excepted, left by FP pairing), and the six
+`FAU + fs form` cases are refused.
 
 Shape dimensions, by section 4 of docs/notes/mali-deqp-families.md:
 - precision: every case is mediump. The swizzle cases are `mediump_*`; the
@@ -248,6 +267,12 @@ Shape dimensions, by section 4 of docs/notes/mali-deqp-families.md:
   all zeros there and in our record's values. The new `lk_*` references
   are drawn with member values and listed in `STRUCT_VALUES`, so
   `differences` reports the FAU words.
+- **Fix (`9fa5bbe0`).** Both routes lay the block out with the walk's fp32
+  rule, and `fs16` loads a struct member's words alone. `lk_uniform_struct`,
+  `_partial` and `_use_case_rip` are byte-equal now. `lk_uniform_struct_vec4`
+  and `_fragment_only_vec4` read two members' words narrowed as a pair where
+  Mesa narrows each alone, and are refused (`MaliError::FsUniform`) until
+  they draw Mesa's words.
 
 ### 3.3 D1: the odd lane of a 16-bit mask widened from the low half (10 cases)
 
@@ -270,6 +295,10 @@ Shape dimensions, by section 4 of docs/notes/mali-deqp-families.md:
   All are `_fragment`. The audit listed 13 at `7b540fee`. The other three,
   `bool_bool{,_bool,_bool_bool}_to_ivecN_fragment`, pass on the board at
   `8ff01055`.
+- **Fix (`d3876279`).** The arm keeps `.h11` when the source is the high
+  half. `d1_conv_bvec2_to_ivec2_fs` and `d1_conv_bvec4_to_ivec4_fs` are
+  byte-equal now; `d1_conv_bvec3_float_to_ivec4_fs` stays DIFFERS, left by
+  the FP pairing.
 
 ## 4. The value-equal forms (why the 179 non-equal BW pairs still read right)
 
@@ -324,30 +353,35 @@ cases the shape stands for: the shape's cell in section 2.
 | `bw_fn_in_bool_vs` | `functions.qualifiers.in_bool_vertex` | BW+CF | DIFFERS | fs `[0] 085c80020200007d LD_VAR_BUF_IMM.f32 @r0, index:0x0` → `6891c00000000084 MOV.i32.discard r0, u2.w0` (and Mesa has no varying program) |
 | `bw_fn_global_in_bool_vs` | `functions.array_arguments.global_in_bool_vertex` | BW+V1 | DIFFERS | vs.varying `[1] 00f4c00380c0c040 FCMP_OR.f32.ne.m1 r0, r0^, 0x0, 0x0` → `00a5c00000044140 V2F32_TO_V2F16 r0, r0^, r1^` |
 | `bw_fn_user_func_arg_bool_types_vs` | `functions.overloading.user_func_arg_bool_types_vertex` | BW+V1 | DIFFERS | vs.varying `[1] 00f4c00380c0c040 FCMP_OR.f32.ne.m1 r0, r0^, 0x0, 0x0` → `00a440100000c040 FADD.f32 r0.h0, r0^, 0x0.neg` |
-| `d1_conv_bvec2_to_ivec2_fs` | `conversions.vector_to_vector.bvec2_to_ivec2_fragment` | D1 | DIFFERS | fs `[3] 00a1c0000800c040 IADD.v2u16 r0, r0^.h00, 0x0` → `00a1c1300800c000 IADD.v2u16 r1, r0.h11, 0x0` |
-| `d1_conv_bvec4_to_ivec4_fs` | `conversions.vector_to_vector.bvec4_to_ivec4_fragment` | D1 | DIFFERS | fs `[4] 00a1c1000800c041 IADD.v2u16 r1, r1^.h00, 0x0` → `00a1c2300800c001 IADD.v2u16 r2, r1.h11, 0x0` |
-| `d1_conv_bvec3_float_to_ivec4_fs` | `conversions.vector_combine.bvec3_float_to_ivec4_fragment` | D1+FP | DIFFERS | fs `[1] 68a5c10000044241 V2F32_TO_V2F16.discard r1, r1^, r2^` → `68a441100000c041 FADD.f32.discard r1.h0, r1^, 0x0.neg`; D1's own word follows: Mesa's `00a1c2300800c001 IADD.v2u16 r2, r1.h11, 0x0` has no counterpart in ours |
-| `lk_uniform_struct` | `linkage.uniform_struct` | LK | DIFFERS | instructions equal; fs FAU word 4: ours `00004c00` (`UniformHalves` of `val.a`) → Mesa `41800000` (fp32 16.0); word 5 `00005000` → `42000000` |
-| `lk_uniform_struct_partial` | `linkage.uniform_struct_partial` | LK | DIFFERS | instructions equal; fs FAU word 4: `00005000` → `42000000` (`val.b`) |
-| `lk_uniform_struct_use_case_rip` | `linkage.uniform_struct_use_case_rip` | LK | DIFFERS | instructions equal; fs FAU word 4: `00005600` → `42c00000` (`val.quadraticAttenuation`) |
-| `lk_uniform_struct_vec4` | `linkage.uniform_struct_vec4` | LK+O | DIFFERS | fs `[0] 68a5c00000048485 V2F32_TO_V2F16.discard r0, u2.w1, u2.w0` → `68a440100000c084 FADD.f32.discard r0.h0, u2.w0, 0x0.neg`; FAU `4c404c00` → `41800000` |
-| `lk_uniform_struct_fragment_only_vec4` | `linkage.uniform_struct_fragment_only_vec4` | LK+O | DIFFERS | fs `[0] 68a5c00000048584 V2F32_TO_V2F16.discard r0, u2.w0, u2.w1` → `68a440100000c085 FADD.f32.discard r0.h0, u2.w1, 0x0.neg`; FAU halves → fp32 |
+| `d1_conv_bvec2_to_ivec2_fs` | `conversions.vector_to_vector.bvec2_to_ivec2_fragment` | D1 | LOWERED | none: byte-equal since `d3876279` |
+| `d1_conv_bvec4_to_ivec4_fs` | `conversions.vector_to_vector.bvec4_to_ivec4_fragment` | D1 | LOWERED | none: byte-equal since `d3876279` |
+| `d1_conv_bvec3_float_to_ivec4_fs` | `conversions.vector_combine.bvec3_float_to_ivec4_fragment` | D1+FP | DIFFERS | fs `[1] 68a5c10000044241 V2F32_TO_V2F16.discard r1, r1^, r2^` → `68a441100000c041 FADD.f32.discard r1.h0, r1^, 0x0.neg`; D1's own words are ours since `d3876279` (ours has Mesa's `00a1c2300800c001 IADD.v2u16 r2, r1.h11, 0x0`), and Mesa's `00a1c10000054241 MKVEC.v2i16 r1, r1^.h0, r2^.h0` has no counterpart in ours |
+| `lk_uniform_struct` | `linkage.uniform_struct` | LK | LOWERED | none: byte-equal since `9fa5bbe0` (the members are fp32 words `41800000`, `42000000` in our FAU too) |
+| `lk_uniform_struct_partial` | `linkage.uniform_struct_partial` | LK | LOWERED | none: byte-equal since `9fa5bbe0` |
+| `lk_uniform_struct_use_case_rip` | `linkage.uniform_struct_use_case_rip` | LK | LOWERED | none: byte-equal since `9fa5bbe0` |
+| `lk_uniform_struct_vec4` | `linkage.uniform_struct_vec4` | LK+O | REFUSED | refused since `9fa5bbe0`: the `val.b.y + val.a.x` read, two members' words narrowed as a pair (`V2F32_TO_V2F16 r0, u2.w1, u2.w0`) where Mesa has `FADD.f32 r0.h0, u2.w0` and `FADD.f32 r1.h0, u2.w1` |
+| `lk_uniform_struct_fragment_only_vec4` | `linkage.uniform_struct_fragment_only_vec4` | LK+O | REFUSED | refused since `9fa5bbe0`, as `lk_uniform_struct_vec4` (the struct read in the fragment shader only) |
 
-The 7 LOWERED references are the evidence for BW: the words are Mesa's, yet
-their cases fail on the board. A fix of BW moves none of them. A fix of a
-form (V1, VL, ...) moves its DIFFERS rows to LOWERED.
+The 7 `bw_*` references byte-equal while their cases fail on the board at
+`8ff01055` is the evidence for BW. The BW fix moves no row of this test
+(BW is not in the words); a fix of a form (V1, VL, ...) moves its DIFFERS
+rows to LOWERED. `d3876279` and `9fa5bbe0` moved the five D1 and LK rows
+above to LOWERED; the two `lk_*_vec4` rows are REFUSED: their two-member
+read is refused (`MaliError::FsUniform`) until it draws Mesa's words.
 
 ## 6. Fix order by cases
 
 | Step | Cause | Cases | Site (tip `f70946ff`) | Change | Moves in `tests/mali_deqp_boolpix.rs` |
 |--:|---|--:|---|---|---|
 | 1 | BW | 277 | `src/gl/program.rs:2895`; `src/mali/program.rs:108`; `src/mali/frame.rs:3117`; record: `src/shaderc/online/mali/fau.rs` (`FauWord`), `select.rs:603-611`, `:757` | `docs/notes/mali-unif2-lowering.md` section 5 / step 2 (D1): `FauWord::UniformBool { dword }` pushed for a `GL_BOOL*` dword, `PushWord::UniformBool` written as `if w != 0 { !0 } else { 0 }` (a `UboRow` `bool` flag for a block row). Needs a host test from `glUniform1i(b, 1)` to the push word (`src/mali/frame_tests.rs`): `tests/mali_ref` cannot see it. | none (BW is not in the words); board: 277 |
-| 2 | LK | 12 | `src/shaderc/online/mali/mod.rs:1623`, `:1632` | pass `fp32(name)` (the struct-member rule) as the other routes do, so `fs16` keeps a member fp32 (`select.rs:635-641`) | `lk_uniform_struct`, `_partial`, `_use_case_rip` to LOWERED if nothing else differs (their instructions are equal today); `_vec4` ones still need O |
-| 3 | D1 | 10 | `src/shaderc/online/mali/nir_fs.rs:13867-13873` | take the lane's own half (`H11` for an odd lane), as the audit's D1 fix candidate | `d1_conv_bvec2_to_ivec2_fs`, `d1_conv_bvec4_to_ivec4_fs` (and those of the audit's `deqp_audit_d1_*` with a `bvec` source); `d1_conv_bvec3_float_to_ivec4_fs` also needs FP |
+| 2 | LK | 12 | `src/shaderc/online/mali/mod.rs:1623`, `:1632` | pass `fp32(name)` (the struct-member rule) as the other routes do, so `fs16` keeps a member fp32 (`select.rs:635-641`) | Done at `9fa5bbe0`: `lk_uniform_struct`, `_partial`, `_use_case_rip` are LOWERED; the two `lk_*_vec4` shapes are REFUSED (`FsUniform`), a two-member read narrowed as a pair until O lands |
+| 3 | D1 | 10 | `src/shaderc/online/mali/nir_fs.rs:13867-13873` | take the lane's own half (`H11` for an odd lane), as the audit's D1 fix candidate | Done at `d3876279`: `d1_conv_bvec2_to_ivec2_fs`, `d1_conv_bvec4_to_ivec4_fs` are LOWERED (and those of the audit's `deqp_audit_d1_*` with a `bvec` source); `d1_conv_bvec3_float_to_ivec4_fs` stays DIFFERS, left by FP |
 | later | V1, VL, A1, WT, FP, S1, NF, CF, O | 0 more board cases here | audit sections 4.2-4.8 | byte-equality only: the values are right already | the rest of DIFFERS |
 
 Steps 1 and 2 are independent of each other and of the open compiler
-steps. Step 1 alone covers 277 of the 299 cases of #11306.
+steps. Step 1 alone covers 277 of the 299 cases of #11306. Steps 2 and 3
+are done (`9fa5bbe0`, `d3876279`); their "Moves" cells record what moved
+in `tests/mali_deqp_boolpix.rs`.
 
 ## 7. Caveats
 
