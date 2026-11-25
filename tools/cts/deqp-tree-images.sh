@@ -8,6 +8,7 @@
 # running and tallying the images is tools/board.sh <board> tree). The
 # per-board names call it with their board:
 #   tools/cts/pi4-deqp-images.sh   rpi_4b     (Raspberry Pi 4, V3D)
+#   tools/cts/pi5-deqp-images.sh   rpi_5      (Raspberry Pi 5, V3D 7.1)
 #   tools/cts/t6-deqp-images.sh    nanopc_t6  (NanoPC-T6, Mali-G610)
 #   tools/cts/imx95-deqp-images.sh verdin_imx95/mimx9596/a55  (Verdin iMX95,
 #                                  Mali-G310)
@@ -16,13 +17,14 @@
 #
 #   tools/cts/deqp-tree-images.sh <board> [--dry-run] <table> <img-dir> [LABEL...]
 #
-# <board>    rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, the Zephyr board
-#            (the arms below)
+# <board>    rpi_4b, rpi_5, nanopc_t6 or verdin_imx95/mimx9596/a55, the Zephyr
+#            board (the arms below)
 # <table>    tools/cts/pi4-full-tree.txt's form: each CONFIG_DEQP_CASE line is
 #            preceded by "# image <LABEL>: ..."; a marker saying
 #            "(with texture-2048.conf)" adds -DEXTRA_CONF_FILE=texture-2048.conf.
 #            tools/cts/pi4-gles3-tree.txt is the Pi 4's dEQP-GLES3 tree
-#            (DEQP_MODULE=gles3), tools/cts/mali-gles2-tree.txt the T6's
+#            (DEQP_MODULE=gles3), tools/cts/pi5-full-tree.txt the Pi 5's
+#            dEQP-GLES2 tree, tools/cts/mali-gles2-tree.txt the T6's
 #            dEQP-GLES2 tree (the Verdin iMX95 builds the same rows: the
 #            back end and its compiler are the T6's).
 # <img-dir>  one build directory per label, <img-dir>/<LABEL>/ (cmake -GNinja,
@@ -53,13 +55,15 @@
 #               the post-build conformance check runs with --gles3. gles2 adds
 #               no argument and checks for ES 2.0, as before.
 #   ZEPHYR_SDK_INSTALL_DIR as for any Zephyr sample; RUSTUP_TOOLCHAIN as for
-#               any V3D sample (rpi_4b)
+#               any V3D sample (rpi_4b, rpi_5)
 #   WEST_VENV   optional: a venv whose bin/ holds west (zephyr-modules.sh)
 # The Mali boards (nanopc_t6, verdin_imx95/mimx9596/a55) also need
 # driver/src/fw/mali_csffw_blob.h in this checkout (made from the board's CSF
 # firmware by driver/tools/mkmalifw.sh, never committed; the G310's is the
 # G610's file, tools/cts/deps.toml MALI_CSFFW), and build with
-# -DYAKOGL_WERROR=ON, as the gate's Mali rows do.
+# -DYAKOGL_WERROR=ON, as the gate's Mali rows do. The Pi 5 (rpi_5) builds
+# with -DYAKOGL_WERROR=ON too: its V3D 7.1 branch of the deqp sample is new
+# and held to -Werror from the start (docs/notes/rpi5-deqp-glmark2.md, 3.2).
 #
 # What an image is and how it is started are separate: this script builds
 # zephyr.bin and writes the .built line, nothing else. The boot route is the
@@ -77,9 +81,10 @@ ZBOARD=${1:-}
 # embeds the Mali's CSF firmware header.
 case "$ZBOARD" in
 rpi_4b) NAME=pi4-deqp-images BOARD_ARGS=() BUILD_DEF=V3D_BUILD MALI_FW=0 ;;
+rpi_5) NAME=pi5-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=V3D_BUILD MALI_FW=0 ;;
 nanopc_t6) NAME=t6-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=T6_DEQP_BUILD MALI_FW=1 ;;
 verdin_imx95/mimx9596/a55) NAME=imx95-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=VI95_DEQP_BUILD MALI_FW=1 ;;
-*) echo "deqp-tree-images: the board must be rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, not '$ZBOARD'" >&2; exit 2 ;;
+*) echo "deqp-tree-images: the board must be rpi_4b, rpi_5, nanopc_t6 or verdin_imx95/mimx9596/a55, not '$ZBOARD'" >&2; exit 2 ;;
 esac
 shift
 die() { echo "$NAME: $*" >&2; exit 2; }

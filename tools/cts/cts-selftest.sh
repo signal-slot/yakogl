@@ -175,13 +175,15 @@ done
 # check, the stage 1 check), t6-deqp-images.sh (the same builder for
 # nanopc_t6: the dry run over mali-gles2-tree.txt, the firmware header check,
 # its cmake arguments), imx95-deqp-images.sh (the same for the Verdin
-# iMX95, its own build string), needed_deps against what the builders read, and
-# board-stage.sh x2 gles3 (its deps, its dry run, the sets still refused).
+# iMX95, its own build string), pi5-deqp-images.sh (the same for rpi_5: the
+# dry run over pi5-full-tree.txt, -Werror, no firmware header), needed_deps
+# against what the builders read, and board-stage.sh x2 gles3 (its deps, its
+# dry run, the sets still refused).
 # Its count of passed checks is pinned, so a selftest that stops checking
 # reads as a failure here, not as a pass -- and a new check in
 # images-selftest.sh without a bump here is a red row too (pull request
 # #1838 failed exactly there).
-IMAGES_SELFTEST_CHECKS=220
+IMAGES_SELFTEST_CHECKS=237
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)
