@@ -31,6 +31,15 @@ Kinds:
   serial-path a /dev/serial/ path (by-id carries the USB serial)
   uart        ttyUSB<n> or ttyACM<n>
   usb-serial  a "SerialNumber: <value>" line as the kernel logs a USB device
+  uboot-id    a U-Boot identifier with a value: ethaddr, eth<n>addr, serial#
+              (also "Serial#:"), serverip, ipaddr, gatewayip, as name=value
+              or "name: value". A value starting with '<' (<redacted>) is a
+              placeholder and passes. A Zephyr Verdin iMX95 slice carries the
+              module's own U-Boot console; its MAC address and addresses are
+              also reported as mac and ipv4.
+
+A slice needs no kmsg/ directory (a Zephyr slice has none): every file under
+it is scanned all the same.
 
 A file that is not UTF-8 is scanned as latin-1. Stdlib only.
 """
@@ -51,6 +60,7 @@ USERHOST = re.compile(r'(?<![\w.@-])[\w][\w.+-]*@[\w][\w-]*(?:\.[\w-]+)*')
 SERIAL_PATH = re.compile(r'/dev/serial/')
 UART = re.compile(r'tty(?:USB|ACM)\d', re.I)
 USB_SERIAL = re.compile(r'SerialNumber[:=]\s*\S', re.I)
+UBOOT_ID = re.compile(r'(?<![\w#])(?:eth\d*addr|serial#|serverip|ipaddr|gatewayip)\s*[:=]\s*[^\s=<]', re.I)
 
 
 def kinds(line):
@@ -76,6 +86,8 @@ def kinds(line):
         found.add('uart')
     if USB_SERIAL.search(line):
         found.add('usb-serial')
+    if UBOOT_ID.search(line):
+        found.add('uboot-id')
     return sorted(found)
 
 
@@ -147,6 +159,16 @@ CASES = [
     ('FTDI converter now attached to ttyUSB0', ['uart']),
     ('console /dev/ttyACM1', ['uart']),
     ('usb 1-1: SerialNumber: A12345', ['usb-serial']),
+    ('=> setenv ethaddr 00:00:5e:00:53:01', ['mac']),
+    ('ethaddr=00:00:5e:00:53:01', ['mac', 'uboot-id']),
+    ('ethaddr=<redacted> serial#=<redacted> serverip=<redacted>', []),
+    ('eth1addr=garbled', ['uboot-id']),
+    ('serial#=12345678', ['uboot-id']),
+    ('Serial#: 12345678', ['uboot-id']),
+    ('serverip=192.0.2.7', ['ipv4', 'uboot-id']),
+    ('ipaddr: 192.0.2.8', ['ipv4', 'uboot-id']),
+    ('=> printenv ethaddr serial# serverip', []),
+    ('serialnumber of rows 5', []),
     ('ssh root@192.0.2.7 via 100.64.0.9', ['ipv4', 'tailnet', 'userhost']),
 ]
 
