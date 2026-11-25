@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Excerpt of the image's console: the end of the run, from dEQP's "DONE!" to the record's last line
+# (the 304 cases' per-case and texture-dump lines before it are not kept; see README.md)
+DONE!
+
+Test run totals:
+  Passed:        304/304 (100.0%)
+  Failed:        0/304 (0.0%)
+  Not supported: 0/304 (0.0%)
+  Warnings:      0/304 (0.0%)
+  Waived:        0/304 (0.0%)
+deqp: done: 304 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 304 cases begun, 304 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES2.functional.texture.mipmap.*,dEQP-GLES2.functional.texture.specification.*'
+  304 cases in 43183 ms, record at 43 s after boot, reset at ~250 s
+  totals: P 304  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 304 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 304 cases begun, 304 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 37; slowest #198 512 ms
+  carve-out (KiB, of 48636): after #0 20141, last 20141, high-water 21653
+  jobs: slow in 0 cases; no job hung or timed out
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+carve-out: 20096256 bytes used now, 22172928 at most, of 49803264; 0 frees held
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+v3d_deqp: build 87881c78 DONE, all passed: 304 cases, P 304 F 0 R 0 N 0 other 0

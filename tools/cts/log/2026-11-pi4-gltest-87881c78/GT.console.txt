@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_gl_test: build 87881c78 (the record at the end or at 75 s)
+board: PM watchdog resets the SoC ~210 s after boot (tryboot -> Linux)
+V3D clock 250000000 -> 500000000 Hz (0)
+v3d_gl_test: the list 199,206,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244 (24 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): ready: carve-out 48 MiB at phys 0x24f5000, GPU VA 0x181000..0x3100000
+gl_test:   trunc and shifts, fragment   (32,16) = 0xc7b34080  want 0xc7b34080  ok  [check 1]
+gl_test:   trunc and shifts, vertex     (32,48) = 0xc7b34080  want 0xc7b34080  ok  [check 2]
+gl_test: case 199 es3trunc: PASS
+gl_test: case 206 es3levels: SKIP (the V3D does not sample 3D or 2D-array textures)
+gl_test: case 223 msaarbo: SKIP (GL_MAX_SAMPLES 1 < 4: 4x FBOs are off in this build, cargo feature msaa-fbo)
+GL error 0x500 in glTexSubImage2D
+GL error 0x502 in glTexSubImage2D
+(the negative-API GL error lines of case 224, 225, 226 and 227 elided; each "ok" line of those cases printed the expected error code)
+gl_test: case 224 negapi_texsubimage2d: PASS
+gl_test: case 225 negapi_texsubimage3d: PASS
+gl_test: case 226 negapi_uniformui: PASS
+gl_test: case 227 negapi_uniformuiv: PASS
+gl_test:   RGBA8 texture on the FBO                             0x0000  ok
+gl_test:   ReadPixels RGBA, FLOAT from RGBA8                    0x0502  ok
+gl_test:   RGBA32I texture on the FBO                           0x0000  ok
+gl_test:   ReadPixels RGBA, FLOAT from RGBA32I                  0x0502  ok
+gl_test:   RGBA32UI texture on the FBO                          0x0000  ok
+gl_test:   ReadPixels RGBA, FLOAT from RGBA32UI                 0x0502  ok
+gl_test: negapi: RenderbufferStorageMultisample(4, RGBA8) 32x32: got GL error 0x502, want 0x0
+gl_test:   FramebufferRenderbuffer                              0x0000  ok
+gl_test: negapi: multisample FBO status 0x8cd6, want COMPLETE
+gl_test:   GetIntegerv(SAMPLE_BUFFERS)                          0x0000  ok
+gl_test: negapi: SAMPLE_BUFFERS 0, want 1 (dEQP: Got invalid value)
+gl_test:   negapi_readpix_fmt teardown                          0x0000  ok
+gl_test: case 228 negapi_readpix_fmt: FAIL
+gl_test: case 229 tf_deleted_output: PASS
+(the per-check "ok [check n]" lines of cases 230-243 elided; every one read "ok")
+gl_test: case 230 flat_lines: PASS
+gl_test: case 231 flat_lines_wide: PASS
+gl_test: case 232 flat_line_strip: PASS
+gl_test: case 233 flat_line_strip_wide: PASS
+gl_test: case 234 flat_line_loop: PASS
+gl_test: case 235 flat_line_loop_wide: PASS
+gl_test: case 236 flat_tri_strip: PASS
+gl_test: case 237 flat_tri_fan: PASS
+gl_test: case 238 drawrandom_packed: PASS
+gl_test: case 239 drawrandom_intfloat: PASS
+gl_test: case 240 drawrandom_intw: PASS
+gl_test: case 241 es3_precision_int: PASS
+gl_test: case 242 es3_precision_uint: PASS
+gl_test: divmix: 24 of 24 instances ok
+gl_test: case 243 divmix: PASS
+gl_test: case 244 w128tex: SKIP (the two-plane RGBA32 path is the GC7000's)
+gl_test: all: 1 of 21 cases failed (20 passed; 0 timed out; first failure case 228 at index 7; second failure case -1; 3 skipped, first skip case 206); precompiled hits 0, compiler runs 134
+gl_test: done
+v3d_gl_test RECORD, build 87881c78, 2 s after boot: DONE
+--- the OSAL ---
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201092 ca 0x201092 ra 0x0 qba 0x201000 qea 0x201092 ct1 ca 0x22306a ra 0x223069 qba 0x223000 qea 0x22306a
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 32 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20146688 bytes used now, 20159232 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+--- the verdicts ---
+
+v3d_gl_test: case 199 PASS
+v3d_gl_test: case 206 SKIP
+v3d_gl_test: case 223 SKIP
+v3d_gl_test: case 224 PASS
+v3d_gl_test: case 225 PASS
+v3d_gl_test: case 226 PASS
+v3d_gl_test: case 227 PASS
+v3d_gl_test: case 228 FAIL
+v3d_gl_test: case 229 PASS
+v3d_gl_test: case 230 PASS
+v3d_gl_test: case 231 PASS
+v3d_gl_test: case 232 PASS
+v3d_gl_test: case 233 PASS
+v3d_gl_test: case 234 PASS
+v3d_gl_test: case 235 PASS
+v3d_gl_test: case 236 PASS
+v3d_gl_test: case 237 PASS
+v3d_gl_test: case 238 PASS
+v3d_gl_test: case 239 PASS
+v3d_gl_test: case 240 PASS
+v3d_gl_test: case 241 PASS
+v3d_gl_test: case 242 PASS
+v3d_gl_test: case 243 PASS
+v3d_gl_test: case 244 SKIP
+v3d_gl_test: 20 of 21 cases passed (2396 ms)
+v3d_gl_test: build 87881c78
+v3d_gl_test RECORD end, build 87881c78

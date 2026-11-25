@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_gl_test: build 87881c78 (the record at the end or at 75 s)
+board: PM watchdog resets the SoC ~210 s after boot (tryboot -> Linux)
+V3D clock 250000000 -> 500000000 Hz (0)
+gl_test: start (case=245 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): ready: carve-out 48 MiB at phys 0x24f5000, GPU VA 0x181000..0x3100000
+yakogl/v3d: clear program built: 408 bytes of code
+gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS 3 < 4)
+gl_test: done
+v3d_gl_test RECORD, build 87881c78, 0 s after boot: DONE
+--- the OSAL ---
+BASELINE: none (no job completed)
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+--- the verdicts ---
+
+v3d_gl_test: case 245 SKIP
+v3d_gl_test: 0 of 0 cases passed (104 ms)
+v3d_gl_test: build 87881c78
+v3d_gl_test RECORD end, build 87881c78
