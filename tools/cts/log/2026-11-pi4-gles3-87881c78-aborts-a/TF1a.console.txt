@@ -1,0 +1,38 @@
+MESS:00:00:07.386299:0: Loaded 'yakogl-TF1a.bin' to 0x200000
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2,...' (the row's filter, tools/cts/pi4-gles3-tree.txt)
+[condensed: the per-case lines #0-#183 are not kept; every one reads "Pass (Pass)", no refusal, no "Test run was ABORTED"]
+v3d_deqp: case #183 P 75ms k2/13 c20189/20314 r0 dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_vec4
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        184/184 (100.0%)
+  Failed:        0/184 (0.0%)
+  Not supported: 0/184 (0.0%)
+  Warnings:      0/184 (0.0%)
+  Waived:        0/184 (0.0%)
+deqp: done: 184 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 184 cases begun, 184 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.highp_mat2,dEQP-GLES3.functional.transfo...
+  184 cases in 12547 ms, record at 12 s after boot, reset at ~250 s
+  totals: P 184  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 184 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 184 cases begun, 184 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 13; slowest #0 591 ms
+  carve-out (KiB, of 48636): after #0 20156, last 20189, high-water 20314
+  jobs: slow in 0 cases; no job hung or timed out
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+v3d_deqp: build 87881c78 DONE, all passed: 184 cases, P 184 F 0 R 0 N 0 other 0
