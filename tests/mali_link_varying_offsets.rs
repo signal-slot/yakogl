@@ -126,8 +126,8 @@ fn target_link_succeeds_and_stages_agree_on_offsets() {
     for v in ins {
         let o = outs.iter().find(|o| name(&o.name) == name(&v.name)).expect("the vertex shader writes it");
         let n = String::from_utf8_lossy(&name(&v.name)).into_owned();
-        let a = generic(&vr, o.location).unwrap_or_else(|| panic!("{n}: no vertex slot"));
-        let b = generic(&fr, v.location).unwrap_or_else(|| panic!("{n}: no fragment slot"));
+        let a = generic(vr, o.location).unwrap_or_else(|| panic!("{n}: no vertex slot"));
+        let b = generic(fr, v.location).unwrap_or_else(|| panic!("{n}: no fragment slot"));
         assert_eq!(b.offset, a.offset, "{n}: fragment offset vs vertex offset");
         assert_eq!(b.mask, a.mask, "{n}: components");
     }
