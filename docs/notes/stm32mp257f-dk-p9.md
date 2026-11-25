@@ -358,9 +358,16 @@ and `/boot` were back byte for byte.
 
 ### gl_test
 
-The regression set (50 cases, case 10 included) was rerun on 2026-11-25 from
-an origin/main `670913e1` image (record `20261125-1325-gltest-set-670913e1`).
-The result is the same as the `a5f1dc8e` run (`20261124-1044-gl_test_all-a5f1dc8e`):
+The P9 gl_test result, like the dEQP sweep below, was built from `a5f1dc8e`
+(records `20261124-1038-gl_test_set-a5f1dc8e` and
+`20261124-1044-gl_test_all-a5f1dc8e`; diff line below, built from `a5f1dc8e`). The regression set (50 cases,
+case 10 included) was rerun on 2026-11-25 from an origin/main `670913e1` image
+(record `20261125-1325-gltest-set-670913e1`) as a confirmation: the result is
+the same as the `a5f1dc8e` run. The `a5f1dc8e` diff line:
+
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (back on Linux after 70 s of 100 s lifetime)
+
+The rerun's result:
 44 PASS, 5 FAIL (cases 6, 11, 47, 182, 189) and 1 SKIP (case 16). Case 10
 passed, and its check 11 (`loop: 3 px wide`) is included in that pass.
 `mp2-gltest-shards.py --skip "" --budget-ms 90000` plans one shard, and that
