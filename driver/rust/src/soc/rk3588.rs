@@ -1869,4 +1869,168 @@ mod tests {
         // it stopped there: the idle request was not released
         assert_eq!(soc.writes.borrow().last(), Some(&(PMU + pd_gpu::PWR_GATE, 0x0001_0000)));
     }
+
+    // ---- WDT0 arming from the states U-Boot may leave (handover note, section 6) ----
+    //
+    // The arming is `ffi::rk3588::dw_wdt_arm_with`: `gate_open` on PCLK_WDT0
+    // then TCLK_WDT0, then `dw_wdt::arm`. None of it names GLB_RST_CON, so
+    // the mock fails any access to it: whatever U-Boot routed there, the
+    // arming neither reads nor writes it.
+
+    use crate::errno::EIO;
+    use crate::ffi::{
+        dw_wdt_arm_with, YdDwWdtArm, YD_DW_WDT_PCLK_OPENED, YD_DW_WDT_REFUSED_GATE, YD_DW_WDT_TCLK_OPENED,
+        YD_DW_WDT_WAS_RUNNING,
+    };
+    use crate::ip::dw_wdt::tests::{Wdt, BASE as WDT_BASE};
+
+    const GLB_RST_CON: usize = CRU_BASE + 0xc10;
+
+    /// WDT0, CLKGATE_CON(15) with the hiword mask (gates in `stuck` ignore
+    /// writes) and GLB_RST_CON, which any access fails.
+    struct Wdt0Board {
+        wdt: Wdt,
+        con15: RefCell<u32>,
+        stuck: u32,
+        cru_writes: RefCell<Vec<u32>>,
+    }
+    impl Mmio for Wdt0Board {
+        fn read32(&self, addr: usize) -> u32 {
+            assert_ne!(addr, GLB_RST_CON, "GLB_RST_CON read");
+            if addr == CRU_BASE + 0x83c {
+                return *self.con15.borrow();
+            }
+            self.wdt.read32(addr)
+        }
+        fn write32(&self, addr: usize, val: u32) {
+            assert_ne!(addr, GLB_RST_CON, "GLB_RST_CON written");
+            if addr == CRU_BASE + 0x83c {
+                self.cru_writes.borrow_mut().push(val);
+                let mask = (val >> 16) & !self.stuck;
+                let mut r = self.con15.borrow_mut();
+                *r = (*r & !mask) | (val & mask);
+                return;
+            }
+            self.wdt.write32(addr, val);
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+    fn wdt0(con15: u32, stuck: u32, cr: u32, torr: u32) -> Wdt0Board {
+        let wdt = Wdt::t6();
+        wdt.regs.borrow_mut()[0] = cr;
+        wdt.regs.borrow_mut()[1] = torr;
+        Wdt0Board { wdt, con15: RefCell::new(con15), stuck, cru_writes: RefCell::new(vec![]) }
+    }
+    fn arm0(b: &Wdt0Board) -> (i32, YdDwWdtArm) {
+        let mut out = YdDwWdtArm::default();
+        (dw_wdt_arm_with(b, WDT_BASE, CRU_BASE, 13, &mut out), out)
+    }
+    /// The three writes of a successful arming: TORR with top 13 in both
+    /// nibbles, CR = RPL as found | WDT_EN, the restart key.
+    fn arm_writes(cr: u32) -> Vec<(usize, u32)> {
+        vec![(0x04, 0xdd), (0x00, (cr & 0x1c) | 1), (0x0c, 0x76)]
+    }
+
+    #[test]
+    fn wdt0_gates_open_as_under_linux_arm_with_no_cru_write() {
+        let b = wdt0(0x2ff8, 0, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.flags, out.refusal, out.period_ms), (0, 0, 0, 22369));
+        assert!(b.cru_writes.borrow().is_empty());
+        assert_eq!(b.wdt.writes(), arm_writes(0x08));
+        assert_eq!(*b.con15.borrow(), 0x2ff8);
+    }
+
+    #[test]
+    fn wdt0_pclk_gated_is_opened_alone_then_armed() {
+        let b = wdt0(0x2ff9, 0, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.flags, out.refusal), (0, YD_DW_WDT_PCLK_OPENED, 0));
+        // only PCLK's write-enable twin; TCLK is not written
+        assert_eq!(*b.cru_writes.borrow(), vec![0x0001_0000]);
+        assert_eq!(*b.con15.borrow(), 0x2ff8);
+        assert_eq!(b.wdt.writes(), arm_writes(0x08));
+    }
+
+    #[test]
+    fn wdt0_tclk_gated_is_opened_alone_then_armed() {
+        let b = wdt0(0x2ffa, 0, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.flags, out.refusal), (0, YD_DW_WDT_TCLK_OPENED, 0));
+        assert_eq!(*b.cru_writes.borrow(), vec![0x0002_0000]);
+        assert_eq!(*b.con15.borrow(), 0x2ff8);
+        assert_eq!(b.wdt.writes(), arm_writes(0x08));
+    }
+
+    #[test]
+    fn wdt0_a_gate_that_stays_closed_refuses_before_any_wdt0_access() {
+        // PCLK stuck: TCLK is not tried, WDT0 is never read or written
+        let b = wdt0(0x2fff, 0x1, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!(rc, -EIO);
+        assert_eq!((out.refusal, out.cr_now, out.flags, out.period_ms), (YD_DW_WDT_REFUSED_GATE, 0x2fff, 0, 0));
+        assert_eq!(*b.cru_writes.borrow(), vec![0x0001_0000]);
+        assert!(b.wdt.ops().is_empty());
+        // TCLK stuck after PCLK opened: the opened one's flag is kept
+        let b = wdt0(0x2ffb, 0x2, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!(rc, -EIO);
+        assert_eq!((out.refusal, out.cr_now, out.flags), (YD_DW_WDT_REFUSED_GATE, 0x2ffa, YD_DW_WDT_PCLK_OPENED));
+        assert_eq!(*b.cru_writes.borrow(), vec![0x0001_0000, 0x0002_0000]);
+        assert!(b.wdt.ops().is_empty());
+    }
+
+    #[test]
+    fn wdt0_arming_never_touches_glb_rst_con_on_any_path() {
+        // GLB_RST_CON routed to the first or second global reset reads as
+        // some word; the code reads none, so the writes are the Linux
+        // state's. The mock panics on an access to 0xfd7c0c10.
+        let linux = {
+            let b = wdt0(0x2ff8, 0, 0x08, 0x0e);
+            arm0(&b);
+            b.wdt.writes()
+        };
+        assert_eq!(linux, arm_writes(0x08));
+        // a refusal path as well (not a DW_apb_wdt)
+        let b = wdt0(0x2ff8, 0, 0x08, 0x0e);
+        b.wdt.regs.borrow_mut()[0xfc / 4] = 0;
+        assert_eq!(arm0(&b).0, -EIO);
+        assert!(b.wdt.writes().is_empty());
+    }
+
+    #[test]
+    fn wdt0_already_running_in_reset_mode_is_re_topped_restarted_and_flagged() {
+        // U-Boot left WDT_EN, reset mode, RPL 2, a different TOP
+        let b = wdt0(0x2ff8, 0, 0x09, 0x0b);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.flags, out.cr_found, out.torr_found), (0, YD_DW_WDT_WAS_RUNNING, 0x09, 0x0b));
+        assert_eq!(b.wdt.writes(), arm_writes(0x09));
+        assert_eq!((out.cr_now, out.torr_now, out.period_ms), (0x09, 0xdd, 22369));
+        assert!(b.cru_writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn wdt0_already_running_in_interrupt_mode_is_moved_to_reset_mode_keeping_rpl() {
+        // WDT_EN | RMOD | RPL 5: the first timeout would only interrupt
+        let b = wdt0(0x2ff8, 0, 0x17, 0x0f);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.flags, out.cr_found), (0, YD_DW_WDT_WAS_RUNNING, 0x17));
+        assert_eq!(b.wdt.writes(), arm_writes(0x17));
+        assert_eq!((out.cr_now, out.torr_now), (0x15, 0xdd));
+    }
+
+    #[test]
+    fn wdt0_running_with_both_gates_gated_opens_apb_first_and_reports_all_three() {
+        let b = wdt0(0x2ffb, 0, 0x09, 0x0b);
+        let (rc, out) = arm0(&b);
+        let all = YD_DW_WDT_WAS_RUNNING | YD_DW_WDT_PCLK_OPENED | YD_DW_WDT_TCLK_OPENED;
+        assert_eq!((rc, out.flags), (0, all));
+        assert_eq!(*b.cru_writes.borrow(), vec![0x0001_0000, 0x0002_0000]);
+        assert_eq!(b.wdt.writes(), arm_writes(0x09));
+    }
 }
