@@ -58,6 +58,28 @@ python3 -I "$PY" --commit "$SHA" --tree "$D/tree.txt" -o - "$S" >"$T/o" 2>&1 \
     && bad "group rows that do not add up are refused" \
     || { grep -q 'do not add up' "$T/o" && ok "inconsistent tally refused" || bad "refusal text"; }
 
+# --causes: the section; an unknown label refused; no --causes = old bytes
+cp "$D"/session/*.tally.txt "$S/"
+cout=$(python3 -I "$PY" --commit "$SHA" --tree "$D/tree.txt" --times "$D/times.tsv" --causes "$D/causes.tsv" -o - "$S" 2>&1)
+chas() { printf '%s\n' "$cout" | grep -qxF -- "$1" && ok "$2" || bad "$2 (missing: $1)"; }
+chas '## Refusing cases' "causes: section written"
+chas '| image | case | cause | issue |' "causes: table header"
+chas '| S1 | dEQP-GLES3.x.y | target larger than tile memory \| 2048 | #12 |' "causes: row, pipe escaped"
+chas '| S1a | dEQP-GLES3.x.z | ETC2 cube not sampled | draft: V3D: ETC2 cube |' "causes: drafted title"
+chas '| S1c | dEQP-GLES3.q | job builder refused the draw | - |' "causes: no issue is '-'"
+printf '%s\n' "$cout" | head -n "$(wc -l < "$D/golden-no-causes.md")" | cmp -s - "$D/golden-no-causes.md" \
+    && ok "causes: text above the section is the output without --causes" || bad "causes: prefix differs"
+python3 -I "$PY" --commit "$SHA" --tree "$D/tree.txt" --times "$D/times.tsv" -o - "$S" 2>&1 \
+    | cmp -s - "$D/golden-no-causes.md" && ok "no --causes: output byte for byte as before" \
+    || bad "no --causes: output differs from golden-no-causes.md"
+printf 'Q7\tc\tcause\t-\n' > "$T/bad.tsv"
+python3 -I "$PY" --commit "$SHA" --tree "$D/tree.txt" --causes "$T/bad.tsv" -o - "$S" >"$T/o" 2>&1 \
+    && bad "causes: unknown label refused" \
+    || { grep -q 'label not in the tree: Q7' "$T/o" && ok "causes: unknown label refused by name" || bad "causes: refusal text"; }
+printf 'S1\tc\tcause\n' > "$T/bad.tsv"
+python3 -I "$PY" --commit "$SHA" --tree "$D/tree.txt" --causes "$T/bad.tsv" -o - "$S" >"$T/o" 2>&1 \
+    && bad "causes: short line refused" || ok "causes: short line refused"
+
 printf '%s\n' "$out" | grep -Eq '/home/|/Users/|/dev/tty|\.ts\.net|([0-9]{1,3}\.){3}[0-9]{1,3}' \
     && bad "README names a private detail" || ok "README names no home path, address or tty"
 
