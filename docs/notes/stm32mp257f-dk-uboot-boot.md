@@ -833,30 +833,165 @@ design above:
 
 ## Board run
 
-*(Empty: filled in by the `board-run` item, in the shape of
-`imx8mp-netboot.md`'s "Board run" sections: the date and the build, what was
-idle before, one numbered step per action with what the runner printed, and
-the board's state after. No board address, host name, UART path, serial or
-credential.)*
+### 2026-11-25: `mp2_hello` from ST's U-Boot, route 1 (microSD): done
 
-What goes here:
+One row run of plan #349's proven `mp2_hello`, through
+`tools/board.sh stm32mp257f-dk run` and `tools/board-stm32mp2-uboot.sh`,
+`BOARD_BOOT=uboot-mmc`, `MP2_NO_WATCHDOG=1` (the image arms no watchdog, so
+the bound of a hang was the `arm,smc-wdt` that ST's Linux leaves running).
+Record (gitignored): `records/dk-uboot/20261125-095237-mp2_hello-4c20912e`.
+The env_read records are `records/dk-uboot-env/before2` and `after2`.
+Firmware as printed: TF-A `v2.10-stm32mp2-r2.0(debug)`, OP-TEE `4.0.0-dev`
+(revision 4.0 `2a5b1d12`) and U-Boot `2023.10-stm32mp-r3.1 (Oct 02 2023 -
+14:39:59 +0000)`.
 
-1. **Image and routes:** the image run (`mp2_hello`, or `gc_triangle` once
-   plan #349's triangle has merged), its sha256 and size; the route (microSD or
-   TFTP); the build of `driver/tools/uboot-mp2` scripts (the commit).
-2. **The verdict line**, verbatim, as `tools/board.sh stm32mp257f-dk` or the
-   runner prints it (`... rc=<rc> verdict=<v> boot=uboot-sd|uboot-tftp ...`),
-   and the scan's phases (`bl2 optee uboot stopped script go image image_end
-   linux`).
-3. **The `fw_printenv` diff before and after** the run (expected: empty), and
-   the before and after `u-boot-env` dumps' sha256 when taken.
-4. **The `/boot` sha256 comparison** before and after (expected: identical for
-   every stock file; only `yakogl/` differs, and is gone again after the
-   cleanup).
-5. **What U-Boot handed over:** the `mp2-handover:` line, the console excerpt
-   from `Hit any key` to the image's banner, `bdinfo` and the live
-   `scriptaddr`/`boot_targets` from the env read.
-6. **The watchdog:** whether `WDT:   Started` appeared, the time from `go` to
-   the end (the image's own end or the reset).
-7. **Failures:** the BL2 `Reset reason:` of each boot, the supply check, and
-   the undo taken. A new defect gets a new issue text, not a line here.
+**Image and route.** `mp2_hello` was built at `59b8bac6` as its README and
+#349 build it (`west build -b stm32mp257f_dk/stm32mp257fxx/a35`, Zephyr
+`af17c0c8aa2a`). `zephyr.bin` is 41224 bytes with sha256
+`4c20912ea43f8adf8121f0d32f196012aa51cf43d0a7d5e535f048cdfd8da47d` and a
+RAM footprint of 0x9c000. It differs from the image #349 proved on
+2026-11-21 (record `…-mp2_hello-405d515b`) for two reasons. The banner
+carries the build commit, and the shared board layer has changed since
+`226cd9a2` (`6612c6cb` and `368e7875`, the display additions; mp2_hello's own
+sources did not change). The scripts were built by `driver/tools/uboot-mp2`
+at `59b8bac6` (`mp2-mmc`, 3820 bytes as U-Boot read them).
+
+**How this run differs from the plain runner** (both are recorded as defects
+in the plan's report):
+
+- The runner ran from a scratch worktree of `59b8bac6` with one line
+  changed. Its `/boot` listing,
+  `find … -print0 | sort -z | xargs -0 sha256sum`, fails on the board,
+  because `find` and `xargs` there are BusyBox and BusyBox's `xargs` has no
+  `-0`. The worktree used
+  `find . -path ./yakogl -prune -o -type f -exec sha256sum {} + | LC_ALL=C sort -k2`,
+  the form `board-stm32mp2.sh` uses. `env_read/collect.sh` got the same
+  change, plus `stat -c '%s %n'` for its `-printf`.
+- The console was reachable only through connected's serial tools, not as a
+  device or bridge the runner could open. `MP2U_CONSOLE` was a shim kept
+  outside the tree. It answered `probe`, passed the runner's typed line on,
+  and on the runner's stop handed back the console text taken through those
+  tools. The agent typed the line itself. The runner's own `scan` judged
+  that text, which is saved verbatim apart from BL2's INFO lines, OP-TEE's
+  start-up lines and part of the second cycle's U-Boot lines.
+
+**Before.** The board had been in ST's Linux for 9 h 35 min. `/boot` was
+mounted from the card's partition 8 (an `SD`-type disk, numbered `mmcblk1`
+in that boot), and `/boot/yakogl` did not exist. The `u-boot-env` partition
+(`mmcblk1p7` in that boot) had both copies valid. The active copy is the
+one at 0x7e000 (flag 0x62, 73 variables); the copy at 0x7c000 has flag 0x61
+and 80 variables, so the card no longer has section 1's blank copy. Image
+sha256 `979256b1…6a2f`, `bootcmd=run bootcmd_stm32mp`, `bootdelay=1`, no
+`preboot`, `scriptaddr=0x90100000`.
+
+1. `tools/mp2_uboot_session_preflight.sh --sha256 4c20912e…` gave 15 ok and
+   1 failed. The failing check was its `board.sh --dry-run … run`, which the
+   image-marker check refuses unless `NETBOOT_NO_WATCHDOG=1` is set (the
+   preflight passes only `MP2_NO_WATCHDOG`). With both set,
+   `tools/board.sh --dry-run stm32mp257f-dk run` printed the whole plan and
+   the typed line (581 bytes, under the 1024-byte limit).
+2. `env_read/collect.sh before2` (card resolved as `mmcblk1`,
+   `u-boot-env` as `mmcblk1p7`, fstype ext4).
+3. `run`: the runner took the lock, ran the pre-checks, read the environment
+   with `dd` + `uboot_env.py` (`env_before_bin_sha256=979256b1…`), recorded
+   the `/boot` listing (25 files), printed the UNDO lines, staged and read
+   back `mp2z-mp2_hello-4c20912ea43f-1795600359-43182.{scr,bin}` under
+   `/boot/yakogl/`, and rebooted Linux.
+4. On the console: BL2 printed `Reset reason: System reset (SYSRST) (0x2074).
+   Warm boot.`, then OP-TEE, then U-Boot (`WDT:   Started watchdog with
+   servicing every 1000ms (32s timeout)`). The keys sent after the U-Boot
+   banner arrived after the 1 s countdown. They landed at extlinux's
+   `Enter choice:`, where a Ctrl-C (`INTERRUPT`, `EXTLINUX FAILED:
+   continuing...`) and the EFI boot manager's failure left U-Boot at
+   `STM32MP> `. This prompt was therefore reached after `bootcmd` had
+   started, and ST's `env_check` had run. It saves nothing while the stored
+   environment is valid, and the after diff confirms it saved nothing. The
+   first two attempts to type the line were dropped with Ctrl-C after a
+   short echo; the capture had lost the first bytes after the write offset,
+   and U-Boot itself had them. The third echo was exact. Then Enter:
+
+   ```
+   mp2z-typed: undo: RAM only, mp2z_*: reset or run bootcmd forgets them
+   3820 bytes read in 211 ms (17.6 KiB/s)
+   ## Executing script at 90100000
+   mp2z: undo: nothing persistent; run bootcmd boots ST Linux
+   mp2z: mmc 0:8 /yakogl/mp2z-mp2_hello-4c20912ea43f-1795600359-43182.bin -> 0xa0000000
+   41224 bytes read in 212 ms (189.5 KiB/s)
+   mp2z: loaded a108 bytes at 0xa0000000, RAM footprint 0x9c000 of the 0x10000000-byte window
+   mp2z: go 0xa0000000
+   ## Starting application at 0xA0000000 ...
+
+   MP2:A EL2
+   MP2:A1
+   MP2:B console up (USART2, polled)
+   mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf809acb8 x2=0xf809acb8 x3=0xa0000000 pc=0xa000370c cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+   mp2: no watchdog armed by this image; PSCI SYSTEM_RESET at 20 s of uptime at the latest
+   *** Booting Zephyr OS build af17c0c8aa2a ***
+   mp2_hello: build 59b8bac6
+   mp2_hello: PASS: counted 5 s in 5018 ms
+   mp2: mp2_hello done: PSCI SYSTEM_RESET at 5022 ms
+   ```
+
+   The next BL2 printed `Reset reason: System reset (SYSRST) (0x2074). Warm
+   boot.`, so there was no brown-out and no power-on reset. U-Boot's
+   countdown ran out, extlinux booted ST's Linux, and the console reached its
+   login line.
+5. The runner saw Linux answer from a new boot, stopped the console helper,
+   removed the staged files (`cleanup=removed`, read back gone) and read the
+   environment again from the re-resolved partition. That was
+   `env_dev_after=mmcblk2p7`: the card was numbered `mmcblk2` in this boot
+   and was found again by type. It then printed:
+
+   ```
+   board-stm32mp2-uboot.sh stm32mp257f-dk: fw_printenv before/after diff (empty) (u-boot-env via dd + uboot_env.py print):
+   board-stm32mp2-uboot.sh stm32mp257f-dk: /boot sha256 before/after diff (empty):
+   board-stm32mp2-uboot.sh stm32mp257f-dk mp2_hello rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=pass:mp2_hello env_diff=empty boot_diff=empty back_after=122s
+   ```
+
+   Exit 0. Its scan line: `mp2-scan: verdict=done back=yes cycles=2 bl2=yes
+   optee=yes uboot=yes stopped=yes script=yes refused=absent go=yes
+   image=yes image_end=yes watchdog=absent linux=yes`. `back_after` includes
+   the time the agent took at the prompt.
+6. `env_read/collect.sh after2` (card `mmcblk2`, `u-boot-env` `mmcblk2p7`),
+   then `summarize.py before2 after2` (exit 0):
+
+   ```
+   ## fw_printenv diff: empty
+   ### u-boot-env image
+   | sha256 | 979256b1432868618d5df3afdf05408a8298980c46229380eae8ab63476f6a2f | 979256b1432868618d5df3afdf05408a8298980c46229380eae8ab63476f6a2f |
+   | active copy | copy 1 | copy 1 |
+   | check | ok | ok |
+   ## /boot files outside yakogl/: unchanged
+   RESULT: IDENTICAL
+   ```
+
+**The environment, `dd` + `uboot_env.py`:** the variable diff is empty, and
+`env_before_bin_sha256` and `env_after_bin_sha256` (in `meta.txt`) are both
+`979256b1432868618d5df3afdf05408a8298980c46229380eae8ab63476f6a2f`. The
+whole 512 KiB partition, both copies and their flag bytes included, is
+byte-identical.
+
+**`/boot`:** the sha256 of all 25 stock files is unchanged (`boot.diff`
+empty, and summarize.py agrees). `/boot/yakogl/` was created by the run,
+removed by it and is absent afterwards.
+
+**Checks:** `tools/mp2_uboot_record_check.py` on the record gave
+`record-check: 5 ok, 0 failed, 1 skipped`. The skip is the `u-boot-env`
+dump, which the runner does not keep; its sha256 are in `meta.txt`. Its
+redaction row passed on 11 files. `tools/mp2_uboot_redact_check.py` had not
+merged, so it did not run.
+
+**Section 11's open items, answered by this run:** the prompt prints as
+`STM32MP> `. U-Boot does start the `arm,smc-wdt` it finds running (`WDT:`
+line above, 1000 ms servicing, 32 s), which is section 9's "source"
+column. The hand-over from `go` is EL2 with MMU, D-cache and I-cache off,
+`x0=0x1`, `x3=0xa0000000`, `pc=0xa000370c`, as #349's runs read it. From
+`go` to the image's end took 5.0 s of the image's uptime. Not done in this
+run: `bdinfo`, `wdt list`, the TFTP route (no TFTP server on UDP 69 and no
+`NETBOOT_*` for a host the board reaches; `tools/mp2_tftp_preflight.sh` not
+passed here), and the `go` hang proof.
+
+**Board after:** ST's Linux, `systemctl is-system-running` = `running`,
+`/boot` on the card's partition 8 (`mmcblk2p8` in this boot), galcore
+loaded and etnaviv not. No module was loaded or unloaded, and Tailscale and
+sshd were not touched. The environment and `/boot` are as before.
