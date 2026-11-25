@@ -1163,6 +1163,99 @@ mod tests {
         assert!(no_pmu_write(&t6));
     }
 
+    // The neighbouring states a U-Boot boot may leave (hand-over note
+    // section 2): each stop code with the report lines it leaves behind.
+
+    #[test]
+    fn u_boot_with_pd_gpu_on_and_the_supply_off_is_refused_before_any_write_or_report() {
+        for sel in [0x1f80, 0x1f24] {
+            let t6 = T6::handed_over_domain_on();
+            t6.rk806.borrow_mut().insert(rk806::POWER_EN0, 0x0e);
+            t6.regs.borrow_mut().insert(SEL158, sel);
+            let mut reported = 0;
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported += 1);
+            assert_eq!((o.stop, o.refusal, o.detail), (Stop::SupplyOff, SUPPLY_OFF_DOMAIN_POWERED, 0x0e), "{sel:#x}");
+            assert_eq!(reported, 0);
+            assert_eq!(o.rk806, [0x0e, o.rk806[1], o.rk806[2], 0x1c]);
+            assert!(!o.supply_enabled);
+            assert!(o.pd_before.usable() && o.pd_after == PdGpuRegs::default());
+            assert!(!o.pd_on.was_on && o.take_over.is_none() && o.qos_policy == 0);
+            assert_eq!(o.ident.gpu_id, 0);
+            assert!(t6.rk806_writes.borrow().is_empty());
+            assert!(no_pmu_write(&t6));
+            assert!(t6.writes.borrow().iter().all(|w| !in_gpu(w.0)));
+        }
+    }
+
+    #[test]
+    fn u_boot_with_the_supply_on_and_pd_gpu_off_writes_no_rk806_frame_and_powers_the_domain() {
+        let t6 = T6::handed_over();
+        assert_eq!(t6.rk806.borrow()[&rk806::POWER_EN0] & rk806::DCDC1_ON, rk806::DCDC1_ON);
+        assert!(!PdGpuRegs::read(&t6, PMU_BASE).usable());
+        let mut reported = Vec::new();
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |g| reported.push(g.stop));
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(reported, [Stop::None], "the hand-over report comes once, before the power-on");
+        assert!(!o.supply_enabled && o.supply_after == [0, 0] && o.supply_waited_us == 0);
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert!(!o.pd_on.was_on && o.pd_after.usable() && o.take_over.is_none());
+        assert_eq!(o.ident.gpu_id, mali::G610_GPU_ID);
+    }
+
+    #[test]
+    fn an_rk806_that_does_not_answer_stops_at_the_first_read_with_nothing_written() {
+        for pd_on in [true, false] {
+            let mut t6 = if pd_on { T6::handed_over_domain_on() } else { T6::handed_over() };
+            // the bus takes the command frames but nothing comes back
+            t6.stuck.push(SPI + rockchip_spi::TXDR);
+            let mut reported = false;
+            let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported = true);
+            let timeout = rockchip_spi::SpiRefusal::RxTimeout as u32;
+            assert_eq!((o.stop, o.refusal), (Stop::Rk806Read, timeout), "pd_on={pd_on}");
+            // the register is the first of RK806_READ, in the detail's upper word
+            assert_eq!(o.detail >> 32, u64::from(RK806_READ[0]), "pd_on={pd_on}");
+            assert_eq!(o.rk806, [0; 4]);
+            assert!(!reported && !o.supply_enabled);
+            assert_eq!(o.clock_set, ClockSet::default(), "the clock is not touched before the supply is known");
+            assert!(t6.rk806_writes.borrow().is_empty());
+            assert!(no_pmu_write(&t6));
+            assert!(t6.writes.borrow().iter().all(|w| !in_gpu(w.0)));
+        }
+    }
+
+    #[test]
+    fn pd_gpu_that_never_acknowledges_its_power_on_stops_with_the_supply_on() {
+        let mut t6 = T6::handed_over();
+        t6.stuck.push(PMU_BASE + pd_gpu::PWR_GATE);
+        let mut reported = false;
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| reported = true);
+        assert_eq!(o.stop, Stop::PowerDomain);
+        assert_eq!(o.refusal, rk3588::PdRefusal::PowerTimeout as u32);
+        assert!(reported, "the hand-over report is made before the power-on is tried");
+        assert!(!o.supply_enabled && !o.pd_after.usable() && o.take_over.is_none());
+        assert_eq!((o.qos_policy, o.ident.gpu_id), (0, 0));
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert!(t6.writes.borrow().iter().all(|w| !in_gpu(w.0)));
+        // the power-on was asked for, and PD_GPU was never cut
+        assert!(t6.writes.borrow().iter().any(|w| w.0 == PMU_BASE + pd_gpu::PWR_GATE && w.1 == 1 << 16));
+        assert!(!t6.writes.borrow().iter().any(|w| w.0 == PMU_BASE + pd_gpu::PWR_GATE && w.1 & 1 != 0));
+    }
+
+    #[test]
+    fn pd_gpu_that_never_acknowledges_after_the_supply_was_enabled_leaves_the_supply_on() {
+        let mut t6 = T6::handed_over_supply_off(0x1c);
+        t6.stuck.push(PMU_BASE + pd_gpu::PWR_GATE);
+        let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
+        assert_eq!((o.stop, o.refusal), (Stop::PowerDomain, rk3588::PdRefusal::PowerTimeout as u32));
+        assert!(o.supply_enabled);
+        assert_eq!(o.supply_after[0] & rk806::DCDC1_ON, rk806::DCDC1_ON);
+        assert_eq!(o.vdd_gpu_uv, 675_000);
+        assert!(!o.pd_after.usable());
+        // one frame: DCDC1 on; no frame turns it off again
+        assert_eq!(t6.rk806_writes.borrow().len(), 1);
+        assert_eq!(t6.rk806.borrow()[&rk806::POWER_EN0] & rk806::DCDC1_ON, rk806::DCDC1_ON);
+    }
+
     /// The T6 as U-Boot hands it over, the words read at its prompt on
     /// 2026-11-12 (docs/notes/nanopc-t6-uboot-handover.md section 4): the GPU
     /// clock on SPLL (CLKSEL_CON(158) 0x1f80, (159) 0), PD_GPU off and in bus
