@@ -46,14 +46,22 @@ expect() {
     if [ "$got" = "$rc" ] && { [ -z "$pat" ] || printf '%s\n' "$out" | grep -qE -- "$pat"; }; then ok "$what"
     else bad "$what (exit $got)"; printf '%s\n' "$out" | sed 's/^/     /'; fi
 }
-fresh() { rm -rf "$T/w"; mkdir -p "$T/w"; R="$T/w/20261120-1030-eye-01234567"; mkrec "$R"; }
+# The record name's sha8 is the image sha256's first 8 digits (board.sh:
+# sha8=${IMG_SHA:0:8}, meta image_sha256), not the commit's: mkrec's commit
+# starts with 01234567, its image_sha256 with abababab, so the name matches
+# the image and shares nothing with the commit.
+fresh() { rm -rf "$T/w"; mkdir -p "$T/w"; R="$T/w/20261120-1030-eye-abababab"; mkrec "$R"; }
 
-fresh; expect "good record is complete" 0 'record-check: .*: complete \(0 problems\)$' "$R"
+fresh; expect "good record is complete (sha8 = image_sha256's first 8, commit unshared)" 0 'record-check: .*: complete \(0 problems\)$' "$R"
 expect "no argument" 2 ''
 expect "missing directory" 2 '' "$T/nope"
 fresh; mv "$R" "$T/w/eye-run"; expect "bad name" 1 '^name: ' "$T/w/eye-run"
-fresh; printf 'commit=ffffffff00000000\nimage_sha256=%s\n' "$(printf 'ab%.0s' $(seq 32))" > "$R/meta.txt"
-expect "sha8 differs from commit" 1 'commit: recorded commit does not start' "$R"
+fresh; sed -i 's/^image_sha256=ab/image_sha256=fe/' "$R/meta.txt"
+expect "sha8 differs from image_sha256" 1 "sha8: .*is not the first 8 digits of meta.txt image_sha256" "$R"
+fresh; sed -i '/image_sha256/d' "$R/meta.txt"
+expect "meta.txt without image_sha256 is refused" 1 'sha8: no 64-hex image_sha256=' "$R"
+fresh; printf 'image_sha256=%s\nimage_sha256=%s\n' "$(printf 'ab%.0s' $(seq 32))" "fe$(printf 'ab%.0s' $(seq 31))" >> "$R/meta.txt"
+expect "meta.txt's last image_sha256 line wins (board.sh mget)" 1 "sha8: .*is not the first 8 digits of meta.txt image_sha256" "$R"
 fresh; sed -i '5d' "$R/console.log"; expect "console line missing" 1 'console: no glmark2-picture line for scene 05' "$R"
 fresh; rm "$R"/photos/07-*.png; expect "photograph missing" 1 'photograph: missing 07-' "$R"
 fresh; rm "$R"/photos/03-*.png; echo "not a png" > "$R/photos/03-x.png"; expect "invalid PNG" 1 'photograph: photos/03-x.png: not a PNG' "$R"
