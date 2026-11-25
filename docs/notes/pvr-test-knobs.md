@@ -39,6 +39,7 @@ Two switches, in `src/pvr/backend.rs`, with their setters:
 |---|---|---|---|
 | `pvr_debug_split_zs` / `pvr_debug_set_split_zs(bool) -> bool` | 1: a framebuffer's depth and stencil are kept apart when they are two renderbuffers (the stencil through `CR_ISP_STENCIL_LOAD_BASE`) | 0: one packed D24S8 buffer per pair, the AM62P's 14 `fbo.render` failures (a60104c2) | gl_test 123 `zsapart`, both arms |
 | `pvr_debug_narrow_la` / `pvr_debug_set_narrow_la(int) -> int` | 1: L8 / A8 / LA8 stored one or two bytes a texel, pack info 0x140 | 0: expanded into RGBA8; 2: narrow with pack info 0x11f | gl_test 132 `narrowla`, all three arms |
+| `pvr_debug_set_draw_targets(int) -> int` | n (1 to 4): GL_MAX_DRAW_BUFFERS, GL_MAX_COLOR_ATTACHMENTS and `gl_MaxDrawBuffers` answer n; returns the previous count | 0: the build's default (3 on the PowerVR); out of range is refused | `tests/pvr_draw_targets_knob.rs`; the deqp sample's `CONFIG_PVR_DEQP_MRT4` (mrt4-deqp-cases.md) |
 
 Eight backend options (`enum pvr_backend_option`, `src/pvr/pvr_backend.h`,
 marked TEST KNOB) take effect only with the feature: `PRETRANSFORM`,
