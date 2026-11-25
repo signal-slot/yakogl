@@ -48,19 +48,18 @@ section 4, each in the commit that adds what the row runs
 
 | # | Row (label, `check.sh` line) | Runs | Env, and why it can gap | `--changed` reach |
 |---|---|---|---|---|
-| E1 | `run     v3d71 host checks (tools/v3d/check71.sh)`, `:3030-3031` | every `tools/v3d/check71.d/*.sh` (57 scripts), one line each | **Yes.** A script exits 77 for a missing input: no C compiler (the ~40 mock/layout checks, e.g. `check71.d/adopt.sh:25`); `MESA_V3D_TREE` (`cl_golden.sh:43`, `job71.sh:78`, `frame_check.sh:62`, `gltest_mesa71.sh:56`); `V3D_SHC` (`gltest_mesa71.sh:64`; both `:185`); `ZEPHYR_SDK_INSTALL_DIR` (`xbuild71.sh:137`). One 77 makes the whole row a gap; a failure outranks it | scope `v3d71`: `src/shaderc/online/v3d/*`, `driver/src/v3d/*`, `tools/v3d/*` (`:203`). **Not** reached by `src/v3d/*` (`:207`, scope `v3d` only), nor by `driver/zephyr/*` or `src/osal/*` (the scripts that read `src/osal/zephyr_v3d71.c` or `driver/zephyr/lib/board/rpi5` then run only when `tools/v3d/*` or an `all` path moves) |
+| E1 | `run     v3d71 host checks (tools/v3d/check71.sh)`, `:3030-3031` | every `tools/v3d/check71.d/*.sh` (59 scripts on the tip), one line each; `check71.sh` is **bash-only** (`sh` is dash on the farm and exits 2) | **Yes, one cause measured.** A script exits 77 for a missing input: no C compiler; a `MESA_V3D_TREE` that has no `build-v3d` (`gltest_mesa71.sh:55-57`); a `V3D_SHC` that is not an executable (`:63-65`); no aarch64 C compiler (`xbuild71.sh:137`, named `ZEPHYR_SDK_INSTALL_DIR`). One 77 makes the whole row a gap; a failure outranks it. **Measured 2026-11-24** on a stock farm machine, `MESA_V3D_TREE` and `ZEPHYR_WS` unset, `bash tools/v3d/check71.sh` (or run directly): exit 77 after about 55 s, `check71: 58 ok, 0 failed, 1 gap(s)`; the only gap is `xbuild71`. `gltest_mesa71` and `gltest_mesa71_tex` pass on the vendored reference build, so neither `MESA_V3D_TREE` nor `V3D_SHC` is needed for 0 gaps (unset is right; a tree without `build-v3d` is the gap). `check71_selftest.sh` passes (5 of 5); `common/tri_check` passes (47 checks) and runs in the gate as `check71.d/tri_check.sh` | scope `v3d71`: `src/shaderc/online/v3d/*`, `driver/src/v3d/*`, `tools/v3d/*` (`:203`). **Not** reached by `src/v3d/*` (`:207`, scope `v3d` only), nor by `driver/zephyr/*` or `src/osal/*` (the scripts that read `src/osal/zephyr_v3d71.c` or `driver/zephyr/lib/board/rpi5` then run only when `tools/v3d/*` or an `all` path moves) |
 | E2 | `tests/v3d71_*.rs` (48 files), in the row `test    $V3D_CONFIG (every tests/ target)`, `:1863-1865` | `cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --tests` (`V3D_CONFIG`, `:1819`); the 7.1 tests carry that set in their headers (e.g. `tests/v3d71_compose.rs`, `v3d71_texfill.rs`) | No. Cargo only. Four tests read `V3D_SHC` or `MESA_V3D_TREE` and then skip *inside* the test (`v3d71_verify_corpus.rs`, `v3d71_mesa_corpus.rs`, `v3d71_mesa_shapes.rs`, `v3d71_shapes.rs`): the cargo row stays green, the same input is checked by E1 | `tests/v3d71_*` matches `tests/*` (`:229`) → scope `tests`, narrowed by `check_tests_reach.py` to the targets a path reaches (`:428-436`); `src/v3d/*` → scope `v3d` (the whole row). Files a test *reads* are in `TEST_TREE_PATHS` (`:1096-1108`: `tools/v3d/pi5`, `tools/v3d/gltest-shaders71`, `driver/docs/rpi5-v3d71-facts.md`, `docs/notes/pre-study-rpi5.md`, `src/v3d/zskeep71.rs`, `backend.rs`, `ffi.rs`, `select.rs`). A new tree a test reads **must be added there** (the tree key row, `tools/check_tree_key_scan.py`, fails on a path outside it) |
 | E3 | `clippy  $V3D_CONFIG` and `test    $V3D_CONFIG (--lib ...)`, `:1855-1857` | clippy and the lib tests, which include the unit tests of `src/v3d/*71.rs` once those modules are in `src/v3d/mod.rs` (today only `#[path]`-included by `tests/`) | No. Clippy is left to the nightly in a PR gate (`CLAUDE.md`); `ci71fix` (`eq_op` in `tests/v3d71_compose.rs`) exists because this row fails there | `v3d` |
-| E4 | `zephyr  rpi_5 probe images (tools/probes/rpi_5/*)`, `:4692-4695` via `zephyr_rpi5_probe_images` (`:4419-4430`) | one `zephyr_werror_image rpi_5 <probe> rpi_5-<name>` (`:4375-4412`: `west build -p always -b rpi_5 ... -DYAKOGL_WERROR=ON`) for **every** directory under `tools/probes/rpi_5/` with a `CMakeLists.txt` and a `prj.conf`: today `rpi5_clear`, `rpi5_dispregs`, `rpi5_dtb`, `rpi5_hello`, `rpi5_ident`, `rpi5_mbox`, `rpi5_scanout16`, `rpi5_scanout32`, `rpi5_tfu`, `rpi5_triangle`, `rpi5_triangle_ours`, `rpi5_wdog` (12; `common/` has neither file) | **Yes.** The whole `if` is guarded by `ZEPHYR_WS` with a `west` workspace (`:4593-4594`); else one gap `zephyr images: no west workspace at ZEPHYR_WS` (`:4696`). An image is built one after another in one row, so one probe that does not build fails the row. The comment at `:4416-4417` lists five probes: it is stale, the loop is not | `scope drivers samples` (`:4692`): `tools/probes/*` and `driver/samples/*` → `samples` (`:224`), `driver/*` → `drivers` (`:225`). A probe's own C is in `tools/probes/`; the library it links (`src/osal/zephyr_v3d71.c`, `src/*`) is `all` |
-| E5 | `test    rpi_5 fdt_walk host test`, `:4702-4707` | `sh tools/probes/rpi_5/common/fdt/test/run.sh`, ASan/UBSan, needs `dtc` (`fdt_walk_test`, `:4435-4442`) | **Yes**: no `dtc` → `gap` (`:4706`); a `SKIPPED` line is a failure (`:4439-4441`) | `drivers samples` |
+| E4 | `zephyr  rpi_5 probe images (tools/probes/rpi_5/*)`, `:4692-4695` via `zephyr_rpi5_probe_images` (`:4419-4430`) | one `zephyr_werror_image rpi_5 <probe> rpi_5-<name>` (`:4375-4412`: `west build -p always -b rpi_5 ... -DYAKOGL_WERROR=ON`) for **every** directory under `tools/probes/rpi_5/` with a `CMakeLists.txt` and a `prj.conf`: today `rpi5_clear`, `rpi5_dispregs`, `rpi5_dtb`, `rpi5_hello`, `rpi5_ident`, `rpi5_mbox`, `rpi5_scanout16`, `rpi5_scanout32`, `rpi5_tex`, `rpi5_tfu`, `rpi5_triangle`, `rpi5_triangle_ours`, `rpi5_wdog` (13 on the tip; `common/` has neither file) | **Yes.** The whole `if` is guarded by `ZEPHYR_WS` with a `west` workspace (`:4593-4594`); else one gap `zephyr images: no west workspace at ZEPHYR_WS` (`:4696`). **Not measured on 2026-11-24** (it needs `ZEPHYR_WS`, which was unset); with it unset the row is that one gap. The probes' host selftests pass (same date): dispregs 37, mbox 70, scanout16 frame16 70 / hold_check 62 / verdicts, scanout32 io_filter 51 / swap_check 151 / verdicts 147. An image is built one after another in one row, so one probe that does not build fails the row. The comment at `:4416-4417` lists five probes: it is stale, the loop is not | `scope drivers samples` (`:4692`): `tools/probes/*` and `driver/samples/*` → `samples` (`:224`), `driver/*` → `drivers` (`:225`). A probe's own C is in `tools/probes/`; the library it links (`src/osal/zephyr_v3d71.c`, `src/*`) is `all` |
+| E5 | `test    rpi_5 fdt_walk host test`, `:4702-4707` | `sh tools/probes/rpi_5/common/fdt/test/run.sh`, ASan/UBSan, needs `dtc` (`fdt_walk_test`, `:4435-4442`) | **Yes**: no `dtc` → `gap` (`:4706`); a `SKIPPED` line is a failure (`:4439-4441`). **Measured 2026-11-24:** with `dtc` on the machine `common/fdt/test/run.sh` passes (`fdt_walk: 528 checks, 0 failed`); `dtc` is the only input this row needs, and it was present | `drivers samples` |
 | E6 | `tools   board.sh dry-run matrix and replays`, `:4114` (`tools/board_selftest.sh`: pi5 `run` against `pi5-fake` and the pi5 tryboot sequence, `board_selftest.sh:482-499`; the probe verdict parser, `:46`) | host only, `no_board_env` (`:342-361`) strips `PI5_*`, `BOARD_*`, `ZEPHYR_*` from the environment | No | `tools` (`:230`: `tools/board.sh`, `board_selftest.sh`, `tools/cts/*`) |
 | E7 | `tools   cts-selftest.sh (... images-selftest included)`, `:3490`; its images check asserts that `deqp-tree-images.sh rpi_5` is refused with rc 2 (`tools/cts/images-selftest.sh:380-381`) | host only | No. **The line is a pin that P13 must change** (a Pi 5 dEQP arm) | `tools` |
 | E8 | `tools/v3d/pi5/*.clif` and the `gltest-shaders71`, `gltest-mesa71` data | no row of their own: read by E1 and E2 | as E1/E2 | `tools/v3d/*` → `v3d v3d71` (`:203`) |
 
 What is **not** in the gate on the tip: any `gpu-v3d71` feature row (the feature
 does not exist, `Cargo.toml:96` is `gpu-v3d`, `gl-table:35` and `:256`); an
-`rpi_5` **gl_test** image (`driver/samples/zephyr/gl_test/boards/` has `rpi_4b.*`
-and no `rpi_5.*`); any Pi 5 stage of `board-stage.sh` (`board-stage.sh:67`,
+`rpi_5` **gl_test** image row (the board files `rpi_5.conf` and `rpi_5.overlay` exist since 1bb98759, but `check.sh` has no row that builds them); any Pi 5 stage of `board-stage.sh` (`board-stage.sh:67`,
 `:175`, `:182`: `pi4` is the only Pi board); a dEQP image arm for `rpi_5`.
 
 The Pi 4 row to copy is `check.sh:4631-4632`:
@@ -86,7 +85,7 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
 | N8 | `tools   board.sh pi5 gl_test verdicts (rpi5_gl_test replay)` | extend `board_selftest.sh` (so row `:4114` carries it): replays of a recorded `gl_test` image's `v3d_gl_test` record end and verdict lines on `pi5-fake` (`boardprep71` did the record-end part; `texverdict71` adds `v3d_tex`/`v3d_cube`) | No (host replay) | `tools` | `boardprep71` (done), `texverdict71`, `board71` for the six cases' recorded replay |
 | N9 | `tools   board-stage.sh pi5 common` self-test | a `board-stage.sh pi5 common` arm (the Pi 5 `layout`/`key` pair, `board-stage.sh:182`, usage `:175`) with its dry-run checked in `tools/cts/cts-selftest.sh` or `tools/board_selftest.sh`, the way `pi4 common` is (`images-selftest.sh:456-465` loop `am62p imx8mp rpi_4b`: add `rpi_5`) | No. The stage needs `PI5_*` values only at run time; the dry run needs none | `tools` | `stage71` |
 | N10 | `docs / tools` rows touched by results | `tools/cts/RESULTS.md` Pi 5 row and `STATUS.md` line: the `ctsdoc`-style lints reach `tools` and `docs`; no new row | No | `docs`, `tools` | `board71`, `board71-tex` (their commit message and RESULTS row; not check.sh) |
-| N11 | P12 gate: the v3d71 row (E1) at 0 gaps | not a new row: E1 must pass with `MESA_V3D_TREE` (built `build-v3d` tree, `tools/v3d/README.md`), `V3D_SHC` (the 7.1 shader tool; `gltest_mesa71.sh` names it) and `ZEPHYR_SDK_INSTALL_DIR` all present on the runner | **Yes**: these three, plus a C compiler. `MESA_V3D_TREE` unset means the vendored reference build (`CLAUDE.md`); set to a tree without `build-v3d` it is a gap. `V3D_SHC` is not in the `deps-env.sh` entries of `setup-gate-host.sh` yet (see section 5) | `v3d71` | the P12 closer (no item yet; see section 5) |
+| N11 | P12 gate: the v3d71 row (E1) at 0 gaps | not a new row: E1 must pass with an aarch64 C compiler on the runner (see section 5) | **Yes**: that compiler only (measured 2026-11-24). `MESA_V3D_TREE` and `V3D_SHC` are **not** needed: unset `MESA_V3D_TREE` means the vendored reference build, and `gltest_mesa71*` pass on it; set to a tree without `build-v3d` it is a gap, so leave it unset or point it at a built tree | `v3d71` | the P12 closer (no item yet; see section 5) |
 | N12 | P13: `dEQP-GLES2` and `glmark2` rows for the Pi 5 | image builders for `rpi_5` (`deqp-tree-images.sh rpi_5`, `images-selftest.sh:380-381` and `:456-465`) and a `board-stage.sh pi5 deqp\|ms4` stage | No in the gate (host rows only); real runs are board sessions | `tools` | P13 items (`deqp71plan` designs them) |
 
 ## 4. Order of the open items
@@ -102,27 +101,48 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
 2. **`gltest71`**: N6 (the rpi_5 gl_test image, `-Werror`) and N5. Both need
    `ZEPHYR_WS`. N6 can only be green after `backend71` (the Kconfig help names
    the feature, `gl-table:114-118`) and `werrdry71` (the trial build) listed what
-   to fix; its commit also adds the board `.conf`/`.overlay`.
+   to fix; the board `.conf`/`.overlay` have merged (1bb98759, no row builds them yet); `backend71` has not (`Cargo.toml` has no `gpu-v3d71`, checked 2026-11-25), so N1 to N6 are all still open.
 3. **`stage71`**: N9 (and N8's `board-stage` side). Reaches `tools` only, so a
    PR of it runs no cargo or Zephyr row: it can land alone.
 4. **`board71`** (after 1 to 3): the board session; RESULTS and STATUS rows
    (N10). Adds no row.
 5. **`mip71`, `cases71`, `board71-tex`, `texprobe71`, `texverdict71`**: N3 rows
    for their tests; N7 for the probe; N8 for `texverdict71`.
-6. **P12 closer** (no item yet): N11, the three inputs on the runner, and a
+6. **P12 closer** (no item yet): N11, the aarch64 compiler on the runner (and `ZEPHYR_WS` for E4), and a
    check that every Pi 5 row of sections 2 and 3 prints `ok` with `0 gap(s)` in
    one nightly. See section 5.
 7. **P13**: N12.
 
 ## 5. What 0 gaps still needs (decisions for the planner)
 
-* **Runner inputs.** The gate's only gap sources for the Pi 5 are `ZEPHYR_WS`
-  (E4, E5-neighbour, N6), `MESA_V3D_TREE`, `V3D_SHC` and `ZEPHYR_SDK_INSTALL_DIR`
-  (E1), `dtc` (E5) and a C compiler (E1). `setup-gate-host.sh` checks `dtc` and
-  the workspaces' trees (`:588-599`), not `V3D_SHC` or `ZEPHYR_SDK_INSTALL_DIR`
-  by name. A `--check` line for each (and a `deps-env.sh` entry for `V3D_SHC`)
-  makes the gap visible before a PR's run, not in its log. That is a script edit,
-  so it is for a later item, not this one.
+* **Measured 2026-11-24** on a stock farm machine with `MESA_V3D_TREE` and
+  `ZEPHYR_WS` unset, per Pi 5 row input:
+
+  | Input | Result | What closes it |
+  |---|---|---|
+  | `check71.sh` (E1) | gap (exit 77, 58 ok, 0 failed, 1 gap; only `xbuild71`) | an aarch64 C compiler, an environment step on the runner (below) |
+  | `gltest_mesa71`, `gltest_mesa71_tex` | pass on the vendored reference build | nothing; keep `MESA_V3D_TREE` unset or pointing at a built tree |
+  | `check71_selftest.sh`, `common/tri_check` | pass (5 of 5; 47 checks) | nothing |
+  | `common/fdt/test/run.sh` (E5) | pass with `dtc` (528 checks, 0 failed) | nothing on this machine; `dtc` must stay installed |
+  | Pi 5 probe host selftests | pass (dispregs 37, mbox 70, scanout16 70 / 62 / verdicts, scanout32 51 / 151 / 147) | nothing |
+  | Zephyr `rpi_5` probe images (E4) | not measured; one gap without `ZEPHYR_WS` | an environment step: a west workspace at `ZEPHYR_WS` (`tools/cts/deps-env.sh --layout`) |
+  | `setup-gate-host.sh --check` | reports `aarch64-cc`, `GLMARK2_SRC` and `pvr_fw_blob.h` missing | only `aarch64-cc` and `dtc` matter for the Pi 5 rows; `GLMARK2_SRC` and `pvr_fw_blob.h` belong to other boards and P13 |
+
+* **The aarch64 compiler.** `xbuild71.sh` (`:46-53`, `:114-138`) takes
+  `aarch64-zephyr-elf-gcc` from `ZEPHYR_SDK_INSTALL_DIR`, else
+  `clang --target=aarch64-none-elf` if it finds a C library for the target,
+  else `aarch64-linux-gnu-gcc`. It must accept `-mcpu=cortex-a72` and
+  `-mcpu=cortex-a76`. Stock clang without a target C library is not enough.
+  Installing `gcc-aarch64-linux-gnu` or the Zephyr SDK on the runner closes the
+  one measured E1 gap: an environment step, no repository change.
+* **`--check` lines.** `setup-gate-host.sh --check` does not name the aarch64
+  compiler for `xbuild71`, `dtc` for E5, `V3D_SHC` or `ZEPHYR_SDK_INSTALL_DIR`
+  as Pi 5 inputs. Item `p12-hostcheck` adds the lines (the compiler and `dtc`
+  matter; `V3D_SHC` is optional, see above). It is a script edit, not part of
+  this note.
+* **`check71.sh` is bash-only.** `sh tools/v3d/check71.sh` exits 2 under dash.
+  Run it directly or with `bash`; a doc or script that says `sh check71.sh` is
+  wrong. A run takes about 55 s, mostly the Mesa-based scripts.
 * **One row, many gaps.** E1 collapses every check71 gap into one row, and its
   exit code is 77 for any one of them. To read which, use the printed `gap:`
   names (`check71.sh:42-48`). A row per input would be clearer but changes the
@@ -133,10 +153,10 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
   is run from `tests/v3d71_ffi.rs`, E2). If a check71.d script starts reading
   `src/v3d/*71*`, add `src/v3d/*71*` to `:203` in that commit.
 * **Stale comment.** `check.sh:4416-4417` lists five probes; the loop takes
-  twelve. A comment-only fix for whoever next touches `:4419`.
+  thirteen. A comment-only fix for whoever next touches `:4419`.
 * **`-Werror` of N6.** Not yet established on the tip for gl_test (`werrdry71`
-  trial listed what to fix; `rpi5_triangle` and the other twelve probes are the
-  E4 evidence `c1probe` re-runs read-only).
+  trial listed what to fix; the probes are the E4 evidence, not measured on
+  2026-11-24).
 * **PR gate versus nightly.** On a PR only the rows the diff reaches run, so a
   Pi 5 change that reaches only `scope v3d71` leaves N6 unrun and vice versa; the
   nightly runs all. A PR that adds N6 reaches `gltest drivers samples v3d`
