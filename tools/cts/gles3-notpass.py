@@ -84,6 +84,20 @@ range may split), and an OLD with only the one-line form 'build X, run Y:'
 counts as covering every row of the tree. Build and date are --commit (or
 the slice directory's) and --date.
 
+Re-split rows (a board session reran part of a row, or the generator made
+more rows than the table OLD was spliced against): --tree is the new table,
+--resplit 22=3 says base row 22 is now three tree rows (22a-22c, following
+each other), --rows counts the new table's rows, and the header keeps counting
+base rows, naming the re-split ones and joining the dates of one build:
+    # rows 0-45 (22 re-split as 22a-22c): build abcdef12, run 2026-11-22/25
+(OLD's header names them too, so --resplit is needed once.) With re-split
+rows the SOURCEs are read in the order given and a later one overrides an
+earlier one for a case both report (a rerun is newer); a case of a re-split
+row that no SOURCE reports keeps OLD's line (or its Pass) instead of
+becoming NoResult; one build per row: parts of a re-split row on another
+build than its other parts are refused. A table with no re-split row is
+spliced and headed exactly as before.
+
 stdout (or -o OUT): the header naming the build, the board and the run date,
 then every mustpass case (tools/cts/gles3-mustpass.txt) that is not Pass, in
 mustpass order, tab separated: <outcome> <case> <first message line>. A
@@ -471,19 +485,95 @@ def case_rows(tree_text, mustpass):
     return owner, len(table)
 
 
-RANGE_LINE = re.compile(r"^# rows (\d+)-(\d+): build (\S+), run (\S+)\s*$")
+RANGE_LINE = re.compile(r"^# rows (\d+)-(\d+)(?: \((.*?)\))?: build (\S+), run (\S+)\s*$")
+RESPLIT_ITEM = re.compile(r"^(\d+) re-split as (\d+)a-(\d+)([b-z])$")
 LEGACY_LINE = re.compile(r"^# .*? build (\S+), run ([^:]+?):")
 
 
-def old_ranges(lines, nrows):
-    """[(lo, hi, commit, date)] of OLD's header."""
-    out = [(int(m.group(1)), int(m.group(2)), m.group(3), m.group(4))
-           for m in map(RANGE_LINE.match, lines) if m]
+def parse_resplits(text, lo, hi):
+    """'22 re-split as 22a-22c, 30 re-split as 30a-30b' -> {22: 3, 30: 2}."""
+    out = {}
+    for item in text.split(", "):
+        m = RESPLIT_ITEM.match(item.strip())
+        if not m or m.group(1) != m.group(2) or m.group(1) != m.group(3):
+            raise NotpassError("header: %r is not 'N re-split as Na-Nx'" % item)
+        row = int(m.group(1))
+        if not lo <= row <= hi or row in out:
+            raise NotpassError("header: re-split row %d is outside its range %d-%d or named twice"
+                               % (row, lo, hi))
+        out[row] = ord(m.group(4)) - 96
+    return out
+
+
+def header_ranges(lines, nrows):
+    """[(lo, hi, commit, date, {base row: parts})] of OLD's header. Rows are
+    the base table's: a re-split row counts once, its parts are Na, Nb, ..."""
+    out = []
+    for m in map(RANGE_LINE.match, lines):
+        if m:
+            lo, hi = int(m.group(1)), int(m.group(2))
+            rs = parse_resplits(m.group(3), lo, hi) if m.group(3) else {}
+            out.append((lo, hi, m.group(4), m.group(5), rs))
     if not out:
         for l in lines:
             m = LEGACY_LINE.match(l)
             if m:
-                return [(0, nrows - 1, m.group(1), m.group(2))]
+                return [(0, nrows - 1, m.group(1), m.group(2), {})]
+    return out
+
+
+def old_ranges(lines, nrows):
+    """[(lo, hi, commit, date)] of OLD's header."""
+    return [r[:4] for r in header_ranges(lines, nrows)]
+
+
+def header_resplits(lines):
+    """{base row: parts} of every re-split row the header names."""
+    out = {}
+    for r in header_ranges(lines, 0):
+        out.update(r[4])
+    return out
+
+
+def row_bases(ntree, resplit):
+    """(base row of each tree row, number of base rows): the parts of a
+    re-split row follow each other in the tree."""
+    nbase = ntree - sum(n - 1 for n in resplit.values())
+    if nbase < 1 or any(b >= nbase for b in resplit):
+        raise NotpassError("the tree has %d rows, too few for the re-split rows %s"
+                           % (ntree, ",".join("%d=%d" % kv for kv in sorted(resplit.items()))))
+    bases = []
+    for b in range(nbase):
+        bases.extend([b] * resplit.get(b, 1))
+    return bases, nbase
+
+
+def parse_resplit_arg(spec):
+    """'22=3,30=2' -> {22: 3, 30: 2}: base row 22 became three tree rows."""
+    out = {}
+    for part in (spec or "").split(","):
+        if not part.strip():
+            continue
+        m = re.fullmatch(r"(\d+)=(\d+)", part.strip())
+        if not m or not 2 <= int(m.group(2)) <= 26 or int(m.group(1)) in out:
+            raise NotpassError("--resplit: %r is not ROW=PARTS (2 to 26 parts, a row once)" % part)
+        out[int(m.group(1))] = int(m.group(2))
+    return out
+
+
+def expand_dates(text):
+    """'2026-10-13/14' -> ['2026-10-13', '2026-10-14']."""
+    first, *rest = text.split("/")
+    return [first] + [first[:len(first) - len(r)] + r if len(r) < len(first) else r for r in rest]
+
+
+def join_dates(dates):
+    """['2026-11-25', '2026-11-27'] -> '2026-11-25/27' (the day alone when
+    year and month agree, as the one-line header writes '2026-10-13/14')."""
+    dates = sorted(set(dates))
+    out = dates[0]
+    for d in dates[1:]:
+        out += "/" + (d[len(d) - 2:] if d[:-2] == dates[0][:-2] else d)
     return out
 
 
@@ -505,9 +595,51 @@ def merge_ranges(old, rows, commit, date):
     return out
 
 
-def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, board):
-    """The spliced TSV text and the number of mustpass cases of the rows."""
+def merge_ranges_resplit(old, base_rows, commit, date, resplit, whole):
+    """The ranges of a table with re-split rows: OLD's per base row, the base
+    rows run now replaced (a re-split row run again by the same build keeps
+    the dates of its parts, joined; whole: the re-split rows all of whose
+    parts were run now, which may change build), neighbouring rows of one build joined
+    with their dates, each range naming the re-split rows it holds."""
+    per_row = {}
+    for lo, hi, c, d, _ in old:
+        for r in range(lo, hi + 1):
+            per_row[r] = (c, expand_dates(d))
+    for b in base_rows:
+        if b in resplit and b in per_row and per_row[b][0] != commit and b not in whole:
+            raise NotpassError("row %d is re-split and has parts of build %s, not %s: "
+                               "rerun every part on one build" % (b, per_row[b][0], commit))
+        if b in resplit and b in per_row and per_row[b][0] == commit:
+            per_row[b] = (commit, per_row[b][1] + [date])
+        else:
+            per_row[b] = (commit, [date])
+    out = []
+    for r in sorted(per_row):
+        c, ds = per_row[r]
+        if out and out[-1][1] == r - 1 and out[-1][2] == c:
+            out[-1] = (out[-1][0], r, c, out[-1][3] + ds)
+        else:
+            out.append((r, r, c, list(ds)))
+    return [(lo, hi, c, join_dates(ds),
+             ", ".join("%d re-split as %da-%d%s" % (b, b, b, chr(96 + resplit[b]))
+                       for b in sorted(resplit) if lo <= b <= hi))
+            for lo, hi, c, ds in out]
+
+
+def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, board, resplit=None):
+    """The spliced TSV text and the number of mustpass cases of the rows.
+    resplit ({base row: parts}, added to the re-split rows OLD's header
+    names) says the tree has more rows than the base table: the header then
+    counts base rows, and a case of a re-split row that no source reports
+    keeps OLD's line instead of becoming NoResult."""
     owner, nrows = case_rows(tree_text, mustpass)
+    header_lines = [l for l in old_text.splitlines() if l.startswith("#")]
+    rs = header_resplits(header_lines)
+    for b, n in (resplit or {}).items():
+        if rs.get(b, n) != n:
+            raise NotpassError("--resplit %d=%d, but the header of OLD names %d parts" % (b, n, rs[b]))
+        rs[b] = n
+    bases, nbase = row_bases(nrows, rs)
     rows = set(parse_rows(rows_spec, nrows))
     stray = [c for c in results if c in owner and owner[c] not in rows]
     if stray:
@@ -518,7 +650,7 @@ def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, boar
         raise NotpassError("the rows %s hold no mustpass case" % rows_spec)
     text, _ = render(results, mine, commit, board, date)
     new = {l.split("\t")[1]: l for l in text.splitlines() if l and not l.startswith("#")}
-    header, kept = [], {}
+    header, kept, old_of = [], {}, {}
     order = {c: i for i, c in enumerate(mustpass)}
     for k, line in enumerate(old_text.splitlines(), 1):
         if line.startswith("#"):
@@ -529,15 +661,28 @@ def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, boar
                 raise NotpassError("OLD:%d: not <outcome> TAB <case> TAB <message>: %r" % (k, line))
             if p[1] not in order:
                 raise NotpassError("OLD:%d: %s is not a mustpass case" % (k, p[1]))
-            if p[1] in kept:
+            if p[1] in kept or p[1] in old_of:
                 raise NotpassError("OLD:%d: %s twice" % (k, p[1]))
+            old_of[p[1]] = p
             if owner.get(p[1]) not in rows:
                 kept[p[1]] = p
+    for c in mine:
+        # a re-split row: the newest source that has a result wins, and no
+        # source at all leaves the result an earlier run gave (or its Pass)
+        if c not in results and bases[owner[c]] in rs:
+            new.pop(c, None)
+            if c in old_of:
+                kept[c] = old_of[c]
     width = max([len(p) for p in kept.values()] + [3])
     lines = {c: "\t".join(p + [""] * (width - len(p))) for c, p in kept.items()}
     for c, l in new.items():
         lines[c] = l + "\t" * (width - 3)
-    ranges = merge_ranges(old_ranges(header, nrows), sorted(rows), commit, date)
+    if rs:
+        run_base = sorted({bases[r] for r in rows})
+        whole = {b for b in run_base if b not in rs or {r for r in range(nrows) if bases[r] == b} <= rows}
+        ranges = merge_ranges_resplit(header_ranges(header, nbase), run_base, commit, date, rs, whole)
+    else:
+        ranges = merge_ranges(old_ranges(header, nrows), sorted(rows), commit, date)
     head = ("# SPDX-License-Identifier: Apache-2.0\n"
             "# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.\n"
             "# dEQP-GLES3 on the %s: every mustpass case\n"
@@ -546,7 +691,13 @@ def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, boar
             "# (no status in any source). Written by gles3-notpass.py --splice; the build and\n"
             "# the run date per row range of tools/cts/am62p-gles3-tree.txt (counted from 0):\n"
             % board)
-    head += "".join("# rows %d-%d: build %s, run %s\n" % r for r in ranges)
+    if rs:
+        head = head.replace("(counted from 0):\n", "(counted from 0; a re-split row\n"
+                            "# counts once, its parts are named 22a, 22b, ...):\n")
+        head += "".join("# rows %d-%d%s: build %s, run %s\n" % (lo, hi, " (%s)" % r if r else "", c, d)
+                        for lo, hi, c, d, r in ranges)
+    else:
+        head += "".join("# rows %d-%d: build %s, run %s\n" % r for r in ranges)
     body = "".join(lines[c] + "\n" for c in sorted(lines, key=order.get))
     return head + body, len(mine)
 
@@ -762,6 +913,8 @@ def main():
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
     ap.add_argument("--splice", metavar="OLD.tsv", help="replace the --rows of OLD.tsv by the SOURCEs")
     ap.add_argument("--rows", metavar="AA-BB[,CC-DD]", help="tree rows (from 0) the SOURCEs hold, with --splice")
+    ap.add_argument("--resplit", metavar="ROW=PARTS[,..]",
+                    help="with --splice: the tree has these base rows split in PARTS rows (22=3: 22a-22c)")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
@@ -773,18 +926,28 @@ def main():
             ap.error("--splice needs --rows")
         results = {}
         try:
-            commit = resolve_commit(a.commit, collect(a.sources, results))
+            with open(a.splice, encoding="utf-8") as f:
+                old = f.read()
+            resplit = parse_resplit_arg(a.resplit)
+            if resplit or header_resplits([l for l in old.splitlines() if l.startswith("#")]):
+                # re-split rows: a later SOURCE overrides an earlier one
+                commits = set()
+                for src in a.sources:
+                    one = {}
+                    commits |= collect([src], one)
+                    results.update(one)
+            else:
+                commits = collect(a.sources, results)
+            commit = resolve_commit(a.commit, commits)
             if not results:
                 raise NotpassError("no per-case result read from any source")
             tree = a.tree
             if tree == os.path.join(HERE, "pi4-gles3-tree.txt"):
                 tree = os.path.join(HERE, "am62p-gles3-tree.txt")
-            with open(a.splice, encoding="utf-8") as f:
-                old = f.read()
             with open(tree, encoding="utf-8") as f:
                 tree_text = f.read()
             text, n = splice(old, tree_text, a.rows, results, read_mustpass(a.mustpass),
-                             commit, a.date, a.board)
+                             commit, a.date, a.board, resplit)
         except NotpassError as e:
             sys.stderr.write("gles3-notpass: %s\n" % e)
             return 1

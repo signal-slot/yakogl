@@ -56,10 +56,18 @@ def read_tsv(text):
 
 
 def check_c1(head, nrows, ref, repo):
+    """nrows: the tree's rows. With re-split rows named in the header the
+    ranges count base rows (a re-split row once): the tree's rows less the
+    extra parts of the re-split rows."""
     out = []
-    ranges = NP.old_ranges(head, nrows)
+    try:
+        nbase = NP.row_bases(nrows, NP.header_resplits(head))[1]
+        ranges = NP.old_ranges(head, nbase)
+    except NP.NotpassError as e:
+        return ["c1: %s" % e]
     if not ranges:
         return ["c1: the header names no build (no '# rows AA-BB: build X, run Y' line)"]
+    nrows = nbase
     covered = {}
     for lo, hi, c, d in ranges:
         for r in range(lo, hi + 1):
@@ -93,7 +101,9 @@ def check_c1(head, nrows, ref, repo):
     return out
 
 
-def check_c2(rows, no_noresult=False):
+def check_c2(rows, no_noresult=False, resplit_cases=None):
+    """resplit_cases: {case: 'row 22 (22a-22c)'} for the cases of re-split
+    rows, which may not stay NoResult."""
     out = []
     for k, p in rows:
         outcome = p[0].strip()
@@ -101,9 +111,26 @@ def check_c2(rows, no_noresult=False):
             out.append("c2: line %d: %s outcome %r" % (k, "empty" if not outcome else "bad", p[0]))
         if no_noresult and outcome == "NoResult":
             out.append("c2: line %d: NoResult: %s" % (k, p[1] if len(p) > 1 else "?"))
+        if outcome == "NoResult" and len(p) > 1 and p[1] in (resplit_cases or {}):
+            out.append("c2: line %d: NoResult in re-split %s: %s" % (k, resplit_cases[p[1]], p[1]))
         if len(p) < 4 or not p[3].strip():
             out.append("c2: line %d: empty cause family: %s" % (k, p[1] if len(p) > 1 else "?"))
     return out
+
+
+def resplit_cases(head, tree_text, mustpass, nrows):
+    """{case: 'row 22 (22a-22c)'} of every case of a re-split row; empty when
+    the header names none or cannot be read against the tree (c1 says so)."""
+    try:
+        rs = NP.header_resplits(head)
+        if not rs:
+            return {}
+        bases = NP.row_bases(nrows, rs)[0]
+        owner, _ = NP.case_rows(tree_text, NP.read_mustpass(mustpass))
+    except (NP.NotpassError, OSError):
+        return {}
+    return {c: "row %d (%da-%d%s)" % (bases[r], bases[r], bases[r], chr(96 + rs[bases[r]]))
+            for c, r in owner.items() if bases[r] in rs}
 
 
 def main():
@@ -112,6 +139,8 @@ def main():
     ap.add_argument("tree")
     ap.add_argument("--no-noresult", action="store_true",
                     help="a NoResult row fails c2 (the whole-tree acceptance)")
+    ap.add_argument("--mustpass", default=os.path.join(HERE, "gles3-mustpass.txt"),
+                    help="the case list, to find the cases of re-split rows")
     ap.add_argument("--ref", default="origin/main")
     ap.add_argument("--repo", default=os.path.join(HERE, "..", ".."),
                     help="the git repository (default: this one)")
@@ -120,7 +149,8 @@ def main():
         with open(a.tsv, encoding="utf-8") as f:
             text = f.read()
         with open(a.tree, encoding="utf-8") as f:
-            nrows = len(TREE.read_table(f.read()))
+            tree_text = f.read()
+        nrows = len(TREE.read_table(tree_text))
     except OSError as e:
         sys.stderr.write("check-gles3-notpass-run: %s\n" % e)
         return 2
@@ -131,7 +161,7 @@ def main():
             print(p)
         print("c2: %s has no cause-family column yet (run gles3-triage.py to add it)" % a.tsv)
         return 2
-    problems += check_c2(rows, a.no_noresult)
+    problems += check_c2(rows, a.no_noresult, resplit_cases(head, tree_text, a.mustpass, nrows))
     for p in problems:
         print(p)
     if not problems:
