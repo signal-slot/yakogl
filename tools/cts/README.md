@@ -70,7 +70,7 @@ tools/cts/
   deqp-es2-programs.sh         every dEQP-GLES2 program of a host v3d run, deduplicated (2b)
 ```
 
-`readme-glmark2-check.py [--readme F] [--results F] [--ref R] [--scenes LIST]` reads the
+`readme-glmark2-check.py [--readme F] [--results F] [--ref R] [--scenes LIST] [--verdicts]` reads the
 glmark2 table of `README.md` and fails (exit 1, one `FAIL:` line each) when a
 board (AM62P, Raspberry Pi 4, i.MX8MP) is missing, the boards name more than
 one commit, the commit is not an ancestor of `--ref` (default `origin/main`;
@@ -86,9 +86,16 @@ form `terrain 250 ms (4 FPS)` match), and the row must cite a record directory
 `records/<board>/<YYYYMMDD-HHMM>-<name>-<sha8>/` (`<board>` is `pi4`, `imx8mp`
 or `am62p`; `<sha8>` matches the common commit by prefix). A missing or
 non-numeric figure and a missing record directory are one `FAIL:` line each
-naming the board. The gate does
+naming the board. `--verdicts` (off by default) also checks that each of those
+rows states its run outcome (`33 scenes`, `0 failed`, `0 GL errors`,
+`0 out-of-memory`) and a picture verdict for terrain and for refract (checked
+against `glmark2-pictures.txt`, or `not looked at by eye`); the accepted
+wording is in the script's docstring, and each missing item is one
+`FAIL: RESULTS: the <Board> glmark2 row does not state <what>` line. The gate does
 not run it on the live files: `cts-selftest.sh` check 27 runs it on
-`testdata/readme-glmark2/`. Run it by hand before handing in a glmark2 table.
+`testdata/readme-glmark2/`, and `readme-glmark2-verdicts-selftest.sh` runs
+`--verdicts` on the `verdicts-*-RESULTS.md` fixtures there. Run it by hand
+before handing in a glmark2 table.
 
 `glmark2-ms.py [--cells] <console log>` reads a glmark2-es2 console log of any
 of the three board images and prints a Markdown table: one row per scene with
