@@ -1,0 +1,17 @@
+# mali column, commit 22c5fc5f45c0d790973043ceda1e54a09dd04543, tools/cts/mali-glmark2-run.sh
+mali | [build] use-vbo=false | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 012a, crc16q 217f; mean 12 12 12; black no
+mali | [build] use-vbo=true | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 b333, crc16q 217f; mean 12 12 12; black no
+mali | [shading] shading=gouraud | 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000012ff, br 00008eff; crc16 0252, crc16q 83c1; mean 0 0 17; black no
+mali | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 a972, crc16q b3e9; mean 231 233 221; black no
+mali | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 700170ff, tl 5a0313ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 afa5, crc16q 9464; mean 48 32 45; black no
+mali | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 d9ab, crc16q 74e5; mean 204 209 190; black no
+mali | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl fafafaff, br ffffffff; crc16 a670, crc16q b61f; mean 199 204 184; black no
+mali | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 9060, crc16q 73e0; mean 42 57 65; black no
+mali | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 9ef3, crc16q 1121; mean 42 57 65; black no
+mali | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 ebfc, crc16q 2df8; mean 42 57 66; black no
+mali | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 1989, crc16q b64b; mean 56 56 56; black no
+mali | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr c3c3c3ff, bl ebebebff, br 484848ff; crc16 afb7, crc16q 63ce; mean 49 49 49; black no
+mali | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 030303ff, tr 000000ff, bl fefefeff, br f9f9f9ff; crc16 2b9f, crc16q 9f64; mean 55 55 55; black no
+mali | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 72a3, crc16q 5b3f; mean 56 56 56; black no
+mali | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 b231, crc16q a5b3; mean 55 55 55; black no
+mali | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 b231, crc16q a5b3; mean 55 55 55; black no
