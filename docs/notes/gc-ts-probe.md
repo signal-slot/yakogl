@@ -759,7 +759,12 @@ stopping it for a session) is what the next attempt needs.
 - **Recheck (same day, after the task moved to another worker)**: the board
   still answers over the lease's ssh, and `podman ps` still lists
   `slint-launcher`, so the readiness stop holds; no image was staged and no
-  jump made.
+  jump made. A third check from a third worker found the same: `tools/board.sh
+  x2 status` exit 1 (board lease none, uptime 204989 s, runlevel default,
+  `kexec_crash_loaded` 0, crash window 268435456, containers 1), and `podman ps`
+  lists `slint-launcher` (up 2 days). The stop's cause is the container's
+  autostart, which only its owner can turn off; stopping it from a task would
+  not leave the board as found.
 
 | page | selector | outcome |
 |---|---|---|
