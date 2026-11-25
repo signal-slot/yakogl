@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The fragment shader of dEQP-GLES2.functional.shaders.loops.while_dynamic_iterations.nested_tricky_dataflow_2_vertex as dEQP-GLES2 writes it (VK-GL-CTS 93bca01), verbatim from the .qpa of tools/mali/deqp-host-measure.sh at c70d4813 (programs/e301c42fbb4c4e1e.frag; plan #402 item ref-vsloop2).
