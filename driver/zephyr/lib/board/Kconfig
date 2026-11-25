@@ -73,7 +73,7 @@ config YAKOGL_BOARD_RPI5_FB_VIRTUAL_HEIGHT
 
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
-	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711 || \
+	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711 || SOC_BCM2712 || \
 		   SOC_SERIES_STM32MP2X_A35 || SOC_RK3588 || SOC_MIMX9596_A55
 	depends on ARM64
 	help
