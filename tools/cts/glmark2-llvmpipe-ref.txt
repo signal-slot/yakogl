@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# glmark2-llvmpipe-ref.txt -- the picture values of glmark2-es2's 33 default scenes at
+# 800x600 drawn by Mesa's llvmpipe on the host: a HOST REFERENCE, not a board result,
+# and not a column of tools/cts/glmark2-pictures.txt (no board is judged against it
+# by the gate). It is kept so that a board session (issue #17, the i.MX8MP by-eye
+# check) has the llvmpipe probes in the tree instead of in a gitignored records/
+# directory.
+#
+# Provenance: tools/cts/glmark2-host-ref.sh at yakogl fc58fc59 (2026-11-25), all 33
+# scenes, 33 ok, 0 failed; glmark2 22c527cb0556f3a1ac4445aaa52cc532760928d5 (the
+# script's COMMIT=) + tools/cts/glmark2-host-ref.patch sha256
+# 8190dec8736eb1cff88a530fc62a897e98c800cacce10decc3e5f7a57f9fe998; Mesa 26.2.1 built
+# by the script (llvmpipe, softpipe), GL_RENDERER llvmpipe (LLVM 21.1.8, 256 bits),
+# GL_VERSION OpenGL ES 3.2 Mesa 26.2.1; Linux x86_64.
+#
+# Format: the line format of tools/cts/glmark2-pictures.txt with the column name
+# llvmpipe, one line per scene in that table's scene order (glmark2-host-ref.sh --list):
+#   llvmpipe | <scene info string> | <the text after "glmark2-picture: <scene>: ">
+# No "tolerance" line: readers use their default of 8 levels per channel. Probes are
+# RGBA8888 (alpha ff, or the scene's own alpha); a board's RGB565 probes have alpha 00
+# and only R, G and B are compared. Read it with
+#   tools/cts/common-tally.py --gm-pictures <console|run dir> llvmpipe --table tools/cts/glmark2-llvmpipe-ref.txt
+#   tools/cts/glmark2-photo-probes.py <screenshot.png> ... --compare tools/cts/glmark2-llvmpipe-ref.txt llvmpipe '<scene>'
+# Expect differences that are not defects: every animated scene ends on the pose its
+# own clock reached (glmark2-host-ref.sh, "Animated scenes"), and llvmpipe is not a
+# GPU. The [texture] tl values in particular are a pose-sensitive reference: the
+# probe sits near the cube's edge, so a renderer with other frame times ends on
+# another pose and tl can read the background (000000); a pose-matched llvmpipe
+# value comes from tools/cts/glmark2-host-pose.sh at the board's ms per frame.
+#
+# Regenerate (records/ is gitignored; replace <sha8> by the yakogl commit):
+#   tools/cts/glmark2-host-ref.sh --out records/host/gmref-<sha8>
+#   tools/cts/glmark2-host-ref.sh --list | cut -f1 | while read -r s; do grep -a 'glmark2-picture:' records/host/gmref-<sha8>/$s.log | tail -1; done > records/host/gmref-<sha8>/console.txt
+#   python3 -I tools/cts/common-tally.py --gm-picture-lines records/host/gmref-<sha8> llvmpipe | grep '^llvmpipe | '
+# then replace the 33 lines below and the provenance above.
+llvmpipe | [build] use-vbo=false | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 427b, crc16q 217f; mean 12 12 12; black no
+llvmpipe | [build] use-vbo=true | 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 427b, crc16q 217f; mean 12 12 12; black no
+llvmpipe | [texture] texture-filter=nearest | 800x600; probes c 2b2d2dff, tl 181a1aff, tr 000000ff, bl 050404ff, br 000000ff; crc16 0404, crc16q 19cd; mean 14 14 14; black no
+llvmpipe | [texture] texture-filter=linear | 800x600; probes c 2d2e2eff, tl 191b1bff, tr 000000ff, bl 050404ff, br 000000ff; crc16 7814, crc16q 0b13; mean 14 14 14; black no
+llvmpipe | [texture] texture-filter=mipmap | 800x600; probes c 2d2e2eff, tl 1b1d1dff, tr 000000ff, bl 050404ff, br 000000ff; crc16 74c9, crc16q 335e; mean 14 14 14; black no
+llvmpipe | [shading] shading=gouraud | 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000012ff, br 00008eff; crc16 b1d5, crc16q 83c1; mean 0 0 17; black no
+llvmpipe | [shading] shading=blinn-phong-inf | 800x600; probes c 1919baff, tl 000000ff, tr 000000ff, bl 191924ff, br 19198cff; crc16 fe9c, crc16q ec9c; mean 5 5 18; black no
+llvmpipe | [shading] shading=phong | 800x600; probes c 0505a2ff, tl 000000ff, tr 000000ff, bl 050585ff, br 0505bfff; crc16 861c, crc16q 7f54; mean 1 1 28; black no
+llvmpipe | [shading] shading=cel | 800x600; probes c 009900ff, tl 000000ff, tr 000000ff, bl 009900ff, br 009900ff; crc16 09bb, crc16q 0c5a; mean 0 25 0; black no
+llvmpipe | [bump] bump-render=high-poly | 800x600; probes c a0a0a0ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a8f4, crc16q 3aa8; mean 15 15 15; black no
+llvmpipe | [bump] bump-render=normals | 800x600; probes c abababff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 b54d, crc16q 099b; mean 15 15 15; black no
+llvmpipe | [bump] bump-render=height | 800x600; probes c 989898ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 68d5, crc16q 29b9; mean 15 15 15; black no
+llvmpipe | [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 30d6, crc16q 2919; mean 0 0 1; black no
+llvmpipe | [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 e852, crc16q 6ab0; mean 231 233 221; black no
+llvmpipe | [pulsar] light=false:quads=5:texture=false | 800x600; probes c 70016fff, tl 5a0213ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 414f, crc16q a71c; mean 48 32 45; black no
+llvmpipe | [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 cb2d, crc16q 0526; mean 205 210 190; black no
+llvmpipe | [desktop] effect=shadow:windows=4 | 800x600; probes c ffffffff, tl 919191ff, tr c0c0c0ff, bl ffffffff, br ffffffff; crc16 888b, crc16q 8639; mean 199 204 184; black no
+llvmpipe | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 5c69, crc16q 8de9; mean 42 57 66; black no
+llvmpipe | [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 01a9, crc16q efb1; mean 42 57 66; black no
+llvmpipe | [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 800x600; probes c b4daf0f0, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 8490, crc16q 54ae; mean 42 57 65; black no
+llvmpipe | [ideas] speed=duration | 800x600; probes c 2a223bff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 b9be, crc16q 6c93; mean 4 3 6; black no
+llvmpipe | [jellyfish] <default> | 800x600; probes c 361507b2, tl 578ef9ff, tr 578ef9ff, bl 3358c8ff, br 3358c8ff; crc16 f4a7, crc16q 6aff; mean 68 101 189; black no
+llvmpipe | [terrain] <default> | 800x600; probes c 697e1aff, tl 555710ff, tr 687f20ff, bl 49550fff, br 536817ff; crc16 9f90, crc16q bcc1; mean 115 126 43; black no
+llvmpipe | [shadow] <default> | 800x600; probes c a0a0a0ff, tl 000000ff, tr 000000ff, bl 4d4d4dff, br 4d4d4dff; crc16 2938, crc16q afab; mean 34 34 34; black no
+llvmpipe | [refract] <default> | 800x600; probes c 6b417dff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a5c7, crc16q 822e; mean 24 20 32; black no
+llvmpipe | [conditionals] fragment-steps=0:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 542b, crc16q 9634; mean 56 56 56; black no
+llvmpipe | [conditionals] fragment-steps=5:vertex-steps=0 | 800x600; probes c 000000ff, tl 000000ff, tr c3c3c3ff, bl ebebebff, br 484848ff; crc16 06ef, crc16q db20; mean 49 49 49; black no
+llvmpipe | [conditionals] fragment-steps=0:vertex-steps=5 | 800x600; probes c 000000ff, tl 030303ff, tr 000000ff, bl fefefeff, br f9f9f9ff; crc16 d493, crc16q 0f38; mean 55 55 55; black no
+llvmpipe | [function] fragment-complexity=low:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 51d3, crc16q d83c; mean 56 56 56; black no
+llvmpipe | [function] fragment-complexity=medium:fragment-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 72a3, crc16q 5b3f; mean 56 56 56; black no
+llvmpipe | [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 3f8d, crc16q 31ae; mean 55 55 55; black no
+llvmpipe | [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 8385, crc16q 90e4; mean 56 56 56; black no
+llvmpipe | [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 800x600; probes c 000000ff, tl 000000ff, tr 424242ff, bl 5e5e5eff, br 9e9e9eff; crc16 88f7, crc16q 7134; mean 55 55 55; black no
