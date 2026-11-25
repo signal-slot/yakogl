@@ -4,8 +4,8 @@
 # am62p-gles3-preflight-selftest.sh - selftest of am62p-gles3-preflight.sh on a fake layout (a four-row table,
 # stub image records) under $TMPDIR (removed at the end): the all-ok path and every FAIL: generator, table,
 # missing/rc=1/other-commit/dirty/unknown images, a wrong directory name or row directory, RUN_BOUND and
-# RETURN_BOUND, each env variable unset, rows past the end, the gl_test directory; the native-3D arm from the
-# directory name; usage errors (exit 2); that no env value appears in the output and that nothing is written.
+# RETURN_BOUND, each env variable unset, rows past the end, the gl_test directory; the native-3D and native-array arms from the
+# directory name; .log files beside the images; usage errors (exit 2); that no env value appears in the output and that nothing is written.
 # The worker's own env is replaced (env -i). The generator and table checks are injected (PREFLIGHT_GEN,
 # PREFLIGHT_CHECK), so no mustpass list is read.
 #   TMPDIR=<dir> bash tools/cts/am62p-gles3-preflight-selftest.sh
@@ -104,9 +104,29 @@ expect "arm n3d1" 0 "ok   arm: DEQP_PVR_NATIVE_3D=1"
 mk "$D-n3d0-idiv1"
 run -- --commit "$SHA" --img-dir "$W/$D-n3d0-idiv1"
 expect "arm n3d0 idiv1" 0 "ok   arm: DEQP_PVR_INSTANCE_DIVISOR=1"
+mk "$D-narr1"
+run -- --commit "$SHA" --img-dir "$W/$D-narr1"
+expect "arm narr1" 0 "ok   arm: DEQP_PVR_NATIVE_ARRAY=1 (native 2D array textures)"
+mk "$D-n3d1-narr0"
+run -- --commit "$SHA" --img-dir "$W/$D-n3d1-narr0"
+expect "arm n3d1 narr0" 0 "ok   arm: DEQP_PVR_NATIVE_ARRAY=0"
+grep -q "ok   arm: DEQP_PVR_NATIVE_3D=1" "$W/log" || { echo "  FAIL n3d1 line with narr0"; fails=$((fails + 1)); }
+mk "$D-n3d0-narr1-idiv1"
+run -- --commit "$SHA" --img-dir "$W/$D-n3d0-narr1-idiv1"
+expect "arm n3d0 narr1 idiv1" 0 "ok   arm: DEQP_PVR_INSTANCE_DIVISOR=1"
+mk "$D-narrX"
+run -- --commit "$SHA" --img-dir "$W/$D-narrX"
+expect "unknown narr suffix" 1 "FAIL image directory name has an unknown suffix"
 mk "$D-bogus"
 run -- --commit "$SHA" --img-dir "$W/$D-bogus"
 expect "unknown arm suffix" 1 "FAIL image directory name has an unknown suffix"
+
+# build logs beside the images
+mkdir "$W/lg"; mk "$D-lg"; mv "$W/$D-lg" "$W/lg/$D"
+for n in 1 3 4; do echo log > "$W/lg/$D/img$n-$S8.log"; echo log > "$W/lg/$D/img$n-aaaaaaaa.log"; done
+echo log > "$W/lg/$D/Q2.log"
+run -- --commit "$SHA" --img-dir "$W/lg/$D"
+expect "build logs beside the images" 0 "preflight: all ok"
 
 # the table
 run PREFLIGHT_GEN="$W/gen-bad" -- --commit "$SHA" --img-dir "$W/$D"
