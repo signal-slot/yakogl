@@ -5,8 +5,9 @@
 # baseline (tools/cts/mp2-gltest-diff.py --expected). One case number per
 # line, then a '#' reason. A listed case that fails on the DK is reported as
 # expected, not new; one that passes is reported too (the entry is stale).
-# Only what the code shows: the DK core has WIDELINE_TRIANGLE_EMU.
-10   # pending Q11: 3 px wide line check ("loop: 3 px wide"), gl_test.c case_prims
-231  # pending Q11: flat_lines_wide
-233  # pending Q11: flat_line_strip_wide
-235  # pending Q11: flat_line_loop_wide
+#
+# No entries now. Cases 10 and 230-235 (the wide-line cases once pending Q11)
+# all PASS on the DK at the present 1..16 line width range: records
+# 20261124-1344-q11_case10-0eca6ffc and 20261124-1347..1352-q11_case230..235
+# (origin/main a5f1dc8e); the whole-set run 20261124-1044-gl_test_all-a5f1dc8e
+# passed case 10 too.
