@@ -81,7 +81,7 @@ scan_file() {
   done < <(grep -noP '(?<![0-9A-Za-z:-])[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}(?![0-9A-Za-z:-])' -- "$f" 2>/dev/null)
   while IFS=: read -r ln m; do
     [ -n "$ln" ] && report "$f" "$ln" usb-serial "$m"
-  done < <(grep -noiE '(i?serial[ _-]?(number)?)[ :=]+[0-9A-Za-z]{6,}|usb-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-if[0-9]{2}' -- "$f" 2>/dev/null)
+  done < <(grep -noiE 'i?serial[ _-]?(number)?[ :=]+[A-Za-z]*[0-9][0-9A-Za-z]{5,}|usb-[A-Za-z0-9_.]+-[A-Za-z0-9_.]+-if[0-9]{2}' -- "$f" 2>/dev/null)
 }
 
 if [ $# -eq 0 ]; then
