@@ -1,0 +1,20 @@
+U-Boot SPL 2025.01 (Jan 13 2025 - 10:00:00 +0000)
+U-Boot 2025.01 (Jan 13 2025 - 10:00:00 +0000)
+
+CPU:   K3 AM62Px SR1.0 HS-FS
+Model: Toradex 0098 Verdin AM62P Quad 4GB WB IT V1.0A
+Net:   eth0: ethernet@8000000port@1
+Hit any key to stop autoboot:  0
+ethaddr=<mac>
+ipaddr=<addr>
+serverip=<addr>
+netmask=<addr>
+bootfile=<home>
+BOOTP broadcast 1
+DHCP client bound to address <addr> (7 ms)
+Using ethernet@8000000port@1 device
+TFTP from server <addr>; our IP address is <addr>
+Filename 'yakogl/4a5b6c7d.bin'.
+Load address: 0x82000000
+Bytes transferred = 1048576 (100000 hex)
+## Starting application at 0x82000000 ...

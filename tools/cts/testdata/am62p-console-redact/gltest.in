@@ -1,0 +1,5 @@
+gl_test: case 196: es3 mrt4
+gl_test:   centre (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+gl_test: PASS case 196
+gl_test: BVNC 36.53.104.796 GPU recovery 0
+rti_arm: fed for 150 s

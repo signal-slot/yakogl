@@ -18,6 +18,8 @@ tools/board.sh), so it matches the address alternative. The rewrite rules, in or
   b) any other dotted quad -> <addr>
   c) a UART device path -> <uart>
   d) a home path -> <home>
+  e) a MAC address (aa:bb:cc:dd:ee:ff or aa-bb-..) -> <mac>   (added for the AM62P's U-Boot ethaddr)
+The UART rule also takes a /dev/serial/by-id/.. path (a USB serial bridge's stable name).
 The rules are idempotent: the <...>, <addr>, <uart> and <home> forms match none of them again.
 A binary file (a NUL byte) is skipped, as grep -I does. The rules keep everything else byte
 for byte, so a file with nothing to redact is left untouched.
@@ -31,7 +33,10 @@ import sys
 ADDR = re.compile(rb"\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
 # The UART and home alternatives are written by concatenation so this file's own text stays
 # clean under the acceptance grep, the way the selftests build their samples.
-UART = re.compile(rb"/dev/" + rb"tty\S*")
+UART = re.compile(rb"/dev/(?:tty" + rb"|serial/)\S*")
+# A MAC address (six hex pairs with ':' or '-'): U-Boot's ethaddr and 'Ethernet ... MAC' lines.
+MAC = re.compile(rb"(?<![0-9A-Fa-f:-])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])"
+                 rb"|(?<![0-9A-Fa-f:-])(?:[0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f-])")
 HOME = re.compile(rb"/home" + rb"/\S*")
 VERSION = re.compile(
     rb"vulkan-cts-([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})-(\d+)-g([0-9a-fA-F]{7,64})"
@@ -41,6 +46,7 @@ VERSION_RULE = "version"
 ADDR_RULE = "addr"
 UART_RULE = "uart"
 HOME_RULE = "home"
+MAC_RULE = "mac"
 
 
 def bracket(m):
@@ -63,6 +69,7 @@ def redact(data, tally=None):
     data = step(data, ADDR_RULE, ADDR, b"<addr>", tally)
     data = step(data, UART_RULE, UART, b"<uart>", tally)
     data = step(data, HOME_RULE, HOME, b"<home>", tally)
+    data = step(data, MAC_RULE, MAC, b"<mac>", tally)
     return data
 
 

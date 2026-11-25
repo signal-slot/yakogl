@@ -1,0 +1,7 @@
+board.sh: am62p backend uboot-tftp, run 2026-11-24-0001
+board.sh: DRY host$ python3 tools/am62p_netboot_uart.py capture <uart> <rundir>/console.raw <rundir>/console.ts &
+board.sh: DRY host$ python3 tools/am62p_netboot_uart.py probe <uart>
+board.sh: BOARD_UART=<uart> stage=<home>
+tftp: done peer=<addr>:59643 file=yakogl/4a5b6c7d.bin bytes=1048576
+tftp: refused peer=<addr>:3689 file=yakogl/probe.bin cause=not_found
+mac <mac> and 12:34:56 time and 1.4.6 stay
