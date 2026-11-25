@@ -114,10 +114,22 @@ export RAW_DIR=${RAW_DIR:-$REPO/build/mali-glmark2-session/$(basename "$out")}
 
 echo "$me: session into $out, board from BOARD_HOST (not printed)"
 
+# The runner's redactor (home and UART paths, user@host, addresses, the board's
+# words) over the files this wrapper writes itself, in place. The tally-*.txt
+# files stay as the tally wrote them: they are its output, not a log.
+redact_out() {
+  local f=()
+  for x in "$@"; do [ -f "$x" ] && f+=("$x"); done
+  [ "${#f[@]}" -gt 0 ] || return 0
+  bash "$RUN" --redact-files "${f[@]}" || echo "$me: WARNING: redaction of ${f[*]##*/} failed; do not commit them" >&2
+}
+
 # ---- 1. preflight ---------------------------------------------------------------
 echo "$me: 1/6 preflight"
 bash "$PREFLIGHT" --build "$build" 2>&1 | tee "$out/preflight.txt"
-if [ "${PIPESTATUS[0]}" != 0 ]; then
+pf_rc=${PIPESTATUS[0]}
+redact_out "$out/preflight.txt"
+if [ "$pf_rc" != 0 ]; then
   echo "$me: preflight failed: not starting; nothing was run on the board"
   echo "$me: exit 5 (stopped before the runner)"
   exit 5
@@ -146,6 +158,7 @@ finish() {
   if [ "$snap_rc" = 0 ]; then
     bash "$STATE" compare "$out/state-before.txt" "$out/state-after.txt" | tee "$out/state-compare.txt"
     cmp_rc=${PIPESTATUS[0]}
+    redact_out "$out/state-compare.txt"
   else
     echo "$me: no second snapshot (exit $snap_rc): the board state after the run is not proven"
   fi
@@ -166,6 +179,7 @@ finish() {
       python3 -I "$TALLY" "--$m" "$out/run" > "$out/tally-$m.txt" 2> "$out/tally-$m.err" || [ "$tally_rc" != 0 ] || tally_rc=$?
     done
     for f in "$out"/tally-*.err; do [ -s "$f" ] || rm -f "$f"; done
+    redact_out "$out"/tally-*.err
     cat "$out/tally-table.txt"
     echo "$me: tally exit $tally_rc; table and row drafts under $out (tally-*.txt)"
   else
