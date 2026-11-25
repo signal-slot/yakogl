@@ -36,6 +36,11 @@
  * order (1: case 1, "uniform", alone), so a first board run is one small
  * case rather than fifty.
  *
+ * CONFIG_GL_TEST_MP2_CASES (empty by default) gives an explicit comma list
+ * instead (a shard of tools/cts/mp2-gltest-shards.py): one number runs that
+ * case alone, more are walked on one context; it overrides the SET_HEAD.
+ * A one-case run prints the "gl_test: all: N of 1" tally itself.
+ *
  * The console has every case's "gl_test: case N <name>: PASS/FAIL" line and
  * "gl_test: all:"; the record (yk-record on USART2) is kind CASE, as the
  * i.MX8MP's SNVS record: one case w1 = case << 16 | first bad check << 8 |
@@ -65,6 +70,7 @@
 int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug, int no_coalesce, int panel);
 int gl_test_set_list(const int *cases, unsigned n, unsigned *stored);
 unsigned gl_test_set_cases(const int **cases);
+void gl_test_shc_stats(unsigned *hits, unsigned *runs);
 
 extern const char *gl_test_skip;
 extern unsigned int gl_test_passed, gl_test_total, gl_test_skipped;
@@ -84,6 +90,47 @@ static uint32_t case_w1(int gl_case, int bad_check, uint32_t status)
 static uint32_t set_case(int c)
 {
 	return c < 0 ? YK_RECORD_CASE_SET_NONE : MIN((uint32_t)c, YK_RECORD_CASE_SET_NONE - 1u);
+}
+
+/* "a,b,c" into out[]; the count, or -1 for anything but decimal case numbers */
+static int parse_list(const char *s, int *out, int max)
+{
+	int n = 0;
+
+	while (*s) {
+		int v = 0, digits = 0;
+
+		while (*s >= '0' && *s <= '9') {
+			v = v * 10 + (*s++ - '0');
+			digits++;
+		}
+		if (!digits || n >= max || (*s && *s != ',')) {
+			return -1;
+		}
+		out[n++] = v;
+		if (*s == ',') {
+			s++;
+			if (!*s) {
+				return -1;
+			}
+		}
+	}
+	return n ? n : -1;
+}
+
+/* The runner's single() prints no tally, and the verdict tool reads the
+ * "gl_test: all:" line (the runner's all_line, same fields) of every run, so
+ * a one-case run prints it here: rc 0 passed, -3 skipped, else failed. */
+static void one_case_tally(int gl_case, int rc)
+{
+	unsigned hits = 0, runs = 0;
+	bool skipped = rc == -3, failed = rc != 0 && !skipped;
+
+	gl_test_shc_stats(&hits, &runs);
+	printk(NAME ": all: %u of 1 cases failed (%u passed; 0 timed out; first failure case %d at index %d; "
+	       "second failure case -1; %u skipped, first skip case %d); precompiled hits %u, compiler runs %u\n",
+	       failed ? 1u : 0u, rc == 0 ? 1u : 0u, failed ? gl_case : -1, failed ? 0 : -1,
+	       skipped ? 1u : 0u, skipped ? gl_case : -1, hits, runs);
 }
 
 static void report(int gl_case, bool one, int rc)
@@ -143,6 +190,27 @@ static int run(void)
 		printk(NAME ": the first %u case(s) of the regression set, from case %d\n", n, set[0]);
 	}
 #endif
+	if (CONFIG_GL_TEST_MP2_CASES[0] != '\0') {
+		static int list[64];
+		int n = parse_list(CONFIG_GL_TEST_MP2_CASES, list, 64);
+
+		if (n <= 0) {
+			printk(NAME ": FAIL: CONFIG_GL_TEST_MP2_CASES is not a list of cases: %s\n",
+			       CONFIG_GL_TEST_MP2_CASES);
+			return -EINVAL;
+		}
+		if (n == 1) {
+			gl_case = list[0];
+			one = true;
+		} else {
+			unsigned stored = 0;
+
+			gl_case = gl_test_set_list(list, (unsigned)n, &stored);
+			one = false;
+			printk(NAME ": the list %s (%u cases) on one context\n", CONFIG_GL_TEST_MP2_CASES,
+			       stored);
+		}
+	}
 	printk(NAME ": case %d on the STM32MP257F-DK's GPU%s%s (lifetime %u ms)\n", gl_case,
 	       CONFIG_GL_TEST_MP2_SKIP[0] ? ", skipping " : "", CONFIG_GL_TEST_MP2_SKIP,
 	       mp2_lifetime_ms());
@@ -171,6 +239,9 @@ static int run(void)
 	}
 	/* the OSAL's close record: the pending-free queue's counters */
 	osal_zephyr_diag_print();
+	if (one) {
+		one_case_tally(gl_case, rc);
+	}
 	report(gl_case, one, rc);
 	if (rc != 0 && gc_render_ready()) {
 		gc_render_stall_dump(NAME " failed");
