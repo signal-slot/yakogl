@@ -123,6 +123,51 @@ mv "$T/S01b2.hold" "$S2/S01b2.console.txt"
 [ "$(none_of)" = 0 ] && ok "S01b2 back: TOTAL none is 0" || bad "restored: none=$(none_of)"
 unset PI4_TREE PI4_MUSTPASS
 
+# ---- a cut-shaped session: image K1 began with k.c1-c4 (the old block), the
+# tree then cut it after its abort trigger (K1 holds c1,c2 now) and moved
+# c3,c4 to the new label K2. Each tally keeps its own console and scope, and a
+# label the tree no longer has is an error, not a skipped file.
+CD=$T/cut-data
+mkdir "$CD"
+K=dEQP-GLES3.functional.shaders.k
+printf '%s\n' "$K.c1" "$K.c2" "$K.c3" "$K.c4" > "$CD/mustpass.txt"
+printf '%s\n' "# synthetic cut tree: only the '# image <LABEL>:' lines are read" \
+    "# image K1: 2 (cut after the abort at c2)" \
+    "# image K2: 2 (the moved cases)" > "$CD/tree.txt"
+export PI4_TREE=$CD/tree.txt PI4_MUSTPASS=$CD/mustpass.txt
+CS=$T/cut
+mkdir "$CS"
+printf '%s\n' "deqp: case filter '$K.*'" "deqp: Pass $K.c1" "deqp: ResourceError $K.c2" \
+    "deqp: done: 1 passed, 1 failed, 0 not supported, 0 warnings, complete=0" \
+    "deqp: summary: 2 cases begun, 2 with a result, 0 without" > "$CS/K1.console.txt"
+printf '%s\n' "deqp: case filter '$K.c3,$K.c4'" "deqp: Pass $K.c3" "deqp: Pass $K.c4" \
+    "deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=1" \
+    "deqp: summary: 2 cases begun, 2 with a result, 0 without" > "$CS/K2.console.txt"
+out=$(bash "$HERE/pi4-session-tally.sh" "$CS" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "cut session tallied" || bad "cut session rc=$rc: $out"
+case "$out" in *"K1: aborted"*) ok "K1 (cut image) reported aborted" ;; *) bad "K1: $out" ;; esac
+case "$out" in *"K2: 2 pass, 0 fail"*) ok "K2 (moved cases) complete" ;; *) bad "K2: $out" ;; esac
+grep -q "^ResourceError $K.c2" "$CS/K1.tally.txt" && ! grep -q "$K.c3" "$CS/K1.tally.txt" \
+    && ok "K1 tally holds its own cases only" || bad "K1 tally scope"
+grep -q 'mustpass cases with a result: 2 (of 2 seen)' "$CS/K2.tally.txt" && ! grep -q "$K.c1" "$CS/K2.tally.txt" \
+    && ok "K2 tally holds the two moved cases only" || bad "K2 tally scope"
+grep -q 'K1.console.txt' "$CS/K1.tally.txt" && grep -q 'K2.console.txt' "$CS/K2.tally.txt" \
+    && ok "each tally names its relative console" || bad "console names in the cut tallies"
+leak=0
+for p in "$HOME" "$PWD" "$T" "${TMPDIR:-}" "$HERE"; do
+    [ -n "$p" ] && [ "$p" != / ] || continue
+    if grep -qF -- "$p" "$CS"/*.tally.txt; then leak=1; echo "    leaked: $p"; fi
+done
+[ $leak -eq 0 ] && ok "no HOME, workspace, TMPDIR or script path in any cut tally" || bad "a worker path in a cut tally"
+# a label the cut removed from the tree: refused, nothing written
+rm -f "$CS"/*.tally.txt
+cp "$CS/K2.console.txt" "$CS/K3.console.txt"
+out=$(bash "$HERE/pi4-session-tally.sh" "$CS" 2>&1); rc=$?
+[ $rc -ne 0 ] && ok "label missing from the tree is an error" || bad "missing label accepted"
+case "$out" in *K3*) ok "message names K3" ;; *) bad "no K3 in: $out" ;; esac
+[ -z "$(ls "$CS"/*.tally.txt 2>/dev/null)" ] && ok "nothing written for the missing label" || bad "tally written despite the missing label"
+unset PI4_TREE PI4_MUSTPASS
+
 if [ $fail -eq 0 ]; then
     echo "pi4-session-tally-selftest: all checks passed"
 else
