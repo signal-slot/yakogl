@@ -15,7 +15,10 @@
 # that leaves a case unmatched (c2), a pi4-gles3 file the redaction scan
 # flags and a --root that is no git repository (c3), the old two-commit
 # fails.tsv header (c4), and a Pi 4 entry of each document without the sha
-# plus the old 9-of-91 ROADMAP claim (c5). Nothing outside $TMPDIR is read
+# plus the old 9-of-91 ROADMAP claim (c5). Two cut cases on top: an aborted
+# image X cut after its trigger, the rest in a new label Xb (c1 passes), and
+# the same record with the tree still giving X those cases (c1 fails); their
+# tallies are pi4-session-tally.sh's over synthetic consoles. Nothing outside $TMPDIR is read
 # or written; the acceptance script itself stays read-only.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -213,6 +216,74 @@ check c5-status-nosha 1 "PASS PASS PASS PASS FAIL" "STATUS.md Pi 4 ES 3.0 entry 
 variant c5-roadmap-old m9
 run_acc c5-roadmap-old
 check c5-roadmap-old 1 "PASS PASS PASS PASS FAIL" "9 of its 91 images at 925dbca9"
+
+# c1-cut: image X aborted at its third case (ResourceError, dEQP ended the
+# session) and the tree was cut after that trigger: X keeps k.c1-k.c3, the
+# new label Xb holds the never-begun k.c4 and k.c5 and ran complete in a
+# second session directory. The tallies come from pi4-session-tally.sh over
+# the synthetic consoles. The tree names the cases one per line, not as a
+# glob: c1 runs check-pi4-gles3-log.py without --mustpass, so the cut rule
+# expands globs against the checkout's own gles3-mustpass.txt, not --root's.
+K=dEQP-GLES3.stress.k
+mcut() {
+	local r=$1 a="$1/tools/cts/log/2026-11-pi4-gles3-$SHA8-cut-a" b="$1/tools/cts/log/2026-11-pi4-gles3-$SHA8-cut-b"
+	printf '%s\n' "$K.c1" "$K.c2" "$K.c3" "$K.c4" "$K.c5" >> "$r/tools/cts/gles3-mustpass.txt"
+	{
+		printf '# image X: the k cases up to the abort trigger\n'
+		printf '%s\n' "$K.c1" "$K.c2" "$K.c3"
+		printf '# image Xb: the k cases X never began\n'
+		printf '%s\n' "$K.c4" "$K.c5"
+	} >> "$r/tools/cts/pi4-gles3-tree.txt"
+	mkdir -p "$a" "$b"
+	printf 'commit: %s\n' "$SHA" > "$a/README.md"
+	printf 'commit: %s\n' "$SHA" > "$b/README.md"
+	{
+		printf 'v3d_deqp: build %s\n' "$SHA8"
+		printf "deqp: case filter '%s,%s,%s,%s,%s'\n" "$K.c1" "$K.c2" "$K.c3" "$K.c4" "$K.c5"
+		for c in c1 c2; do
+			printf "Test case '%s'..\n  Pass (Pass)\ndeqp: Pass %s\n" "$K.$c" "$K.$c"
+		done
+		printf "Test case '%s'..\n  ResourceError (out of tile memory)\ndeqp: ResourceError %s\n" "$K.c3" "$K.c3"
+		printf 'deqp: done: 2 passed, 1 failed, 0 not supported, 0 warnings, complete=0\n'
+		printf 'deqp: summary: 3 cases begun, 3 with a result, 0 without\n'
+	} > "$a/X.console.txt"
+	{
+		printf 'v3d_deqp: build %s\n' "$SHA8"
+		printf "deqp: case filter '%s,%s'\n" "$K.c4" "$K.c5"
+		printf "Test case '%s'..\n  Pass (Pass)\ndeqp: Pass %s\n" "$K.c4" "$K.c4"
+		printf "Test case '%s'..\n  Fail (image mismatch)\ndeqp: Fail %s\n" "$K.c5" "$K.c5"
+		printf 'deqp: done: 1 passed, 1 failed, 0 not supported, 0 warnings, complete=1\n'
+		printf 'deqp: summary: 2 cases begun, 2 with a result, 0 without\n'
+	} > "$b/Xb.console.txt"
+	for s in "$a" "$b"; do
+		env -i PATH="$PATH" HOME="$W" PI4_TREE="$r/tools/cts/pi4-gles3-tree.txt" \
+			PI4_MUSTPASS="$r/tools/cts/gles3-mustpass.txt" \
+			bash "$HERE/pi4-session-tally.sh" "$s" >> "$W/cut-tally.out" 2>&1
+	done
+}
+# c1-uncut: the same record, but the tree still gives k.c4 and k.c5 to X
+# (no Xb label), so X's never-begun cases are in no other label: aborted.
+muncut() {
+	sed -i -e '/^# image Xb:/d' "$1/tools/cts/pi4-gles3-tree.txt"
+	sed -i -e 's/^# image X: .*/# image X: the k cases, never cut/' "$1/tools/cts/pi4-gles3-tree.txt"
+}
+
+variant c1-cut mcut
+# the tallies are pi4-session-tally.sh's: X stopped early, Xb complete
+if [ "$(cat "$W/cut-tally.out")" != "$(printf 'X: aborted\nXb: 1 pass, 1 fail, 0 notsupported, 0 other')" ]; then
+	echo "  FAIL c1-cut: pi4-session-tally.sh printed:"
+	sed 's/^/       /' "$W/cut-tally.out"
+	fails=$((fails + 1))
+fi
+run_acc c1-cut
+check c1-cut 0 "PASS PASS PASS PASS PASS" "4 images, 4 with a tally, 0 missing"
+
+cp -a "$W/c1-cut" "$W/c1-uncut"
+muncut "$W/c1-uncut"
+gitc "$W/c1-uncut" add -A
+gitc "$W/c1-uncut" commit -q -m variant
+run_acc c1-uncut
+check c1-uncut 1 "FAIL PASS PASS PASS PASS" "aborted, no complete deqp summary (1): X"
 
 if [ $fails -eq 0 ]; then
 	echo "pi4-gles3-acceptance-selftest: all checks passed"
