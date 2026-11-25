@@ -2459,6 +2459,9 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_pending_clear.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_pending_clear
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_tile_pool.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_tile_pool
+# The clear plan of 949f0bef, ab0222cf and 9fe54bc6 leaves ES 2.0 whole clears alone.
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_clear_plan.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_clear_plan
 # The TMU base level stays 0 and max level as before for ES 2.0 textures
 # (337a9453 adds texture::state_at; ES 2.0 has no GL_TEXTURE_BASE_LEVEL).
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_base_level.rs)" \
