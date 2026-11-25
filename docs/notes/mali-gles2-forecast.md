@@ -575,6 +575,98 @@ move; only the rows a fix reaches gain Pass. This is not the whole tree: rows ou
 `state_query` and `shader_api` rows held for `apierr-fix`) are not forecast
 here.
 
+## 8. Verdin iMX95 (Mali-G310) (forecast, 2026-11-25)
+
+**This is a forecast, not a board result.** It is written before plan #407's
+iMX95 tree (images built at `e63ab28e`, rows `tools/cts/mali-gles2-tree.txt`)
+has a tally, so the analysis can compare the measurement with it.
+
+**Method.** (1) Take the T6's tree at `8ff01055` as the baseline. (2) Read
+what the three compiler commits between `8ff01055` and `e63ab28e` say they
+change (`git log 8ff01055..e63ab28e -- src/shaderc/online/mali` lists 15
+commits; this forecast reads `a824ec97`, `d3876279` and `9fa5bbe0`, the
+three the plan named), and look each affected case family up in the
+baseline's `results.tsv`. (3) Add what the G310's hardware facts can change.
+The compiler takes no GPU input (`mali-g310-vs-g610.md` section 5: 2381 of
+2381 regions identical on the G310v2 and the G610), so every refusal is
+expected to repeat. This was not run on the host or the board.
+
+**Baseline** (`python3 -I tools/cts/mali-deqp-tally.py --tally` over
+`tools/cts/log/2026-11-24-t6-gles2-S{1..4}-8ff01055`): 17,165 cases in 76
+rows; 10,950 Pass, 5,706 Fail, 506 NotSupported, 3 QualityWarning. 5,829 of
+the non-Pass are online-compiler refusals (issue #11251,
+`docs/es2-cts-failures.md` section M).
+
+**What the compiler commits change.**
+
+| Commit | What it says | dEQP cases it reaches in the baseline | Effect |
+|---|---|---|---|
+| `a824ec97` | `glsl.rs` keeps the precision tables through a rewrite and stops a rebalance at a conversion; a value of no known class is refused (`PrecisionUnknown`) | none named. Its message finds no shader that turns from compiled to refused in the corpora it checked, and no refusal text moves | 0, with a small risk of a new refusal where a class is Unknown |
+| `d3876279` | `b2i32` of a 16-bit mask widens the lane's own half (cause D1, issue #11306) | `conversions.*bvec*_to_ivec*_fragment`: 7 of the `bool`-to-`int` fragment cases are `Fail`, "Image comparison failed" (`bvec2_bvec2_to_ivec4`, `vec2_bvec2_to_ivec4`, `bvec2_to_ivec2`, `bvec3_to_ivec2`, `bvec3_to_ivec3`, `bvec4_to_ivec2`, `bvec4_to_ivec4`); the 4 of 5 D1 references now byte-equal are among them | Fail to Pass, 4 to 7 |
+| `9fa5bbe0` | A struct's float member is fp32 words in a mediump fragment block; a read of two struct-member words apart is refused | `linkage.uniform_struct*`: 6 `Fail` "Image comparison failed" should draw (`uniform_struct`, `_fragment_only`, `_partial`, `_partial_vec4_float`, `_use_case_rip`, `_use_case_rip_sans_highp`); 6 more (`uniform_struct{,_fragment_only}_vec4{,_float,_vec3}`) go from wrong pixels to a refusal; 5 `_partial_*` Pass "by chance" and should stay | Fail to Pass, 3 to 6; 6 stay Fail with a new cause |
+
+**Predicted tally for the compiler alone (the T6 at `e63ab28e`, and the
+iMX95 if the hardware changes nothing):**
+
+| Status | Baseline (T6 `8ff01055`) | Predicted iMX95 | Range |
+|---|---:|---:|---:|
+| Pass | 10,950 | 10,960 | 10,957 to 10,963 |
+| Fail | 5,706 | 5,696 | 5,693 to 5,699 |
+| NotSupported | 506 | 506 | 506 |
+| QualityWarning | 3 | 3 | 3 |
+| Total | 17,165 | 17,165 | |
+
+The bounds add the two commits' Fail-to-Pass counts (4 to 7 and 3 to 6, so 7
+to 13 more Pass); the centre is 10. NotSupported does not move: those 506
+are extension and format refusals (`EXT_clip_control`, compressed formats,
+`EXT_multisampled_render_to_texture`) and compiler refusals that dEQP
+marks NotSupported; no commit changes them.
+
+**What the hardware can change** (`mali-g310-vs-g610.md`: `GPU_ID`
+`0xac740001`, `SHADER_PRESENT 0x1`, `CORE_FEATURES 0x1` (the G310v2: tile
+buffers 16384 and 8192 bytes, half the G610's), `TILER_FEATURES 0x809`
+(8 levels, as the G610's)):
+
+- **Tile buffer.** The model's budget halves the tile only for frames of
+  12 bytes a pixel or more (three or four targets, 4x MSAA). GLES2 has
+  neither (`EXT_multisampled_render_to_texture` is NotSupported on the T6),
+  and a 1x frame's tile is the 1024-pixel clamp on both. Expected: no
+  difference. If one appears, look in `framebuffer*` and `fbo` rows.
+- **One shader core.** `SHADER_PRESENT 0x1` drives the TLS/WLS sizes and
+  the query block (sized for 64 ids). The families most likely to differ
+  are the large-frame and heavy-shader rows (`shaders.random`, `loops`
+  fragment loops, `texture.*`, `fragment_ops`): a differing result there
+  is a size or timing fault, not a refusal. A Lost or hang case is the
+  likelier form than a wrong pixel. The 208 fragment loops of section 3 are
+  the hang risk, as on the T6; on one core a case that the T6 ran in time
+  may take longer, so the rows near the lifetime are the first to lose
+  cases.
+- **Texture features.** `TEXTURE_FEATURES_0` of the G310 is not known on the
+  host. The `NotSupported` "No suitable compressed formats found" (9 cases)
+  and the compressed-texture rows are where a changed feature mask would
+  show.
+- **Constants still the G610's** (section 5 of the G310 note): the
+  renderer name, `GL_RENDERER` "Arm Mali-G310v2 (YakoGL)" (dEQP reports it
+  in `info.renderer`, no case compares it), and the frame tests' budgets.
+  Not expected to change a case.
+- **Pre-existing flakiness.** The T6's own run-to-run differences (a
+  case passing in one session and not in another) are not a G310
+  difference; compare the iMX95's rows with the T6's per-case, not only
+  with the totals.
+
+**Families expected to differ from the T6 baseline.** Compared with the
+baseline: `conversions` (`bvec*_to_ivec*_fragment`, up to 7 more Pass) and
+`linkage` (`uniform_struct*`, up to 6 more Pass, 6 changed refusals). From
+the hardware, at low probability: `texture.*`, `fragment_ops`,
+`shaders.loops` fragment rows and any row near the lifetime. Everywhere
+else the iMX95 tally should equal the T6's case by case.
+
+**What would falsify this.** More than 13 cases moving from Fail to Pass, or
+any compiler refusal that differs between the boards (the compiler has no
+GPU input), means a factor this section does not name. A Pass count below
+10,950 would mean the G310 loses cases the T6 passes: look at the rows'
+times and at `tools/cts/mali-fail-triage.py`'s causes first.
+
 ## What the note does not claim
 
 - No case is claimed to pass because it compiles: compiling is necessary, not
