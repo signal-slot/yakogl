@@ -1065,6 +1065,17 @@ fi
 # live repository is not checked here (its entries change with the Pi 4 rerun).
 gl3check 61 check-pi4-gles3-results-selftest.sh "the Pi 4 ES 3.0 entries checked against tree, mustpass and TSV, four wrong sets named"
 
+# 62: glmark2-results-row.py on synthetic glmark2-ms cells and GM verdict lines
+# (the RESULTS.md glmark2 cell, its refusals and exit codes).
+echo
+echo "== 62. glmark2-results-row-selftest.sh"
+if gr_out=$(TMPDIR="${TMPDIR:-/tmp}" bash "$HERE/glmark2-results-row-selftest.sh" 2>&1); then
+    ok "glmark2-results-row.py: synthetic cells printed and refused"
+else
+    bad "glmark2-results-row-selftest.sh failed"
+    printf '%s\n' "$gr_out" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
