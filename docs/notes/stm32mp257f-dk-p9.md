@@ -412,6 +412,26 @@ Failure classes (observed, not root-caused):
 - NotSupported: negative_api compressedtexsubimage2d 9, multisample 16,
   clip_control 8, msrtt 1.
 
+### dEQP-GLES2 list-shard sweep at `66fcaa3a` (six slices, in progress)
+
+The sweep is run again from a flat case list. It uses one image from origin/main
+`66fcaa3a` for all six slices, `mp2-deqp-shards.py --budget-ms 12500`,
+138 shards, a 600 s lifetime and `RUN_BOUND=700`. The case list, the shard
+to slice map, the times and the shard logs are in
+`tools/cts/log/2026-11-mp2-gles2-p9/`. The line below is
+`mp2-p9-diff.py --report-only` over every slice that has landed so far
+(`tools/cts/mp2-p9-notes-check.py` c3 compares the two). Each slice
+replaces it.
+
+- Slice 1 (shards 0..22, 2,875 cases, 2026-11-25): 2,855 Pass, 12 Fail,
+  8 NotSupported (`clip_control.*`), no hang, no refusal, no run cut. The
+  12 Fail are `fbo.render.color.mix_{,npot_}tex2d_{rgb,rgba,bgra}{,_depth_component16}`
+  (shard 10), colour-texture class (b). Each run took 4.1 to 19.6 s of
+  image time. Shard 13 is the exception at 159.5 s (`flush_finish.*`),
+  26.6 % of the lifetime.
+
+`mp2-p9-diff: shared 0, new 12, fixed 0, missing 0` (slice 1 of 6, image `66fcaa3a`).
+
 ### Q11: the measured line width
 
 Q11 board runs, all at `a5f1dc8e`, each case alone with `GL_TEST_MP2_SKIP=""`, all pass:

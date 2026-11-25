@@ -1,0 +1,4 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+The STM32MP257F-DK dEQP-GLES2 sweep case list (P9): mp2-deqp-gles2.txt
+minus mp2-deqp-gles2-exclude.txt, one mustpass case a line.
