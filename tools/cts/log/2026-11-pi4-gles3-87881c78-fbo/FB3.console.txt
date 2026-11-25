@@ -1,0 +1,2684 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 87881c78, 2026-11-24, image FB3: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.17 [sdcard] pieeprom.upd not found
+  4.17 [sdcard] recover4.elf not found
+  4.18 [sdcard] recovery.elf not found
+  4.05 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.11 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.12 0x00d03114 0x00000000 0x00001fff
+  4.16 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.52 Starting start4.elf @ 0xfec00200 partition 1
+  4.35 XHCI-STOP
+  4.35 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.36 USBSTS 18
+  4.36 PCI0 reset
+  4.37 +
+
+MESS:00:00:04.387144:0: arasan: arasan_emmc_open
+MESS:00:00:04.388803:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.509033:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.521902:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.556191:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.557603:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.561986:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.725124:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.727941:0: brfs: File read: 164 bytes
+MESS:00:00:04.820579:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.825087:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.841500:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.307498:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.313044:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.322082:0: *** Restart logging
+MESS:00:00:05.323853:0: brfs: File read: 164 bytes
+MESS:00:00:05.402270:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.407302:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.421894:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.429355:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.433175:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.441933:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.447424:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.469468:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.484948:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.488238:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.529386:0: brfs: File read: 56249 bytes
+MESS:00:00:05.549184:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.614037:0: brfs: File read: 5971 bytes
+MESS:00:00:05.620616:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.661729:0: brfs: File read: 164 bytes
+MESS:00:00:05.665815:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.668888:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.674738:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.831165:0: brfs: File read: 145 bytes
+MESS:00:00:07.245954:0: brfs: File read: /mfs/sd/yakogl-FB3.bin
+MESS:00:00:07.248774:0: Loaded 'yakogl-FB3.bin' to 0x200000 size 0x1000f58
+MESS:00:00:07.255387:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.264190:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.270693:0: uart: Baud rate change done...
+MESS:00:00:07.272710:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.fbo.color.*,dEQP-GLES3.functional.fbo.depth.*,dEQP-GLES3.functional.fbo.multiview.*,dEQP-GLES3.functional.fbo.stencil.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x338e000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.r11f_g11f_b10f_src_over'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.blend.r11f_g11f_b10f_src_over
+v3d_deqp: case #0 N 129ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.fbo.color.blend.r11f_g11f_b10f_src_over
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.r16f_src_over'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.r16f_src_over
+v3d_deqp: case #1 P 81ms k2/17 c20141/20348 r0 dEQP-GLES3.functional.fbo.color.blend.r16f_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.r8_src_over'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.blend.r8_src_over
+v3d_deqp: case #2 F 72ms k2/17 c20141/20376 r0 dEQP-GLES3.functional.fbo.color.blend.r8_src_over
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rg16f_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rg16f_src_over
+v3d_deqp: case #3 P 47ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rg16f_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rg8_src_over'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.blend.rg8_src_over
+v3d_deqp: case #4 F 74ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rg8_src_over
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgb10_a2_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgb10_a2_src_over
+v3d_deqp: case #5 P 48ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgb10_a2_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgb16f_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgb16f_src_over
+v3d_deqp: case #6 P 48ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgb16f_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgb565_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgb565_src_over
+v3d_deqp: case #7 P 46ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgb565_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgb5_a1_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgb5_a1_src_over
+v3d_deqp: case #8 P 46ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgb5_a1_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgb8_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgb8_src_over
+v3d_deqp: case #9 P 44ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgb8_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgba16f_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgba16f_src_over
+v3d_deqp: case #10 P 47ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgba16f_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgba4_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgba4_src_over
+v3d_deqp: case #11 P 46ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgba4_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.rgba8_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.rgba8_src_over
+v3d_deqp: case #12 P 44ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.rgba8_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.blend.srgb8_alpha8_src_over'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.blend.srgb8_alpha8_src_over
+v3d_deqp: case #13 P 73ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.blend.srgb8_alpha8_src_over
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.clear.r11f_g11f_b10f
+v3d_deqp: case #14 N 23ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r16f
+v3d_deqp: case #15 P 30ms k2/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r16i'..
+yakogl/v3d: integer clear program built: 416 bytes of code
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r16i
+v3d_deqp: case #16 P 33ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r16ui
+v3d_deqp: case #17 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.clear.r32f
+v3d_deqp: case #18 N 20ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r32i
+v3d_deqp: case #19 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r32ui
+v3d_deqp: case #20 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r8
+v3d_deqp: case #21 P 25ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r8i
+v3d_deqp: case #22 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.r8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.r8ui
+v3d_deqp: case #23 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.r8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg16f
+v3d_deqp: case #24 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg16i
+v3d_deqp: case #25 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg16ui
+v3d_deqp: case #26 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.clear.rg32f
+v3d_deqp: case #27 N 21ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg32i
+v3d_deqp: case #28 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg32ui
+v3d_deqp: case #29 P 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg8
+v3d_deqp: case #30 P 25ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg8i
+v3d_deqp: case #31 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rg8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rg8ui
+v3d_deqp: case #32 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rg8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb10_a2
+v3d_deqp: case #33 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb10_a2ui
+v3d_deqp: case #34 P 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb16f
+v3d_deqp: case #35 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb565
+v3d_deqp: case #36 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb5_a1
+v3d_deqp: case #37 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgb8
+v3d_deqp: case #38 P 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba16f
+v3d_deqp: case #39 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba16i
+v3d_deqp: case #40 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba16ui
+v3d_deqp: case #41 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.clear.rgba32f
+v3d_deqp: case #42 N 21ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba32i
+v3d_deqp: case #43 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba32ui
+v3d_deqp: case #44 P 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba4
+v3d_deqp: case #45 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba8
+v3d_deqp: case #46 P 24ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba8i
+v3d_deqp: case #47 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.rgba8ui
+v3d_deqp: case #48 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.clear.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.clear.srgb8_alpha8
+v3d_deqp: case #49 P 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.clear.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r11f_g11f_b10f
+v3d_deqp: case #50 N 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16f
+v3d_deqp: case #51 P 32ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16i
+v3d_deqp: case #52 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16ui
+v3d_deqp: case #53 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32f
+v3d_deqp: case #54 N 25ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32i
+v3d_deqp: case #55 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32ui
+v3d_deqp: case #56 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8
+v3d_deqp: case #57 P 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8i
+v3d_deqp: case #58 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8ui
+v3d_deqp: case #59 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.r8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16f
+v3d_deqp: case #60 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16i
+v3d_deqp: case #61 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16ui
+v3d_deqp: case #62 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32f
+v3d_deqp: case #63 N 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32i
+v3d_deqp: case #64 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32ui
+v3d_deqp: case #65 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8
+v3d_deqp: case #66 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8i
+v3d_deqp: case #67 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8ui
+v3d_deqp: case #68 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rg8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2
+v3d_deqp: case #69 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2ui
+v3d_deqp: case #70 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb16f
+v3d_deqp: case #71 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb565
+v3d_deqp: case #72 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb5_a1
+v3d_deqp: case #73 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb8
+v3d_deqp: case #74 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16f
+v3d_deqp: case #75 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16i
+v3d_deqp: case #76 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16ui
+v3d_deqp: case #77 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32f
+v3d_deqp: case #78 N 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32i
+v3d_deqp: case #79 P 32ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32ui
+v3d_deqp: case #80 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba4
+v3d_deqp: case #81 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8
+v3d_deqp: case #82 P 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8i
+v3d_deqp: case #83 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8ui
+v3d_deqp: case #84 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.srgb8_alpha8
+v3d_deqp: case #85 P 34ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.rbo.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r11f_g11f_b10f
+v3d_deqp: case #86 N 28ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16f
+v3d_deqp: case #87 P 33ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16i
+v3d_deqp: case #88 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16ui
+v3d_deqp: case #89 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32f
+v3d_deqp: case #90 N 25ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32i
+v3d_deqp: case #91 P 32ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32ui
+v3d_deqp: case #92 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8
+v3d_deqp: case #93 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8i
+v3d_deqp: case #94 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8ui
+v3d_deqp: case #95 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.r8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16f
+v3d_deqp: case #96 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16i
+v3d_deqp: case #97 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16ui
+v3d_deqp: case #98 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32f
+v3d_deqp: case #99 N 25ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32i
+v3d_deqp: case #100 P 33ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32ui
+v3d_deqp: case #101 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8
+v3d_deqp: case #102 P 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8i
+v3d_deqp: case #103 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8ui
+v3d_deqp: case #104 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rg8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2
+v3d_deqp: case #105 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2ui
+v3d_deqp: case #106 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb16f
+v3d_deqp: case #107 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb565
+v3d_deqp: case #108 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb5_a1
+v3d_deqp: case #109 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb8
+v3d_deqp: case #110 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16f
+v3d_deqp: case #111 P 32ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16i
+v3d_deqp: case #112 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16ui
+v3d_deqp: case #113 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32f
+v3d_deqp: case #114 N 27ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32i
+v3d_deqp: case #115 P 33ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32ui
+v3d_deqp: case #116 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba4
+v3d_deqp: case #117 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8
+v3d_deqp: case #118 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8i
+v3d_deqp: case #119 P 30ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8ui
+v3d_deqp: case #120 P 31ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.srgb8_alpha8
+v3d_deqp: case #121 P 34ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.blit.tex2d.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r11f_g11f_b10f
+v3d_deqp: case #122 N 29ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16f
+v3d_deqp: case #123 P 38ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16i
+v3d_deqp: case #124 P 36ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16ui
+v3d_deqp: case #125 P 36ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32f
+v3d_deqp: case #126 N 26ms k5/17 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32i
+v3d_deqp: case #127 P 40ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32ui
+v3d_deqp: case #128 P 38ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8'..
+yakogl/v3d: a 16x16 render target is sampled from its render image (1024 bytes, 1 levels): no tiled copy
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8
+v3d_deqp: case #129 P 43ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8i
+v3d_deqp: case #130 P 35ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8ui
+v3d_deqp: case #131 P 35ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.r8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16f
+v3d_deqp: case #132 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16i
+v3d_deqp: case #133 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16ui
+v3d_deqp: case #134 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32f
+v3d_deqp: case #135 N 26ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32i
+v3d_deqp: case #136 P 41ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32ui
+v3d_deqp: case #137 P 38ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8
+v3d_deqp: case #138 P 35ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8i
+v3d_deqp: case #139 P 35ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8ui
+v3d_deqp: case #140 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rg8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2
+v3d_deqp: case #141 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2ui
+v3d_deqp: case #142 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb16f
+v3d_deqp: case #143 P 37ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb565
+v3d_deqp: case #144 P 35ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb5_a1
+v3d_deqp: case #145 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb8
+v3d_deqp: case #146 P 34ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16f
+v3d_deqp: case #147 P 37ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16i
+v3d_deqp: case #148 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16ui
+v3d_deqp: case #149 P 37ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32f
+v3d_deqp: case #150 N 27ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32i
+v3d_deqp: case #151 P 41ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32ui
+v3d_deqp: case #152 P 39ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba4
+v3d_deqp: case #153 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8
+v3d_deqp: case #154 P 34ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8i
+v3d_deqp: case #155 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8ui
+v3d_deqp: case #156 P 36ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.srgb8_alpha8
+v3d_deqp: case #157 P 39ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.repeated_clear.sample.tex2d.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2d.r11f_g11f_b10f
+v3d_deqp: case #158 N 25ms k5/18 c20141/20431 r0 dEQP-GLES3.functional.fbo.color.tex2d.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r16f'..
+yakogl/v3d: tiled copies high-water 139264 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.r16f
+v3d_deqp: case #159 P 69ms k5/19 c20141/20627 r0 dEQP-GLES3.functional.fbo.color.tex2d.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r16i'..
+yakogl/v3d: tiled copies high-water 307200 of 16777216 bytes
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r16i
+v3d_deqp: case #160 F 95ms k5/19 c20141/21003 r0 dEQP-GLES3.functional.fbo.color.tex2d.r16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r16ui
+v3d_deqp: case #161 F 93ms k5/19 c20141/21003 r0 dEQP-GLES3.functional.fbo.color.tex2d.r16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2d.r32f
+v3d_deqp: case #162 N 22ms k5/19 c20141/21003 r0 dEQP-GLES3.functional.fbo.color.tex2d.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r32i'..
+yakogl/v3d: tiled copies high-water 671744 of 16777216 bytes
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r32i
+v3d_deqp: case #163 F 101ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.r32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r32ui
+v3d_deqp: case #164 F 95ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.r32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.r8
+v3d_deqp: case #165 P 62ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r8i
+v3d_deqp: case #166 F 90ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.r8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.r8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.r8ui
+v3d_deqp: case #167 F 92ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.r8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rg16f
+v3d_deqp: case #168 P 64ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg16i'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg16i
+v3d_deqp: case #169 F 92ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg16ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg16ui
+v3d_deqp: case #170 F 93ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2d.rg32f
+v3d_deqp: case #171 N 23ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg32i'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg32i
+v3d_deqp: case #172 F 98ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg32ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg32ui
+v3d_deqp: case #173 F 97ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rg8
+v3d_deqp: case #174 P 64ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg8i'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg8i
+v3d_deqp: case #175 F 91ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rg8ui'..
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2d.rg8ui
+v3d_deqp: case #176 F 93ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rg8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2
+v3d_deqp: case #177 P 66ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2ui
+v3d_deqp: case #178 P 57ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb16f
+v3d_deqp: case #179 P 66ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb565'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb565
+v3d_deqp: case #180 P 64ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb5_a1'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb5_a1
+v3d_deqp: case #181 P 64ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgb8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgb8
+v3d_deqp: case #182 P 60ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba16f'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba16f
+v3d_deqp: case #183 P 68ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba16i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba16i
+v3d_deqp: case #184 P 60ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba16ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba16ui
+v3d_deqp: case #185 P 60ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2d.rgba32f
+v3d_deqp: case #186 N 21ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba32i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba32i
+v3d_deqp: case #187 P 65ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba32ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba32ui
+v3d_deqp: case #188 P 64ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba4'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba4
+v3d_deqp: case #189 P 65ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba8
+v3d_deqp: case #190 P 60ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba8i'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba8i
+v3d_deqp: case #191 P 58ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.rgba8ui'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.rgba8ui
+v3d_deqp: case #192 P 58ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2d.srgb8_alpha8'..
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2d.srgb8_alpha8
+v3d_deqp: case #193 P 82ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2d.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2darray.r11f_g11f_b10f
+v3d_deqp: case #194 N 24ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r16f'..
+  cube-bind: 0x1534000 unit 0 kick 2459 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2461 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2463 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2465 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2467 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.r16f
+v3d_deqp: case #195 P 140ms k5/26 c20141/21446 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r16i'..
+  cube-bind: 0x1534000 unit 0 kick 2469 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2471 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2473 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2475 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2477 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r16i
+v3d_deqp: case #196 F 181ms k5/26 c20141/22432 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r16ui'..
+  cube-bind: 0x1534000 unit 0 kick 2479 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2481 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2483 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2485 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2487 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r16ui
+v3d_deqp: case #197 F 183ms k5/26 c20141/22432 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2darray.r32f
+v3d_deqp: case #198 N 24ms k5/26 c20141/22432 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r32i'..
+  cube-bind: 0x1534000 unit 0 kick 2489 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+yakogl/v3d: tiled copies high-water 1384448 of 16777216 bytes
+  cube-bind: 0x1534000 unit 0 kick 2491 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2493 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2495 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2497 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r32i
+v3d_deqp: case #199 F 202ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r32ui'..
+  cube-bind: 0x1534000 unit 0 kick 2499 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2501 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2503 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2505 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2507 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r32ui
+v3d_deqp: case #200 F 199ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r8'..
+  cube-bind: 0x1534000 unit 0 kick 2509 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2511 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2513 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2515 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2517 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.r8
+v3d_deqp: case #201 P 137ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r8i'..
+  cube-bind: 0x1534000 unit 0 kick 2519 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2521 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2523 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2525 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2527 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r8i
+v3d_deqp: case #202 F 172ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.r8ui'..
+  cube-bind: 0x1534000 unit 0 kick 2529 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2531 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2533 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2535 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2537 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.r8ui
+v3d_deqp: case #203 F 173ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.r8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg16f'..
+  cube-bind: 0x1534000 unit 0 kick 2539 (draw)
+  cube(draw) @0x1534000 128x128 x5, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x128 @0x0): 0.0000 0.0000 0.0000 0.0000 73.1667
+  cube(draw) level 1 (64x64 @0xa0000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x32 @0xc8000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x16 @0xd2000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x8 @0xd4800): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x4 @0xd5200): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x2 @0xd5480): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (1x1 @0xd5520): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1534000 unit 0 kick 2541 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2543 (draw)
+  cube(draw) @0x1534000 128x128 x5, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x128 @0x0): 387.0000 23.3333 0.0000 0.0000 73.1667
+  cube(draw) level 1 (64x64 @0xa0000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x32 @0xc8000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x16 @0xd2000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x8 @0xd4800): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x4 @0xd5200): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x2 @0xd5480): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (1x1 @0xd5520): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1534000 unit 0 kick 2545 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2547 (draw)
+  cube(draw) @0x1534000 128x128 x5, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x128 @0x0): 387.0000 23.3333 321.5833 -162.0833 73.1667
+  cube(draw) level 1 (64x64 @0xa0000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x32 @0xc8000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x16 @0xd2000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x8 @0xd4800): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x4 @0xd5200): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x2 @0xd5480): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (1x1 @0xd5520): 0.0000 0.0000 0.0000 0.0000 0.0000
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rg16f
+v3d_deqp: case #204 P 291ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg16i'..
+  cube-bind: 0x1534000 unit 0 kick 2549 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2551 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2553 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2555 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2557 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg16i
+v3d_deqp: case #205 F 181ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg16ui'..
+  cube-bind: 0x1534000 unit 0 kick 2559 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2561 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2563 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2565 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2567 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg16ui
+v3d_deqp: case #206 F 184ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2darray.rg32f
+v3d_deqp: case #207 N 24ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg32i'..
+  cube-bind: 0x1534000 unit 0 kick 2569 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2571 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2573 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2575 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2577 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg32i
+v3d_deqp: case #208 F 202ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg32ui'..
+  cube-bind: 0x1534000 unit 0 kick 2579 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2581 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2583 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2585 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2587 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg32ui
+v3d_deqp: case #209 F 202ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg8'..
+  cube-bind: 0x1534000 unit 0 kick 2589 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2591 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2593 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2595 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2597 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rg8
+v3d_deqp: case #210 P 140ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg8i'..
+  cube-bind: 0x1534000 unit 0 kick 2599 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2601 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2603 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2605 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2607 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg8i
+v3d_deqp: case #211 F 174ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rg8ui'..
+  cube-bind: 0x1534000 unit 0 kick 2609 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2611 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2613 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2615 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2617 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex2darray.rg8ui
+v3d_deqp: case #212 F 176ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rg8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2'..
+  cube-bind: 0x1534000 unit 0 kick 2619 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2621 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2623 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2625 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2627 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2
+v3d_deqp: case #213 P 142ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2ui'..
+  cube-bind: 0x1534000 unit 0 kick 2629 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2631 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2633 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2635 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2637 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2ui
+v3d_deqp: case #214 P 138ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb16f'..
+  cube-bind: 0x1534000 unit 0 kick 2639 (draw)
+  cube(draw) @0x1534000 128x128 x5, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x128 @0x0): -675.8333 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (64x64 @0xa0000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x32 @0xc8000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x16 @0xd2000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x8 @0xd4800): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x4 @0xd5200): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x2 @0xd5480): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (1x1 @0xd5520): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1534000 unit 0 kick 2641 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2643 (draw)
+  cube(draw) @0x1534000 128x128 x5, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x128 @0x0): -675.8333 0.0000 98.3229 -134.5938 0.0000
+  cube(draw) level 1 (64x64 @0xa0000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x32 @0xc8000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x16 @0xd2000): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x8 @0xd4800): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x4 @0xd5200): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x2 @0xd5480): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (1x1 @0xd5520): 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1534000 unit 0 kick 2645 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2647 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb16f
+v3d_deqp: case #215 P 235ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb565'..
+  cube-bind: 0x1534000 unit 0 kick 2649 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2651 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2653 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2655 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2657 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb565
+v3d_deqp: case #216 P 141ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb5_a1'..
+  cube-bind: 0x1534000 unit 0 kick 2659 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2661 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2663 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2665 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2667 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb5_a1
+v3d_deqp: case #217 P 141ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgb8'..
+  cube-bind: 0x1534000 unit 0 kick 2669 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2671 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2673 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2675 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2677 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgb8
+v3d_deqp: case #218 P 136ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba16f'..
+  cube-bind: 0x1534000 unit 0 kick 2679 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2681 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2683 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2685 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2687 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba16f
+v3d_deqp: case #219 P 124ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba16i'..
+  cube-bind: 0x1534000 unit 0 kick 2689 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2691 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2693 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2695 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2697 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba16i
+v3d_deqp: case #220 P 156ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba16ui'..
+  cube-bind: 0x1534000 unit 0 kick 2699 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2701 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2703 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2705 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2707 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba16ui
+v3d_deqp: case #221 P 155ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex2darray.rgba32f
+v3d_deqp: case #222 N 23ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba32i'..
+  cube-bind: 0x1534000 unit 0 kick 2709 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2711 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2713 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2715 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2717 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba32i
+v3d_deqp: case #223 P 173ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba32ui'..
+  cube-bind: 0x1534000 unit 0 kick 2719 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2721 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2723 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2725 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2727 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba32ui
+v3d_deqp: case #224 P 171ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba4'..
+  cube-bind: 0x1534000 unit 0 kick 2729 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2731 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2733 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2735 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2737 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba4
+v3d_deqp: case #225 P 142ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba8'..
+  cube-bind: 0x1534000 unit 0 kick 2739 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2741 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2743 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2745 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2747 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba8
+v3d_deqp: case #226 P 135ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba8i'..
+  cube-bind: 0x1534000 unit 0 kick 2749 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2751 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2753 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2755 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2757 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba8i
+v3d_deqp: case #227 P 141ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.rgba8ui'..
+  cube-bind: 0x1534000 unit 0 kick 2759 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2761 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2763 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2765 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2767 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.rgba8ui
+v3d_deqp: case #228 P 141ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex2darray.srgb8_alpha8'..
+  cube-bind: 0x1534000 unit 0 kick 2769 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2771 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2773 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2775 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2777 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex2darray.srgb8_alpha8
+v3d_deqp: case #229 P 167ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex2darray.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex3d.r11f_g11f_b10f
+v3d_deqp: case #230 N 23ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r16f'..
+  cube-bind: 0x1534000 unit 0 kick 2779 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2781 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2783 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2785 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2787 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 6, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.r16f
+v3d_deqp: case #231 P 135ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r16i'..
+  cube-bind: 0x1534000 unit 0 kick 2789 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2791 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2793 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2795 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2797 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r16i
+v3d_deqp: case #232 F 181ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r16ui'..
+  cube-bind: 0x1534000 unit 0 kick 2799 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2801 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2803 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2805 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2807 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r16ui
+v3d_deqp: case #233 F 182ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex3d.r32f
+v3d_deqp: case #234 N 22ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r32i'..
+  cube-bind: 0x1534000 unit 0 kick 2809 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2811 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2813 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2815 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2817 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r32i
+v3d_deqp: case #235 F 197ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r32ui'..
+  cube-bind: 0x1534000 unit 0 kick 2819 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2821 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2823 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2825 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2827 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r32ui
+v3d_deqp: case #236 F 196ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r8'..
+  cube-bind: 0x1534000 unit 0 kick 2829 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2831 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2833 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2835 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2837 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.r8
+v3d_deqp: case #237 P 134ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r8i'..
+  cube-bind: 0x1534000 unit 0 kick 2839 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2841 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2843 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2845 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2847 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r8i
+v3d_deqp: case #238 F 171ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.r8ui'..
+  cube-bind: 0x1534000 unit 0 kick 2849 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2851 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2853 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2855 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2857 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.r8ui
+v3d_deqp: case #239 F 173ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.r8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg16f'..
+  cube-bind: 0x1534000 unit 0 kick 2859 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2861 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2863 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2865 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2867 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rg16f
+v3d_deqp: case #240 P 111ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg16i'..
+  cube-bind: 0x1534000 unit 0 kick 2869 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2871 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2873 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2875 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2877 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg16i
+v3d_deqp: case #241 F 181ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg16ui'..
+  cube-bind: 0x1534000 unit 0 kick 2879 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2881 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2883 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2885 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2887 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg16ui
+v3d_deqp: case #242 F 182ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex3d.rg32f
+v3d_deqp: case #243 N 22ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg32i'..
+  cube-bind: 0x1534000 unit 0 kick 2889 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2891 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2893 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2895 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2897 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg32i
+v3d_deqp: case #244 F 201ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg32ui'..
+  cube-bind: 0x1534000 unit 0 kick 2899 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2901 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2903 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2905 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2907 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg32ui
+v3d_deqp: case #245 F 201ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg8'..
+  cube-bind: 0x1534000 unit 0 kick 2909 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2911 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2913 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2915 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2917 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rg8
+v3d_deqp: case #246 P 136ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg8i'..
+  cube-bind: 0x1534000 unit 0 kick 2919 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2921 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2923 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2925 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2927 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg8i
+v3d_deqp: case #247 F 173ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rg8ui'..
+  cube-bind: 0x1534000 unit 0 kick 2929 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2931 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2933 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2935 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2937 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.tex3d.rg8ui
+v3d_deqp: case #248 F 174ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rg8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2'..
+  cube-bind: 0x1534000 unit 0 kick 2939 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2941 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2943 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2945 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2947 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 13, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2
+v3d_deqp: case #249 P 138ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2ui'..
+  cube-bind: 0x1534000 unit 0 kick 2949 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2951 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2953 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2955 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2957 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 14, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2ui
+v3d_deqp: case #250 P 137ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb16f'..
+  cube-bind: 0x1534000 unit 0 kick 2959 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2961 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2963 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2965 (draw)
+  cube-bind: 0x1534000 unit 0 kick 2967 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb16f
+v3d_deqp: case #251 P 113ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb565'..
+  cube-bind: 0x1534000 unit 0 kick 2969 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2971 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2973 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2975 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2977 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb565
+v3d_deqp: case #252 P 136ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb5_a1'..
+  cube-bind: 0x1534000 unit 0 kick 2979 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2981 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2983 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2985 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2987 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb5_a1
+v3d_deqp: case #253 P 137ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgb8'..
+  cube-bind: 0x1534000 unit 0 kick 2989 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2991 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2993 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2995 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 2997 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgb8
+v3d_deqp: case #254 P 132ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba16f'..
+  cube-bind: 0x1534000 unit 0 kick 2999 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3001 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3003 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3005 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3007 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba16f
+v3d_deqp: case #255 P 118ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba16i'..
+  cube-bind: 0x1534000 unit 0 kick 3009 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3011 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3013 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3015 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3017 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba16i
+v3d_deqp: case #256 P 155ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba16ui'..
+  cube-bind: 0x1534000 unit 0 kick 3019 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3021 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3023 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3025 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3027 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba16ui
+v3d_deqp: case #257 P 154ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.tex3d.rgba32f
+v3d_deqp: case #258 N 21ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba32i'..
+  cube-bind: 0x1534000 unit 0 kick 3029 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3031 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3033 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3035 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3037 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba32i
+v3d_deqp: case #259 P 173ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba32ui'..
+  cube-bind: 0x1534000 unit 0 kick 3039 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3041 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3043 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3045 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3047 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba32ui
+v3d_deqp: case #260 P 171ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba4'..
+  cube-bind: 0x1534000 unit 0 kick 3049 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3051 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3053 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3055 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3057 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba4
+v3d_deqp: case #261 P 136ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba8'..
+  cube-bind: 0x1534000 unit 0 kick 3059 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3061 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3063 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3065 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3067 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba8
+v3d_deqp: case #262 P 131ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba8i'..
+  cube-bind: 0x1534000 unit 0 kick 3069 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3071 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3073 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3075 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3077 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba8i
+v3d_deqp: case #263 P 140ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.rgba8ui'..
+  cube-bind: 0x1534000 unit 0 kick 3079 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3081 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3083 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3085 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3087 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.rgba8ui
+v3d_deqp: case #264 P 141ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.tex3d.srgb8_alpha8'..
+  cube-bind: 0x1534000 unit 0 kick 3089 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3091 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3093 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3095 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3097 (draw)
+  cube(draw) @0x1534000 128x128 x5: fmt 23, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.tex3d.srgb8_alpha8
+v3d_deqp: case #265 P 161ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.tex3d.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r11f_g11f_b10f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.texcube.r11f_g11f_b10f
+v3d_deqp: case #266 N 23ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.texcube.r11f_g11f_b10f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r16f'..
+  cube-bind: 0x1534000 unit 0 kick 3100 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3102 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3104 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 6, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3106 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 6, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.r16f
+v3d_deqp: case #267 P 124ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.texcube.r16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r16i'..
+  cube-bind: 0x1534000 unit 0 kick 3109 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3111 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3113 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3115 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r16i
+v3d_deqp: case #268 F 162ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.texcube.r16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r16ui'..
+  cube-bind: 0x1534000 unit 0 kick 3118 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3120 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3122 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3124 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r16ui
+v3d_deqp: case #269 F 164ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.texcube.r16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.texcube.r32f
+v3d_deqp: case #270 N 23ms k5/26 c20141/23926 r0 dEQP-GLES3.functional.fbo.color.texcube.r32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r32i'..
+  cube-bind: 0x1534000 unit 0 kick 3127 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3129 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3131 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3133 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r32i
+v3d_deqp: case #271 F 179ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.r32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r32ui'..
+  cube-bind: 0x1534000 unit 0 kick 3136 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3138 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3140 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3142 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r32ui
+v3d_deqp: case #272 F 179ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.r32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r8'..
+  cube-bind: 0x1534000 unit 0 kick 3145 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3147 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3149 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3151 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.r8
+v3d_deqp: case #273 P 121ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.r8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r8i'..
+  cube-bind: 0x1534000 unit 0 kick 3154 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3156 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3158 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3160 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r8i
+v3d_deqp: case #274 F 153ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.r8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.r8ui'..
+  cube-bind: 0x1534000 unit 0 kick 3163 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3165 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3167 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3169 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.r8ui
+v3d_deqp: case #275 F 155ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.r8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg16f'..
+  cube-bind: 0x1534000 unit 0 kick 3172 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3174 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3176 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3178 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rg16f
+v3d_deqp: case #276 P 106ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg16i'..
+  cube-bind: 0x1534000 unit 0 kick 3181 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3183 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3185 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3187 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg16i
+v3d_deqp: case #277 F 162ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg16i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg16ui'..
+  cube-bind: 0x1534000 unit 0 kick 3190 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3192 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3194 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3196 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg16ui
+v3d_deqp: case #278 F 163ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg16ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.texcube.rg32f
+v3d_deqp: case #279 N 23ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg32i'..
+  cube-bind: 0x1534000 unit 0 kick 3199 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3201 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3203 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3205 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg32i
+v3d_deqp: case #280 F 184ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg32i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg32ui'..
+  cube-bind: 0x1534000 unit 0 kick 3208 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3210 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3212 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3214 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg32ui
+v3d_deqp: case #281 F 183ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg32ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg8'..
+  cube-bind: 0x1534000 unit 0 kick 3217 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3219 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3221 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3223 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rg8
+v3d_deqp: case #282 P 124ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg8i'..
+  cube-bind: 0x1534000 unit 0 kick 3226 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3228 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3230 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3232 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg8i
+v3d_deqp: case #283 F 155ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg8i
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rg8ui'..
+  cube-bind: 0x1534000 unit 0 kick 3235 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3237 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3239 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3241 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Fail dEQP-GLES3.functional.fbo.color.texcube.rg8ui
+v3d_deqp: case #284 F 157ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rg8ui
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2'..
+  cube-bind: 0x1534000 unit 0 kick 3244 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3246 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3248 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 13, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3250 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 13, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2
+v3d_deqp: case #285 P 126ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2ui'..
+  cube-bind: 0x1534000 unit 0 kick 3253 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3255 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3257 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 14, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3259 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 14, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2ui
+v3d_deqp: case #286 P 119ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb10_a2ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb16f'..
+  cube-bind: 0x1534000 unit 0 kick 3262 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3264 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3266 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3268 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb16f
+v3d_deqp: case #287 P 108ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb565'..
+  cube-bind: 0x1534000 unit 0 kick 3271 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3273 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3275 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3277 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb565
+v3d_deqp: case #288 P 125ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb565
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb5_a1'..
+  cube-bind: 0x1534000 unit 0 kick 3280 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3282 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3284 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3286 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb5_a1
+v3d_deqp: case #289 P 125ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb5_a1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgb8'..
+  cube-bind: 0x1534000 unit 0 kick 3289 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3291 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3293 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3295 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgb8
+v3d_deqp: case #290 P 121ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgb8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba16f'..
+  cube-bind: 0x1534000 unit 0 kick 3298 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3300 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3302 (draw)
+  cube-bind: 0x1534000 unit 0 kick 3304 (draw)
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba16f
+v3d_deqp: case #291 P 114ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba16f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba16i'..
+  cube-bind: 0x1534000 unit 0 kick 3307 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3309 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3311 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3313 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 19, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba16i
+v3d_deqp: case #292 P 137ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba16i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba16ui'..
+  cube-bind: 0x1534000 unit 0 kick 3316 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3318 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3320 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3322 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 18, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba16ui
+v3d_deqp: case #293 P 137ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba16ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba32f'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.color.texcube.rgba32f
+v3d_deqp: case #294 N 21ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba32f
+  NotSupported (Format not supported)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba32i'..
+  cube-bind: 0x1534000 unit 0 kick 3325 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3327 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3329 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3331 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 21, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba32i
+v3d_deqp: case #295 P 155ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba32i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba32ui'..
+  cube-bind: 0x1534000 unit 0 kick 3334 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3336 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3338 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3340 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 20, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba32ui
+v3d_deqp: case #296 P 153ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba32ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba4'..
+  cube-bind: 0x1534000 unit 0 kick 3343 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3345 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3347 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3349 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba4
+v3d_deqp: case #297 P 125ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba8'..
+  cube-bind: 0x1534000 unit 0 kick 3352 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3354 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3356 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3358 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 0, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba8
+v3d_deqp: case #298 P 120ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba8i'..
+  cube-bind: 0x1534000 unit 0 kick 3361 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3363 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3365 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3367 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 17, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba8i
+v3d_deqp: case #299 P 121ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba8i
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.rgba8ui'..
+  cube-bind: 0x1534000 unit 0 kick 3370 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3372 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3374 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3376 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 16, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.rgba8ui
+v3d_deqp: case #300 P 122ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.rgba8ui
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.color.texcube.srgb8_alpha8'..
+  cube-bind: 0x1534000 unit 0 kick 3379 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3381 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3383 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 23, cpu 0x1e633000 - not dumped
+  cube-bind: 0x1534000 unit 0 kick 3385 (draw)
+  cube(draw) @0x1534000 128x128 x6: fmt 23, cpu 0x1e633000 - not dumped
+deqp: Pass dEQP-GLES3.functional.fbo.color.texcube.srgb8_alpha8
+v3d_deqp: case #301 P 144ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.color.texcube.srgb8_alpha8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.basic.depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.basic.depth24_stencil8
+v3d_deqp: case #302 P 52ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.basic.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.basic.depth32f_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.basic.depth32f_stencil8
+v3d_deqp: case #303 P 48ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.basic.depth32f_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.basic.depth_component16'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.basic.depth_component16
+v3d_deqp: case #304 P 51ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.basic.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.basic.depth_component24'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.basic.depth_component24
+v3d_deqp: case #305 P 51ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.basic.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.basic.depth_component32f'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.basic.depth_component32f
+v3d_deqp: case #306 P 48ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.basic.depth_component32f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth24_stencil8
+v3d_deqp: case #307 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth32f_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth32f_stencil8
+v3d_deqp: case #308 P 42ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth32f_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component16'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component16
+v3d_deqp: case #309 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component24'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component24
+v3d_deqp: case #310 P 45ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component32f'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component32f
+v3d_deqp: case #311 P 40ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_test_clamp.depth_component32f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth24_stencil8
+v3d_deqp: case #312 P 48ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth32f_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth32f_stencil8
+v3d_deqp: case #313 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth32f_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component16'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component16
+v3d_deqp: case #314 P 47ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component16
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component24'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component24
+v3d_deqp: case #315 P 48ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component24
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component32f'..
+deqp: Pass dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component32f
+v3d_deqp: case #316 P 42ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.depth.depth_write_clamp.depth_component32f
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.multiview.samples_1'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.multiview.samples_1
+v3d_deqp: case #317 N 23ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.multiview.samples_1
+  NotSupported (Multiview is not supported at es3fMultiviewTests.cpp:158)
+
+Test case 'dEQP-GLES3.functional.fbo.multiview.samples_2'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.multiview.samples_2
+v3d_deqp: case #318 N 27ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.multiview.samples_2
+  NotSupported (Multiview is not supported at es3fMultiviewTests.cpp:158)
+
+Test case 'dEQP-GLES3.functional.fbo.multiview.samples_4'..
+deqp: NotSupported dEQP-GLES3.functional.fbo.multiview.samples_4
+v3d_deqp: case #319 N 26ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.multiview.samples_4
+  NotSupported (Multiview is not supported at es3fMultiviewTests.cpp:158)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.attach.depth_only'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.attach.depth_only
+v3d_deqp: case #320 P 49ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.attach.depth_only
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_attachment'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_attachment
+v3d_deqp: case #321 P 52ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_attachment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_separate'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_separate
+v3d_deqp: case #322 P 52ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.attach.depth_stencil_separate
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.attach.stencil_only'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.attach.stencil_only
+v3d_deqp: case #323 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.attach.stencil_only
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8
+v3d_deqp: case #324 P 43ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8_depth
+v3d_deqp: case #325 P 49ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.basic.depth24_stencil8_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8
+v3d_deqp: case #326 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8_depth'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8_depth
+v3d_deqp: case #327 P 46ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.basic.depth32f_stencil8_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.fbo.stencil.basic.stencil_index8'..
+deqp: Pass dEQP-GLES3.functional.fbo.stencil.basic.stencil_index8
+v3d_deqp: case #328 P 44ms k5/26 c20141/24370 r0 dEQP-GLES3.functional.fbo.stencil.basic.stencil_index8
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        243/329 (73.9%)
+  Failed:        50/329 (15.2%)
+  Not supported: 36/329 (10.9%)
+  Warnings:      0/329 (0.0%)
+  Waived:        0/329 (0.0%)
+deqp: done: 243 passed, 50 failed, 36 not supported, 0 warnings, complete=1
+deqp: summary: 329 cases begun, 329 with a result, 0 without
+v3d_deqp DONE: build 87881c78, filter 'dEQP-GLES3.functional.fbo.color.*,dEQP-GLES3.functional.fbo.depth.*,dEQP-GLES3.functional.fbo.multiview.*,dEQP-GLES3....
+  329 cases in 24112 ms, record at 24 s after boot, reset at ~250 s
+  totals: P 243 F 50 N 36  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 243 passed, 50 failed, 36 not supported, 0 warnings, complete=1
+  summary: 329 cases begun, 329 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 5 at #16, last 5, high-water 26, before #0 (first not passed) 0; slowest #204 291 ms
+  carve-out (KiB, of 48636): after #0 19880, last 20141, high-water 24370
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 3434 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20096768 bytes used now, 24955392 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 1/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 3252 calls, 533027 map reads (163 a call, at most 1153 in one); free runs 3, longest 29705216 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 3434 jobs ended; emitted 35784, skipped 8122; groups compared 4884, mismatches 542
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout (letters stop before the last cases)
+    0 NPFPFPPPPPPPPPNPPPNPPPPPPPPNPPPPPPPPPPPPPPNPPPPPPPNPPPNPPPPPPPPNPPPPPPPPPPPPPPNPPPPPPPNPPPNPPPPPPPPNPPPPPPPPPPPPPPNPPPPPPPNPPPNP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x338e000, GPU VA 0x181000..0x3100000
+driver: ... 12 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  color.blend                                                 3 F2 N1                   2x Image comparison failed
+                                                                                        1x Format not supported
+  color.clear                                                 4 N4                      4x Format not supported
+  color.repeated_clear.blit.rbo                               4 N4                      4x Format not supported
+  color.repeated_clear.blit.tex2d                             4 N4                      4x Format not supported
+  color.repeated_clear.sample.tex2d                           4 N4                      4x Format not supported
+  color.tex2d                                                16 F12 N4                 12x Image comparison failed
+                                                                                        4x Format not supported
+  color.tex2darray                                           16 F12 N4                 12x Image comparison failed
+                                                                                        4x Format not supported
+  color.tex3d                                                16 F12 N4                 12x Image comparison failed
+                                                                                        4x Format not supported
+  color.texcube                                              16 F12 N4                 12x Image comparison failed
+                                                                                        4x Format not supported
+  multiview                                                   3 N3                      3x Multiview is not supported at es3fMultiviewTests.cpp:158
+  ... 86 more not passed (the UART has every line)
+v3d_deqp: build 87881c78 DONE: 329 cases, P 243 F 50 R 0 N 36 other 0
