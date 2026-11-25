@@ -140,9 +140,26 @@ int yd_mp25_ltdc_disable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_l
 int yd_mp25_ltdc_set_fb(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
 			const struct yd_env *env, uint64_t fb_phys);
 
-/* One line interrupt at the end of the active area, polled. -ETIMEDOUT
- * after two frames. */
+/* One frame boundary: the line interrupt at the end of the active area with
+ * IER.LIE set for the wait (r3.1 ltdc.c only relies on LIF with LIE set),
+ * polled; a CPSR line wrap also counts (logged as a warning). -ETIMEDOUT
+ * after two frames: read yd_mp25_ltdc_frame_diag() then. */
 int yd_mp25_ltdc_wait_frame(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env);
+
+/* What the LTDC shows after a frame timeout (reads only, nothing cleared). */
+struct yd_mp25_ltdc_diag {
+	uint32_t isr;
+	uint32_t ier;
+	uint32_t cpsr0;            /* CPSR (CXPOS << 16 | CYPOS) ... */
+	uint32_t cpsr1;            /* ... and 1 ms later: equal = timing stands */
+	uint32_t cdsr;             /* bit 0 VDES, 1 HDES, 2 VSYNCS, 3 HSYNCS */
+	uint32_t gcr;
+	uint32_t rcr;              /* L1RCR */
+};
+
+/* 0 and *out filled, -ENODEV (block does not probe), -EINVAL (null). */
+int yd_mp25_ltdc_frame_diag(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
+			    struct yd_mp25_ltdc_diag *out);
 
 /* Frame CRC (GCR.CRCEN, ltdc.c ltdc_crtc_set_crc_source). on and
  * layer3_secure are booleans; layer3_secure is the RIFSC's answer for layer 3

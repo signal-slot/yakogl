@@ -48,7 +48,7 @@
 //! address counts from its reload. No ordering rule is attached to it.
 //!
 //! Status as the block shows it: `LTDC_IDR` 0x040101, `LCR` 2 layers, `GC2R`
-//! a 64-bit bus; `ISR.LIF` set while `LTDCEN`; the DSI `VERSION` 1.41;
+//! a 64-bit bus; `ISR.LIF` set while `LTDCEN` and `IER.LIE`; the DSI `VERSION` 1.41;
 //! `PHY_STATUS` `PHY_LOCK` and the clock lane's stop state follow the rules
 //! above. Any other offset in the two blocks reads and writes as plain
 //! storage; an access outside them, or a byte access, panics.
@@ -248,7 +248,10 @@ impl State {
             l::LCR => 2,
             l::GC2R => 3 << 4,
             l::ISR => {
-                if self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 {
+                // LIF only while IER.LIE is set: r3.1 ltdc.c never relies on
+                // it otherwise (ltdc_crtc_enable_vblank :1454-1456), and the
+                // DK did not show it with LIE clear (board-display3)
+                if self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 && self.ltdc_get(l::IER) & l::IER_LIE != 0 {
                     l::INT_LINE
                 } else {
                     0

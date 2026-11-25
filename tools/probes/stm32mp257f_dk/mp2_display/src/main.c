@@ -84,6 +84,13 @@ static void print_record(const struct stm32_ltdc_status *st, const struct device
 	       "clock %u Hz\n",
 	       st->ltdc.hwver, st->ltdc.bus_bytes, st->ltdc.layers, st->ltdc.on, st->pitch,
 	       (unsigned long long)st->fb_phys, st->pixel_clock_hz);
+	if (st->frame_diag_ok) {
+		const struct yd_mp25_ltdc_diag *g = &st->frame_diag;
+
+		printk("mp2_display: ltdc at frame timeout: isr 0x%08x ier 0x%08x cpsr 0x%08x "
+		       "0x%08x (1 ms) cdsr 0x%08x gcr 0x%08x l1rcr 0x%08x\n",
+		       g->isr, g->ier, g->cpsr0, g->cpsr1, g->cdsr, g->gcr, g->rcr);
+	}
 	if (dd != NULL) {
 		printk("mp2_display: dsi on %u lanes %u lane %u kbit/s (timings %u Mbit/s) pll "
 		       "idf %u ndiv %u odf %u, hline %u, failed step %u errno %d\n",

@@ -72,6 +72,10 @@ struct stm32_ltdc_status {
 	uint32_t bpp;               /* bytes per pixel */
 	uint64_t fb_phys;           /* the buffer scanned out */
 	struct yd_mp25_ltdc_data ltdc; /* the LTDC's record (hwver, bus_bytes, isr) */
+	/* The LTDC's registers at the last STM32_LTDC_STEP_FRAME failure, read
+	 * before the chain went down; frame_diag_ok 1 when they were read. */
+	struct yd_mp25_ltdc_diag frame_diag;
+	uint8_t frame_diag_ok;
 };
 
 /* The driver's frame buffer, mapped normal non-cacheable: a CPU write needs

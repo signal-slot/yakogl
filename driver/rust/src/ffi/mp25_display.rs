@@ -448,8 +448,10 @@ pub unsafe extern "C" fn yd_mp25_ltdc_set_fb(
     unsafe { ltdc_set_fb_with(&port(), &*env, &*cfg, &mut *data, fb_phys) }
 }
 
-/// Wait for one line interrupt at the end of the active area (polled,
-/// `LIF` cleared first). `-ETIMEDOUT` after two frames.
+/// Wait for one frame boundary: the line interrupt at the end of the active
+/// area with `IER.LIE` set for the wait, as r3.1 ltdc.c relies on it
+/// (polled, `LIF` cleared first; a `CPSR` line wrap also counts, logged).
+/// `-ETIMEDOUT` after two frames: read [`yd_mp25_ltdc_frame_diag`] then.
 ///
 /// # Safety
 /// As [`yd_mp25_ltdc_probe`].
@@ -461,6 +463,63 @@ pub unsafe extern "C" fn yd_mp25_ltdc_wait_frame(cfg: *const YdMp25LtdcConfig, e
     // SAFETY: the caller's contract.
     let (c, env, hw) = unsafe { (&*cfg, &*env, port()) };
     rc(ltdc_of(&hw, c).and_then(|l| l.wait_frame(&hw, env)))
+}
+
+/// `struct yd_mp25_ltdc_diag`: [`ltdc::FrameDiag`] for C.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdMp25LtdcDiag {
+    pub isr: u32,
+    pub ier: u32,
+    /// `CPSR` twice, `ltdc::DIAG_CPSR_GAP_US` (1 ms) apart.
+    pub cpsr0: u32,
+    pub cpsr1: u32,
+    pub cdsr: u32,
+    pub gcr: u32,
+    /// `L1RCR` on the MP25.
+    pub rcr: u32,
+}
+const _: () = assert!(size_of::<YdMp25LtdcDiag>() == 28);
+const _: () = assert!(offset_of!(YdMp25LtdcDiag, cpsr1) == 12);
+const _: () = assert!(offset_of!(YdMp25LtdcDiag, rcr) == 24);
+
+pub(crate) fn ltdc_frame_diag_with(m: &impl Mmio, env: &impl Env, c: &YdMp25LtdcConfig) -> Result<YdMp25LtdcDiag, i32> {
+    let d = ltdc_of(m, c)?.frame_diag(m, env);
+    Ok(YdMp25LtdcDiag {
+        isr: d.isr,
+        ier: d.ier,
+        cpsr0: d.cpsr[0],
+        cpsr1: d.cpsr[1],
+        cdsr: d.cdsr,
+        gcr: d.gcr,
+        rcr: d.rcr,
+    })
+}
+
+/// After a frame timeout: `ISR`, `IER`, `CPSR` read twice 1 ms apart, `CDSR`,
+/// `GCR` and `L1RCR` into `*out` (reads only, nothing cleared). `-ENODEV`
+/// when the block does not probe, `-EINVAL` for a null pointer.
+///
+/// # Safety
+/// `cfg`, `env`, `out` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_frame_diag(
+    cfg: *const YdMp25LtdcConfig,
+    env: *const YdEnv,
+    out: *mut YdMp25LtdcDiag,
+) -> i32 {
+    if cfg.is_null() || env.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    match unsafe { ltdc_frame_diag_with(&port(), &*env, &*cfg) } {
+        Ok(d) => {
+            // SAFETY: as above.
+            unsafe { *out = d };
+            0
+        }
+        Err(e) => e,
+    }
 }
 
 /// `GCR.CRCEN` on or off, as ltdc.c's `ltdc_crtc_set_crc_source` does.
@@ -1815,6 +1874,52 @@ mod tests {
         assert_eq!(r(ltdc::TWCR), (1649 << 16) | 749);
         assert_eq!(r(ltdc::GCR) & ltdc::GCR_LTDCEN, 0);
         assert!(c.lines.borrow().iter().any(|(_, s)| s.contains("reload not taken")));
+    }
+
+    #[test]
+    fn frame_diag_on_a_register_image_reads_without_clearing() {
+        // after a frame timeout: ISR, IER, CPSR twice (1 ms), CDSR, GCR, L1RCR
+        let mut img = vec![0u32; 0x400 / 4];
+        img[(ltdc::IDR / 4) as usize] = ltdc::HWVER_40101;
+        img[(ltdc::GC2R / 4) as usize] = 3 << 4;
+        img[(ltdc::ISR / 4) as usize] = ltdc::INT_FU_WARN;
+        img[(ltdc::IER / 4) as usize] = ltdc::IER_ERRORS;
+        img[(ltdc::CPSR / 4) as usize] = (12 << 16) | 34;
+        img[(ltdc::CDSR / 4) as usize] = 0x5;
+        img[(ltdc::GCR / 4) as usize] = 0xc000_0001;
+        img[(0x108 / 4) as usize] = ltdc::RCR_VBR;
+        let cfg = YdMp25LtdcConfig { base: img.as_mut_ptr() as usize, ..LTDC_CFG };
+        let e = crate::model::TestEnv::default();
+        let d = ltdc_frame_diag_with(&port(), &e, &cfg).unwrap();
+        assert_eq!(
+            d,
+            YdMp25LtdcDiag {
+                isr: ltdc::INT_FU_WARN,
+                ier: ltdc::IER_ERRORS,
+                cpsr0: (12 << 16) | 34,
+                cpsr1: (12 << 16) | 34,
+                cdsr: 5,
+                gcr: 0xc000_0001,
+                rcr: ltdc::RCR_VBR,
+            }
+        );
+        assert_eq!(*e.waited_us.borrow(), u64::from(ltdc::DIAG_CPSR_GAP_US));
+        assert_eq!(img[(ltdc::ISR / 4) as usize], ltdc::INT_FU_WARN, "nothing cleared");
+        let soc = Soc::new();
+        let (c, _adv) = rig(&soc, Adv7535Config::default());
+        let ce = env(&c);
+        let mut out = YdMp25LtdcDiag::default();
+        // SAFETY: the null checks stop before any access; `cfg.base` is `img`.
+        unsafe {
+            assert_eq!(yd_mp25_ltdc_frame_diag(core::ptr::null(), &ce, &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_diag(&cfg, core::ptr::null(), &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_diag(&cfg, &ce, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_diag(&cfg, &ce, &mut out), 0);
+        }
+        assert_eq!(out, d);
+        let dead = Soc::new();
+        dead.poke(LTDC + ltdc::IDR as usize, 0);
+        assert_eq!(ltdc_frame_diag_with(&dead, &e, &LTDC_CFG), Err(-ENODEV));
     }
 
     /// Run `f` with `m` behind the LTDC and DSI extern entry points.

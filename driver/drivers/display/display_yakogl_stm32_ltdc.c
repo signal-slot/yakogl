@@ -298,6 +298,7 @@ static int ltdc_chain_up(const struct device *dev)
 	}
 	d->st.step = STM32_LTDC_STEP_NONE;
 	d->st.err = 0;
+	d->st.frame_diag_ok = 0;
 	rc = ltdc_select(dev);
 	if (rc < 0) {
 		return rc;
@@ -378,6 +379,16 @@ static int ltdc_chain_up(const struct device *dev)
 	(void)yd_mp25_ltdc_isr(&d->yd_cfg, &d->st.ltdc); /* the bring-up's bits cleared */
 	rc = yd_mp25_ltdc_wait_frame(&d->yd_cfg, &d->env);
 	if (rc < 0) {
+		/* Why no frame: read before the teardown changes it. */
+		const struct yd_mp25_ltdc_diag *g = &d->st.frame_diag;
+
+		d->st.frame_diag_ok =
+			yd_mp25_ltdc_frame_diag(&d->yd_cfg, &d->env, &d->st.frame_diag) == 0;
+		if (d->st.frame_diag_ok) {
+			LOG_ERR("ltdc: no frame (%d): isr 0x%08x ier 0x%08x cpsr 0x%08x 0x%08x (1 ms) "
+				"cdsr 0x%08x gcr 0x%08x l1rcr 0x%08x",
+				rc, g->isr, g->ier, g->cpsr0, g->cpsr1, g->cdsr, g->gcr, g->rcr);
+		}
 		ltdc_chain_down(dev);
 		return fail(d, STM32_LTDC_STEP_FRAME, rc);
 	}
