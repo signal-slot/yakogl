@@ -3,22 +3,22 @@
 //! A PowerVR vertex shader with 16 `vec4` outputs, `gl_Position` and
 //! `gl_PointSize` compiles and links, on the host (item pvr-vout64-test).
 //!
-//! The PowerVR answers GL_MAX_VERTEX_OUTPUT_COMPONENTS 60: the GL core
-//! reports `MAX_VARYING_VECTORS * 4` for every GPU but the V3D
-//! (src/gl/context.rs:262, with the expectation at src/gl/state.rs:3251).
-//! That is a software choice, not a hardware limit, and it is why
-//! dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
-//! fails: ES 3.0 asks for at least 64. A later change to src/gl/context.rs
-//! would raise that answer to 64; this file is the guard that the PowerVR
-//! compiler path already carries what such a program declares, so the
-//! change needs no board. It pins tri-vout's probe: a vertex shader
+//! The PowerVR answers GL_MAX_VERTEX_OUTPUT_COMPONENTS 64, ES 3.0's
+//! minimum (table 6.33), as the V3D does (src/gl/context.rs
+//! MAX_VERTEX_OUTPUT_COMPONENTS, with the expectation in src/gl/state.rs
+//! `the_es3_limits_are_what_this_gpu_carries_and_programs`); it used to
+//! answer `MAX_VARYING_VECTORS * 4` = 60, a software choice rather than a
+//! hardware limit, and dEQP-GLES3.functional.implementation_limits.
+//! max_vertex_output_components and the state_query.integers forms of it
+//! failed on that. The first case pins the answer, and the shader's
+//! `gl_MaxVertexOutputVectors` (16) that moves with it. The second is the
+//! guard that the PowerVR compiler path carries what the answer promises,
+//! so the raise needs no board: tri-vout's probe, a vertex shader
 //! declaring 16 `vec4` outputs plus `gl_Position` and `gl_PointSize`,
-//! linked with a fragment shader that reads all 16, compiles and links on
-//! the PowerVR path today. Nothing in the ES 3.0 link refuses it:
-//! `varying_budget` (src/shaderc/online/reflect.rs) passes an ES 3.00
-//! pair, and no GL-core check counts vertex outputs against the reported
-//! limit -- that limit is only ever reported, which is the defect behind
-//! the dEQP case, not this test's subject.
+//! linked with a fragment shader that reads all 16, compiles and links.
+//! Nothing in the ES 3.0 link refuses it: `varying_budget`
+//! (src/shaderc/online/reflect.rs) passes an ES 3.00 pair, and no GL-core
+//! check counts vertex outputs against the reported limit.
 //!
 //! The limit that is enforced sits one row lower: a `ShcShader` carries 16
 //! varying rows (src/shaderc/mod.rs:1380), so a 17th `vec4` output is
@@ -267,10 +267,40 @@ fn build_pair(n: usize) -> Result<GLuint, String> {
     link_pair(vs, fs)
 }
 
+/// GL_MAX_VERTEX_OUTPUT_COMPONENTS reads 64 through every query form, and a
+/// vertex shader sees `gl_MaxVertexOutputVectors` 16: two arrays sized
+/// `gl_MaxVertexOutputVectors - 15` and `17 - gl_MaxVertexOutputVectors`
+/// compile only with that value (a size of 0 or less is a compile error).
+#[test]
+fn the_limit_reads_64_and_the_shader_sees_16_vectors() {
+    let _g = context();
+    let mut i: GLint = 0;
+    let mut i64v: GLint64 = 0;
+    let mut f: GLfloat = 0.0;
+    let mut b: GLboolean = 0;
+    // SAFETY: plain GL calls; one output each.
+    unsafe {
+        glGetIntegerv(GL_MAX_VERTEX_OUTPUT_COMPONENTS, &mut i);
+        glGetInteger64v(GL_MAX_VERTEX_OUTPUT_COMPONENTS, &mut i64v);
+        glGetFloatv(GL_MAX_VERTEX_OUTPUT_COMPONENTS, &mut f);
+        glGetBooleanv(GL_MAX_VERTEX_OUTPUT_COMPONENTS, &mut b);
+        assert_eq!(glGetError(), GL_NO_ERROR, "the queries set no error");
+    }
+    assert_eq!(i, 64, "GL_MAX_VERTEX_OUTPUT_COMPONENTS: ES 3.0 table 6.33 asks 64");
+    assert_eq!(i64v, 64);
+    assert_eq!(f, 64.0);
+    assert_eq!(b, 1);
+    let probe = "#version 300 es\n\
+                 float probe[gl_MaxVertexOutputVectors - 15];\n\
+                 float none[17 - gl_MaxVertexOutputVectors];\n\
+                 void main() {\n  probe[0] = 1.0;\n  none[0] = 2.0;\n  gl_Position = vec4(probe[0], none[0], 0.0, 1.0);\n}\n";
+    compile(GL_VERTEX_SHADER, probe).unwrap_or_else(|e| panic!("gl_MaxVertexOutputVectors is not 16: {e}"));
+}
+
 /// The tri-vout probe: 16 `vec4` outputs plus `gl_Position` and
 /// `gl_PointSize`, read by the fragment shader in full, compile and link
-/// on the PowerVR path. This is what a src/gl change raising
-/// GL_MAX_VERTEX_OUTPUT_COMPONENTS from 60 to 64 relies on.
+/// on the PowerVR path. This is what GL_MAX_VERTEX_OUTPUT_COMPONENTS 64
+/// (src/gl/context.rs) promises.
 #[test]
 fn sixteen_vec4_outputs_with_builtins_compile_and_link() {
     let _g = context();
