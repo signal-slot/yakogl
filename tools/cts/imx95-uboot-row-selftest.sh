@@ -48,4 +48,22 @@ rm "$t/img/TS1R05/zephyr/.config"
 o=$(run "$t/img" TS1R05)
 [ "$(grep -c 'LIFETIME_S=600' "$here/../../driver/samples/zephyr/deqp/verdin_imx95.conf")" -eq 1 ] || { echo "conf moved"; exit 1; }
 echo "$o" | grep -F -q -- '600 s lifetime + 60 s WDOG3 = 660 s' || { echo "conf fallback"; exit 1; }
+# --fs fat: fatload with the name relative to the partition (S1a's route)
+fat() { python3 -I "$here/imx95-uboot-row.py" --storage 0:1 --stage /boot/ --fs fat "$@"; }
+mk T6S1R01 100000 good
+truncate -s 12768592 "$t/img/T6S1R01/zephyr/zephyr.bin"   # 0xc2d550, as S1a's README
+o=$(fat "$t/img" T6S1R01)
+for w in 'fatload mmc 0:1 0xd0000000 T6S1R01.bin' 'cat > /boot/T6S1R01.bin' \
+	"rm -f /boot/T6S1R01.bin" 'md5sum /boot/T6S1R01.bin' 'md5sum 0xd0000000 0xc2d550'; do
+	echo "$o" | grep -F -q -- "$w" || { echo "fat missing: $w"; exit 1; }
+done
+if echo "$o" | grep -F -q ext4load; then echo "fat printed ext4load"; exit 1; fi
+o=$(fat "$t/img" TS1R01-TS1R02)
+echo "$o" | grep -c '^fatload mmc 0:1 0xd0000000 TS1R0[12]\.bin$' | grep -qx 2 || { echo "fat range"; exit 1; }
+o=$(python3 -I "$here/imx95-uboot-row.py" --storage 0:1 --stage /boot/x.bin --fs fat "$t/img" TS1R01)
+echo "$o" | grep -F -q 'fatload mmc 0:1 0xd0000000 x.bin' || { echo "fat file"; exit 1; }
+o=$(python3 -I "$here/imx95-uboot-row.py" --storage 1:3 --stage /mnt/b/ --mount /mnt/b --fs fat "$t/img" TS1R01)
+echo "$o" | grep -F -q 'fatload mmc 1:3 0xd0000000 TS1R01.bin' || { echo "fat mount"; exit 1; }
+if python3 -I "$here/imx95-uboot-row.py" --storage 0:1 --stage /mnt/ --fs fat "$t/img" TS1R01 >/dev/null 2>&1; then echo "fat outside mount accepted"; exit 1; fi
+run "$t/img" TS1R01 | grep -F -q 'ext4load mmc 0:2 0xd0000000 /mnt/vi95/TS1R01.bin' || { echo "ext4 default"; exit 1; }
 echo ok
