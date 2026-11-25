@@ -566,6 +566,62 @@ Plan for finishing: twelve slices, one session each (only one session holds the 
 
 Status: three slices are recorded and the twelve above are planned (to be updated when they run).
 
+### Planned order of the remaining slices
+
+**Planned, not measured.** No time below comes from a board run of these slices. Each is the session planner's
+estimate (`imx8mp-gles3-sessions.py`: Pi 4 rates where the Pi 4 record has the group, else the assumed rates
+printed in its header) plus 60 s per entry for the reboot of a first pass (`NAMES=0`; the recipe's boot is
+45-105 s). The measured times replace this table when the slices have run. Slice directories are
+`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-<rows>`; `rowsN-M` is tree entries N-1 to M-1.
+`imx8mp-gles3-slice.py` accepts all twelve ranges.
+
+| Run | Slice directory suffix | Entries | Mustpass cases | Planned first pass | Largest entry (planner) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `rows14-16` | 13-15 | 1,183 | 0.07 h (256 s) | 31 s |
+| 2 | `rows58-61` | 57-60 | 190 | 0.48 h (1,740 s) | 440 s (entry 59) |
+| 3 | `rows62-67` | 61-66 | 97 | 0.69 h (2,494 s) | 396 s |
+| 4 | `rows95-107` | 94-106 | 1,579 | 1.09 h (3,938 s) | 296 s |
+| 5 | `rows123-128` | 122-127 | 2,355 | 0.43 h (1,538 s) | 293 s |
+| 6 | `rows52-57` | 51-56 | 2,019 | 0.38 h (1,381 s) | 280 s |
+| 7 | `rows68-75` | 67-74 | 384 | 0.74 h (2,678 s) | 300 s |
+| 8 | `rows76-83` | 75-82 | 286 | 0.73 h (2,625 s) | 300 s |
+| 9 | `rows84-94` | 83-93 | 734 | 0.97 h (3,508 s) | 300 s |
+| 10 | `rows108-117` | 107-116 | 1,440 | 0.97 h (3,480 s) | 288 s |
+| 11 | `rows118-122` | 117-121 | 882 | 0.33 h (1,182 s) | 255 s |
+| 12 | `rows129-133` | 128-132 | 3,202 | 0.42 h (1,498 s) | 298 s |
+| | all twelve | 85 | 14,351 | 7.31 h | |
+
+No entry exceeds the planner's 480 s risk flag (0.8 x the 600 s window); the largest is entry 59 at 440 s.
+
+Order and reasons:
+- **Run 1, `rows14-16`, alone:** the shortest slice (blend `fbo_srgb`); it proves the image, the slice commit and the
+  route before a long one.
+- **Runs 2 and 3, the 3d filtering slices** (`rows58-61`, then `rows62-67`): their per-case rate (22 s) is
+  assumed from the AM62P, not measured, and these two hold the entries nearest the risk flag. They go early so a
+  watchdog end shows while the rest of the plan can still change.
+- **Runs 4 and 5** (`rows95-107`, `rows123-128`): the longest and the ubo slice, both flagged by the plan as
+  worth an early look. **Runs 6-12:** the rest, in row order.
+- One session holds the board at a time; run the slices one after another, each with `RUN_BOUND=800`.
+
+Stop rule: a row that ends `board.sh` rc 5 (`the board did not come back`) stops the chain. Stop the session
+and report; start no further slice.
+
+Not predictable with the current `imx8mp-gles3-sessions.py`: page counts, and the ES 2.0 time (it has no
+`--rows` filter and no GLES2 mustpass option).
+
+Reproduce the table (the planner's per-entry rows, summed over the twelve ranges with 60 s per entry):
+
+```
+python3 -I tools/cts/imx8mp-gles3-sessions.py | python3 -I -c '
+import sys
+rows=[l.rstrip("\n").split("\t") for l in sys.stdin if l[:1].isdigit()]
+for a,b in [(14,16),(52,57),(58,61),(62,67),(68,75),(76,83),(84,94),(95,107),(108,117),(118,122),(123,128),(129,133)]:
+    s=rows[a-1:b]; t=sum(float(r[2]) for r in s)+60*len(s)
+    print("rows%d-%d" % (a,b), len(s), sum(int(r[1]) for r in s), round(t), round(t/3600,2), max(float(r[2]) for r in s))'
+```
+
+Columns printed: slice, entries, cases, planned seconds, hours, largest entry's estimate in seconds.
+
 Rules that hold for every step:
 - **One commit.** All slices of a campaign come from the same `origin/main` commit, and the image is named after
   it (`es3-<hash8>`). `tools/cts/imx8mp-gles3-merge.py --check` fails when two slices name different commits.
