@@ -14,7 +14,9 @@ glmark2 row for each board at that commit. This checks exactly that:
     with a warning when git or the ref is unavailable, and with --ref none);
   * RESULTS.md's glmark2 table has a row for each board citing that commit;
   * with --scenes (off by default), each of those rows also gives a number of
-    ms a frame for every named scene and cites a record directory.
+    ms a frame for every named scene and cites a record directory;
+  * with --verdicts (off by default), each of those rows also states the run's
+    outcome and the terrain and refract picture verdicts.
 
 --scenes terrain,shadow,refract reads a scene figure as "<scene> <n> ms" (the
 row text, markdown bold ignored). Both row styles match: glmark2-ms.py --cells
@@ -23,12 +25,38 @@ prints "terrain 178.86 ms (6 FPS)", and RESULTS.md rows have "terrain 250 ms
 with <board> pi4, imx8mp or am62p and <sha8> the common commit's first 8
 characters (by prefix).
 
+--verdicts reads the row text (markdown bold and backticks ignored, case
+ignored) for each of these; a number must not be part of a longer number:
+
+  '33 scenes'        "33 scenes" or "33 of 33 scenes" (not "32 of 33 scenes")
+  '0 failed'         "0 failed"
+  '0 GL errors'      "0 GL errors", "0 GL error" ("0 GL error lines")
+  '0 out-of-memory'  "0 out-of-memory", "0 out of memory", "0 out of GPU
+                     memory" (hyphens or spaces; "... scenes" after it is fine)
+  picture verdicts   for terrain and for refract, one of:
+    (a) the scene name, then within 80 characters with no ',' ';' or '|'
+        between them, a verdict: match / matches / matched, mismatch /
+        mismatches, differ / differs / differed, or "not looked at by eye"
+        ("terrain a match", "terrain and refract not looked at by eye",
+        "refract means equal ... (not looked at by eye)");
+    (b) a verdict word, then within 60 characters with no '(' ';' or '|' a
+        parenthesised list naming the scene ("4 differ in a probe (desktop
+        blur, jellyfish, terrain, refract)", "mismatch 5, each one probe of
+        an animated scene (..., terrain c off 10, refract c ...)").
+    A match / mismatch / differ verdict counts only when the row also names
+    glmark2-pictures.txt (the table it was checked against); "not looked at
+    by eye" counts on its own.
+
+Each item missing gives "FAIL: RESULTS: the <Board> glmark2 row does not state
+<what>" and exit status 1.
+
 The live README fails this by design until its boards are re-measured at one
 commit, so the gate runs the check on fixtures only (cts-selftest.sh).
 
 Usage:
   python3 tools/cts/readme-glmark2-check.py [--readme F] [--results F] [--ref R]
                                                 [--scenes terrain,shadow,refract]
+                                                [--verdicts]
 Exit status: 0 passes, 1 fails, 2 a file or table could not be parsed.
 """
 import argparse
@@ -124,6 +152,43 @@ def scene_fails(board, text, scenes, commit):
     return fails
 
 
+# what a row must state with --verdicts: (label, pattern over the row text)
+OUTCOMES = [
+    ("'33 scenes'", r"(?<!of )(?<![\d.])33 (?:of 33 )?scenes\b"),
+    ("'0 failed'", r"(?<![\d.])0 failed\b"),
+    ("'0 GL errors'", r"(?<![\d.])0 GL errors?\b"),
+    ("'0 out-of-memory'", r"(?<![\d.])0 out[- ]of[- ](?:GPU[- ])?memory\b"),
+]
+PICTURE_SCENES = ["terrain", "refract"]
+VERDICT = r"(?:\b(?:mis)?match(?:es|ed)?\b|\bdiffer(?:s|ed)?\b|\bnot looked at by eye\b)"
+BY_EYE = "not looked at by eye"
+
+
+def picture_verdict(text, scene):
+    """True when text states a picture verdict for scene (module docstring)."""
+    sc = r"\b%s\b" % re.escape(scene)
+    tables = "glmark2-pictures.txt" in text
+    for m in re.finditer(sc + r"[^,;|]{0,80}?(" + VERDICT + ")", text):
+        if tables or m.group(1) == BY_EYE:
+            return True
+    for m in re.finditer("(" + VERDICT + r")[^(;|]{0,60}\(([^()]*)\)", text):
+        if re.search(sc, m.group(2)) and (tables or m.group(1) == BY_EYE):
+            return True
+    return False
+
+
+def verdict_fails(board, text):
+    text = text.replace("`", "").lower()
+    fails = []
+    for what, pat in OUTCOMES:
+        if not re.search(pat, text, re.I):
+            fails.append(what)
+    for sc in PICTURE_SCENES:
+        if not picture_verdict(text, sc):
+            fails.append("a %s picture verdict" % sc)
+    return ["RESULTS: the %s glmark2 row does not state %s" % (board, w) for w in fails]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--readme", default=os.path.join(ROOT, "README.md"))
@@ -133,6 +198,9 @@ def main():
     ap.add_argument("--scenes", default="",
                     help="comma list of scenes (e.g. terrain,shadow,refract): each "
                     "board's RESULTS row also needs '<scene> <n> ms' and a record dir")
+    ap.add_argument("--verdicts", action="store_true",
+                    help="each board's RESULTS row also states 33 scenes, 0 failed, "
+                    "0 GL errors, 0 out-of-memory and terrain/refract picture verdicts")
     a = ap.parse_args()
     scenes = [x.strip() for x in a.scenes.split(",") if x.strip()]
 
@@ -179,8 +247,11 @@ def main():
                 fails.append("RESULTS: no glmark2 row for %s" % b)
             elif not any(same(commit, h) for h in results[b]):
                 fails.append("RESULTS: the %s glmark2 row does not cite `%s`" % (b, commit))
-            elif scenes:
-                fails += scene_fails(b, rtext[b], scenes, commit)
+            else:
+                if scenes:
+                    fails += scene_fails(b, rtext[b], scenes, commit)
+                if a.verdicts:
+                    fails += verdict_fails(b, rtext[b])
 
     for f in fails:
         print("FAIL: " + f)
