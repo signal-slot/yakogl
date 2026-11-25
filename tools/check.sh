@@ -3632,6 +3632,9 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
   step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" no_board_env tools/cts/cts-selftest.sh
+  # tools/cts/t6-uboot-log-selftest.sh: t6-uboot-log.sh and t6-uboot-redact.py
+  # (a redacted NanoPC-T6 U-Boot record into tools/cts/log) on synthetic records.
+  step "tools   t6-uboot-log-selftest.sh (T6 U-Boot record redaction, synthetic records)" no_board_env bash tools/cts/t6-uboot-log-selftest.sh
   # tools/cts/es2-tree-gate-selftest.sh: es2-tree-gate.py (the five stage-1
   # fields of a whole dEQP-GLES2 tree record) on synthetic records. Host only.
   # cts-selftest.sh runs it as its check 58 as well, with the count pinned.
