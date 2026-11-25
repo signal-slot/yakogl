@@ -193,5 +193,18 @@ if(CONFIG_YAKOGL_BOARD)
   elseif(CONFIG_YAKOGL_BOARD_RPI4)
     zephyr_library_sources(rpi4/board_rpi4.c rpi4/rpi_mbox.c rpi4/fbcon.c rpi4/rpi_wdog.c)
     zephyr_library_include_directories(rpi4 "${_yb_repo}/src/osal")
+  elseif(CONFIG_SOC_BCM2712)
+    # The Raspberry Pi 5 (the glmark2 image): no screen yet (bcm2712/), the
+    # PM watchdog and the mailbox from the Pi 4's sources with the SoC a
+    # parameter. An image that sets YAKOGL_RPI5_WDOG / YAKOGL_RPI5_MBOX
+    # (gl_test, the probes) links them from their own libraries already.
+    zephyr_library_sources(bcm2712/board_bcm2712.c)
+    if(NOT CONFIG_YAKOGL_RPI5_WDOG)
+      zephyr_library_sources(rpi4/rpi_wdog.c)
+    endif()
+    if(NOT CONFIG_YAKOGL_RPI5_MBOX)
+      zephyr_library_sources(rpi4/rpi_mbox.c)
+    endif()
+    zephyr_library_include_directories(rpi4 "${_yb_repo}/src/osal")
   endif()
 endif()
