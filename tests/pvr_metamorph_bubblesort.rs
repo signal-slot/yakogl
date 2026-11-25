@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2017 Alastair F. Donaldson and Hugues Evrard, Imperial College London
 //! The graphicsfuzz metamorphic case `bubblesort_flag` (plan #388, issue
 //! #313) through the PowerVR online back end and the USC byte model.
 //!
