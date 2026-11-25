@@ -845,7 +845,9 @@ Landed (sha8 on the integration tip):
 - `src/msaa_store.rs`, the per-attachment sample store keyed by
   `(target_id, gen)`: `d560e749`.
 - `src/msaa_hw`: Valhall (Mali) 4x descriptor and writeback resolve words
-  `fb51ce43`; GC7000UL 4x scratch, RS resolve format and state words
+  `fb51ce43`, and its sample preload words for a 4x FBO drawn into again
+  after a flush (from the sample store, or the resolved `rb.mem` broadcast
+  into every sample: `colour_preload`, `zs_preload_from_resolved`); GC7000UL 4x scratch, RS resolve format and state words
   `9273dfba`. Pure, not wired.
 - V3D job builder: per-RT 4x sample buffers and typed 4x targets: `4bcb55c3`.
 - `gl_test` case 223 `msaarbo`, built, not run: `080b6f9e`.
