@@ -106,7 +106,10 @@ Exit: the command's status (128 + N when a signal N ended it).
 NOT_STARTED (40): the command was not started, nothing was relayed (no
 rfc2217://<host>:<port> in T6_UART, a session that could not be opened or
 set, this tool already around the command, or a command that cannot be
-run). FAILED (41): this tool failed while the command ran; the command was
+run). BAUD_UNCONFIRMED (42): also not started, nothing relayed: the server
+did not confirm 1500000 to SET-BAUDRATE; stderr says "server baud <n>,
+expected 1500000" (<n> is "unknown" when it never answered). A caller stops
+before any reboot. FAILED (41): this tool failed while the command ran; the command was
 sent SIGTERM and waited for. The runners use neither code.
 
 Only the Python standard library: run it with `python3 -I`.
@@ -129,6 +132,10 @@ import tty
 
 NOT_STARTED = 40
 FAILED = 41
+# NOT_STARTED's one cause that callers must tell apart: the server did not
+# confirm BAUD ("server baud <n>, expected 1500000"; <n> is "unknown" when it
+# never answered SET-BAUDRATE). A caller stops before any reboot on it.
+BAUD_UNCONFIRMED = 42
 # The environment the command gets besides T6_UART: set to 1, it tells a
 # runner that T6_UART is this tool's pty (its record says so).
 VIA = "T6_UART_RFC2217"
@@ -285,6 +292,14 @@ class Refused(Exception):
     pass
 
 
+class BaudUnconfirmed(Refused):
+    pass
+
+
+class NoAnswer(Refused):
+    pass
+
+
 class Session:
     """One RFC 2217 session with the line set (open() does both), then the
     data both ways. Bytes from the server before the line is set are
@@ -356,7 +371,7 @@ class Session:
         while not done():
             left = deadline - time.monotonic()
             if left <= 0:
-                raise Refused("the server did not answer %s within %d s" % (what, NEGOTIATE_S))
+                raise NoAnswer("the server did not answer %s within %d s" % (what, NEGOTIATE_S))
             r, _, _ = select.select([self.sock], [], [], left)
             if r:
                 try:
@@ -376,9 +391,17 @@ class Session:
             self.answers.pop(code + SERVER, None)
             self.sb(code, value)
         names = "/".join(NAMES[c] for c, _ in wanted)
-        self.wait(deadline, names, lambda: all(c + SERVER in self.answers for c, _ in wanted))
+        try:
+            self.wait(deadline, names, lambda: all(c + SERVER in self.answers for c, _ in wanted))
+        except NoAnswer:
+            if any(c == SET_BAUDRATE for c, _ in wanted) and SET_BAUDRATE + SERVER not in self.answers:
+                raise BaudUnconfirmed("server baud unknown (no answer to SET-BAUDRATE), expected %d" % BAUD)
+            raise
         for code, value in wanted:
             got = self.answers[code + SERVER]
+            if code == SET_BAUDRATE and got != value:
+                n = struct.unpack("!I", got)[0] if len(got) == 4 else "unknown"
+                raise BaudUnconfirmed("server baud %s, expected %d" % (n, BAUD))
             if got != value:
                 raise Refused("the server answers %s with %s, not %s: the line is not set" % (
                     NAMES[code], shown(code, got), shown(code, value)))
@@ -698,6 +721,9 @@ def run(cmd):
         host, port = parse_url(os.environ.get("T6_UART", ""))
         silent_s, answer_s = seconds(SILENT_ENV, SILENT_S), seconds(ANSWER_ENV, ANSWER_S)
         session = Session.open(host, port)
+    except BaudUnconfirmed as e:
+        say("REFUSED: %s; the command was not started" % e)
+        return BAUD_UNCONFIRMED
     except (ValueError, Refused) as e:
         say("REFUSED: %s; the command was not started" % e)
         return NOT_STARTED
@@ -773,6 +799,7 @@ class FakeAdapter(threading.Thread):
         self.lsock.listen(4)
         self.port = self.lsock.getsockname()[1]
         self.wrong = wrong
+        self.deaf_baud = False                # never answers SET-BAUDRATE (nor takes it)
         self.lock = threading.Lock()
         self.conn, self.conns, self.wire, self.cmds = None, 0, [], []
         self.got, self.garbled, self.dropped = bytearray(), bytearray(), 0
@@ -861,6 +888,8 @@ class FakeAdapter(threading.Thread):
                                     break
                                 value = what[1]
                             elif conn is self.muted:
+                                continue
+                            elif self.deaf_baud and code == SET_BAUDRATE:
                                 continue
                             elif asks:
                                 value = self.line[code]
@@ -1146,10 +1175,21 @@ while args:
         srv.start()
         p, d = start(srv, ["mark", "started", "exit", "0"])
         rc, err = finish(p)
-        check(rc == NOT_STARTED and read(d, "started") is None and read(d, "env") is None,
-              "an answer of 115200 to SET-BAUDRATE: exit %d, the command not started (rc %d)" % (NOT_STARTED, rc))
-        check("REFUSED: the server answers SET-BAUDRATE with 115200, not 1500000" in err and quiet(err, srv),
-              "the refusal names the setting and both values, not the address (%r)" % err.strip())
+        check(rc == BAUD_UNCONFIRMED and read(d, "started") is None and read(d, "env") is None,
+              "a server staying at 115200: exit %d, the command not started (rc %d)" % (BAUD_UNCONFIRMED, rc))
+        check("server baud 115200, expected 1500000" in err and quiet(err, srv),
+              "the refusal gives the acknowledged baud and the expected one, not the address (%r)" % err.strip())
+        srv.close()
+        # ... and one that never answers SET-BAUDRATE (waits NEGOTIATE_S).
+        srv = FakeAdapter()
+        srv.deaf_baud = True
+        srv.start()
+        p, d = start(srv, ["mark", "started", "exit", "0"])
+        rc, err = finish(p)
+        check(rc == BAUD_UNCONFIRMED and read(d, "started") is None,
+              "a server never answering SET-BAUDRATE: exit %d, the command not started (rc %d)" % (BAUD_UNCONFIRMED, rc))
+        check("server baud unknown (no answer to SET-BAUDRATE), expected 1500000" in err and quiet(err, srv),
+              "the refusal says no baud was acknowledged, not the address (%r)" % err.strip())
         srv.close()
 
         # 4. The connection lost once: opened and set again, the gap said,
