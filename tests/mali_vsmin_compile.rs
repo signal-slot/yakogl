@@ -5,10 +5,10 @@
 //! dEQP-GLES2 builds `void main (void) { gl_Position = vec4(0.0); }` with
 //! the smallest fragment shader for its negative_api, state_query and
 //! shader_api cases (docs/es2-cts-failures.md M.1 row 7). The NanoPC-T6 tree
-//! at 8ff01055 refused it at compile, so those 8 cases fail. The first test
-//! pins the outcome at the tip (the shader compiles and links, the draw is
-//! refused by the back end); the ignored one asserts that it compiles, links
-//! with a trivial fragment shader and draws, for the fix to un-ignore.
+//! at 8ff01055 refused it at compile, so those 8 cases fail. The test
+//! asserts that it compiles (the constant gl_Position fix, 159f1d14), links
+//! with a trivial fragment shader and draws: the back end builds a draw with
+//! no vertex attribute as Mesa does (src/mali/frame_noattr_tests.rs).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_vsmin_compile
@@ -214,36 +214,13 @@ fn link_and_draw(v: GLuint, f: GLuint) -> (bool, u64, GLenum) {
     }
 }
 
-/// The outcome at the tip (59b8bac6, host): the vertex shader compiles (info
-/// log empty; the constant gl_Position fix of #11328, 159f1d14) and links
-/// with the trivial fragment shader, but a draw with it is refused by the
-/// back end: "mali frame: a draw with no vertex attribute, more than 16, or
-/// one of other than 1 to 4 32-bit floats is not built yet" (-95, GL error
-/// GL_INVALID_OPERATION from glDrawArrays). dEQP only builds the program, so
-/// the 8 cases of M.1 row 7 depend on the compile and link alone.
+/// The fix (#11328): it compiles, links with a trivial fragment shader and
+/// draws one triangle without a refusal. The draw has attribute 0 enabled,
+/// which the shader does not read; the back end builds it with no Attribute
+/// (Mesa's empty vertex elements). Before the fix the draw was refused: "mali
+/// frame: a draw with no vertex attribute, ... is not built yet" (-95, GL
+/// error GL_INVALID_OPERATION from glDrawArrays).
 #[test]
-fn today_the_smallest_vertex_shader_compiles_and_links_but_its_draw_is_refused() {
-    let _g = context();
-    let (v, ok, log) = compile(GL_VERTEX_SHADER, VS);
-    assert_eq!((ok, log.as_str()), (1, ""), "the vertex shader's compile status and info log");
-    let (f, ok, log) = compile(GL_FRAGMENT_SHADER, FS);
-    assert_eq!((ok, log.as_str()), (1, ""), "the fragment shader's compile status and info log");
-    let (linked, refused, err) = link_and_draw(v, f);
-    assert!(linked, "the program links");
-    assert_eq!(refused, 1, "the draw is refused by the back end");
-    assert_eq!(err, GL_INVALID_OPERATION, "glDrawArrays' error");
-    let osal = LOG.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    assert!(
-        osal.iter().any(|l| l.contains("a draw with no vertex attribute, more than 16, or one of other than 1 to 4")),
-        "the refusal line; osal log {osal:?}"
-    );
-}
-
-/// What a full fix delivers: it compiles, links with a trivial fragment
-/// shader and draws one triangle without a refusal. Un-ignore it and delete
-/// the pin above when the back end builds a draw with no vertex attribute.
-#[test]
-#[ignore = "issue #11328: compile and link work at the tip, the draw of a shader with no vertex attribute is refused (-95, GL_INVALID_OPERATION)"]
 fn the_smallest_vertex_shader_compiles_links_and_draws() {
     let _g = context();
     let (v, ok, log) = compile(GL_VERTEX_SHADER, VS);

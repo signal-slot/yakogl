@@ -620,6 +620,7 @@ fn each_draw_not_built_is_refused_by_name() {
         instance_divisor: 0,
     }];
     let five = [VertexAttribute { components: 5, ..attributes[0] }];
+    let none = [VertexAttribute { components: 0, ..attributes[0] }];
     let seventeen = [attributes[0]; 17];
     let draw = DrawCall {
         zs: DepthStencilState::OFF,
@@ -689,7 +690,9 @@ fn each_draw_not_built_is_refused_by_name() {
             NOT_BUILT_ATTRIBUTES,
         ),
         (
-            f(DrawCall { zs: DepthStencilState::OFF, colour_mask: 0xf, front_cw: false, attributes: &[], ..draw }),
+            /* no attribute is built (frame_noattr_tests.rs, #11328); an
+             * attribute of no component is not */
+            f(DrawCall { zs: DepthStencilState::OFF, colour_mask: 0xf, front_cw: false, attributes: &none, ..draw }),
             NOT_BUILT_ATTRIBUTES,
         ),
         (

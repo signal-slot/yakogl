@@ -53,6 +53,8 @@ mod frame_mrt_tests;
 #[cfg(test)]
 mod frame_msaa_tests;
 #[cfg(test)]
+mod frame_noattr_tests;
+#[cfg(test)]
 mod frame_points_tests;
 #[cfg(test)]
 mod frame_polyoffset_tests;

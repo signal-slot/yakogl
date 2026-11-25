@@ -148,8 +148,12 @@ pub const INVALID_INDEXED_FIRST_VERTEX: &str = "mali frame: an indexed draw with
 /// draw is never split. The builder builds every divisor as Mesa does
 /// ([`VertexAttribute::instance_divisor`]).
 pub const MAX_INSTANCE_DIVISOR: u32 = 0xffff;
+/// A draw with no vertex attribute is built (its vertex shader reads none,
+/// as dEQP's `gl_Position = vec4(0.0)`; #11328): Mesa leaves the Attribute
+/// and Attribute Buffer resource entries zero (`panfrost_emit_resources`,
+/// pan_cmdstream.h:296-301, through `pan_make_resource_table`).
 pub const NOT_BUILT_ATTRIBUTES: &str =
-    "mali frame: a draw with no vertex attribute, more than 16, or one of other than 1 to 4 32-bit floats is not built yet";
+    "mali frame: a draw with more than 16 vertex attributes, or one of other than 1 to 4 32-bit floats, is not built yet";
 /// A stage with varyings and no IDVS varying program: the program record
 /// broke its contract (a compiler defect), not a gap.
 pub const INVALID_VARYINGS: &str =
@@ -2576,8 +2580,7 @@ fn check_draw(
         }
     }
     require(
-        (1..=MAX_ATTRIBUTES).contains(&d.attributes.len())
-            && d.attributes.iter().all(|a| (1..=4).contains(&a.components)),
+        d.attributes.len() <= MAX_ATTRIBUTES && d.attributes.iter().all(|a| (1..=4).contains(&a.components)),
         NOT_BUILT_ATTRIBUTES,
     )?;
     if (vs.varyings != 0 || fs.varyings != 0) && d.vs.varying_spd.is_none() {
@@ -3386,7 +3389,13 @@ fn emit_draw(
      * divisor `1D NPOT Divisor` with `Divisor R`, `E` and `D` of
      * [`npot_divisor`] */
     let n = d.attributes.len();
-    let attributes = desc.alloc(n * Attribute::LENGTH, 32)?;
+    /* no attribute (a vertex shader that reads none): no Attribute and no
+     * Buffer array and both resource entries left zero, as Mesa's
+     * `panfrost_emit_resources` (pan_cmdstream.h:296-301) does for
+     * `num_elements` 0 and an empty `vb_mask`: `pan_make_resource_table`
+     * returns on a count of 0 (pan_encoder.h:271-272) */
+    let attributes = if n == 0 { None } else { Some(desc.alloc(n * Attribute::LENGTH, 32)?) };
+    let buffers = if n == 0 { None } else { Some(desc.alloc(n * Buffer::LENGTH, 32)?) };
     for (i, a) in d.attributes.iter().enumerate() {
         /* R32_FLOAT .. R32G32B32A32_FLOAT: R32F R001, RG32F RG01, RGB32F
          * RGB1, RGBA32F RGBA (Mesa 26.2.1 pan_format.c:451-454); v9+ spells
@@ -3421,9 +3430,10 @@ fn emit_draw(
             divisor_d,
             ..Default::default()
         };
-        desc.write(attributes, i * Attribute::LENGTH, &attr.pack()?)?;
+        if let Some(attributes) = attributes {
+            desc.write(attributes, i * Attribute::LENGTH, &attr.pack()?)?;
+        }
     }
-    let buffers = desc.alloc(n * Buffer::LENGTH, 32)?;
     for (i, a) in d.attributes.iter().enumerate() {
         let b = if a.instance_divisor != 0 {
             Buffer {
@@ -3434,7 +3444,9 @@ fn emit_draw(
         } else {
             Buffer { address: a.buffer.gpu, size: a.buffer.size, ..Default::default() }
         };
-        desc.write(buffers, i * Buffer::LENGTH, &b.pack()?)?;
+        if let Some(buffers) = buffers {
+            desc.write(buffers, i * Buffer::LENGTH, &b.pack()?)?;
+        }
     }
 
     /* the vertex stage's textures first, then its samplers and uniforms, in
@@ -3472,8 +3484,10 @@ fn emit_draw(
     /* the resource tables (`panfrost_emit_resources`, pan_cmdstream.h:279-323) */
     let vs_res = desc.alloc(RESOURCE_TABLES * Resource::LENGTH, 64)?;
     resource(desc, vs_res, TABLE_UBO, vs_ubos.gpu, u64::from(vs_ubo_count))?;
-    resource(desc, vs_res, TABLE_ATTRIBUTE, attributes.gpu, n as u64)?;
-    resource(desc, vs_res, TABLE_ATTRIBUTE_BUFFER, buffers.gpu, n as u64)?;
+    if let (Some(attributes), Some(buffers)) = (attributes, buffers) {
+        resource(desc, vs_res, TABLE_ATTRIBUTE, attributes.gpu, n as u64)?;
+        resource(desc, vs_res, TABLE_ATTRIBUTE_BUFFER, buffers.gpu, n as u64)?;
+    }
     resource(desc, vs_res, TABLE_SAMPLER, vs_sampler.gpu, vs_count)?;
     if let Some((texture, _)) = vs_texture {
         resource(desc, vs_res, TABLE_TEXTURE, texture.gpu, vs_count)?;
@@ -3494,8 +3508,8 @@ fn emit_draw(
     open.layout = Layout {
         depth_stencil: Some(ds),
         blend: Some(blend),
-        attributes: Some(attributes),
-        buffers: Some(buffers),
+        attributes,
+        buffers,
         vs_sampler: Some(vs_sampler),
         vs_sysvals: Some(vs_sysvals),
         vs_ubos: Some(vs_ubos),

@@ -2607,7 +2607,10 @@ fn vertex_attributes(
     out: &mut [frame::VertexAttribute; 16],
 ) -> Result<usize, FrameError> {
     let n = vs_attributes.len();
-    if n == 0 || n > out.len() {
+    /* none is built: a vertex shader that reads no attribute (#11328) draws
+     * with whatever arrays the core has enabled left unread, as Mesa's
+     * vertex elements of such a shader are empty */
+    if n > out.len() {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_ATTRIBUTES));
     }
     let staged = &d.attribs[..usize::from(d.num_attribs).min(d.attribs.len())];

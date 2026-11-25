@@ -47,7 +47,7 @@ listed.
 | Refusal | Constant | Defined | Raised at |
 | --- | --- | --- | --- |
 | a frame built without a colour clear (`build_frame`; the backend preloads instead) | `NOT_BUILT_NO_CLEAR` | `src/mali/frame.rs:135` | `src/mali/frame.rs:2034` |
-| no vertex attribute, more than 16, or not 1 to 4 float32 | `NOT_BUILT_ATTRIBUTES` | `src/mali/frame.rs:150` | `src/mali/frame.rs:2523`, `src/mali/backend.rs:2535` |
+| more than 16 vertex attributes, or one not 1 to 4 float32 | `NOT_BUILT_ATTRIBUTES` | `src/mali/frame.rs:150` | `src/mali/frame.rs:2523`, `src/mali/backend.rs:2535` |
 | fragment shader writes depth, stencil, coverage or memory | `NOT_BUILT_FS_EFFECTS` | `src/mali/frame.rs:156` | `src/mali/frame.rs:2532` |
 | preload of a target whose rows are not a multiple of 64 bytes | `NOT_BUILT_PRELOAD_STRIDE` | `src/mali/frame.rs:158` | `src/mali/frame.rs:2642`, `src/mali/backend.rs:2895` |
 | texture larger than 65536 texels a side, more levels than the builder takes, or a row stride narrower than its rows | `NOT_BUILT_TEXTURE_SIZE` | `src/mali/frame.rs:162` | `src/mali/frame.rs:2541`, `src/mali/frame.rs:2555`, `src/mali/frame.rs:2564`, `src/mali/backend.rs:2197`, `src/mali/backend.rs:2308`, `src/mali/backend.rs:2317`, `src/mali/backend.rs:2442` |
@@ -107,6 +107,20 @@ gone from `src/mali`:
   built (#11308). `stage_textures` in `src/mali/backend.rs` builds both stages'
   textures, texture i at index i of the stage's tables, and
   `DrawCall::vs_textures` carries the vertex stage's array.
+- A draw whose vertex shader reads no attribute (the zero case of
+  `NOT_BUILT_ATTRIBUTES`, dEQP's `gl_Position = vec4(0.0)`): built (#11328).
+  The constant keeps refusing more than 16 attributes and one of other than 1
+  to 4 float32 components. Mesa's vertex elements of such a shader are empty,
+  so `panfrost_emit_resources` (`G/pan_cmdstream.h:296-301`) asks for an
+  Attribute table of `num_elements` 0 and an Attribute Buffer table of
+  `util_last_bit(vb_mask)` 0, and `pan_make_resource_table`
+  (`L/pan_encoder.h:268-279`) leaves both Resource entries zero; the draw's
+  INDEX_COUNT and INSTANCE_COUNT are the draw's. `emit_draw` in
+  `src/mali/frame.rs` allocates no Attribute and no Buffer array and leaves
+  entries 1 and 2 of the vertex resource table zero
+  (`src/mali/frame_noattr_tests.rs`); `vertex_attributes()` in
+  `src/mali/backend.rs` hands an empty list over, an enabled array the shader
+  does not read left unread (`tests/mali_vsmin_compile.rs`).
 
 The first three retired names are in no commit of this history's `src/mali`: the
 history starts at `381b0f09` (the YakoGL 0.1.0 import, 2026-10-27), which
