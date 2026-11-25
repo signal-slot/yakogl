@@ -3541,6 +3541,8 @@ if command -v python3 >/dev/null 2>&1; then
   # behind an exit status of 0).
   scope tools
   step "tools   deqp-uart-tally log verdicts" python3 tools/cts/deqp-uart-tally.py --self-test
+  # deqp-precision-values.py: out-of-bound got/expected values of precision cases.
+  step "tools   deqp-precision-values on synthetic logs" bash tools/cts/deqp-precision-values-selftest.sh
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
   # failing cases), on synthetic runs through board.sh's own tally.
