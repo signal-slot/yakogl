@@ -18,12 +18,24 @@
 #   rpi5_dispregs verdict: q5 clock <name> (<id>): state <on|off|no clock|not answered> rate <hz|-> measured <hz|-> max <hz|->
 #   rpi5_dispregs verdict: q5: <answer>   the disp (16), hsm (13) and bvb (14) clocks
 #   rpi5_dispregs verdict: q6: <answer>   display count, settings and the HDMI words
+#   rpi5_dispregs verdict: q4yline: <counts|stuck|unknown|missing> (<reason>)
+#       channel 0's STATUS trace: `counts` when YLINE took at least 64
+#       distinct values and wrapped at least once per FRCNT step (and FRCNT
+#       stepped), `stuck` when YLINE took one value only, `unknown` otherwise.
+#       Recomputed from the `yline` summary lines and compared with the
+#       image's own `q4yline:` line; a disagreement is a FAIL. A missing
+#       trace is a FAIL only when the end line says done.
 #   rpi5_dispregs verdict: end: <the image's end line, or missing>
 #   rpi5_dispregs verdict: done | FAIL (<reason>) | incomplete (<reason>)
 #
 # The image's lines (all prefixed `rpi5_dispregs: `; others are ignored):
 #
 #   hvs ch<n> ctrl0 <hex> enb <0|1> fwidth <n> lines <n> status <hex> mode <n> frcnt <n>
+#   yline trace ch0 samples <n> period_ns <n> span_us <n> ...  |  yline trace ch0 skipped (...)
+#   yline range min <n> max <n> distinct <n> wraps <n> max_jump <n>  |  yline range none
+#   yline frcnt first <n> last <n> steps <n>  |  yline frcnt none
+#   yline step <k> frcnt <a>-><b> sample <i> yline <y>-><y>   (at most 16)
+#   q4yline: <counts|stuck|unknown> (<reason>)
 #   pv<n> decode en <0|1> viden <0|1> clk_select <n> pixel_rep <n> format <n> hactive <n> ... vactive <n> ... vic <n>
 #   mbox <state|rate|measured|max> tag <hex> clock <id> status <hex> answered <hex> value <hex> rc <n> stage <s>
 #   mbox num_displays tag <hex> status <hex> answered <hex> value <hex> rc <n> stage <s>
@@ -37,7 +49,8 @@
 # bit 1 no such clock (fw_clk.h).
 #
 # Exit status: 0 the image said done, 1 incomplete (no end line), 2 usage,
-# 3 the image said FAIL.
+# 3 the image said FAIL, or said done with the yline trace missing or its
+# q4yline line disagreeing with its own summary.
 #
 # Self-test: tools/probes/rpi_5/rpi5_dispregs/verdicts_selftest.sh
 set -u
@@ -95,6 +108,41 @@ BEGIN {
     hvs_fw[ch] = field("fwidth")
     hvs_lines[ch] = field("lines")
     hvs_enb[ch] = field("enb")
+    next
+}
+/^rpi5_dispregs: yline trace ch0 / {
+    yt_seen = 1
+    yt_n = field("samples")
+    yt_period = field("period_ns")
+    yt_span = field("span_us")
+    if ($5 == "skipped")
+        yt_skipped = 1
+    next
+}
+/^rpi5_dispregs: yline range / {
+    yr_seen = 1
+    yr_min = field("min")
+    yr_max = field("max")
+    yr_distinct = field("distinct")
+    yr_wraps = field("wraps")
+    yr_jump = field("max_jump")
+    next
+}
+/^rpi5_dispregs: yline frcnt / {
+    yf_seen = 1
+    yf_first = field("first")
+    yf_last = field("last")
+    yf_steps = field("steps")
+    next
+}
+/^rpi5_dispregs: yline step / {
+    ys_lines++
+    next
+}
+/^rpi5_dispregs: q4yline: / {
+    q4_img = $3
+    q4_img_line = $0
+    sub(/^rpi5_dispregs: q4yline: /, "", q4_img_line)
     next
 }
 /^rpi5_dispregs: pv[01] decode / {
@@ -255,11 +303,55 @@ END {
         hs = "hdmi: missing (no hdmi line in the log)"
     printf "rpi5_dispregs verdict: q6: %s, %s, %s\n", nds, dss, hs
 
+    # ---- Q4 (YLINE) ----
+    q4_fail = ""
+    if (!yt_seen || q4_img == "") {
+        q4 = "missing (" (!yt_seen ? "no yline trace line" : "no q4yline line") " in the log)"
+        q4_missing = 1
+    } else if (yt_skipped) {
+        q4 = "unknown (the image skipped the trace: " q4_img_line ")"
+    } else {
+        sum = "samples " yt_n " period_ns " yt_period " span_us " yt_span
+        if (yr_seen && yr_distinct != "") {
+            sum = sum ", yline " yr_min ".." yr_max " distinct " yr_distinct " wraps " yr_wraps " max_jump " yr_jump
+            if (yf_seen && yf_steps != "")
+                sum = sum ", frcnt " yf_first ".." yf_last " steps " yf_steps
+            else
+                sum = sum ", frcnt missing"
+        } else
+            sum = sum ", no yline value read"
+        d = yr_distinct + 0
+        w = yr_wraps + 0
+        st = yf_steps + 0
+        if (!yr_seen || yr_distinct == "" || !yf_seen || yf_steps == "")
+            mine = "unknown"
+        else if (d <= 1)
+            mine = "stuck"
+        else if (d >= 64 && st >= 1 && w >= st)
+            mine = "counts"
+        else
+            mine = "unknown"
+        q4 = mine " (" sum ")"
+        if (mine != q4_img)
+            q4_fail = "q4yline: the image says " q4_img ", its summary gives " mine
+        else if (yf_steps != "" && ys_lines != ((st < 16) ? st : 16))
+            q4_fail = "q4yline: " (ys_lines + 0) " yline step lines for " st " FRCNT steps"
+    }
+    printf "rpi5_dispregs verdict: q4yline: %s\n", q4
+
     # ---- end ----
     if (endline != "")
         printf "rpi5_dispregs verdict: end: %s\n", endline
     else
         printf "rpi5_dispregs verdict: end: missing (the log stops before the image'"'"'s end line)\n"
+    if (endline ~ /^done \(/ && q4_missing) {
+        print "rpi5_dispregs verdict: FAIL (the image said done but printed no yline trace)"
+        exit 3
+    }
+    if (endline ~ /^done \(/ && q4_fail != "") {
+        printf "rpi5_dispregs verdict: FAIL (%s)\n", q4_fail
+        exit 3
+    }
     if (endline ~ /^done \(/) {
         print "rpi5_dispregs verdict: done"
         exit 0

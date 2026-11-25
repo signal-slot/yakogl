@@ -12,6 +12,9 @@
  *   map     the mailbox, the HVS (0x1a000 bytes) and pixel valves 0 and 1
  *   hvs     VERSION, then CTRL0 (ENB, FWIDTH 28:16, LINES 12:0) and STATUS of
  *           channels 0 and 1: the size the HVS composes (Q3)
+ *   yline   Q4: about 60 ms of channel 0 STATUS reads (YLINE, FRCNT), then
+ *           `yline ...` summary lines and `q4yline: counts|stuck|unknown`
+ *           (yline_trace(); reads only)
  *   pv<n>   PV_CONTROL, PV_V_CONTROL, PV_HORZA/B, PV_VERTA/B raw, then
  *           decoded with pv_hdmi.h (CLK_SELECT, PIXEL_REP, format) and
  *           pv_timing.h (active width and height, the VIC if the timing is
@@ -231,6 +234,146 @@ static void read_hvs(mm_reg_t hvs)
 	}
 }
 
+/*
+ * Q4 (YLINE): a read-only trace of channel 0's STATUS (driver/docs/
+ * rpi5-v3d71-facts.md, section B: STATUS holds EMPTY, FRCNT, OFIELD, MODE and
+ * YLINE; FRCNT 21:16 and YLINE 12:0 are scanout_alive.h's SA_STATUS_* masks,
+ * rpi:vc4_regs.h:605,612). One STATUS read per slot of YT_BUDGET_US /
+ * YT_SAMPLES (about 14.6 us, close to one 1080p60 line), for at most
+ * YT_SAMPLES reads or YT_BUDGET_US (60 ms, more than three frames at 60 Hz),
+ * whichever ends first. Between reads the loop waits on k_cycle_get_32()
+ * only: the loop's only MMIO access is sys_read32() of STATUS. Nothing is
+ * printed inside the loop; the summary follows it. No register is written and
+ * pv_wait_vblank() is not called.
+ */
+#define YT_SAMPLES    4096u
+#define YT_BUDGET_US  60000u
+#define YT_MAX_STEPS  16u   /* FRCNT steps listed one per line */
+#define YT_MIN_DISTINCT 64u /* 'counts' needs this many distinct YLINE values */
+
+static uint32_t yt_status[YT_SAMPLES];
+static uint32_t yt_cycle[YT_SAMPLES];
+static uint8_t yt_seen[(SA_STATUS_YLINE_MASK + 1u) / 8u];
+
+static inline uint32_t yt_yline(uint32_t s)
+{
+	return s & SA_STATUS_YLINE_MASK;
+}
+
+static inline uint32_t yt_frcnt(uint32_t s)
+{
+	return (s >> SA_STATUS_FRCNT_SHIFT) & SA_STATUS_FRCNT_MASK;
+}
+
+/* The trace: reads only. Returns the number of samples stored. */
+static uint32_t yline_sample(mm_reg_t hvs, uint32_t off, uint32_t budget, uint32_t slot)
+{
+	uint32_t n = 0;
+	uint32_t t0 = k_cycle_get_32();
+
+	while (n < YT_SAMPLES) {
+		uint32_t now = k_cycle_get_32();
+
+		if (now - t0 >= budget)
+			break;
+		if (now - t0 < n * slot)
+			continue;
+		yt_cycle[n] = now;
+		yt_status[n] = sys_read32(hvs + off);
+		n++;
+	}
+	return n;
+}
+
+static void yline_trace(mm_reg_t hvs)
+{
+	uint32_t hz = sys_clock_hw_cycles_per_sec();
+	uint32_t budget = (uint32_t)((uint64_t)hz * YT_BUDGET_US / 1000000u);
+	uint32_t slot = budget / YT_SAMPLES;
+	uint32_t n, ones = 0, distinct = 0, wraps = 0, steps = 0, max_jump = 0;
+	uint32_t ymin = SA_STATUS_YLINE_MASK, ymax = 0, period_ns = 0, span_us = 0;
+	const char *verdict;
+	static char why[96];
+	int d0;
+
+	if (!hvs) {
+		printk("rpi5_dispregs: yline trace ch0 skipped (the HVS did not map)\n");
+		printk("rpi5_dispregs: q4yline: unknown (no trace: the HVS did not map)\n");
+		return;
+	}
+	d0 = sa_is_d0(sys_read32(hvs + SA_HVS_VERSION));
+	n = yline_sample(hvs, sa_reg_status(d0, 0), budget, slot);
+
+	memset(yt_seen, 0, sizeof(yt_seen));
+	for (uint32_t i = 0; i < n; i++) {
+		uint32_t y = yt_yline(yt_status[i]);
+
+		if (yt_status[i] == ALL_ONES) {
+			ones++;
+			continue;
+		}
+		if (!(yt_seen[y / 8u] & BIT(y % 8u))) {
+			yt_seen[y / 8u] |= BIT(y % 8u);
+			distinct++;
+		}
+		ymin = MIN(ymin, y);
+		ymax = MAX(ymax, y);
+		if (i > 0 && yt_status[i - 1] != ALL_ONES) {
+			uint32_t p = yt_yline(yt_status[i - 1]);
+
+			if (y < p)
+				wraps++;
+			else
+				max_jump = MAX(max_jump, y - p);
+			if (yt_frcnt(yt_status[i]) != yt_frcnt(yt_status[i - 1]))
+				steps++;
+		}
+	}
+	if (n > 1 && hz != 0) {
+		uint64_t span = yt_cycle[n - 1] - yt_cycle[0];
+
+		period_ns = (uint32_t)(span * 1000000000ull / hz / (n - 1u));
+		span_us = (uint32_t)(span * 1000000ull / hz);
+	}
+
+	printk("rpi5_dispregs: yline trace ch0 samples %u period_ns %u span_us %u cycle_hz %u "
+	       "all_ones %u stepping %s\n",
+	       n, period_ns, span_us, hz, ones, d0 ? "D0" : "C0");
+	if (n == ones) {
+		printk("rpi5_dispregs: yline range none\n");
+		printk("rpi5_dispregs: yline frcnt none\n");
+		printk("rpi5_dispregs: q4yline: unknown (no STATUS read other than all ones)\n");
+		return;
+	}
+	printk("rpi5_dispregs: yline range min %u max %u distinct %u wraps %u max_jump %u\n", ymin, ymax,
+	       distinct, wraps, max_jump);
+	printk("rpi5_dispregs: yline frcnt first %u last %u steps %u\n", yt_frcnt(yt_status[0]),
+	       yt_frcnt(yt_status[n - 1]), steps);
+	for (uint32_t i = 1, k = 0; i < n && k < YT_MAX_STEPS; i++) {
+		uint32_t a = yt_status[i - 1], b = yt_status[i];
+
+		if (a == ALL_ONES || b == ALL_ONES || yt_frcnt(a) == yt_frcnt(b))
+			continue;
+		printk("rpi5_dispregs: yline step %u frcnt %u->%u sample %u yline %u->%u\n", k, yt_frcnt(a),
+		       yt_frcnt(b), i, yt_yline(a), yt_yline(b));
+		k++;
+	}
+
+	if (distinct <= 1u) {
+		verdict = "stuck";
+		snprintk(why, sizeof(why), "YLINE %u in all %u samples", ymin, n - ones);
+	} else if (distinct >= YT_MIN_DISTINCT && steps >= 1u && wraps >= steps) {
+		verdict = "counts";
+		snprintk(why, sizeof(why), "%u distinct values, %u wraps over %u FRCNT steps", distinct,
+			 wraps, steps);
+	} else {
+		verdict = "unknown";
+		snprintk(why, sizeof(why), "%u distinct values, %u wraps, %u FRCNT steps", distinct,
+			 wraps, steps);
+	}
+	printk("rpi5_dispregs: q4yline: %s (%s)\n", verdict, why);
+}
+
 /* Q3, the valve half. Returns 1 when the valve mapped. */
 static int read_pv(unsigned int n, uint64_t pa, uint32_t size)
 {
@@ -288,6 +431,8 @@ int main(void)
 
 	/* Q3 */
 	read_hvs(hvs);
+	/* Q4: YLINE and FRCNT of channel 0, reads only */
+	yline_trace(hvs);
 	n_pv += read_pv(0, PV0_BASE, PV0_SIZE);
 	n_pv += read_pv(1, PV1_BASE, PV1_SIZE);
 	printk("rpi5_dispregs: pv mux/stat not read (no offset of them in the repo)\n");

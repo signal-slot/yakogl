@@ -20,6 +20,15 @@
 #   fail       the image's FAIL end line (exit 3)
 #   incomplete the log stops before the end line (exit 1)
 #   crlf       the "read" log with CR line ends and a timestamp prefix
+#   counts     the YLINE trace (in every log above): 1080 values, 3 wraps
+#              over 3 FRCNT steps (q4yline: counts)
+#   stuck      YLINE 0 in every sample (q4yline: stuck, exit 0)
+#   fewvals    YLINE takes 40 values (q4yline: unknown, exit 0)
+#   missing    no trace lines with a done end line (FAIL, exit 3); with no
+#              end line (incomplete, exit 1) or a FAIL end line (its reason)
+#   disagree   the image's q4yline says counts, its summary gives stuck
+#              (FAIL, exit 3)
+#   yskip      the image skipped the trace (the HVS did not map): unknown
 #   usage      no argument, an unreadable file (exit 2)
 #
 # Prints one line per failed check and a last line
@@ -72,7 +81,47 @@ clock() {
     tag max "$1" "$3" "$7"
 }
 
-# make_log <file> <pv0 width> <hvs fwidth> <pv0 en> <hsm state> <hsm measured> <mbox rc> <end line>
+# yline_lines <mode>: the image's YLINE trace summary (src/main.c
+# yline_trace()); mode counts, stuck, fewvals, disagree, skipped or none.
+yline_lines() {
+    trace="rpi5_dispregs: yline trace ch0 samples 4096 period_ns 14648 span_us 59985 cycle_hz 54000000 all_ones 0 stepping D0"
+    case "$1" in
+    counts)
+        echo "$trace"
+        echo "rpi5_dispregs: yline range min 0 max 1124 distinct 1080 wraps 3 max_jump 2"
+        echo "rpi5_dispregs: yline frcnt first 5 last 8 steps 3"
+        echo "rpi5_dispregs: yline step 0 frcnt 5->6 sample 700 yline 1124->0"
+        echo "rpi5_dispregs: yline step 1 frcnt 6->7 sample 1840 yline 1123->1"
+        echo "rpi5_dispregs: yline step 2 frcnt 7->8 sample 2980 yline 1124->0"
+        echo "rpi5_dispregs: q4yline: counts (1080 distinct values, 3 wraps over 3 FRCNT steps)"
+        ;;
+    stuck | disagree)
+        echo "$trace"
+        echo "rpi5_dispregs: yline range min 0 max 0 distinct 1 wraps 0 max_jump 0"
+        echo "rpi5_dispregs: yline frcnt first 5 last 5 steps 0"
+        if [ "$1" = stuck ]; then
+            echo "rpi5_dispregs: q4yline: stuck (YLINE 0 in all 4096 samples)"
+        else
+            echo "rpi5_dispregs: q4yline: counts (1080 distinct values, 3 wraps over 3 FRCNT steps)"
+        fi
+        ;;
+    fewvals)
+        echo "$trace"
+        echo "rpi5_dispregs: yline range min 0 max 39 distinct 40 wraps 3 max_jump 1"
+        echo "rpi5_dispregs: yline frcnt first 5 last 8 steps 3"
+        echo "rpi5_dispregs: yline step 0 frcnt 5->6 sample 700 yline 39->0"
+        echo "rpi5_dispregs: yline step 1 frcnt 6->7 sample 1840 yline 39->0"
+        echo "rpi5_dispregs: yline step 2 frcnt 7->8 sample 2980 yline 39->0"
+        echo "rpi5_dispregs: q4yline: unknown (40 distinct values, 3 wraps, 3 FRCNT steps)"
+        ;;
+    skipped)
+        echo "rpi5_dispregs: yline trace ch0 skipped (the HVS did not map)"
+        echo "rpi5_dispregs: q4yline: unknown (no trace: the HVS did not map)"
+        ;;
+    esac
+}
+
+# make_log <file> <pv0 width> <hvs fwidth> <pv0 en> <hsm state> <hsm measured> <mbox rc> <end line> [yline mode, default counts]
 # hsm state 0x1 on, 0x0 off. A measured rate of 0x0 means the clock is off.
 make_log() {
     f=$1
@@ -83,6 +132,7 @@ make_log() {
     hm=$6
     rc=$7
     end=$8
+    ymode=${9:-counts}
     {
         echo "rpi5_dispregs: build abc1234"
         echo "rpi5_dispregs: cache management on"
@@ -90,6 +140,7 @@ make_log() {
         echo "rpi5_dispregs: hvs mapped version 0x00000054 stepping D0"
         echo "rpi5_dispregs: hvs ch0 ctrl0 0x80000438 enb 1 fwidth $fw lines 1080 status 0x00052000 mode 2 frcnt 5"
         echo "rpi5_dispregs: hvs ch1 ctrl0 0x00000000 enb 0 fwidth 0 lines 0 status 0x00000000 mode 0 frcnt 0"
+        yline_lines "$ymode"
         echo "rpi5_dispregs: pv0 mapped"
         echo "rpi5_dispregs: pv0 regs control 0x00000001 vcontrol 0x00000001 horza 0x00940058 horzb 0x00200780 verta 0x00240005 vertb 0x00040438"
         echo "rpi5_dispregs: pv0 decode en $pven viden $pven clk_select 1 pixel_rep 0 format 0 hactive $pvw hfp 32 hsync 40 hbp 74 vactive 1080 vfp 4 vsync 5 vbp 36 vic 0"
@@ -141,6 +192,7 @@ expect_has read "$out" "q5: hsm on measured 400000000, bvb on measured 300000000
 expect_has read "$out" "q6: displays: 2, settings: answered, hdmi: hdmi0 hotplug 1 hd_vid_ctl enable 1, hdmi1 hotplug 0 hd_vid_ctl enable 0; the firmware drives HDMI0"
 expect_has read "$out" "end: done ("
 expect_has read "$out" "verdict: done"
+expect_has read "$out" "q4yline: counts (samples 4096 period_ns 14648 span_us 59985, yline 0..1124 distinct 1080 wraps 3 max_jump 2, frcnt 5..8 steps 3)"
 
 # skipped: the HSM clock is off
 make_log "$tmp/skipped" 960 1920 1 0x0 0x0 0 "done (pv 2 of 2, clock tags 16 of 16, hdmi skipped)"
@@ -202,6 +254,53 @@ run "$tmp/crlf"
 expect_rc crlf "$rc" 0
 expect_has crlf "$out" "two pixels per clock: yes"
 expect_has crlf "$out" "the firmware drives HDMI0"
+expect_has crlf "$out" "q4yline: counts"
+
+# stuck: YLINE never moves
+make_log "$tmp/stuck" 960 1920 1 0x1 0x17d78400 0 "$DONE" stuck
+run "$tmp/stuck"
+expect_rc stuck "$rc" 0
+expect_has stuck "$out" "q4yline: stuck (samples 4096"
+expect_has stuck "$out" "distinct 1 wraps 0"
+expect_has stuck "$out" "verdict: done"
+
+# fewvals: YLINE moves over too few values for counts
+make_log "$tmp/fewvals" 960 1920 1 0x1 0x17d78400 0 "$DONE" fewvals
+run "$tmp/fewvals"
+expect_rc fewvals "$rc" 0
+expect_has fewvals "$out" "q4yline: unknown (samples 4096"
+
+# missing: done but no trace is a FAIL
+make_log "$tmp/missing" 960 1920 1 0x1 0x17d78400 0 "$DONE" none
+run "$tmp/missing"
+expect_rc missing "$rc" 3
+expect_has missing "$out" "q4yline: missing (no yline trace line in the log)"
+expect_has missing "$out" "verdict: FAIL (the image said done but printed no yline trace)"
+
+# missing without an end line: incomplete, not FAIL
+make_log "$tmp/missing-inc" 960 1920 1 0x1 0x17d78400 0 "" none
+run "$tmp/missing-inc"
+expect_rc missing-inc "$rc" 1
+expect_has missing-inc "$out" "q4yline: missing"
+expect_has missing-inc "$out" "verdict: incomplete (no end line)"
+
+# missing with the image's FAIL end line: the image's reason stands
+make_log "$tmp/missing-fail" 960 1920 1 0x1 0x17d78400 0 "FAIL (the HVS did not map)" none
+run "$tmp/missing-fail"
+expect_rc missing-fail "$rc" 3
+expect_has missing-fail "$out" "verdict: FAIL (the HVS did not map)"
+
+# disagree: the image's verdict does not follow from its own summary
+make_log "$tmp/disagree" 960 1920 1 0x1 0x17d78400 0 "$DONE" disagree
+run "$tmp/disagree"
+expect_rc disagree "$rc" 3
+expect_has disagree "$out" "verdict: FAIL (q4yline: the image says counts, its summary gives stuck)"
+
+# yskip: the image skipped the trace
+make_log "$tmp/yskip" 960 1920 1 0x1 0x17d78400 0 "$DONE" skipped
+run "$tmp/yskip"
+expect_rc yskip "$rc" 0
+expect_has yskip "$out" "q4yline: unknown (the image skipped the trace: unknown (no trace: the HVS did not map))"
 
 # usage
 out=$(sh "$V" 2>&1)
