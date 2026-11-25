@@ -2907,7 +2907,10 @@ What is left needs a run from U-Boot or a job from Zephyr:
   (kept), a PVTPLL state, an out-of-table divider and an unknown mux). Not
   measured: the rates U-Boot itself believes, SCMI clock 5 included (the build has
   no `clk` command), and the move on the board (no image has run from U-Boot yet;
-  issue #4627).
+  issue #4627: the 2026-11-25 sessions of plan #408 stopped before the prompt,
+  the serial adapter's one slot held by the farm's console server at 115200
+  where the console runs at 1500000; docs/notes/nanopc-t6-uboot-handover.md,
+  section 5, "Board sessions").
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the

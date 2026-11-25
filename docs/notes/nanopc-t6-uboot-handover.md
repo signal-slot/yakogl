@@ -7,7 +7,8 @@ are merged code with host tests. The U-Boot and eMMC facts (section 4) were
 measured read-only under Armbian and, on 2026-11-12, at the U-Boot prompt with
 the tool of section 3. The load route (section 5) is a tool
 (driver/tools/uboot-t6/stage.sh and prompt-go.sh, issue #4627) and has not
-run on the board. Its load addresses, from source, are confirmed on the board
+run on the board: the 2026-11-25 sessions stopped before the prompt, the
+console's line rate (section 5, "Board sessions"). Its load addresses, from source, are confirmed on the board
 twice: in the environment compiled into the booted binary (read under
 Armbian) and by `printenv` at the prompt. The entry audit (section 6) follows.
 
@@ -327,6 +328,27 @@ check the commands, `go`, record the image's output and judge it with
 `t6-verdict.sh` (`T6_ROUTE=uboot`). None of this has run on the board. (The
 script draft t6-zephyr.cmd, which needed `setexpr`, `icache` and `dcache`,
 was removed.)
+
+Board sessions (plan #408, item uboot-s1, issue #4627). None has reached the
+prompt. The three attempts of 2026-11-25 (at cbb55860 and 65af54b5, where
+t6_cold, t6_gpu, t6_fw and t6_submit were staged with `stage.sh` and every
+dry run of `prompt-reads.sh` and `prompt-go.sh` exited 0, then `stage.sh
+undo`; and again on main 35c98f25) stopped at the same cause, before
+anything was written to U-Boot or the board was rebooted: the serial
+adapter has one client slot, and the farm's console server for the serial
+lease holds it, opened at the adapter's stored 115200 baud. The T6's console
+runs at 1500000, so a line written to UART2 from Armbian reaches that server
+as 3 bytes of garbage, and a direct open for `t6-uart-rfc2217.py` (what
+`prompt-reads.sh --go` and `prompt-go.sh --go` use) is answered `busy:
+another client is connected` (exit 40). An RFC 2217 SET-BAUDRATE sent
+through the console server's write is escaped as data, as it should be, and
+leaves the line at 115200. The KVM's HDMI does not help: this U-Boot writes
+`stdout=serial,vidconsole` but reads only the serial line (no `usbkbd` in
+its compiled-in environment, read from the eMMC image under Armbian). So
+nothing of sections 1, 2, 6 and 7 has been measured from U-Boot's state.
+The next session needs one of: the console lease opened at 1500000, the
+adapter's stored baud set to 1500000 (its own shell, `baud 1500000`), or the
+slot left free for `t6-uart-rfc2217.py`; and a `T6_HAND`.
 
 Load addresses, from source (U-Boot v2026.07, file:line), and confirmed on the
 board twice:

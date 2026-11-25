@@ -16,6 +16,12 @@ Status:
   "The route") and has not run on the board (issue #4627). The script draft
   `t6-zephyr.cmd` is gone: it needed `setexpr`, `icache` and `dcache`, which
   this build lacks.
+- The 2026-11-25 sessions (plan #408) stopped before the prompt: the
+  adapter's one client slot was held by the farm's serial console server at
+  the adapter's stored 115200, not the console's 1500000, so `--go` exited
+  40 (`busy`). A `--go` run needs that slot free, or the line opened at
+  1500000 (docs/notes/nanopc-t6-uboot-handover.md, section 5, "Board
+  sessions").
 
 ## Prompt reads
 
