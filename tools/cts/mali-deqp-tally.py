@@ -56,8 +56,34 @@ meta.txt carries one more, optional key
                among the slices given)
 
 and a slice of a board other than the NanoPC-T6 one more, optional key,
-board=<MALI_BOARD> (tools/mali/panthor/board-profile.sh), which the tally
-does not read.
+board=<MALI_BOARD> (tools/mali/panthor/board-profile.sh): nanopc-t6 (the
+default) or verdin-imx95. A slice without the key takes its board from the
+directory name's tag (-t6- or -imx95-). The key and the tag must agree
+(RULE board-name), an unknown board is RULE board-unknown, and slices of two
+boards in one --tally, --check-cover or --check-doc are refused with
+RULE board-mix (exit 1): one tally is one board.
+
+A Verdin iMX95 slice (tools/cts/log/<date>-imx95-gles2-<session>-<sha8>/,
+session S1a, S1b, S2, S3a, S3b or S4, RULE session-name otherwise) is one
+Zephyr image per tree row, started by hand from U-Boot and read from the
+UART: there is no ssh, no kmsg and no Linux chunk. Its chunks.tsv has the
+same columns; kmsg, resets, ssh_after and boot_same may be '-' on any row
+(nothing was measured), and kmsg/ may be absent. A row maps to the existing
+Lost reasons of results.tsv, which RULE lost-reason requires to start with
+one of chunk-crash, chunk-hang, board-lost, not-run in an iMX95 slice:
+  done      the row ended with its verdict; its cases hold dEQP statuses
+  hang      the image's own lifetime timer or WDOG3 cut it off: the cases
+            it never reported are Lost chunk-hang
+  lost      the board did not return (board-lost) or the row was never
+            started (not-run); the rows after a lost board are not-run
+No new reason is needed. Reruns= and replaces= work as for the T6.
+
+The doc's Verdin iMX95 part is a block of its own, with the markers
+<!-- mali-deqp-tally begin imx95 --> ... <!-- mali-deqp-tally end imx95 -->
+and the same content form as the T6 block. --check-doc DOC --log LOGDIR
+checks the T6 block as before and, when the doc has an iMX95 block, that one
+against the slices its own "Slices:" line names; --check-doc DOC SLICE...
+with iMX95 slices checks the iMX95 block (RULE doc-block when absent).
 
 A case may then appear in the rerunning slice and in an earlier slice, and
 only so: that earlier slice is one of the names in reruns and has the case as
@@ -104,6 +130,7 @@ that cannot be read exits 2. --no-git skips the ancestor rule (fixtures);
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,6 +147,11 @@ META_KEYS = ("commit", "session", "rows", "tree", "boot_id_before",
 LOST_REASONS = ("chunk-crash", "chunk-hang", "board-lost", "not-run")
 BEGIN = "<!-- mali-deqp-tally begin -->"
 END = "<!-- mali-deqp-tally end -->"
+BEGIN_IMX95 = "<!-- mali-deqp-tally begin imx95 -->"
+END_IMX95 = "<!-- mali-deqp-tally end imx95 -->"
+BOARDS = ("nanopc-t6", "verdin-imx95")
+BOARD_TAG = {"t6": "nanopc-t6", "imx95": "verdin-imx95"}
+IMX95_SESSIONS = ("S1a", "S1b", "S2", "S3a", "S3b", "S4")
 # A back end refusal in a detail or an exit line: "refused <name>",
 # "refused: <name>" or "refusal=<name>".
 REFUSED = re.compile(r"\brefus(?:ed|al)\b[\s:=]+([A-Za-z_][A-Za-z0-9_.:-]*)")
@@ -197,6 +229,37 @@ def is_ancestor(commit, ref, cwd):
     r = subprocess.run(["git", "merge-base", "--is-ancestor", commit, ref],
                        cwd=cwd, capture_output=True)
     return r.returncode == 0
+
+
+def slice_board(s):
+    """(board, error) of a slice: meta board=, else the directory name's
+    tag (-t6-, -imx95-), else nanopc-t6."""
+    tag = re.search(r"-(t6|imx95)-gles2-", s["name"])
+    tagged = BOARD_TAG[tag.group(1)] if tag else None
+    key = s["meta"].get("board")
+    if key and key not in BOARDS:
+        return key, "RULE board-unknown: %s: board %r is not %s" % (
+            s["name"], key, "|".join(BOARDS))
+    if key and tagged and key != tagged:
+        return key, ("RULE board-name: %s: board=%s but the directory name "
+                     "says %s" % (s["name"], key, tagged))
+    return key or tagged or "nanopc-t6", None
+
+
+def board_mix(slices):
+    """The RULE board-mix error when the slices belong to two boards."""
+    by = {}
+    for s in slices:
+        by.setdefault(slice_board(s)[0], []).append(s["name"])
+    if len(by) > 1:
+        return ["RULE board-mix: one tally is one board, but the slices are "
+                "of %s" % "; ".join("%s: %s" % (b, ", ".join(n))
+                                    for b, n in sorted(by.items()))]
+    return []
+
+
+def is_imx95(slices):
+    return bool(slices) and slice_board(slices[0])[0] == "verdin-imx95"
 
 
 def rerun_names(s):
@@ -332,6 +395,9 @@ def resolve(slices):
 
 def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
     """Returns the list of 'RULE name: text' errors."""
+    errs = board_mix(slices)
+    if errs:
+        return errs
     slices, _sup, dups, errs = resolve(slices)
     want = set(mustpass)
     seen = {}
@@ -340,6 +406,14 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
         for k in META_KEYS:
             if not s["meta"].get(k):
                 errs.append("RULE meta-field: %s: meta.txt has no %s" % (n, k))
+        board, berr = slice_board(s)
+        if berr:
+            errs.append(berr)
+        zephyr = board == "verdin-imx95"
+        if zephyr and s["meta"].get("session") and \
+                s["meta"]["session"] not in IMX95_SESSIONS:
+            errs.append("RULE session-name: %s: session %r is not %s" % (
+                n, s["meta"]["session"], "|".join(IMX95_SESSIONS)))
         c = s["meta"].get("commit", "")
         if c and not re.fullmatch(r"[0-9a-f]{40}", c):
             errs.append("RULE meta-field: %s: commit %r is not 40 hex" % (n, c))
@@ -353,7 +427,7 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
             for i, col in enumerate(CHUNK_COLS):
                 if not f[i]:
                     errs.append("RULE chunk-field: %s: %s is empty" % (row, col))
-            unrun = f[CHUNK_COLS.index("status")] == "lost"
+            unrun = f[CHUNK_COLS.index("status")] == "lost" or zephyr
             for col in ("kmsg", "resets", "cases", "seconds"):
                 v = f[CHUNK_COLS.index(col)]
                 if unrun and v == "-" and col in ("kmsg", "resets"):
@@ -382,6 +456,11 @@ def check_cover(mustpass, slices, git=True, main_ref="origin/main", cwd=None):
             elif st == "Lost" and not detail.strip():
                 errs.append("RULE lost-reason: %s: %s is Lost without a reason"
                             % (where, case))
+            elif st == "Lost" and zephyr and \
+                    not detail.strip().startswith(LOST_REASONS):
+                errs.append("RULE lost-reason: %s: %s Lost reason %r is not "
+                            "%s" % (where, case, detail.strip(),
+                                    "|".join(LOST_REASONS)))
             if case not in want:
                 errs.append("RULE cover-unknown: %s: %s is not in the mustpass "
                             "list" % (where, case))
@@ -549,7 +628,8 @@ def render_text(slices, per_case=False):
 def render_markdown(slices, per_case=False):
     by_status, by_cause = tally(slices, per_case)
     commits = sorted({s["meta"].get("commit", "")[:8] for s in slices})
-    out = [BEGIN, "",
+    begin, end = (BEGIN_IMX95, END_IMX95) if is_imx95(slices) else (BEGIN, END)
+    out = [begin, "",
            "Slices: " + ", ".join("`%s`" % s["name"] for s in
                                   sorted(slices, key=lambda x: x["name"])),
            "(commits " + ", ".join("`%s`" % c for c in commits) + ").", "",
@@ -560,16 +640,16 @@ def render_markdown(slices, per_case=False):
     out += ["", "| Status | Cause | Cases |", "| --- | --- | ---: |"]
     for (st, c), n in sorted(by_cause.items(), key=lambda x: (-x[1], x[0])):
         out.append("| %s | %s | %d |" % (st, c.replace("|", "\\|"), n))
-    out += ["", END]
+    out += ["", end]
     return "\n".join(out) + "\n"
 
 
-def doc_block(text):
-    a = text.find(BEGIN)
-    b = text.find(END)
+def doc_block(text, begin=BEGIN, end=END):
+    a = text.find(begin)
+    b = text.find(end)
     if a < 0 or b < a:
         return None
-    return text[a:b + len(END)] + "\n"
+    return text[a:b + len(end)] + "\n"
 
 
 def block_slices(blk):
@@ -590,18 +670,38 @@ def check_doc(doc, slices, log=None):
             text = f.read()
     except OSError as e:
         raise Fatal("%s: %s" % (doc, e.strerror))
-    blk = doc_block(text)
+    errs = board_mix(slices)
+    if errs:
+        return errs
+    imx = log is None and is_imx95(slices)
+    begin, end = (BEGIN_IMX95, END_IMX95) if imx else (BEGIN, END)
+    blk = doc_block(text, begin, end)
     if blk is None:
-        return ["RULE doc-block: %s has no %s ... %s block" % (doc, BEGIN, END)]
+        return ["RULE doc-block: %s has no %s ... %s block"
+                % (doc, begin, end)]
+    # With --log the T6 block is checked as before, and the doc's Verdin
+    # iMX95 block too when it has one.
+    parts = [(blk, begin, end)]
     if log is not None:
-        names = block_slices(blk)
-        if names is None:
-            return ["RULE doc-slices: %s: the block's \"Slices:\" line names "
-                    "no slice directory" % doc]
-        slices = [load_slice(os.path.join(log, n)) for n in names]
-    if blk != render_markdown(slices):
-        return ["RULE doc-stale: %s: the mali-deqp-tally block differs from "
-                "--markdown of the slices" % doc]
+        blk2 = doc_block(text, BEGIN_IMX95, END_IMX95)
+        if blk2 is not None:
+            parts.append((blk2, BEGIN_IMX95, END_IMX95))
+    for blk, begin, end in parts:
+        if log is not None:
+            names = block_slices(blk)
+            if names is None:
+                return ["RULE doc-slices: %s: the block's \"Slices:\" line "
+                        "names no slice directory" % doc]
+            slices = [load_slice(os.path.join(log, n)) for n in names]
+            errs = board_mix(slices)
+            if errs:
+                return errs
+            if is_imx95(slices) != (begin == BEGIN_IMX95):
+                return ["RULE doc-slices: %s: the %s block names slices of "
+                        "the other board" % (doc, begin)]
+        if blk != render_markdown(slices):
+            return ["RULE doc-stale: %s: the mali-deqp-tally block differs "
+                    "from --markdown of the slices" % doc]
     return []
 
 
@@ -839,6 +939,104 @@ def self_test():
                   o) is not None)
     chk("per-case, backend format: an ENOMEM message cut short is kept",
         re.search(r"Fail +1 +refused:mali arena: out of memory", o) is not None)
+    # Verdin iMX95 Zephyr slices (imx95/): no ssh, no kmsg, hang and lost rows
+    im = os.path.join(FIXTURES, "imx95")
+    imp = os.path.join(im, "mustpass.txt")
+    ia = os.path.join(im, "2026-11-30-imx95-gles2-S1a-00000000")
+    ib = os.path.join(im, "2026-11-30-imx95-gles2-S1b-00000000")
+    chk("imx95: the slices cover their mustpass list",
+        run("--check-cover", "--no-git", imp, ia, ib)[0] == 0)
+    rc, o, _e = run("--tally", "--no-git", ia, ib)
+    chk("imx95 tally: total 9, 3 Pass, 1 Fail, 5 Lost",
+        rc == 0 and re.search(r"^TOTAL +9$", o, re.M) is not None and
+        re.search(r"^Pass +3$", o, re.M) is not None and
+        re.search(r"^Fail +1$", o, re.M) is not None and
+        re.search(r"^Lost +5$", o, re.M) is not None)
+    chk("imx95 tally: a row cut off by the lifetime is Lost chunk-hang",
+        re.search(r"^cause Lost +2  chunk-hang$", o, re.M) is not None)
+    chk("imx95 tally: a board that did not return is board-lost, a row never "
+        "started not-run",
+        re.search(r"^cause Lost +2  board-lost$", o, re.M) is not None and
+        re.search(r"^cause Lost +1  not-run$", o, re.M) is not None)
+    chk("imx95 tally: a Fail keeps dEQP's text, numbers folded",
+        "Image comparison failed: max difference = (#, #, #)" in o)
+    rc, o, _e = run("--tally", "--markdown", ia, ib)
+    chk("imx95 markdown: the iMX95 markers, pinned fixture",
+        rc == 0 and o.startswith(BEGIN_IMX95) and
+        o.endswith(END_IMX95 + "\n") and
+        o == open(os.path.join(im, "tally.md"), encoding="utf-8").read())
+    chk("imx95: one slice alone is a valid tally",
+        run("--tally", ia)[0] == 0)
+    must("imx95: a slice missing from the cover", "cover-missing",
+         "--check-cover", "--no-git", imp, ia)
+    must("imx95: T6 and iMX95 slices in one --tally", "board-mix",
+         "--tally", ia, good[0])
+    must("imx95: T6 and iMX95 slices in one --check-cover", "board-mix",
+         "--check-cover", "--no-git", mp, ia, good[0])
+    chk("imx95: a mixed tally exits 1 and prints no counts",
+        run("--tally", ia, good[0])[1] == "")
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
+        def cp(src, name, edit=None):
+            dst = os.path.join(t, name)
+            shutil.copytree(src, dst)
+            for fn, a, bb in edit or ():
+                p = os.path.join(dst, fn)
+                with open(p, encoding="utf-8", newline="") as f:
+                    txt = f.read()
+                assert a in txt, (name, fn, a)
+                with open(p, "w", encoding="utf-8", newline="") as f:
+                    f.write(txt.replace(a, bb))
+            return dst
+        must("imx95: a session name the plan does not use", "session-name",
+             "--check-cover", "--no-git", imp,
+             cp(ia, "x1", [("meta.txt", "session=S1a", "session=S9")]), ib)
+        must("imx95: a Lost reason outside the four", "lost-reason",
+             "--check-cover", "--no-git", imp,
+             cp(ia, "x2", [("results.tsv", "chunk-hang", "mystery")]), ib)
+        must("imx95: board= that disagrees with the directory name",
+             "board-name", "--check-cover", "--no-git", imp,
+             cp(good[0], "2026-11-08-t6-gles2-S1-00000000",
+                [("meta.txt", "session=S1", "session=S1\nboard=verdin-imx95")]),
+             ib)
+        must("imx95: an unknown board", "board-unknown",
+             "--check-cover", "--no-git", imp,
+             cp(ia, "x3", [("meta.txt", "board=verdin-imx95", "board=zx")]))
+        must("t6: '-' in kmsg on a done row is still refused", "chunk-field",
+             "--check-cover", "--no-git", mp,
+             cp(good[0], "x4", [("chunks.tsv", "\t0\t0\tyes\tyes\t-",
+                                 "\t-\t-\t-\t-\t-")]), good[1])
+        # --check-doc: a T6 block and an iMX95 block in one doc
+        log = os.path.join(t, "log")
+        os.makedirs(log)
+        for src in good + [ia, ib]:
+            shutil.copytree(src, os.path.join(log, os.path.basename(src)))
+        with open(os.path.join(FIXTURES, "doc-current.md"),
+                  encoding="utf-8") as f:
+            t6doc = f.read()
+        with open(os.path.join(im, "tally.md"), encoding="utf-8") as f:
+            imdoc = f.read()
+        both = os.path.join(t, "doc-both.md")
+        with open(both, "w", encoding="utf-8") as f:
+            f.write(t6doc + "\nVerdin iMX95\n\n" + imdoc)
+        stale = os.path.join(t, "doc-stale.md")
+        with open(stale, "w", encoding="utf-8") as f:
+            f.write(t6doc + "\nVerdin iMX95\n\n" +
+                    imdoc.replace("| Pass | 3 |", "| Pass | 4 |"))
+        chk("imx95 check-doc --log: both parts current",
+            run("--check-doc", both, "--log", log)[0] == 0)
+        chk("imx95 check-doc: the iMX95 part against its slices",
+            run("--check-doc", both, ia, ib)[0] == 0)
+        chk("check-doc: T6 slices still check the T6 part of a two-part doc",
+            run("--check-doc", both, *good)[0] == 0)
+        must("imx95 check-doc --log: a stale iMX95 part", "doc-stale",
+             "--check-doc", stale, "--log", log)
+        must("imx95 check-doc: a stale iMX95 part against its slices",
+             "doc-stale", "--check-doc", stale, ia, ib)
+        must("imx95 check-doc: a doc without the iMX95 part", "doc-block",
+             "--check-doc", os.path.join(FIXTURES, "doc-current.md"), ia, ib)
+        chk("check-doc --log: a doc without the iMX95 part is as before",
+            run("--check-doc", os.path.join(FIXTURES, "doc-current.md"),
+                "--log", log)[0] == 0)
     # ancestor rule, in a throwaway repository
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
         def git(*a):
@@ -934,6 +1132,9 @@ def main(argv):
                                       main_ref))
         if mode == "--tally" and args:
             s = [load_slice(p) for p in args]
+            mix = board_mix(s)
+            if mix:
+                return report(mix)
             sys.stdout.write(render_markdown(s, per_case) if markdown
                              else render_text(s, per_case))
             return 0
