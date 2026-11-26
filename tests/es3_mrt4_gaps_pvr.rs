@@ -326,6 +326,20 @@ fn clear_buffer(buf: GLint, rgba: [f32; 4]) -> Seen {
     s.into_iter().rev().find(|s| s.do_clear).expect("the clear reached the back end")
 }
 
+/// The clear of draw buffer `buf`, which is GL_NONE or has no image: ES 3.0
+/// 4.2.3 makes it no error and no effect, so nothing reaches the back end,
+/// not even at the flush.
+fn clear_buffer_none(buf: GLint) {
+    SEEN.lock().unwrap().clear();
+    // SAFETY: four readable floats.
+    unsafe {
+        glClearBufferfv(GL_COLOR, buf, YELLOW.as_ptr());
+        glFinish();
+    }
+    assert_eq!(err(), GL_NO_ERROR, "draw buffer {buf} names nothing: no error");
+    assert!(SEEN.lock().unwrap().is_empty(), "draw buffer {buf} names nothing: nothing reaches the back end");
+}
+
 /// A pixel of colour attachment `att` of the bound framebuffer, read back.
 fn read_pixel(att: GLenum) -> [u8; 4] {
     let mut px = [0u8; 4];
@@ -395,8 +409,7 @@ fn none_none_none_att3_clears_and_reads_back_attachment_3() {
     assert_eq!((a3.out_shift, a3.clear_target_mask, a3.targets.len()), (3, 1, 1), "draw buffer 3 is target 0");
     assert_ne!(a3.targets[0].0, 0);
     for b in 0..3 {
-        let c = clear_buffer(b, YELLOW);
-        assert_eq!(c.clear_target_mask, 1 << 7, "draw buffer {b} is not in the list: it names nothing");
+        clear_buffer_none(b);
     }
     assert_eq!(read_pixel(GL_COLOR_ATTACHMENT3), [255, 255, 0, 255]);
     release(fb, &rbs);
@@ -419,12 +432,11 @@ fn att0_none_none_att3_keeps_four_slots_with_holes() {
      * and output 3 to register 1 (mrt_layout holds no hole) */
     assert_eq!(registers(&d), [(0, 0), (3, 1)]);
 
-    /* clears: draw buffer 3 is slot 3 (mask bit 3), the holes name nothing */
+    /* clears: draw buffer 3 is slot 3 (mask bit 3), the holes clear nothing */
     let c = clear_buffer(3, YELLOW);
     assert_eq!((c.out_shift, c.clear_target_mask), (0, 1 << 3));
     assert_eq!(read_pixel(GL_COLOR_ATTACHMENT3), [255, 255, 0, 255]);
-    let c = clear_buffer(1, YELLOW);
-    assert_eq!((c.clear_target_mask, c.targets[1].0), (1 << 1, 0), "draw buffer 1 is a hole: its bit names no target");
+    clear_buffer_none(1);
     release(fb, &rbs);
 }
 
@@ -471,17 +483,11 @@ fn only_attachment_3_is_complete_and_is_the_frame_target() {
     assert_eq!(registers(&d), [(0, 0)]);
     assert_eq!(read_pixel(GL_COLOR_ATTACHMENT3), [255, 255, 0, 255]);
 
-    /* a list naming attachment 0, which has no image: today the error
-     * comes at the flush (glFinish), not at the clear */
+    /* a list naming attachment 0, which has no image: the clear of draw
+     * buffer 0 is no error and records nothing (ES 3.0 4.2.3), so the flush
+     * has nothing to refuse either */
     draw_buffers(&[GL_COLOR_ATTACHMENT0]);
-    SEEN.lock().unwrap().clear();
-    // SAFETY: four readable floats.
-    unsafe { glClearBufferfv(GL_COLOR, 0, YELLOW.as_ptr()) };
-    assert_eq!(err(), GL_NO_ERROR, "the clear itself is accepted: the clear is recorded, not drawn");
-    // SAFETY: plain GL call.
-    unsafe { glFinish() };
-    assert_eq!(err(), GL_INVALID_FRAMEBUFFER_OPERATION, "the flush finds no image behind draw buffer 0");
-    assert!(SEEN.lock().unwrap().is_empty(), "nothing reached the back end");
+    clear_buffer_none(0);
     release(fb, &rbs);
 }
 
