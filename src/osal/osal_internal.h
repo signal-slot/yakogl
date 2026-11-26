@@ -147,6 +147,10 @@ struct osal_v3d_cpu_of {
  * -ENOTSUP where it runs no TFU jobs. A queued job that fails is the OSAL's
  * to log and recover from; the job's fence keeps the render's result. */
 #define OSAL_QUERY_V3D_TFU_QUEUE 17u
+/* out = two uint32_t (8 bytes): the V3D 7.1 hub's HUB_IDENT1, then
+ * HUB_IDENT3, as read at init. Only the 7.1 OSAL answers; -ENOTSUP elsewhere.
+ * The Rust side is OSAL_QUERY_V3D_HUB_IDENT in src/osal/mod.rs. */
+#define OSAL_QUERY_V3D_HUB_IDENT 20u
 /* in = uint32_t (out pointer, 4 bytes): the site of the next wait(), one of
  * OSAL_WAIT_SITE_*: the render service's 20 ms re-post line names it. Only the
  * log differs. The Rust side is OSAL_WAIT_SITE_* in src/osal/mod.rs. */
