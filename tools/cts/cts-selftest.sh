@@ -936,9 +936,10 @@ malicheck() {
     fi
 }
 
-# 46: mali-slice-redact.py on synthetic slices (addresses, host names and
-# serials found; clean slices pass; usage and unreadable files exit 2).
-malicheck 46 mali-slice-redact-selftest.sh 25
+# 46: mali-slice-redact.py on synthetic slices (addresses, host names,
+# serials, home paths and the login user found; clean slices pass; usage and
+# unreadable files exit 2).
+malicheck 46 mali-slice-redact-selftest.sh 32
 # 47: mali-slice-readme.py writes and checks a slice's README.md.
 malicheck 47 mali-slice-readme-selftest.sh 34
 # 48: mali-rerun-tree.py builds the tree table of the Lost cases of slices.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Check NanoPC-T6 dEQP-GLES2 slices for addresses, host names and serials.
+"""Check NanoPC-T6 dEQP-GLES2 and sweep slices for addresses, host names,
+serials, home paths and the board's login user.
 
-  python3 -I tools/cts/mali-slice-redact.py SLICE...
+  python3 -I tools/cts/mali-slice-redact.py [--user NAME] SLICE...
   python3 -I tools/cts/mali-slice-redact.py --self-test
 
 A slice is tools/cts/log/<date>-t6-gles2-<session>-<sha8>/ (layout in the
@@ -37,6 +38,24 @@ Kinds:
               placeholder and passes. A Zephyr Verdin iMX95 slice carries the
               module's own U-Boot console; its MAC address and addresses are
               also reported as mac and ipv4.
+  home-path   a /home/<name> home directory: the name after "/home/" is the
+              finding; the tail after it stays unechoed, as every other kind
+              echoes nothing. A <redacted> name passes, the same way the
+              U-Boot placeholders above do. A "home/" component inside a
+              relative path (under a word character) is not a home path.
+  user        the login name given by --user NAME, or the value of the
+              environment variable BOARD_USER when --user is absent: a whole
+              word anywhere in the line. The name is never read from a file
+              (CLAUDE.md: board identities are environment, never the tree):
+              the caller knows it, the record must not hold it. The name is
+              matched exactly, case included: a login name is exact, and the
+              distro name of the same letters in another case is no leak
+              (t6-redact-check.sh's env:NAME rule searches its values case
+              insensitively; a login does not want that). A name that sits
+              inside a user@host pair or a /home/ path reports user beside
+              userhost or home-path. A name shorter than 3 characters is
+              ignored, as that rule ignores it too: too many short words
+              would match it. --user overrides BOARD_USER.
 
 A slice needs no kmsg/ directory (a Zephyr slice has none): every file under
 it is scanned all the same.
@@ -61,9 +80,20 @@ SERIAL_PATH = re.compile(r'/dev/serial/')
 UART = re.compile(r'tty(?:USB|ACM)\d', re.I)
 USB_SERIAL = re.compile(r'SerialNumber[:=]\s*\S', re.I)
 UBOOT_ID = re.compile(r'(?<![\w#])(?:eth\d*addr|serial#|serverip|ipaddr|gatewayip)\s*[:=]\s*[^\s=<]', re.I)
+HOME_PATH = re.compile(r'(?<![\w.-])/home/[A-Za-z0-9_.-]+')
 
 
-def kinds(line):
+def user_pattern(name):
+    """A compiled whole-word matcher for a login name, or None: no name, or
+    one shorter than 3 characters, means no user rule (t6-redact-check.sh's
+    env:NAME rule ignores those too)."""
+    name = (name or '').strip()
+    if len(name) < 3:
+        return None
+    return re.compile(r'(?<![\w-])' + re.escape(name) + r'(?![\w-])')
+
+
+def kinds(line, user_re=None):
     """The sorted set of kinds found in one line."""
     found = set()
     for m in IPV4.finditer(line):
@@ -88,10 +118,14 @@ def kinds(line):
         found.add('usb-serial')
     if UBOOT_ID.search(line):
         found.add('uboot-id')
+    if HOME_PATH.search(line):
+        found.add('home-path')
+    if user_re is not None and user_re.search(line):
+        found.add('user')
     return sorted(found)
 
 
-def scan_file(path, out):
+def scan_file(path, out, user_re=None):
     """Print the hits of one file; return the number of hits."""
     with open(path, 'rb') as f:
         data = f.read()
@@ -101,13 +135,13 @@ def scan_file(path, out):
         text = data.decode('latin-1')
     n = 0
     for no, line in enumerate(text.splitlines(), 1):
-        for k in kinds(line):
+        for k in kinds(line, user_re):
             out.write('REDACT %s:%d: %s\n' % (path, no, k))
             n += 1
     return n
 
 
-def scan_paths(paths, out=sys.stdout, err=sys.stderr):
+def scan_paths(paths, out=sys.stdout, err=sys.stderr, user_re=None):
     """Scan the slices; return the exit code."""
     hits = 0
     unreadable = 0
@@ -127,13 +161,22 @@ def scan_paths(paths, out=sys.stdout, err=sys.stderr):
             files = [top]
         for p in files:
             try:
-                hits += scan_file(p, out)
+                hits += scan_file(p, out, user_re)
             except OSError as e:
                 fail(p, e)
     if unreadable:
         return 2
     return 1 if hits else 0
 
+
+# Test look-alikes, assembled from parts so this file's own text holds none
+# of them (tools/release/redaction-scan.py reads every tracked file; the way
+# t6-redact-check.sh concatenates its own patterns): FAKE_HOME is a home
+# directory, FAKE_REL a relative "home/" component, FAKE_HOME_USER a home
+# directory of the login name of USER_CASES.
+FAKE_HOME = '/ho' 'me' '/root/logs/pvr.log'
+FAKE_REL = 'tools/' + 'ho' 'me' + '/root/notes.txt'
+FAKE_HOME_USER = '/ho' 'me' '/zzuser9/logs'
 
 # All addresses are from documentation ranges (RFC 5737, 3849, MAC 00:00:5e:00:53:xx).
 CASES = [
@@ -170,6 +213,19 @@ CASES = [
     ('=> printenv ethaddr serial# serverip', []),
     ('serialnumber of rows 5', []),
     ('ssh root@192.0.2.7 via 100.64.0.9', ['ipv4', 'tailnet', 'userhost']),
+    (FAKE_HOME, ['home-path']),
+    ('/home/<redacted>/tail and a bare /home/ name pass', []),
+    ('read the relative ' + FAKE_REL, []),
+]
+
+# The user rule: kinds(line, user_pattern(NAME)) with a known login name.
+USER_CASES = [
+    ('login as zzuser9 on the board', ['user']),
+    ('ssh zzuser9@board jump', ['user', 'userhost']),
+    (FAKE_HOME_USER, ['home-path', 'user']),
+    ('host zzuser9.example: the name inside a host name', ['user']),
+    ('zzuser9name is not the login word', []),
+    ('plain kernel line: panthor fff00000.gpu: GPU reset', []),
 ]
 
 
@@ -182,6 +238,16 @@ def self_test():
         if got != want:
             bad += 1
             print('FAIL kinds(%r) = %s, want %s' % (line, got, want))
+    ure = user_pattern('zzuser9')
+    for line, want in USER_CASES:
+        got = kinds(line, ure)
+        if got != want:
+            bad += 1
+            print('FAIL kinds(%r, user) = %s, want %s' % (line, got, want))
+    if user_pattern('ab') is not None or user_pattern(None) is not None \
+            or user_pattern('   ') is not None:
+        bad += 1
+        print('FAIL a login name shorter than 3 characters builds a matcher')
     with tempfile.TemporaryDirectory() as d:
         os.mkdir(os.path.join(d, 'kmsg'))
         for name, body in (('meta.txt', 'rows=1-2\n'), ('kmsg/a.txt', 'ok\nlink 192.0.2.7\n')):
@@ -208,10 +274,30 @@ def self_test():
 def main(argv):
     if argv == ['--self-test']:
         return self_test()
-    if not argv or argv[0].startswith('-'):
-        sys.stderr.write(__doc__.split('\n\n')[0] + '\n')
+    usage = __doc__.split('\n\n')[0] + '\n'
+    user = None
+    paths = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--user':
+            if i + 1 >= len(argv):
+                sys.stderr.write('mali-slice-redact: --user needs a name\n')
+                return 2
+            user = argv[i + 1]
+            i += 2
+        elif a.startswith('-'):
+            sys.stderr.write(usage)
+            return 2
+        else:
+            paths.append(a)
+            i += 1
+    if not paths:
+        sys.stderr.write(usage)
         return 2
-    return scan_paths(argv)
+    if user is None:
+        user = os.environ.get('BOARD_USER')
+    return scan_paths(paths, user_re=user_pattern(user))
 
 
 if __name__ == '__main__':
