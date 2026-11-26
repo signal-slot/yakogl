@@ -377,10 +377,41 @@ def build(args, tree):
     return 0
 
 
+# The six sessions of plan #407 and the rows each one holds (first, last).
+SESSION_SPANS = {
+    "S1a": ("T6S1R01", "T6S1R12"),
+    "S1b": ("T6S1R13", "T6S1R24"),
+    "S2": ("T6S2R01", "T6S2R14"),
+    "S3a": ("T6S3R01", "T6S3R15"),
+    "S3b": ("T6S3R16", "T6S3R30"),
+    "S4": ("T6S4R01", "T6S4R08"),
+}
+
+
+def expected_span(d, args, tree):
+    """The labels DIR must hold: --expect FIRST-LAST, else the session tag of
+    the directory name (...-imx95-gles2-<tag>-<sha8>); None when neither."""
+    if args.expect:
+        first, _, last = args.expect.partition("-")
+        pair = (first, last)
+    else:
+        m = re.search(r"-imx95-gles2-(S[0-9][ab]?)-[0-9a-f]{8}$", os.path.abspath(d))
+        if not m or m.group(1) not in SESSION_SPANS:
+            return None
+        pair = SESSION_SPANS[m.group(1)]
+    if pair[0] not in tree or pair[1] not in tree:
+        die("--expect %s-%s: not '# image' rows of the tree" % pair)
+    i, j = tree.index(pair[0]), tree.index(pair[1])
+    if i > j:
+        die("--expect %s-%s: first is after last" % pair)
+    return tree[i : j + 1]
+
+
 def check_dirs(args, tree):
     keys = {l: label_key(l) for l in tree}
     ordinal = session_ordinals(tree)
     bad = 0
+    all_labels = []
     for d in args.check:
         errs = []
         path = os.path.join(d, "rows.tsv")
@@ -429,6 +460,18 @@ def check_dirs(args, tree):
         for l in dupes:
             errs.append("label %s names %d rows, want one" % (l, labels.count(l)))
         labels = [l for l in labels if l in keys]
+        want_span = expected_span(d, args, tree)
+        if want_span is not None:
+            miss = [l for l in want_span if l not in labels]
+            extra = sorted({l for l in labels if l not in want_span})
+            if miss:
+                errs.append(
+                    "the table lacks %d of the %d rows of its span %s-%s: %s"
+                    % (len(miss), len(want_span), want_span[0], want_span[-1], ", ".join(miss))
+                )
+            if extra:
+                errs.append("rows outside the span %s-%s: %s" % (want_span[0], want_span[-1], ", ".join(extra)))
+        all_labels.extend(labels)
         uniq = sorted(dict.fromkeys(labels), key=lambda l: keys[l])
         if uniq:
             lo, hi = keys[uniq[0]], keys[uniq[-1]]
@@ -453,6 +496,23 @@ def check_dirs(args, tree):
                 print("%s: %s" % (d, e), file=sys.stderr)
         else:
             print("OK: %s: %d rows" % (d, len(uniq)))
+    if args.whole:
+        miss = [l for l in tree if all_labels.count(l) == 0]
+        dup = [l for l in tree if all_labels.count(l) > 1]
+        if miss or dup:
+            bad += 1
+            print(
+                "whole tree: %d of %d '# image' rows appear once%s%s"
+                % (
+                    len(tree) - len(miss) - len(dup),
+                    len(tree),
+                    "; missing %s" % ", ".join(miss) if miss else "",
+                    "; more than once %s" % ", ".join(dup) if dup else "",
+                ),
+                file=sys.stderr,
+            )
+        else:
+            print("OK: all %d '# image' rows appear exactly once across %d directories" % (len(tree), len(args.check)))
     return 1 if bad else 0
 
 
@@ -460,6 +520,11 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="imx95-rows-tsv.py", description=__doc__.splitlines()[0])
     ap.add_argument("--check", metavar="DIR", nargs="+",
                     help="check DIR/rows.tsv (exit 1 on any violation) instead of building")
+    ap.add_argument("--expect", metavar="FIRST-LAST",
+                    help="--check: the span every DIR must hold (default: from the session tag of "
+                         "the directory name *-imx95-gles2-<S1a|S1b|S2|S3a|S3b|S4>-<sha8>)")
+    ap.add_argument("--whole", action="store_true",
+                    help="--check: all '# image' rows of the tree appear exactly once across the DIRs")
     ap.add_argument("--tree", default=DEFAULT_TREE,
                     help="the '# image' tree (default: mali-gles2-tree.txt next to this tool)")
     ap.add_argument("--out", default="rows.tsv", help="build: the file to write (rows.tsv)")
