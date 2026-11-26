@@ -462,6 +462,11 @@ static void feed_tick(struct k_timer *t)
 		return;
 	}
 	yd_dw_wdt_feed(s_wdt);
+	/* One line at the first feed (after it, so the feed is not delayed): the
+	 * record shows the timer ticks from the state the loader left. */
+	if (s_feeds == 0) {
+		printk("yakogl-wdt: nanopc_t6 first feed at %lld ms\n", (long long)now);
+	}
 	s_feeds++;
 }
 static K_TIMER_DEFINE(s_feeder, feed_tick, NULL);
