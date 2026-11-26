@@ -1936,6 +1936,22 @@ mod tests {
         vec![(0x04, 0xdd), (0x00, (cr & 0x1c) | 1), (0x0c, 0x76)]
     }
 
+    /// The `period_ms 22369` of the `T6:A3` line. The TOP the images arm with
+    /// (13) is `CONFIG_YAKOGL_NANOPC_T6_WDT_TOP`, a Kconfig value in C, not a
+    /// Rust constant: `arm0` and `arm_writes` pass it as 13. What Rust owns is
+    /// the period of that TOP at `TCLK_WDT0_HZ` and the TOP the arming writes.
+    #[test]
+    fn wdt0_top_13_period_is_22369_ms_at_the_wdt_clock() {
+        use crate::ip::dw_wdt;
+        assert_eq!(dw_wdt::period_ms(13, TCLK_WDT0_HZ), Some(22369));
+        let b = wdt0(0x2ff8, 0, 0x08, 0x0e);
+        let (rc, out) = arm0(&b);
+        assert_eq!((rc, out.period_ms), (0, 22369));
+        // TOP 13 in both nibbles of TORR
+        assert_eq!(out.torr_now, 0xdd);
+        assert!(b.wdt.writes().contains(&(0x04, 0xdd)));
+    }
+
     #[test]
     fn wdt0_gates_open_as_under_linux_arm_with_no_cru_write() {
         let b = wdt0(0x2ff8, 0, 0x08, 0x0e);
