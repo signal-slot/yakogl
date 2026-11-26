@@ -56,6 +56,14 @@
 # wait for it). There the "HPD 1" line after the hold is the proof of a
 # connected display.
 #
+# T6:A's CNTFRQ_EL0 field: banner_a_el2 prints it (driver/rust/src/board/
+# nanopc_t6_early.rs); records of images built before that change print the
+# T6:A line without it and are judged too. The verdict takes no value from
+# the field, so the T6:A match accepts the line with and without CNTFRQ_EL0:
+# the template is the form the record's own T6:A line prints (t6a_has_cntfrq
+# below). When the field is printed its value is a token; a value that is
+# not a decimal differs on the line, on both forms of the match.
+#
 # The probes' own tables (t6_gpu and after) predict the GPU hand-over Linux
 # leaves (PD_GPU off with vdd_gpu_s0 on, the clock at CPLL / 5). With
 # T6_ROUTE=uboot those lines are judged against the same values, so a correct
@@ -168,7 +176,13 @@ table_boot() {
 	# banner_a_el2 with the VHE exit: HCR_EL2 found -> written (Z1 measured
 	# 0x000000048800003a -> 0x0000000080000002; not a prediction for a probe)
 	# SCTLR_EL2 (SA) with M, C and I clear (hook t6a_sctlr)
-	e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16} CNTFRQ_EL0 {d}' 'T6:A EL' t6a_sctlr
+	# CNTFRQ_EL0: judged in the form the record's own T6:A line prints
+	# (t6a_has_cntfrq below); the value is a token, checked for form only
+	if t6a_has_cntfrq; then
+		e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16} CNTFRQ_EL0 {d}' 'T6:A EL' t6a_sctlr
+	else
+		e 'T6:A EL2 HCR_EL2 0x{x16} -> 0x{x16} SCTLR_EL2 0x{@SA} VBAR_EL2 0x{x16} -> 0x{x16}' 'T6:A EL' t6a_sctlr
+	fi
 	# U-Boot's go: found (GF) with one of M, C, I set; left (GL), read back,
 	# with all three clear and equal to T6:A's (hook t6g_sctlr)
 	if [ "$ROUTE" = uboot ]; then
@@ -221,6 +235,20 @@ t6a_sctlr() { is_x16 "${V[SA]}" && (( (16#${V[SA]} & SCTLR_MCI) == 0 )); }
 t6g_sctlr() {
 	is_x16 "${V[GF]}" && is_x16 "${V[GL]}" && (( (16#${V[GF]} & SCTLR_MCI) != 0 )) &&
 		(( (16#${V[GL]} & SCTLR_MCI) == 0 )) && [ "${V[GL]}" = "${V[SA]:-}" ]
+}
+
+# Does the T6:A line the table judges (the record's first) print CNTFRQ_EL0
+# with a decimal value at its end? The record of an image built before the
+# banner gained the field prints it without; both forms pass the T6:A check.
+t6a_has_cntfrq() {
+	local l
+	for l in "${LINES[@]}"; do
+		if [[ $l == 'T6:A EL2 '* ]]; then
+			[[ $l =~ ' CNTFRQ_EL0 '-?[0-9]+$ ]] && return 0
+			return 1
+		fi
+	done
+	return 1
 }
 
 # The GIC active state line is printed once per boot: a second one in the
