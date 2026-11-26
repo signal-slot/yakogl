@@ -92,9 +92,11 @@ done < <(bash "$HERE/imx8mp-glmark2-dumps.sh" scenes)
 if [ "$n" = 33 ]; then ok "33 scenes listed"; else bad "$n scenes listed"; fi
 d=$(diff "$T/orig.md" "$T/n.md" | grep -c '^>')
 if [ "$d" = 33 ]; then ok "33 lines changed"; else bad "$d lines changed"; fi
-if python3 "$HERE/imx8mp-glmark2-verdicts.py" "$T/n.md" --complete; then
-  ok "verdicts.py --complete on the filled copy"
-else bad "verdicts.py --complete"; fi
+# note-fill writes table rows only; --complete also wants the 'What was
+# looked at' bullets and no placeholder text, so the rows are checked without it
+if python3 "$HERE/imx8mp-glmark2-verdicts.py" "$T/n.md" | grep -qx 'ok: 33 rows, 33 filled'; then
+  ok "verdicts.py: 33 rows, 33 filled on the filled copy"
+else bad "verdicts.py on the filled copy"; fi
 
 if [ "$fail" = 0 ]; then echo "== note-fill self-test: all passed"
 else echo "== note-fill self-test: FAILED"; fi

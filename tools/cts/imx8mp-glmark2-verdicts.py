@@ -20,8 +20,12 @@ NOTE defaults to the by-eye note. The '## Verdicts' table has the columns
       without a value`; photograph goes only with `seen without a value`, dump,
       both and photograph+probes never do; a `wrong` row has an
       entry (its scene text) under '## Wrong scenes' if that heading exists;
-  (d) with --complete every row is filled in: no `not yet looked at`, no `-`,
-      and acceptance criterion c2's grep counts 33.
+  (d) every `- **[scene]**` bullet under '## What was looked at' names a scene
+      of the table, at most once;
+  (e) with --complete every row is filled in: no `not yet looked at`, no `-`,
+      and acceptance criterion c2's grep counts 33; every scene of the table
+      has exactly one bullet under '## What was looked at'; and the note holds
+      none of the skeleton's placeholder texts (PLACEHOLDERS).
 
 One line per problem, exit 1 if any; otherwise `ok: N rows, M filled`, exit 0.
 """
@@ -42,6 +46,9 @@ TODO = "not yet looked at"
 VERDICTS = ("right", "wrong", "seen without a value", TODO)
 ROUTES = ("dump", "photograph", "both", "photograph+probes")
 RECORD = re.compile(r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |]+-([0-9a-f]{8})/?")
+LOOKED = "What was looked at"
+BULLET = re.compile(r"^- \*\*(\[.*?)\*\*")
+PLACEHOLDERS = ("Not yet established", "To fill in", "Skeleton: no scene")
 C2 = re.compile(r"^\| \[[a-z0-9]+\] .*\| [0-9a-f]{8} \| "
                 r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |]+-[0-9a-f]{8}/? \|")
 
@@ -58,24 +65,31 @@ def scenes_from_lines(text):
 
 
 def read_rows(text):
-    """The table rows under '## Verdicts' (line, cells) and the Wrong scenes text."""
-    rows, wrong, sect = [], None, None
+    """The table rows under '## Verdicts' (line, cells), the Wrong scenes text,
+    and the scenes of the '- **[' bullets under '## What was looked at' (None
+    if there is no such section)."""
+    rows, wrong, looked, sect = [], None, None, None
     for line in text.splitlines():
         if line.startswith("## "):
             sect = line[3:].strip()
             if sect == "Wrong scenes":
                 wrong = ""
+            elif sect == LOOKED and looked is None:
+                looked = []
             continue
         if sect == "Wrong scenes":
             wrong += line + "\n"
         elif sect == "Verdicts" and line.startswith("| ["):
             rows.append((line, [c.strip() for c in line.strip().strip("|").split("|")]))
-    return rows, wrong
+        elif sect == LOOKED and line.startswith("- **["):
+            m = BULLET.match(line)
+            looked.append(m.group(1).strip() if m else line[4:].strip())
+    return rows, wrong, looked
 
 
 def check(text, scenes, complete):
     """Return (problems, nrows, nfilled)."""
-    rows, wrong = read_rows(text)
+    rows, wrong, looked = read_rows(text)
     probs = []
     if len(rows) != NROWS:
         probs.append(f"rows: {len(rows)}, want {NROWS}")
@@ -126,6 +140,26 @@ def check(text, scenes, complete):
         probs.append(f"{s}: scene is not in the dump script's list")
     if complete and c2 != NROWS:
         probs.append(f"c2 grep counts {c2}, want {NROWS}")
+    if looked is None:
+        if complete:
+            probs.append(f"no '## {LOOKED}' section (--complete)")
+        looked = []
+    count = {}
+    for s in looked:
+        count[s] = count.get(s, 0) + 1
+    for s in count:
+        if s not in seen:
+            probs.append(f"{s}: '{LOOKED}' entry names no scene of the table")
+        elif count[s] > 1:
+            probs.append(f"{s}: '{LOOKED}' entry appears {count[s]} times")
+    if complete:
+        for s in cells_of:
+            if s not in count:
+                probs.append(f"{s}: no '{LOOKED}' entry (--complete)")
+        for p in PLACEHOLDERS:
+            for n, line in enumerate(text.splitlines(), 1):
+                if p in line:
+                    probs.append(f"line {n}: placeholder text '{p}' (--complete)")
     return probs, len(rows), filled
 
 
@@ -172,6 +206,17 @@ CASES = [
     ("bad-dump-novalue.md", False, 1, "has a value, not 'seen without a value'"),
     ("bad-wrong-entry.md", False, 1, "wrong, but no entry under '## Wrong scenes'"),
     ("bad-dash.md", True, 1, "not filled in (--complete)"),
+    ("skeleton.md", True, 1, "[build] use-vbo=false: no 'What was looked at' entry"),
+    ("skeleton.md", True, 1, "placeholder text 'Not yet established' (--complete)"),
+    ("partial-looked.md", False, 0, "ok: 33 rows, 2 filled"),
+    ("bad-looked-missing.md", True, 1,
+     "[shading] shading=phong: no 'What was looked at' entry (--complete)"),
+    ("bad-looked-duplicate.md", False, 1,
+     "[build] use-vbo=true: 'What was looked at' entry appears 2 times"),
+    ("bad-looked-unknown.md", False, 1,
+     "[build] use-vbo=maybe: 'What was looked at' entry names no scene of the table"),
+    ("bad-looked-placeholder.md", True, 1, "placeholder text 'To fill in' (--complete)"),
+    ("bad-looked-nosection.md", True, 1, "no '## What was looked at' section (--complete)"),
 ]
 
 
