@@ -800,10 +800,11 @@ runner kept the device it had resolved before the reboot, its post-cycle
 read of `yako_once` failed (`dd: failed to open '/dev/mmcblk2p7'`), and its
 "disarm" then wrote the pre-arm environment to `/dev/mmcblk2p7`, which no
 longer named a device: `dd` created a 512 KiB regular file on devtmpfs (RAM,
-gone at the next boot). No storage was written (U-Boot had already cleared
-`yako_once`), but with the eMMC taking the stale number the same path would
-have written the eMMC. The `gc_clear` run used a local copy of the runner
-that resolves the card again after the new boot and writes only onto a block
+gone at the next boot), read it back, and recorded `disarmed=on exit`. No
+storage was written (U-Boot had already cleared `yako_once`), but with the eMMC
+taking the stale number the same path would have written the eMMC. The
+`gc_clear` run used a local copy of the runner that resolves the card again
+after the new boot and writes only onto a block
 device. That fix landed in `3d9808f9` ("board-stm32mp2.sh: resolve the card
 again after each reboot and write the environment only onto its block
 device"), proven by the 2026-11-26 reruns (`Board verdicts` rows 5 and 6,
@@ -869,7 +870,7 @@ below are the old parser's output on `console.mcp.txt` as saved.
   at 874 ms`; the next BL2 printed `Reset reason: System reset (SYSRST)
   (0x2074). Warm boot.`
   - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 pc=0xa000539c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-  - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
+  - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above, fixed in `c7c06858`; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
   - `verdict gc-fence model=PASS retired=PASS irq=PASS:1 final=PASS record=PASS:kind=2`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
   - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above, fixed in `3d9808f9`; the 2026-11-26 rerun, `Board verdicts` row 5, is rc=0)
@@ -888,7 +889,7 @@ below are the old parser's output on `console.mcp.txt` as saved.
   `PSCI SYSTEM_RESET at 894 ms`, then `Reset reason: System reset (SYSRST)
   (0x2074). Warm boot.`
   - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa000599c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-  - `verdict gc-irq connected=FAIL route=absent` (as for `gc_fence`)
+  - `verdict gc-irq connected=FAIL route=absent` (as for `gc_fence`, fixed in `c7c06858`)
   - `verdict gc-clear model=PASS readback=PASS:0 final=PASS record=PASS:kind=2`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
   - `board-stm32mp2.sh stm32mp257f-dk gc_clear rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=45s`
