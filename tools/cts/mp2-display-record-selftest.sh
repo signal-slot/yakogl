@@ -6,7 +6,8 @@
 #   bash tools/cts/mp2-display-record-selftest.sh
 # Cases: PASS, FAIL, a judge FAIL, a missing result line, a missing hold
 # line, a missing judge verdict, and a log carrying an address, host, tty
-# path and USB serial that must be redacted. Exits 0 when all match.
+# path and USB serial that must be redacted; the crc and per-check lines, a
+# FAIL naming a check, and two KVM verdicts with offsets. Exits 0 when all match.
 set -u
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tool() { python3 -I "$here/mp2-display-record.py" "$@"; }
@@ -71,6 +72,35 @@ else ko "redaction (rc $rc)"; echo "$out"; fi
 echo "$usr@$ip2 only" > "$work/junk.log"
 out=$(tool "$work/junk.log" --commit deadbee 2>&1); rc=$?
 if [ $rc = 1 ] && ! grep -q '10\.1\.2\.' <<<"$out"; then ok junk-refuses; else ko "junk-refuses (rc $rc)"; fi
+
+# crc diagnostic, per-check lines and a check-naming FAIL (never decide PASS)
+mklog "$work/diag.log" PASS "mp2_display: crc: 0x2fab 0x2fab
+mp2_display: frames: 3 seen at the cpsr wrap
+mp2_display: layer: addr 0x1000 enable 1 after reload
+mp2_display: underrun: 0 transfer_err: 0"
+out=$(tool "$work/diag.log" --judge "$work/j.pass" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'mp2_display, PASS' <<<"$out" && grep -q 'mp2_display: crc: 0x2fab 0x2fab' <<<"$out" \
+    && grep -q 'mp2_display: frames: 3 seen' <<<"$out" && grep -q 'layer: addr 0x1000' <<<"$out" \
+    && grep -q 'not the verdict' <<<"$out"; then ok crc-and-check-lines; else ko "crc-and-check-lines (rc $rc)"; echo "$out"; fi
+
+mklog "$work/crcfail.log" PASS "mp2_display: crc: 0x1234"
+sed -i 's|^mp2_display: PASS: .*|mp2_display: FAIL: frames -3|' "$work/crcfail.log"
+out=$(tool "$work/crcfail.log" --judge "$work/j.pass" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'mp2_display, FAIL' <<<"$out" && grep -q 'failed check.*frames, error -3' <<<"$out" \
+    && ! grep -q 'mp2_display, PASS' <<<"$out"; then ok fail-names-check; else ko "fail-names-check (rc $rc)"; echo "$out"; fi
+
+mklog "$work/crconly.log" PASS "mp2_display: crc: 0x1234"
+sed -i 's|^mp2_display: PASS: .*|mp2_display: FAIL: crc -5|' "$work/crconly.log"
+out=$(tool "$work/crconly.log" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'mp2_display, FAIL' <<<"$out" && grep -q 'crc, error -5' <<<"$out"; then ok fail-crc; else ko "fail-crc (rc $rc)"; fi
+
+# two KVM verdicts with their offsets; a FAIL in either decides FAIL
+echo 'colorbars: PASS: ok' > "$work/j25"; echo 'colorbars: PASS: still ok' > "$work/j45"
+out=$(tool "$work/pass.log" --judge "$work/j25@25" --judge "$work/j45@45" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'mp2_display, PASS' <<<"$out" && grep -q '25 s after the result line.*colorbars: PASS: ok' <<<"$out" \
+    && grep -q '45 s after the result line.*still ok' <<<"$out"; then ok two-screenshots; else ko "two-screenshots (rc $rc)"; echo "$out"; fi
+out=$(tool "$work/pass.log" --judge "$work/j25@25" --judge "$work/j.fail@45" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'mp2_display, FAIL' <<<"$out" && grep -q '45 s after' <<<"$out"; then ok two-screenshots-fail; else ko "two-screenshots-fail (rc $rc)"; fi
 
 if [ $bad = 0 ]; then echo "mp2-display-record-selftest: all ok"; else echo "mp2-display-record-selftest: $bad failed"; fi
 exit $((bad != 0))
