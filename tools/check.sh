@@ -3501,14 +3501,22 @@ if command -v python3 >/dev/null 2>&1; then
   # case 63, matattr), not a build error.
   step "tools   gl_test shader sources have table rows" python3 -I tools/vivante/check_gl_test_blobs.py
   # The STM32MP257F's GPU row (0x8000/0x6205, issues #7, #1281): the self-test
-  # of tools/vivante/gate_st.sh, which needs no Mesa tree. The script's own
-  # two checks (hwdb, golden) need a Mesa 26.2.1 tree with the etnaviv
-  # drm-shim build (MESA_ETNA_TREE), which the dependency layout
-  # (tools/cts/deps-env.sh) does not carry; as rows they would be a gap on
-  # every runner, so they are run by hand (tools/vivante/README.md) until the
-  # layout carries the tree.
+  # of tools/vivante/gate_st.sh, which needs no Mesa tree, and the script's
+  # two checks (hwdb, golden), which need a Mesa 26.2.1 tree with the etnaviv
+  # drm-shim build (MESA_ETNA_TREE; tools/cts/deps-env.sh --present supplies
+  # it when tools/vivante/mesa-etna-build.sh --check says it is complete).
+  # The script's exit 2 is its `gap:` line (no tree, no build): the row is a
+  # gap naming MESA_ETNA_TREE, never ok, and the marker file tells run_row.
+  gate_st_row() {
+    local status=0
+    tools/vivante/gate_st.sh "$1" || status=$?
+    [ "$status" -eq 2 ] && : > "$ROWS/$ROW_SEQ.gap"
+    return "$status"
+  }
   scope vivante
   step "tools   tools/vivante/gate_st_selftest.sh (no Mesa tree)" selftest_row tools/vivante/gate_st_selftest.sh
+  step "tools   tools/vivante/gate_st.sh hwdb (MESA_ETNA_TREE)" gate_st_row hwdb
+  step "tools   tools/vivante/gate_st.sh golden (MESA_ETNA_TREE)" gate_st_row golden
   # The source list's gl_test programs (tools/shaders/precompiled.list, apps
   # gl_test and gl_test_es100) are what gl_test.c links, read out of its text
   # by glsl2v3d.py's reader: a case that links a new program and a list that

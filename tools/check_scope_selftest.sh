@@ -301,14 +301,17 @@ expect "stm32mp257f_dk without ZEPHYR_WS: the zephyr images gap" "^gap   zephyr 
 checks=$((checks + 1))
 ! printf '%s\n' "$out" | grep -qE '^(plan|ok) +zephyr  stm32mp257f_dk' ||
   { echo "FAIL stm32mp257f_dk without ZEPHYR_WS: an image row is planned"; fails=$((fails + 1)); }
-# its GPU row's host check: the gate_st.sh self-test (no Mesa tree), planned
-# on a change of the script; the script's hwdb and golden checks need
-# MESA_ETNA_TREE, which no runner's layout has, so they are no rows
+# its GPU row's host checks: the gate_st.sh self-test (no Mesa tree) and the
+# script's hwdb and golden rows (a gap without MESA_ETNA_TREE, at run time),
+# planned on a change of the script or of what it reads
+for f in tools/vivante/gate_st.sh tools/vivante/hwdb_compare.py tools/vivante/cs_golden.c \
+  tools/vivante/mesa-cs-golden.patch tools/vivante/testdata/hwdb-compare-st-6205.txt; do
+  out=$(plan "$f")
+  expect "gate_st $f: the self-test row" '^plan  tools   tools/vivante/gate_st_selftest.sh \(no Mesa tree\)$' "$out"
+  expect "gate_st $f: the hwdb row" '^plan  tools   tools/vivante/gate_st.sh hwdb \(MESA_ETNA_TREE\)$' "$out"
+  expect "gate_st $f: the golden row" '^plan  tools   tools/vivante/gate_st.sh golden \(MESA_ETNA_TREE\)$' "$out"
+done
 out=$(plan tools/vivante/gate_st.sh)
-checks=$((checks + 1))
-! printf '%s\n' "$out" | grep -qE 'gate_st\.sh (hwdb|golden)' ||
-  { echo "FAIL gate_st: a row runs a check that needs MESA_ETNA_TREE"; fails=$((fails + 1)); }
-expect "gate_st: the self-test row" '^plan  tools   tools/vivante/gate_st_selftest.sh \(no Mesa tree\)$' "$out"
 expect "gate_st: the Vivante scope only" '^check.sh: .*\(--changed HEAD, scopes: vivante \)' "$out"
 out=$(plan tools/probes/rpi_5/rpi5_hello/src/main.c)
 expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
