@@ -39,11 +39,12 @@
 #               per-cause table and the draft issues)
 #   5 family    mali-family-tree.py                        -> family.txt
 #   6 diff      imx95-t6-diff.py against the T6 slices     -> diff.txt, diff.md
-#   7 cause     imx95-g310-cause.py --summary over the cases both sides hold
-#               (case, T6 result, iMX95 result)            -> cause.tsv,
-#               cause-summary.txt, cause-differences.tsv (without
-#               no-difference). Lost is passed as Missing and ResourceError
-#               as InternalError, the cause tool's own results.
+#   7 cause     imx95-t6-diff.py --tsv | imx95-g310-cause.py --summary
+#               (the differences as case, T6 result, iMX95 result; Lost
+#               cases read Lost; with --commit-cases
+#               imx95-g310-cause-commits.tsv when it exists)
+#                                                          -> cause-input.tsv,
+#               cause.tsv, cause-summary.txt, cause-differences.tsv
 #
 # A stage that fails is named on stderr as `stage <n> <name>: FAIL ...` and the
 # chain stops there (a missing row stops it at stage 1, before anything is
@@ -194,31 +195,18 @@ py "$here/imx95-t6-diff.py" --markdown $imx_args $t6_args >"$out/diff.md" 2>"$ou
 ok 6 diff
 
 # 7 cause ------------------------------------------------------------------
-# Join the results.tsv of the T6 slices and of the iMX95 slices on the case:
-# a result beats Lost, otherwise the later one wins. Only cases both sides hold.
-: >"$out/t6.results.tsv"
-for s in $t6; do
-	[ -f "$s/results.tsv" ] && cat "$s/results.tsv" >>"$out/t6.results.tsv"
-done
-: >"$out/imx95.results.tsv"
-for s in $slices; do cat "$s/results.tsv" >>"$out/imx95.results.tsv"; done
+# imx95-t6-diff.py --tsv: one line per per-case difference of the compared
+# rows (case, T6 result, iMX95 result; a Lost case reads Lost). No no-difference
+# case is fed in, so the summary counts differences only.
 {
 	printf 'case\tt6_result\timx95_result\n'
-	awk -F'\t' '
-		function n(s) {
-			if (s == "Lost") return "Missing"
-			if (s == "ResourceError") return "InternalError"
-			return s
-		}
-		$1 == "case" { next }
-		NR == FNR { r = n($2); if (!($1 in t) || t[$1] == "Missing" || r != "Missing") t[$1] = r; next }
-		{ r = n($2); if (!($1 in m)) order[++k] = $1
-		  if (!($1 in m) || m[$1] == "Missing" || r != "Missing") m[$1] = r }
-		END { for (i = 1; i <= k; i++) { c = order[i]; if (c in t) printf "%s\t%s\t%s\n", c, t[c], m[c] } }
-	' "$out/t6.results.tsv" "$out/imx95.results.tsv"
-} >"$out/cause-input.tsv" 2>"$out/cause.err" || { cat "$out/cause.err" >&2; fail 7 cause "joining the results"; }
-rm -f "$out/t6.results.tsv" "$out/imx95.results.tsv"
-py "$here/imx95-g310-cause.py" --summary "$out/cause-input.tsv" >"$out/cause.tsv" 2>"$out/cause.err" ||
+	# shellcheck disable=SC2086
+	py "$here/imx95-t6-diff.py" --tsv $imx_args $t6_args 2>"$out/cause.err"
+} >"$out/cause-input.tsv" || { cat "$out/cause.err" >&2; fail 7 cause "imx95-t6-diff.py --tsv"; }
+commit_opt=
+[ -f "$here/imx95-g310-cause-commits.tsv" ] && commit_opt="--commit-cases $here/imx95-g310-cause-commits.tsv"
+# shellcheck disable=SC2086
+py "$here/imx95-g310-cause.py" --summary $commit_opt "$out/cause-input.tsv" >"$out/cause.tsv" 2>"$out/cause.err" ||
 	{ cat "$out/cause.err" >&2; fail 7 cause "imx95-g310-cause.py"; }
 grep '^#' "$out/cause.tsv" >"$out/cause-summary.txt"
 grep -v '^#' "$out/cause.tsv" | awk -F'\t' 'NR == 1 || $4 != "no-difference"' >"$out/cause-differences.tsv"

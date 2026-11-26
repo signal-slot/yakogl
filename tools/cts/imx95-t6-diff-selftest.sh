@@ -122,6 +122,21 @@ has "--markdown: transition table" "$t/md" "| T6 -> iMX95 | Cases |"
 has "--markdown: cause table" "$t/md" "| T6 -> iMX95 | T6 cause | iMX95 cause | Cases |"
 has "--markdown: case table row" "$t/md" "| \`$P.p_f\` | Pass | - | Fail | - |"
 has "--markdown: slices named" "$t/md" "iMX95 slices: \`2026-11-25-imx95-gles2-S1a-00000000\`."
+python3 -I "$D" --tsv --imx95 "$B" --t6 "$A" > "$t/tsv" 2>/dev/null
+[ "$(wc -l < "$t/tsv")" -eq 8 ] && ok "--tsv: one line per difference" || bad "--tsv: one line per difference"
+awk -F'\t' 'NF != 3 { exit 1 }' "$t/tsv" && ok "--tsv: three columns, no header" || bad "--tsv: three columns, no header"
+has "--tsv: Pass->Fail" "$t/tsv" "$(printf '%s.p_f\tPass\tFail' $P)"
+has "--tsv: Fail->Pass" "$t/tsv" "$(printf '%s.f_p\tFail\tPass' $P)"
+has "--tsv: a hang is Lost" "$t/tsv" "$(printf '%s.p_hang\tPass\tLost' $P)"
+has "--tsv: a case missing from a run row is Lost" "$t/tsv" "$(printf '%s.p_notrun\tPass\tLost' $P)"
+has "--tsv: a refusal against none is a Fail->Fail line" "$t/tsv" "$(printf '%s.ref_none\tFail\tFail' $P)"
+hasnt "--tsv: a refusal cut short is no line" "$t/tsv" "$P.ref_same"
+hasnt "--tsv: Fail on both without a refusal is no line" "$t/tsv" "$P.fail_both"
+python3 -I "$D" --tsv --absent --imx95 "$B" --t6 "$A" > "$t/tsva" 2>/dev/null
+[ "$(wc -l < "$t/tsva")" -eq 8 ] && ok "--tsv --absent: rows not run are not output" || bad "--tsv --absent: rows not run are not output"
+python3 -I "$D" --tsv --limit 1 --imx95 "$B" --t6 "$A" > "$t/tsvl" 2>/dev/null
+[ "$(wc -l < "$t/tsvl")" -eq 8 ] && ok "--tsv ignores --limit" || bad "--tsv ignores --limit"
+python3 -I "$here/imx95-g310-cause.py" --summary "$t/tsv" > "$t/tsvc" 2>&1 && ok "--tsv: the cause tool reads it" || bad "--tsv: the cause tool reads it"
 python3 -I "$D" --imx95 "$A" --t6 "$A" > "$t/self" 2>&1
 has "a slice against itself: 0 differences" "$t/self" "differences: 0"
 R=$here/log/2026-11-24-t6-gles2-S1-8ff01055
