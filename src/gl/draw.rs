@@ -8137,14 +8137,31 @@ mod tests {
     }
 
     /// (f) glClearBuffer(GL_COLOR, n) clears draw buffer n alone (it was
-    /// dropped for n > 0); glClear clears every target (mask 0).
+    /// dropped for n > 0). Draw buffer n names a real attachment here:
+    /// ES 3.0 4.2.3 makes a clear of a GL_NONE draw buffer no effect and no
+    /// error (src/gl/es3.rs, 2026-11-26; pinned by tests/v3d_clear_mrt4.rs
+    /// and tests/es3_mrt4_clear_pvr.rs), so an unattached draw buffer would
+    /// record no clear at all.
     #[test]
     fn clear_buffer_names_its_one_target() {
         let gl = Gl::new(16, 16);
         basic(&gl);
         fbo_8x8();
         let red = [1.0f32, 0.0, 0.0, 1.0];
-        let n = (context::max_draw_buffers() as u32 - 1).min(2);
+        let m = context::max_draw_buffers() as u32;
+        let n = (m - 1).min(2);
+        /* attachments and draw buffers 0..m, every draw buffer naming a real
+         * image, so the clear below has an image to clear (m is 3 on every
+         * GPU today, and 1 with GL_MAX_DRAW_BUFFERS of 1) */
+        let tex: Vec<GLuint> = (1..m).map(|_| texture_rgba(8, 8)).collect();
+        let bufs: Vec<GLenum> = (0..m).map(|i| GL_COLOR_ATTACHMENT0 + i).collect();
+        // SAFETY: plain GL calls; `bufs` holds m enums, `tex` m - 1 textures.
+        unsafe {
+            for (i, t) in tex.iter().enumerate() {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1 + i as GLuint, GL_TEXTURE_2D, *t, 0);
+            }
+            glDrawBuffers(m as GLsizei, bufs.as_ptr());
+        }
         // SAFETY: four readable floats; plain GL calls.
         unsafe {
             /* the last draw buffer this GPU has (2 on the PowerVR, 0 where
@@ -8155,7 +8172,12 @@ mod tests {
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
         let masks: Vec<(bool, u8)> = gl.draws().iter().map(|d| (d.draw.do_clear, d.draw.clear_target_mask)).collect();
-        assert_eq!(masks, [(true, 1 << n), (true, 0)], "the draw buffer's clear kept apart from the glClear");
+        /* glClear clears the m draw buffers it names and no other (a
+         * draw buffer past m is GL_NONE): the mask is 0 -- all -- only when
+         * every slot of the list names an image, else one bit per named
+         * slot (`clear_target_mask`) */
+        let all_mask: u8 = if m as usize >= crate::backend::GLES_MAX_TARGETS { 0 } else { (1u8 << m) - 1 };
+        assert_eq!(masks, [(true, 1 << n), (true, all_mask)], "the draw buffer's clear kept apart from the glClear");
     }
 
     /// glClear clears only the draw buffers that are not GL_NONE.
@@ -14329,11 +14351,15 @@ mod tests {
         assert_eq!(d.clear_target_mask, 1, "draw buffer 1 is target 0");
         assert_eq!(d.clear_rgba, [0.2, 0.0, 0.0, 1.0], "alpha the target does not have reads 1");
 
-        /* a clear of draw buffer 0, dropped from the list, touches nothing */
+        /* a clear of draw buffer 0, dropped from the list: the draw buffer
+         * is GL_NONE, so ES 3.0 4.2.3 makes it no error and no effect, and
+         * the back end sees no clear at all (the next draw arrives without
+         * one; it used to arrive merged with mask bit 7) */
         // SAFETY: four readable floats.
         unsafe { crate::gl::es3::glClearBufferfv(GL_COLOR, 0, v.as_ptr()) };
+        assert_eq!(gl.error(), GL_NO_ERROR, "a GL_NONE draw buffer is no error");
         let Some(d) = shifted_tri(&gl) else { return };
-        assert_eq!(d.clear_target_mask, 0x80, "a clear naming a dropped draw buffer touches nothing");
+        assert!(!d.do_clear, "a clear of a GL_NONE draw buffer records no clear");
     }
 
     /// The other form of the case: attachment 0 absent. ES 2.0 has no colour
