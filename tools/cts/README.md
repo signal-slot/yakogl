@@ -94,7 +94,10 @@ wording is in the script's docstring, and each missing item is one
 `FAIL: RESULTS: the <Board> glmark2 row does not state <what>` line. The gate does
 not run it on the live files: `cts-selftest.sh` check 27 runs it on
 `testdata/readme-glmark2/`, and `readme-glmark2-verdicts-selftest.sh` runs
-`--verdicts` on the `verdicts-*-RESULTS.md` fixtures there. Run it by hand
+`--verdicts` on the `verdicts-*-RESULTS.md` fixtures there;
+`readme-glmark2-strict-selftest.sh` runs the strict reading (a row's commit is
+its own `main `<sha>``, scene ms outside `at `<other>`` clauses) on the
+`strict-*-RESULTS.md` fixtures. Run it by hand
 before handing in a glmark2 table.
 
 `glmark2-ms.py [--cells] <console log>` reads a glmark2-es2 console log of any
