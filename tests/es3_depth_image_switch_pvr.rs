@@ -62,8 +62,10 @@
 //! cargo test --features host-test,gpu-powervr --test es3_depth_image_switch_pvr
 //! ```
 //!
-//! That command builds the file EMPTY (0 tests): the gate below needs
-//! `shaderc-online` too, as in tests/es3_blit_ds_layers_pvr.rs. The tests run with
+//! That command builds nothing: the target's gate needs `shaderc-online` too
+//! (as in tests/es3_blit_ds_layers_pvr.rs), its Cargo.toml entry names it, and
+//! cargo refuses a `--test` name whose entry the feature set cannot satisfy
+//! (docs/ci.md 3.9). The tests run with
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_depth_image_switch_pvr

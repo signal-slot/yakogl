@@ -239,8 +239,19 @@ opt-level = 1
 # overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
 # harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
 # applies. The edit loop's `dev` profile keeps opt-level 1.
+#
+# `debug = false`: no DWARF in test builds. Every integration test is its own
+# binary and statically links the whole library, so each binary carried its own
+# copy of the library's debug information: of `es3_srgb`'s 30 MiB, 29.2 MiB was
+# debug sections and 1 MiB was code (measured with `size -A`, 2026-11-26). The
+# gate builds this once per feature set and per test file, which is where a
+# full run's 121.5 GiB came from (docs/ci.md 3.9). A failing test still prints
+# its file and line (the panic location is not DWARF) and, with RUST_BACKTRACE,
+# the function names (the symbol table is kept); a debugger session builds the
+# tests with CARGO_PROFILE_TEST_DEBUG=true.
 [profile.test]
 opt-level = 3
+debug = false
 debug-assertions = true
 overflow-checks = true
 
@@ -259,3 +270,2280 @@ opt-level = 2
 lto = true
 codegen-units = 1
 debug = true
+
+# The whole-suite test rows build one integration test binary per tests/ file for every
+# feature set they run (10 such rows today), each statically linking the whole library:
+# 8,920 binaries per full run, measured 15 MiB each with the `dev` DWARF. A file whose
+# whole-file `#![cfg(...)]` gate cannot hold under the row's features compiles to an empty
+# crate, so 5,876 of those were 0-test husks of the library (docs/ci.md 3.9). These
+# entries carry the gates into cargo's target selection: `required-features` are the plain
+# feature atoms of the file's cfg gate, so a feature set that cannot satisfy a gate does
+# not link that file's binary at all, and every binary that ran tests before still runs.
+# A `--test` name of a target the feature set cannot build is a cargo error; tools/check.sh
+# filters its `--changed` tests-scope pick with tools/check_test_features.py --live.
+#
+# The rule is mechanical, and tools/check_test_features.py --check is its row: a file
+# gated on host-test alone gets no entry (it skips nothing); a gate with any(...) or
+# not(...) parts contributes only its atoms, which are necessary conditions, so cargo
+# skips only where the gate is false anyway. Change a gate in a tests/ file and this
+# row goes red until its entry moves with it, the way the generated tables' rows compare
+# bytes with their generators.
+
+# The [[test]] entries begin here (tools/check_test_features.py --emit).
+[[test]]
+name = "alloc_clobber"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "backend_differential"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "blob_table"
+required-features = ["gpu-powervr"]
+[[test]]
+name = "branch_splat"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "cf_survey"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "constant_registers"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "depth_resolve_pvr"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "depth_resolve_pvr_backend"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "depth_resolve_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "deqp_repro_shaders"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "egl_swap_end_wait"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "encoding_vocabulary"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "es2_compressed_list"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es2_error_rules_buffer"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "es2_error_rules_fbo"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "es2_error_rules_state"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "es2_fragdata"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es2_invariance"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es2_npot"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es2_preprocessor"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es2_program_binary_report"
+required-features = ["host-test", "no-shader-table", "report-es2", "shaderc-online"]
+[[test]]
+name = "es2_pvr_ms4_constancy"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es2_pvr_vertex_texture"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es2_report_guard"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "es2_report_limits"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "es2_report_v3d_uniforms"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "es3_base_level_rebind_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_layers_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_layers_mali"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_layers_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_layers_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_mali"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_window_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_window_mali"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_window_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_blit_ds_window_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_cbf_report_es2"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "es3_clear_rebind_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_clearbuffer_formats_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_color_buffer_float_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_colormask_formats_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_compare_state"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_cube_base_level_compl_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_decoded_class_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_default_vao_divisor"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_depth_image_switch_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_depth_image_switch_mali"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_depth_image_switch_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_depth_image_switch_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_draw_buffers_limit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_draw_random"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_etc2_cube_wrap_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_etc2_negative"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_etc2_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_flatshade_guard"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_float_surf_abi"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_float_vec_out_alu_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_float_vec_out_alu_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_formats_gc"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "es3_formats_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_four_rt_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_fragdepth_cases"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_fragdepth_gc"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "es3_fragdepth_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_fragdepth_v3d_sim"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_fragdepth_v3d_state"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_fragment_out_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_fragops_scissor_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_gc_const_array"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "es3_gc_mesa_formats"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "es3_gc_vout64"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_genmip_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_grad_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_grad_base_level_vs_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_grad_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_grad_words_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_half_float_blend"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_half_float_mrt_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_half_float_rt_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_half_float_rt_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_half_float_rt_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_host_fails_v3d"
+required-features = ["gpu-v3d", "host-test"]
+[[test]]
+name = "es3_instanced"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_instanced_divisor_cap"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_instanced_split_typed"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_int32_rt_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_int_mixed_other_gpus"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_mixed_out_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_mrt_alu_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_mrt_alu_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_alu_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_out_alu_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_builtin_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_out_builtin_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_cf_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_out_cf_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_conv_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_out_conv_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_copy_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_out_prec_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_out_prec_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_int_rt_gc"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "es3_int_rt_mrt_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_int_rt_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_int_vec_out_alu_gc_v3d"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_int_vec_out_alu_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_invalidate_blit_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_invalidate_blit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_invalidate_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_large_target_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_lifetime_tf"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_limits_pvr_ubo"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_limits_v3d"
+required-features = ["gpu-v3d", "host-test"]
+[[test]]
+name = "es3_link_iface"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_minlod_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_blend_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_blend_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_blit_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_blit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_budget_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_clear_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_copytex_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_copytex_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_ds_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_ds_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_formats_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_formats_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_fragdata"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_gaps_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_gaps_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_gl_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_gl_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_glsl"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_indexed"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_invalidate_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_layers_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_layers_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_msaa_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_msaa_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_out_pvr"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_out_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online", "test-knobs"]
+[[test]]
+name = "es3_mrt4_queries"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_scissor"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_sizes_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_sizes_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_tiles_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt4_v3d"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online", "test-knobs"]
+[[test]]
+name = "es3_mrt_blend_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_mrt_clear_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_mrt_ds_clear_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_mrt_sizes_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_ds_resolve"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_blitmask"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_clear"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_complete"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_coverage"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_draws"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_ds"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_es2ctx"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_es31_absent"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_formats"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_iformat"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_life"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_mrt"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_query"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_rect"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_srgb"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_state"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_texdst"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_gl_window"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_mali"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_read_errors"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_msaa_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_narrow_int_rt_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_negapi_uniform"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_pbo_rb_clears_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_precision_target_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_program_binary"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_projgrad_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_2darray"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_3d"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_3d_fix"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_3d_lod"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_centroid"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_chunk_fetch"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_deqp"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_edges"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_emu"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_magic"
+required-features = ["gpu-powervr"]
+[[test]]
+name = "es3_pvr_divisor_pds"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_divisor_pds_many"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_divisor_random"
+required-features = ["gpu-powervr", "host-test", "pvr-instance-divisor", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_split"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_divisor_vao"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_etc_array"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_fbo_float"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_fbo_int_rg"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_flatshade"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_flatshade_lines"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_fragdepth"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_fragout_array"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_instanceid"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_instanceid_pds"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "es3_pvr_int_mask"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_int_mixed_gl"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_int_output"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_longname"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_mixed_shapes"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_modf"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_mrt4"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_mrt_load"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_pvr_pcf"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_pcf_cube"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_random83"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_round"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_shadow"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_swizzle"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_texfn"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_texgrad"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_texoffset"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_texsize"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_pvr_varyings"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_r32_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_r8_readback"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rb_formats_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_readback4_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_readback4_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_readback_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_blit_rb_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_blit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_clear_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_copytex_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_layers_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_mrt_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_msaa_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_pack_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_queries_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_readback_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_respec_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_texstorage_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_texture_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_unpack2d_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb10a2_unpack3d_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgb16f_attach_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgba32f_paths_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgba32f_pvr"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rgba32f_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rt128_codegen_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rt128_key_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_rt_masks_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_s03a_output_locations_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_sample_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_sampler_lod_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_samplers3d_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_sampling_r32f_ret16_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_shaderc_corpus"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_shaderc_fold"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_shaderc_infolog"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_shaderc_pp"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "es3_shaderc_pp_splice"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_shaderc_repro"
+required-features = ["shaderc-online"]
+[[test]]
+name = "es3_shaderc_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_shadow_array_formats_texsize_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_shadow_array_texsize_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_shadow_clamp_draw_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_shadow_clamp_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_shadow_texsize_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_shadow_type_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_shadow_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_shadow_v3d_draw"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_size_only_r32f_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_srgb_blit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_swizzle_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words46_47_edge_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_copytex_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_multiunit_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_progswitch_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_respec_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_sampler_obj_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_stages_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_subimage_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tex_words_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_texelfetch_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texlod_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize3d_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_clamp_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_etc2_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_int_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_level_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_level_vs_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_max_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_mutable_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_base_shadow_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_big_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_texsize_lod_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tf_random_capture_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_tf_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_ubo_name_queries"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_ubo_v3d"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_ubo_v3d_link_limits"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_ubo_v3d_negative"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_ubo_v3d_queries"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_uniform_block_long_name"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_clear_float_words"
+required-features = ["gpu-v3d", "host-test"]
+[[test]]
+name = "es3_v3d_copytex_int_rg"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_f32_rt_key"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_v3d_fbo_int_rg"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_fbo_int_rg_layers"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_attach_query"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_clear"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_clear_layers"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_mrt_format"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_mrt_mask"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_mrt_mask_layers"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_rb_tex_parity"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_int_rg_render_sample"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_out_of_scratch"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_v3d_refusal_gl"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_v3d_varyings"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_vertex_arrays"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "es3_vs_ret32_v3d"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "es3_wide128_compare_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_copy_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_es2_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_fbo_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_filter_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_flow_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_incomplete_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_join_targets_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_layers_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_levels_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_lifetime_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_mip_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_mixed_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_multidraw_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_narrow_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_neighbours_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_planes_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_query_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_refusals_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_respec_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_sampler_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_sizes_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_slotlimit_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_slots_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_storage_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_subimage_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_swizzle_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_texfetch_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_uniforms_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "es3_wide128_vertex_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_const_map"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "gc_current_attrib_stage"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_depth_format_ts"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_depth_resolve"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_depth_sample"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_depth_view_golden"
+required-features = ["gpu-vivante", "host-test", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_divisor_above_max"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_client"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_dedup"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_disabled"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_first"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_int"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_many"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_restart"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_shared"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_divisor_vao"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_blend_key"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_copytex"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_fbo_complete"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_float_sample"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_fragdata"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_msaa"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_pending_clear"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_read_format"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_texstore"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_drift_uniforms"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_more_clears"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_more_mipmap"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_random3"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_rt_switch"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_sampler_slots"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_es2ctx_tiled_ts"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_etc2_sampled"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_fallback_stats"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_glmark2_mip_offer"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_iid_unsplit"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_instance_count_wide"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_instanced_zero"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_kick_diff"
+required-features = ["gpu-vivante", "test-knobs"]
+[[test]]
+name = "gc_layout"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_mip_one_kick"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_mipmap_gpu"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_npot_repeat"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_pe_wire_stream"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_resolve_wait_kick"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_rs_clear_stream"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_rt128_targets"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_scene_kicks"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gc_scene_kicks_depth_tpu"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_scene_kicks_tiled"
+required-features = ["gpu-vivante", "host-test", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_scene_kicks_tiled_rt"
+required-features = ["gpu-vivante", "host-test", "report-es2", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_select_fold"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "gc_sr_shader_count"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "gc_st_blobs"
+required-features = ["gpu-vivante"]
+[[test]]
+name = "gc_state_dedup"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_storage_current"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_stream_divisor"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_stream_divisor_elements"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_swap_resolve"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_terrain_shader_count"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "gc_tex_layout"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_texkill_scan"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_tiled_copy_reuse"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gc_tiled_ez_golden"
+required-features = ["gpu-vivante", "host-test", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_tiled_rt"
+required-features = ["gpu-vivante", "host-test", "shaderc-online", "test-knobs"]
+[[test]]
+name = "gc_ts_fast_clear"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_ts_probe"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_ts_resolve_interp"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_ts_words"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "gc_unroll"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "gc_vertex_count_wide"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gl_base_level_param"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "gl_bind_base_level"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "gl_blend_key_pin"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "gl_buffer_retired_reuse"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "gl_client_array_copy"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "gl_es2ctx_drift_frag_location"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gl_es2ctx_drift_incomplete_fb"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "gl_es2ctx_drift_link_with"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gl_es2ctx_drift_uniform_names"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gl_es2ctx_es3_only"
+required-features = ["host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "gl_es2ctx_sweep_current_attrib"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "gl_es2ctx_sweep_program_hint"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "gl_es2ctx_sweep_texslot_mark"
+required-features = ["host-test", "report-es2"]
+[[test]]
+name = "gl_fs_dump_switch"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "gl_level_pitch_attach_gc"
+required-features = ["gpu-vivante", "host-test", "shaderc-online"]
+[[test]]
+name = "gl_many_uniforms"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "gl_map_buffer_reuse"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "gl_no_alpha_int"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "gl_pending_clear_rebind"
+required-features = ["host-test", "shaderc-online"]
+[[test]]
+name = "glmark2_corpus"
+required-features = ["shaderc-online"]
+[[test]]
+name = "gltest_loop_io_shaders"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "internal_programs"
+required-features = ["shaderc-online"]
+[[test]]
+name = "keep_budget"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "ladder_rederive"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "ladder_rungs_compile"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "lane_move_equivalence"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "mali_3d_levels"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_api_stub"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_arith_const"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_attr_active"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_attr_gap"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_attr_inactive_loc"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_attr_records_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_blend_states"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_blend_states_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_blend_words"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_bool_uniform"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_const_fold"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_corpus_diff"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_cube_complete"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_cube_samplers"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_cube_samplers_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_depthonly_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_depthtex_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_deqp_arith"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_audit"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_boolpix"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_cfold2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_colourpair"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_constop"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_constprod"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_constrnd"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_ctrlflow"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_defects"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fclane"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fclane2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fmaloc"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fsint"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fsint2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fsunif"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fsunif2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_fsunif3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_gaps"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_idxloc"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_intrnd"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_intval"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_intval3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_intval4"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_intval5"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_irindex"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_irindex2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_irindex3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_loops"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_loops2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_loops3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_loops4"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_misc"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_misc2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_misc3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_mixcol"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_mixprec"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_mixprec3"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_mixprec4"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_negzero"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_posvary"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_structmember"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_texmisc"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_uniarray"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_unif2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_unitype"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_varylink"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_varylink2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_varyload"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vs16ref"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsconst"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsloop"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsloop2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsmix"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsuniarr"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsuniarr2"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_deqp_vsunif"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_draw_inval"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_draw_inval_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_draw_inval_rest"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_draw_oom"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_draw_oom_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_fau_page"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_fragcoord16"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_fragment_random"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_fragment_random_cases"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_fragment_random_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_fs_arith"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_glmark2_corpus"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_ideas"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_int_loops"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_link_varying_offsets"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_locals"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_npot_mip_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_rebind_stencil_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_ref_selftest"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_rgb565_stencil"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_rgb565_stencil_es2"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_tex_multi"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_tex_swizzle"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_tex_vertex"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_texcoord_lane"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_vcube_lod"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_vcube_magswitch"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_vs_arith"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_vs_cube_edge"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_vs_cube_edge_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_vs_fma"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_vs_tex2d_cube"
+required-features = ["gpu-mali", "shaderc-online"]
+[[test]]
+name = "mali_vs_tex2d_cube_gl"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_vsmin_compile"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_zs_fidelity"
+required-features = ["gpu-mali", "host-test", "shaderc-online"]
+[[test]]
+name = "mali_zs_sharing"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mali_zs_words"
+required-features = ["gpu-mali", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "mixed_key_no_collision"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "mixed_target_keys_parity"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "mov_survey"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "online_corpus"
+required-features = ["shaderc-online"]
+[[test]]
+name = "online_corpus_dump"
+required-features = ["shaderc-online"]
+[[test]]
+name = "operand_banks"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "pvr_array_native_cases"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_backend_rt4"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_default_uniform_guard"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_draw_targets_knob"
+required-features = ["gpu-powervr", "host-test", "test-knobs"]
+[[test]]
+name = "pvr_eot_words_pin"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_f16_mrt_gl"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_fragment_bytes_pin"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_fsign_negzero"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_int_cube"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_int_targets_deqp"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_ld_encode"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_metamorph_bubblesort"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_mip_three_levels"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_mipgen_program"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_mixed_key_spec"
+required-features = ["gpu-powervr"]
+[[test]]
+name = "pvr_mixed_layout_cross"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_mrt_layout4"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_mrt_layout_mesa"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_msaa_rb"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_native3d_sampler_words"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_native_switch_cache"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_npot_levels"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_pbe_mixed_words"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_pds_once"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_pr_fill_guard"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_pr_forcedpr"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_pr_swapzs"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_pr_zs_formats"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_render_rt4"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_sglr_shaders"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_target_keys_refusals"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_terrain_kicks"
+required-features = ["gpu-powervr", "host-test"]
+[[test]]
+name = "pvr_tex_lod_words"
+required-features = ["gpu-powervr"]
+[[test]]
+name = "pvr_texfetch_fixed"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_ubo_draw_16k"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_ubo_memory_load"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_ubo_select_exec"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "pvr_ubo_std140_edge"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_vertex_attrib_formats"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "pvr_vertex_outputs_64"
+required-features = ["gpu-powervr", "host-test", "shaderc-online"]
+[[test]]
+name = "read_before_write"
+required-features = ["shaderc-online"]
+[[test]]
+name = "scratch_survey"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "sha256"
+required-features = ["gpu-powervr"]
+[[test]]
+name = "shaderc71_clamp"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "shaderc71_count_bounds"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_deqp_programs"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_deqp_repro"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_determinism"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_es2_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_fs_builtins"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_glmark2_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_limits"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_lists"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_malformed"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_mali_testdata"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_prims"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "shaderc71_tree_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "source_use_bits"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "stack_survey"
+required-features = ["shaderc-online"]
+[[test]]
+name = "temps_survey"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "twin_draw_list"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "undefined_lanes"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "uniidx_knobs"
+required-features = ["gpu-vivante", "shaderc-online"]
+[[test]]
+name = "usc1_triangle"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_exec_ld"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_exec_pck_model"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_exec_ubo_seq"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_exec_writes"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_limits"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_old_image"
+required-features = ["gpu-powervr", "shaderc-online"]
+[[test]]
+name = "usc_survey"
+required-features = ["shaderc-online"]
+[[test]]
+name = "v3d71_alloc_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_case5_record"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_codec_emit"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_compare_self"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_corpus_sources"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_errata"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_gltest_rpi5_conf"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_gltest_shaders"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_gltest_tex_shaders"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_glue_tex"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_harness"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_link"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_mesa_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_mesa_shapes"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_online_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_op_map"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_sched_alu"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_sched_fuzz"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d71_sched_io"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_sched_thrsw"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d71_select_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_shapes"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_sig_map"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_sim_branch"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d71_sim_flags"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_sim_ops"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_sim_signals"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_small_imm"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_tri_shaders"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_verify_corpus"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d71_verify_mutants"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d71_verify_oracle"
+required-features = ["gpu-v3d", "host-test", "no-shader-table", "shaderc-online"]
+[[test]]
+name = "v3d_clear"
+required-features = ["gpu-v3d", "host-test"]
+[[test]]
+name = "v3d_clear_mrt"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_clear_mrt4"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_copy_reasons"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_cube_noseamless"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_depth_storage"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_base_level"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_blend_key"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_clear_plan"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_colormask"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_copytex"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_fbo_complete"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_fragdata"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_mixed_size"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_msaa"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_pending_clear"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_read_format"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_tile_pool"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_uniform_words"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_drift_uniforms"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_more_clears"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_refusals"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_es2ctx_t5_mem"
+required-features = ["gpu-v3d", "host-test", "report-es2", "shaderc-online"]
+[[test]]
+name = "v3d_fbo4096_refusal_kind"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_frame_rt4"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_glmark2_mem"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_lazy_raster_readers"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_mip_chain_pin"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_online_corpus"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_pi4_aborts2_refusals"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_rt_sample"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_sim_mesa"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_target_4096_mem"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_terrain_jobs"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_tex_array"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_texture_size_words"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_texture_state_at"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_tfu_host"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_tfu_mipmap_nowait"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_array_len_limit"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_bit_patterns"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_block_binding_remap"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_both_stages_full"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_buffer_range"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_default_sweep"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_delete_bound"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_dynamic_index_limit"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_full_stage"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_inactive_blocks"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_inactive_min"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_instance_array"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_instanced_index"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_int_members"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_large_sim"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_large_vs"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_matrix_layouts"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_program_switch"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_rebind_update"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_shared_packed"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_shared_stages"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_short_buffer"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_small_arrays"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_std140_edge"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_ubo_struct_members"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_uniform_host"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_uniform_host_only"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_units_cube_mem"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "v3d_varyings_compile"
+required-features = ["gpu-v3d", "shaderc-online"]
+[[test]]
+name = "v3d_wait_time"
+required-features = ["gpu-v3d", "host-test", "shaderc-online"]
+[[test]]
+name = "vivante_imx8mp_limits"
+required-features = ["gpu-vivante", "host-test"]
+[[test]]
+name = "vivante_npot"
+required-features = ["gpu-vivante"]
+[[test]]
+name = "vivante_profile"
+required-features = ["gpu-vivante"]
+[[test]]
+name = "vivante_st_profile"
+required-features = ["gpu-vivante"]
+# The [[test]] entries end here.

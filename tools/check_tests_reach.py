@@ -12,8 +12,9 @@ Prints one line, for tools/check.sh (the `tests` scope, docs/ci.md):
   <target> ...    the targets (tests/<target>.rs) the paths reach
 
 The reading is textual and conservative: a path selects more targets, never
-fewer. A target is a root tests/<name>.rs (Cargo.toml has no [[test]]
-entries). Its sources are the file and everything it pulls in with `mod`,
+fewer. A target is a root tests/<name>.rs (Cargo.toml's [[test]] entries are exactly
+those root files, carrying required-features; a target Cargo.toml does not
+name is auto-discovered). Its sources are the file and everything it pulls in with `mod`,
 `#[path]`, `include!`, `include_str!` or `include_bytes!`, transitively. A
 changed root tests/<name>.rs reaches <name> and every target that pulls it
 in. A changed file under a tests/ subdirectory reaches the targets that pull

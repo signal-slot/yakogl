@@ -33,7 +33,9 @@
 //!
 //! Compiled only with `report-es2`: an ES 3.0 build answers all of this
 //! differently on purpose, and `cargo test --test es2_report_guard` there
-//! runs zero tests.
+//! builds nothing at all: the Cargo.toml entry names `host-test` and
+//! `report-es2` as required, and cargo refuses the named target without
+//! them (docs/ci.md 3.9).
 
 #![cfg(all(feature = "host-test", feature = "report-es2"))]
 

@@ -110,6 +110,19 @@
 # --quick on four lanes. A cold tree pays for a build of the crate and its
 # dev-dependencies per configuration, which is minutes; run it once and it
 # stays warm.
+#
+# Disk on a cold tree, measured 2026-11-26 (docs/ci.md 3.9): a whole-suite
+# test row links one binary per tests/ file for every feature set it runs, and
+# a file whose whole-file cfg gate cannot hold under a feature set used to
+# link a 0-test copy of the library all the same (a husk). Cargo.toml's
+# generated [[test]] entries -- the gates' feature atoms, emitted and
+# byte-compared by tools/check_test_features.py, a row below -- make cargo
+# skip those binaries, and [profile.test] debug = false drops the DWARF that
+# was 96% of every one of them: 3,044 whole-suite binaries instead of 8,920.
+# A full --no-clippy --changed run from an empty target directory, four cores,
+# jobs 2: 14.25 GiB of target written, 551 rows green, 1 h 59 min wall. Before
+# the same two fixes, one runner job wrote 121.5 GiB and four such VMs filled
+# a 476 GiB host (docs/ci.md 3.9).
 set -u
 
 cd "$(dirname "$0")/.." || exit 2
@@ -467,6 +480,16 @@ tests_narrow_row() {
     case "$s" in all | licence | local) return 1 ;; esac
     case " $SCOPES " in *" $s "*) return 1 ;; esac
   done
+  return 0
+}
+# tests_scope_empty_note <feature set>: the CONFIGS row of a `--changed` tests-scope run
+# whose reached targets are all ones this feature set does not build, their Cargo.toml
+# [[test]] gate needing another GPU or feature (docs/ci.md 3.9). Such a target built and
+# ran a 0-test empty binary in this row before; there is no binary to build now, and the
+# target's own rows run it where its gate holds. Say so and be green: the row tested
+# nothing of the change before either.
+tests_scope_empty_note() {
+  echo "nothing the change reached is built under $1: every reached target's gate needs another feature set (Cargo.toml [[test]] required-features); it ran no tests in this row before either"
   return 0
 }
 # 0 when the rows under the current `scope` line are selected.
@@ -1685,21 +1708,44 @@ for f in "${CONFIGS[@]}"; do
   esac
   # A change confined to tests/ builds and runs the targets it reaches only
   # (TEST_TARGETS, tools/check_tests_reach.py), and the library's test_rules
-  # once: they read tests/*.rs, which no other library test does.
-  pick=() clip=(--all-targets)
+  # once: they read tests/*.rs, which no other library test does. The pick is
+  # filtered to the targets this feature set builds (the Cargo.toml [[test]]
+  # required-features, docs/ci.md 3.9): a reached target whose gate cannot hold
+  # here built a 0-test empty binary before as well, and naming it now is a
+  # cargo error. A pick that filters to none leaves the row nothing to build;
+  # it says so (tests_scope_empty_note), and test_rules still runs once.
+  pick=() clip=(--all-targets) tests_lib_wanted=0
   if tests_narrow_row; then
-    for t in $TEST_TARGETS; do pick+=(--test "$t"); done
+    tests_lib_wanted=1
+    if live=$(python3 -I tools/check_test_features.py --live "$f" $TEST_TARGETS); then
+      for t in $live; do pick+=(--test "$t"); done
+    else
+      # The filter itself failed: keep the unfiltered pick, so the row fails
+      # loudly on a cargo error rather than quietly testing nothing. Say so:
+      # an unfiltered pick names targets cargo now skips, and that error is
+      # the row's, not the filter's.
+      echo "check.sh: tools/check_test_features.py --live $f FAILED; running the unfiltered pick" >&2
+      for t in $TEST_TARGETS; do pick+=(--test "$t"); done
+    fi
     clip=("${pick[@]}")
   fi
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" "${clip[@]}"
+  if [ "$tests_lib_wanted" -eq 1 ] && [ "${#pick[@]}" -eq 0 ]; then
+    step "clippy  $f (tests scope: nothing reached builds here)" tests_scope_empty_note "$f"
+  else
+    step "clippy  $f" "${tier[@]}" cargo clippy --no-default-features --features "$f" "${clip[@]}"
+  fi
   # --no-fail-fast: cargo otherwise stops at the first test BINARY that fails,
   # and every binary after it goes unrun. A red row then names one failure
   # and hides the rest: on 2026-09-23 a gate red on deqp_repro_shaders never
   # ran encoding_vocabulary, whose own failure surfaced a push later.
   [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
-  step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" ${pick[@]+"${pick[@]}"}
-  if [ "${#pick[@]}" -gt 0 ] && [ "$tests_lib_done" -eq 0 ]; then
+  if [ "$tests_lib_wanted" -eq 1 ] && [ "${#pick[@]}" -eq 0 ]; then
+    step "test    $f (tests scope: nothing reached builds here)" tests_scope_empty_note "$f"
+  else
+    step "test    $f" cargo_test "${tier[@]}" --no-fail-fast --no-default-features --features "$f" ${pick[@]+"${pick[@]}"}
+  fi
+  if [ "$tests_lib_wanted" -eq 1 ] && [ "$tests_lib_done" -eq 0 ]; then
     tests_lib_done=1
     [ "${#tier[@]}" -eq 0 ] || uses_tier_tables
     step "test    $f (--lib test_rules::, reads tests/*.rs)" \
@@ -4367,6 +4413,15 @@ step "tools   check.sh test cache: record, skip, run again on a new key" tools/c
 # The row pool (--jobs): the same log with one job and four, and a lane
 # that orders a writer before its reader.
 step "tools   check.sh --jobs: the log in order, the counts, a lane" tools/check_pool_selftest.sh
+# The Cargo.toml [[test]] entries and the cfg gates of the tests/ files are each other's
+# byte-compare (docs/ci.md 3.9): every gated tests/ file has an entry whose
+# required-features are its whole-file gate's feature atoms and nothing else, so a
+# feature set that cannot satisfy a gate builds no 0-test copy of that file, and a gate
+# that moved without its entry is a red row here. A change to a tests/ file or to the
+# tool reaches this row (tests, tools); a change to Cargo.toml reaches every row.
+scope tests tools
+step "tools   Cargo.toml [[test]] entries == the cfg gates of tests/" \
+  python3 -I tools/check_test_features.py --check
 # The tree key scan (tree_key_scan): every path a literal in the test code
 # names is under TEST_TREE_PATHS. A file a test reads outside them leaves the
 # test cache blind to it. A file scan of a few seconds, with no build. Every

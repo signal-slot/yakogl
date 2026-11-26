@@ -401,6 +401,13 @@ took 2261 s. A document pull request's gate took 4 s there (#225).
 - `[profile.test] opt-level = 3` (inherits dev otherwise): about 2x on the
   compiler-heavy tests, measured above. Debug assertions and overflow
   checks stay on. The dev profile for the edit loop is unchanged.
+- `[profile.test] debug = false` (2026-11-26): debug info was 96% of each
+  whole-suite test binary's bytes — 29.2 MiB of debug sections against
+  730 KiB of `.text` in one measured binary (3.9). It is not what a gate
+  failure reads: a failed test names itself and prints its panic's message,
+  unchanged with or without it (checked: the same failing test's output in
+  both layouts). `CARGO_PROFILE_TEST_DEBUG=true` puts it back for a local
+  debugging loop.
 - The one-test corpus binaries (`es3_ubo`, `stack_survey`, `gc_const_map`,
   `online_corpus`, ...) split their corpus into several `#[test]`s (by
   dEQP group, by shader directory), so the harness runs them on several
@@ -543,7 +550,10 @@ third-party crates again.
 
 What this does not fix: the cache a run needs grows with every test file.
 At 0.144 GiB each, the 88 GiB are about 600 more test files, two weeks at
-the rate of those three days. Issue #10653 holds that.
+the rate of those three days. Issue #10653 holds that. Section 3.9
+(2026-11-26) attacked that per-file cost itself: a `tests/` file is now
+built only in the feature sets where its cfg gate can hold a test, and its
+binaries carry no debug info.
 
 ### 3.7 A full run's disk (2026-11-14)
 
@@ -564,14 +574,23 @@ CI gate job's `--check` step runs on a warm cache and does not set
 CARGO_INCREMENTAL, so it ignores them. `GATE_FULL_RUN=1 tools/setup-gate-host.sh
 --check` makes them `missing` and the exit status 1; use it before a full run.
 
+The 180 GB of target and the 120 GB free describe the binary layout of
+2026-11-14. 3.9 (2026-11-26) shrank that layout — a whole-suite test row
+links only the test binaries its feature set can run, without debug info —
+and a full run of the new one writes a fraction of what this one did
+(3.9, measured). The guards keep their numbers until a walk-fit measures
+them again against the new layout: a gate host is still a host that starts
+a full run with 120 GB free.
+
 ### 3.8 Free disk check
 
 `setup-gate-host.sh --check` also prints `disk` (the filesystem of
 `CARGO_TARGET_DIR`, default `~/.cache/yakogl/ci-target`) and `disk-build` (the
 repository's `build/`): `ok disk <GB> free`, or a line naming the need. A full
-gate needs about 220 GB free without pruning (walk-fit, disk-map);
-`YAKOGL_GATE_MIN_FREE_GB` overrides that. A shortfall is `warn`, and `missing`
-(exit status 1) when the threshold is set explicitly or `GATE_FULL_RUN=1`.
+gate needs about 220 GB free without pruning (walk-fit, disk-map; the
+measurement of the layout before 3.9); `YAKOGL_GATE_MIN_FREE_GB` overrides
+that. A shortfall is `warn`, and `missing` (exit status 1) when the threshold
+is set explicitly or `GATE_FULL_RUN=1`.
 
 Run the check in the shell that starts the gate, after the exports the full
 gate is started with: `export $(tools/cts/deps-env.sh --present);
@@ -584,6 +603,124 @@ whose inputs are prepared: false misses. The other inputs `deps-env.sh
 `PCO_SPM_LOAD_CAPTURE`, `MESA_PAN_TREE`, `DEQP_GLES3_TEST_DIR`, `LZ4`,
 `MALI_CSFFW`) are read the same way; treat a `missing` for any of them from a
 bare shell as unconfirmed until it is repeated after the exports.
+
+### 3.9 A feature set that cannot hold a test's cfg gate still links the test (2026-11-26)
+
+Four runner VMs filled a 476 GiB host on 2026-11-24 and stopped it for two
+days. A gate job measured on a runner VM on 2026-11-26 had written 121.5 GiB
+at the 2 h 16 min mark and was still writing (49.5 GiB in its first hour,
+53.9 GiB in its second): `ci-target/debug/deps` 125 GiB and 34,420 files,
+11 to 16 hashes per test file name, unit-test binaries of 63 to 169 MiB, the
+`yakogl` library compiled 36 times in the job, the warm image cache 2.2 GiB,
+and nothing an earlier feature set built reused or removed during the job.
+The disk was not full of sources or caches. It was full of test binaries,
+for two multiplied reasons, both now fixed in the tree.
+
+**A test is a link.** Each root `tests/` file is its own test binary,
+statically linking the whole library; a row that runs the whole suite — the
+nine CONFIGS rows and the V3D row — builds one per file, so a full run links
+the library into 892 test targets ten times over. That is 8,920 link outputs
+at 892 root files, before anything else a full run builds.
+
+**A husk is a link for nothing.** A file's whole-file `#![cfg(...)]` gate
+selects the tests a feature set has; where the gate cannot hold, the file
+compiles to an empty crate and cargo still links and runs its full test
+binary: zero tests, the whole library, a husk. 5,876 of the 8,920 were
+husks. A `[[test]]` entry whose `required-features` are exactly the plain
+`feature = "..."` atoms at the top level of the file's gate makes cargo skip
+the target — the skip `cargo test --features ...` already performs for a
+manifest with such entries; naming a skipped target with `--test` is a cargo
+error, which is what `check.sh`'s narrowed pick filters through the same
+table. An atom is a necessary condition of the gate, never a claim that the
+gate holds: an `any(...)` or `not(...)` part contributes nothing, so cargo
+skips a target only where its gate is false anyway, and a binary that
+disappears from a row is a binary that ran no test in that row. The same
+holds for `clippy --all-targets`: a husk is an empty crate, and a cfg'd-out
+file gives a linter nothing to lint. The live counts, per whole-suite row,
+of the 892 files a row builds (counted 2026-11-26 with
+`tools/check_test_features.py --live`, the same rule cargo applies):
+
+| feature set | built (was 892) |
+|---|---|
+| `host-test,gpu-powervr` | 161 |
+| `host-test,gpu-powervr,report-es2` | 170 |
+| `host-test,gpu-vivante` | 157 |
+| `host-test,gpu-powervr,shaderc-online` | 348 |
+| `host-test,gpu-vivante,shaderc-online` | 338 |
+| `host-test,gpu-powervr,shaderc-online,report-es2` | 363 |
+| `host-test,gpu-vivante,shaderc-online,report-es2` | 368 |
+| `host-test,gpu-powervr,shaderc-online,precompiled-shaders` | 348 |
+| `host-test,gpu-vivante,shaderc-online,precompiled-shaders` | 338 |
+| `host-test,gpu-v3d,shaderc-online,no-shader-table` | 453 |
+| the ten rows together | **3,044**, was 8,920 |
+
+**Debug info is the rest of the bytes.** The `es3_srgb` binary of the V3D row
+measured 31,957,832 B: 29.2 MiB of debug sections against 730,464 B of
+`.text` — 96% DWARF, the same shape as every whole-suite binary and the
+reason unit-test binaries reached 63 to 169 MiB. `[profile.test]
+debug = false` (Cargo.toml) makes the same binary 1,396,688 B (`.debug_info`
+1,778,661 → 0 on a probe crate, both layouts built side by side). A gate
+failure reads nothing from it: the failing test names itself and its panic
+message, file and line — a probe test's failure output in the two layouts is
+identical except for the thread PID the harness prints (the probe is not in
+the tree), and the symbol table survives for `RUST_BACKTRACE` frames.
+`CARGO_PROFILE_TEST_DEBUG=true` puts the debug info back for a local
+debugging loop.
+
+**The whole-suite row, cold, both ways** (4-core host, scratch
+`CARGO_TARGET_DIR`, `CARGO_INCREMENTAL=0`, `cargo test --no-run --features
+host-test,gpu-powervr,shaderc-online`, all 892 targets):
+
+| | before | after |
+|---|---|---|
+| test binaries built | 892 | 348 |
+| scratch target directory | 19 GiB | 3.5 GiB |
+| build wall clock | 3 m 23 s | 2 m 9 s |
+
+After, the 349 executables average 3.7 MiB (the largest 20.9 MiB, a unit-test
+binary); 1.3 GiB of the 3.5 GiB is binaries and the library rlibs, the rest
+metadata and build-script output. Per test file over the whole suite that is
+3.4 builds on average instead of 10, and a build a fraction of 0.144 GiB/10
+(3.6): the per-file cache cost issue #10653 counts goes down about an order
+of magnitude.
+
+**The Cargo.toml tail block and its gate row.** 752 `[[test]]` entries
+(1,504 entry features) sit between two marker lines in Cargo.toml, printed
+by `tools/check_test_features.py --emit`. The gate treats the region the way
+it treats a generated table: the row `tools   Cargo.toml [[test]] entries ==
+the cfg gates of tests/` (scopes `tests` `tools`) runs `--check` and is red,
+naming each drift — an entry's features against its file's gate atoms, a
+gated file with no entry ("every feature set without those features links a
+0-test copy of it"), an entry naming no `tests/` file, two entries of one
+name, an entry or a gate moved without the other, the markers gone, an entry
+written outside them. Change a file's gate and the entry moves in the same
+commit; that is what keeps "cargo skips it" and "the gate is false there"
+the same fact rather than two.
+
+**check.sh.** In a `--changed` run of the `tests` scope, the CONFIGS rows'
+target pick is filtered through `--live <the row's features> <targets>` so a
+row names only targets its feature set builds; a row whose reached targets
+are all ones that feature set does not build prints a note row
+(`tests_scope_empty_note`) instead of building husks — it ran no test of the
+change in that row before either — and the library's `test_rules` still run
+once. If `--live` itself fails, the pick stays unfiltered and the tool's
+failure is printed: the row then goes red on cargo's own error rather than
+green on a silent empty pick.
+
+**A full run.** Before: the runner's measured job above (121.5 GiB written,
+still growing at 2 h 16 min) and 3.6's warm-cache numbers (85,691 files,
+92.7 GiB in use). After, measured on 2026-11-26 on this 4-core host
+(`tools/check.sh --no-clippy --changed <base>`, an empty target directory,
+`YAKOGL_CHECK_JOBS=2` — the `gate.yml` rule, half the cores — and
+`CARGO_INCREMENTAL=0`, no compiler cache): 551 rows green
+(`551 ok, 0 failed, 0 gap(s), 0 skipped`, 39 clippy rows left to the
+nightly), 3,249 test binaries run, 1 h 59 min 33 s wall, and the target
+directory wrote **14.25 GiB** — 22.8 GiB of the whole filesystem, counting
+the Zephyr images' build trees under `build/`. The same host cannot hold
+the before run: its layout is the 121.5 GiB job above and 3.7's 180 GB
+target, and this host has 62 GB free. That number is why the before
+side of this table is the runner's measurement rather than a pair run
+here.
 
 ## 5. Steps, in order
 
