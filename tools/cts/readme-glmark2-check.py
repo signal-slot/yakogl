@@ -12,15 +12,18 @@ glmark2 row for each board at that commit. This checks exactly that:
   * the rows name one commit (short hashes match by prefix);
   * the commit is an ancestor of --ref (git merge-base --is-ancestor; skipped
     with a warning when git or the ref is unavailable, and with --ref none);
-  * RESULTS.md's glmark2 table has a row for each board citing that commit;
+  * RESULTS.md's glmark2 table has a row for each board whose own commit, its
+    first "main `<sha>`" outside parentheses, is that commit (full hash or the
+    first 8 characters, not a looser prefix);
   * with --scenes (off by default), each of those rows also gives a number of
     ms a frame for every named scene and cites a record directory;
   * with --verdicts (off by default), each of those rows also states the run's
     outcome and the terrain and refract picture verdicts.
 
 --scenes terrain,shadow,refract reads a scene figure as "<scene> <n> ms" (the
-row text, markdown bold ignored). Both row styles match: glmark2-ms.py --cells
-prints "terrain 178.86 ms (6 FPS)", and RESULTS.md rows have "terrain 250 ms
+row text, markdown bold ignored; figures of another commit, "<scene> <n> ms at
+`<other>`" and parentheses holding "at `<other>`", are left out). Both row
+styles match: glmark2-ms.py --cells prints "terrain 178.86 ms (6 FPS)", and RESULTS.md rows have "terrain 250 ms
 (4 FPS)". A record directory is records/<board>/<YYYYMMDD-HHMM>-<name>-<sha8>/
 with <board> pi4, imx8mp or am62p and <sha8> the common commit's first 8
 characters (by prefix).
@@ -132,10 +135,48 @@ def same(a, b):
     return a.startswith(b) or b.startswith(a)
 
 
+def same_commit(a, b):
+    """a and b name one commit: equal, or both >= 8 characters and equal in
+    their first 8 (not a looser prefix)."""
+    return a == b or (min(len(a), len(b)) >= 8 and a[:8] == b[:8])
+
+
+ATTRIB = re.compile(r"\bmain\s+`([0-9a-f]{7,40})`", re.I)
+AT_OTHER = re.compile(r"\bat\s+`([0-9a-f]{7,40})`", re.I)
+
+
+def row_commit(text):
+    """The row's own commit: its first 'main `<sha>`' outside parentheses."""
+    depth, out = 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        out += ch if depth == 0 else " "
+    m = ATTRIB.search(out)
+    return m.group(1) if m else None
+
+
+def own_run_text(text, commit):
+    """text without the figures that belong to another commit: parenthesised
+    groups holding 'at `<other>`' and '<scene> <n> ms [(..)] at `<other>`'."""
+    def other(m):
+        return not same_commit(m.group(1), commit)
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r"\([^()]*\)", lambda m: " " if any(
+            other(a) for a in AT_OTHER.finditer(m.group(0))) else m.group(0), text)
+    return re.sub(r"\b[a-z][\w-]*\s+\S+\s+ms\b(?:\s*\([^()]*\))?\s+at\s+`([0-9a-f]{7,40})`",
+                  lambda m: " " if other(m) else m.group(0), text, flags=re.I)
+
+
 def scene_fails(board, text, scenes, commit):
     fails = []
+    own = own_run_text(text, commit)
     for sc in scenes:
-        m = re.search(r"\b%s\b\s+(\S+)\s+ms\b" % re.escape(sc), text, re.I)
+        m = re.search(r"\b%s\b\s+(\S+)\s+ms\b" % re.escape(sc), own, re.I)
         if not m:
             fails.append("RESULTS: the %s glmark2 row has no '%s <n> ms' figure" % (board, sc))
         elif not re.fullmatch(r"\d+(?:\.\d+)?", m.group(1)):
@@ -245,8 +286,9 @@ def main():
         for b in WANT:
             if b not in results:
                 fails.append("RESULTS: no glmark2 row for %s" % b)
-            elif not any(same(commit, h) for h in results[b]):
-                fails.append("RESULTS: the %s glmark2 row does not cite `%s`" % (b, commit))
+            elif not (rc := row_commit(rtext[b])) or not same_commit(commit, rc):
+                fails.append("RESULTS: the %s glmark2 row does not cite `%s` as its own "
+                             "commit (want 'main `<sha>`', 8 characters or full)" % (b, commit))
             else:
                 if scenes:
                     fails += scene_fails(b, rtext[b], scenes, commit)
