@@ -14,7 +14,9 @@
 #      check-gles3-notpass-run.py the one-build whole-tree check of the result
 #   4. am62p-session-readme.py    the README of both record directories
 #   5. am62p-gles3-acceptance.sh  c1-c4 on the fake repository
-# am62p-gles3-report.py is not run here. The tools under test are only run, never changed; a tool
+#   6. am62p-gles3-report.py      the per-row table and the #1285 outcome section (rows 22-38) of both
+#                                 records against testdata/am62p-gles3-e2e/report-expected.md
+# (-v prints the report). The tools under test are only run, never changed; a tool
 # that does not take another tool's output is a defect reported by a FAIL line (none is fixed here).
 # Fixtures: tools/cts/testdata/am62p-gles3-e2e/. Everything else is made under $TMPDIR (removed at the
 # end); no board, no network, no home path, host name or address in any file written.
@@ -277,6 +279,65 @@ rc=$?
 for c in c1 c2 c3 c4; do chk "acceptance: $c PASS" grep -q "^$c PASS " "$W/acc.out"; done
 chk "acceptance: exit 0" [ $rc = 0 ]
 [ $rc = 0 ] || { show "$W/acc.out" 12; show "$W/acc.err" 6; }
+
+# ---- 6. report ---------------------------------------------------------------------------------------
+echo '-- 6. report'
+# The report reads records named deqp-gles3-<sha8> whose run directories are img<N>-<sha8> of the table it
+# is given (the 47-row table: row 21 is 21a, 21b). Copy the two records so: session 1's rows from the
+# aborted one on are shifted by one, its aborted run is row 21a and is superseded by the rerun's.
+for t in a b; do mkdir -p "$W/rep/$t/deqp-gles3-$S8"; done
+RA=$W/rep/a/deqp-gles3-$S8
+RB=$W/rep/b/deqp-gles3-$S8
+for d in "$REC"/*-g[0-9][0-9]-*; do
+    b=${d##*/}; k=${b#*-*-g}; k=$((10#${k%%-*}))
+    [ "$k" -le $((ABORT + 1)) ] || k=$((k + 1))
+    cp -r "$d" "$RA/${b%%-g*}-img$k-$S8"
+    printf 'img%d-%s\timg\t-\tf\n' "$k" "$S8" >> "$RA/tree.txt"
+done
+for t in a:22 b:23; do
+    d=$(ls -d "$REC2"/*-g22${t%%:*}-*)
+    b=${d##*/}
+    cp -r "$d" "$RB/${b%%-g*}-img${t##*:}-$S8"
+    printf 'img%d-%s\timg\t-\tf\n' "${t##*:}" "$S8" >> "$RB/tree.txt"
+done
+# the tally reads "deqp: <Status> <case>" lines with HH:MM:SS prefixes, as the board's console has them (the
+# fixtures' dEQP-native lines are not that form): rewrite each copy's console from the splice's own rules
+python3 -I - "$W/cases.lst" "$ABORT" "$RA" "$RB" "$S8" <<'PY'
+import glob, re, sys
+lst, ab, ra, rb, s8 = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+by = {}
+for l in open(lst):
+    r, c = l.rstrip('\n').split('\t')
+    by.setdefault(int(r), []).append(c)
+def status(r):
+    return 'Fail' if r % 7 == 3 else 'NotSupported' if r % 11 == 5 else 'Pass'
+def write(d, res):
+    with open(d + '/console.txt', 'w') as f:
+        for c, s in res:
+            f.write('09:00:00 deqp: %s %s\n' % (s, c))
+        f.write('09:00:00 deqp: summary: %d cases begun, %d with a result, 0 without\n' % (len(res), len(res)))
+for d in glob.glob(ra + '/*-img*-' + s8):
+    k = int(re.search(r'-img(\d+)-', d).group(1))   # 1-based row of the 47-row table
+    r = k - 1 if k - 1 < ab else k - 2               # 0-based row of the 46-row session
+    if r == ab:
+        open(d + '/console.txt', 'w').write('09:00:00 deqp: fatal: aborted\n')   # the abort, no result
+    else:
+        write(d, [(c, status(r)) for c in by[r]])
+ab3 = by[ab]
+for d in glob.glob(rb + '/*-img*-' + s8):
+    k = int(re.search(r'-img(\d+)-', d).group(1))
+    write(d, [(ab3[0], 'Pass'), (ab3[1], 'Fail')] if k == ab + 1 else [(ab3[2], 'NotSupported')])
+PY
+python3 -I "$HERE/am62p-gles3-report.py" --table "$W/tree47.txt" --mustpass "$W/must.txt" --note-section 22-38 "$RA" "$RB" \
+    > "$W/report.raw" 2> "$W/report.err"
+rc=$?
+chk "report: exit 0" [ $rc = 0 ]
+[ $rc = 0 ] || show "$W/report.err" 6
+sed "s/$S8/@SHA8@/g" "$W/report.raw" > "$W/report.out"
+[ "${1:-}" = -v ] && cat "$W/report.out"
+chk "report: matches testdata/am62p-gles3-e2e/report-expected.md" cmp -s "$W/report.out" "$FX/report-expected.md"
+cmp -s "$W/report.out" "$FX/report-expected.md" || diff "$W/report.out" "$FX/report-expected.md" | head -20
+chk "report: the #1285 section says rows 22-38 ended done with resets 0" has "$W/report.out" "Every one of the 17 rows ended verdict=done with resets 0."
 
 echo "am62p-gles3-e2e self-test: $pass ok, $fail failed"
 [ "$fail" = 0 ]
