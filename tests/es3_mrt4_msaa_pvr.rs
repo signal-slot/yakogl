@@ -8,8 +8,13 @@
 //! Two things meet here that are each only half built today: four draw targets
 //! (`backend::HOST_DRAW_TARGETS` stands in for the knob; the GL core handles
 //! any count) and 4x renderbuffers (docs/notes/es3-msaa-renderbuffers.md: the
-//! GL core refuses a 2 or 4 sample renderbuffer, one sample is plain storage,
-//! and `GlesDraw::samples` is 1 for an FBO draw). The GL core is driven
+//! GL core refuses a 2 or 4 sample renderbuffer on a back end whose
+//! `max_samples` is 0, as this file's stand-in is; one sample is plain
+//! storage, and `GlesDraw::samples` is 1 for an FBO draw). The real PowerVR
+//! keeps 4x framebuffer objects under the `msaa-fbo` feature (`max_samples`
+//! 4; tests/pvr_msaa_rb.rs, tests/es3_msaa_pvr.rs), but only of one colour
+//! attachment: a 4x draw into several is refused by name, so nothing here
+//! depends on `msaa-fbo` and the 4x four-target tests stay ignored. The GL core is driven
 //! through the API into a stand-in back end that records what it is handed
 //! (targets, samples) and fills no pixels, so the pixel expectations of the
 //! resolve are `#[ignore]`d; the PowerVR's own draw needs the board's job
@@ -414,7 +419,7 @@ fn four_targets_and_one_sample_today() {
     let _g = context();
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), 4);
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), 4);
-    assert_eq!(geti(GL_MAX_SAMPLES), 1, "src/gl/msaa.rs:29 backend_max_samples() is 0");
+    assert_eq!(geti(GL_MAX_SAMPLES), 1, "the stand-in's max_samples is 0 (src/gl/msaa.rs backend_max_samples)");
 }
 
 /// A 4 sample RGBA8 renderbuffer is refused at storage, so no 4x framebuffer
@@ -589,7 +594,7 @@ fn the_render_layer_tables_reach_four() {
 
 /// 4 once the GL core reads the back end's capability.
 #[test]
-#[ignore = "GL core gl-msaa-cap, src/gl/msaa.rs:29: backend_max_samples() is the constant 0, so GL_MAX_SAMPLES is 1 until the PowerVR sets max_samples 4 (pvr-msaa-fbo)"]
+#[ignore = "the stand-in's max_samples is 0 (GL_MAX_SAMPLES 1); the real PowerVR's 4 under msaa-fbo is pinned by tests/pvr_msaa_rb.rs and tests/es3_msaa_pvr.rs, but it refuses a 4x frame of several colour attachments (src/pvr/backend.rs, not built), so this file's 4x four-target class has no back end yet"]
 fn max_samples_is_four() {
     let _g = context();
     assert_eq!(geti(GL_MAX_SAMPLES), 4);
@@ -611,7 +616,7 @@ fn the_render_layer_has_four_render_targets() {
 /// Storage, completeness and the draw of a 4x framebuffer with four RGBA8
 /// attachments: four targets, `samples` 4.
 #[test]
-#[ignore = "GL core gl-msaa-cap, src/gl/msaa.rs:53: glRenderbufferStorageMultisample(4) is GL_INVALID_OPERATION and an FBO draw has samples 1; PowerVR pvr-msaa-fbo (docs/notes/es3-msaa-renderbuffers.md (c1)) must then draw four targets at 4x (src/pvr/backend.rs:5721 frame_samples)"]
+#[ignore = "the stand-in's max_samples is 0, so glRenderbufferStorageMultisample(4) is GL_INVALID_OPERATION; the real PowerVR (max_samples 4 under msaa-fbo) refuses a draw into several 4x colour attachments by name (tests/pvr_msaa_rb.rs two_colour_attachments_at_four_samples_are_refused): four targets at 4x need a sample store per render target (docs/notes/es3-msaa-renderbuffers.md (c1)), not built"]
 fn a_four_output_4x_draw_has_four_targets_and_samples_four() {
     let _g = context();
     let fbo = framebuffer4(4).expect("4 samples are legal storage");
@@ -628,7 +633,7 @@ fn a_four_output_4x_draw_has_four_targets_and_samples_four() {
 /// glClear of four 4x attachments reaches the back end as a four-target clear
 /// at 4 samples.
 #[test]
-#[ignore = "GL core gl-msaa-cap, src/gl/msaa.rs:53 (no 4x storage) and PowerVR pvr-msaa-fbo: no 4x four-target frame to clear"]
+#[ignore = "the stand-in's max_samples is 0 (no 4x storage); the real PowerVR under msaa-fbo builds no 4x frame of several colour attachments (src/pvr/backend.rs, not built)"]
 fn a_clear_of_four_4x_attachments_has_four_targets_and_samples_four() {
     let _g = context();
     let _fbo = framebuffer4(4).expect("4 samples are legal storage");
@@ -643,7 +648,7 @@ fn a_clear_of_four_4x_attachments_has_four_targets_and_samples_four() {
 /// covered edge, resolves by `glBlitFramebuffer`: the interior exact, the
 /// edge pixel half of every channel (two of four samples), the rest clear.
 #[test]
-#[ignore = "GL core gl-msaa-resolve (the blit, src/gl/msaa.rs:53 no 4x storage) and PowerVR pvr-msaa-fbo (PBE downscale store per render target): no 4x four-target frame; the stand-in fills no pixels, run it against the PowerVR's own host path"]
+#[ignore = "PowerVR: a PBE downscale store and a sample store per render target, not built (the real back end refuses several 4x colour attachments even under msaa-fbo); the stand-in has max_samples 0 and fills no pixels, so run it against the PowerVR's own host path once that is built"]
 fn each_attachment_resolves_by_blit() {
     let _g = context();
     let fbo = framebuffer4(4).expect("4 samples are legal storage");

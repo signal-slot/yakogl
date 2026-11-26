@@ -43,7 +43,12 @@
 //! HOST-ONLY: the GPU is a stand-in that paints memory; no board was used.
 //! The rig is the one of tests/pvr_msaa_rb.rs.
 //!
+//! The multisampled cases need the PowerVR's 4x framebuffer objects, which it
+//! keeps only with the `msaa-fbo` feature (`max_samples` 4; 0 without, and a
+//! pin of that runs instead):
+//!
 //! ```text
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test es3_msaa_ds_resolve
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_ds_resolve
 //! ```
 //!
@@ -838,6 +843,7 @@ fn msaa_and_fresh_resolve(ds_format: GLenum, samples: i32) -> (GLuint, GLuint, V
 
 /// The colour-only resolve of the same sequence is fine: the 4x source is not
 /// the cause.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn colour_resolve_into_a_fresh_framebuffer_is_accepted() {
     let _g = rig();
@@ -858,6 +864,7 @@ fn colour_resolve_into_a_fresh_framebuffer_is_accepted() {
 /// Pins today's answer: the resolve blit of depth/stencil into a destination
 /// no frame has drawn into is GL_INVALID_OPERATION, for the two sample counts
 /// for each plane and both counts. (blit.rs says the cause once per process in the log, so the line is not asserted per iteration.)
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn depth_stencil_resolve_into_an_undrawn_destination_is_refused_today() {
     for (samples, mask) in [
@@ -880,6 +887,7 @@ fn depth_stencil_resolve_into_an_undrawn_destination_is_refused_today() {
 }
 
 /// ES 3.0 4.3.3: the same blit is legal. Fails today (see the header).
+#[cfg(feature = "msaa-fbo")]
 #[test]
 #[ignore = "msaa-ds-resolve: needs a back-end ZS buffer for an undrawn destination (src/gl/blit.rs, #313)"]
 fn depth_stencil_resolve_into_an_undrawn_destination_is_accepted() {
@@ -904,4 +912,50 @@ fn depth_stencil_resolve_into_an_undrawn_destination_is_accepted() {
     }
     assert_eq!(err(), GL_NO_ERROR, "{:?}", logs());
     release(&[ms_fb, one_fb], &rbs);
+}
+
+/// Without `msaa-fbo` the PowerVR's `max_samples` is 0: GL_MAX_SAMPLES is 1,
+/// 2 and 4 samples of every format of the group are GL_INVALID_OPERATION (so
+/// dEQP reports `fbo.msaa.{2,4}_samples.*` NotSupported), and the colour
+/// resolve of a one-sample framebuffer into a fresh one is accepted.
+#[cfg(not(feature = "msaa-fbo"))]
+#[test]
+fn without_msaa_fbo_there_is_no_multisampled_storage() {
+    let _g = rig();
+    assert_eq!(geti(GL_MAX_SAMPLES), 1);
+    for f in [
+        GL_RGBA8,
+        GL_DEPTH_COMPONENT16,
+        GL_DEPTH_COMPONENT24,
+        GL_DEPTH_COMPONENT32F,
+        GL_DEPTH24_STENCIL8,
+        GL_DEPTH32F_STENCIL8,
+        GL_STENCIL_INDEX8,
+    ] {
+        for samples in [2, 4] {
+            let mut rb = 0;
+            // SAFETY: room for one name; plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, f, W, H);
+                assert_eq!(glGetError(), GL_INVALID_OPERATION, "{samples} samples of {f:#x}");
+                glDeleteRenderbuffers(1, &rb);
+            }
+        }
+    }
+    let (one_s, one_c) = (renderbuffer(GL_RGBA8, 1), renderbuffer(GL_RGBA8, 0));
+    assert_eq!(rb_samples(one_s), 1);
+    let s_fb = framebuffer(&[one_s], None);
+    clear_and_draw();
+    let one_fb = framebuffer(&[one_c], None);
+    // SAFETY: plain GL calls.
+    unsafe {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, s_fb);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, one_fb);
+        glBlitFramebuffer(0, 0, W, H, 0, 0, W, H, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "{:?}", logs());
+    assert!(four_sample_kicks().is_empty(), "no 4x kick without msaa-fbo");
+    release(&[s_fb, one_fb], &[one_s, one_c]);
 }

@@ -11,16 +11,19 @@
 //!   written), and the rule once it is submitted;
 //! * -ENOTSUP for a stencil kept apart (`split_zs_on`), the depth buffer
 //!   beside it still converting by the rule;
-//! * the multisampled layout: a request of 2 or 3 samples is stored as 4x
-//!   (`msaa::stored_samples`), and its depth and stencil are sample 0 (the
-//!   word at (2x, 2y) of rows twice the ZLS-tile-aligned width), bit for bit
-//!   against `ds_retention::unorm24_depth` and `word >> 24`.
+//! * the multisampled layout, with `msaa-fbo`: a request of 2 or 3 samples is
+//!   stored as 4x (`msaa::stored_samples`), and its depth and stencil are
+//!   sample 0 (the word at (2x, 2y) of rows twice the ZLS-tile-aligned
+//!   width), bit for bit against `ds_retention::unorm24_depth` and
+//!   `word >> 24`; without it (the PowerVR's `max_samples` 0), 2 to 4 samples
+//!   are GL_INVALID_OPERATION and 1 sample resolves by the one-sample rule.
 //!
 //! Not reachable from tests/, left to src/pvr/backend_tests.rs:
-//! * the 2x layout (pixel (x, y) reads word (x, 2y); row = ceil(w / ZLS_TILE)
-//!   * ZLS_TILE words): the GL core stores 4 samples for every request of
-//!   1..=4 on this back end (`max_samples` 4), so no draw names a 2x buffer;
-//!   build a `DsBuf` with `samples` 2 in the unit test;
+//! * the 2x layout (pixel (x, y) reads word (x, 2y); a row is
+//!   ceil(w / ZLS_TILE) times ZLS_TILE words): the GL core stores 4 samples
+//!   for every request of 1..=4 on this back end with `msaa-fbo`
+//!   (`max_samples` 4; 1 sample without it, `max_samples` 0), so no draw
+//!   names a 2x buffer; build a `DsBuf` with `samples` 2 in the unit test;
 //! * -EINVAL from `ds_sample0` (`ds_bytes(w, h, samples)` > `mem.size`): every
 //!   buffer the back end allocates is `ds_bytes` long; shrink `mem.size` of a
 //!   live slot in the unit test;
@@ -42,7 +45,8 @@
 //!
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-powervr,shaderc-online --test depth_resolve_pvr_edges` (and
-//! with `,report-es2` for the stencil kept apart).
+//! with `,report-es2` for the stencil kept apart, and with `,msaa-fbo` for
+//! the 4x layout).
 
 /// The packed D24S8 word kick `fence` stores at word `i` of its
 /// depth/stencil buffer: six extremes first (depth 0, all ones, the top bit
@@ -981,6 +985,8 @@ mod backend {
 
     /// A request of 2 or 3 samples is a 4x buffer: sample 0, the word at
     /// (2x, 2y) of rows twice the aligned width, for widths on and off the tile.
+    /// The PowerVR keeps 4x framebuffer objects only with `msaa-fbo`.
+    #[cfg(feature = "msaa-fbo")]
     fn multisample_requests() {
         /* an ES 2.0 report has no multisampled renderbuffers */
         if cfg!(feature = "report-es2") {
@@ -993,6 +999,40 @@ mod backend {
                 check_rule(&t, fence, true);
                 release(t);
             }
+        }
+    }
+
+    /// Without `msaa-fbo` the PowerVR's `max_samples` is 0: GL_MAX_SAMPLES is
+    /// 1, a request of 2 to 4 samples is GL_INVALID_OPERATION and stores
+    /// nothing, and a request of 1 is a one-sample buffer that resolves by the
+    /// one-sample rule (the word at (x, y)).
+    #[cfg(not(feature = "msaa-fbo"))]
+    fn multisample_requests() {
+        /* an ES 2.0 report has no multisampled renderbuffers */
+        if cfg!(feature = "report-es2") {
+            return;
+        }
+        let mut max = -1;
+        // SAFETY: one GLint.
+        unsafe { glGetIntegerv(GL_MAX_SAMPLES, &mut max) };
+        assert_eq!(max, 1);
+        for samples in [2, 3, 4] {
+            let mut rb = 0;
+            // SAFETY: room for one name; plain GL calls.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, 33, 5);
+                assert_eq!(glGetError(), GL_INVALID_OPERATION, "{samples} samples");
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                glDeleteRenderbuffers(1, &rb);
+            }
+        }
+        for (w, h) in [(33, 5), (64, 3), (7, 40)] {
+            let (t, fence) = rendered(Kind::Packed, w, h, 1);
+            assert_eq!(t.samples, 1, "one sample requested: {t:?}");
+            check_rule(&t, fence, true);
+            release(t);
         }
     }
 
