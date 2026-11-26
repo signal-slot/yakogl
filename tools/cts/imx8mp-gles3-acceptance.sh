@@ -11,7 +11,8 @@
 # <repo root>  the repository whose record is checked (default: the one that
 #              holds this script); the checkers are run from its tools/cts.
 # --date       the campaign day for c3 (default: the date in the name of the
-#              tools/cts/log/*-imx8mp-gles3-*-rows01-13 directory).
+#              tools/cts/log/*-imx8mp-gles3-*-rows01-13 directory, else the
+#              date of the 'Run YYYY-MM-DD, ...' line of its README.md).
 #
 #   c1  imx8mp-gles3-merge.py --check over the slice directories
 #       tools/cts/log/*-imx8mp-gles3-*-rows* exits 0 and prints
@@ -135,10 +136,19 @@ if [ -z "$DATE" ]; then
 		esac
 	done
 fi
+# a YYYY-MM directory name: the run window line of its README.md, "Run
+# YYYY-MM-DD, hh:mm-hh:mm UTC", in the board's clock
+if [ -z "$DATE" ]; then
+	for d in "${r01[@]}"; do
+		[ -f "$d/README.md" ] || continue
+		DATE=$(grep -m1 -oE '^Run [0-9]{4}-[0-9]{2}-[0-9]{2}' "$d/README.md" | cut -c5-14)
+		[ -n "$DATE" ] && break
+	done
+fi
 if [ ${#dirs[@]} -eq 0 ]; then
 	res 3 FAIL "no slice directories to report"
 elif [ -z "$DATE" ]; then
-	res 3 FAIL "no campaign day: pass --date or name the rows01-13 directory <YYYY-MM-DD>-imx8mp-gles3-..."
+	res 3 FAIL "no campaign day: pass --date, name the rows01-13 directory <YYYY-MM-DD>-imx8mp-gles3-... or give its README.md a 'Run <YYYY-MM-DD>, ...' line"
 else
 	out=$(tool imx8mp-gles3-report.py --date "$DATE" "${dirs[@]}" 2>&1)
 	rc=$?
