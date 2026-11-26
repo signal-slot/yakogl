@@ -418,3 +418,25 @@ r1, 0x40000000.h11, r0.h00` and `FMA.v2f16 r2, u3.w1, r0.h00`, each with
 its `FROUND`/`FADD`), then the same compare and `MUX`. The values are the
 same; the pairing of the arms on `select_highp`'s route and the constants'
 moves are the open work (mali-fragcoord-fp16.md section 5).
+
+## `sqrt` in the island (plan #367 lower-nonfinite-const, step mploop)
+
+glmark2's function fs `849c` (scene 29, fragment-complexity=medium) runs
+`fract(sqrt(t * t))` five times on the narrowed value after the highp head
+`fract(FragCoord.x * FragCoord.y * 0.0001)`. `alu16` took `+`, `*`,
+`floor`, `fract` and the negation of one lane of that fp16 arithmetic, but
+not `sqrt`, so the shader was refused at FRAGCOORD_FP16. Mesa's program
+(gm2_mploop_3, one step of it) is `lower_fsqrt`'s `frcp(frsq(a))` at fp16:
+
+```
+FMA.v2f16 r0, r0^.h00, r0^.h00, 0x0.neg      t * t
+FRSQ.f16 r0, r0^.h00
+FRCP.f16 r0, r0^.h00
+FROUND.v2f16.rtn r1, r0.h00                  fract
+```
+
+`alu16` now takes `sqrt` and `inversesqrt` of one lane: an `Frsq` node of
+one lane, and for `sqrt` an `Frcp` node of it. gm2_mploop_2 (849c's five
+calls) and gm2_mploop_3 are byte-equal (`tests/mali_mploop.rs`), and so is
+gm2_intloop_func_fs, which stopped at the same refusal. glmark2: `849c`
+compiles, so scene 29 is compile-clean.

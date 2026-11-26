@@ -1,5 +1,5 @@
 # synthetic host verdicts for glmark2-mali-tally-selftest.sh (not a real corpus; the
-# format of tests/fixtures/mali_glmark2_verdicts.txt: <n> <scene> <vs|fs> <hash>: ok|<refusal>)
+# fixture format of tests/mali_glmark2_corpus.rs: <n> <scene> <vs|fs> <hash>: ok|<refusal>)
 # a subset of the scenes: 8 predicted clean, ideas, conditionals 5/0 and loop
 # fragment-loop=false refused; every other scene has no line (no prediction)
 0 build:use-vbo=false fs 4748: ok
