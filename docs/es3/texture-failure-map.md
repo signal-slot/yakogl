@@ -156,6 +156,111 @@ host. The note that colour formats of texstorage2d (rgba8, r8, rgb565, r32f,
 rgba16f) fail the same way means these 20 are **not** part of the "ES 3.0
 sized formats refused" cause.
 
+### 2.2.1 The seven causes of the 467 AM62P `specification` fails
+
+The 467 `texture.specification` lines of `am62p-gles3-notpass.tsv` are all
+`Fail`: 323 "Compile failed at sglrGLContext.cpp:863" and 144 "Image
+comparison failed", measured at `ad2b5ed` (tree row 40). They fall into seven
+causes that sum to 467 (a host reading of the cases, not a board
+measurement of each).
+
+| cause | cases | message | what it is | expected |
+|---|---:|---|---|---|
+| K1 | 200 | Compile failed | The 25 integer `*_cube` formats (incl. `rgb10_a2ui`) of `basic_teximage2d`, `basic_texsubimage2d`, `teximage2d_pbo`, `texsubimage2d_pbo`, plus the integer `*_2d_array` and `*_3d` of `teximage3d_pbo` and `texsubimage3d_pbo`. The compiler refused integer cube, 3D and 2D-array samplers. | Pass |
+| K1b | 4 | Compile failed | `random_teximage2d.cube_0/1/3/7`, same cause (power-of-two sides). | Pass |
+| K2 | 14 | Image comparison failed | Single-level or power-of-two `rgba32f` cases (2D, cube, 3D, 2D array, PBO paths, three `*_unpack_params.rgba32f_complex`, `texstorage2d.format.rgba32f_2d`). RGBA32F was stored as halves: values above 65504 became infinity, while dEQP fills up to +-1e5. Five more `rgba32f` cases sit under K3-K5 and need both fixes. | Pass at the tip |
+| K3 | 56 | Image comparison failed | All 54 `texstorage2d.format.*_cube` (57x57, full chain) plus `texstorage2d.size.cube_57x57_2_levels` and `_6_levels`. A NPOT cube keeps only its base level. | Pass with the src/gl fix |
+| K4 | 76 | Image comparison failed | `basic_teximage3d.*_2d_array` (49, 57x44x5), `texstorage3d.format.*_2d_array` (21), `texstorage3d.size.2d_array_57x63x5_2_levels`, `texsubimage3d_depth.*` (5). Same rule for NPOT 2D arrays. | Pass with a src/gl change |
+| K5 | 116 | Image comparison failed | `basic_teximage3d.*_3d` (20), `basic_texsubimage3d.*_3d` (49), `texstorage3d.format.*_3d` (42), `texstorage3d.size.3d_*` (5). A mipmapped 3D texture samples level 0 of its slice grid. | Pass with native 3D on |
+| K6 | 1 | Image comparison failed | `texstorage3d.size.2d_array_64x32x3_7_levels`. On the stacked arm the smallest levels are under one row per layer and cannot be addressed. | Pass with native array on |
+
+200 + 4 + 14 + 56 + 76 + 116 + 1 = 467. Open count: the causes give 204
+compile refusals (K1 + K1b) and 263 image comparisons (K2-K6), while the
+TSV's message split is 323 "Compile failed" and 144 "Image comparison failed".
+The two splits differ by 119 cases and the cause list does not say which; the
+per-cause counts above are the plan's, the TSV's split is the measured one,
+and they are not reconciled here.
+
+**K1, K1b (Compile failed).** `src/shaderc/online/powervr/select.rs` now takes
+the sampler's return type, so integer cube, 3D and 2D-array samplers select;
+the remaining catch-all is the `ir::Op::Tex { .. }` arm at `:1985`
+(projective cube or array, offset on a cube). Fixed before `31cdaefc`, pinned
+by `tests/pvr_sglr_shaders.rs` (`eef6e35c`) and `tests/es3_pvr_2darray.rs`
+(and `tests/es3_pvr_*` integer pins).
+
+**K2.** RGBA32F stored as halves. Fixed by `ecd9743e`:
+`rgba32f_own_class` (`src/gl/texture.rs:6581`) includes `gpu-powervr`, so the
+texture is stored as the `TEXF_RGBA32F` surface (`src/pvr/backend.rs:1287`,
+selected at `:1318`). The fix is on the tip, **not** in the `31cdaefc` board
+build (`ecd9743e` is not an ancestor of `31cdaefc`; checked).
+
+**K3.** `npot_mip_chains` is false for stacked faces
+(`src/gl/texture.rs:1308-1310`), so an upload to level >= 1 of a NPOT cube
+records the level as present and drops its texels (`:3065`, the
+`npot_level && t.chain_levels == 1` return), and `src/gl/native_cube.rs`
+copies only the held levels (`chain_levels`, `:245-255`). The src/gl fix is
+`2d215408` "pvr: a NPOT cube map holds its mip chain, packed, for the native
+cube's copy", on an unmerged branch (third attempt; not an ancestor of the
+tip), with host test `tests/pvr_npot_cube.rs` (on that branch; not in this
+tree). Its message notes that the online compile cache key
+(`switches_now`, `src/shaderc/online/backend.rs:287`, which holds only
+`pvr_native_3d` and `pvr_native_array`) leaves out `pvr_native_cube`.
+
+**K4.** The same rule for NPOT 2D arrays: only a decoded ETC2 array gets a
+packed chain (`stacked_decoded_array`, `src/gl/texture.rs:1318`); other NPOT
+arrays take the early return at `:5927` (the `npot_level &&
+t.chain_levels == 1` block). Proposed src/gl design: widen
+`stacked_decoded_array` to `(t.decoded_from != 0 || native array bound)`, drop
+the early returns for such textures, and add a draw rule in `src/gl/draw.rs`
+clamping a stacked-array program to level 0. It needs
+`PVR_NATIVE_ARRAY_DEFAULT` (`src/shaderc/mod.rs:311`, now 0) on, or a rule
+that such textures always take the copy. Proposed host test:
+`tests/pvr_npot_array_chain.rs` (does not exist yet).
+
+**K5.** A mipmapped 3D texture samples level 0 of its slice grid because
+`PVR_NATIVE_3D_DEFAULT = 0` (`src/shaderc/mod.rs:339`). The fix is the flip to
+1, already supported by `e179ad48` and `e90122b8`; the decision is the
+native-3D board A/B. Host tests: `tests/es3_pvr_3d_lod.rs`,
+`tests/pvr_native3d_sampler_words.rs`, `tests/es3_pvr_3d.rs`. Three of its
+cases are `rgba32f` and pass only on a build with `ecd9743e`.
+
+**K6.** On the stacked arm the smallest levels are under one row per layer
+and cannot be addressed (`src/gl/texture.rs:1890-1895`, the "never fewer
+rows than the level holds" comment; `array_uv` in
+`src/shaderc/online/powervr/select.rs:4210`). The fix is
+`PVR_NATIVE_ARRAY_DEFAULT = 1` or the K4 draw rule.
+
+**Expected outcome per cause.**
+
+| build / arm | K1 + K1b | K2 | K3 | K4 | K5 | K6 |
+|---|---|---|---|---|---|---|
+| `31cdaefc`, default arm | Pass | Fail | Fail | Fail | Fail | Fail |
+| the tip, default arm | Pass | Pass | Fail | Fail | Fail | Fail |
+| tip, native 3D on | Pass | Pass | Fail | Fail | Pass | Fail |
+| tip, native array on | Pass | Pass | Fail | Fail (needs the K4 change) | Fail | Pass |
+
+At `31cdaefc` on the default arm that is 204 Pass and 263 Image comparison
+failed (K2 still fails there). The K2 cases under K3-K5 need both the K2 fix
+and the cause's own fix.
+
+No cause can be fixed in `src/pvr` or `src/shaderc/online/powervr` alone:
+K3 and K4 are src/gl changes, K5 and K6 are shared switch defaults in
+`src/shaderc/mod.rs`.
+
+**Corrections to the cited lines (checked against the tree at this commit).**
+The catch-all of `select.rs` is now the `Tex` arm at `:1985` (cited
+`:1977-1979`); `:1977-1979` is a cube PCF arm. The other cited
+`src/gl/texture.rs` lines hold (`:1308-1310`, `~3065`, `~5927`, `~1318`,
+`:6581`; K6's comment is at `:1890-1895`); `switches_now` is at
+`backend.rs:287`; `PVR_NATIVE_ARRAY_DEFAULT` is at `:311` and
+`PVR_NATIVE_3D_DEFAULT` at `:339`. `native_array_bound` does not exist in
+the tree (the switch is `native_array_enabled`, `src/shaderc/mod.rs:321`; the
+proposed widening names a predicate to be written). `src/gl/draw.rs` has no
+stacked-array rule yet. `tests/pvr_npot_cube.rs` and
+`tests/pvr_npot_array_chain.rs` are not in this tree. All the commits
+(`eef6e35c`, `ecd9743e`, `e179ad48`, `e90122b8`, `31cdaefc`, `2d215408`)
+exist; `2d215408` is not an ancestor of the tip.
+
 ## 3. Not supported (1,658) is not a failure
 
 1,658 of the group's cases are NotSupported on the AM62P (RES §1r group
