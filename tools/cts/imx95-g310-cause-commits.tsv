@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# dEQP cases the commits between the T6 baseline 8ff01055 and the iMX95 images e63ab28e move (Fail on the T6, Pass on iMX95 S1a).
+# imx95-g310-cause.py --commit-cases reads column 1; columns 2 and 3 are the commit and a note.
+# case	commit	note
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_float	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat2	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat3	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_mat4	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec2	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec3	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.attribute_location.bind_aliasing.max_inactive_vec4	54d5f0a6	compiler: an attribute read only in a never-taken side takes no location (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.rebind_rbo_rgb565_depth_component16_stencil_index8	c4df367f	Mali back end (src/mali/frame.rs)
+dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.rebind_rbo_rgb565_stencil_index8	c4df367f	Mali back end (src/mali/frame.rs)
+dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.rebind_tex2d_rgb_depth_component16_stencil_index8	c4df367f	Mali back end (src/mali/frame.rs)
+dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.rebind_tex2d_rgb_stencil_index8	c4df367f	Mali back end (src/mali/frame.rs)
+dEQP-GLES2.functional.negative_api.shader.get_active_attrib	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.shader.get_active_uniform	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.shader.get_attrib_location	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.shader.get_uniform_location	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.vertex_array.draw_arrays	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.vertex_array.draw_arrays_incomplete_primitive	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.vertex_array.draw_elements	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.negative_api.vertex_array.draw_elements_incomplete_primitive	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.shader_api.compile_link.compile_vertex_shader	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.shader_api.compile_link.link_vertex_fragment	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.integers.current_program_binding_getboolean	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.integers.current_program_binding_getfloat	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.integers.current_program_binding_getinteger	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.shader.delete_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.shader.program_validate_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.state_query.shader.shader_compile_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
