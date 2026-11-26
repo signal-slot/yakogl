@@ -1,0 +1,13 @@
+deqp: case filter 'precision*'
+qpa: #beginTestCaseResult dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.highp_vertex.scalar
+qpa: <TestCaseResult CasePath="dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.highp_vertex.scalar" Version="0.3.4" CaseType="Performance">
+qpa:  <Message MessageType="InfoMessage"><Text>QualityWarning sample:
+qpa: 	in0 = 0x1.000000p-130
+qpa: 	out0 = 0.0
+qpa: 	Expected range: [0x1.000000p0, 0x1.000000p0]
+qpa: </Text></Message>
+qpa:  <Result StatusCode="QualityWarning">Low-quality shader prec
+qpa+ ision</Result>
+qpa: </TestCaseResult>
+qpa: #endTestCaseResult
+deqp: QualityWarning dEQP-GLES3.functional.shaders.builtin_functions.precision.sign.highp_vertex.scalar

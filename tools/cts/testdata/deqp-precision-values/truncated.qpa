@@ -1,0 +1,25 @@
+#sessionInfo releaseName vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c
+#sessionInfo logFormatVersion "0.3.4"
+
+#beginSession
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.builtin_functions.precision.tanh.highp_fragment.scalar
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.builtin_functions.precision.tanh.highp_fragment.scalar" Version="0.3.4" CaseType="Performance">
+ <Message MessageType="InfoMessage"><Text>QualityWarning sample:
+	in0 = 0x1.000000p-130
+	out0 = 0.0
+	Expected range: [0x1.000000p-130, 0x1.000000p-130]
+</Text></Message>
+ <Result StatusCode="QualityWarning">Low-quality shader precision</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat2
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult CasePath="dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat2" Version="0.3.4" CaseType="Performance">
+ <Message MessageType="InfoMessage"><Text>Fail sample:
+	in0 = mat2(vec2(0x1.000000p0, 0x1.000000p1), vec2(0x1.800000p1, 0x1.000000p2))
+	out0 = mat2(vec2(0x1.000000p0, +inf), vec2(0x1.200000p3, 0x1.000000p3))
+	Expected range: ((
