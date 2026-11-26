@@ -125,6 +125,18 @@
 #    console the console decides and the ring is kept as ramlog.txt; a ring
 #    save left behind makes the next run refuse and disarm remove it; a TERM
 #    while armed writes the pre-arm environment (preboot included) back.
+# 12. The P10 gaps G3, G6, G7 and restore (runner-p10-gaps): the image's
+#    yk-record lines (consoles in tools/testdata/mp2-env-yk-record/) give
+#    result=record:<KIND> and resets=, record= after back_after; a fail or
+#    FAULT record is failed, an invalid one bad_record, garbled lines no
+#    record (the line as before); the NEEDS A PERSON line after not_back
+#    names the power-cycle through the farm's reset resource and says not to
+#    run again (tally and live); the G7 comment at the card lookup; restore
+#    prints the undo lines with the card's u-boot-env resolved now (the
+#    renumbered card's mmcblk2p7, never the stale mmcblk0p7), runs no dd and
+#    writes nothing, and refuses (rc 3, no undo line) when /boot resolves to
+#    the eMMC; its code path has dd only inside echo.
+#    yakogl-tools decodes the records: YAKOGL_TOOLS, else built here once.
 # Prints "board_stm32mp2_selftest: N checks, F failed"; exit 0 only when F is
 # 0 and N is the pinned count. About 90 s (the live runs poll every 5 s; the
 # watchdog case waits 12 s, and longer on a host too slow to reach the fake
@@ -134,7 +146,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=238
+WANT_CHECKS=255
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -168,6 +180,14 @@ unset BOARD_HOST BOARD_UART MP2_NO_CONSOLE MP2_NO_WATCHDOG MP2_SUDO MP2_ENV_OFFS
     MP2_BACKUP_DIR RUN_BOUND RETURN_BOUND BOARD_END_RE LOCK BOARD_LOCK LOCK_WAIT HOLD_MAX
 
 echo "board_stm32mp2_selftest: build $(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown)"
+# the record decoder the runner calls for a yk-record line (as tools/board_selftest.sh builds it)
+if [ -z "${YAKOGL_TOOLS:-}" ]; then
+    (cd "$REPO" && cargo build -q -p yakogl-tools) || { echo "board_stm32mp2_selftest: cannot build yakogl-tools"; exit 1; }
+    YAKOGL_TOOLS=$(cd "$REPO" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')/debug/yakogl-tools
+fi
+[ -x "$YAKOGL_TOOLS" ] || { echo "board_stm32mp2_selftest: no $YAKOGL_TOOLS"; exit 1; }
+export YAKOGL_TOOLS
+YKR=$REPO/tools/testdata/mp2-env-yk-record
 
 # ---- fake images: the AArch64 Image header, image_size, a marker ------------
 mkimg() { # mkimg FILE FOOTPRINT MARKER [NOHEADER]
@@ -409,6 +429,21 @@ check "the selftest verb runs this script" grep -q '^selftest) exec bash "$HERE/
 out=$("$B" 2>&1)
 check "no arguments: rc 2" [ $? = 2 ]
 check "the refusals touched no stub and wrote nothing" eval '[ ! -e "$S/logs" ] && untouched'
+
+# G7: the comment at the card lookup; restore's code path (P10 gaps)
+check "P10 G7: the card lookup (where_env) carries the comment that mmcblkN names move across a one-shot reboot, so devices are found by label, never by a fixed name" \
+    eval 'c=$(awk "/^where_env\(\) \{/ { exit } { print }" "$B" | tail -8); grep -q "P10 gap G7: mmcblkN names move across a one-shot reboot" <<<"$c" && grep -q "mmcblk0 before it and mmcblk2 after it" <<<"$c" && grep -q "never found by a fixed name" <<<"$c" && grep -q "PARTLABEL" <<<"$c"'
+rs=$(sed -n "/^cmd_restore() {/,/^}/p" "$B")
+check "restore: its code path runs no dd and writes nothing: every line naming dd is an echo, no b/fgw/mp2_ssh/env_write/env_push/rm/cp/redirect to the board" \
+    eval '[ -n "$rs" ] && ! grep -E "(^|[^a-z_])dd " <<<"$rs" | grep -vqE "^ *echo " && ! grep -qE "(^|[^a-z_])(b|fgw|mp2_ssh|b_ssh|env_write|env_push|env_restore|take_lock|meta) " <<<"$rs" &&
+          ! grep -E "(^| )(rm|cp|mv|tee|dd) " <<<"$rs" | grep -vqE "^ *echo "'
+out=$(BOARD_HOST=$FAKE_HOST dry restore "$S/no-such-image.bin" 2>&1)
+rc=$?
+check "restore: an image that is not there: rc 2, no undo line, no stub" eval '[ "$rc" = 2 ] && grep -q "restore: no image" <<<"$out" && ! grep -q "dd of=" <<<"$out" && untouched'
+head -c 4096 /dev/zero > "$S/restore-short.bin"
+out=$(BOARD_HOST=$FAKE_HOST dry restore "$S/restore-short.bin" 2>&1)
+rc=$?
+check "restore: an image shorter than the copies' end: rc 2, no undo line" eval '[ "$rc" = 2 ] && grep -q "shorter than the environment.s end" <<<"$out" && ! grep -q "dd of=" <<<"$out" && untouched'
 
 # the device guard alone (dev_guard, its constants and die, extracted by
 # name as section 5 does), on the DK's layout as dk-linux-baseline read it
@@ -757,6 +792,9 @@ out=$("$B" tally "$d" 2>&1)
 rc=$?
 check "the board did not come back: rc 5, not_back, back_after absent, even with a PASS" \
     eval '[ "$rc" = 5 ] && grep -q " rc=5 verdict=not_back boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=absent$" <<<"$out"'
+check "P10 G6: after not_back the NEEDS A PERSON line names the reset step (power-cycle through the farm's reset resource), says not to run again, then status and disarm" \
+    eval 'l=$(grep "NEEDS A PERSON" <<<"$out"); [ "$(grep -c . <<<"$l")" = 1 ] && grep -q "power-cycle the board through the farm.s reset resource (resource:stm32mp257f-dk-reset)" <<<"$l" &&
+          grep -q "never retries: do not run it again" <<<"$l" && grep -q "then .tools/board-stm32mp2.sh status. and .disarm." <<<"$l" && ! grep -q "Nothing resets it from outside" <<<"$l"'
 d="$S/runs/20261108-1209-trial-0123abcd"
 mkrun "$d" name=trial blind=1 back=1 t_reboot=1000 t_back=1060
 out=$("$B" tally "$d" 2>&1)
@@ -823,6 +861,41 @@ out=$("$B" tally "$d" 2>&1)
 rc=$?
 check "a run that hits the lifetime: rc 8, verdict=lifetime, elapsed seconds" \
     eval '[ "$rc" = 8 ] && grep -q " rc=8 verdict=lifetime boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=70s lifetime_after=100s$" <<<"$out"'
+# G3: the image's yk-record lines (tools/testdata/mp2-env-yk-record/README.md)
+ykr() { # ykr FIXTURE: tally of a run that came back with that console
+    local dd="$S/runs/20261110-1200-ykr$1-0123abcd"
+    mkrun "$dd" name=ykr blind=0 back=1 t_reboot=1000 t_back=1070
+    cp "$YKR/$1.console.txt" "$dd/console.txt"
+    out=$("$B" tally "$dd" 2>&1)
+    rc=$?
+}
+ykr pass
+check "P10 G3: a CASE pass record: rc 0, done, result=record:CASE, resets= and record= its four words after back_after (the line byte for byte)" \
+    eval '[ "$rc" = 0 ] && [ "$out" = "board-stm32mp2.sh stm32mp257f-dk ykr rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=record:CASE back_after=70s resets=absent record=594b0101,00010101,00000001,00000000" ]'
+ykr fail
+check "P10 G3: a CASE record with status fail and no FAIL line: rc 4, failed, result=record:CASE" \
+    eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=record:CASE back_after=70s resets=absent record=594b0102,00010203,ff0000ff,ff00ff00$" <<<"$out"'
+ykr fault
+check "P10 G3: a FAULT record: rc 4, failed, result=record:FAULT" \
+    eval '[ "$rc" = 4 ] && grep -q " verdict=failed .* result=record:FAULT back_after=70s resets=absent record=594b0305,96000045,40001234,00000010$" <<<"$out"'
+ykr invalid
+check "P10 G3: a record whose status is invalid: rc 4, bad_record, never done" \
+    eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=bad_record .* result=record:CASE back_after=70s resets=absent record=594b0103," <<<"$out"'
+ykr garbled
+check "P10 G3: garbled yk-record lines are no record: result=pass:gl_test from the tally, no resets= and no record= on the line" \
+    eval '[ "$rc" = 0 ] && grep -q " rc=0 verdict=done .* result=pass:gl_test back_after=70s$" <<<"$out" && ! grep -q "record=\|resets=\|result=record:" <<<"$out"'
+d="$S/runs/20261110-1210-ykrjudge-0123abcd"
+mkrun "$d" name=ykr blind=1 back=1 t_reboot=1000 t_back=1070
+out=$("$B" judge "$d" "$YKR/pass.console.txt" 2>&1)
+rc=$?
+check "P10 G3: judge of a blind run with a record console: result=record:CASE, resets= and record= before console=external" \
+    eval '[ "$rc" = 0 ] && grep -q " verdict=done boot=uboot-sd row boot_verdict=complete result=record:CASE back_after=70s resets=absent record=594b0101,00010101,00000001,00000000 console=external$" <<<"$out"'
+d="$S/runs/20261110-1211-ykrlost-0123abcd"
+mkrun "$d" name=ykr blind=0 back=1 t_reboot=1000 t_back=1070
+cp "$YKR/pass.console.txt" "$d/console.txt"
+out=$(YAKOGL_TOOLS=$S/no-such-yakogl-tools "$B" tally "$d" 2>&1)
+check "P10 G3: yakogl-tools missing: a WARNING, the record not decoded, the earlier result (pass:gl_test) and no record=" \
+    eval 'grep -q "WARNING: yakogl-tools is not available" <<<"$out" && grep -q " result=pass:gl_test back_after=70s$" <<<"$out"'
 HANG='12:00:03 mp2_hello: hanging on purpose with interrupts locked, the OP-TEE watchdog must reset'
 d="$S/runs/20261108-1212-wdog-0123abcd"
 mkrun "$d" name=wdog blind=0 back=1 t_reboot=1000 t_back=1070 expect_wdog=1
@@ -1109,6 +1182,23 @@ rc=$?
 check "live status (preboot): rc 0, 'install: ok' read from preboot=run yako_hook with bootcmd as ST has it, the env and bootfs devices on the SD card, 'stock boot files: unchanged since install', nothing left" \
     eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -qx "preboot=run yako_hook" <<<"$out" && grep -qx "bootcmd=run bootcmd_stm32mp" <<<"$out" && grep -q "^env partition: /dev/mmcblk0p7 .*bootfs: /dev/mmcblk0p8 (U-Boot part 8, card /dev/mmcblk0)" <<<"$out" &&
           grep -q "stock boot files: unchanged since install" <<<"$out" && grep -q "^left behind: nothing recorded" <<<"$out"'
+
+# restore (print-only): the undo lines with the card's u-boot-env resolved now
+out=$(BOARD_HOST=$FAKE_HOST dry restore "$S/env.bin" 2>&1)
+rc=$?
+check "restore --dry-run: rc 0, no stub, the board asked only findmnt/lsblk/sysfs/test -b (no DRY dd), the undo printed for /dev/mmcblk0p7 (seek 992, 16 KiB)" \
+    eval '[ "$rc" = 0 ] && untouched && ! grep "^DRY board" <<<"$out" | grep -q "dd " && grep -q "^DRY board.*findmnt" <<<"$out" && grep -q "^DRY board\$ test -b /dev/mmcblk0p7" <<<"$out" &&
+          grep -qF "  host\$ tail -c +507905 $S/env.bin | head -c 16384 | ssh <BOARD_HOST> '"'"'dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync'"'"'" <<<"$out" && ! leaks "$out"'
+cp "$PART" "$S/restore-before.bin"
+: > "$F/ssh.log"
+out=$(live restore 2>&1)
+rc=$?
+check "live restore: rc 0, the newest pristine image of install, the card's u-boot-env resolved now (/dev/mmcblk0p7 on /dev/mmcblk0, type SD), the dd and read-back lines printed with it" \
+    eval '[ "$rc" = 0 ] && p=$(ls "$S"/backup/*-u-boot-env.bin | tail -1) && grep -q "restore: the card.s u-boot-env is /dev/mmcblk0p7 now (PARTLABEL u-boot-env on /dev/mmcblk0, the disk /boot is mounted from, device type SD" <<<"$out" &&
+          grep -qF "  the image: $p (sha256 $(sha256sum "$p" | cut -d" " -f1)" <<<"$out" && grep -qF "  host\$ tail -c +507905 $p | head -c 16384 | ssh <BOARD_HOST> '"'"'dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync'"'"'" <<<"$out" &&
+          grep -qF "  host\$ ssh <BOARD_HOST> '"'"'dd if=/dev/mmcblk0p7 bs=64k status=none'"'"' | tail -c +507905 | head -c 16384 | cmp -" <<<"$out" && ! leaks_live "$out"'
+check "live restore: it ran no dd and wrote nothing on the board (the command log has no dd, rm, cp or cat >; the partition byte for byte)" \
+    eval '[ -s "$F/ssh.log" ] && ! grep -qE "(^| |;)(dd|rm|cp|mv|tee) |cat >|systemctl" "$F/ssh.log" && cmp -s "$S/restore-before.bin" "$PART" && ! grep -q "UNDO" <<<"$out"'
 
 : > "$F/ssh.log"
 : > "$F/ssh.opts"
@@ -1405,9 +1495,10 @@ rc=$?
 rd=$(ls -d "$S"/live-logs/*-gone-* 2>/dev/null | head -1)
 check "live run (never answers again): rc 5, verdict not_back, back_after absent" \
     eval '[ "$rc" = 5 ] && grep -qE "^board-stm32mp2.sh stm32mp257f-dk gone rc=5 verdict=not_back boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=absent$" <<<"$out"'
-check "live run (never answers again): the NEEDS A PERSON line after the verdict, naming the wait, no retry and no outside reset" \
+check "live run (never answers again): the NEEDS A PERSON line after the verdict, naming the wait, no retry, and the reset step (P10 G6: a power-cycle through the farm's reset resource)" \
     eval 'v=$(grep -n "verdict=not_back" <<<"$out" | head -1 | cut -d: -f1); p=$(grep -n "NEEDS A PERSON" <<<"$out" | cut -d: -f1);
-          [ -n "$v" ] && [ -n "$p" ] && [ "$p" -gt "$v" ] && grep -q "within 2 s after the reboot" <<<"$out" && grep -q "never retries" <<<"$out" && grep -q "Nothing resets it from outside" <<<"$out"'
+          [ -n "$v" ] && [ -n "$p" ] && [ "$p" -gt "$v" ] && grep -q "within 2 s after the reboot" <<<"$out" && grep -q "never retries: do not run it again" <<<"$out" &&
+          grep -q "power-cycle the board through the farm.s reset resource (resource:stm32mp257f-dk-reset)" <<<"$out"'
 check "live run (never answers again): exactly one reboot, no command after the board went silent, the staged image left on the card" \
     eval '[ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && [ "$(tail -c 2000 "$F/ssh.log" | grep -c "cut -d. -f1 /proc/uptime")" -ge 1 ] &&
           [ -n "$(ls "$F"/boot/yakogl/once-gone-*.bin 2>/dev/null)" ] && grep -q "^back=0" "$rd/meta.txt" && grep -q "^cleanup=not done: Linux not back" "$rd/meta.txt"'
@@ -1435,6 +1526,13 @@ out=$(live install 2>&1)
 rc=$?
 check "live install with /boot on the eMMC (G1): rc 3, 'not SD', no write, the eMMC's u-boot-env byte for byte" \
     eval '[ "$rc" = 3 ] && grep -q "not SD" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && cmp -s "$S/emmc-before.bin" "$F/dev/mmcblk1p5"'
+: > "$F/ssh.log"
+out=$(live restore 2>&1)
+rc=$?
+check "live restore with /boot on the eMMC (mmcblk1, type MMC): rc 3, REFUSED 'not SD' and restore's own refusal, no undo line (no host\$ and no dd of=/dev/mmcblk1p5), no dd sent, the eMMC byte for byte" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /boot is on /dev/mmcblk1, whose /sys/block/mmcblk1/device/type is .MMC., not SD" <<<"$out" &&
+          grep -q "restore: REFUSED: the u-boot-env partition did not resolve to the SD card /boot is on; no undo line is printed. The eMMC is never a restore target" <<<"$out" &&
+          ! grep -q "host\\$\|dd of=" <<<"$out" && ! grep -q "dd " "$F/ssh.log" && cmp -s "$S/emmc-before.bin" "$F/dev/mmcblk1p5"'
 rm -f "$F/dev/mmcblk1p5"
 printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
 grep -v u-boot-env <<<"$CARD_TABLE" > "$F/state/lsblk"
@@ -1540,6 +1638,15 @@ card_home() {
 }
 after_reboot() { awk -v r="$(grep -n "systemctl reboot" "$F/ssh.log" | head -1 | cut -d: -f1)" 'NR > r' "$F/ssh.log"; }
 card_at2
+# restore on the renumbered card: the device resolved now (mmcblk2p7), never
+# a name of another boot (mmcblk0p7 was the eMMC's vendorfs in the session
+# emmc-env-audit read)
+out=$(live restore "$S/env.bin" 2>&1)
+rc=$?
+check "live restore on the card numbered mmcblk2: rc 0, the undo names /dev/mmcblk2p7 alone, never /dev/mmcblk0p7; no dd sent" \
+    eval '[ "$rc" = 0 ] && grep -q "is /dev/mmcblk2p7 now (PARTLABEL u-boot-env on /dev/mmcblk2" <<<"$out" && grep -qF "'"'"'dd of=/dev/mmcblk2p7 bs=512 seek=992 conv=fsync'"'"'" <<<"$out" &&
+          ! grep -q "mmcblk0p7" <<<"$out" && ! grep -q "dd " "$F/ssh.log"'
+: > "$F/ssh.log"
 echo flip > "$F/state/mode"
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" flip 2>&1)
 rc=$?
