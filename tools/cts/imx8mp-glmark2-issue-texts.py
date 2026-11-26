@@ -129,15 +129,21 @@ def main():
     print("== 3. RESULTS.md 'Common set', i.MX8MP row: replace '(not looked at by eye)' ==")
     print(f"looked at by eye ({counts}; {wtxt}; `{NOTE}`)")
     print()
-    print("== 4. STATUS.md (Japanese): replace '絵は Pi 4 と i.MX8MP をまだ目で見ていない（カメラ無し）' ==")
+    print("== 4. STATUS.md (Japanese), two places (line 11 and line 30): replace "
+          "'imx8mp 列は値だけで判定している回帰用の基準で、目で見るのは #17 で開いている。' "
+          "and 'i.MX8MP の絵はまだ値だけで判定しており（カメラ無し）、目で見るのは #17 で開いている。' ==")
     jw = "間違い 0" if not wrong else "間違いのシーン: " + ", ".join(wrong)
+    print(f"imx8mp 列は 33 シーンを目で見た（正しい {right}、間違い {len(wrong)}、"
+          f"値なしで見た {seen}。{jw}。{NOTE}）。")
     print(f"i.MX8MP の絵は 33 シーンを目で見た（正しい {right}、間違い {len(wrong)}、"
-          f"値なしで見た {seen}。{jw}。{NOTE}）。Pi 4 は docs/notes/pi4-glmark2-pictures-by-eye.md")
+          f"値なしで見た {seen}。{jw}。{NOTE}）。")
     print()
     print("== 5. docs/notes/stage2-bench-gap.md: row 'every scene's picture checked', i.MX8MP cell ==")
     print(f"by value, 33 of 33 (column `imx8mp`); by eye: {counts} (`{NOTE}`)")
     print()
-    print("== 6. ROADMAP.md stage 2, 'Pictures by eye', i.MX8MP part ==")
+    print("== 6. ROADMAP.md stage 2, 'Pictures by eye': replace the two lines "
+          "'Only the i.MX8MP by-eye check stays open (#17); its' and "
+          "'pictures are checked by value only.' ==")
     print(f"The i.MX8MP pictures were looked at by eye ({counts}; {wtxt}; "
           f"`{NOTE}`, #17, #1196).")
 
