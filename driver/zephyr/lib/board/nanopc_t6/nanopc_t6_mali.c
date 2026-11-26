@@ -19,6 +19,8 @@
  *   blocks mapped and handed to yd_t6_osal_up, the bring-up of
  *   board::nanopc_t6_osal (Z1 to Z3, then the group), and WDT0's feed.
  */
+#include <errno.h>
+
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/device_mmio.h>
@@ -39,7 +41,6 @@
 #define T6_QOS_PHYS  0xfdf35000UL
 #define T6_GPU_PHYS  0xfb000000UL
 #define T6_GPU_MAP   0x280000
-#define T6_TIMER_HZ  24000000 /* CNTFRQ_EL0 */
 
 int osal_zephyr_mali_board_up(const struct osal_zephyr_mali_init *fw,
 			      const struct yd_t6_osal_mem *mem,
@@ -49,6 +50,13 @@ int osal_zephyr_mali_board_up(const struct osal_zephyr_mali_init *fw,
 			      struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *o)
 {
 	mm_reg_t cru, pmu, spi2, qos, gpu;
+	uint64_t cntfrq;
+	uint32_t timer_hz;
+	int rc;
+
+	/* the counter frequency the entry before us left, as it is */
+	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+	timer_hz = (uint32_t)cntfrq;
 
 	device_map(&cru, T6_CRU_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&pmu, T6_PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
@@ -56,8 +64,12 @@ int osal_zephyr_mali_board_up(const struct osal_zephyr_mali_init *fw,
 	device_map(&qos, T6_QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
 	device_map(&gpu, T6_GPU_PHYS, T6_GPU_MAP, K_MEM_CACHE_NONE);
 	t6_watchdog_feed();
-	return yd_t6_osal_up(cru, pmu, spi2, qos, gpu, T6_GPU_MAP, fw->fw, fw->fw_len, T6_TIMER_HZ,
-			     mem, clean, delay_us, on_handover, z1, o);
+	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, T6_GPU_MAP, fw->fw, fw->fw_len, timer_hz, mem,
+			   clean, delay_us, on_handover, z1, o);
+	if (rc == -EINVAL && timer_hz == 0) {
+		printk("t6: CNTFRQ_EL0 0: no time base, the osal and firmware entries refuse it\n");
+	}
+	return rc;
 }
 
 void osal_zephyr_mali_board_feed(void)
