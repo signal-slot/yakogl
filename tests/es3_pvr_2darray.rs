@@ -672,3 +672,111 @@ fn a_vertex_texture_size_alone_keeps_the_sampler_row() {
         }
     }
 }
+
+/// dEQP-GLES3 texture.specification.texstorage3d.size.2d_array_64x32x3_7_levels:
+/// a 64x32x3 `GL_TEXTURE_2D_ARRAY` of 7 levels (64x32, 32x16, 16x8, 8x4, 4x2,
+/// 2x1, 1x1). With the native array on, the descriptor is a twiddled 2D of
+/// one layer's size with all 7 levels and `depth` 2, and `textureLod` at
+/// each of the 7 levels reads that level of the layer asked for: the byte
+/// model's texel of `marker_at_level(marker_at_layer(s, layer), lod)`, the
+/// same pixel as the IR's, for every layer (the model is a hash of the
+/// marker, so layers and levels are the "distinct value" of each).
+#[test]
+fn a_64x32x3_array_of_7_levels_reads_each_lod_from_its_own_level_and_layer() {
+    /* the descriptor: layer size 64x32, 7 levels, depth = layers - 1 */
+    let t = GlesTextureBind {
+        format: GLES_TEXFMT_RGBA8,
+        type_: GLES_TEXTYPE_2D_ARRAY_TWIDDLED,
+        layers: 3,
+        base_gpu: 0x80_0000_0000,
+        width: 64,
+        height: 32,
+        stride_texels: 64,
+        bytes: 3 * 10_920,
+        mip_filter: 2,
+        mip_levels: 7,
+        linear_filter: 1,
+        min_linear: 1,
+        wrap_s: GLES_WRAP_REPEAT,
+        wrap_t: GLES_WRAP_REPEAT,
+        ..GlesTextureBind::ZERO
+    };
+    let w = yakogl::pvr::backend::texture_descriptor(&t);
+    let iw0 = w[0] as u64 | (w[1] as u64) << 32;
+    let iw1 = w[2] as u64 | (w[3] as u64) << 32;
+    assert_eq!(iw0 & 7, 1, "TEXTYPE_2D");
+    assert_eq!(((iw0 >> 34) & 0x3fff, (iw0 >> 48) & 0x3fff), (63, 31), "one layer's size");
+    assert_eq!(iw1 & 0xf, 7, "64x32 down to 1x1 is 7 levels");
+    assert_eq!((iw1 >> 4) & 0x7ff, 2, "depth = layers - 1");
+    assert_eq!(((w[8] >> 23) & 0x1ff) | ((w[9] & 1) << 9), 6 * 64, "maxlod over seven levels");
+
+    /* each LOD of each layer */
+    let m = sampler_marker("s");
+    assert!(usc_exec::tex_depth(m) >= 2, "the model's `s` has fewer than 3 layers");
+    let src = fragment("uniform highp sampler2DArray s;", "o = textureLod(s, c, l);");
+    let (u, v) = (0.3f32, 0.8f32);
+    let mut seen = std::collections::BTreeSet::new();
+    for lod in 0..7u32 {
+        for layer in 0..3u32 {
+            let case: Box<InputFn<'_>> = Box::new(move |n: &str, k: u32| match n {
+                "c" => [u, v, layer as f32][k as usize].to_bits(),
+                "l" => (lod as f32).to_bits(),
+                _ => 0,
+            });
+            let _ = usc_exec::take_layers();
+            let _ = usc_exec::take_levels();
+            let px = run_against_ir(&src, &[case.as_ref()])[0];
+            assert_eq!(usc_exec::take_layers(), vec![layer], "lod {lod}: the layer addressed");
+            assert_eq!(usc_exec::take_levels(), vec![(lod as f32).to_bits()], "lod {lod}: the level addressed");
+            let mm = usc_exec::marker_at_level(usc_exec::marker_at_layer(m, layer), (lod as f32).to_bits());
+            let mut want = 0u32;
+            for k in 0..4u32 {
+                let x = f32::from_bits(usc_exec::sample_model(mm, u.to_bits(), v.to_bits(), k));
+                want |= ((x.clamp(0.0, 1.0) * 255.0).round() as u32) << (8 * k);
+            }
+            assert_eq!(px, want, "lod {lod} layer {layer}: {px:08x}, its own level and layer {want:08x}");
+            seen.insert(px);
+        }
+    }
+    assert!(seen.len() >= 20, "21 (level, layer) pairs read {} distinct pixels", seen.len());
+}
+
+/// The same array on the default stacked path (`pvr_native_array` off): one
+/// tall 2D image of 3 x 32 = 96 rows whose level `l` has `96 >> l` rows
+/// (floor, at least 1), sampled at `pvr_arrUV`'s coordinate
+/// `(clamp(v) + layer) / 3` (usc_exec::array_uv). Row `floor(coord * rows)`
+/// is each layer's own row down to level 5 (3 rows: one per layer) and
+/// level 6 has a single row, so all three layers read the same texel: the
+/// smallest level is less than one row per layer and cannot be addressed.
+/// This is deterministic arithmetic of the layout, not a model of a texel,
+/// so it is asserted; on the board it is the K6 fail of
+/// texstorage3d.size.2d_array_64x32x3_7_levels.
+#[test]
+fn the_stacked_path_cannot_address_the_smallest_levels_of_the_same_array() {
+    let m = sampler_marker("s");
+    /* the stacked image's state: width 64, height 96 (fields hold less one) */
+    let mut state = usc_exec::tex_state(m);
+    state[0] = (state[0] & !7) | 4; /* a STRIDE image: no base level added */
+    state[1] = (state[1] & !((0x3fff << 2) | (0x3fff << 16))) | (63 << 2) | (95 << 16);
+    assert_eq!(usc_exec::tex_size_2d(state, 0), [64, 96]);
+    let layers = 3.0f32.to_bits();
+    for lod in 0..7u32 {
+        let rows = (96u32 >> lod).max(1);
+        let read: Vec<u32> = (0..3u32)
+            .map(|layer| {
+                let c = [0.3f32, 0.8, layer as f32].map(f32::to_bits);
+                let (_, vv) = usc_exec::array_uv(state, layers, c);
+                ((f32::from_bits(vv) * rows as f32).floor() as u32).min(rows - 1)
+            })
+            .collect();
+        let band = |layer: u32| layer * rows / 3..((layer + 1) * rows / 3).max(layer * rows / 3 + 1);
+        if lod <= 5 {
+            for layer in 0..3u32 {
+                assert!(band(layer).contains(&read[layer as usize]), "lod {lod}: layer {layer} reads row {read:?}");
+            }
+        } else {
+            assert_eq!(rows, 1, "level 6 is one row");
+            assert_eq!(read, vec![0, 0, 0], "level 6: the three layers read the same row");
+        }
+    }
+}
