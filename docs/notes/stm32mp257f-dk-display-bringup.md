@@ -1452,7 +1452,127 @@ Table 501 with §31's `LTDC`/`LTDC_ER`), (b) settled as to what `CCRCR` is
 What remains open is board-side only: (a)(i)/(ii) and the CRC latch point —
 so the CRC stays a diagnostic.
 
+## Board scan-out record (board-display5, crc-probes, 2026-11-26)
+
+Fifth DK display session (plan #415, item board-display5), the first after
+crc-rust and crc-probes (`f814af0f`, `e2cd0d2a`): the frame event is
+`ISR.LIF` or the `CPSR` wrap, PASS rests on the scan-out check (checks
+10-13 of the fix spec above), the CRC is a logged diagnostic read in the
+event step. All three images built at c8fbf34e with the READMEs' west lines
+for `stm32mp257f_dk/stm32mp257fxx/a35` (Zephyr af17c0c8aa2a,
+`-DYAKOGL_WERROR=ON`, `-d build/zephyr-werror/<probe>`); each build exited 0
+and linked:
+
+```
+mp2_display:       [151/151] Linking C executable zephyr/zephyr.elf
+mp2_gpu_scanout:   [156/157] Linking C executable zephyr/zephyr.elf
+mp2_display_state: [137/137] Linking C executable zephyr/zephyr.elf
+```
+
+Procedure as board-display4: `install` (undo printed first), one blind run
+per probe (`MP2_HOLD_S=60 MP2_NO_CONSOLE=1`), the console captured over the
+console resource's MCP server and handed to `judge` as an excerpt (BL2's
+reset line to the image's last line; the OP-TEE/SCMI frame lines, the
+BL2/BL31 `INFO` lines and the GPU bring-up lines left out, marked as such in
+each file), KVM screenshots about 25 s and 45 s after the result line,
+judged with `display_check/colorbars.py` and `triangle.py` (JPEG converted
+to PNG outside the tree), then `status` and `uninstall`. Each probe ran
+once.
+
+**`mp2_display` and `mp2_gpu_scanout` both printed their PASS lines, and the
+KVM judged the pictures: `mp2_display: PASS: 1920x1080 argb8888 60 frames`
+with `colorbars: PASS`, `mp2_gpu_scanout: PASS: 1920x1080 pitch 7680 phys
+0xfb04e000 60 frames` with `triangle: PASS`.** Every frame of both scan-out
+checks came by `LIF` (`lif 60 wrap 0`), the layer read back right, and no
+error flag was set. `mp2_display_state` did not finish: it stopped at its
+`ltdc` block with `ERROR: CONFIG_MAX_XLAT_TABLES is too small` (finding 5).
+
+| commit | image | runner | verdict lines | observation | stock boot files |
+| --- | --- | --- | --- | --- | --- |
+| c8fbf34e | `mp2_display` (sha256 f0701ddc7ccd599929614a7ce921a164de0646faae6104f9d21ba4ce9a4f944d, 123288 bytes) | `MP2_HOLD_S=60 MP2_NO_CONSOLE=1 tools/board-stm32mp2.sh run build/zephyr-werror/mp2_display/zephyr/zephyr.bin <rec> mp2_display`, then `judge` (record `20261126-0715-mp2_display-f0701ddc`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=195s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=4 verdict=no_end_line boot=uboot-sd row boot_verdict=image_started result=pass:mp2_display back_after=195s console=external` | chain up (`chain step none err 0`, `adv7535 rev 0x14 hpd 1 started 1`), 1920x1080@60 (VIC 16); `mp2_display: scanout: frames 60/60 (lif 60 wrap 0) max wait 16550 us, layer fb 0xb0000000 want 0xb0000000 lxcr 0x00000001 gcr 0xc0002221 ok 1/1, lipcr 0x461 want 0x461 ier 0x00000046`, `... isr_or 0x00000001 fuwif 0 fuif 0 terrif 0 furif 0 crcif 0, failed 0x0 rrif_seen 0 rc 0`, `scanout: errors: unobservable (no RRIF after the control reload)`; CRC `0x00002fab` for base, again x3, changed and restored, `crc: diagnostic: stable y changed n restored y`; **`mp2_display: PASS: 1920x1080 argb8888 60 frames`**, `hold: 60 frames ok, 0 failed`; the layer's lifetime line arrived without its first byte (`p2: lifetime over: PSCI SYSTEM_RESET at 150000 ms`, finding 6), hence `no_end_line`. KVM 25 s after the result line: ST's held Weston launcher, `colorbars: FAIL: partial: 2 of 8 bars (white black)`; 45 s after it: **eight full-height bars, white, yellow, cyan, green, magenta, red, blue, black**, `colorbars: PASS: 8 bars white yellow cyan green magenta red blue black` | staged image removed by the run |
+| c8fbf34e | `mp2_gpu_scanout` (sha256 d51752ee861ba665fbba9544ff0c960cc89f99ddebac4b1926925dd262bef006, 164248 bytes) | the same call with `mp2_gpu_scanout` (record `20261126-0719-mp2_gpu_scanout-d51752ee`) | `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=206s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=8 verdict=lifetime boot=uboot-sd row boot_verdict=complete result=pass:mp2_gpu_scanout back_after=206s console=external lifetime_after=150s` | render and linear copy pass (`linear: PASS 1920x1080 pitch 7680 at GPU 0xfb04e000 phys 0xfb04e000 (0 failing checks)`), chain up, layer at 0xfb04e000; `ltdc: errors unobservable (ISR latched no RRIF after a VBR reload)`; `mp2_gpu_scanout: scanout: frames 60/60 (lif 60 wrap 0) max wait 16550 us, layer fb 0xfb04e000 want 0xfb04e000 lxcr 0x00000001 gcr 0xc0002221 ok 1/1, lipcr 0x461 want 0x461 ier 0x00000046`, `... isr_or 0x00000001 fuwif 0 fuif 0 terrif 0 furif 0 crcif 0, failed 0x0 rrif_seen 0 rc 0`; CRC base/again x3 `0x0000da5b`, changed `0x00004803`, restored `0x0000da5b`, `crc: diagnostic: stable y changed y restored y`; **`mp2_gpu_scanout: PASS: 1920x1080 pitch 7680 phys 0xfb04e000 60 frames`**, `_gpu_scanout: hold: 60 frames ok, 0 failed` (first bytes lost, finding 6), `mp2: lifetime over: PSCI SYSTEM_RESET at 150000 ms`. KVM 25 s after the result line: row 1's bars still (`triangle: FAIL: too much colour: 88% of the picture is lit`); 45 s after it: **gc_triangle's picture, red apex top centre, green bottom left, blue bottom right on the dark blue-grey clear colour, full frame**, `triangle: PASS: red apex top, green bottom left, blue bottom right, box 1530x960 at 195,111 (red(0.49,0.21) green(0.19,0.79) blue(0.82,0.79))` | staged image removed by the run |
+| c8fbf34e | `mp2_display_state` (sha256 6e2c32bb4771ad0bf9544fc181a3ca4109eaef84d739d8492cd062728e418a2f, 49544 bytes) | the same call with `mp2_display_state` (record `20261126-0723-mp2_display_state-6e2c32bb`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display_state rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=45s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display_state rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=none back_after=45s console=external` | blocks `rifsc` and `rcc` read in full, then in block `ltdc`, after `rifsc sem_id121 0x420804cc = 0x00000000`: `ERROR: CONFIG_MAX_XLAT_TABLES is too small`, `ESR_ELn: 0x0000000056000002`, `EC: 0x15 (Unknown)`, `mp2: fatal error 4`, `mp2: fatal error: PSCI SYSTEM_RESET at 394 ms`; no `mp2_display_state: PASS` or `FAIL` line (`result=none`; `verdict=done` only because the fatal-error reset matches the layer's end line, finding 5) | `status` before `uninstall`: `install: ok`, `left behind: nothing recorded`, `stock boot files: unchanged since install`; `uninstall`: `stock boot files: unchanged since install`, `unhooked: no preboot of ours, no yako_* variable, bootcmd 'run bootcmd_stm32mp' (not written), /boot/yakogl removed. Nothing was rebooted.` |
+
+Findings, in the order they constrain the next step:
+
+1. **`LIF` latches on this session; the `LIPCR`/`IER` writes land.** Both
+   probes read `lipcr 0x461` (1121 = `AAH + 1`, `want 0x461`) and `ier
+   0x00000046` back, and all 60 frame events of each check were `LIF`
+   (`lif 60 wrap 0`, `isr_or 0x00000001`), with a frame wait of at most
+   16550 us (one 60 Hz frame). This answers the open (a)(i)/(ii) of "CRC and
+   frame wait" for the image at c8fbf34e: the write lands and the flag
+   latches. Board-display4's `ISR 0x0` throughout (finding 2 there) is not
+   reproduced; this session does not show which difference of the old wait
+   (21176f74) caused it.
+2. **The `RRIF` positive control did not see `RRIF`** (`rrif_seen 0`,
+   `ltdc: errors unobservable (ISR latched no RRIF after a VBR reload)`),
+   so check 12 reports `errors: unobservable` and does not count as passed;
+   PASS was printed because checks 10 and 11 held and check 12 did not fail
+   (step 13). Since `ISR` demonstrably latches (`LIF` in every event), the
+   missing `RRIF` points at the control itself (the `VBR` reload completing
+   before the probe clears and samples `ISR`, or `RRIF` needing `RRIE`),
+   not at a dead `ISR`; no error flag (`fuwif fuif terrif furif crcif` all
+   0) was seen in any of the 120 event `ISR` values.
+3. **The CRC, now read at `LIF`** (`line 1121`..`1124 via lif`):
+   `mp2_gpu_scanout`'s static GPU buffer hashed `0x0000da5b` on four
+   consecutive reads, `0x00004803` with the corner pixel (0,0) inverted and
+   `0x0000da5b` again when restored (`stable y changed y restored y`): the
+   per-frame-hash behaviour RM0457 describes (R5:§53.5.17), on this probe.
+   `mp2_display`'s CPU-written bars hashed `0x00002fab` on every read,
+   including after its two bytes of line 0 were inverted (`changed n`), as
+   in board-display4. Board-display4's unstable `0xda5b`/`0x7f01`/`0x8895`
+   was therefore the wrap read point; `mp2_display`'s unchanged CRC is still
+   open (whether its `display_write()` change reaches the scanned buffer).
+   One session and one probe do not meet the promotion rule above (stable
+   and different with a visible change, on both), so the CRC stays a
+   diagnostic.
+4. **The KVM again needs about 20 s to show a new signal**: at 25 s it
+   showed the previous picture (ST's launcher, then `mp2_display`'s bars),
+   at 45 s the probe's. The 45 s triangle screenshot also has an 80x4 pixel
+   blue-grey strip at x 1600..1679, y 1069..1072 (right edge at the blue
+   bar's right edge, 1679, of the previous picture), which is why
+   `triangle.py`'s box is 1530x960 here against 1530x858 in board-display4;
+   probably a stale capture block of the previous picture, not confirmed.
+5. **`mp2_display_state` runs out of translation tables** at its `ltdc`
+   block (the built `.config` has `CONFIG_MAX_XLAT_TABLES=8`, Zephyr's
+   default; `mp2_display` has 64, `mp2_gpu_scanout` 256), the same fault
+   `mp2_display` had in board-display3 before its `prj.conf` raised the
+   value. `judge` counts that run `verdict=done rc=0` with `result=none`,
+   because the layer's `mp2: fatal error: PSCI SYSTEM_RESET at 394 ms`
+   matches its end-line pattern: a crash with no result line reads as a
+   clean end.
+6. **The console lost the first bytes of the line after each 60 s hold**:
+   `p2: lifetime over: ...` (`mp2_display`) and `_gpu_scanout: hold: ...`
+   (`mp2_gpu_scanout`), exactly as received over the console resource. For
+   `mp2_display` that hid the layer's end line, so `judge` printed
+   `no_end_line` although the image printed its PASS line and reached its
+   lifetime reset (`Reset reason: System reset (SYSRST) (0x2074). Warm
+   boot.` follows on the console).
+
+Supply. No hardware fault: all three images ended in a system reset
+(`Reset reason: System reset (SYSRST) (0x2074). Warm boot.` in BL2 before
+each return) and the board came back to ST's Linux in 45 s to 206 s.
+
+Board state after the session: ST's Linux answering over ssh,
+`/boot/yakogl` removed, no `preboot` or `yako_*` variable, `bootcmd` ST's
+own, stock boot files unchanged since install (runner lines above). The KVM
+showed the triangle at the end of `mp2_gpu_scanout`'s hold. Nothing else on
+the board was written; no module loaded or unloaded.
+
 ## GPU buffer scan-out
+
+**board-display5 (c8fbf34e, record `20261126-0719-mp2_gpu_scanout-d51752ee`):
+achieved.** The probe printed `mp2_gpu_scanout: PASS: 1920x1080 pitch 7680
+phys 0xfb04e000 60 frames`, after `scanout: frames 60/60 (lif 60 wrap 0)`,
+the layer read back at 0xfb04e000 (`ok 1/1`) and `failed 0x0` (error check
+`unobservable`: no `RRIF` after the control reload, see board-display5
+finding 2). 45 s after the result line the KVM showed gc_triangle's picture
+(red apex top centre, green bottom left, blue bottom right on the dark
+blue-grey clear colour, full frame), judged `triangle: PASS: red apex top,
+green bottom left, blue bottom right, box 1530x960 at 195,111
+(red(0.49,0.21) green(0.19,0.79) blue(0.82,0.79))`. The diagnostic CRC was
+stable on the static buffer and followed the one-pixel change
+(`0x0000da5b`, `0x00004803`, `0x0000da5b`).
 
 **board-display4 (21176f74, records `20261125-1217-mp2_gpu_scanout-83b9adf2`
 and `20261125-1227-mp2_gpu_scanout-83b9adf2`): the GPU-rendered buffer is
