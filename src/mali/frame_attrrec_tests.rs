@@ -15,6 +15,12 @@
 //!   R32G32B32A32_FLOAT (RGBA32F RGBA, pan_format.c:454), offset 0, stride
 //!   0; its Buffer is `panfrost_emit_vertex_buffers`'s (:938-971), Simple,
 //!   the 16 bytes;
+//! - a location whose array is disabled, the current value the GL core
+//!   staged at stride 0 with the input's component count (two floats' worth
+//!   of RG32F for a vec2): the same element, RGBA32F at stride 0 from 16
+//!   bytes holding the staged floats, the components the core staged no
+//!   bytes for GL's (0, 0, 0, 1) (`st_setup_current` uploads the whole
+//!   four-float `_mesa_draw_current_attrib`); arrays stay as they are;
 //! - a record below the highest that no location names: the table is
 //!   indexed by record (Mesa's `attributes_read_count` entries,
 //!   pan_cmdstream.c:2522-2548), so the slot takes the same element and no
@@ -40,7 +46,7 @@ use super::backend::{vertex_attributes, INITIAL_CURRENT_VALUE, INVALID_ATTRIBUTE
 use super::cs::{Instr, Stream};
 use super::frame::*;
 use super::genxml::v10::*;
-use crate::backend::GlesDraw;
+use crate::backend::{GlesAttrib, GlesDraw, GLES_ATTRIBF_FLOAT32};
 
 /// The data pool's and the descriptor arena's bases.
 const DATA: u64 = 0x7fff_fff0_0000;
@@ -251,4 +257,75 @@ fn two_locations_of_one_record_and_more_than_sixteen_are_refused() {
         Err(FrameError::NotBuilt(why)) => assert_eq!(why, NOT_BUILT_ATTRIBUTES),
         r => panic!("record 16: {:?}", r.map(|v| v.len())),
     }
+}
+
+/// `d` with a second attribute at `vi_reg` 1: a disabled vec2 array's
+/// current value as the core stages it, stride 0 and `bytes` its staging.
+fn with_constant(mut d: GlesDraw, bytes: &[f32]) -> GlesDraw {
+    d.num_attribs = 2;
+    d.attribs[1] = GlesAttrib {
+        vi_reg: 1,
+        components: 2,
+        format: GLES_ATTRIBF_FLOAT32,
+        stride: 0,
+        cpu: bytes.as_ptr().cast(),
+        cpu_bytes: 4 * bytes.len() as u32,
+        ..GlesAttrib::ZERO
+    };
+    d
+}
+
+/// The current value the frame uploaded for `a`, as floats.
+fn value_of(mem: &[u8], a: &VertexAttribute) -> Vec<f32> {
+    let at = (a.buffer.gpu - DATA) as usize;
+    mem[at..at + 16].as_chunks::<4>().0.iter().map(|&b| f32::from_le_bytes(b)).collect()
+}
+
+#[test]
+fn a_staged_vec2_current_value_is_mesas_rgba32f_element() {
+    /* the core's staging at the tip: the whole current value, 16 bytes,
+     * labelled with the vec2's two components */
+    static WHOLE: [f32; 4] = [0.5, 0.25, 0.0, 1.0];
+    let d = with_constant(triangle(TARGET, &VERTICES), &WHOLE);
+    let (got, mem) = attributes(&d, &[(0, 0), (1, 1)]);
+    let got = got.expect("the draw's attributes are built");
+    assert_eq!(got.len(), 2);
+    let c = got[1];
+    assert_eq!((c.components, c.stride, c.offset, c.instance_divisor, c.buffer.size), (4, 0, 0, 0, 16));
+    assert_eq!(value_of(&mem, &c), WHOLE, "the staged value, four floats");
+
+    let (frame, runs, desc) = build(&got);
+    assert!(runs, "the draw runs");
+    let (attrs, bufs) = (frame.layout.attributes.unwrap(), frame.layout.buffers.unwrap());
+    assert_eq!(words8(&desc, attrs.gpu, 0), [ATTR_RG32F_1D, 2, 0, 0, 8, 0, 0, 0], "the staged array is unchanged");
+    let (want_a, want_b) = current_value_words(1, c.buffer.gpu);
+    assert_eq!(words8(&desc, attrs.gpu, 1), want_a, "Mesa's RGBA32F Attribute (word 0 0x2fc00115), stride 0");
+    assert_eq!(want_a[0], 0x2fc0_0115);
+    assert_eq!(words8(&desc, bufs.gpu, 1), want_b, "Mesa's Simple Buffer of 16 bytes");
+}
+
+#[test]
+fn a_shorter_staged_current_value_is_padded_with_0_0_0_1() {
+    /* two floats only: the missing z and w are GL's 0 and 1 */
+    static TWO: [f32; 2] = [0.5, 0.25];
+    let d = with_constant(triangle(TARGET, &VERTICES), &TWO);
+    let (got, mem) = attributes(&d, &[(0, 0), (1, 1)]);
+    let got = got.expect("the draw's attributes are built");
+    let c = got[1];
+    assert_eq!((c.components, c.stride, c.buffer.size), (4, 0, 16));
+    assert_eq!(value_of(&mem, &c), [0.5, 0.25, 0.0, 1.0]);
+    let (frame, _, desc) = build(&got);
+    let attrs = frame.layout.attributes.unwrap();
+    assert_eq!(words8(&desc, attrs.gpu, 1), current_value_words(1, c.buffer.gpu).0);
+}
+
+#[test]
+fn a_per_instance_array_at_stride_0_is_not_a_current_value() {
+    static ONE: [f32; 2] = [0.5, 0.25];
+    let mut d = with_constant(triangle(TARGET, &VERTICES), &ONE);
+    d.attribs[1].per_instance = 1;
+    d.attribs[1].divisor = 1;
+    let (got, _) = attributes(&d, &[(0, 0), (1, 1)]);
+    let c = got.expect("the draw's attributes are built")[1];
+    assert_eq!((c.components, c.stride, c.buffer.size, c.instance_divisor), (2, 0, 8, 1), "the array as staged");
 }

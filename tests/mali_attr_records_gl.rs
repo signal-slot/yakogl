@@ -13,8 +13,8 @@
 //!   stride 0, offset 0, and a Simple Buffer of 16 bytes holding GL's
 //!   initial (0, 0, 0, 1). The core stages that value itself for a vec4, so
 //!   the frame's own element (shared upload, a location nothing stages) is
-//!   not reached through GL; an unstaged vec2 is staged as two floats (RG32F),
-//!   which is not Mesa's word (an ignored case);
+//!   not reached through GL; an unstaged vec2 is staged at stride 0 with
+//!   two components, which the back end builds as the same RGBA32F element;
 //! - the refusals the records keep (`NOT_BUILT_ATTRIBUTE`,
 //!   `INVALID_ATTRIBUTE_RECORDS`, `NOT_BUILT_ATTRIBUTES`) are not reachable
 //!   through GL (the core converts every array to float32 and has 16
@@ -519,20 +519,23 @@ fn an_enabled_array_of_an_unread_attribute_takes_no_record() {
 }
 
 /// An unstaged vec2 attribute: Mesa's current-value element is four floats
-/// whatever the attribute's type, RGBA32F. The core at the tip stages the
-/// disabled array's current value itself, two floats, and the frame gets
-/// RG32F (observed: word 0 0x2bc04115 for Mesa's 0x2fc00115, buffer of 16
-/// bytes). The same data is read; the words are not Mesa's.
+/// whatever the attribute's type, RGBA32F. The core stages the disabled
+/// array's current value with the vec2's two components at stride 0; the
+/// Mali back end builds it as Mesa's element (word 0 0x2fc00115, not RG32F's
+/// 0x2bc04115), a Simple Buffer of 16 bytes holding (0, 0, 0, 1).
 #[test]
-#[ignore = "the core stages an unstaged vec2's current value as two floats, so the Attribute is RG32F; Mesa's current-value element is RGBA32F (observed word 0 0x2bc04115, Mesa 0x2fc00115)"]
 fn an_unstaged_vec2_reads_mesas_rgba32f_current_value() {
     let _g = context();
     let p = link("vec2 current", VS, &[("a_pos", 0), ("a_uv", 1), ("a_extra", 2)]);
     let extra = Array { loc: 2, size: 4, ty: GL_FLOAT, stride: 0, data: FULL.as_ptr().cast() };
     let d = draw(p, &[pos(0), extra]);
     built("vec2 current", &d);
-    let (a, _) = vertex_stage("vec2 current");
+    let (a, b) = vertex_stage("vec2 current");
     assert_eq!(a[1], attr_words(ATTR_RGBA32F_1D, 1, 0));
+    assert_eq!(a[2], attr_words(ATTR_RGBA32F_1D, 2, 16), "the staged vec4 array is unchanged");
+    let gpu = u64::from(b[1][2]) | u64::from(b[1][3]) << 32;
+    assert_eq!(b[1], buffer_words(16, gpu), "the current-value Buffer: Simple, 16 bytes");
+    assert_eq!(floats(&contents(&b[1])), [0.0, 0.0, 0.0, 1.0], "GL's initial current value");
     // SAFETY: plain GL call.
     unsafe { glDeleteProgram(p) };
 }

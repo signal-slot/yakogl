@@ -2615,7 +2615,9 @@ fn uniform_words<'a>(cpu: *const c_void, dwords: u16) -> &'a [u32] {
 /// core staged nothing for reads what Mesa's current-value element of an
 /// attribute never given a value reads: GL's initial (0, 0, 0, 1), four
 /// floats at stride 0 from a 16-byte Buffer. A record no location names (a
-/// gap below the highest) takes the same element; no code fetches it.
+/// gap below the highest) takes the same element; no code fetches it. A
+/// disabled array's value the core staged (stride 0) is that element too,
+/// holding the staged floats ([`current_value_element`]).
 pub(super) fn vertex_attributes(
     d: &GlesDraw,
     vs_attributes: &[(u8, u8)],
@@ -2641,26 +2643,27 @@ pub(super) fn vertex_attributes(
         let Some(a) = first.and_then(|&(loc, _)| staged.iter().find(|a| a.vi_reg == loc)) else {
             let c = match current {
                 Some(c) => c,
-                None => {
-                    let mut bytes = [0u8; 16];
-                    for (b, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(INITIAL_CURRENT_VALUE) {
-                        *b = v.to_le_bytes();
-                    }
-                    let b = data.upload(&bytes, 16)?;
-                    *current.insert(frame::VertexAttribute {
-                        buffer: frame::VertexBuffer { gpu: b.gpu, size: 16 },
-                        offset: 0,
-                        stride: 0,
-                        components: 4,
-                        instance_divisor: 0,
-                    })
-                }
+                None => *current.insert(current_value_element(&[], data)?),
             };
             out[rec] = c;
             continue;
         };
         if a.format != GLES_ATTRIBF_FLOAT32 {
             return Err(FrameError::NotBuilt(NOT_BUILT_ATTRIBUTE));
+        }
+        if !a.cpu.is_null() && a.cpu_bytes != 0 && a.stride == 0 && a.per_instance == 0 {
+            /* a disabled array's current value, staged by the core at
+             * stride 0 with the shader input's component count (an RG32F
+             * fetch for a vec2): Mesa's element is four floats whatever the
+             * input's type (`st_setup_current`, R32G32B32A32_FLOAT, stride
+             * 0), so it is built as RGBA32F from 16 bytes, any components
+             * the core staged no bytes for GL's (0, 0, 0, 1). Arrays (a
+             * non-zero stride, or per instance) stay as they are */
+            // SAFETY: the GL core's contract for `cpu`: `cpu_bytes` readable
+            // bytes that live until the draw returns.
+            let bytes = unsafe { core::slice::from_raw_parts(a.cpu.cast::<u8>(), a.cpu_bytes as usize) };
+            out[rec] = current_value_element(bytes, data)?;
+            continue;
         }
         let (buffer, offset) = if !a.cpu.is_null() && a.cpu_bytes != 0 {
             // SAFETY: the GL core's contract for `cpu`: `cpu_bytes` readable
@@ -2689,6 +2692,30 @@ pub(super) fn vertex_attributes(
         };
     }
     Ok(n)
+}
+
+/// Mesa's current-value element: the first floats of `bytes` (at most four;
+/// none for a location the core staged nothing for), the components it
+/// leaves out GL's (0, 0, 0, 1), in four floats, as
+/// `_mesa_draw_current_attrib` holds every generic attribute's current
+/// value; RGBA32F at stride 0 from a 16-byte Buffer
+/// (`panfrost_emit_vertex_buffers`, `panfrost_pack_attribute`, Mesa 26.2.1
+/// pan_cmdstream.c:938-971, 4084-4117).
+pub(super) fn current_value_element(bytes: &[u8], data: &mut Pool) -> Result<frame::VertexAttribute, FrameError> {
+    let mut value = [0u8; 16];
+    for (b, v) in value.as_chunks_mut::<4>().0.iter_mut().zip(INITIAL_CURRENT_VALUE) {
+        *b = v.to_le_bytes();
+    }
+    let n = bytes.len().min(16);
+    value[..n].copy_from_slice(&bytes[..n]);
+    let b = data.upload(&value, 16)?;
+    Ok(frame::VertexAttribute {
+        buffer: frame::VertexBuffer { gpu: b.gpu, size: 16 },
+        offset: 0,
+        stride: 0,
+        components: 4,
+        instance_divisor: 0,
+    })
 }
 
 /// A draw's two programs as the frame builder takes them, and the vertex
