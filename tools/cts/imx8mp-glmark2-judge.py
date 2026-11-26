@@ -353,6 +353,10 @@ def self_test():
                     "|---|---|---|---|---|\n")
             for s in allscenes:
                 f.write(row.replace(scene, s).replace(PLACEHOLDER, "right") + "\n")
+            # --complete also wants one 'What was looked at' bullet per scene
+            f.write("\n## What was looked at\n\n")
+            for s in allscenes:
+                f.write("- **%s**: looked at it.\n" % s)
         r = subprocess.run([sys.executable, "-I", vp, note, "--complete"],
                            capture_output=True, text=True)
         expect("verdicts.py --complete accepts 33 rows of the helper's format (%s)"
