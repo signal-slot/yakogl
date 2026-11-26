@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND (GPL-2.0-only OR MIT)
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-// SPDX-FileCopyrightText: 2018 Marty E. Plummer <hanetzer@startmail.com>
-// SPDX-FileCopyrightText: 2019 Linaro, Ltd, Rob Herring <robh@kernel.org>
+// SPDX-FileCopyrightText: 2018 Marty E. Plummer
+// SPDX-FileCopyrightText: 2019 Linaro, Ltd, Rob Herring
 // SPDX-FileCopyrightText: 2019, 2023 Collabora ltd.
 // SPDX-FileCopyrightText: 2025 ARM Limited
 // Linux part: panthor (drivers/gpu/drm/panthor, Linux v6.18), "GPL-2.0 or MIT" (read as GPL-2.0-only OR MIT), used under MIT.
