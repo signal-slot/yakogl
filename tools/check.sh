@@ -2264,6 +2264,53 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_pvr
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_msaa_gc.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_msaa_gc
+# The remaining multisample test files (stand-in GL core, store, hw words, read errors):
+step "test    $V3D_CONFIG (tests/es3_msaa_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_v3d
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_blitmask.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_blitmask
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_clear.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_clear
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_complete.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_complete
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_coverage.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_coverage
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_draws.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_draws
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_ds.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_ds
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_es31_absent.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_es31_absent
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_formats.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_formats
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_iformat.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_iformat
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_life.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_life
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_mrt.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_mrt
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_query.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_query
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_rect.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_rect
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_srgb.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_srgb
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_state.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_state
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_texdst.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_texdst
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_window.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_window
+step "test    $V3D_CONFIG (tests/es3_msaa_read_errors.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_read_errors
+step "test    host-test,gpu-powervr,shaderc-online,report-es2 (tests/es3_msaa_gl_es2ctx.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es3_msaa_gl_es2ctx
+step "test    host-test,gpu-powervr (tests/msaa_store_api.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test msaa_store_api
+step "test    host-test,gpu-vivante (tests/msaa_hw_gc_api.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante --test msaa_hw_gc_api
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_msaa_rb.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_msaa_rb
 # Flat shading on the V3D and the GC7000UL (docs/notes/es3-flatshading.md): a
 # regression guard that pins the provoking vertex (the last), the flat flags
 # and the native primitive of every mode. Compiles to nothing under report-es2.
