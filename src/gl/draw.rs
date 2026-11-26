@@ -2890,7 +2890,7 @@ fn dense_target_mask(d: &GlesDraw, mask: u8) -> u8 {
  * fused into a draw -- into that quad before the draw (measured on the
  * AM62P: dEQP color_clear 19/19). Every backend that draws applies the
  * mask. */
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 struct ClearPlan {
     /// The buffers this clear still changes.
     color: bool,
@@ -2971,74 +2971,81 @@ fn plan_clear(
 /// TLB clear from `GlesDraw::clear_rgba`'s four words (`v3d::state::
 /// clear_words`) and the clear quad from the same four, so the GL core hands
 /// it the format's channels and 0 (G, B) and 1 (A) in the others
-/// ([`int_clear_channels`]). The PowerVR and the GC7000 get the values as
+/// ([`clear_channel_groups`]). The PowerVR and the GC7000 get the values as
 /// before.
 const NARROW_INT_CLEAR: bool = cfg!(feature = "gpu-v3d");
 
-/// [`int_clear_channels`] has logged its refusal (one line, not one per
-/// clear).
+/// A clear fused into a draw has found targets in several channel groups
+/// ([`clear_channel_groups`]) and logged its refusal (one line, not one per
+/// clear). The draw entry points split such a clear before the draw
+/// ([`settle_split_clear`]), so this is the named answer for one that reached
+/// the draw unsplit, not a path a glClear is expected to take.
 static REFUSED_UNEVEN_CLEAR: Global<bool> = Global::new(false);
 
-/// The channels (bit 0 R .. 3 A) of the colour clear's value that keep the
-/// application's values on a back end that narrows ([`NARROW_INT_CLEAR`]);
-/// 0xf, every channel, elsewhere and for every clear that names no R or RG
-/// integer texture drawn as its wide store. `mask` is the clear's target mask
-/// as targets of the draw's dense list (0: every target).
+/// The colour clear's targets, one group per set of channels that keep the
+/// application's values ([`clear_channel_groups`]): (channels, target mask)
+/// for each of the first `.1` entries.
+type ClearGroups = ([(u8, u8); GLES_MAX_TARGETS], usize);
+
+/// The cleared colour targets grouped by the channels (bit 0 R .. 3 A) of the
+/// clear's value that keep the application's values on a back end that
+/// narrows ([`NARROW_INT_CLEAR`]). `mask` is the clear's target mask as
+/// targets of the draw's dense list (0: every target).
 ///
 /// Every cleared integer target takes the format's channels of its
 /// attachment ([`framebuffer::fb_target_channel_mask_n`]), every other target
-/// all four. The clear has one value for every target (`clear_rgba`), so a
-/// clear whose targets disagree (an R8I texture beside an RGBA8
-/// renderbuffer under glClear) cannot be narrowed for one without changing
-/// the other: it is refused by name with GL_INVALID_OPERATION rather than
-/// writing the application's B and A into the texture's store.
-fn int_clear_channels(c: &GlContext, d: &GlesDraw, mask: u8) -> Result<u8, DrawError> {
+/// all four; the channels outside them are given 0 (G, B) and 1 (A)
+/// ([`apply_clear_plan`]).
+///
+/// One group (every target agrees, no R or RG integer texture is cleared, or
+/// the back end does not narrow) is `(channels, mask)`, the clear's own mask
+/// unchanged: the clear is one pass, as it always was. The clear has one
+/// value for every target (`clear_rgba`), so targets that disagree (an R8I
+/// texture beside an RGBA8 renderbuffer under glClear) are several groups,
+/// each with the dense target mask of its own targets: the clear is emitted
+/// once per group ([`emit_pending_clear`]), as a run of glClearBuffer calls
+/// would be. Channel sets are 0x1, 0x3 and 0xf, so there are at most three
+/// groups, and never more than [`GLES_MAX_TARGETS`].
+fn clear_channel_groups(c: &GlContext, d: &GlesDraw, mask: u8) -> ClearGroups {
+    let mut g = [(0xf, mask); GLES_MAX_TARGETS];
     if !NARROW_INT_CLEAR {
-        return Ok(0xf);
+        return (g, 1);
     }
     let lead = d.targets[0].out_shift;
-    let mut channels: Option<(u8, usize)> = None;
-    for (i, t) in d.targets[..d.num_targets.max(1) as usize].iter().enumerate() {
+    let mut n = 0;
+    let count = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    for (i, t) in d.targets[..count].iter().enumerate() {
         if t.gpu == 0 || (mask != 0 && mask & (1u8 << i.min(7)) == 0) {
             continue;
         }
         let own =
             if gles_surf_is_integer(t.format) { framebuffer::fb_target_channel_mask_n(c, lead + i as u8) } else { 0xf };
-        match channels {
-            None => channels = Some((own, i)),
-            Some((first, _)) if first == own => {}
-            Some((first, at)) => {
-                // SAFETY: single-threaded by contract; no other reference is live.
-                let reported = unsafe { REFUSED_UNEVEN_CLEAR.get() };
-                if !*reported {
-                    *reported = true;
-                    glog!(
-                        "clear refused: draw buffer {} takes channels {:#x}, draw buffer {} channels {:#x} (an R \
-                         or RG integer texture keeps 0, 0, 1 in the channels its format lacks), and this back \
-                         end has one clear value for every target",
-                        lead as usize + at,
-                        first,
-                        lead as usize + i,
-                        own
-                    );
-                }
-                return Err((GL_INVALID_OPERATION, "int_clear_channels"));
+        match g[..n].iter().position(|&(m, _)| m == own) {
+            Some(k) => g[k].1 |= 1u8 << i,
+            None => {
+                g[n] = (own, 1u8 << i);
+                n += 1;
             }
         }
     }
-    Ok(channels.map_or(0xf, |(m, _)| m))
+    if n <= 1 {
+        let channels = if n == 1 { g[0].0 } else { 0xf };
+        return ([(channels, mask); GLES_MAX_TARGETS], 1);
+    }
+    (g, n)
 }
 
 /// Fill the clear fields of a draw from the plan (and clear the pending one).
 /// `channels`: the channels that keep the clear's values
-/// ([`int_clear_channels`]); the others are given 0 (G, B) and 1 (A).
-fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear, channels: u8) {
+/// ([`clear_channel_groups`]); the others are given 0 (G, B) and 1 (A).
+/// `target_mask`: the targets this pass clears, as targets of the draw's
+/// dense list (the clear's own, `dense_target_mask`, or one group's).
+fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear, channels: u8, target_mask: u8) {
     d.do_clear = cp.color;
     d.clear_color_mask = cp.color_mask;
     /* The clear's target mask as targets of the draw's dense list: the same
      * shift resolve_targets applied (`dense_target_mask`), so "the clear
      * names the frame target" means the same thing here as there. */
-    let target_mask = dense_target_mask(d, pc.state.target_mask);
     d.clear_target_mask = if cp.color { target_mask } else { 0 };
     d.clear_rgba = if cp.color { pc.rgba } else { [0.0; 4] };
     /* an R or RG integer texture in a four-channel store: the channels its
@@ -3221,49 +3228,74 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
         return;
     };
     /* an R or RG integer texture's clear keeps its absent channels at 0, 0,
-     * 1, or a clear of it beside a target that keeps all four is refused */
-    let mut cp = cp;
-    let mut channels = 0xf;
-    if cp.color {
-        match int_clear_channels(c, d, dense_target_mask(d, pc.state.target_mask)) {
-            Ok(m) => channels = m,
-            Err((e, func)) => {
-                if !quiet {
-                    c.set_error(e, func);
-                }
-                pc.color = false;
-                if !(cp.depth || cp.stencil) {
-                    return;
-                }
-                (cp.color, cp.color_mask) = (false, 0);
-            }
+     * 1; beside a target that keeps other channels the clear is one pass per
+     * channel group, each naming its own targets (`clear_channel_groups`).
+     * A clear of one group is the one pass it always was. */
+    let mask = dense_target_mask(d, pc.state.target_mask);
+    let (groups, n) = if cp.color { clear_channel_groups(c, d, mask) } else { ([(0xf, mask); GLES_MAX_TARGETS], 1) };
+    let base = *d;
+    for (k, &(channels, target_mask)) in groups[..n].iter().enumerate() {
+        let mut cp = cp;
+        if k > 0 {
+            /* the next group's pass: the same target, colour only (depth
+             * and stencil went with the first) */
+            *d = base;
+            (cp.depth, cp.stencil) = (false, false);
         }
-    }
-    let color = cp.color;
-    apply_clear_plan(d, &cp, pc, channels);
-    d.clear_quad = cp.quad;
-    d.scissor = cp.scissor;
-    d.scissor_rect = cp.scissor_rect;
-    d.stencil_write_mask = cp.stencil_write_mask;
-    d.stencil_back_write_mask = cp.stencil_write_mask;
-    resolve_ds_storage(c, d);
-    /* A depth- or stencil-only clear must leave the colour buffer alone, so
-     * the mask follows the colour clear rather than being opened up. */
-    d.color_write = color;
-    d.color_mask = if color { 0xf } else { 0x0 };
-    d.flip_y = framebuffer::fb_flip_y(c);
-    d.prim = GLES_PRIM_TRIANGLES;
-    d.index_count = 0; /* clear-only kick, no geometry */
-    d.viewport = c.viewport;
-    /* The depth range matters here as much as the viewport: a backend that
-     * clears with a quad puts it through the same viewport transform as
-     * geometry, and a zeroed range is not "the default", it is a range of no
-     * width. Left unset, the Vivante backend derived PA_VIEWPORT_SCALE_Z =
-     * far - near = 0, which collapses every z to the offset, so a clear with
-     * no draw behind it wrote depth 0 whatever value it was given. */
-    d.depth_range = c.depth_range;
+        let color = cp.color;
+        apply_clear_plan(d, &cp, pc, channels, target_mask);
+        d.clear_quad = cp.quad;
+        d.scissor = cp.scissor;
+        d.scissor_rect = cp.scissor_rect;
+        d.stencil_write_mask = cp.stencil_write_mask;
+        d.stencil_back_write_mask = cp.stencil_write_mask;
+        resolve_ds_storage(c, d);
+        /* A depth- or stencil-only clear must leave the colour buffer alone, so
+         * the mask follows the colour clear rather than being opened up. */
+        d.color_write = color;
+        d.color_mask = if color { 0xf } else { 0x0 };
+        d.flip_y = framebuffer::fb_flip_y(c);
+        d.prim = GLES_PRIM_TRIANGLES;
+        d.index_count = 0; /* clear-only kick, no geometry */
+        d.viewport = c.viewport;
+        /* The depth range matters here as much as the viewport: a backend that
+         * clears with a quad puts it through the same viewport transform as
+         * geometry, and a zeroed range is not "the default", it is a range of no
+         * width. Left unset, the Vivante backend derived PA_VIEWPORT_SCALE_Z =
+         * far - near = 0, which collapses every z to the offset, so a clear with
+         * no draw behind it wrote depth 0 whatever value it was given. */
+        d.depth_range = c.depth_range;
 
-    submit_draw(c, reported, d, "the pending clear", None);
+        submit_draw(c, reported, d, "the pending clear", None);
+    }
+}
+
+/// A pending colour clear whose targets fall into several channel groups
+/// ([`clear_channel_groups`]: an R or RG integer texture drawn as its wide
+/// store beside a target that keeps other channels) cannot be fused into
+/// one draw, which carries one clear value. It is emitted before the draw,
+/// one pass per group with depth and stencil in the first
+/// ([`emit_pending_clear`]), as [`settle_quad_clear`] does for a clear the
+/// background object cannot carry out; the draw then has no clear to fuse.
+/// A clear of one group is left for the draw as before. Only on a back end
+/// that narrows ([`NARROW_INT_CLEAR`]).
+fn settle_split_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32) {
+    if !NARROW_INT_CLEAR || !pending_clear_of(c).color {
+        return;
+    }
+    *d = GlesDraw::ZERO;
+    if resolve_target(c, d).is_err() {
+        return; /* the target is the draw's problem to report */
+    }
+    set_target_format(c, d);
+    resolve_targets(c, d);
+    let (has_depth, has_stencil) = framebuffer::fb_target_depth_stencil(c);
+    let pc = pending_clear_of(c);
+    let split = plan_clear(pc, (d.target_w, d.target_h, d.target_gpu != 0), has_depth, has_stencil)
+        .is_some_and(|cp| cp.color && clear_channel_groups(c, d, dense_target_mask(d, pc.state.target_mask)).1 > 1);
+    if split {
+        emit_pending_clear(c, d, reported, true, false);
+    }
 }
 
 /// A glClear applies to the framebuffer bound when it was called. A clear
@@ -4451,20 +4483,34 @@ fn build_common(
         let (has_depth, has_stencil) = framebuffer::fb_target_depth_stencil(c);
         match plan_clear(pc, (d.target_w, d.target_h, d.target_gpu != 0), has_depth, has_stencil) {
             Some(mut cp) => {
-                /* as in emit_pending_clear: a refused colour clear is
-                 * dropped with its error, the draw and the depth/stencil
+                /* a clear of several channel groups was emitted before the
+                 * draw (settle_split_clear); one that reaches it anyway is
+                 * refused by name: its colour clear is dropped with
+                 * GL_INVALID_OPERATION, the draw and the depth/stencil
                  * clears go on */
+                let mask = dense_target_mask(d, pc.state.target_mask);
                 let mut channels = 0xf;
                 if cp.color {
-                    match int_clear_channels(c, d, dense_target_mask(d, pc.state.target_mask)) {
-                        Ok(m) => channels = m,
-                        Err((e, func)) => {
-                            c.set_error(e, func);
-                            (cp.color, cp.color_mask) = (false, 0);
+                    let (groups, n) = clear_channel_groups(c, d, mask);
+                    if n == 1 {
+                        channels = groups[0].0;
+                    } else {
+                        // SAFETY: single-threaded by contract; no other reference is live.
+                        let logged = unsafe { REFUSED_UNEVEN_CLEAR.get() };
+                        if !*logged {
+                            *logged = true;
+                            glog!(
+                                "clear refused: its targets take channels {:#x?} (an R or RG integer texture keeps \
+                                 0, 0, 1 in the channels its format lacks), a draw carries one clear value, and \
+                                 the clear was not split before the draw",
+                                &groups[..n]
+                            );
                         }
+                        c.set_error(GL_INVALID_OPERATION, FUNC);
+                        (cp.color, cp.color_mask) = (false, 0);
                     }
                 }
-                apply_clear_plan(d, &cp, pc, channels)
+                apply_clear_plan(d, &cp, pc, channels, mask)
             }
             None => {
                 pc.color = false;
@@ -5316,6 +5362,7 @@ fn draw_arrays(c: Option<&mut GlContext>, st: &mut DrawState, mode: GLenum, firs
      * upload) by build_common: the backend fetches vertices sequentially. */
     settle_pending_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
     settle_quad_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
+    settle_split_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
     let d = &mut st.arrays_draw;
     if culls_everything(c, prim) {
         if let Err((e, func)) = resolve_target(c, d) {
@@ -5723,6 +5770,7 @@ fn draw_elements(
     /* indexed draws address vertices 0..max_index absolutely */
     settle_pending_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
     settle_quad_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
+    settle_split_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
     let d = &mut st.elements_draw;
     if culls_everything(c, prim) {
         if let Err((e, func)) = resolve_target(c, d) {

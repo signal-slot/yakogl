@@ -7,7 +7,7 @@
 //! An R or RG integer texture is held in and drawn as the four-channel store
 //! of the same type and width. The TLB clear words (`state::clear_words`) and
 //! the clear quad carry all four values of `GlesDraw::clear_rgba` into the
-//! store, so the GL core narrows them (`draw.rs` `int_clear_channels`,
+//! store, so the GL core narrows them (`draw.rs` `clear_channel_groups`,
 //! `NARROW_INT_CLEAR`, V3D only): the channels the format lacks get 0 (G, B)
 //! and 1 (A), never the application's B and A.
 //!
@@ -21,10 +21,14 @@
 //! 8} at attachment 0, at layer 1 of a 2D array and at level 1 leaves 0 (G,
 //! B) and 1 (A) in the store's absent channels; a glClear with a partial
 //! colour mask or a scissor (the quad path) changes only the format's
-//! channels; an R8I texture at attachment 1 beside a float attachment 0
-//! keeps RT 0's clear value and is narrowed, or the clear is refused by a
-//! named reason (one clear value for every target: the GL core drops it with
-//! GL_INVALID_OPERATION and a "clear refused" log line).
+//! channels. A glClear of an R/RG integer texture at attachment 1 beside an
+//! RGBA8 renderbuffer or an RGBA8I texture at attachment 0 is split by the GL
+//! core into one clear per channel group (`draw.rs` `clear_channel_groups`;
+//! the back end has one clear value per clear, `GlesDraw::clear_rgba`): RT
+//! 0's pass names RT 0 alone with the application's four values, RT 1's
+//! names RT 1 alone with R (and G) kept and 0, 0, 1 in the rest; depth is
+//! cleared in exactly one pass; no GL error. A glClear followed by a draw
+//! is split before the draw, which then fuses no clear.
 //!
 //! What the stand-in sees, and what it cannot. It sees each clear as the
 //! `GlesDraw` the back end is handed: `clear_rgba`, `clear_color_mask`,
@@ -48,15 +52,21 @@
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
+use std::ffi::CString;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend, *};
+use yakogl::gl::buffer::glBindBuffer;
 use yakogl::gl::consts::*;
+use yakogl::gl::draw::*;
 use yakogl::gl::es3::*;
 use yakogl::gl::framebuffer::*;
+use yakogl::gl::program::*;
+use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
 use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
+use yakogl::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
 use yakogl::v3d::state;
 
@@ -93,6 +103,7 @@ struct Seen {
     clear_color_mask: u8,
     clear_quad: bool,
     clear_target_mask: u8,
+    do_clear_depth: bool,
     /// `state::colour_needs_quad`: the quad path rather than the TLB clear.
     needs_quad: bool,
     /// `state::refusal` / `state::unsupported` (a clear has no job state).
@@ -114,6 +125,7 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
         clear_color_mask: d.clear_color_mask,
         clear_quad: d.clear_quad,
         clear_target_mask: d.clear_target_mask,
+        do_clear_depth: d.do_clear_depth,
         needs_quad: state::colour_needs_quad(d),
         refused: state::refusal(d).or_else(|| state::unsupported(d)),
     });
@@ -661,49 +673,183 @@ fn texture_glclear_quad_path_changes_only_the_formats_channels() {
     }
 }
 
-/// An R8I texture at attachment 1 beside an RGBA8 renderbuffer at attachment 0
-/// under glClear: RT 0's clear value is the application's float colour,
-/// unchanged by the integer RT; RT 1 is narrowed (the clear words of its wide
-/// store hold 0, 0, 1 in G, B, A) or the clear is refused with a named cause:
-/// by the back end (`state::refusal` / `state::unsupported`), or by the GL
-/// core before it (one clear value cannot be right for both targets: no
-/// clear reaches the back end and GL_INVALID_OPERATION is raised, with the
-/// "clear refused" log line). (Which of a float colour's bits an integer RT
-/// takes is undefined by the spec; the hidden channels are not.)
+/// The application's glClearColor of the split cases, as `clear_rgba`'s bits.
+const COLOUR: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
+
+/// The passes of a glClear split by channel group: exactly one pass names
+/// RT 0 alone (`0b01`) and one names RT 1 alone (`0b10`), none is refused,
+/// and depth is cleared in at most one of them. Returns (RT 0's, RT 1's).
+fn split_passes(c: &[Seen], what: &str) -> (Seen, Seen) {
+    assert_eq!(c.len(), 2, "{what}: one clear per channel group: {c:?}");
+    for s in c {
+        assert_eq!(s.refused, None, "{what}: {s:?}");
+        assert_eq!(s.targets.len(), 2, "{what}: both targets in every pass");
+    }
+    let rt0 = c.iter().find(|s| s.clear_target_mask == 0b01);
+    let rt1 = c.iter().find(|s| s.clear_target_mask == 0b10);
+    let (Some(rt0), Some(rt1)) = (rt0, rt1) else {
+        panic!("{what}: a pass for RT 0 alone and one for RT 1 alone: {c:?}")
+    };
+    assert!(c.iter().filter(|s| s.do_clear_depth).count() <= 1, "{what}: depth cleared twice: {c:?}");
+    (rt0.clone(), rt1.clone())
+}
+
+/// An R or RG integer texture (a TEXTURE_2D, layer 1 of a 2D array, level 1)
+/// at attachment 1 beside an RGBA8 renderbuffer at attachment 0 under
+/// glClear: the GL core splits the clear into one pass per
+/// channel group (one clear value per pass, `GlesDraw::clear_rgba`). RT 0's
+/// pass names RT 0 alone and carries the application's four values; RT 1's
+/// names RT 1 alone and carries the format's channels of them with 0 (G, B)
+/// and 1 (A) in the rest. No GL error, nothing refused. (Which of a float
+/// colour's bits an integer RT takes is undefined by the spec; the hidden
+/// channels are not.)
 #[test]
-fn r8i_texture_beside_a_float_target_under_glclear_keeps_rt0_and_narrows_or_refuses_rt1() {
+fn r_or_rg_texture_layer_or_level_beside_a_float_target_under_glclear_is_split_per_channel_group() {
     let _g = context();
-    let r = ROWS[0];
-    let _f = fbo_float_then(&r, Kind::Texture2d);
-    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
-    // SAFETY: plain GL calls.
-    unsafe {
-        glClearColor(0.25, 0.5, 0.75, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    let _ = err();
-    let c = clears();
-    if c.is_empty() {
-        assert_eq!(err(), GL_INVALID_OPERATION, "no clear reached the back end, and none was refused");
-        return;
-    }
-    for s in &c {
-        match s.refused {
-            Some(why) => assert!(!why.is_empty(), "a refusal without a cause"),
-            None => {
-                assert_eq!(s.targets.len(), 2);
-                let want = [0.25f32, 0.5, 0.75, 1.0].map(f32::to_bits);
-                assert_eq!(
-                    words(s.targets[0].3, s.clear_bits),
-                    words(s.targets[0].3, want),
-                    "RT 0's clear value is unchanged"
-                );
-                assert!(
-                    hidden_channels_clean(&r, s, s.targets[1].3),
-                    "RT 1 carries B/A into the hidden channels: {s:?}"
-                );
+    for kind in [Kind::Texture2d, Kind::ArrayLayer, Kind::Level1] {
+        for r in ROWS {
+            let what = format!("{} {kind:?}", r.name);
+            let _f = fbo_float_then(&r, kind);
+            assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{what}");
+            SEEN.lock().unwrap().clear();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+            assert_eq!(err(), GL_NO_ERROR, "{what}: glClear");
+            let c = clears();
+            assert_eq!(err(), GL_NO_ERROR, "{what}: no clear refused");
+            let (rt0, rt1) = split_passes(&c, &what);
+            let want = COLOUR.map(f32::to_bits);
+            assert_eq!(rt0.clear_bits, want, "{what}: RT 0 takes the application's four values");
+            assert_eq!(words(rt0.targets[0].3, rt0.clear_bits), words(rt0.targets[0].3, want), "{what}: RT 0's words");
+            assert_eq!(rt1.clear_bits, narrowed_bits(&r, want), "{what}: RT 1 keeps its channels, 0, 0, 1 in the rest");
+            assert!(hidden_channels_clean(&r, &rt1, rt1.targets[1].3), "{what}: RT 1's hidden channels: {rt1:?}");
+            let side = if matches!(kind, Kind::Level1) { 4 } else { 8 };
+            assert_eq!((rt1.targets[1].1, rt1.targets[1].2), (side, side), "{what}: RT 1 is the attached image");
+            for s in [&rt0, &rt1] {
+                assert_eq!(s.clear_color_mask, 0xf, "{what}: the application's colour mask in each pass");
+                assert!(!s.clear_quad, "{what}: an unscissored clear");
             }
         }
+    }
+}
+
+/// The same split beside an RGBA8I texture at attachment 0 (both integer,
+/// the channels differ), with a depth renderbuffer: glClear(COLOR | DEPTH)
+/// clears depth in exactly one pass; RT 0 takes all four values, the R8I
+/// texture R with 0, 0, 1.
+#[test]
+fn r8i_texture_beside_an_rgba8i_texture_with_depth_is_split_and_clears_depth_once() {
+    let _g = context();
+    let r = ROWS[0];
+    let mut fb = 0;
+    // SAFETY: room for one name.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+    }
+    let mut f = Fbo { fb, tex: vec![], rbs: vec![], w: 8 };
+    attach(&mut f, GL_RGBA8I, Kind::Texture2d, GL_COLOR_ATTACHMENT0);
+    attach(&mut f, r.ifmt, Kind::Texture2d, GL_COLOR_ATTACHMENT0 + 1);
+    attach(&mut f, GL_DEPTH_COMPONENT16, Kind::Renderbuffer, GL_DEPTH_ATTACHMENT);
+    let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT0 + 1];
+    // SAFETY: two draw buffers listed.
+    unsafe { glDrawBuffers(2, bufs.as_ptr()) };
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    SEEN.lock().unwrap().clear();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+        glClearDepthf(0.5);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    let c = clears();
+    assert_eq!(err(), GL_NO_ERROR, "no clear refused");
+    let (rt0, rt1) = split_passes(&c, "RGBA8I + R8I + depth");
+    assert_eq!(c.iter().filter(|s| s.do_clear_depth).count(), 1, "depth cleared exactly once: {c:?}");
+    let want = COLOUR.map(f32::to_bits);
+    assert_eq!(rt0.clear_bits, want, "RT 0 (RGBA8I) takes all four");
+    assert_eq!(rt1.clear_bits, narrowed_bits(&r, want), "RT 1 (R8I) keeps R, 0, 0, 1");
+}
+
+/// A glClear of the split kind followed by a draw: the clear is emitted
+/// before the draw as one pass per channel group, and the draw fuses no
+/// clear (`draw.rs` `settle_split_clear`). No GL error.
+#[test]
+fn a_split_glclear_before_a_draw_goes_out_before_it_and_the_draw_fuses_none() {
+    let _g = context();
+    let r = ROWS[3]; /* RG8UI */
+    let _f = fbo_float_then(&r, Kind::Texture2d);
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    program(&["vec4", "uvec4"]);
+    SEEN.lock().unwrap().clear();
+    static TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0, -1.0, 3.0, 0.0, 1.0];
+    // SAFETY: plain GL calls; TRI is static and outlives the draw.
+    unsafe {
+        glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, TRI.as_ptr() as *const c_void);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glFinish();
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    let seen = core::mem::take(&mut *SEEN.lock().unwrap());
+    let last = seen.last().cloned().expect("the draw reached the back end");
+    assert!(!last.do_clear, "the draw fuses no clear: {last:?}");
+    assert_eq!(last.refused, None, "the draw: {last:?}");
+    let c: Vec<Seen> = seen.into_iter().filter(|s| s.do_clear).collect();
+    let (rt0, rt1) = split_passes(&c, "before the draw");
+    assert_eq!(rt0.clear_bits, COLOUR.map(f32::to_bits));
+    assert_eq!(rt1.clear_bits, narrowed_bits(&r, COLOUR.map(f32::to_bits)));
+    // SAFETY: plain GL call.
+    unsafe { glUseProgram(0) };
+}
+
+fn shader(ty: GLenum, text: &str) -> GLuint {
+    let text = CString::new(text).unwrap();
+    // SAFETY: plain GL calls; one NUL-terminated source.
+    unsafe {
+        let s = glCreateShader(ty);
+        let p: [*const c_char; 1] = [text.as_ptr()];
+        glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+        glCompileShader(s);
+        let mut ok: GLint = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+        assert_eq!(ok, 1, "{text:?} did not compile");
+        s
+    }
+}
+
+/// A program with one output per type of `tys`, at locations 0.., current.
+fn program(tys: &[&str]) {
+    let mut fs = String::from("#version 300 es\nprecision highp int;\nprecision mediump float;\n");
+    let mut body = String::new();
+    for (i, ty) in tys.iter().enumerate() {
+        fs += &format!("layout(location = {i}) out highp {ty} o{i};\n");
+        body += &match *ty {
+            "vec4" => format!("o{i} = vec4(0.25, 0.5, 0.75, 1.0); "),
+            "ivec4" => format!("o{i} = ivec4(1, -2, 3, -4); "),
+            _ => format!("o{i} = uvec4(1u, 2u, 3u, 4u); "),
+        };
+    }
+    fs += &format!("void main() {{ {body}}}\n");
+    let v = shader(GL_VERTEX_SHADER, "#version 300 es\nin vec4 p;\nvoid main() { gl_Position = p; }\n");
+    let f = shader(GL_FRAGMENT_SHADER, &fs);
+    // SAFETY: plain GL calls.
+    unsafe {
+        let p = glCreateProgram();
+        glAttachShader(p, v);
+        glAttachShader(p, f);
+        glLinkProgram(p);
+        let mut ok: GLint = 0;
+        glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+        assert_eq!(ok, 1, "{fs:?} did not link");
+        glUseProgram(p);
     }
 }
 
