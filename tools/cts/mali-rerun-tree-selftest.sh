@@ -86,6 +86,22 @@ python3 -I "$TOOL" --mustpass "$MP" --max 401 "${IS[@]}" > /dev/null 2>&1
 check "iMX95 --max above 400 exits 2" test $? -eq 2
 python3 -I "$TOOL" --mustpass "$MP" "${IS[0]}" "${SL[1]}" > /dev/null 2>&1
 check "a mix of iMX95 and T6 slices exits 2" test $? -eq 2
+# board=verdin_imx95 (the Zephyr spelling) is the same board as verdin-imx95.
+mkdir -p "$tmp/us/a" "$tmp/us/b" "$tmp/spmix/a" "$tmp/spmix/b"
+for s in "$D"/a/*/; do cp -r "$s" "$tmp/us/a/"; cp -r "$s" "$tmp/spmix/a/"; done
+for s in "$D"/b/*/; do cp -r "$s" "$tmp/us/b/"; cp -r "$s" "$tmp/spmix/b/"; done
+for s in "$tmp"/us/a/*/ "$tmp"/us/b/*/; do printf 'board=verdin_imx95\nsession=S1\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "$tmp"/us/a/*/ "$tmp"/us/b/*/ > "$tmp/us.txt" 2> "$tmp/userr.txt"
+check "board=verdin_imx95 gives a table (exit 0, no stderr)" test $? -eq 0 -a ! -s "$tmp/userr.txt"
+check "board=verdin_imx95 gives the same table as verdin-imx95" cmp -s "$tmp/us.txt" "$tmp/i95-expected.txt"
+check "no T6 label for board=verdin_imx95" test "$(grep -c 'T6' "$tmp/us.txt")" -eq 0
+python3 -I "$TOOL" --mustpass "$MP" --max 401 "$tmp"/us/a/*/ > /dev/null 2>&1
+check "board=verdin_imx95 --max above 400 exits 2" test $? -eq 2
+for s in "$tmp"/spmix/a/*/; do printf 'board=verdin_imx95\n' > "$s/meta.txt"; done
+for s in "$tmp"/spmix/b/*/; do printf 'board=verdin-imx95\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "$tmp"/spmix/a/*/ "$tmp"/spmix/b/*/ > "$tmp/spmix.txt" 2> "$tmp/spmixerr.txt"
+check "slices mixing both spellings are one board (exit 0, no stderr)" test $? -eq 0 -a ! -s "$tmp/spmixerr.txt"
+check "the mixed-spelling table is the I95RR table" cmp -s "$tmp/spmix.txt" "$tmp/i95-expected.txt"
 cp -r "${SL[0]}" "$tmp/t6meta/"
 for s in "$tmp"/t6meta/*/; do printf 'board=nanopc-t6\n' > "$s/meta.txt"; done
 python3 -I "$TOOL" --mustpass "$MP" "$tmp"/t6meta/*/ | grep -q '^# image T6RR001:'

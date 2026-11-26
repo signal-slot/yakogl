@@ -92,13 +92,16 @@ MAX_ROW = {"verdin-imx95": 400}
 
 
 def slice_board(slice_dir):
-    """The board= of a slice's meta.txt; nanopc-t6 when there is none."""
+    """The board= of a slice's meta.txt; nanopc-t6 when there is none.
+
+    '_' reads as '-': the Zephyr board name verdin_imx95 is the same board
+    as verdin-imx95."""
     path = os.path.join(slice_dir.rstrip("/"), "meta.txt")
     try:
         with open(path, encoding="utf-8") as f:
             for ln in f.read().split("\n"):
                 if ln.startswith("board="):
-                    return ln[6:].strip() or "nanopc-t6"
+                    return ln[6:].strip().replace("_", "-") or "nanopc-t6"
     except FileNotFoundError:
         pass
     except OSError as e:
