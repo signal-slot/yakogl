@@ -98,6 +98,29 @@ QOS_BLOCKS = (0xFDF35000, 0xFDF35200, 0xFDF35400, 0xFDF35600)
 CLKGATE_CON15 = 0xFD7C083C
 GLB_RST_ST, GLB_RST_CON = 0xFD7C0C04, 0xFD7C0C10
 WDT0 = 0xFEAF0000
+# UART2, the debug console (rk3588-base.dtsi serial@feb50000;
+# board::nanopc_t6_early::UART2_PHYS; driver/docs/nanopc-t6-mali.md table).
+# DW_apb_uart, 32-bit registers at reg-shift 2: LCR is +0x0c, USR +0x7c. Both
+# reads are free of side effects. Never read RBR (+0), IIR (+8), LSR (+0x14)
+# or MSR (+0x18): those reads clear state. DLL/DLM share +0 and +4 with RBR/IER
+# behind LCR.DLAB, and reaching them is a write to LCR that would break
+# U-Boot's own console, so the divisor is not read.
+UART2 = 0xFEB50000
+UART2_LCR, UART2_USR = UART2 + 0x0C, UART2 + 0x7C
+# UART2's clock in the CRU, Linux v6.12 drivers/clk/rockchip/clk-rk3588.c:
+# CLKSEL_CON(x) is CRU + 0x300 + 4x (CLKGATE_CON(x) is +0x800 + 4x, as above).
+#   :509 clk_uart2_p = { clk_uart2_src, clk_uart2_frac, xin24m }
+#   :631-633 clk_uart2 mux CLKSEL_CON(45)[1:0] (0 src, 1 frac, 2 xin24m)
+#   :1247-1249 clk_uart2_src: gpll_cpll_p, CLKSEL_CON(43) mux bit 7 (0 gpll,
+#     1 cpll), divider bits 6:2 (div + 1), gate CLKGATE_CON(12) bit 14
+#   :1250-1253 clk_uart2_frac: CLKSEL_CON(44), numerator [31:16] and
+#     denominator [15:0] (clk.h COMPOSITE_FRACMUX div_shift 16; rate =
+#     parent * n / d), gate CLKGATE_CON(12) bit 15
+#   :1221 pclk_uart2 gate CLKGATE_CON(12) bit 3; :1254-1255 sclk_uart2 gate
+#     CLKGATE_CON(13) bit 0
+# PLL rate: clk-pll.c:896-921 (m, p, s and k).
+UART2_SEL = 0xFD7C0000 + 0x300 + 4 * 43       # CLKSEL_CON(43), (44), (45) follow
+UART2_GATE12 = 0xFD7C0000 + 0x800 + 4 * 12    # CLKGATE_CON(12), (13) follow
 
 ALLOWED = re.compile(
     r"(?:version|help|printenv|bdinfo|dm tree|clk dump|wdt list"
@@ -145,6 +168,12 @@ def first_commands():
         md(CLKGATE_CON15),
         md(GLB_RST_ST),
         md(GLB_RST_CON),
+        # UART2's format, status and clock (decode: uart2_decode). No RBR,
+        # IIR, LSR, MSR; no DLL/DLM (they need LCR.DLAB, a write).
+        md(UART2_LCR),
+        md(UART2_USR),
+        md(UART2_SEL, 3),
+        md(UART2_GATE12, 2),
         "clk dump",
         "wdt list",
         # The eMMC is mmc 0 (U-Boot's own "MMC:" line; `mmc list` shows it
@@ -211,6 +240,70 @@ def later_commands(answers):
     else:
         notes.append("dm tree shows no probed pmic: no pmic command is entered")
     return cmds, notes
+
+
+def pll_hz(answers, base):
+    """A PLL's rate in Hz (clk-pll.c:896-921, fractional k included) from
+    its PLL_CON words, or None. The PLL mode is not checked here."""
+    w = md_words(answers.get(md(base, 7), ""), base, 7)
+    if w is None or w[1] & 0x3f == 0:
+        return None
+    m, p, s, k = w[0] & 0x3ff, w[1] & 0x3f, (w[1] >> 6) & 7, w[2] & 0xffff
+    return (24000000 * m // p + (24000000 * k // (p * 65535) if k else 0)) >> s
+
+
+def uart2_decode(answers):
+    """The lines that say what UART2 reads at the prompt: format, clock
+    source, input clock and the baud divisor 1 gives. [] when the reads
+    were not made. The divisor itself is not read."""
+    lcr = md_word(answers.get(md(UART2_LCR), ""), UART2_LCR)
+    usr = md_word(answers.get(md(UART2_USR), ""), UART2_USR)
+    sel = md_words(answers.get(md(UART2_SEL, 3), ""), UART2_SEL, 3)
+    gates = md_words(answers.get(md(UART2_GATE12, 2), ""), UART2_GATE12, 2)
+    if lcr is None and sel is None:
+        return []
+    out = ["UART2: the divisor (DLL/DLM) is not read: it sits behind LCR.DLAB, and setting that "
+           "is a write that breaks U-Boot's console; the baud below is what divisor 1 would give"]
+    if lcr is not None:
+        par = "N" if not lcr & 8 else ("O" if not lcr & 0x10 else "E")
+        out.append("UART2 LCR 0x%08x: %d%s%d, DLAB %s%s" % (
+            lcr, 5 + (lcr & 3), par, 2 if lcr & 4 else 1,
+            "SET (the divisor latch is open: not a normal state)" if lcr & 0x80 else "clear",
+            "" if lcr & 0xff == 3 else " (not 8N1 with DLAB clear)"))
+    if usr is not None:
+        out.append("UART2 USR 0x%08x: BUSY %d, TFNF %d, TFE %d, RFNE %d, RFF %d" % (
+            usr, usr & 1, usr >> 1 & 1, usr >> 2 & 1, usr >> 3 & 1, usr >> 4 & 1))
+    if sel is None:
+        out.append("UART2 clock: CLKSEL_CON(43..45) not read")
+        return out
+    src, frac, mux = sel
+    hz, how = None, "reserved mux value 3"
+    if mux & 3 == 2:
+        hz, how = 24000000, "xin24m (24 MHz OSC)"
+    elif mux & 3 < 2:
+        pll, base = ("cpll", 0xFD7C01A0) if src >> 7 & 1 else ("gpll", 0xFD7C01C0)
+        phz = pll_hz(answers, base)
+        div = (src >> 2 & 0x1f) + 1
+        how = "%s / %d" % (pll, div)
+        hz = None if phz is None else phz // div
+        if phz is None:
+            how += " (PLL words not read)"
+        if mux & 3 == 1:
+            n, d = frac >> 16, frac & 0xffff
+            if n and d:
+                how += " * %d / %d (fractional divider)" % (n, d)
+                hz = None if hz is None else hz * n // d
+            else:
+                how += " (fractional divider 0: pass-through)"
+    out.append("UART2 clock select: CLKSEL_CON(43) 0x%08x, (44) 0x%08x, (45) 0x%08x: source %s" % (src, frac, mux, how))
+    if gates is not None:
+        g12, g13 = gates
+        names = [("pclk_uart2", g12, 3), ("clk_uart2_src", g12, 14), ("clk_uart2_frac", g12, 15), ("sclk_uart2", g13, 0)]
+        out.append("UART2 gates (1 = gated): CLKGATE_CON(12) 0x%08x, (13) 0x%08x: %s" % (
+            g12, g13, ", ".join("%s %d" % (n, w >> b & 1) for n, w, b in names)))
+    if hz is not None:
+        out.append("UART2 input clock %d Hz; divisor 1 gives %d baud (clk / 16); the PLL mode is not applied" % (hz, hz // 16))
+    return out
 
 
 class Stop(Exception):
@@ -427,6 +520,9 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30, back=Non
                 ans.write("# %s\n" % n)
             for cmd in more:
                 one(cmd)
+            for n in uart2_decode(answers):
+                say(n)
+                ans.write("# %s\n" % n)
             say("%d commands answered; entering reset" % len(answers))
             one("reset")
             # From here the board must not be written to: disarm.
@@ -884,6 +980,45 @@ def self_test():
     pvt = dict(sec4)
     pvt[md(0xFD7C0578)] = "fd7c0578: 00005f24\n"
     check(clock_prediction(pvt) == "move", "replay: the PVTPLL bit predicts move")
+
+    # 12. UART2's reads and their decode. Only reads with no side effect; the
+    # divisor is not read; DLAB, the clock source and the computed rate.
+    u2cmds = [md(UART2_LCR), md(UART2_USR), md(UART2_SEL, 3), md(UART2_GATE12, 2)]
+    check(all(c in plan_cmds and allowed(c) for c in u2cmds), "uart2: its reads are in the plan and allowed")
+    check(all(a not in (UART2 + 0x00, UART2 + 0x08, UART2 + 0x14, UART2 + 0x18) for a in
+              [int(c.split()[1], 16) for c in u2cmds]),
+          "uart2: no RBR, IIR, LSR or MSR read")
+    check(md(UART2_LCR) == "md.l 0xfeb5000c 1" and md(UART2_SEL, 3) == "md.l 0xfd7c03ac 3"
+          and md(UART2_GATE12, 2) == "md.l 0xfd7c0830 2", "uart2: the addresses")
+    check(not any(re.match(r"(?:mw|mm|nm|cp|setenv|saveenv)\b", c) for c in first_commands()),
+          "uart2: the plan has no write command")
+    with open(os.path.join(here, "synthetic-uart2-pll-frac.txt")) as f:
+        utext = f.read()
+    u2 = parse_transcript(utext)
+    check(set(u2) <= plan_cmds and all(allowed(c) for c in u2), "uart2 fixture: every command is in the plan and allowed")
+    check("SYNTHETIC" in utext and "expect uart2_hz=100000000 baud=6250000 dlab=clear" in utext,
+          "uart2 fixture: marked synthetic, header says the expectation")
+    check(not re.search(r"(?i)/dev/|tty|serial|ethaddr|[0-9a-f]{2}(:[0-9a-f]{2}){5}|\.(local|lan)\b", utext),
+          "uart2 fixture: no tty path, serial or MAC")
+    d = "\n".join(uart2_decode(u2))
+    check("not read" in d and "DLAB" in d and "LCR.DLAB" in d, "uart2: the decode says the divisor is not read, and why")
+    check("8N1, DLAB clear" in d and "cpll / 5 * 1 / 3 (fractional divider)" in d
+          and "input clock 100000000 Hz; divisor 1 gives 6250000 baud" in d,
+          "uart2: a PLL source with a fractional divider decodes to the computed rate")
+    check(pll_hz(u2, 0xFD7C01A0) == 1500000000 and pll_hz(u2, 0xFD7C01C0) == 1188000000, "uart2: PLL Hz")
+    osc = dict(u2)
+    osc[md(UART2_SEL, 3)] = "fd7c03ac: 00000090 00010003 00000002\n"
+    d = "\n".join(uart2_decode(osc))
+    check("xin24m (24 MHz OSC)" in d and "input clock 24000000 Hz; divisor 1 gives 1500000 baud" in d,
+          "uart2: 24 MHz with divisor 1 decodes to 1500000")
+    dlab = dict(u2)
+    dlab[md(UART2_LCR)] = "feb5000c: 00000083                             ....\n"
+    d = "\n".join(uart2_decode(dlab))
+    check("DLAB SET" in d and "not 8N1" in d, "uart2: DLAB set is flagged")
+    gpll = dict(u2)
+    gpll[md(UART2_SEL, 3)] = "fd7c03ac: 00000008 00000000 00000000\n"
+    check("input clock 396000000 Hz" in "\n".join(uart2_decode(gpll)) and uart2_decode(sec4) == [],
+          "uart2: the gpll source with the plain divider; no UART2 reads, no decode")
 
     return check.summary("prompt-reads")
 
