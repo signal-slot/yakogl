@@ -24,6 +24,12 @@ The block gives
     line when the image stopped, the verdict;
   - the names of the two records it rests on.
 
+After those, three more blocks (appended): the UART2 lines of the prompt reads
+("# UART2 ..." in answers.txt), the image's "t6: GIC active state" line (a
+"no redistributor with affinity" line means no frame matched or the wake
+timed out), and the feeder's "first feed at N ms" line, reported absent when
+missing (the feeder timer never ticked).
+
 A value that was not read or whose line is absent prints "not read". Nothing
 is guessed: keep, move and refuse follow gpu_clock_set's own outcomes
 (ClockSet.kept; stop 9 NoTableRate and stop 10 ReadBack or Rate are the
@@ -333,6 +339,42 @@ def go_block(img, verdict):
     return L
 
 
+GIC_RX = re.compile(r"^t6: GIC active state: (.*)$", re.M)
+FEED_RX = re.compile(r"^yakogl-wdt: nanopc_t6 first feed at (-?\d+) ms\s*$", re.M)
+UART2_RX = re.compile(r"^# (UART2.*)$", re.M)
+
+
+def uart2_block(reads_text):
+    """The UART2 lines prompt-reads.py wrote as '# UART2 ...' notes."""
+    got = UART2_RX.findall(reads_text)
+    if not got:
+        return ["  UART2 at the prompt: %s (no 'UART2' lines in answers.txt)" % NR]
+    return ["  " + x for x in got]
+
+
+def tail_block(reads_text, img):
+    L = ["", "UART2 at the prompt (prompt reads)"]
+    L += uart2_block(reads_text)
+    L.append("GIC redistributor wake and active reset (image)")
+    g = GIC_RX.search(img)
+    if g is None:
+        L.append("  GIC active state line: %s" % NR)
+    else:
+        L.append("  GIC active state: " + g.group(1).rstrip())
+        if "no redistributor with affinity" in g.group(1):
+            L.append("  no redistributor matched: the wake timed out or the affinity has no frame; "
+                     "SGIs and PPIs were not scanned")
+        else:
+            L.append("  a redistributor matched and was woken or found awake")
+    L.append("WDT0 feeder (image)")
+    f = FEED_RX.search(img)
+    if f is None:
+        L.append("  first feed: absent (no 'yakogl-wdt: nanopc_t6 first feed' line: the feeder timer never ticked)")
+    else:
+        L.append("  first feed at %s ms" % f.group(1))
+    return L
+
+
 def summary(reads_arg, go_arg):
     rname, rf = locate(reads_arg, "answers.txt")
     gname, gf = locate(go_arg, "image.log", ("verdict.txt",))
@@ -350,6 +392,7 @@ def summary(reads_arg, go_arg):
     out += reads_block(ans, notes)
     out.append("")
     out += go_block(gf["image.log"], gf["verdict.txt"])
+    out += tail_block(rf["answers.txt"], gf["image.log"])
     return "\n".join(out) + "\n"
 
 
