@@ -2,6 +2,21 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # PowerVR host: where glmark2 refract's (and shadow's) glDrawArrays time goes
 
+**Status (2026-11-26): fix 1 landed in main `21099fcd`.** Its design, its TPU
+state words and its board figures are `docs/notes/pvr-depth-sample.md`. The
+PowerVR back end answers `samples_rendered_depth` (`pvr_depth_sampled`,
+`src/pvr/backend.rs`): a rendered depth texture of one level, sampled by the
+next draw, is bound as the depth buffer's X8U24 stride image
+(`depth_buffer_binding`) and `depth_for_draw` (`src/gl/texture.rs`) resolves
+nothing, so glmark2 `shadow` and `refract` no longer reach the CPU depth
+resolve on main. The resolve remains only for the fallback paths: a CPU read
+or write of the texels, a rendered level above 0 or a chain, a buffer holding
+no stored depth of the texture's size or only a whole clear, a buffer the
+frame being recorded still draws into, a multisampled buffer, and the host
+tests' mock tables. Everything below is the path at the measured commit
+`41e95169`, kept as the historical record of what the resolve cost before fix
+1 landed.
+
 `tools/hostharness/glmark2/FINDINGS-pvr-allscenes.md` ("The top 5 costs",
 rows 1 and 2) left the cost of `refract`'s and `shadow`'s `glDrawArrays`
 unattributed: 0.94 and 0.67 ms a draw against about 2 us for an ordinary draw,
@@ -90,8 +105,10 @@ a code path, and it is under the 20% the attribution leaves.
 ## What the resolve does
 
 `resolve_depth` (`src/gl/texture.rs`) is the fallback of `depth_for_draw`:
-the PowerVR back end does not answer `samples_rendered_depth`, so before the
-draw that samples the depth texture the GL core submits the rendering kick,
+at the measured commit the PowerVR back end did not answer
+`samples_rendered_depth` (it does now — `pvr_depth_sampled`, see the status at
+the top), so before the draw that samples the depth texture the GL core submits
+the rendering kick,
 waits for it, and has the back end write the depth into the texture's R32F
 texels (`pvr_backend_depth_resolve`, `src/pvr/backend.rs`, "Write the depth
 plane of GL object `id`"). The branch taken on the host is the live one
@@ -151,39 +168,53 @@ layout, with a D24S8 or D32 format the TPU supports). YakoGL's store is the
 ZLS buffer: packed D24S8 laid out linearly at the ZLS-tile-aligned width, which
 `pvr_backend_depth_resolve` documents as "not a format the texture unit is
 known to sample"; whether the TPU can read it directly (or the ISP can store
-into an R32F/D32F target of the texture itself) has not been tried on the
-AM62P. That is the experiment the first fix below needs, the same question
-the GC7000 has in `docs/notes/gc-depth-sample.md`.
+into an R32F/D32F target of the texture itself) had not been tried on the
+AM62P at the time of measurement. Fix 1 has since answered the first question:
+the TPU reads the ZLS word as an X8U24 stride image (main `21099fcd`,
+`docs/notes/pvr-depth-sample.md`). The ISP-stores-into-the-texture variant
+remains untried, the same question the GC7000 has in
+`docs/notes/gc-depth-sample.md`.
 
 ## Ranked fixes
 
 Estimates are of the draw call's host CPU time; the board's will be larger.
+**State (2026-11-26): fix 1 has landed (main `21099fcd`,
+`docs/notes/pvr-depth-sample.md`); fix 2 is in progress; fixes 3 and 4 are
+unchanged.**
 
-1. **Sample the rendered depth from the ZLS buffer, no resolve**
-   (`samples_rendered_depth`, the hook the V3D already answers; see
-   `depth_for_draw` in `src/gl/texture.rs`). Gain: the whole step, 94 to 97% of
-   refract's and shadow's draw calls (about 3.3 ms a frame on the host, more on the
-   board), less nothing: the V3D's equivalent still copies. Files:
-   `src/pvr/backend.rs` (answer `samples_rendered_depth`, bind the buffer as the
-   draw's texture with the depth format and the aligned stride),
-   `src/pvr/backend_tests.rs`, a board experiment first. Risk: high. The TPU must
-   read the ZLS word (24-bit unorm in bits 23..0, stencil in 31..24) at the
-   buffer's linear aligned pitch; if it cannot, the fix is not available and
-   fix 2 is the answer. A texture sampled this way stays stale in its texels
-   (the GL core already resolves on the next CPU access).
-2. **Convert by rows on slices, no closure, no per-texel `Option`**
-   (`pvr_backend_depth_resolve`, `ds_retention::write_depth_texels`). Gain: the
-   GC7000's identical rewrite halved a 1024 x 1024 resolve (1.10 to 0.56 ms best);
-   expect 1.5 to 2 ms of the 3.3 ms here (about 45 to 60% of the draw call).
-   Files: `src/pvr/backend.rs`, `src/ds_retention.rs`, a test like
-   `tests/gc_depth_resolve.rs` (bit-exact against the old loop, the pitch,
-   padding, 1 x 1 and oversized-request cases). Risk: low, bit-exact by
-   construction of the test. Needs the unorm24 conversion left as it is or the
-   exhaustive check of `gc-unorm24-exhaustive` for any change to it.
+1. **Sample the rendered depth from the ZLS buffer, no resolve** — **landed
+   (main `21099fcd`)**, design, TPU state words and board figures:
+   `docs/notes/pvr-depth-sample.md`. (`samples_rendered_depth`, the hook the
+   V3D already answers; see `depth_for_draw` in `src/gl/texture.rs`.) Gain: the
+   whole step, 94 to 97% of refract's and shadow's draw calls (about 3.3 ms a
+   frame on the host, more on the board), less nothing: the V3D's equivalent
+   still copies. Files: `src/pvr/backend.rs` (answer `samples_rendered_depth`,
+   bind the buffer as the draw's texture with the depth format and the aligned
+   stride), `src/pvr/backend_tests.rs`, a board experiment first (done, in
+   `docs/notes/pvr-depth-sample.md`). Risk: high. The TPU must read the ZLS
+   word (24-bit unorm in bits 23..0, stencil in 31..24) at the buffer's linear
+   aligned pitch; it can, as an X8U24 stride image, so fix 2 stands as the
+   answer for the resolve paths that fix 1 leaves. A texture sampled this way
+   stays stale in its texels (the GL core already resolves on the next CPU
+   access).
+2. **Convert by rows on slices, no closure, no per-texel `Option`** — **in
+   progress** (no main commit to name yet). (`pvr_backend_depth_resolve`,
+   `ds_retention::write_depth_texels`.) Gain: the GC7000's identical rewrite
+   halved a 1024 x 1024 resolve (1.10 to 0.56 ms best); expect 1.5 to 2 ms of
+   the 3.3 ms here (about 45 to 60% of the draw call); after fix 1 landed, that
+   is the gain on the resolve paths fix 1 leaves — `shadow` and `refract` no
+   longer resolve on main. Files: `src/pvr/backend.rs`, `src/ds_retention.rs`,
+   `tests/depth_resolve_pvr_rows.rs` (on main: bit-exact against the old loop,
+   the pitch, padding, 1 x 1 and oversized-request cases). Risk: low,
+   bit-exact by construction of the test. Needs the unorm24 conversion left as
+   it is or the exhaustive check of `gc-unorm24-exhaustive` for any change to
+   it.
 3. **A faster unorm24 conversion** (reciprocal multiply: `gc-unorm24-fix`, in
    review). Gain on the PowerVR host: none measured (see above), so it is not
    a PowerVR fix on its own; it only helps once fix 2 removes the closure.
-   Files: `src/ds_retention.rs`. Risk: low (exhaustive check exists).
+   Files: `src/ds_retention.rs`. Risk: low (exhaustive check exists). After
+   fix 1 landed the loop it speeds is reached on main only on the fallback
+   paths named in the status.
 4. **Narrow the resolve to the region the sampling draw reads.** glmark2's
    shadow and refract sample the whole map, so no gain on them; recorded
    only so nobody expects it. Not proposed.
@@ -192,13 +223,25 @@ Not proposed: the first-draw gap (1 to 4%, no code path to change), any step of
 the record (0.04 to 0.09 ms a frame), the flush and finish (host: 0; on the board
 they are the GPU's time, the lead's), anything about glGenerateMipmap (#916).
 
-## Suggested updates elsewhere (not made here)
+## Host figures before and after the row resolve
 
-* `docs/README.md`: `- [pvr-refract-draw.md](notes/pvr-refract-draw.md): PowerVR host, glmark2 refract and shadow: 94 to 97% of the draw call is the CPU depth resolve, a ranked fix list.`
-* `tools/hostharness/glmark2/FINDINGS-pvr-allscenes.md`, rows 1 and 2 of "The top 5 costs": where "Where
-  inside is not narrowed" and "The draw: unknown until the symbols are sampled" stand,
-  write "`pvr_backend_depth_resolve` (the CPU conversion of the 1600 x 1200
-  ZLS depth into the sampled depth texture), 94 to 97% of the draw call,
-  `docs/notes/pvr-refract-draw.md`", and in "What a rerun still owes" replace the
-  first bullet (the top-3 symbols column) with a pointer to this note, which
-  answers it with laps because `perf` was refused.
+Empty for now: the before/after measurement of fix 2 (the row resolve) fills
+it. It will hold glmark2 `shadow`, `refract` and `texture` in ms a frame and
+ms a draw, at two named `origin/main` commits — the last commit before the row
+resolve lands, and one carrying it — measured on one machine with the harness
+method of the Method section (`tools/hostharness/glmark2/run.sh`,
+`GM2_PROFILE=1 GM2_FRAMES=20`), with a note of which path each scene ran at
+each commit (after fix 1, `shadow` and `refract` sample the depth buffer on
+main, so a resolve figure there belongs to a fallback path; the baseline run
+names the paths). The `41e95169` measurements above stay as the historical
+record.
+
+## Suggested updates elsewhere (not made here; both since done on main, checked 2026-11-26)
+
+* `docs/README.md`: **done** — the index carries
+  `notes/pvr-refract-draw.md` ("PowerVR host, glmark2 refract and shadow: 94
+  to 97% of the draw call was the CPU depth resolve (before fix 1); a ranked
+  fix list.") and `notes/pvr-depth-sample.md`.
+* `tools/hostharness/glmark2/FINDINGS-pvr-allscenes.md`, rows 1 and 2 of "The top 5 costs": **done** — both rows now name `pvr_backend_depth_resolve` (the CPU conversion of the 1600 x 1200 ZLS depth into the sampled depth texture, 94 to 97% of the draw call), cite this
+  note and main `21099fcd`, and the first bullet of "What a rerun still owes"
+  points to this note instead of owing a `perf` run.
