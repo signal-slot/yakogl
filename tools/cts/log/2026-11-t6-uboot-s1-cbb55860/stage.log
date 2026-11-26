@@ -1,0 +1,31 @@
+t6_cold-1080.bin: OK
+t6_cold-dbg.bin: OK
+t6_cold-int.bin: OK
+t6_cold-s3.bin: OK
+t6_fw.bin: OK
+t6_gpu.bin: OK
+t6_hello.bin: OK
+t6_mmu.bin: OK
+t6_submit.bin: OK
+t6_tri-s3.bin: OK
+9befb087468187af3015de94713138e42fa766c7e2734ab82138d7dd61aa6900  t6_cold.bin
+1f9b9a391863e14e1f10c13fa926365dc8d2ef2cc877da5aa148cad16966f2d6  t6_fw.bin
+0171334cff516d7a7fc13d1b672c69188ef3f1a2a542abf51fb8b9c2566b1a19  t6_gpu.bin
+379d28820d269a97217e01ea22e8b5e205a17235d9eb43c17ed65a09f61bf82e  t6_submit.bin
+=== stage t6_cold
+stage.sh: /boot's fingerprint written to <record>/t6-boot.fingerprint (422 entries), before anything on the board
+stage.sh: /boot/yakogl/t6_cold.bin is <checkout at cbb55860>s/t6_cold.bin (sha256 9befb087468187af3015de94713138e42fa766c7e2734ab82138d7dd61aa6900)
+stage.sh: /boot's other files still match <record>/t6-boot.fingerprint
+=== stage t6_gpu
+stage.sh: /boot matches <record>/t6-boot.fingerprint (422 entries)
+stage.sh: /boot/yakogl/t6_gpu.bin is <checkout at cbb55860>s/t6_gpu.bin (sha256 0171334cff516d7a7fc13d1b672c69188ef3f1a2a542abf51fb8b9c2566b1a19)
+stage.sh: /boot's other files still match <record>/t6-boot.fingerprint
+=== stage t6_fw
+stage.sh: /boot matches <record>/t6-boot.fingerprint (422 entries)
+stage.sh: /boot/yakogl/t6_fw.bin is <checkout at cbb55860>s/t6_fw.bin (sha256 1f9b9a391863e14e1f10c13fa926365dc8d2ef2cc877da5aa148cad16966f2d6)
+stage.sh: /boot's other files still match <record>/t6-boot.fingerprint
+=== stage t6_submit
+stage.sh: /boot matches <record>/t6-boot.fingerprint (422 entries)
+stage.sh: /boot/yakogl/t6_submit.bin is <checkout at cbb55860>s/t6_submit.bin (sha256 379d28820d269a97217e01ea22e8b5e205a17235d9eb43c17ed65a09f61bf82e)
+stage.sh: /boot's other files still match <record>/t6-boot.fingerprint
+UNDO: BOARD_HOST=root@<t6> <checkout at cbb55860>/driver/tools/uboot-t6/stage.sh undo <record>/t6-boot.fingerprint

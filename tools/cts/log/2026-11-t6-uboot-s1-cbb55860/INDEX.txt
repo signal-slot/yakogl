@@ -1,0 +1,32 @@
+T6 U-Boot session 1 (plan #408, item uboot-s1; issues #7, #4627), 2026-11-25.
+Image commit: origin/main cbb55860 (cbb55860275ebec8ade1b57e0710d08e21344912).
+Images: west build -b nanopc_t6 -DYAKOGL_WERROR=ON, ZEPHYR_MODULES from
+tools/cts/zephyr-modules.sh; firmware header from mali_csffw.bin sha256
+a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b.
+Full record (gitignored): records/nanopc-t6/20261125-0416-t6-uboot-s1-cbb55860/.
+Redacted: paths, boot_ids, host names and the adapter's address.
+
+Outcome: no image was started from U-Boot and the board was never rebooted
+(boot_id unchanged from start to end). The first failure was prompt-reads.sh
+--go, exit 40: the serial adapter refused the RFC 2217 session ("busy:
+another client is connected"), because the connected serial MCP server held
+the adapter's one client slot. T6_HAND was not set in the environment either,
+and the farm had no value for it, so --go would have refused (exit 3) next.
+
+File                      Image       Command                                 Exit  Verdict
+images.sha256             all four    sha256 of the staged images             -     -
+prior-boot-yakogl.sha256  (earlier)   the 10 images left in /boot/yakogl      -     -
+                                      by a session of 2026-11-24, backed up
+                                      in the record before undo removed them
+stage.log                 t6_cold     stage.sh stage                          0     -
+                          t6_gpu      stage.sh stage                          0     -
+                          t6_fw       stage.sh stage                          0     -
+                          t6_submit   stage.sh stage                          0     -
+dry-runs.log              -           prompt-reads.sh (dry run)               0     -
+                          t6_cold     prompt-go.sh (dry run)                  0     -
+                          t6_gpu      prompt-go.sh (dry run)                  0     -
+                          t6_fw       prompt-go.sh (dry run)                  0     -
+                          t6_submit   prompt-go.sh (dry run)                  0     -
+prompt-reads-go.log       -           prompt-reads.sh --go                    40    none (UART busy; nothing written, no reboot)
+(not run)                 t6_cold, t6_gpu, t6_fw, t6_submit: prompt-go.sh --go not started after the first failure
+undo.log                  -           stage.sh undo                           0     "stock /boot restored"

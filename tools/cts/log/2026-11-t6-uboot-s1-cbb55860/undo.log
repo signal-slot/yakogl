@@ -1,0 +1,7 @@
+stage.sh: /boot matches <record>/t6-boot.fingerprint (422 entries)
+stage.sh: /boot/yakogl removed
+stage.sh: stock /boot restored: every file matches <record>/t6-boot.fingerprint and /boot/yakogl is gone
+undo exit 0
+ls: cannot access '/boot/yakogl': No such file or directory
+57239.10
+<boot_id>
