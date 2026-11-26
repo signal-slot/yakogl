@@ -78,11 +78,17 @@ Each scene's picture value and frame time are recorded on all three boards
 scenes each from this commit; `tools/cts/RESULTS.md`). No scene is black. The
 AM62P's scenes were looked at on its panel through a camera at `bc43ea09`, and
 the `86d0b482` run's pictures match those in 28 of 33 scenes. The other 5 are
-animated scenes, sampled at a different frame count. The Pi 4 and i.MX8MP pictures are judged
-by value only. The slow scenes are terrain, shadow and refract: on the AM62P
+animated scenes, sampled at a different frame count. The Pi 4's pictures have
+since been looked at by eye, without a camera, from the image's own frame
+dumps: 33 of 33 right (`docs/notes/pi4-glmark2-pictures-by-eye.md`, recorded
+in `d1e77916`). Only the i.MX8MP's pictures are judged by value only for now
+(#17). The slow scenes are terrain, shadow and refract: on the AM62P
 terrain takes 91 ms a frame, mostly GL-call time on the CPU, while shadow
 and refract take 10.6 and 37.1 ms since #40 (353 and 376 before). On the
-Pi 4, terrain takes 179 ms (shadow 7.3, refract 18.7). On the i.MX8MP they run
+Pi 4 terrain takes about 34.5 ms a frame at main `bdd2ba1c` (shadow about
+7.3 ms, refract about 17.2 ms); terrain took 179.26 ms at `445c5653` and
+161.79 at `c4af4917`, and is no longer a slow scene there (#1209,
+`docs/notes/pi4-slow-terrain.md`). On the i.MX8MP they run
 at 1 to 2 FPS. The i.MX8MP's other scenes are capped by a wait for the panel's
 VSYNC on every frame (`docs/notes/imx8mp-frame-floor.md`).
 
