@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! GLSL ES 3.00 `round` and `roundEven` (section 8.3) give the exact
 //! result: the dEQP-GLES3 `shaders.builtin_functions.common.round.*_highp_*`
 //! and `roundeven.*_highp_*` cases (16), which failed on the AM62P with

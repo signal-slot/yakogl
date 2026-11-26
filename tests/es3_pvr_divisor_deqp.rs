@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! The vertex-attribute and divisor shapes of the dEQP-GLES3 instanced cases
 //! on the PowerVR, with and without the hardware instance divisors (P3, opt-in
 //! cargo feature `pvr-instance-divisor`; docs/notes/instanceid-per-draw.md,

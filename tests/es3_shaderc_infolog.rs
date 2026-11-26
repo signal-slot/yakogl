@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! The vertex and fragment shaders dEQP-GLES3's `transform_feedback` group
 //! generates, rebuilt on the host and put through the online compiler.
 //!
