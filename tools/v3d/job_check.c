@@ -329,12 +329,12 @@ static void part_rollback(void)
 	fs_bad.num_uniforms = 1;
 	r = d;
 	r.fs = &fs_bad;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a uniform word outside the storage: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a uniform word outside the storage: BAD_FIELD, nothing left");
 	static const struct v3d_uniform unknown[] = { { 77, 0 } };
 	fs_bad.uniforms = unknown;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "an unknown uniform contents: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "an unknown uniform contents: BAD_FIELD, nothing left");
 	r = d;
 	r.num_attrs = 1;
 	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
@@ -838,14 +838,14 @@ static void part_tmu(void)
 	struct v3d_job_draw r = d;
 	r.tmu = &tmu[1]; /* unit 0 only */
 	r.num_tmu = 1;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a unit the draw did not bind: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a unit the draw did not bind: BAD_FIELD, nothing left");
 	const struct v3d_job_tmu misaligned[2] = { { 1, 0x00500048u, 0x00500060u },
 						   { 0, 0x00500000u, 0x00500020u } };
 	r.tmu = misaligned;
 	r.num_tmu = 2;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a record not 32-byte aligned: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a record not 32-byte aligned: BAD_FIELD, nothing left");
 	/* the VS and CS streams read the vertex stage's own table */
 	static const struct v3d_uniform vs_tex_u[] = { { V3D_QUNIFORM_TMU_CONFIG_P0, (0u << 24) | 0x2 } };
 	struct v3d_vs_prog vst_prog = vs;
@@ -853,8 +853,8 @@ static void part_tmu(void)
 	vst_prog.num_uniforms = 1;
 	r = d;
 	r.vs = &vst_prog;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a VS binding with only an FS table: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a VS binding with only an FS table: BAD_FIELD, nothing left");
 	const struct v3d_job_tmu vs_table[1] = { { 0, 0x00600000u, 0x00600020u } };
 	r.vs_tmu = vs_table;
 	r.num_vs_tmu = 1;
@@ -888,12 +888,12 @@ static void part_tmu(void)
 	snapshot();
 	r.tmu = &sized[1]; /* binding 0 only */
 	r.num_tmu = 1;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a size word for a binding the draw did not give: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a size word for a binding the draw did not give: BAD_FIELD, nothing left");
 	r.tmu = tmu; /* the same bindings, no size given */
 	r.num_tmu = 2;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a size word for a binding given without its size: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a size word for a binding given without its size: BAD_FIELD, nothing left");
 	/* the depth and array-size words (QUNIFORM_TEXTURE_DEPTH 46 and
 	 * _ARRAY_SIZE 47): the same lookup by binding; the depth of a 3D
 	 * texture and the layer count of an array, 0 (not given) or a
@@ -921,12 +921,12 @@ static void part_tmu(void)
 	snapshot();
 	r.tmu = &deep[1]; /* binding 0 only */
 	r.num_tmu = 1;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a depth word for a binding the draw did not give: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a depth word for a binding the draw did not give: BAD_FIELD, nothing left");
 	r.tmu = sized; /* sizes given, no depth or layer count */
 	r.num_tmu = 2;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "a depth word for a binding given without it: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "a depth word for a binding given without it: BAD_FIELD, nothing left");
 	/* words 44-47 hand through whatever v3d_job_tmu holds, level-0 or not
 	 * (a size minified to GL_TEXTURE_BASE_LEVEL: max(x >> base, 1) for the
 	 * width, height and 3D depth; the layer count of an array is never
@@ -1011,19 +1011,19 @@ static void part_tmu(void)
 	snapshot();
 	fs_multi.uniforms = fs_u5d;
 	fs_multi.num_uniforms = 2;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "word 46 for the unbound unit 5 between bound units: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "word 46 for the unbound unit 5 between bound units: BAD_FIELD, nothing left");
 	fs_multi.uniforms = fs_u5a;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "word 47 for the unbound unit 5 between bound units: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "word 47 for the unbound unit 5 between bound units: BAD_FIELD, nothing left");
 	/* unit 4 asked for but dropped from the draw's units */
 	fs_multi.uniforms = fs_mu;
 	fs_multi.num_uniforms = 8;
 	const struct v3d_job_tmu no4[3] = { multi[0], multi[1], multi[2] };
 	r.tmu = no4;
 	r.num_tmu = 3;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-	      "words 46/47 of unit 4 when the draw bound only 9, 1 and 0xffffffff: REFUSED, nothing left");
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+	      "words 46/47 of unit 4 when the draw bound only 9, 1 and 0xffffffff: BAD_FIELD, nothing left");
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the textured job ends");
 }
@@ -1112,8 +1112,8 @@ static void part_wpos(void)
 		struct v3d_job_draw r = d;
 		r.fs = &bf;
 		snapshot();
-		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-		      "a point-coord word with data 1: REFUSED, nothing left");
+		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+		      "a point-coord word with data 1: BAD_FIELD, nothing left");
 		struct v3d_job_state zs = st;
 		zs.wpos = (struct v3d_wpos){ 0.0f, 0.0f };
 		struct v3d_uniform ok_u[2] = { { V3D_QUNIFORM_FB_PNTC_Y_SCALE, 0 },
@@ -1121,8 +1121,8 @@ static void part_wpos(void)
 		bf.uniforms = ok_u;
 		r.st = &zs;
 		snapshot();
-		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
-		      "a point-coord pair from a zeroed (absent) transform: REFUSED, nothing left");
+		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(),
+		      "a point-coord pair from a zeroed (absent) transform: BAD_FIELD, nothing left");
 	}
 
 	/* refused, and nothing left: absent, made for another height, a scale
@@ -1132,10 +1132,10 @@ static void part_wpos(void)
 		uint32_t data;
 		const char *what;
 	} bad[] = {
-		{ 0.0f, 0.0f, 0, "a zeroed (absent) transform: REFUSED, nothing left" },
-		{ -1.0f, (float)(H + 1), 0, "a transform for another height: REFUSED, nothing left" },
-		{ 1.0f, (float)H, 0, "scale 1 with the window's offset: REFUSED, nothing left" },
-		{ -1.0f, (float)H, 1, "data 1: REFUSED, nothing left" },
+		{ 0.0f, 0.0f, 0, "a zeroed (absent) transform: BAD_FIELD, nothing left" },
+		{ -1.0f, (float)(H + 1), 0, "a transform for another height: BAD_FIELD, nothing left" },
+		{ 1.0f, (float)H, 0, "scale 1 with the window's offset: BAD_FIELD, nothing left" },
+		{ -1.0f, (float)H, 1, "data 1: BAD_FIELD, nothing left" },
 	};
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		struct v3d_uniform u[2] = { { V3D_QUNIFORM_FB_WPOS_Y_SCALE, bad[i].data },
@@ -1148,7 +1148,7 @@ static void part_wpos(void)
 		r.st = &bs;
 		r.fs = &bf;
 		snapshot();
-		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(), bad[i].what);
+		check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && unchanged(), bad[i].what);
 	}
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the gl_FragCoord job ends");
@@ -1764,8 +1764,8 @@ static void part_pntc(void)
 		uint32_t prim;
 		const char *what;
 	} bad[] = {
-		{ V3D_PRIM_TRIANGLES, "gl_PointCoord drawn as triangles: REFUSED, nothing left" },
-		{ V3D_PRIM_LINES, "gl_PointCoord drawn as lines: REFUSED, nothing left" },
+		{ V3D_PRIM_TRIANGLES, "gl_PointCoord drawn as triangles: BAD_FIELD, nothing left" },
+		{ V3D_PRIM_LINES, "gl_PointCoord drawn as lines: BAD_FIELD, nothing left" },
 	};
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		struct v3d_job_draw d = {
@@ -1773,7 +1773,7 @@ static void part_pntc(void)
 			.attrs = attrs, .num_attrs = 2, .prim = bad[i].prim, .count = 3,
 		};
 		snapshot();
-		check(v3d_job_draw(&j, &d, NULL) == V3D_JOB_REFUSED && unchanged(), bad[i].what);
+		check(v3d_job_draw(&j, &d, NULL) == V3D_JOB_BAD_FIELD && unchanged(), bad[i].what);
 	}
 }
 
@@ -2619,7 +2619,7 @@ static void part_pack_skip(void)
 	r.fs = &fs_bad;
 	struct v3d_job_pack before = j.pack;
 	uint32_t bcl_used = l.bcl.used;
-	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && l.bcl.used == bcl_used &&
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_BAD_FIELD && l.bcl.used == bcl_used &&
 		      j.pack.valid == before.valid &&
 		      memcmp(j.pack.key, before.key, sizeof(before.key)) == 0 &&
 		      counts_are(&j.pack.n, before.n.emitted, before.n.skipped, before.n.compared,

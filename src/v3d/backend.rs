@@ -3985,9 +3985,10 @@ fn record_arrays_and_draw(
             Ok(())
         }
         V3D_JOB_FULL => Err(Attempt::Full),
-        _ => Err(Attempt::Unsupported(
+        V3D_JOB_REFUSED => Err(Attempt::Unsupported(
             "the job builder refused the draw (a uniform, program or primitive it does not write)",
         )),
+        r => Err(Attempt::Unsupported(v3d_job_refusal(r))),
     }
 }
 
