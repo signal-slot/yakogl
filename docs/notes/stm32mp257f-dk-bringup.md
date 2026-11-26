@@ -800,27 +800,33 @@ runner kept the device it had resolved before the reboot, its post-cycle
 read of `yako_once` failed (`dd: failed to open '/dev/mmcblk2p7'`), and its
 "disarm" then wrote the pre-arm environment to `/dev/mmcblk2p7`, which no
 longer named a device: `dd` created a 512 KiB regular file on devtmpfs (RAM,
-gone at the next boot), read it back, and recorded `disarmed=on exit`. No
-storage was written (U-Boot had already cleared `yako_once`), but with the
-eMMC taking the stale number the same path would have written the eMMC. The
-`gc_clear` run used a local, uncommitted copy of the runner that resolves the
-card again after the new boot and writes only onto a block device
-(`card_after=/dev/mmcblk2`: the number flipped back); the defect and that fix
-are the runner's issue (`tools/board-stm32mp2.sh`, not this note's).
+gone at the next boot). No storage was written (U-Boot had already cleared
+`yako_once`), but with the eMMC taking the stale number the same path would
+have written the eMMC. The `gc_clear` run used a local copy of the runner
+that resolves the card again after the new boot and writes only onto a block
+device. That fix landed in `3d9808f9` ("board-stm32mp2.sh: resolve the card
+again after each reboot and write the environment only onto its block
+device"), proven by the 2026-11-26 reruns (`Board verdicts` rows 5 and 6,
+`cd044c9f`, records `20261126-0941-gc_fence-4e20c7ab` and
+`20261126-0944-gc_clear-d391cc4d`): the card renumbered again, the runner
+resolved it again, both runs rc=0.
 After both runs the environment partition was written back from the
 session's pristine image and read back with sha256 `4150e472…` (the
 session's baseline, no `preboot`, no `yako_*`), `/boot/yakogl` was removed,
 and the 25 files of `/boot` read back with the same sha256 as before the
 session.
 
-`dk_verdict.py` on the saved text prints `gc-irq connected=FAIL
-route=absent` for both runs. That is the parser, not the board: the Zephyr
-minimal log prints `I: irq 215 connected` and the parser strips only the
-full log prefix. With `I: ` stripped it prints `gc-irq route=PASS:ours
-igroupr=mismatch` and still counts the run failed, because it treats
+`dk_verdict.py` on the saved text printed `gc-irq connected=FAIL
+route=absent` for both runs. That was the parser, not the board: the Zephyr
+minimal log prints `I: irq 215 connected` and the parser then stripped only
+the full log prefix; with `I: ` stripped it printed `gc-irq route=PASS:ours
+igroupr=mismatch` and still counted the run failed, because it treated
 `mismatch` as bad, while the board layer's own comment (`gc_irq_mp2.c:11-13`)
-expects `GICD_IGROUPRn` to read RAZ from non-secure EL1. The verdict lines
-below are the parser's output on `console.mcp.txt` as saved.
+expects `GICD_IGROUPRn` to read RAZ from non-secure EL1. Both halves were
+fixed in `c7c06858` ("dk_verdict: gc-irq reads minimal-log level prefixes and
+accepts igroupr=mismatch with route=ours"), as today's
+`tools/probes/stm32mp257f_dk/verdict/dk_verdict.py` shows. The verdict lines
+below are the old parser's output on `console.mcp.txt` as saved.
 
 ### gc_fence: PASS, the fence retires through SPI 183
 
@@ -866,7 +872,7 @@ below are the parser's output on `console.mcp.txt` as saved.
   - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
   - `verdict gc-fence model=PASS retired=PASS irq=PASS:1 final=PASS record=PASS:kind=2`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
-  - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above)
+  - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above, fixed in `3d9808f9`; the 2026-11-26 rerun, `Board verdicts` row 5, is rc=0)
 
 ### gc_clear: PASS, both clears read back through the resolve engine
 
