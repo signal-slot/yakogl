@@ -197,18 +197,27 @@ issue #26.
    `MODE_CON0` (0xfd7c0280), the CPLL `PLL_CON` words (index 104 to 110, from
    0xfd7c01a0) and the GPLL ones (112 to 118, from 0xfd7c01c0). Then
    `clk dump` (the rates U-Boot believes, SCMI clock 5 included).
-   Decision rules, from section 1: 0x1f24 with the CPLL at 1500 MHz means no CRU
-   write; bit 14 set, the SPLL, a mux past 4 or a divider off the table means
-   `gpu_clock_set` writes CPLL / 5; a CPLL at another rate means
-   `ClockSetRefused`, nothing written, and the image needs another target.
+   Decision rules, the full rule of section 1 (read the PLL words past the
+   first line of each `md.l` answer): **keep** (no CRU write) needs a mux that
+   names a readable PLL in normal mode whose rate over the divider is exactly
+   a `GPU_OPP` rate and a stacks divider of 1 (`CLKSEL_CON(159)` field 0);
+   0x1f24 with the CPLL at 1500 MHz is that case. **Move** (writes CPLL / 5)
+   is bit 14 set, the SPLL, an unknown mux, a divider that gives no table
+   rate, or a PLL out of normal mode; the stacks divider is rewritten only
+   when it is not 1. **Refuse** (`ClockRefusal::NoTableRate`, nothing
+   written) is a CPLL at another rate than 1500 MHz, and the image needs
+   another target.
    Also `md.l` of `CLKGATE_CON(15)` (0xfd7c083c: WDT0's gates, bits 0 and
    1), `GLB_RST_ST` (0xfd7c0c04) and `GLB_RST_CON` (0xfd7c0c10); and, only
    when both WDT0 gates read open, WDT0's `WDT_CR` and `WDT_TORR`
    (0xfeaf0000, 2 words) and `COMP_PARAM_1`, `COMP_VERSION`, `COMP_TYPE`
    (0xfeaf00f4, 3 words); never `WDT_EOI` (+0x14), whose read clears the
    interrupt. Added after the 2026-11-12 run, not yet read on the board.
-   Decides: whether WDT0 is clocked and stopped as the image finds it, and
-   whether a WDT0 timeout resets the SoC from U-Boot's state.
+   Record `GLB_RST_ST` and `GLB_RST_CON` verbatim and compare them with
+   Armbian's 0x00000002 and 0x0000ffdf (driver/docs/nanopc-t6-mali.md);
+   claim no meaning for a bit. Tells: whether WDT0 is clocked and stopped as
+   the image finds it. Whether a WDT0 timeout resets the SoC from U-Boot's
+   state is not decided by these reads alone (the rule in section 6).
 4. **The watchdog and the eMMC.** `wdt list`, `mmc list`, `mmc dev 0` (selects,
    writes nothing), `mmc info`, `mmc part`, `ext4ls mmc 0:1 /`,
    `ext4ls mmc 0:1 /boot`. Never `mmc write`, `ext4write` or `saveenv`.
@@ -353,7 +362,25 @@ slot left free for `t6-uart-rfc2217.py`; and a `T6_HAND`. A session runs
 `/dev/ttyS2` from Armbian and reads it back on `T6_UART`, before anything is
 rebooted. Exit 0 is the console read at 1500000; 6 is the slot busy, 8 the
 adapter not confirming 1500000, 10 bytes that are not the line (another
-rate). It has not run on the board yet.
+rate).
+
+Update, session uboot-s1b (2026-11-26): `console-check.sh` ran on the board
+for the first time and behaved as documented: exit 6 (slot busy), the board
+read correctly as a NanoPC-T6 with `/dev/ttyS2` at 1500000. Nothing was
+rebooted; no `t6-uboot-s1b` log slice exists, and no `t6-uboot-go` record (a
+`prompt-reads.sh --go` or `prompt-go.sh --go` record directory) has been made
+by any session. A second blocker is the farm's "never reboot" rule for the
+T6 resource, which conflicts with these runners, whose job is to reboot the
+board into U-Boot; the owner has to settle it, and a `T6_HAND` must be set.
+Session uboot-s2 (gl_test, triangle, dEQP rows) did not run: it needs s1b
+first, its images rebuilt at one origin/main commit and each copied to
+`<probe>.bin` before staging (`stage.sh` stages a file under its own name).
+The serial lease's registration now gives the stored baud 1500000 and a raw
+TCP stream with a shell prompt, and RFC 2217 at 1500000 for the session only;
+`console-check.sh` has to confirm that before a reboot. Measured at the
+prompt since 2026-11-12: nothing. Section 4 (c) holds the only values read
+from U-Boot. A session's measured block comes from
+`tools/cts/t6-uboot-handover-summary.py` run on its `t6-uboot-go` record.
 
 Load addresses, from source (U-Boot v2026.07, file:line), and confirmed on the
 board twice:
@@ -470,8 +497,12 @@ read after a WDT0 return is read against the value read at the prompt, and any
 bit meaning comes from the TRM or from that comparison, written down with its
 source when it is.
 
-Rule: "WDT0 timeout resets the SoC from U-Boot's state" counts as proven only
-when the board reads the `GLB_RST_CON` value after a WDT0 return, that is,
+Rule: the sources show only that `GLB_RST_CON` reads 0x0000ffdf under Armbian,
+where a WDT0 timeout does reset the SoC; no source says the register decides
+it. "WDT0 timeout resets the SoC from U-Boot's state" counts as proven only
+when the prompt reads `GLB_RST_CON` 0x0000ffdf and an image then returns by
+its own WDT0. Every other `GLB_RST_CON` value is "undecided: the proof image
+decides". The word is also read after a WDT0 return, that is, that is,
 after an image that ended by its own WDT0 and not by PSCI `SYSTEM_RESET`
 (the board glue's `t6: <probe> done: PSCI SYSTEM_RESET at N ms` line is the PSCI case). Armbian coming back is not that proof:
 a PSCI reset brings it back too, and a return by WDT0 with `GLB_RST_CON` not

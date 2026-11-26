@@ -22,8 +22,14 @@ Status:
   40 (`busy`). A `--go` run needs that slot free, or the line opened at
   1500000 (docs/notes/nanopc-t6-uboot-handover.md, section 5, "Board
   sessions"). `console-check.sh` ("Before a session: the console") now
-  finds either cause before anything is rebooted; it has not run on the
-  board.
+  finds either cause before anything is rebooted; it ran once on the
+  board (uboot-s1b, 2026-11-26): exit 6, slot busy, the board read as a
+  T6 with `/dev/ttyS2` at 1500000. No session has reached the prompt since
+  2026-11-12; the farm's "never reboot" rule for the T6 and a missing
+  `T6_HAND` are the next blockers.
+- `stage.sh` stages a file under its own name: copy each build's
+  `zephyr.bin` to `<probe>.bin` before `stage.sh stage`, and give
+  `prompt-go.sh` that file.
 
 ## Before a session: the console
 
