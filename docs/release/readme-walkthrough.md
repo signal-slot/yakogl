@@ -118,5 +118,5 @@ supplies. Outputs: `cargo test -p yakogl-tools` "128 passed; 0 failed";
 0, from the archive (`nm`) and, with no archive, from the source: the same 304.
 
 The criterion of line 6 ends in a passing `tools/check.sh --quick` with no gap.
-That part is the Line 3 walk above: red at `4326fbd9` ("474 ok, 16 failed,
-0 gap(s)"), and its newest re-walk at `6a54408d` reached no summary line.
+That part is line 3's newest reading above: red at `4f34ffb8` ("488 ok, 7 failed,
+0 gap(s)"). The older readings at `4326fbd9` and `6a54408d` are superseded.
