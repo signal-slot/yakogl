@@ -224,42 +224,52 @@ side, under ssh before the Zephyr run, supplies the references
 4. **Can channel 0's list pointer be changed under a running scanout without
    a visible glitch, and is the vblank the safe point?** Not read anywhere
    (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe now prints `heade=` in its snapshot line.
-   *First board run 2026-11-25: placement refused, nothing written, no swap;
-   Q4 unanswered.* `rpi5_scanout32` ran on the Pi 5 (tryboot, image built
-   from `458834ea`; record in `tools/probes/rpi_5/rpi5_scanout32/README.md`,
-   "On the board"; `board.sh pi5` reported `rc=4 verdict=failed` and
-   `back_after=171s`). The probe refused to place its list, wrote no list
-   word and no `LPTRS`, and made no swap:
-   `u3 dlist: refused place: no END, no room wholly before HEADE (619 non-zero words stepped past)`,
-   `u3 swap 1: skipped (not placed)` (`u3 swap 2` .. `u3 swap 8` read the
-   same), `u3 named: no (no swap was made)`, and
-   `rpi5_scanout32: FAIL (our list was refused: its words are not known free)`.
-   The block is the firmware's list itself: its walk from `HEADE` 672 reaches
-   no END within the 256 words read (8 entries, `walk stopped at word 896`),
-   and with no END the library places our list only wholly before `HEADE`,
-   where 619 non-zero words leave no 20-word zero span
-   (`dlswap result FAIL place: no END, no room wholly before HEADE`).
-   The verdict lines of the run are:
-   `q4: unanswered (placement refused)` and
-   `verdicts: FAIL (placement refused: place: no END, no room wholly before HEADE (619 non-zero words stepped past))`.
-   What the run does show of the running scanout is write-free only. FRCNT
-   advanced through the whole run:
-   `rpi5_scanout32: S2 ch0 FRCNT series 2 3 4 6 7 8 (6 reads 20 ms apart): 6 frames, advancing`.
-   The read-only restore compare of the firmware's 256 words came back
-   byte-equal except the declared hardware word: only word 676 differed,
-   `dlswap restore-diff word 676 entry 0 off 4 was 0x8000001e now 0x800003e3 hw=skip`,
-   and the compare line reads `u3 restore: PASS byte-equal except hw words off 4`
-   and ends `hwskip=4:skip (nothing was written)`.
-   So, as far as FRCNT and the restore show: the probe left the firmware's
-   scanout running and its list intact (Q2's `4:skip` set holds, and the
-   restore judging works with no swap); nothing about swapping `LPTRS` at
-   vblank is shown, because no swap was made. Q4 stays open, and it waits on
-   the probe or the library, not on a board retry: the walk must find the
-   firmware list's END, or the placement must find a span it can prove free,
-   before a swap can be measured. The board returned to Linux by itself
-   through the PM watchdog and tryboot.
+   *Board runs on stage 2: Q4 is still unanswered.* `rpi5_scanout32` ran on
+   the Pi 5 twice (records in `tools/probes/rpi_5/rpi5_scanout32/README.md`,
+   "On the board"). The first run (2026-11-25, image of `458834ea`) refused
+   to place its list and wrote nothing, because the 256-word walk found no
+   END. The second run (2026-11-26, image built from `77ddb606`, default
+   `4:skip`) **failed: the placement worked, swap 1 landed in vblank, then
+   the image took a CPU exception.** `board.sh pi5` reported
+   `rc=4 verdict=no_end_line`; the board came back to Linux by itself through
+   the watchdog and tryboot (`back=1`).
+   *Where the lists are* (the `rpi5_dlmap` read-only map, 2026-11-25, image
+   of `22c5fc5f`; its README): the firmware's list is words 672..928, eight
+   entries of NEXT 32 (only entry 0 at word 672 has VALID set; entries 1..7
+   are `0x20000000`, VALID clear) and its END at **word 928**
+   (`0x80000000`); unused list memory holds a `0xb0b0b0b0` fill, not zeros
+   (so zeros are no proof of free room), and word 0 is a bare END that
+   channel 1 uses while enabled. The first run's walk stopped at word 896,
+   one entry short of that END. With the whole-memory walk the probe found
+   it: `S3 list read from word 672: 4096 words; END at word 928 (list index 256)`,
+   `u3 walk: heade=672 end=928 words=257 entries=8 invalid=7 mem=4096 len=20 place=929`.
+   **Our list went to word 929**, right after the END (slot A 929, slot B 939,
+   20 words each; the 20 saved words 929..948 were all `0xb0b0b0b0`):
+   `u3 dlist: placed word 929 len 20 (slot A 929, slot B 939)`.
+   *Swap 1* wrote `LPTRS` just after a vblank found by reads and the HVS
+   picked it up: `dlswap lact-pickup ok polls=0 frcnt=14..15 want=929 lact=929`,
+   `u3 vblank 1: landed=yes why=landed frcnt 14 -> 15 steps=1 invblank=yes tight=ok pickup_reads=127834 pickup_us=16666.629 ...`,
+   `u3 named: yes LPTRS 0x000003a1 after swap 1, our list at word 929 ... DL.LACT pickup ok (want 929 lact 929)`.
+   The library's restore of the firmware's list inside swap 1 also read
+   right (`dlswap restore-lact ok ... want=672 lact=672`, `dlswap restore-words ok fw 672..928 byte-equal except hw words off 4 (1 differed)`;
+   the one differing word 676 is the declared `4:skip` word). Then, at about
+   1.6 s of Zephyr time, between swap 1 and swap 2: `ELR_ELn: 0x0000000000000020`,
+   `EC: 0x20 (Instruction Abort ...)`, `FAR_ELn: 0x0000000000000020`,
+   `lr: 0x000000000020bd18`, `ZEPHYR FATAL ERROR 0: CPU exception on CPU 0`,
+   `Halting system`: an instruction fetch from address 0x20, a jump through a
+   null pointer. The image printed no `u3 swap 2`, no `u3 restore` and no end
+   line. The verdict lines are `q4: unanswered (incomplete log)` and
+   `verdicts: incomplete (the run did not print all expected verdict lines)`.
+   *What this shows, and what not:* one pointer swap at vblank was picked up
+   by the HVS (`LACT` reached the new head, FRCNT advanced by one). It does
+   **not** answer Q4: the two-buffer alternation over 8 swaps, FRCNT through
+   each, and `u3 restore: PASS` were not reached, so there is no `q4: yes`,
+   and nobody looked at the picture. The fault is a code defect in the probe
+   or the library (a null callback or function pointer after swap 1), not
+   shown to be a display effect; the fix is a code change, then another board
+   run.
    *How stage 2 measures it* (the merged method, reads and one LPTRS write;
-   this run refused placement and never reached it):
+   the second run reached swap 1 only):
    - *Frame edge, by reads only.* `hvs6v_wait_frame`
      (`driver/zephyr/lib/board/rpi5_scanout/hvs6_vblank.h:124-166`) reads
      channel 0's STATUS (`DISP0_STATUS`, `:54`) and polls until FRCNT (bits
