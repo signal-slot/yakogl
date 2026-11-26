@@ -45,4 +45,10 @@ case_ "--roadmap: commit, #17, no Pi 4 by value only" $P $R 0 '^ok:' --ref none 
 case_ "--roadmap: commit not named" $P $R 1 'does not name .dfabc888' --ref none --roadmap --roadmap-file "$D/roadmap-nosha.md"
 case_ "--roadmap: #17 not named" $P $R 1 'does not name #17' --ref none --roadmap --roadmap-file "$D/roadmap-no17.md"
 case_ "--roadmap: Pi 4 pictures by value only" $P $R 1 'Pi 4 pictures are checked by value only' --ref none --roadmap --roadmap-file "$D/roadmap-pi4value.md"
+
+# opt-in --prose (Pi 4 pictures by eye, Pi 4 terrain ms as in RESULTS)
+case_ "--prose: by eye, terrain 34.77 ms, history skipped" prose-pass-README.md $R 0 '^ok:' --ref none --prose
+case_ "--prose: Pi 4 pictures by value only" prose-valueonly-README.md $R 1 'Pi 4 pictures are judged by value only' --ref none --prose
+case_ "--prose: Pi 4 terrain differs from RESULTS" prose-terrain-README.md $R 1 'Pi 4 terrain 179.26 ms, RESULTS.md.s Pi 4 row has 34.77 ms' --ref none --prose
+case_ "no --prose: the value-only prose is not read" prose-valueonly-README.md $R 0 '^ok:' --ref none
 echo "all cases passed"

@@ -65,6 +65,14 @@ the default run does not read these files:
                '## 2.' heading to the next '## ') names the commit and #17, and
                no sentence in it says the Pi 4 pictures are checked "by value
                only" (a sentence with 'Pi 4' and 'by value only').
+  --prose      the README's paragraphs that mention glmark2 (blank-line separated)
+               have no sentence with 'Pi 4' and 'by value only' (the Pi 4
+               pictures are checked by eye, docs/notes/pi4-glmark2-pictures-by-eye.md),
+               and every 'terrain <n> ms' figure in a sentence with 'Pi 4'
+               equals the terrain ms of RESULTS.md's Pi 4 row, if it has one
+               (a figure followed by 'at [main] `<sha>`' of another commit is history
+               and is skipped; "terrain takes about 34.5 ms a frame" is read, "about"
+               and a few verbs between are allowed). Failures print "FAIL: README: ...".
 
 Each item missing gives "FAIL: RESULTS: the <Board> glmark2 row does not state
 <what>" and exit status 1.
@@ -76,7 +84,7 @@ Usage:
   python3 tools/cts/readme-glmark2-check.py [--readme F] [--results F] [--ref R]
                                                 [--scenes terrain,shadow,refract]
                                                 [--verdicts] [--status] [--checklist]
-                                                [--roadmap]
+                                                [--roadmap] [--prose]
 Exit status: 0 passes, 1 fails, 2 a file or table could not be parsed.
 """
 import argparse
@@ -314,6 +322,41 @@ def roadmap_fails(path, commit):
     return fails
 
 
+def prose_fails(path, commit, rtext):
+    paras, cur = [], []
+    for ln in read_lines(path) + [""]:
+        if ln.strip():
+            cur.append(ln)
+        else:
+            if cur:
+                paras.append(" ".join(" ".join(cur).split()))
+            cur = []
+    text = " ".join(p for p in paras if "glmark2" in p.lower() and not p.startswith("|"))
+    fails = []
+    want = None
+    m = re.search(r"\bterrain\s+(\d+(?:\.\d+)?)\s+ms\b",
+                  own_run_text(rtext.get("Raspberry Pi 4", ""), commit), re.I)
+    if m:
+        want = m.group(1)
+    for sent in re.split(r"[.!?](?=\s)", text):
+        if "Pi 4" not in sent:
+            continue
+        if "by value only" in sent:
+            fails.append("README: the glmark2 prose says the Pi 4 pictures are judged by value only "
+                         "(docs/notes/pi4-glmark2-pictures-by-eye.md records 33 of 33 checked by eye)")
+        if want is None:
+            continue
+        for t in re.finditer(r"\bterrain\s+(?:\w+\s+){0,2}?(\d+(?:\.\d+)?)\s*ms\b"
+                             r"(?P<rest>[^;,]{0,40})", sent, re.I):
+            o = re.search(r"\bat\s+(?:main\s+)?`([0-9a-f]{7,40})`", t.group("rest"))
+            if o and not same_commit(commit, o.group(1)):
+                continue
+            if float(t.group(1)) != float(want):
+                fails.append("README: the glmark2 prose gives Pi 4 terrain %s ms, "
+                             "RESULTS.md's Pi 4 row has %s ms" % (t.group(1), want))
+    return fails
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--readme", default=os.path.join(ROOT, "README.md"))
@@ -334,6 +377,8 @@ def main():
     ap.add_argument("--checklist-file", default=os.path.join(ROOT, "docs", "release", "checklist.md"))
     ap.add_argument("--roadmap", action="store_true",
                     help="ROADMAP.md's stage-2 section names the commit and #17, no Pi 4 'by value only'")
+    ap.add_argument("--prose", action="store_true",
+                    help="README's glmark2 prose: no Pi 4 'by value only', Pi 4 terrain ms as in RESULTS")
     ap.add_argument("--roadmap-file", default=os.path.join(ROOT, "ROADMAP.md"))
     a = ap.parse_args()
     scenes = [x.strip() for x in a.scenes.split(",") if x.strip()]
@@ -394,6 +439,8 @@ def main():
         fails += checklist_fails(a.checklist_file)
     if commits and a.roadmap:
         fails += roadmap_fails(a.roadmap_file, commits[0])
+    if commits and a.prose:
+        fails += prose_fails(a.readme, commits[0], rtext)
 
     for f in fails:
         print("FAIL: " + f)
