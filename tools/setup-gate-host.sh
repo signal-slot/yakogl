@@ -44,7 +44,7 @@
 # tools/cts/deps.toml needs (the same list: `tools/cts/deps-env.sh --packages
 # apt`). The heavy per-machine workspaces themselves (ZEPHYR_WS with west and
 # the Zephyr SDK, HAL_NXP_DIR, PCO_SHC with GLSL2USC_CACHE, MESA_PAN_TREE,
-# MESA_V3D_TREE) are out of scope here: they are workspaces, not packages. `tools/cts/deps-env.sh --build-missing`
+# MESA_V3D_TREE, MESA_ETNA_TREE) are out of scope here: they are workspaces, not packages. `tools/cts/deps-env.sh --build-missing`
 # makes them, after this script has installed the packages. --check still
 # reports the MALI_CSFFW firmware file (check.sh's gpu::mali row gaps without
 # it); --install only prints the command that fetches it, as that is a
@@ -72,6 +72,9 @@
 # overrides the layout and must hold the marker deps.toml gives for that entry
 # (zephyr/module.yml, .west/config, an executable pco_shc); a stale one is
 # `missing` (it made rows fail or gap in earlier walks).
+# --check also reports MESA_ETNA_TREE (the ST Vivante gate rows' Mesa 26.2.1
+# etna tree, issues #7, #1281): ok only when tools/vivante/mesa-etna-build.sh
+# --check accepts it, else a `warn` gap line with the build hint, never ok.
 # --check also reports the rustup target aarch64-unknown-linux-gnu (check.sh's
 # "clippy yakogl-mali-panthor (aarch64-unknown-linux-gnu)" row gaps without it
 # on the toolchain the gate runs under; the same per-toolchain rule as
@@ -419,6 +422,28 @@ check_v3d_shc() {
   fi
 }
 
+# MESA_ETNA_TREE: the Mesa 26.2.1 etnaviv tree of the ST Vivante gate rows
+# (tools/vivante/gate_st.sh, gen_shader_table.py --st; issues #7, #1281). It
+# is validated by tools/vivante/mesa-etna-build.sh --check, which takes the
+# directory that holds mesa-26.2.1 (the tree's parent) and prints the tree it
+# found; that must be the tree named. Never a pass when unset or incomplete:
+# a `warn` gap line with the hint, like V3D_SHC (the rows are a named gap).
+check_mesa_etna_tree() {
+  local tree=${MESA_ETNA_TREE-} out hint
+  hint="build it with tools/vivante/mesa-etna-build.sh (tools/vivante/README.md, \"Building it\"), then export MESA_ETNA_TREE=<dir>/mesa-26.2.1 (tools/cts/deps-env.sh --present does); the ST hwdb, golden-stream and shader-table rows would gap"
+  if [ -z "$tree" ]; then
+    line warn MESA_ETNA_TREE "missing: unset: $hint"
+    return
+  fi
+  tree=${tree%/}
+  if out=$("$(dirname "$0")/vivante/mesa-etna-build.sh" --check "$(dirname "$tree")" 2>&1) &&
+     [ "$out" = "MESA_ETNA_TREE=$tree" ]; then
+    line ok MESA_ETNA_TREE "$tree"
+  else
+    line warn MESA_ETNA_TREE "missing: $tree is not a complete tree (${out:-no output}): $hint"
+  fi
+}
+
 check_pkgconfig() {
   local m out
   if ! command -v pkg-config >/dev/null 2>&1; then
@@ -713,6 +738,7 @@ run_checks() {
   check_aarch64_gcc
   check_zephyr_sdk
   check_v3d_shc
+  check_mesa_etna_tree
   check_pkgconfig
   check_mali_csffw
   check_glmark2_src
