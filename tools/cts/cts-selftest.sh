@@ -1160,6 +1160,17 @@ else
     printf '%s\n' "$ocr_out" | tail -8 | sed 's/^/        | /'
 fi
 
+# 68: common-row.py (RESULTS/README/data.js text of one common record) runs its
+# own --self-test; this row is its exit status.
+echo
+echo "== 68. common-row.py --self-test"
+if cr_out=$(python3 -I "$HERE/common-row.py" --self-test 2>&1); then
+    ok "common-row.py --self-test"
+else
+    bad "common-row.py --self-test failed"
+    printf '%s\n' "$cr_out" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
