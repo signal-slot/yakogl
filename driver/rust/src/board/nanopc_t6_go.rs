@@ -446,6 +446,108 @@ mod tests {
         assert_eq!((r.x[1], r.x[9]), (0, 1 << 2), "only CurrentEL was read");
     }
 
+    #[test]
+    fn an_image_size_off_the_sector_and_the_line_cleans_the_last_partial_line() {
+        // 0x1234 bytes: 9 sectors of 512 less a partial one; the end is 0x34
+        // into a 64-byte line, so the line holding the last byte is cleaned.
+        let end = WIN.0 + 0x1234;
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, end);
+        assert_eq!((r.dc_first, r.dc_last), (Some(WIN.0), WIN.0 + 0x1200));
+        assert_eq!(r.dc_count, 0x1200 / 64 + 1);
+        assert!(r.dc_strided);
+        assert_eq!(r.x[3], end, "x3 is the end as given, not rounded");
+        // One byte past a line boundary still takes that line; the boundary
+        // itself takes none beyond it.
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.0 + 0x1001);
+        assert_eq!((r.dc_last, r.dc_count), (WIN.0 + 0x1000, 0x1000 / 64 + 1));
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.0 + 0x1000);
+        assert_eq!((r.dc_last, r.dc_count), (WIN.0 + 0xfc0, 0x1000 / 64));
+        // A size of one byte and of one sector less one byte, both ends ragged.
+        for size in [1u64, 511, 513] {
+            let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.0 + size);
+            assert_eq!(r.dc_count, size.div_ceil(64), "size {size}");
+            assert_eq!(r.dc_last, WIN.0 + (size - 1) / 64 * 64, "size {size}");
+        }
+        // 32-byte lines: the same rule.
+        let r = run(2, UBOOT_SCTLR, 0x0003_0000, WIN.0, WIN.0 + 0x1234);
+        assert_eq!((r.dc_count, r.dc_last), (0x1234 / 32 + 1, WIN.0 + 0x1220));
+    }
+
+    #[test]
+    fn el3_and_el0_are_left_alone_like_el1() {
+        // Only EL2 takes the go path: any other CurrentEL branches past it
+        // even with M, C and I set in what SCTLR_EL2 would read.
+        for el in [0, 1, 3] {
+            let r = run(el, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+            assert!(r.sctlr_writes.is_empty() && r.events.is_empty() && r.dc_count == 0, "EL{el}");
+            assert_eq!((r.x[1], r.x[9]), (0, el << 2), "EL{el}");
+            assert_eq!(r.sctlr, UBOOT_SCTLR, "SCTLR_EL2 unread and unwritten at EL{el}");
+        }
+    }
+
+    #[test]
+    fn at_el1_the_text_leaves_x2_to_x4_and_the_other_scratch_registers_alone() {
+        // x1 = 0 is the only result; x2, x3, x4 and x10..x13 are not set, so
+        // the glue prints no range for an entry that cleaned none.
+        let r = run(1, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        for i in [2, 3, 4, 10, 11, 12, 13] {
+            assert_eq!(r.x[i], 0, "x{i}");
+        }
+    }
+
+    #[test]
+    fn caches_already_off_do_nothing_and_a_second_pass_after_the_go_path_does_nothing() {
+        // M, C and I clear with every other bit set: no write.
+        let r = run(2, !SCTLR_GO_MASK, CTR_A55, WIN.0, WIN.1);
+        assert!(r.sctlr_writes.is_empty() && r.events.is_empty() && r.dc_count == 0);
+        assert_eq!((r.x[1], r.x[2], r.x[3], r.x[4]), (0, 0, 0, 0));
+        // The go path once, then the text again on what it left: the second
+        // run finds the bits clear, so it writes and cleans nothing and x1 is
+        // 0 (no second T6:G line).
+        let first = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        assert_eq!(first.sctlr & SCTLR_GO_MASK, 0);
+        let second = run(2, first.sctlr, CTR_A55, WIN.0, WIN.1);
+        assert!(second.sctlr_writes.is_empty() && second.events.is_empty() && second.dc_count == 0);
+        assert_eq!(second.x[1], 0);
+        assert_eq!(second.sctlr, first.sctlr, "the register is as the first pass left it");
+    }
+
+    #[test]
+    fn the_go_path_does_not_depend_on_the_read_back_so_a_stuck_bit_is_still_cleaned_and_reported() {
+        // The clean runs whether or not the write took: every line, the same
+        // sequence of events, and x1 is the value found, not the value left.
+        let ok = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.0 + 0x2000);
+        let stuck = run_stuck(2, UBOOT_SCTLR, SCTLR_C, CTR_A55, WIN.0, WIN.0 + 0x2000);
+        assert_eq!(stuck.events, ok.events);
+        assert_eq!(stuck.dc_count, ok.dc_count);
+        assert_eq!(stuck.x[1], UBOOT_SCTLR);
+        assert_ne!(stuck.x[4], ok.x[4]);
+    }
+
+    #[test]
+    fn the_one_sctlr_write_comes_before_every_line_cleaned_and_nothing_between_the_barriers_stores() {
+        // The interpreter's event order: the write, its isb, then the lines,
+        // then dsb, ic, tlbi, dsb, isb. The first `dc` is never ahead of the
+        // `msr`, for any size and either line size.
+        for (ctr, size) in [(CTR_A55, 1u64), (CTR_A55, 0x1234), (0x0003_0000, 0x40), (CTR_A55, 0x10_0000)] {
+            let r = run(2, UBOOT_SCTLR, ctr, WIN.0, WIN.0 + size);
+            let at = |s: &str| r.events.iter().position(|e| e == s).unwrap();
+            assert_eq!(r.events.iter().filter(|e| *e == "msr").count(), 1);
+            assert!(at("msr") < at("dc"), "size {size}");
+            assert_eq!(r.events[at("msr") + 1], "isb", "the write is followed at once by isb");
+            assert_eq!(r.events[at("dc") - 1], "isb", "nothing sits between that isb and the first dc");
+            assert_eq!(r.events.last().unwrap(), "isb", "the text ends on isb before x4 is read");
+        }
+        // In the text: no instruction between `isb` after the write and the
+        // `dc` loop that reads memory or writes SCTLR, and exactly one msr.
+        let l = lines();
+        assert_eq!(l.iter().filter(|s| s.starts_with("msr")).count(), 1);
+        let msr = l.iter().position(|s| s.starts_with("msr")).unwrap();
+        let dc = l.iter().position(|s| s.starts_with("dc ")).unwrap();
+        assert!(msr < dc && l[msr + 1] == "isb");
+        assert!(l[msr + 2..dc].iter().all(|s| !s.starts_with("msr") && !s.starts_with("dc ")));
+    }
+
     fn lines() -> Vec<&'static str> {
         // by path, as ffi::rk3588 names it
         crate::board::nanopc_t6_go::t6_go_off_asm!().lines().map(str::trim).collect()
