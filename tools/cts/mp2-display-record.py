@@ -3,13 +3,22 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """mp2-display-record.py - format a DK display session's scan-out record.
 
-  tools/cts/mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT] [--commit SHA]
+  tools/cts/mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]
 
 RUNNER_LOG is tools/board-stm32mp2.sh's output (its verdict, hold and
 stock-boot-file lines) with the probe's console lines (the record
 directory's INDEX.txt and console.txt concatenated is fine). JUDGE_OUT is
 the output of display_check/colorbars.py (or triangle.py):
-"<tag>: PASS|FAIL: ...".
+"<tag>: PASS|FAIL: ...". --judge may be given once per KVM screenshot
+(about 25 s and 45 s after the result line); "@SECONDS" after the path is
+that screenshot's offset after the result line, kept in the row.
+
+The probe's "<probe>: crc: ..." lines are kept as a diagnostic row that
+never decides the verdict. Any other "<probe>: <check>: ..." line (frames,
+layer address/enable readback, underrun, transfer error, ...) is kept
+generically by prefix in a "check log" row, also without deciding the
+verdict. A "<probe>: FAIL: <check> <err>" result is a FAIL and its check
+and error are shown. PASS is only written when the probe printed it.
 
 Prints the Markdown record block for docs/notes/stm32mp257f-dk-display-bringup.md:
 commit, probe, mode and its source (EDID or fallback), the PASS/FAIL line,
@@ -86,6 +95,10 @@ RE_CHAIN = re.compile(r"(?:mp2_display|mp2_gpu_scanout): chain step (\S+) err (-
 RE_MODE = re.compile(r"(?:mp2_display|mp2_gpu_scanout): mode (\d+x\d+) (\d+) Hz .*?, (\w+) vic (\d+)")
 RE_BUILD = re.compile(r"runner: tools/board-stm32mp2\.sh build (\S+)")
 RE_JUDGE = re.compile(r"^\s*(\w+): (PASS|FAIL)(?:: (.*))?$")
+RE_FAILCHK = re.compile(r"^\s*\w+: FAIL: ([A-Za-z_][\w-]*) (-?\d+)\b")
+# "<probe>: <check>: ..." log lines; the names handled elsewhere are left out
+RE_CHECK = re.compile(r"^\s*(?:mp2_display|mp2_gpu_scanout): ([A-Za-z_][\w-]*): (.*\S)\s*$")
+CHECK_SKIP = ("PASS", "FAIL", "crc", "hold", "build")
 
 
 def build(lines, jlines, commit):
@@ -107,6 +120,21 @@ def build(lines, jlines, commit):
     out["result"] = res.group(0).strip()
     if fails:
         passed = False
+
+    mf = RE_FAILCHK.search(res.group(0))
+    if mf:
+        out["failed_check"] = "%s, error %s" % (mf.group(1), mf.group(2))
+
+    crc, checks = [], []
+    for ln in lines:
+        m = RE_CHECK.search(ln)
+        if not m or not ln.strip().startswith(out["probe"] + ":"):
+            continue
+        if m.group(1) == "crc":
+            crc.append(ln.strip())
+        elif m.group(1) not in CHECK_SKIP:
+            checks.append(ln.strip())
+    out["crc"], out["checks"] = crc, checks
 
     m = find(lines, RE_CHAIN, "the probe's 'chain step ... edid ... choice' line")[1]
     edid_ok, choice = int(m.group(4)), int(m.group(5))
@@ -135,21 +163,28 @@ def build(lines, jlines, commit):
     if v.group(2) not in ("done", "returned"):
         passed = False
 
-    if jlines is None:
+    out["judges"] = []
+    if not jlines:
         out["judge"] = "none (no judge output given)"
     else:
-        j = [x for x in (RE_JUDGE.search(ln) for ln in jlines) if x]
-        if not j:
-            raise Refuse("missing line: the judge's '<tool>: PASS|FAIL: ...' verdict in the judge file")
-        out["judge"] = j[-1].group(0).strip()
-        if j[-1].group(2) == "FAIL":
-            passed = False
+        for off, jl in jlines:
+            j = [x for x in (RE_JUDGE.search(ln) for ln in jl) if x]
+            if not j:
+                raise Refuse("missing line: the judge's '<tool>: PASS|FAIL: ...' verdict in the judge file")
+            out["judges"].append((off, j[-1].group(0).strip()))
+            if j[-1].group(2) == "FAIL":
+                passed = False
+        out["judge"] = out["judges"][-1][1]
     out["passed"] = passed
     return out
 
 
 def render(r):
     judge = r["judge"] if r["judge"].startswith("none") else "`%s`" % r["judge"]
+    jrows = [("judge verdict", judge)]
+    if len(r["judges"]) > 1 or any(o for o, _ in r["judges"]):
+        jrows = [("judge verdict (%s)" % ("%s s after the result line" % o if o else "offset not given"),
+                  "`%s`" % v) for o, v in r["judges"]]
     rows = [
         ("commit", r["commit"]),
         ("probe", r["probe"]),
@@ -157,7 +192,10 @@ def render(r):
         ("chain", r["chain"]),
         ("result line", "`%s`" % r["result"]),
         ("hold window", r["hold"]),
-        ("judge verdict", judge),
+        ("failed check", r.get("failed_check")),
+        ("crc (diagnostic, not the verdict)", "<br>".join("`%s`" % c for c in r["crc"]) or None),
+        ("check log", "<br>".join("`%s`" % c for c in r["checks"]) or None),
+        *jrows,
         ("stock boot files", r["stock"]),
         ("return to Linux", r["back"]),
         ("runner verdict", "`%s`" % r["verdict"]),
@@ -165,12 +203,15 @@ def render(r):
     s = "### Scan-out record: %s, %s\n\n" % (r["probe"], "PASS" if r["passed"] else "FAIL")
     s += "| item | value |\n| --- | --- |\n"
     for k, v in rows:
+        if v is None:
+            continue
         s += "| %s | %s |\n" % (k, v)
     return s
 
 
 def main(argv):
-    path = judge = commit = None
+    path = commit = None
+    judge = []
     it = iter(argv)
     for a in it:
         if a in ("--judge", "--commit"):
@@ -179,19 +220,22 @@ def main(argv):
                 print("mp2-display-record: %s needs a value" % a, file=sys.stderr)
                 return 2
             if a == "--judge":
-                judge = val
+                judge.append(val)
             else:
                 commit = val
         elif a.startswith("-") or path:
-            print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT] [--commit SHA]", file=sys.stderr)
+            print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]", file=sys.stderr)
             return 2
         else:
             path = a
     if not path:
-        print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT] [--commit SHA]", file=sys.stderr)
+        print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]", file=sys.stderr)
         return 2
     lines = read(path)
-    jlines = read(judge) if judge else None
+    jlines = []
+    for j in judge:
+        m = re.match(r"^(.*)@(\d+)$", j)
+        jlines.append((m.group(2), read(m.group(1))) if m else (None, read(j)))
     try:
         r = build(lines, jlines, commit)
     except Refuse as e:
