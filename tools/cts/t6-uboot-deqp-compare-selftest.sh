@@ -44,6 +44,44 @@ printf '%s.a\n%s.q\n' $P $P >"$D/scope.txt"
 out=$(run --scope "$D/scope.txt" --uboot "$D/ub.log" --kexec "$D/kx.txt" --armbian "$D/ar.tsv")
 chk "--scope: q missing" has "$out" "$P.q uboot=- kexec=- armbian=- missing"
 
+# Chain: t6-uboot-rows.sh (fake prompt-go that makes a record dir like the real
+# one: image.log with the deqp lines, plus uart.log/typed.log/verdict.txt)
+# -> its rows.tsv / out-dir / one record dir as --uboot.
+RT=$D/rt; mkdir -p "$RT/img/R1/zephyr" "$RT/img/R2/zephyr" "$RT/img/R3/zephyr" "$RT/recs"
+printf '# image R1: 1\n# image R2: 2\n# image R3: 3\n' >"$RT/tree.txt"
+for l in R1 R2 R3; do echo $l >"$RT/img/$l/zephyr/zephyr.bin"; done
+cat >"$RT/fake.sh" <<'FAKE'
+#!/bin/sh
+l=$(cat "$1"); rec=$RECS/$l-t6-uboot-go; mkdir -p "$rec"
+echo "prompt-go.sh: record $rec"
+printf 'deqp: Pass dEQP-GLES2.%s.ok\r\ndeqp: Fail dEQP-GLES2.%s.bad\ndeqp: summary: 2 cases begun, 2 with a result, 0 without\n' $l $l >"$rec/image.log"
+echo "typed noise" >"$rec/typed.log"
+printf 'deqp: Pass dEQP-GLES2.%s.uartonly\n' $l >"$rec/uart.log"
+echo "VERDICT deqp PASS" >"$rec/verdict.txt"
+[ "$l" = R3 ] && exit 10
+[ "$l" = R2 ] && exit 11
+exit 0
+FAKE
+chmod +x "$RT/fake.sh"
+PROMPT_GO=$RT/fake.sh TREE=$RT/tree.txt RECS=$RT/recs bash "$HERE/t6-uboot-rows.sh" "$RT/img" "$RT/out" R1 R2 R3 --go >/dev/null 2>&1
+chk "rows.sh stopped at R3 (exit 10 row recorded)" test "$(cut -f2 "$RT/out/rows.tsv" | tr '\n' ' ')" = "0 11 10 "
+printf 'Pass dEQP-GLES2.R1.ok\nPass dEQP-GLES2.R1.bad\nPass dEQP-GLES2.R2.ok\nFail dEQP-GLES2.R2.bad\nPass dEQP-GLES2.R3.ok\nPass dEQP-GLES2.R3.bad\n' >"$D/kx2.txt"
+for u in "$RT/out/rows.tsv" "$RT/out"; do
+	out=$(run --uboot "$u" --kexec "$D/kx2.txt" --armbian "$D/kx2.txt"); rc=$?
+	chk "chain ($(basename "$u")): exit 0" test $rc -eq 0
+	chk "chain: R1.ok same" has "$out" "dEQP-GLES2.R1.ok uboot=Pass kexec=Pass armbian=Pass same"
+	chk "chain: R1.bad newly failing" has "$out" "dEQP-GLES2.R1.bad uboot=Fail kexec=Pass armbian=Pass newly failing"
+	chk "chain: R2.bad same (both fail)" has "$out" "dEQP-GLES2.R2.bad uboot=Fail kexec=Fail armbian=Fail same"
+	chk "chain: stopped row's image.log is read" has "$out" "dEQP-GLES2.R3.ok uboot=Pass kexec=Pass armbian=Pass same"
+	chk "chain: uart.log is not read" lacks "$out" "uartonly"
+	chk "chain summary" has "$out" "t6-uboot-deqp-compare: 6 cases, same 4, newly failing 2, newly passing 0, missing 0"
+done
+out=$(run --uboot "$RT/recs/R2-t6-uboot-go" --kexec "$D/kx2.txt" --armbian "$D/kx2.txt")
+chk "one record dir reads image.log only" has "$out" "t6-uboot-deqp-compare: 2 cases, same 2, newly failing 0, newly passing 0, missing 0"
+rm "$RT/recs/R1-t6-uboot-go/image.log"
+run --uboot "$RT/out" --kexec "$D/kx2.txt" --armbian "$D/kx2.txt" >/dev/null
+chk "done row without image.log: exit 2" test $? -eq 2
+
 # bad input exits 2
 run --uboot "$D/nope" --kexec "$D/kx.txt" --armbian "$D/ar.tsv" >/dev/null
 chk "unreadable file: exit 2" test $? -eq 2
