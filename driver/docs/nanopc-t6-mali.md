@@ -805,7 +805,8 @@ milestones (Zephyr booted by U-Boot), as on every board.
   reset through PSCI; the watchdog proof image came back through WDT0 alone;
   `t6_gpu` powered PD_GPU, read `GPU_ID` 0xa8670005, soft reset the GPU and
   brought its L2 up (below, "Z1" and "The GPU power-on"). The sign-off form
-  (U-Boot starting the image) has not run.
+  (U-Boot starting the image) has not run; the 2026-11 t6-uboot sessions
+  stopped before the prompt (see "Open").
 - **Z2**: AS0 page tables; a GPU cache flush round trip. Host side done
   2026-10-26 (design, builder, register sequence, the `t6_mmu` image and its
   gate row; below, "Z2: AS0 and a cache flush"). **PASS on the board
@@ -2907,10 +2908,16 @@ What is left needs a run from U-Boot or a job from Zephyr:
   (kept), a PVTPLL state, an out-of-table divider and an unknown mux). Not
   measured: the rates U-Boot itself believes, SCMI clock 5 included (the build has
   no `clk` command), and the move on the board (no image has run from U-Boot yet;
-  issue #4627: the 2026-11-25 sessions of plan #408 stopped before the prompt,
+  issue #4627: the 2026-11-25 sessions of plan #408 (log slice
+  `tools/cts/log/2026-11-t6-uboot-s1-cbb55860/`, t6-uboot) stopped before the prompt,
   the serial adapter's one slot held by the farm's console server at 115200
   where the console runs at 1500000; docs/notes/nanopc-t6-uboot-handover.md,
-  section 5, "Board sessions").
+  section 5, "Board sessions"). Session uboot-s1b (2026-11-26) ran
+  `console-check.sh` (exit 6) and stopped before any reboot; the farm's
+  "never reboot" rule for the T6 and a missing `T6_HAND` are open. No
+  `t6-uboot-go` record exists, so keep, move or refuse, the supply read,
+  PD_GPU and the WDT0 gates (`CLKGATE_CON(15)`, `GLB_RST_CON` against
+  Armbian's 0xffdf) remain unmeasured from an image start.
 - **The QoS words' effect.** The choice is made in code: `soc::rk3588::QosPolicy`
   holds the two candidates — `Reset`, the hardware reset values (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40), and `LinuxZero`, what Linux reads with the
