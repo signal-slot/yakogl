@@ -110,6 +110,43 @@ runb --pages --page-seconds 90 | awk -F'\t' '$1 == 2 {print $3}' | grep -qx 30.0
 for n in 1 3; do
   runb --sessions "$n" | grep -v '^#' | check_ranges 4 || fail "measured --sessions $n coverage"
 done
+# a slice of any campaign commit: the 05769bf2-style name (full date, other hash) reads the same way; the
+# different back_after figures prove these rates come from this slice (e00 44 s / 4 cases, e02 33 s / 3 cases)
+sl2="$tmp/slices2/2026-11-16-imx8mp-gles3-05769bf2-rows00-02"
+mkdir -p "$sl2"
+cat > "$sl2/verdicts.txt" <<EOF
+# synthetic
+board.sh imx8mp e00 rc=0 verdict=done boot=x back_after=44s uptime=20s
+board.sh imx8mp e02 rc=0 verdict=done boot=x back_after=33s uptime=20s
+EOF
+cp "$sl/results.tsv" "$sl2/results.tsv"
+runb2() { python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+          --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/slices2/*" "$@"; }
+runb2 > "$tmp/outb2.tsv" 2> "$tmp/errb2.txt" || fail "the 05769bf2-style slice run exited nonzero: $(cat "$tmp/errb2.txt")"
+rowb2() { awk -F'\t' -v i="$1" '$1 == i' "$tmp/outb2.tsv" | cut -f"$2"; }
+[ "$(rowb2 0 3)" = 44.0 ] || fail "05769bf2-style measured lifetime seconds: $(rowb2 0 3)"
+[ "$(rowb2 0 4)" = imx8mp:rows00-02 ] || fail "05769bf2-style source label: $(rowb2 0 4)"
+[ "$(rowb2 2 3)" = 33.0 ] || fail "05769bf2-style measured shader seconds: $(rowb2 2 3)"
+grep -q '^# rate functional.lifetime = 11.0000 s/case (imx8mp:rows00-02' "$tmp/outb2.tsv" || fail "header lacks the 05769bf2-style measured rate"
+# mixed commits: one glob must not mix the slices of two campaign commits (imx8mp-gles3-merge.py --check mirrors this)
+mkdir -p "$tmp/mixed"
+cp -r "$sl" "$sl2" "$tmp/mixed/"
+rc=0; python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+     --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/mixed/*" \
+     > "$tmp/mixout" 2> "$tmp/mixerr" || rc=$?
+[ "$rc" = 2 ] || fail "mixed commits exited $rc, expected 2"
+grep -q '9bc82915' "$tmp/mixerr" && grep -q '05769bf2' "$tmp/mixerr" || fail "mixed-commit message names no commits: $(cat "$tmp/mixerr")"
+grep -q 'mixed commits\|campaign commits' "$tmp/mixerr" || fail "mixed-commit message unclear: $(cat "$tmp/mixerr")"
+[ ! -s "$tmp/mixout" ] || fail "mixed commits wrote output"
+# a slice directory whose name carries no commit hash is skipped with a note, not used
+mkdir -p "$tmp/slices3/2026-11-imx8mp-gles3-rows00-02"
+cp "$sl/verdicts.txt" "$sl/results.tsv" "$tmp/slices3/2026-11-imx8mp-gles3-rows00-02/"
+python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+         --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/slices3/*" \
+         > "$tmp/skipout" 2> "$tmp/skiperr" || fail "a run with an unparseable slice name exited nonzero: $(cat "$tmp/skiperr")"
+grep -q '^# note: skipped 2026-11-imx8mp-gles3-rows00-02: ' "$tmp/skipout" || fail "no skip note for the unparseable name"
+[ "$(awk -F'\t' '$1 == 0 {print $3}' "$tmp/skipout")" = 2.0 ] || fail "the skipped slice still gave a measured rate"
+[ "$(awk -F'\t' '$1 == 0 {print $4}' "$tmp/skipout")" = pi4:LT ] || fail "the skipped slice changed the rate source"
 # --rows: only the named entries are listed, with the numbers they have without --rows; ranges stay inside
 run --rows 1..3 | grep -v '^#' | awk -F'\t' '$1 ~ /^[0-9]+$/ {printf "%s ", $1}' | grep -qx '1 2 3 ' || fail "--rows 1..3 lists other entries"
 [ "$(run --rows 3 | awk -F'\t' '$1 ~ /^[0-9]+$/' | cut -f1-4)" = "$(row 3 | cut -f1-4)" ] || fail "--rows 3 changes entry 3's numbers"
