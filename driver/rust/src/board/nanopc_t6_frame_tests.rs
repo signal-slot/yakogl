@@ -39,7 +39,7 @@ fn the_va_map_is_the_documented_one() {
     assert_eq!(f::GEOMETRY_BUFFER_VA, 0x1_0210_0000);
     assert_eq!(f::TARGET_VA, 0x1_0300_0000);
     assert_eq!(f::HEAP_FIRST_CHUNK_VA, 0x8000_00a0_0000);
-    assert!(f::DRAW);
+    const { assert!(f::DRAW) };
 }
 
 #[test]
