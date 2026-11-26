@@ -40,7 +40,12 @@ host-only compile. Nothing here ran on the NanoPC-T6.
 
    This ran at the tip `22c5fc5f`. The VK-GL-CTS tree was the shallow
    clone of its tip `05ca62dc`, not the `93bca01` the earlier notes name:
-   fetching that commit was refused on this host. The tree had
+   fetching that commit was refused on that host. A later blob-less
+   fetch of both commits showed that the loop programs' generator,
+   `modules/gles2/functional/es2fShaderLoopTests.cpp`, is the same at
+   both. Between them, `modules/glshared` changes only
+   `glsAttributeLocationTests.cpp` and `glsBuiltinPrecisionTests.cpp`, so
+   dEQP writes the same loop programs at `93bca01`. The tree had
    `external/fetch_sources.py` and the three files of
    `tools/cts/cts-yakogl-target.patch`, which are all new files and were
    written verbatim. Of the 196 cases, 188 stop at a refusal on the host
