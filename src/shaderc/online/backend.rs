@@ -72,7 +72,8 @@ struct Compiled {
     stage: u32,
     blend_key: u32,
     /// [`switches_now`] when the record was compiled: the PowerVR's native
-    /// 3D and 2D-array switches change the code, so they are part of the key.
+    /// 3D, 2D-array and cube switches change the code, so they are part of
+    /// the key.
     switches: u8,
     /// The source, kept because a blend variant is the same text compiled
     /// again for one blend state.
@@ -283,11 +284,16 @@ pub fn forget_compiled() {
 }
 
 /// The runtime switches the PowerVR instruction selection reads
-/// (`pvr_native_3d` bit 0, `pvr_native_array` bit 1); 0 without the PowerVR.
+/// (`pvr_native_3d` bit 0, `pvr_native_array` bit 1, `pvr_native_cube` bit
+/// 2); 0 without the PowerVR. Without the cube bit a samplerCube program
+/// compiled with the native cube off (the stacked look-up) was handed back
+/// after it was turned on, and the draw bound the stacked cube for it.
 fn switches_now() -> u8 {
     #[cfg(feature = "gpu-powervr")]
     {
-        u8::from(crate::shaderc::native_3d_enabled()) | (u8::from(crate::shaderc::native_array_enabled()) << 1)
+        u8::from(crate::shaderc::native_3d_enabled())
+            | (u8::from(crate::shaderc::native_array_enabled()) << 1)
+            | (u8::from(crate::shaderc::native_cube_enabled()) << 2)
     }
     #[cfg(not(feature = "gpu-powervr"))]
     {
