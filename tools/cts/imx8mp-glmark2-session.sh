@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 #   tools/cts/imx8mp-glmark2-session.sh <NN|gmNN-label> [--dry-run]
-#       [--record-dir DIR] [--ref-dir DIR]
+#       [--record-dir DIR] [--ref-dir DIR] [--route ROUTE] [--main REF]
 #
 # One i.MX8MP (Verdin iMX8M Plus, GC7000UL) glmark2 scene from its frame dump
 # to a checked verdict row of docs/notes/imx8mp-glmark2-pictures-by-eye.md.
@@ -32,28 +32,34 @@
 #                 watchdog window) is printed when the tool is there; it is
 #                 information, the step does not fail on it.
 #   redaction     imx8mp-gles3-redact.py --check on the record: exit 0.
-#   record-check  imx8mp-glmark2-record-check.py on the record. That tool
-#                 checks a whole 33-scene session with photographs, so of its
-#                 problem lines only those about this record count: the
-#                 "console: ..." lines of the other 32 scenes and every
-#                 "photograph: ..." line (a dump record has none) are left
-#                 out; a name, commit, sha256 or redaction line, and the
-#                 console line of this scene, fail the step.
+#   record-check  imx8mp-glmark2-record-check.py --scene <label> on the record
+#                 (the one-record-per-scene layout): any problem line fails
+#                 the step.
 #   compare       glmark2-picdiff.py and glmark2-sidebyside.py against
 #                 <ref-dir>/<slug>.png (the llvmpipe reference of
 #                 glmark2-host-ref.sh) into the record: <label>.picdiff.png
 #                 and <label>.sidebyside.png.
 #   judge         imx8mp-glmark2-judge.py's proposed row and entry opening
 #                 (when the tool is there). The verdict is never decided or
-#                 written here: the two imx8mp-glmark2-note-fill.py commands
-#                 (right, wrong) are printed for the person who has looked at
-#                 the side-by-side picture.
+#                 written here: the imx8mp-glmark2-note-fill.py commands are
+#                 printed for the person who has looked at the side-by-side
+#                 picture, with the commit of meta.txt's commit= line and
+#                 --check-main --main <ref>. Route dump, both or
+#                 photograph+probes: one command for right, one for wrong;
+#                 route photograph: the one for `seen without a value`
+#                 (note-fill.py's and imx8mp-glmark2-verdicts.py's rules).
 #
 # --record-dir   an existing record directory <YYYYMMDD-HHMM>-<label>-<sha8>
 #                of this scene: the run step is skipped (also the way to redo
 #                the checks of a record, with or without --dry-run).
 # --ref-dir      the reference directory; default the newest
 #                records/host/*-gmref-* of this checkout.
+#
+# --route        dump (default), photograph, both or photograph+probes: the
+#                route cell of the printed note-fill commands.
+# --main         the ref the printed commands check the commit against
+#                (--check-main --main REF); default $IMX8MP_MAIN, else
+#                origin/main. Also the judge's --main when given.
 #
 # Environment: IMX8MP_IMG_DIR (the images of `imx8mp-glmark2-dumps.sh build`,
 # needed by the run step), IMX8MP_RECORDS (the records directory, default
@@ -69,7 +75,7 @@ DUMPS=${IMX8MP_SESSION_DUMPS:-$HERE/imx8mp-glmark2-dumps.sh}
 NOTE=docs/notes/imx8mp-glmark2-pictures-by-eye.md
 
 usage() {
-    echo "usage: tools/cts/imx8mp-glmark2-session.sh <NN|gmNN-label> [--dry-run] [--record-dir DIR] [--ref-dir DIR]" >&2
+    echo "usage: tools/cts/imx8mp-glmark2-session.sh <NN|gmNN-label> [--dry-run] [--record-dir DIR] [--ref-dir DIR] [--route ROUTE] [--main REF]" >&2
     exit 2
 }
 # step_fail NAME WHY [EXIT]
@@ -90,6 +96,8 @@ dirs_of() {
 DRY=0
 RECDIR=
 REFDIR=
+ROUTE=dump
+MAINOPT=
 SCENE=
 while [ $# -gt 0 ]; do
     case $1 in
@@ -104,6 +112,16 @@ while [ $# -gt 0 ]; do
         REFDIR=$2
         shift
         ;;
+    --route)
+        [ $# -ge 2 ] || usage
+        ROUTE=$2
+        shift
+        ;;
+    --main)
+        [ $# -ge 2 ] || usage
+        MAINOPT=$2
+        shift
+        ;;
     -*) usage ;;
     *)
         [ -z "$SCENE" ] || usage
@@ -113,6 +131,10 @@ while [ $# -gt 0 ]; do
     shift
 done
 [ -n "$SCENE" ] || usage
+case $ROUTE in
+dump | photograph | both | photograph+probes) ;;
+*) step_fail resolve "route '$ROUTE' is not one of dump, photograph, both, photograph+probes" 2 ;;
+esac
 
 # resolve: "<label> <scene info> -b <glmark2 argument>" per scene
 scenes=$(bash "$DUMPS" scenes) || step_fail resolve "imx8mp-glmark2-dumps.sh scenes failed"
@@ -197,18 +219,14 @@ echo "session: step redaction: ok"
 
 # record-check
 rcrc=0
-rcout=$(python3 -I "$HERE/imx8mp-glmark2-record-check.py" "$RECDIR") || rcrc=$?
+rcout=$(python3 -I "$HERE/imx8mp-glmark2-record-check.py" --scene "$LABEL" "$RECDIR") || rcrc=$?
 [ "$rcrc" -le 1 ] || step_fail record-check "imx8mp-glmark2-record-check.py exited $rcrc"
-rcbad=$(printf '%s\n' "$rcout" | awk -v nn="$NN" '
-    /^record-check: / { next }
-    /^photograph: / { next }
-    /^console: no glmark2-picture line for scene [0-9][0-9] / && $7 != nn { next }
-    NF { print }')
+rcbad=$(printf '%s\n' "$rcout" | awk '/^record-check: / { next } NF { print }')
 if [ -n "$rcbad" ]; then
     printf '%s\n' "$rcbad" >&2
     step_fail record-check "the record has the problems above"
 fi
-echo "session: step record-check: ok (the other scenes' console lines and the photograph lines left out)"
+echo "session: step record-check: ok (--scene $LABEL)"
 
 # compare
 if [ -z "$REFDIR" ]; then
@@ -228,7 +246,7 @@ rbase=$(basename "$RECDIR")
 relrec=records/imx8mp/$rbase/
 if [ -f "$HERE/imx8mp-glmark2-judge.py" ]; then
     main=()
-    [ -z "${IMX8MP_MAIN:-}" ] || main=(--main "$IMX8MP_MAIN")
+    [ -z "${MAINOPT:-${IMX8MP_MAIN:-}}" ] || main=(--main "${MAINOPT:-$IMX8MP_MAIN}")
     python3 -I "$HERE/imx8mp-glmark2-judge.py" "$RECDIR" "$REFDIR" --out "$RECDIR" "${main[@]+"${main[@]}"}" ||
         step_fail judge "imx8mp-glmark2-judge.py failed"
     echo "session: step judge: ok (the row above is a proposal, its verdict is the placeholder)"
@@ -237,7 +255,11 @@ else
 fi
 commit=$(sed -n 's/^commit=\([0-9a-f]\{40\}\)$/\1/p' "$RECDIR/meta.txt" 2> /dev/null | tail -n 1)
 echo "session: look at $LABEL.sidebyside.png in the record; then, by what was seen (not run here), one of:"
-for v in right wrong; do
-    echo "  python3 tools/cts/imx8mp-glmark2-note-fill.py --note $NOTE --scene $LABEL --commit ${commit:-<the commit the image was built from>} --record $relrec --route dump --verdict $v"
+mainref=${MAINOPT:-${IMX8MP_MAIN:-origin/main}}
+if [ "$ROUTE" = photograph ]; then verdicts=("seen without a value"); else verdicts=(right wrong); fi
+for v in "${verdicts[@]}"; do
+    q=$v
+    [[ $v != *" "* ]] || q="'$v'"
+    echo "  python3 tools/cts/imx8mp-glmark2-note-fill.py --note $NOTE --scene $LABEL --commit ${commit:-<the commit the image was built from>} --record $relrec --route $ROUTE --verdict $q --check-main --main $mainref"
 done
 exit 0
