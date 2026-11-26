@@ -86,6 +86,17 @@ python3 -I "$TOOL" --mustpass "$MP" --max 401 "${IS[@]}" > /dev/null 2>&1
 check "iMX95 --max above 400 exits 2" test $? -eq 2
 python3 -I "$TOOL" --mustpass "$MP" "${IS[0]}" "${SL[1]}" > /dev/null 2>&1
 check "a mix of iMX95 and T6 slices exits 2" test $? -eq 2
+# Both spellings of the iMX95 board, and a mix of them.
+mkdir -p "$tmp/us/a" "$tmp/us/b"
+cp -r "$tmp"/i95/a/*/ "$tmp/us/a/"
+cp -r "$tmp"/i95/b/*/ "$tmp/us/b/"
+for s in "$tmp"/us/a/*/; do printf 'board=verdin_imx95\nsession=S1\n' > "$s/meta.txt"; done
+python3 -I "$TOOL" --mustpass "$MP" --max 3 "$tmp"/us/a/*/ "$tmp"/us/b/*/ > "$tmp/us.txt" 2>&1
+check "mixed verdin_imx95 and verdin-imx95 slices give the I95RR table" cmp -s "$tmp/us.txt" "$tmp/i95-expected.txt"
+python3 -I "$TOOL" --mustpass "$MP" "$tmp"/us/a/*/ 2>&1 | grep -q '^# image I95RR001:'
+check "board=verdin_imx95 alone is labelled I95RR" test $? -eq 0
+python3 -I "$TOOL" --mustpass "$MP" --max 401 "$tmp"/us/a/*/ > /dev/null 2>&1
+check "verdin_imx95 keeps the 400-case row limit" test $? -eq 2
 cp -r "${SL[0]}" "$tmp/t6meta/"
 for s in "$tmp"/t6meta/*/; do printf 'board=nanopc-t6\n' > "$s/meta.txt"; done
 python3 -I "$TOOL" --mustpass "$MP" "$tmp"/t6meta/*/ | grep -q '^# image T6RR001:'
