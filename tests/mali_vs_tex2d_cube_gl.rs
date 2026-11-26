@@ -54,6 +54,7 @@ use yakogl::gl::state::*;
 use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::{glDisableVertexAttribArray, glEnableVertexAttribArray, glVertexAttribPointer};
+use yakogl::mali::frame::SEAMLESS_CUBE_MAP;
 use yakogl::mali::genxml::v10::{
     DescriptorType, GenericPlane, MipmapMode, Sampler, Texture, TextureDimension, WrapMode,
 };
@@ -235,10 +236,14 @@ fn mesa_sampler(cube: bool) -> Sampler {
     Sampler {
         wrap_mode_s: WrapMode::CLAMP_TO_EDGE,
         wrap_mode_t: WrapMode::CLAMP_TO_EDGE,
-        /* the seamless cube map's r is clamped; the 2D sampler keeps GL's REPEAT */
-        wrap_mode_r: if cube { WrapMode::CLAMP_TO_EDGE } else { WrapMode::REPEAT },
+        /* The reference comes from an ES 3.1 context: its cube sampler is seamless
+        with r clamped (tools/mali/board-ref/2026-11-24/vs-tex2d-cube.pandecode:158,
+        :163, :579). ES 2.0 has no seamless cube maps, so under report-es2 Mesa's
+        own ES 2.0 sampler has Seamless Cube Map false and GL's default REPEAT for
+        r. The 2D sampler has the flag set in both builds. */
+        wrap_mode_r: if cube && SEAMLESS_CUBE_MAP { WrapMode::CLAMP_TO_EDGE } else { WrapMode::REPEAT },
         round_to_nearest_even: false,
-        seamless_cube_map: true,
+        seamless_cube_map: !cube || SEAMLESS_CUBE_MAP,
         normalized_coordinates: true,
         magnify_nearest: true,
         minify_nearest: true,
