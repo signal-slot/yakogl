@@ -21,6 +21,9 @@ trap 'rm -rf "$D"' EXIT
 fail=0
 pass=0
 ok()  { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
+# okn: the GLES3 fixtures; "ok+" so that cts-selftest.sh check 30 (which pins 30 "  ok " lines and
+# is owned elsewhere) keeps counting only the original checks. Both count in the total below.
+okn() { printf '  ok+   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fail=$((fail + 1)); }
 
 cat > "$D/console.txt" <<'EOF'
@@ -137,6 +140,117 @@ grep -qE '^-- 1 of 2 capture\(s\) console dark' <<<"$dout" && ok "summary counts
 tout=$(python3 -I "$SCAN" --fail-dark "$D/finished.txt" 2>&1)
 trc=$?
 if [ "$trc" = 0 ] && ! grep -q 'console dark' <<<"$tout"; then ok "text capture: not dark, --fail-dark exit 0"; else bad "text capture marked dark (exit $trc)"; fi
+
+# ---- GLES3 hang and reset fixtures (inline, nothing under tools/cts/log) -------
+
+# (1) a hang mid-case: the qpa echo shows the case began, no result, no end line; the log
+# stays open. The hung case is named (begun), not the last case with a result.
+cat > "$D/hang.txt" <<'EOF'
+11:00:00 deqp: selector 13
+11:00:01 deqp: case filter 'dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.*'
+11:00:02 qpa: #beginTestCaseResult dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.src_color
+11:00:03 qpa: <Result StatusCode="Pass">ok</Result>
+11:00:03 deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.src_color
+11:00:03 qpa: #endTestCaseResult
+11:00:04 qpa: #beginTestCaseResult dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.dst_color
+EOF
+hout=$(python3 -I "$SCAN" -q --watch 13 "$D/hang.txt" 2>&1)
+hrc=$?
+[ "$hrc" = 1 ] && okn "hang: exit 1" || bad "hang: exit $hrc"
+if grep -qE '^!! NO FINISH row 13 \(hang\) .*last result dEQP-GLES3\.functional\.fragment_ops\.blend\.fbo_srgb\.add\.src_color; case begun, no result: dEQP-GLES3\.functional\.fragment_ops\.blend\.fbo_srgb\.add\.dst_color;.*\[WATCH: expected\]' <<<"$hout"; then
+    okn "hang: names the case that began (dst_color) and the last result"
+else bad "hang: case not named"; printf '%s\n' "$hout" | sed 's/^/        /'; fi
+# without the qpa echo only the result lines show: the report says the hung case is the one after the last result
+sed '/^[0-9:]* qpa/d' "$D/hang.txt" > "$D/hang-noecho.txt"
+python3 -I "$SCAN" -q "$D/hang-noecho.txt" 2>&1 | grep -qE 'last result dEQP-.*src_color; no case shown as begun .*the one after the last result' &&
+    okn "hang without qpa echo: says the hung case is not shown" || bad "hang without qpa echo"
+
+# (2) a WDOG1 reset in a row with a begun case, then U-Boot, kernel and Zephyr boot noise,
+# whose lines must not be read as cases or rows; the next row finishes
+cat > "$D/wdog.txt" <<'EOF'
+12:00:00 deqp: selector 58
+12:00:01 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest
+12:00:02 deqp: Pass dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_nearest
+12:00:03 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_linear
+12:10:00 gc_wdog_arm: feeding bound of 590 s over; WDOG1 resets the SoC within 10000 ms
+U-Boot SPL 2024.04-toradex (Jan 01 2026 - 00:00:00 +0000)
+DDRINFO: start DRAM init
+Normal Boot
+Trying to boot from BOOTROM
+U-Boot 2024.04-toradex (Jan 01 2026 - 00:00:00 +0000)
+Hit any key to stop autoboot:  0
+Booting Linux on physical CPU 0x0000000000 [0x410fd034]
+Linux version 6.6.0 (build@host) #1 SMP
+12:10:20 *** Booting Zephyr OS build v4.1.0 ***
+12:10:21 deqp: selector 59
+12:10:25 deqp: Pass dEQP-GLES3.functional.texture.filtering.2d_array.formats.rgba8_mipmap
+12:10:30 deqp: summary: 1 cases begun, 1 with a result, 0 without
+EOF
+wout=$(python3 -I "$SCAN" --watch 58-60 "$D/wdog.txt" 2>&1)
+wrc=$?
+[ "$wrc" = 1 ] && okn "wdog: exit 1" || bad "wdog: exit $wrc"
+if grep -qE '^!! NO FINISH row 58 \(watchdog end\) .*last result .*rgba8_nearest; case begun, no result: dEQP-GLES3\.functional\.texture\.filtering\.2d_array\.formats\.rgba8_linear;' <<<"$wout"; then
+    okn "wdog: row 58 is a watchdog end naming the begun case"
+else bad "wdog: row 58"; printf '%s\n' "$wout" | sed 's/^/        /'; fi
+grep -qE '^row +59 .* +9s .*finish' <<<"$wout" && okn "wdog: the row after the reset finishes" || bad "wdog: row 59"
+grep -qE '^-- watched rows not in this log: 60$' <<<"$wout" && okn "wdog: watched row 60 absent" || bad "wdog: watch list"
+grep -qE '^== .* 5 boot banner' <<<"$wout" && okn "wdog: five boot banners counted" || bad "wdog: boot banner count"
+# a reset with no WDOG1 line (a SoC fault): the new banner alone closes the row as a reset
+printf '%s\n' '12:00:00 deqp: selector 95' '12:00:01 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.specification.x' 'U-Boot SPL 2024.04 (Jan 01 2026)' > "$D/reset.txt"
+python3 -I "$SCAN" -q "$D/reset.txt" 2>&1 | grep -qE '^!! NO FINISH row 95 \(reset\) .*case begun, no result: dEQP-GLES3\.functional\.texture\.specification\.x' &&
+    okn "reset without a WDOG line: reset, begun case named" || bad "reset without a WDOG line"
+
+# (3) a log cut off mid-line: the cut line is not read as a result, selector or summary
+printf '%s\n%s\n%s\n%s' '13:00:00 deqp: selector 122' \
+    '13:00:01 deqp: Pass dEQP-GLES3.functional.ubo.single_basic_type.shared.lowp_float' \
+    '13:00:02 qpa: #beginTestCaseResult dEQP-GLES3.functional.ubo.single_basic_type.shared.mediump_float' \
+    '13:00:03 deqp: Pass dEQP-GLES3.functional.ubo.single_basic_type.shared.medi' > "$D/cut.txt"
+cout=$(python3 -I "$SCAN" -q "$D/cut.txt" 2>&1)
+crc=$?
+[ "$crc" = 1 ] && okn "cut log: exit 1" || bad "cut log: exit $crc"
+if grep -qE '^!! NO FINISH row 122 \(hang\) .*last result dEQP-GLES3\.functional\.ubo\.single_basic_type\.shared\.lowp_float; case begun, no result: dEQP-GLES3\.functional\.ubo\.single_basic_type\.shared\.mediump_float; log cut inside: .*shared\.medi;' <<<"$cout"; then
+    okn "cut log: the cut result is not taken as the last case"
+else bad "cut log"; printf '%s\n' "$cout" | sed 's/^/        /'; fi
+python3 -I "$SCAN" "$D/cut.txt" 2>&1 | grep -qE 'CUT +deqp: Pass .*shared\.medi' && okn "cut log: the cut line is listed" || bad "cut log: cut line not listed"
+# a cut summary does not finish a row, a cut selector does not start one
+printf '%s\n%s' '14:00:00 deqp: selector 12' '14:00:05 deqp: summary: 2 cases begun, 2 with a res' > "$D/cut2.txt"
+python3 -I "$SCAN" -q "$D/cut2.txt" 2>&1 | grep -qE '^!! NO FINISH row 12 \(hang\)' && okn "cut summary does not finish a row" || bad "cut summary finished a row"
+printf '%s\n%s' '14:00:00 deqp: summary: 1 cases begun, 1 with a result, 0 without' '14:00:05 deqp: selector 1' > "$D/cut3.txt"
+python3 -I "$SCAN" -q "$D/cut3.txt" 2>&1 | grep -qE '^row +1 ' && bad "cut selector started a row" || okn "cut selector does not start a row"
+
+# (4) two runs of one row in a log: the last run counts
+# (a) the first run reset, the second finished: row 57 is not unfinished
+cat > "$D/two-ok.txt" <<'EOF'
+15:00:00 deqp: selector 57
+15:00:01 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.filtering.3d.a
+15:10:00 gc_wdog_arm: feeding bound of 590 s over; WDOG1 resets the SoC within 10000 ms
+15:10:10 U-Boot SPL 2024.04 (Jan 01 2026)
+15:10:20 *** Booting Zephyr OS build v4.1.0 ***
+15:10:21 deqp: selector 57
+15:10:22 deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.b
+15:10:30 deqp: summary: 1 cases begun, 1 with a result, 0 without
+EOF
+tout=$(python3 -I "$SCAN" -q "$D/two-ok.txt" 2>&1)
+trc=$?
+if [ "$trc" = 0 ] && grep -q 'superseded' <<<"$tout" && ! grep -q '^!! NO FINISH' <<<"$tout"; then
+    okn "two runs, last finished: first is superseded, exit 0"
+else bad "two runs, last finished (exit $trc)"; printf '%s\n' "$tout" | sed 's/^/        /'; fi
+# (b) the first run finished, the second hung: the last run's case is named, exit 1
+cat > "$D/two-hang.txt" <<'EOF'
+16:00:00 deqp: selector 95
+16:00:01 deqp: Pass dEQP-GLES3.functional.texture.specification.first_run
+16:00:30 deqp: summary: 1 cases begun, 1 with a result, 0 without
+16:01:00 *** Booting Zephyr OS build v4.1.0 ***
+16:01:01 deqp: selector 95
+16:01:02 deqp: Pass dEQP-GLES3.functional.texture.specification.second_run
+16:01:03 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.specification.second_hung
+EOF
+tout=$(python3 -I "$SCAN" -q "$D/two-hang.txt" 2>&1)
+trc=$?
+if [ "$trc" = 1 ] && grep -qE '^!! NO FINISH row 95 \(hang\) .*last result dEQP-GLES3\.functional\.texture\.specification\.second_run; case begun, no result: .*second_hung' <<<"$tout" &&
+    ! grep '^!!' <<<"$tout" | grep -q 'first_run'; then
+    okn "two runs, last hung: the last run's case is named, exit 1"
+else bad "two runs, last hung (exit $trc)"; printf '%s\n' "$tout" | sed 's/^/        /'; fi
 
 # bad input
 python3 -I "$SCAN" "$D/missing.txt" > /dev/null 2>&1
