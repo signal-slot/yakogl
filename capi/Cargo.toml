@@ -42,6 +42,10 @@ gpu-vivante = ["yakogl/gpu-vivante"]
 # compiler is its only shader back end, so it goes with `shaderc-online` and
 # `no-shader-table` (the yakogl crate refuses it otherwise).
 gpu-v3d = ["yakogl/gpu-v3d"]
+# The Raspberry Pi 5's V3D 7.1 (the yakogl crate's `gpu-v3d71`, which implies
+# `gpu-v3d`): the 7.1 table as `g_backend`. It goes with the same
+# `shaderc-online` and `no-shader-table` as `gpu-v3d`.
+gpu-v3d71 = ["yakogl/gpu-v3d71"]
 # The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`, a skeleton that
 # refuses every draw): like the V3D it goes with `shaderc-online` and
 # `no-shader-table`.

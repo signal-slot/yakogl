@@ -99,6 +99,14 @@ gpu-vivante = []
 # a library that cannot compile a shader). Like the GC7000, `struct shc_shader`
 # grows a V3D half (`ShcShader::v3d`).
 gpu-v3d = []
+# The Raspberry Pi 5's Broadcom V3D 7.1 (BCM2712 D0, V3D 7.1.10): the same
+# `v3d/` module, the same online compiler and `ShcShader::v3d` half, with the
+# 7.1 table `yakogl_backend_v3d71` (src/v3d/table71.rs) as `g_backend` in
+# place of the 4.2 one (src/backend.rs). It implies `gpu-v3d`, so the
+# exactly-one-GPU rule of src/lib.rs and every `gpu-v3d` rule stay as they
+# are (docs/notes/v3d71-gl-table.md section 4; zephyr/Kconfig's
+# YAKOGL_GPU_V3D71 names this feature).
+gpu-v3d71 = ["gpu-v3d"]
 # The NanoPC-T6's Arm Mali-G610 (RK3588, Valhall arch 10; `mali/`): a
 # skeleton. The descriptor packers are generated from Mesa's v10.xml
 # (src/mali/genxml/v10.rs, tools/mali/gen_pack_rs.py); the backend refuses
