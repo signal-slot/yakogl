@@ -13,7 +13,14 @@
             tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055/ directories (their
             results.tsv) or the results.tsv files
 Each option takes one or more files or directories (a directory is read by its
-results.tsv, else by its *.log files); several files are united and a later
+results.tsv, else by its *.log files); --uboot also takes what
+tools/cts/t6-uboot-rows.sh leaves: its <out-dir> or its rows.tsv (each row's
+record directory, the fourth column, is read by its image.log), or one record
+directory of driver/tools/uboot-t6/prompt-go.sh (image.log, the UART from `go`
+to Linux's login; uart.log and typed.log are not read: they repeat or lack
+the image's lines). A row with exit code 0 or 11 must have an image.log with
+outcome lines; a row of another code (a stop) or with no record ("-", a dry
+run) adds what its image.log has, if any. Several files are united and a later
 file's status for a case replaces an earlier one's. A file may be, line by line:
   "deqp: <Status> <case>" (the Zephyr deqp sample's console line, as
       tools/cts/deqp-uart-tally.py reads it: NULs and CRs dropped, a leading
@@ -66,8 +73,36 @@ def parse(text):
     return out
 
 
+def rows_files(tsv):
+    """image.log files of the record dirs named by a t6-uboot-rows.sh rows.tsv."""
+    out = []
+    with open(tsv, errors="replace") as fh:
+        for l in fh:
+            f = l.rstrip("\n").split("\t")
+            if len(f) < 4:
+                continue
+            log = os.path.join(f[3], "image.log") if f[3] != "-" else None
+            if log and os.path.isfile(log):
+                if f[1] in ("0", "11"):
+                    out.append((log, True))
+                else:
+                    with open(log, errors="replace") as lf:
+                        if parse(lf.read()):
+                            out.append((log, True))
+            elif f[1] in ("0", "11"):
+                raise ValueError("%s: row %s (exit %s) has no image.log in record %s"
+                                 % (tsv, f[0], f[1], f[3]))
+    return out
+
+
 def files_of(p):
+    if os.path.basename(p) == "rows.tsv" and os.path.isfile(p):
+        return [f for f, _ in rows_files(p)]
     if os.path.isdir(p):
+        if os.path.isfile(os.path.join(p, "rows.tsv")):
+            return [f for f, _ in rows_files(os.path.join(p, "rows.tsv"))]
+        if os.path.isfile(os.path.join(p, "image.log")):
+            return [os.path.join(p, "image.log")]
         t = os.path.join(p, "results.tsv")
         if os.path.isfile(t):
             return [t]
