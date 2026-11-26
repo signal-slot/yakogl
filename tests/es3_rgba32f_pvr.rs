@@ -234,6 +234,8 @@ const VALUES: [f32; 4] = [1.0e5, -1.0e5, 1.0 / 3.0, 1.0e-8];
 enum Shape {
     D2,
     Array,
+    Cube,
+    D3,
 }
 
 impl Shape {
@@ -241,19 +243,23 @@ impl Shape {
         match self {
             Shape::D2 => GL_TEXTURE_2D,
             Shape::Array => GL_TEXTURE_2D_ARRAY,
+            Shape::Cube => GL_TEXTURE_CUBE_MAP,
+            Shape::D3 => GL_TEXTURE_3D,
         }
     }
     fn sampler(self) -> &'static str {
         match self {
             Shape::D2 => "sampler2D",
             Shape::Array => "sampler2DArray",
+            Shape::Cube => "samplerCube",
+            Shape::D3 => "sampler3D",
         }
     }
 }
 
-/// A SIDE x SIDE (x 2 layers) texture, every texel `values`, NEAREST.
+/// A SIDE x SIDE (x 2 layers or slices; a cube: six faces) texture, every texel `values`, NEAREST.
 fn make(shape: Shape, internalformat: GLenum, values: [f32; 4]) -> GLuint {
-    let layers = if matches!(shape, Shape::Array) { 2 } else { 1 };
+    let layers = if matches!(shape, Shape::Array | Shape::D3) { 2 } else { 1 };
     let px: Vec<f32> = (0..SIDE * SIDE * layers).flat_map(|_| values).collect();
     let mut name = 0;
     // SAFETY: plain GL calls; `px` holds SIDE x SIDE x layers RGBA floats.
@@ -264,7 +270,12 @@ fn make(shape: Shape, internalformat: GLenum, values: [f32; 4]) -> GLuint {
         let data = px.as_ptr() as *const c_void;
         match shape {
             Shape::D2 => glTexImage2D(GL_TEXTURE_2D, 0, f, w, h, 0, GL_RGBA, GL_FLOAT, data),
-            Shape::Array => glTexImage3D(shape.target(), 0, f, w, h, l, 0, GL_RGBA, GL_FLOAT, data),
+            Shape::Array | Shape::D3 => glTexImage3D(shape.target(), 0, f, w, h, l, 0, GL_RGBA, GL_FLOAT, data),
+            Shape::Cube => {
+                for face in 0..6 {
+                    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, f, w, h, 0, GL_RGBA, GL_FLOAT, data);
+                }
+            }
         }
         for p in [GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER] {
             glTexParameteri(shape.target(), p, GL_NEAREST as GLint);
@@ -292,11 +303,28 @@ fn floats(texel: &[u8]) -> [f32; 4] {
 #[test]
 fn rgba32f_samples_full_floats() {
     let _g = context();
-    for shape in [Shape::D2, Shape::Array] {
+    // the cube is the stacked one here: pvr_native_cube off at compile time
+    yakogl::shaderc::pvr_set_native_cube(0);
+    for shape in [Shape::D2, Shape::Array, Shape::Cube, Shape::D3] {
         let (b, texel) = drawn(shape, GL_RGBA32F, VALUES);
         assert_eq!(b.format, GLES_TEXFMT_RGBA32F, "{shape:?}: bound class");
         assert_eq!(floats(&texel), VALUES, "{shape:?}: texels as uploaded, not halves");
     }
+    yakogl::shaderc::pvr_set_native_cube(yakogl::shaderc::PVR_NATIVE_CUBE_DEFAULT);
+}
+
+/// The native cube (the default): the draw binds a twiddled copy of the six
+/// faces; its 16-byte texels must still hold the uploaded floats.
+#[test]
+fn rgba32f_native_cube_copy_carries_full_floats() {
+    let _g = context();
+    yakogl::shaderc::pvr_set_native_cube(1);
+    let (b, texel) = drawn(Shape::Cube, GL_RGBA32F, VALUES);
+    assert_eq!(b.type_, GLES_TEXTYPE_CUBE_TWIDDLED_PROBE, "the native copy is bound");
+    assert_eq!(b.format, GLES_TEXFMT_RGBA32F, "bound class");
+    assert!(b.bytes >= 6 * 4096, "six faces: {}", b.bytes);
+    assert_eq!(floats(&texel), VALUES, "native cube copy: texels as uploaded, not halves");
+    yakogl::shaderc::pvr_set_native_cube(yakogl::shaderc::PVR_NATIVE_CUBE_DEFAULT);
 }
 
 #[test]
