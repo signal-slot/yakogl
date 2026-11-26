@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Compare a NanoPC-T6 dEQP-GLES2 run started from U-Boot with two baselines, per case.
+"""Compare a NanoPC-T6 dEQP-GLES2 run started from U-Boot with baselines, per case.
 
     python3 -I tools/cts/t6-uboot-deqp-compare.py [--quiet] [--all]
-        [--scope FILE] --uboot FILE... --kexec FILE... --armbian FILE...
+        [--scope FILE] --uboot FILE... --armbian FILE... [--kexec FILE...]
 
   --uboot   the U-Boot-started Zephyr run (the board session's UART log)
   --kexec   the kexec-started Zephyr run (main de2f2c103, 2026-11-17): UART logs
-            of its 76 images, or a "<Status> <case>" list made from them
+            of its 76 images, or a "<Status> <case>" list made from them.
+            Optional: those logs are gitignored records on another host, so no
+            per-case kexec baseline is in the tree. Without --kexec the
+            comparison is U-Boot against Armbian only: the first line of the
+            output is "kexec: no per-case baseline" (also with --quiet) and the
+            kexec column is left out of the per-case lines. An explicit
+            --kexec file that is missing, unreadable, or has no outcome line
+            is an error with its own exit code (3, below), never a silent
+            "no baseline": no kexec baseline is said by omitting --kexec.
   --armbian Armbian's Linux/panthor run (main 8ff01055, 2026-11-24): the four
             tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055/ directories (their
             results.tsv) or the results.tsv files
@@ -31,20 +39,24 @@ file's status for a case replaces an earlier one's. A file may be, line by line:
 Anything else is ignored.
 
 Per case one line: "<case> uboot=<S> kexec=<S> armbian=<S> <class>", with "-"
-for no outcome. The scope is the U-Boot run's cases (a one-row run), or
---scope FILE's case names (one per line, e.g. gles2-mustpass.txt) so that a
-case the U-Boot run lacks is "missing", or --all for every case of any input.
+for no outcome; without --kexec the kexec column is left out:
+"<case> uboot=<S> armbian=<S> <class>". The scope is the U-Boot run's cases (a
+one-row run), or --scope FILE's case names (one per line, e.g.
+gles2-mustpass.txt) so that a case the U-Boot run lacks is "missing", or --all
+for every case of any input.
 Classes, by the pass side (Pass, NotSupported, QualityWarning,
 CompatibilityWarning) against the fail side (everything else); newly failing
 wins when the baselines disagree:
   same           U-Boot is on the same side as every baseline that has the case
   newly failing  U-Boot fails and a baseline passes
   newly passing  U-Boot passes and a baseline fails
-  missing        U-Boot has no outcome for the case, or neither baseline has it
+  missing        U-Boot has no outcome for the case, or no given baseline has it
 --quiet prints only the cases that are not "same". The last line is
 "t6-uboot-deqp-compare: N cases, same A, newly failing B, newly passing C,
 missing D". Exit 0; exit 2 on bad input (a usage error, an unreadable file, a
-file with no outcome line).
+file with no outcome line, a bad --scope); exit 3 when --kexec is given but a
+kexec file is missing, unreadable, or has no outcome line (the kexec side
+alone gets this code: the --uboot and --armbian sides keep exit 2).
 """
 import argparse
 import glob
@@ -143,7 +155,8 @@ def main():
         description=doc[0], epilog="\n".join(doc[2:]),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--uboot", nargs="+", required=True)
-    ap.add_argument("--kexec", nargs="+", required=True)
+    ap.add_argument("--kexec", nargs="+",
+                    help="optional; omit it for a U-Boot vs Armbian comparison")
     ap.add_argument("--armbian", nargs="+", required=True)
     ap.add_argument("--scope", metavar="FILE")
     ap.add_argument("--all", action="store_true")
@@ -153,7 +166,7 @@ def main():
     except SystemExit as e:
         return 2 if e.code else 0
     try:
-        u, k, r = load(a.uboot), load(a.kexec), load(a.armbian)
+        u, r = load(a.uboot), load(a.armbian)
         scope = None
         if a.scope:
             with open(a.scope, errors="replace") as fh:
@@ -163,6 +176,15 @@ def main():
     except (OSError, ValueError) as e:
         print("t6-uboot-deqp-compare: %s" % e, file=sys.stderr)
         return 2
+    k = {}
+    if a.kexec:
+        try:
+            k = load(a.kexec)
+        except (OSError, ValueError) as e:
+            print("t6-uboot-deqp-compare: kexec: %s" % e, file=sys.stderr)
+            return 3
+    if not a.kexec:
+        print("kexec: no per-case baseline")
     if a.all:
         cases = set(u) | set(k) | set(r)
     elif scope is not None:
@@ -174,8 +196,12 @@ def main():
         cl = classify(u.get(c), k.get(c), r.get(c))
         n[cl] += 1
         if cl != "same" or not a.quiet:
-            print("%s uboot=%s kexec=%s armbian=%s %s" % (
-                c, u.get(c, "-"), k.get(c, "-"), r.get(c, "-"), cl))
+            if a.kexec:
+                print("%s uboot=%s kexec=%s armbian=%s %s" % (
+                    c, u.get(c, "-"), k.get(c, "-"), r.get(c, "-"), cl))
+            else:
+                print("%s uboot=%s armbian=%s %s" % (
+                    c, u.get(c, "-"), r.get(c, "-"), cl))
     print("t6-uboot-deqp-compare: %d cases, same %d, newly failing %d, "
           "newly passing %d, missing %d" % (
               len(cases), n["same"], n["newly failing"], n["newly passing"],
