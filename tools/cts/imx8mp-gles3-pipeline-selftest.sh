@@ -159,7 +159,8 @@ mp --check "${B[0]}" > "$work/b3.out" 2>&1; rc=$?
 echo "== --notpass shape"
 mp --notpass "${S[@]}" > "$work/np.tsv" 2> "$work/np.err"; rc=$?
 expect "notpass exits 0" "$rc"
-[ ! -s "$work/np.err" ]; expect "notpass has nothing on stderr" $?
+# the generator's no-result rows began fewer cases than their mustpass: only the shortfall warnings may appear
+! grep -qv '^WARNING: e[0-9]*: begun [0-9]* of [0-9]* mustpass (shortfall)$' "$work/np.err"; expect "notpass has nothing on stderr but shortfall warnings" $?
 # pi4-gles3-fails.tsv: leading '#' header lines, then `<record>:<Status> <case>` rows (record = image there, e<i> here)
 shape='^[A-Za-z0-9_.-]+:(Fail|NotSupported|QualityWarning|CompatibilityWarning|ResourceError|InternalError|Crash|Timeout|NoResult) dEQP-GLES3\.[^ ]+$'
 # the pi4 records are file paths (build/f-A1.txt), so '/' is allowed there
