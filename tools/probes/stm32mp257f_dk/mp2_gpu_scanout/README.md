@@ -50,19 +50,24 @@ request is on the console (`gc_power: ...`, `display_power: ...`).
    Kconfig. The format needs no conversion: the PE's X8R8G8B8 is the word
    `0x00RRGGBB`, the LTDC's format 0 (ARGB8888) reads it unchanged ("GPU
    buffer format" in the note);
-5. waits 60 frames, each with no transfer or underrun error
-   (`stm32_ltdc_wait_frame`);
-6. checks the picture with the LTDC's frame CRC (`stm32_ltdc_crc_enable`,
-   `stm32_ltdc_frame_crc`), one `mp2_gpu_scanout: crc: <what> 0x<crc>` line
-   per read: four reads of the unchanged buffer must be equal (`base`,
-   `again`), corner pixel (0,0) of the buffer inverted and cleaned must change
-   the CRC (`changed`), the restored pixel must give the first value back
-   (`restored`). Verdict `crc: stable+changing ok`, `crc: FAIL <why>` (the
-   result is then `FAIL: crc <err>`) or `crc: unavailable` (-ENODEV: no CRC
-   unit; not a failure).
+5. runs the scan-out check over 60 frames (`stm32_ltdc_scanout_check`: frame
+   events by `ISR.LIF` or the CPSR wrap, the layer's address and enable read
+   back after the reload and after the last frame, no FUWIF/FUIF/TERRIF/FURIF
+   in any event's ISR). The record is always printed (`mp2_gpu_scanout:
+   scanout: ...`; `errors: unobservable` when no RRIF followed the control
+   reload, not a failure); a failed check prints `scanout: check
+   frames|layer|errors|control failed` and the result `FAIL: scanout-<check>
+   <err>`;
+6. logs the LTDC's frame CRC as a diagnostic only (`stm32_ltdc_crc_enable`,
+   `stm32_ltdc_frame_crc_event`): `mp2_gpu_scanout: crc: <what> 0x<crc> line
+   <cypos> via <wrap|lif>` for four reads of the unchanged buffer (`base`,
+   `again`), the corner pixel (0,0) inverted and cleaned (`changed`), restored
+   (`restored`), then `crc: diagnostic: stable <y|n> changed <y|n> restored
+   <y|n>` or `crc: unavailable`. It gates nothing (the bring-up note's "CRC
+   and frame wait").
 
-PASS rests on the read-back, the flip's read-back of the scanned address, the
-frame flags and the CRC; the picture on the KVM.
+PASS rests on the read-back, the flip's read-back of the scanned address and
+the scan-out check; the picture on the KVM.
 
 `PASS` comes only after both the read-back and the scan-out succeeded. The
 probe then keeps scanning out for `CONFIG_MP2_GPU_SCANOUT_HOLD_S` seconds

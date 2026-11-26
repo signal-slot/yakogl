@@ -16,8 +16,11 @@
  *    barrier is the only maintenance); blanking_off() brings the chain up,
  *    blanking_on() takes it down (ADV7535 stop, DSI detach, LTDC disable).
  *  - yakogl_drv/stm32_ltdc.h: the bring-up's record, the frame check
- *    (stm32_ltdc_wait_frame), a flip to a foreign buffer (stm32_ltdc_set_fb),
- *    and the board hooks with their weak defaults here.
+ *    (stm32_ltdc_wait_frame: the CPSR wrap or ISR.LIF, the ISR of the event's
+ *    step), the scan-out check a probe's PASS rests on
+ *    (stm32_ltdc_scanout_check), the frame CRC as a diagnostic only
+ *    (stm32_ltdc_crc_enable / _frame_crc / _frame_crc_event), a flip to a
+ *    foreign buffer (stm32_ltdc_set_fb), and the board hooks with their weak defaults here.
  *
  * The mode is chosen once, at the first call that needs it: ADV7535 init,
  * HPD (polled up to 2 s: the HDMI 5 V has just come on), EDID
@@ -448,8 +451,8 @@ int stm32_ltdc_framebuffer(const struct device *dev, struct stm32_ltdc_fb *fb)
 
 int stm32_ltdc_wait_frame(const struct device *dev, uint32_t *isr)
 {
+	struct yd_mp25_ltdc_frame ev;
 	struct ltdc_data *d;
-	uint32_t bits;
 	int rc;
 
 	if (!is_ltdc(dev)) {
@@ -461,16 +464,20 @@ int stm32_ltdc_wait_frame(const struct device *dev, uint32_t *isr)
 		k_mutex_unlock(&d->lock);
 		return -ENODEV;
 	}
-	rc = yd_mp25_ltdc_wait_frame(&d->yd_cfg, &d->env);
-	bits = yd_mp25_ltdc_isr(&d->yd_cfg, &d->st.ltdc);
+	/* The event's ISR is the one the FFI read and cleared in the frame's
+	 * step (ltdc.c ltdc_irq); a second ISR read here would see nothing. */
+	rc = yd_mp25_ltdc_wait_frame_event(&d->yd_cfg, &d->env, &ev);
 	k_mutex_unlock(&d->lock);
-	if (isr != NULL) {
-		*isr = bits;
-	}
 	if (rc < 0) {
+		if (isr != NULL) {
+			*isr = 0;
+		}
 		return rc;
 	}
-	return (bits & STM32_LTDC_ISR_ERRORS) != 0u ? -EIO : 0;
+	if (isr != NULL) {
+		*isr = ev.isr;
+	}
+	return (ev.isr & STM32_LTDC_ISR_ERRORS) != 0u ? -EIO : 0;
 }
 
 int stm32_ltdc_set_fb(const struct device *dev, uint64_t fb_phys)
@@ -521,12 +528,12 @@ int stm32_ltdc_crc_enable(const struct device *dev, bool on)
 	return rc;
 }
 
-int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc)
+int stm32_ltdc_frame_crc_event(const struct device *dev, struct yd_mp25_ltdc_frame *ev)
 {
 	struct ltdc_data *d;
 	int rc;
 
-	if (!is_ltdc(dev)) {
+	if (!is_ltdc(dev) || ev == NULL) {
 		return -ENODEV;
 	}
 	d = dev->data;
@@ -535,7 +542,42 @@ int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc)
 		k_mutex_unlock(&d->lock);
 		return -ENODEV;
 	}
-	rc = yd_mp25_ltdc_frame_crc(&d->yd_cfg, &d->env, crc);
+	rc = yd_mp25_ltdc_frame_crc_event(&d->yd_cfg, &d->env, ev);
+	k_mutex_unlock(&d->lock);
+	return rc;
+}
+
+int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc)
+{
+	struct yd_mp25_ltdc_frame ev;
+	int rc;
+
+	if (crc == NULL) {
+		return is_ltdc(dev) ? -EINVAL : -ENODEV;
+	}
+	rc = stm32_ltdc_frame_crc_event(dev, &ev);
+	if (rc == 0) {
+		*crc = ev.crc;
+	}
+	return rc;
+}
+
+int stm32_ltdc_scanout_check(const struct device *dev, uint32_t frames,
+			     struct yd_mp25_ltdc_scanout *out)
+{
+	struct ltdc_data *d;
+	int rc;
+
+	if (!is_ltdc(dev) || out == NULL) {
+		return -ENODEV;
+	}
+	d = dev->data;
+	k_mutex_lock(&d->lock, K_FOREVER);
+	if (!d->st.on) {
+		k_mutex_unlock(&d->lock);
+		return -ENODEV;
+	}
+	rc = yd_mp25_ltdc_scanout_check(&d->yd_cfg, &d->st.ltdc, &d->env, frames, out);
 	k_mutex_unlock(&d->lock);
 	return rc;
 }

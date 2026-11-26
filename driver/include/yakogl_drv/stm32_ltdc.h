@@ -53,8 +53,11 @@ extern "C" {
 #define STM32_LTDC_ISR_FUWARN   (1u << 1)
 #define STM32_LTDC_ISR_TERR     (1u << 2)
 #define STM32_LTDC_ISR_FUERR    (1u << 6)
-/* What makes a frame bad: a bus error or an underrun error. */
-#define STM32_LTDC_ISR_ERRORS   (STM32_LTDC_ISR_TERR | STM32_LTDC_ISR_FUERR)
+#define STM32_LTDC_ISR_FURERR   (1u << 8)
+/* What makes a frame bad (the scan-out check's set): a bus error or any
+ * underrun flag. */
+#define STM32_LTDC_ISR_ERRORS   (STM32_LTDC_ISR_TERR | STM32_LTDC_ISR_FUWARN | \
+				 STM32_LTDC_ISR_FUERR | STM32_LTDC_ISR_FURERR)
 
 struct stm32_ltdc_status {
 	uint32_t step;              /* STM32_LTDC_STEP_* that failed last, 0 none */
@@ -98,9 +101,11 @@ const struct stm32_ltdc_status *stm32_ltdc_status(const struct device *dev);
  * yakogl,ltdc-fb), or the select's error. */
 int stm32_ltdc_framebuffer(const struct device *dev, struct stm32_ltdc_fb *fb);
 
-/* One frame: yd_mp25_ltdc_wait_frame() then the ISR read and cleared into
- * *isr (may be NULL). -ENODEV while the chain is down, -ETIMEDOUT no frame,
- * -EIO a transfer or underrun error (STM32_LTDC_ISR_ERRORS) in the ISR. */
+/* One frame event (yd_mp25_ltdc_wait_frame_event(): ISR.LIF or the CPSR wrap,
+ * whichever comes first). *isr (may be NULL) is the ISR the FFI read in the
+ * event's step and cleared through ICR, so the error flags are in it and
+ * nowhere else; 0 on a timeout. -ENODEV while the chain is down, -ETIMEDOUT
+ * no frame, -EIO an error flag (STM32_LTDC_ISR_ERRORS) in that ISR. */
 int stm32_ltdc_wait_frame(const struct device *dev, uint32_t *isr);
 
 /* Scan out another buffer (a GPU-rendered frame) at the chain's pitch and
@@ -111,13 +116,28 @@ int stm32_ltdc_set_fb(const struct device *dev, uint64_t fb_phys);
 
 /* Frame CRC (GCR.CRCEN; layer 3 is non-secure on the DK). on switches the
  * CRC unit on or off. -ENODEV while the chain is down or the LTDC has no CRC,
- * else the FFI's negative errno. */
+ * else the FFI's negative errno. A diagnostic: it decides no result. */
 int stm32_ltdc_crc_enable(const struct device *dev, bool on);
 
-/* One frame's CCRCR after the FFI's skipped frames, into *crc (untouched on
- * an error). -ENODEV while down or no CRC unit, -EINVAL CRC off or crc NULL,
- * -ETIMEDOUT no frame. Compare two reads; ST's algorithm is undocumented. */
+/* One frame's CCRCR after the FFI's two skipped frame events (ltdc.c
+ * CRC_SKIP_FRAMES), into *crc (untouched on an error). -ENODEV while down or
+ * no CRC unit, -EINVAL CRC off or crc NULL, -ETIMEDOUT no frame. Compare
+ * reads only; ST's algorithm is undocumented and the line where the value is
+ * final is not stated. */
 int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc);
+
+/* As stm32_ltdc_frame_crc(), with the event: ev->crc, ev->line (CPSR line of
+ * the read) and ev->via (YD_MP25_LTDC_VIA_WRAP / _LIF). Same errors. */
+int stm32_ltdc_frame_crc_event(const struct device *dev, struct yd_mp25_ltdc_frame *ev);
+
+/* What a probe's PASS rests on (yd_mp25_ltdc_scanout_check(), the bring-up
+ * note's checks 10-12): `frames` frame events, the layer read back before
+ * and after, every event's ISR. *out is filled whenever the check ran. 0 all
+ * held, -ETIMEDOUT too few frames, -EIO layer wrong or an error flag
+ * (out->failed says which), -ENODEV while the chain is down or no LTDC,
+ * -EINVAL 0 frames. The CRC enters nothing. */
+int stm32_ltdc_scanout_check(const struct device *dev, uint32_t frames,
+			     struct yd_mp25_ltdc_scanout *out);
 
 /* ---- board hooks ---------------------------------------------------------
  * Weak defaults in the driver; the board layer overrides them

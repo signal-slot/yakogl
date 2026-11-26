@@ -5,24 +5,34 @@
  * chain owner, display_yakogl_stm32_ltdc.c; the board layer powered the path
  * before, display_power_mp2.c), writes the eight colour bars (pattern.c,
  * what display_check/colorbars.py judges) line by line with display_write(),
- * turns blanking off, checks MP2_DISPLAY_FRAMES frames and prints
+ * turns blanking off, runs the scan-out check over MP2_DISPLAY_FRAMES frames
+ * (stm32_ltdc_scanout_check) and prints
  *   mp2_display: PASS: <w>x<h> <fmt> <n> frames
  *   mp2_display: FAIL: <step> <err>
  * PASS only when the chain is up (LTDC on, DSI streaming, ADV7535 started)
- * and every frame came with no transfer or underrun error. It then keeps
- * scanning out CONFIG_MP2_DISPLAY_HOLD_S seconds (one frame checked a
- * second), so the runner's MP2_HOLD_S and the KVM can see the picture. The
- * board layer (stm32mp2.c) resets the board through PSCI at its lifetime.
+ * and the scan-out check returned 0 with no failed bit: at least that many
+ * frame events (ISR.LIF or the CPSR wrap), the layer's address and enable
+ * read back right after the reload and after the last frame, and no FUWIF,
+ * FUIF, TERRIF or FURIF in any event's ISR. The check's record is always
+ * printed ("mp2_display: scanout: ..."; "errors: unobservable" when no RRIF
+ * came after the control reload: the error flags could not be seen, which is
+ * not a failure), and a failed check prints its name before the FAIL line
+ * ("scanout: check frames|layer|errors|control failed"; step scanout-frames,
+ * scanout-layer, scanout-errors or scanout-control). It then keeps scanning
+ * out CONFIG_MP2_DISPLAY_HOLD_S seconds (one frame checked a second), so the
+ * runner's MP2_HOLD_S and the KVM can see the picture. The board layer
+ * (stm32mp2.c) resets the board through PSCI at its lifetime.
  *
- * Before the result line the LTDC's frame CRC checks the picture itself
- * (stm32_ltdc_crc_enable / stm32_ltdc_frame_crc), logged as "mp2_display:
- * crc:" lines: constant while the buffer is unchanged, different with two
- * pixels of line 0 changed, back to the first value once restored; verdict
- *   mp2_display: crc: stable+changing ok
- *   mp2_display: crc: FAIL <why>      (the result becomes FAIL)
- *   mp2_display: crc: unavailable     (-ENODEV: no CRC unit; no failure)
- * The chain keeps scanning out throughout, so the hold that follows the
- * result line shows the restored picture. The KVM still judges the colours.
+ * After the check, the LTDC's frame CRC is logged as a diagnostic only
+ * (stm32_ltdc_crc_enable / stm32_ltdc_frame_crc_event): "mp2_display: crc:
+ * <what> 0x<crc> line <cypos> via <wrap|lif>" for four reads of the unchanged
+ * buffer, one with two pixels of line 0 changed, one restored, then
+ *   mp2_display: crc: diagnostic: stable <y|n> changed <y|n> restored <y|n>
+ *   mp2_display: crc: unavailable     (-ENODEV: no CRC unit)
+ * Nothing of it gates PASS: the CRC did not follow the picture on this path
+ * (docs/notes/stm32mp257f-dk-display-bringup.md, "CRC and frame wait"). The
+ * chain keeps scanning out throughout, so the hold that follows the result
+ * line shows the restored picture. The KVM still judges the colours.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -36,6 +46,8 @@
 #include <yakogl_drv/stm32_ltdc.h>
 
 #include "pattern.h"
+
+#define NAME "mp2_display"
 
 #define LTDC_NODE DT_NODELABEL(ltdc)
 #define DSI_NODE  DT_PHANDLE(LTDC_NODE, dsi_host)
@@ -125,14 +137,70 @@ static void compare_bars(unsigned int w)
 	printk("mp2_display: bars: equal to the crate's\n");
 }
 
+/* The scan-out check's record, always printed (whatever it said), then each
+ * failed check by name. Returns 0 only when the FFI said 0 and no check bit
+ * is set: the one place PASS comes from. *name is the first failed check, for
+ * the FAIL line; *seen the frames counted. */
+static int scanout_verdict(const struct device *dev, uint32_t frames, const char **name,
+			   uint32_t *seen)
+{
+	struct yd_mp25_ltdc_scanout o = {0};
+	int rc = stm32_ltdc_scanout_check(dev, frames, &o);
+
+	printk(NAME ": scanout: frames %u/%u (lif %u wrap %u) max wait %u us, layer fb 0x%08x "
+	       "want 0x%08x lxcr 0x%08x gcr 0x%08x ok %u/%u, lipcr 0x%x want 0x%x ier 0x%08x\n",
+	       o.frames, o.frames_wanted, o.frames_lif, o.frames_wrap, o.max_wait_us, o.cfbar,
+	       o.cfbar_want, o.lxcr, o.gcr, o.layer_ok_before, o.layer_ok_after, o.lipcr,
+	       o.lipcr_want, o.ier);
+	printk(NAME ": scanout: isr_or 0x%08x fuwif %u fuif %u terrif %u furif %u crcif %u, "
+	       "failed 0x%x rrif_seen %u rc %d\n",
+	       o.isr_or, o.fuwif, o.fuif, o.terrif, o.furif, o.crcif, o.failed, o.rrif_seen, rc);
+	if (!o.rrif_seen) {
+		printk(NAME ": scanout: errors: unobservable (no RRIF after the control reload)\n");
+	}
+	*seen = o.frames;
+	*name = NULL;
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_FRAMES) != 0u) {
+		printk(NAME ": scanout: check frames failed (%u of %u)\n", o.frames,
+		       o.frames_wanted);
+		*name = "scanout-frames";
+	}
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_LAYER) != 0u) {
+		printk(NAME ": scanout: check layer failed (address or enable read back wrong)\n");
+		if (*name == NULL) {
+			*name = "scanout-layer";
+		}
+	}
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_ERRORS) != 0u) {
+		printk(NAME ": scanout: check errors failed (FIFO underrun or transfer error)\n");
+		if (*name == NULL) {
+			*name = "scanout-errors";
+		}
+	}
+	if (rc != 0 && *name == NULL) {
+		printk(NAME ": scanout: check control failed (the RRIF control reload)\n");
+		*name = "scanout-control";
+	}
+	if (rc == 0 && *name != NULL) {
+		rc = -EIO; /* a failed bit decides as well as the return value */
+	}
+	return rc;
+}
+
 #define CRC_READS 4
 
+/* A diagnostic only: it prints and decides nothing. */
 static int crc_read(const struct device *dev, const char *what, uint32_t *crc)
 {
-	int err = stm32_ltdc_frame_crc(dev, crc);
+	struct yd_mp25_ltdc_frame ev;
+	int err = stm32_ltdc_frame_crc_event(dev, &ev);
 
 	if (err == 0) {
-		printk("mp2_display: crc: %s 0x%08x\n", what, *crc);
+		*crc = ev.crc;
+		printk(NAME ": crc: %s 0x%08x line %u via %s\n", what, ev.crc, ev.line,
+		       ev.via == YD_MP25_LTDC_VIA_LIF ? "lif" : "wrap");
+	} else {
+		printk(NAME ": crc: %s read %d\n", what, err);
 	}
 	return err;
 }
@@ -142,12 +210,13 @@ static bool crc_unavailable(int err)
 	return err == -ENODEV || err == -ENOTSUP || err == -ENOSYS;
 }
 
-/* 0 on ok or unavailable, else the error (verdict printed). The buffer's
- * line 0 is written with its first two bytes inverted and then restored,
- * through display_write() (the driver's cache handling for the CPU pattern). */
-static int crc_check(const struct device *dev, const struct display_buffer_descriptor *desc)
+/* The CRC as a diagnostic: the buffer's line 0 is written with its first two
+ * bytes inverted and then restored, through display_write() (the driver's
+ * cache handling for the CPU pattern). Prints; nothing is returned. */
+static void crc_diag(const struct device *dev, const struct display_buffer_descriptor *desc)
 {
-	uint32_t base, c, isr = 0;
+	uint32_t base = 0, c = 0, changed = 0, restored = 0, isr = 0;
+	bool stable = true, ch_ok, rs_ok;
 	int err;
 
 	err = stm32_ltdc_crc_enable(dev, true);
@@ -155,22 +224,16 @@ static int crc_check(const struct device *dev, const struct display_buffer_descr
 		err = crc_read(dev, "base", &base);
 	}
 	if (crc_unavailable(err)) {
-		printk("mp2_display: crc: unavailable\n");
-		return 0;
+		printk(NAME ": crc: unavailable\n");
+		return;
 	}
 	if (err) {
-		printk("mp2_display: crc: FAIL read %d\n", err);
-		return err;
+		printk(NAME ": crc: diagnostic: no value (%d)\n", err);
+		return;
 	}
 	for (int i = 1; i < CRC_READS; i++) {
-		err = crc_read(dev, "again", &c);
-		if (err) {
-			printk("mp2_display: crc: FAIL read %d\n", err);
-			return err;
-		}
-		if (c != base) {
-			printk("mp2_display: crc: FAIL unstable 0x%08x vs 0x%08x\n", c, base);
-			return -EIO;
+		if (crc_read(dev, "again", &c) == 0 && c != base) {
+			stable = false;
 		}
 	}
 
@@ -178,37 +241,15 @@ static int crc_check(const struct device *dev, const struct display_buffer_descr
 	line[1] ^= 0xff;
 	err = display_write(dev, 0, 0, desc, line);
 	(void)stm32_ltdc_wait_frame(dev, &isr);
-	if (err == 0) {
-		err = crc_read(dev, "changed", &c);
-	}
+	ch_ok = err == 0 && crc_read(dev, "changed", &changed) == 0 && changed != base;
 	line[0] ^= 0xff;
 	line[1] ^= 0xff;
-	if (err) {
-		(void)display_write(dev, 0, 0, desc, line);
-		printk("mp2_display: crc: FAIL changed-read %d\n", err);
-		return err;
-	}
-	if (c == base) {
-		(void)display_write(dev, 0, 0, desc, line);
-		printk("mp2_display: crc: FAIL unchanged with changed pixels 0x%08x\n", c);
-		return -EIO;
-	}
-
 	err = display_write(dev, 0, 0, desc, line);
 	(void)stm32_ltdc_wait_frame(dev, &isr);
-	if (err == 0) {
-		err = crc_read(dev, "restored", &c);
-	}
-	if (err) {
-		printk("mp2_display: crc: FAIL restore %d\n", err);
-		return err;
-	}
-	if (c != base) {
-		printk("mp2_display: crc: FAIL restored 0x%08x, was 0x%08x\n", c, base);
-		return -EIO;
-	}
-	printk("mp2_display: crc: stable+changing ok\n");
-	return 0;
+	rs_ok = err == 0 && crc_read(dev, "restored", &restored) == 0 && restored == base;
+	printk(NAME ": crc: diagnostic: stable %c changed %c restored %c\n", stable ? 'y' : 'n',
+	       ch_ok ? 'y' : 'n', rs_ok ? 'y' : 'n');
+	(void)stm32_ltdc_crc_enable(dev, false);
 }
 
 static int show(const struct device *dev, const char **fmt_name, unsigned int *w,
@@ -223,7 +264,8 @@ static int show(const struct device *dev, const char **fmt_name, unsigned int *w
 	struct display_buffer_descriptor desc;
 	enum pattern_format pf;
 	size_t row;
-	uint32_t isr = 0;
+	const char *check = NULL;
+	uint32_t seen = 0;
 	int err;
 
 	if (!device_is_ready(dev)) {
@@ -289,17 +331,12 @@ static int show(const struct device *dev, const char **fmt_name, unsigned int *w
 		return fail("chain", -EIO);
 	}
 
-	/* The frame path: every frame's line interrupt, no error flag. */
-	for (*frames = 0; *frames < MP2_DISPLAY_FRAMES; (*frames)++) {
-		err = stm32_ltdc_wait_frame(dev, &isr);
-		if (err) {
-			printk("mp2_display: frame %d: isr 0x%x\n", *frames, isr);
-			return fail("frame", err);
-		}
-	}
-	err = crc_check(dev, &desc);
+	/* PASS rests on this and on nothing else: the scan-out check. */
+	err = scanout_verdict(dev, MP2_DISPLAY_FRAMES, &check, &seen);
+	*frames = (int)seen;
+	crc_diag(dev, &desc);
 	if (err) {
-		return fail("crc", err);
+		return fail(check != NULL ? check : "scanout", err);
 	}
 	return 0;
 }
