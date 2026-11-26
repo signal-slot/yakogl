@@ -232,6 +232,46 @@ rc_is "printenv's MAC and IP in answers.txt do not refuse" 0
 hasnt "printenv's MAC is not echoed" "aa:bb"
 hasnt "printenv's IP is not echoed" "$IP1"
 
+# 10. UART2 prompt-read lines, the GIC wake line and the first-feed line.
+# SYNTHETIC fixtures: made-up lines in the formats of prompt-reads.py's
+# uart2_decode(), aarch64.rs gic_active_reset's line and nanopc_t6.c's feeder.
+RU="$W/20261125-1100-reads-0123abcd"; reads 00000000 off "$RU"
+{
+	echo "# SYNTHETIC: UART2 notes as prompt-reads.py writes them, not a measurement"
+	echo "# UART2 LCR 0x00000003: 8N1, DLAB clear"
+	echo "# UART2 USR 0x00000006: BUSY 0, TFNF 1, TFE 1, RFNE 0, RFF 0"
+	echo "# UART2 clock select: CLKSEL_CON(43) 0x00000090, (44) 0x00010003, (45) 0x00000001: source cpll / 5 * 1 / 3"
+	echo "# UART2 input clock 100000000 Hz; divisor 1 gives 6250000 baud (clk / 16); the PLL mode is not applied"
+} >>"$RU/answers.txt"
+RG="$W/20261125-1110-t6_cold-gic-0123abcd"; go keep "$RG"
+{
+	echo "# SYNTHETIC lines: GIC and feeder, not a measurement"
+	echo "t6: GIC active state: GICD_TYPER 0x0000ff25 GICR_TYPER 0x0000000000000000 GICR_ISACTIVER0 0x08000000 as found, 1 INTID(s) active (INTIDs 27), 16 word(s) written ICACTIVER, 0 still active"
+	echo "yakogl-wdt: nanopc_t6 first feed at 2005 ms"
+} >>"$RG/image.log"
+run "$RU" "$RG"
+rc_is "new lines: exit 0" 0
+has "uart2: LCR line" "UART2 LCR 0x00000003: 8N1, DLAB clear"
+has "uart2: clock input line" "UART2 input clock 100000000 Hz; divisor 1 gives 6250000 baud"
+has "gic: line echoed" "GIC active state: GICD_TYPER 0x0000ff25"
+has "gic: found" "a redistributor matched"
+has "feed: first feed" "first feed at 2005 ms"
+hasnt "feed: not absent" "feeder timer never ticked"
+# the new lines come after the old ones
+if [ "$(grep -n 'verdict:' <<<"$OUT" | head -1 | cut -d: -f1)" -lt "$(grep -n 'UART2 at the prompt' <<<"$OUT" | head -1 | cut -d: -f1)" ]; then ok "new lines are appended after the verdict"; else bad "new lines are appended after the verdict"; fi
+# no redistributor, no first feed
+RH="$W/20261125-1120-t6_cold-nogic-0123abcd"; go keep "$RH"
+echo "t6: GIC active state: GICD_TYPER 0x0000ff25, no redistributor with affinity 0x00000000 in 1 frame(s): SGIs and PPIs not scanned, 0 INTID(s) active (none), 15 word(s) written ICACTIVER, 0 still active" >>"$RH/image.log"
+run "$R" "$RH"
+has "gic: no redistributor" "no redistributor matched"
+has "first feed absent" "first feed: absent"
+has "first feed absent: says why" "the feeder timer never ticked"
+has "uart2 absent: not read" "UART2 at the prompt: not read"
+# nothing at all: the GIC line is not read
+run "$R" "$RB"
+has "gic absent: not read" "GIC active state line: not read"
+has "first feed absent on a bare log" "first feed: absent"
+
 # 9. usage and unreadable
 run; rc_is "no arguments: exit 2" 2
 run "$W/nowhere" "$RC1"; rc_is "no answers.txt: exit 4" 4
