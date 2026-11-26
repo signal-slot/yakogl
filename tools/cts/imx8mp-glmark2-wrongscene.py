@@ -109,7 +109,8 @@ def entry(a):
                      "alone is 'seen without a value', never wrong)")
     label = label_of(scene)
     nn = label.split("-")[0]
-    title = f"i.MX8MP GC7000UL: glmark2 {scene} renders wrong"
+    # starts with the scene cell: imx8mp-glmark2-issue-texts.py reads it so
+    title = f"{scene}: renders wrong on the i.MX8MP (GC7000UL)"
     return f"""### {scene}
 
 **Title**: {title}
