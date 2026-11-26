@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-26, the eleven tryboot cycles of the aborts3 record: image sha256, Linux boot id before the reboot, reboot time, seconds to Linux, clean-up, run, jobs and end lines (README.md)
+== cycles
+S03a1 sha256=35e3108f9fa95d2ba7e9fcfe2c78a37044b2358b51db20c800fdea4fa4c5c208 boot_before=36fd01c2-4416-4382-b2fe-fd46de904ddb t_reboot=1795683798 back_after=302s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 192 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a2 sha256=ed1fe144e311c101e83c0f4d6c92aeebd3b2d28e849ddece20c9a27509957d95 boot_before=f02825d4-beaf-45bb-9762-c5c7be14119f t_reboot=1795684122 back_after=298s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 306 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a3 sha256=cfdc61c93799850dfb2a98a68d4aa9c544c9b6302efab89fca0316097b3d71d1 boot_before=082bf69a-a166-4262-b529-8eb9b01fa1a9 t_reboot=1795684437 back_after=307s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 331 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a4 sha256=9bac7c6763e9b53e17d53746a52a6eb0116c9c278146fbbf907af3406ca62d52 boot_before=2dadec09-fa48-4f97-9a19-8d657a56867e t_reboot=1795684760 back_after=298s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 355 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a5 sha256=2174cebefeb4d44b2daa211f5412b91feb74d62c3573c11d9ccdd697b923d21b boot_before=85b61011-84a9-4801-a45c-1248a08c09eb t_reboot=1795685078 back_after=306s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 411 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a6 sha256=a5aca2a0144eb2fa6197f96324f9c670c906ad118474669f5e1ee2048d7eb69f boot_before=4e1e2a44-30e4-4244-b44b-b5ca1b0022d9 t_reboot=1795685401 back_after=306s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 388 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S03a7 sha256=e8b658e851978ea96a7b2a66796b51334103711db32d0f4e83a3017d949b7930 boot_before=cb41ee57-2eba-4bec-974e-58399a4dd5c8 t_reboot=1795685717 back_after=305s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 425 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF1a1 sha256=3108ff17664c0bd3d7cd5cc18f92eced0278b36c93611baf272013f5f0f3ce50 boot_before=787daee3-5d05-4229-8ba2-24ba1d7a791c t_reboot=1795686031 back_after=304s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 153 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF1b1 sha256=da663e2f1f7dcb94bf477ca93647e6b291461f1d6e9cac621dc15ee036174f35 boot_before=3aa794ea-94d1-47ee-9bf9-a45b7524df08 t_reboot=1795686353 back_after=304s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 152 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF2a1 sha256=e98b57064a5e514443f03957e56c8b8ed36f8b454812f90788d432a5b228817f boot_before=db34cae5-1e17-499b-a1ce-f8fbed22e378 t_reboot=1795686668 back_after=305s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 155 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+TF2b1 sha256=f0ae4a120a7fda5e9bd07877b1b87e2886277781efa8c9686d0b7882f153b075 boot_before=5dbb1489-b198-4254-a82f-cc4c581cf35a t_reboot=1795686983 back_after=307s cleanup=staged image removed, tryboot.txt removed as before the run (read back)
+   1 cases in 154 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
