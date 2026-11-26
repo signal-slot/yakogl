@@ -61,6 +61,15 @@ grep -q "flat on the i.MX8MP" <<<"$out2" || bad "issue title 1"
 grep -q "black on the i.MX8MP" <<<"$out2" || bad "issue title 2"
 grep -q "間違いのシーン" <<<"$out2" || bad "Japanese wrong line"
 
+# one photograph+probes row, judged by content only
+awk -v n=0 '/^\| \[/ && /\| dump \| right \|$/ { n++; if (n == 5) sub(/\| dump \| right \|$/, "| photograph+probes | seen without a value |") } { print }' "$d/right.md" >"$d/pp.md"
+grep -q 'photograph+probes' "$d/pp.md" || bad "pp fixture not built"
+out4=$(python3 "$tool" --note "$d/pp.md" 2>"$d/e4") || bad "photograph+probes note refused: $(cat "$d/e4")"
+grep -q "32 right, 0 wrong, 1 seen without a value, of 33" <<<"$out4" || bad "photograph+probes counts"
+grep -q "route(s): dump, photograph+probes" <<<"$out4" || bad "photograph+probes named in routes"
+sed 's/| photograph+probes |/| bogus-route |/' "$d/pp.md" >"$d/bad.md"
+if python3 "$tool" --note "$d/bad.md" >/dev/null 2>&1; then bad "bogus route accepted"; fi
+
 if python3 "$tool" --note "$skel" >"$d/o3" 2>"$d/e3"; then bad "skeleton accepted"; fi
 [ -s "$d/o3" ] && bad "skeleton refusal printed to stdout"
 grep -q "not yet looked at" "$d/e3" || bad "skeleton refusal message"
