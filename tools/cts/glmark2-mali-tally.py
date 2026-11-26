@@ -139,7 +139,7 @@ to stderr, so that mode's output is unchanged. --forward-only (needs --baseline)
 status 4 when some scene moved back. Without --baseline nothing changes. No raw log of the
 a57d8104 record is in the tree; pass its record directory when it is restored.
 
---host-verdicts <file> (the format of tests/fixtures/mali_glmark2_verdicts.txt: lines
+--host-verdicts <file> (the verdict fixture format tests/mali_glmark2_corpus.rs writes: lines
 "<n> <scene> <vs|fs> <hash>: ok|<refusal>", the scene in glmark2's -b form) compares the run with
 the host's compile prediction: a scene is predicted clean when every one of its shaders is ok,
 else refused with its first refusal. After the default table, one line "forecast <scene>: host
@@ -886,7 +886,7 @@ VERDICT_LINE_RE = re.compile(r"^(\d+) (\S+) (vs|fs) ([0-9a-f]+): (.*)$")
 
 def read_host_verdicts(path, scenes):
     """{info: None (every shader of the scene compiles) | 'vs ace2: refusal' (the first)} of a
-    tests/fixtures/mali_glmark2_verdicts.txt-format file; a scene it has no line for is absent"""
+    file in the format of tests/mali_glmark2_corpus.rs's fixture; a scene it has no line for is absent"""
     by_info = {info: slug for slug, info in scenes}
     text = CT.read_text(path)
     if text is None:

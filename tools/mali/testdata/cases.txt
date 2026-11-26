@@ -271,3 +271,49 @@ gm2_texmulti_6  gm2_texmulti_6.vert gm2_texmulti_6.frag triangles vs.position=eq
 # 87, the matrix order and the flattened function among them (`unanalysed`).
 gm2_ideas_1         gm2_ideas_1.vert        gm2_ideas_1.frag        triangles vs.position=equal fs.fragment=differs:mediump:16:2cf0e24d70a3
 gm2_cf_earlyret_vs  gm2_cf_earlyret_vs.vert gm2_cf_earlyret_vs.frag triangles vs.position=differs:unanalysed:117:6b6c72c35da2 vs.varying=differs:unanalysed:87:67e4a44355fb fs.fragment=differs:mediump:13:043920c93422
+# #367 lower-nonfinite-const: the lit fragment shaders' built-ins on constants (shading 994f/fea0, bump d442/487d/77c5;
+# docs/notes/mali-nonfinite-const.md), drawn with --uniform-values. Our compiler is byte-equal to gm2_nonfin_2 and _4
+# (tests/mali_nonfinite_const.rs); _1 is one instruction longer, _3 and _5 stop at later families. pan_shc's SPIR-V path
+# has no lower_precision: its constants are fp32 words and its arithmetic fp32 (`mediump`).
+gm2_nonfin_1  gm2_nonfin_1.vert gm2_nonfin_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:11292c2340f8
+gm2_nonfin_2  gm2_nonfin_2.vert gm2_nonfin_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:12:22abcc6dfcd8
+gm2_nonfin_3  gm2_nonfin_3.vert gm2_nonfin_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:36:30aa836b3b78
+gm2_nonfin_4  gm2_nonfin_4.vert gm2_nonfin_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:9:81841d85a38d
+gm2_nonfin_5  gm2_nonfin_5.vert gm2_nonfin_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:38:ba754e5020d5
+# #367 lower-nonfinite-const step 2 (texcoord-425b): the texture scenes' fs 425b, its coordinate in lanes 1 and 2 of the
+# load whose lane 0 is Color's one component (docs/notes/mali-texcoord-varyings.md), drawn with --uniform-values. Our
+# compiler is byte-equal to gm2_tc425_1 and _4 (tests/mali_texcoord_425b.rs); _2 (highp) and _3 (the coordinate across
+# two slots) stay refused. pan_shc's SPIR-V path has no lower_precision and no link-time varying packing (`mediump`);
+# its vertex programs sum the matrix products from the last column and keep the dead lanes (`unanalysed`).
+gm2_tc425_1  gm2_tc425_1.vert gm2_tc425_1.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:16:b5d7d3546284
+gm2_tc425_2  gm2_tc425_2.vert gm2_tc425_2.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:18:b088ce173981
+gm2_tc425_3  gm2_tc425_3.vert gm2_tc425_3.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:23:97cc5c7f495d fs.fragment=differs:mediump:14:0b3fdebeca1a
+gm2_tc425_4  gm2_tc425_4.vert gm2_tc425_4.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:16:b5d7d3546284
+# #367 lower-nonfinite-const step 5 (mploop): function fs 849c's `sqrt` in the fp16 arithmetic after gl_FragCoord's highp
+# head, and loop fs 3678's mediump loop to a uniform bound (docs/notes/mali-fragcoord-fp16-ops.md, mali-int-loops.md),
+# drawn with --uniform-values. Our compiler is byte-equal to gm2_mploop_2 and _3 (tests/mali_mploop.rs); _1 (the loop)
+# stays refused. pan_shc's SPIR-V path has no lower_precision: its arithmetic after the head is fp32 (`mediump`).
+gm2_mploop_1  gm2_mploop_1.vert gm2_mploop_1.frag triangles vs.position=equal fs.fragment=differs:mediump:18:07966aa742a7
+gm2_mploop_2  gm2_mploop_2.vert gm2_mploop_2.frag triangles vs.position=equal fs.fragment=differs:mediump:41:0b7dea079e45
+gm2_mploop_3  gm2_mploop_3.vert gm2_mploop_3.frag triangles vs.position=equal fs.fragment=differs:mediump:9:97345a1c9945
+# #367 lower-nonfinite-const step 6 (effect2d): effect2d fs 3c3d and ba8e's convolution kernels, look-ups beside another
+# at the converted coordinate plus a constant pair, a kernel's -1.0 a negated texel in the sum (TEX_MULTI;
+# docs/notes/mali-tex-multi.md), drawn with --uniform-values. Our compiler is byte-equal to gm2_fx2d_1..3
+# (tests/mali_effect2d_tex.rs). pan_shc's SPIR-V path has no lower_precision (`mediump`).
+gm2_fx2d_1  gm2_fx2d_1.vert gm2_fx2d_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:0ed6c5778673
+gm2_fx2d_2  gm2_fx2d_2.vert gm2_fx2d_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:a2a53c22716d
+gm2_fx2d_3  gm2_fx2d_3.vert gm2_fx2d_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:64:53e53836e370
+# #367 lower-nonfinite-const step 7 (fsoperand): jellyfish fs 8ee5's gradient, `mix` of two vec3 uniforms (a uniform first
+# in a sum and under the negation; docs/notes/mali-fs-operand.md), drawn with --uniform-values. Our compiler is byte-equal
+# to gm2_fsop_2..4 and _6..9 (tests/mali_fs_operand.rs); _1 differs in the order of independent instructions, _5 stays
+# refused. pan_shc's SPIR-V path has no lower_precision (`mediump`); _2 and _6, _9 are equal; _4's varying program keeps
+# the dead lane (`unanalysed`).
+gm2_fsop_1  gm2_fsop_1.vert gm2_fsop_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:ba10b424d7e3
+gm2_fsop_2  gm2_fsop_2.vert gm2_fsop_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fsop_3  gm2_fsop_3.vert gm2_fsop_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:4:5cae2d8a6897
+gm2_fsop_4  gm2_fsop_4.vert gm2_fsop_4.frag triangles vs.position=equal vs.varying=differs:unanalysed:7:b7de6440f312 fs.fragment=differs:mediump:16:a2a94689ed3a
+gm2_fsop_5  gm2_fsop_5.vert gm2_fsop_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:14:9d6c95f064fb
+gm2_fsop_6  gm2_fsop_6.vert gm2_fsop_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fsop_7  gm2_fsop_7.vert gm2_fsop_7.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:15:dc1ee4ad5593
+gm2_fsop_8  gm2_fsop_8.vert gm2_fsop_8.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:2:e437ec4172ec
+gm2_fsop_9  gm2_fsop_9.vert gm2_fsop_9.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
