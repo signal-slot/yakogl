@@ -5318,6 +5318,61 @@ if [ "$QUICK" -eq 0 ]; then
   fi
 fi
 
+# The V3D 7.1 (Raspberry Pi 5) online back end over the three P13 shader sets
+# (plan #386): each test compiles its corpus through chain71 and decodes every
+# word with codec71 and verify71. Each corpus is outside git, and a test whose
+# knob names none passes after printing SKIP, so a row here runs only with its
+# corpus and is otherwise a gap naming the knob, never a pass.
+#   shaderc71_glmark2_corpus  GLMARK2_CORPUS (index.txt), or GLMARK2_SRC: the
+#                             glmark2_corpus row above generated
+#                             build/glmark2-host/shaders from it (--quick runs
+#                             no such row, so it needs GLMARK2_CORPUS)
+#   shaderc71_es2_corpus      DEQP_GLES2_TEST_DIR (the deps.toml entry:
+#                             VK-GL-CTS data/gles2/shaders at 93bca01)
+#   shaderc71_deqp_programs   DEQP_ES2_PROGRAMS (the deps.toml entry: the
+#                             harvest of tools/cts/deqp-es2-programs.sh)
+# shaderc71_row <test> <knob> <dir>: the test with that knob set to <dir>;
+# plain `cargo test` (the corpus is outside git, no key of cargo_test covers
+# it). The cargo status counts, and so does a SKIP line: the knob was set, so
+# the corpus must have been read.
+shaderc71_row() {
+  local t=$1 knob=$2 dir=$3 log rc
+  log=$(env "$knob=$dir" cargo test --no-default-features \
+    --features host-test,gpu-v3d,shaderc-online,no-shader-table --test "$t" -- --nocapture 2>&1)
+  rc=$?
+  printf '%s\n' "$log" | grep -E '^(SKIP|test result)|skipped' || true
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$log" | tail -40; return 1; }
+  ! printf '%s\n' "$log" | grep -Eq '^SKIP|is not set; .* skipped' || { echo "$t skipped although $knob=$dir"; return 1; }
+}
+shaderc71_glmark2_corpus() {
+  shaderc71_row shaderc71_glmark2_corpus GLMARK2_CORPUS "${GLMARK2_CORPUS:-$PWD/build/glmark2-host/shaders}"
+}
+shaderc71_es2_corpus() { shaderc71_row shaderc71_es2_corpus DEQP_GLES2_TEST_DIR "$DEQP_GLES2_TEST_DIR"; }
+shaderc71_deqp_programs() { shaderc71_row shaderc71_deqp_programs DEQP_ES2_PROGRAMS "$DEQP_ES2_PROGRAMS"; }
+scope v3d tests
+if [ -n "${GLMARK2_CORPUS-}" ] && [ -f "$GLMARK2_CORPUS/index.txt" ] ||
+  { [ "$QUICK" -eq 0 ] && [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; }; then
+  # reads what the glmark2_corpus row above wrote (r:tree waits for its w:tree)
+  tests_row shaderc71_glmark2_corpus
+  step "test    glmark2 corpus through the V3D 7.1 back end (tests/shaderc71_glmark2_corpus.rs)" shaderc71_glmark2_corpus
+else
+  gap "shaderc71_glmark2_corpus: no glmark2 corpus: GLMARK2_CORPUS='${GLMARK2_CORPUS-}' holds no index.txt and GLMARK2_SRC='${GLMARK2_SRC-}' is no glmark2 tree(--quick runs no glmark2_corpus row to generate one; set GLMARK2_SRC; tools/cts/deps-env.sh --build GLMARK2_SRC): the glmark2 shaders were NOT compiled at 7.1"
+fi
+scope v3d tests
+if ls "${DEQP_GLES2_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
+  tests_row shaderc71_es2_corpus
+  step "test    dEQP-GLES2 .test library through the V3D 7.1 back end (tests/shaderc71_es2_corpus.rs)" shaderc71_es2_corpus
+else
+  gap "shaderc71_es2_corpus: no dEQP GLES2 corpus at DEQP_GLES2_TEST_DIR='${DEQP_GLES2_TEST_DIR-}' (tools/cts/deps-env.sh --build DEQP_GLES2_TEST_DIR): the library was NOT compiled at 7.1"
+fi
+scope v3d tests
+if [ -f "${DEQP_ES2_PROGRAMS:-/nonexistent}/index.tsv" ]; then
+  tests_row shaderc71_deqp_programs
+  step "test    harvested dEQP-GLES2 programs through the V3D 7.1 back end (tests/shaderc71_deqp_programs.rs)" shaderc71_deqp_programs
+else
+  gap "shaderc71_deqp_programs: no harvest at DEQP_ES2_PROGRAMS='${DEQP_ES2_PROGRAMS-}' (a board entry: tools/cts/deps-env.sh --board rpi_5 --build DEQP_ES2_PROGRAMS): the programs were NOT compiled at 7.1"
+fi
+
 # driver/rust/src/soc/imx8mp/regs.rs is generated from NXP's BSD-3 hal_nxp
 # headers (tools/hal-nxp/gen_regs.py), never edited: regenerate and compare.
 # The generator itself refuses inputs whose sha256 is not the pinned one (hal_nxp

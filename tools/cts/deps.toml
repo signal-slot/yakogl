@@ -56,7 +56,7 @@
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
 # MALI_CSFFW (one pinned file), LZ4 (one small program), MP2_QEMU (one QEMU
-# binary from pinned sources) and DEQP_GLES3_TEST_DIR (one directory at a
+# binary from pinned sources), DEQP_GLES3_TEST_DIR and DEQP_GLES2_TEST_DIR (one directory each at a
 # pinned commit), fetched by .github/workflows/gate.yml when a runner lacks
 # them (their notes).
 
@@ -270,6 +270,29 @@ fi
 git -C "$part" sparse-checkout set --no-cone /data/gles3/shaders/
 git -C "$part" checkout -q --detach "$want"
 mv "$part" "$DEPS/VK-GL-CTS-gles3"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
+name = "DEQP_GLES2_TEST_DIR"
+path = "VK-GL-CTS-gles2/data/gles2/shaders"
+marker = "VK-GL-CTS-gles2/data/gles2/shaders/conditionals.test"
+note = "the dEQP GLES2 shader library (*.test) of VK-GL-CTS at 93bca01, the commit DEQP_WORK pins: tests/shaderc71_es2_corpus.rs (the V3D 7.1 back end over it) runs only when this names it. A sparse checkout of data/gles2/shaders alone (no external/fetch_sources.py), in a directory of its own, as DEQP_GLES3_TEST_DIR is (DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as a complete tree). DEQP_WORK's clone is the source when it has the commit (no network), else one blobless commit from GitHub. Test data: read it, never run anything from it"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+part="$DEPS/VK-GL-CTS-gles2.part"
+rm -rf "$part"
+if git -C "$DEPS/VK-GL-CTS" cat-file -e "$want^{commit}" 2>/dev/null; then
+  git clone -q --no-checkout "$DEPS/VK-GL-CTS" "$part"
+else
+  git init -q "$part"
+  git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$part" fetch -q --depth 1 --filter=blob:none origin "$want"
+fi
+git -C "$part" sparse-checkout set --no-cone /data/gles2/shaders/
+git -C "$part" checkout -q --detach "$want"
+mv "$part" "$DEPS/VK-GL-CTS-gles2"
 '''
 packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]
@@ -1066,3 +1089,19 @@ sha256 = "a0e03c526cc09d4c2ab20aa19a8c12e916cdc49a170acb16a6563c28f70eafd3"
 [[dep.inputs]]
 url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+b1_amd64.deb"
 sha256 = "015be740d6236ad114582dea500c1d907f29e16d6db00566ca32fb68d71ac90d"
+
+[[dep]]
+name = "DEQP_ES2_PROGRAMS"
+path = "deqp-es2-programs"
+marker = "deqp-es2-programs/index.tsv"
+board = "*"
+requires = ["HOST_DEQP_CTS"]
+note = "the harvest of every dEQP-GLES2 shader program, tools/cts/deqp-es2-programs.sh: the whole gles2 mustpass run on this host against the V3D 4.2 library, then each program's sources and 4.2 outcome read from the logs (index.tsv, programs/): tests/shaderc71_deqp_programs.rs runs only when this names it. Built from HOST_DEQP_CTS (the script copies it privately when it has no yakogl target; it is never written); builds deqp-gles2 under build/host-deqp/ of the repository and runs the whole mustpass, which takes a long time (about 95 s build on a 4-core host, then the run), so it is for hosts and images, run on purpose. Built in a .part directory and renamed, with the run directory dropped (about the logs' size) once extracted. The text is dEQP's output (Apache-2.0), never committed"
+build = '''
+rm -rf "$DEPS/deqp-es2-programs.part"
+tools/cts/deqp-es2-programs.sh --cts "$DEPS/VK-GL-CTS-host" --out "$DEPS/deqp-es2-programs.part"
+rm -rf "$DEPS/deqp-es2-programs.part/run"
+mv "$DEPS/deqp-es2-programs.part" "$DEPS/deqp-es2-programs"
+'''
+packages.apt = ["git", "python3", "cmake", "ninja-build", "g++"]
+packages.portage = ["dev-vcs/git", "dev-lang/python", "dev-build/cmake", "dev-build/ninja", "sys-devel/gcc"]
