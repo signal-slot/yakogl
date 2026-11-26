@@ -25,7 +25,7 @@ chmod +x "$t/sdk/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc" "$t/shc"
 run() { # <pathdir> [VAR=val...]
   local d=$1
   shift
-  env -u ZEPHYR_SDK_INSTALL_DIR -u V3D_SHC -u MESA_V3D_TREE PATH="$d:$PATH" "$@" \
+  env -u ZEPHYR_SDK_INSTALL_DIR -u V3D_SHC -u MESA_V3D_TREE -u MESA_ETNA_TREE PATH="$d:$PATH" "$@" \
     "$real" tools/setup-gate-host.sh --check 2>&1
 }
 want() { # <desc> <regex> <output>
@@ -52,5 +52,14 @@ mkdir -p "$t/tree/build-v3d/src/broadcom"
 cp "$t/shc" "$t/tree/build-v3d/src/broadcom/v3d_shc"
 tr=$(run "$t/hide" MESA_V3D_TREE="$t/tree")
 want "shc via MESA_V3D_TREE" '^ok +V3D_SHC .*v3d_shc' "$tr"
+e0=$(run "$t/hide")
+want "etna unset is a gap" '^warn +MESA_ETNA_TREE +missing: unset: .*mesa-etna-build.sh' "$e0"
+checks=$((checks + 1))
+if printf '%s\n' "$e0" | grep -Eq '^ok +MESA_ETNA_TREE'; then echo "FAIL etna unset reported ok"; fails=$((fails + 1)); fi
+mkdir -p "$t/etna/mesa-26.2.1"
+e1=$(run "$t/hide" MESA_ETNA_TREE="$t/etna/mesa-26.2.1")
+want "etna incomplete is a gap" '^warn +MESA_ETNA_TREE +missing: .*not a complete tree.*gap: MESA_ETNA_TREE' "$e1"
+checks=$((checks + 1))
+if printf '%s\n' "$e1" | grep -Eq '^ok +MESA_ETNA_TREE'; then echo "FAIL etna incomplete reported ok"; fails=$((fails + 1)); fi
 echo "setup-gate-host_selftest: $((checks - fails))/$checks ok"
 [ "$fails" -eq 0 ]
