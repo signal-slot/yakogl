@@ -141,7 +141,12 @@ fn translate(src: &str, stage: &str) -> Result<Result<String, String>, Gap> {
 /// Mesa's 7.1 program for `shape`: Ok(Err) when a tool ran and failed (the
 /// message names the step), Err(Gap) when the reference cannot run here.
 pub fn compile71(shc: &Path, shape: &Shape) -> Result<Result<Mesa71, String>, Gap> {
-    let work = Path::new(env!("CARGO_TARGET_TMPDIR")).join("v3d71_ref").join(shape.name);
+    // One directory per process: five test binaries use this module, and the
+    // gate runs each in several rows at once, all with the same
+    // CARGO_TARGET_TMPDIR; a shared directory had one row truncate a file
+    // (`fs::write`) another row's glslangValidator was reading.
+    let work =
+        Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("v3d71_ref-{}", std::process::id())).join(shape.name);
     std::fs::create_dir_all(&work).expect("creates the scratch directory");
     let mut spv = Vec::new();
     for (stage, src, ext) in [("vs", shape.vs, "vert"), ("fs", shape.fs, "frag")] {

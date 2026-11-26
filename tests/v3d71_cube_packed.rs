@@ -198,8 +198,12 @@ fn find_cc() -> Option<String> {
 /// The texfill test's harness, unchanged.
 const HARNESS_C: &str = include_str!("v3d71_texfill_harness.c");
 
+/// Builds the harness; the path of the executable. The directory is this
+/// process's own: tools/check.sh runs this binary in several rows at once, all
+/// with the same CARGO_TARGET_TMPDIR, and a fixed path let one row rewrite the
+/// executable another row was running ("Text file busy", "Permission denied").
 fn build_harness(cc: &str) -> PathBuf {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("v3d71_cube_packed");
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("v3d71_cube_packed-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let exe = dir.join("harness");
     let src = dir.join("harness.c");
