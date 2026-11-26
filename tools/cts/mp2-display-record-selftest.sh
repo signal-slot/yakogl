@@ -4,7 +4,7 @@
 #
 # mp2-display-record-selftest.sh - mp2-display-record.py on synthetic logs.
 #   bash tools/cts/mp2-display-record-selftest.sh
-# Cases: PASS, FAIL, a judge FAIL, a missing result line, a missing hold
+# Cases: PASS, FAIL, a judge FAIL, a missing result line, a blind run's hold (meta, option, console, unknown)
 # line, a missing judge verdict, and a log carrying an address, host, tty
 # path and USB serial that must be redacted; the crc and per-check lines, a
 # FAIL naming a check, and two KVM verdicts with offsets.
@@ -57,7 +57,23 @@ if [ $rc = 1 ] && grep -q 'refused' <<<"$out" && grep -q 'PASS|FAIL' <<<"$out"; 
 
 grep -v '^hold:' "$work/pass.log" > "$work/nohold.log"
 out=$(tool "$work/nohold.log" 2>&1); rc=$?
-if [ $rc = 1 ] && grep -q 'hold' <<<"$out"; then ok missing-hold; else ko "missing-hold (rc $rc)"; fi
+if [ $rc = 0 ] && grep -q 'hold: unknown' <<<"$out" && ! grep -q 'held [0-9]' <<<"$out"; then ok hold-unknown; else ko "hold-unknown (rc $rc)"; echo "$out"; fi
+
+# blind run: no console hold: line; the value comes from meta.txt or --hold-s
+mkdir "$work/rd"; printf 'blind=1\nhold_s=60\n' > "$work/rd/meta.txt"
+out=$(tool "$work/nohold.log" --meta "$work/rd" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'held 60 s (source: meta.txt hold_s)' <<<"$out"; then ok hold-from-meta; else ko "hold-from-meta (rc $rc)"; echo "$out"; fi
+out=$(tool "$work/nohold.log" --meta "$work/rd/meta.txt" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'source: meta.txt' <<<"$out"; then ok hold-from-meta-file; else ko "hold-from-meta-file (rc $rc)"; fi
+out=$(tool "$work/nohold.log" --meta "$work/rd" --hold-s 45 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'held 45 s (source: option' <<<"$out"; then ok hold-from-option; else ko "hold-from-option (rc $rc)"; echo "$out"; fi
+printf 'blind=1\n' > "$work/rd/meta.txt"
+out=$(tool "$work/nohold.log" --meta "$work/rd" 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'hold: unknown' <<<"$out"; then ok hold-meta-without-hold_s; else ko "hold-meta-without-hold_s (rc $rc)"; fi
+# the console's hold: line wins over meta and option (unchanged behaviour)
+printf 'hold_s=99\n' > "$work/rd/meta.txt"
+out=$(tool "$work/pass.log" --meta "$work/rd" --hold-s 98 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q 'held 20 s (source: console)' <<<"$out" && ! grep -q 'held 9[89]' <<<"$out"; then ok hold-from-console; else ko "hold-from-console (rc $rc)"; echo "$out"; fi
 
 echo 'nothing here' > "$work/nojudge.txt"
 out=$(tool "$work/pass.log" --judge "$work/nojudge.txt" 2>&1); rc=$?
