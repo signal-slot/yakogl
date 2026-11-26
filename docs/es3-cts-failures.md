@@ -82,9 +82,9 @@ with an `other` status and never begins the 123 cases after it, the same record 
 Entries 13-15 and 51-132 (14,351 mustpass cases) have not run. Per cause: "GC7000UL (i.MX8MP) failures
 by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`. The cause map
 `tools/cts/imx8mp-gles3-causes.tsv` gives every one of the 873 named fails a cause (0 unclassified): RC1 275,
-RC8 150, R and RG integer texture attachments 116, RC14 80, 16F targets 51, sRGB targets 46, RC17 28, narrow
-targets 27, RC13 25, `default_vertex_attrib` 24, the rest 51; 6 sit on `unexplained-*` lines and 4 are CRC pair
-mates that did not fail ("Per cause" below).
+RC8 150, R and RG integer texture attachments 116, RC14 80, 16F targets 51, sRGB targets 46, RC17 26, narrow
+targets 27, RC13 25, `default_vertex_attrib` 24, the rest 53; none sits on an `unexplained-*` line any more (the
+root-cause investigations of plan #410 named them) and 5 are CRC pair mates that did not fail ("Per cause" below).
 
 ## Feature state
 
@@ -163,14 +163,14 @@ fails than that and were not paged, so 969 of the 1,851 fails have no name.
 
 | Group (entries) | Fail | NotSupported | Where the named fails are | Causes |
 |---|---:|---:|---|---|
-| shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8, e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`; e27's `vec3`, `vec4` and `mat2`..`mat3x4` outputs, 120), RC14 (e27's `transpose` `mat4`, `mat4x2`, `mat4x3`, 18: the executor's fourth output, `GL_INVALID_ENUM` on its framebuffer), RC13 (`random.texture` 22 and `random.all_features` 3: the compiler refuses the shader on the host too), unexplained (`precision.tanh.highp` scalar and `vec2` 4, `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38`), 3 CRC pair mates; the rest is unnamed |
+| shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8 (one of them a CRC pair mate), e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`; e27's `vec3`, `vec4` and `mat2`..`mat3x4` outputs, 120), RC14 (e27's `transpose` `mat4`, `mat4x2`, `mat4x3`, 18: the executor's fourth output, `GL_INVALID_ENUM` on its framebuffer), RC13 (`random.texture` 22 and `random.all_features` 3: the compiler refuses the shader on the host too), `gc-tanh-rcp-denormal` (`precision.tanh.highp` scalar and `vec2` 4), `gc-idiv-float-quotient` (`precision.int.highp_div_fragment`), 4 CRC pair mates (the 3 below and `random.basic_expression.fragment.38`); the rest is unnamed |
 | fbo (4-9) | 400 | 255 | `color` 116, `render` 80, `blit` 94 (`conversion` 48, `default_framebuffer` 30, `depth_stencil` 16), `invalidate` 29, `completeness` 34, `msaa` 34, `depth` 10, 3 CRCs of e8 outside the list | RC1 (RGBA32I/UI targets 36 + 16 + 12 + 8), R and RG integer texture attachments (below), RC7 (sRGB targets), 16F targets, RC8 (`msaa`, `depth_stencil`, blits from the window), `depth` clamp |
 | fragment_out (18-20) | 215 | 115 | `array.int`/`uint` 72, `basic.int`/`uint` 24 (RC1, host-predicted: 48 of them are the RGBA32I/UI outputs), `array.fixed` 12 and `basic.fixed` 13 (`srgb8_alpha8`, `r8_highp_float`), `array.float` 24 (`rg16f` 12, `rgba16f` 12) and `basic.float` 3 (`rg16f_*_vec4`), `random` 60; e20 also holds the 8 `implementation_limits` fails | RC1, RC7, 16F targets, RC14 (`random`: a fourth attachment is `GL_INVALID_ENUM` on the host, 26 of the 54 predicted) |
 | primitive_restart .. shader_api (24) | 26 (+7 other) | 26 | `read_pixels` 24 (every `rgba_int` and `rgba_uint` `alignment`, `rowlength` and `skip` case; host-predicted, RC1), `rasterization` lines 7 (`interpolation.basic.lines`, `line_strip`, `projected.lines`, `fbo.*.interpolation.lines`, `rbo_multisample_max.*.lines_wide`) | RC1, RC8, line rasterization |
-| clipping .. dither (2) | 24 | 0 | `default_vertex_attrib` non-square matrices: `mat2x3`, `mat2x4`, `mat3x2`, `mat3x4`, `mat4x2`, `mat4x3` x `1f`, `1fv`, `4f`, `4fv` (every square type passes) | Appendix A (a picture verdict, board only) |
-| multisample .. pbo (23) | 17 | 58 | `negative_api` 7 (`buffer.blit_framebuffer_multisample`, `clear_bufferiv`/`uiv`, `read_pixels_fbo_format_mismatch`, `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`/`3d`), `pbo.renderbuffer.rgba32{i,ui}_{clears,triangles}` 4, `multisample.fbo_max_samples` 4 | RC1, RC8, RC10 |
-| draw, draw_buffers_indexed (3) | 7 | 76 | `draw.random` 14, 72, 141, 162, 179, 200, 209 | not classified (picture verdicts); the 76 NotSupported are `draw_buffers_indexed` (RC14, host-predicted) |
-| instanced (21) | 6 | 0 | `draw_arrays_instanced.mixed.*`, `draw_elements_instanced.mixed.*` (2, 4, 20 instances) | Appendix A, T6: the GC7000UL board check of the hardware divisor, failed |
+| clipping .. dither (2) | 24 | 0 | `default_vertex_attrib` non-square matrices: `mat2x3`, `mat2x4`, `mat3x2`, `mat3x4`, `mat4x2`, `mat4x3` x `1f`, `1fv`, `4f`, `4fv` (every square type passes) | `gc-select-nonsquare-attrib`: `varying_columns` in `src/shaderc/online/select.rs` knows `mat2`/`mat3`/`mat4` only, so a non-square matrix attribute read through column 1 alone gets no attribute row (`glGetAttribLocation` -1); host-traced, not Appendix A T1 |
+| multisample .. pbo (23) | 17 | 58 | `negative_api` 7 (`buffer.blit_framebuffer_multisample`, `clear_bufferiv`/`uiv`, `read_pixels_fbo_format_mismatch`, `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`/`3d`), `pbo.renderbuffer.rgba32{i,ui}_{clears,triangles}` 4, `multisample.fbo_max_samples` 4 | RC1, RC8, RC10 (n-negapi: 17 fails = `negative_api` 9, counting the CRC-named `shader.program_parameteri` outside the mustpass, `pbo` 4, `multisample` 4; 6 fixed on main after `9bc82915` (`clear_bufferiv`/`uiv` by `8f019dae`, `program_parameteri` by `ab8b7cbf`, `uniformui{,v}` by `bc200f21`, `texsubimage2d`/`3d` by `bece11ec`) and 11 open behind GC multisample (`max_samples` 0: `blit_framebuffer_multisample`, the 4x step of `read_pixels_fbo_format_mismatch`, `fbo_max_samples` 4) and the 128-bit render target (`pbo` 4, the RGBA32I/UI step of `read_pixels_fbo_format_mismatch`)) |
+| draw, draw_buffers_indexed (3) | 7 | 76 | `draw.random` 14, 72, 141, 162, 179, 200, 209 | `gc-draw-int-byte-short-attrib`: integer byte/short buffer arrays fetched in place (board evidence: the 7 in-place cases fail, the 15 converted ones pass); the 76 NotSupported are `draw_buffers_indexed` (RC14, host-predicted) |
+| instanced (21) | 6 | 0 | `draw_arrays_instanced.mixed.*`, `draw_elements_instanced.mixed.*` (2, 4, 20 instances) | `appendix-a-t6-instanced`: the campaign image predates V1 (`6c4759ea`); the divisor-2 draw was split per instance and V0 refused instances 1.. reading `gl_InstanceID`; fixed on main, the divisor above 1 is unmeasured on the board |
 | fragment_ops (10-12, 16, 17) | 2 | 0 | `blend.fbo_srgb.equation_src_func_dst_func.max` and `.min` (e12); the other 1,991 cases these five entries began pass | RC7 (`max`/`min` on an sRGB target); entries 13-15 (the rest of `fbo_srgb`) not run |
 | lifetime (22) | 2 | 0 | `attach.deleted_output.buffer_transform_feedback` (RC3's known case) and one case outside the list | RC3 |
 | implementation_limits (in 20) | 8 | 0 | `compressed_texture_formats`, `num_compressed_texture_formats`, `max_color_attachments`, `max_draw_buffers`, `max_combined_{fragment,vertex}_uniform_components`, `max_uniform_block_size`, `max_vertex_output_components` | RC10, RC14 (the host tip at `26d1c4a2` fails 8 of the 49 `implementation_limits` cases as well, value verdicts the counting list does not carry; the limits moved after the campaign commit, plan #359) |
@@ -211,10 +211,10 @@ picture or read-back verdict the host could not see):
 | `fragment_out.random` beyond the host's 54 | 6 | e20 | `random.1`, `.44`, `.61`, `.64`, `.65`, `.69` |
 | `instanced.*.mixed.*` (T6) | 6 | e21 | above |
 | `rasterization` lines | 5 | e24 | `interpolation.basic.{lines,line_strip}`, `interpolation.projected.lines`, `fbo.rbo_singlesample.interpolation.lines`, `fbo.texture_2d.interpolation.lines`: the line-interpolation family the i.MX8MP dEQP-GLES2 run lists as hardware-reference (major-axis weights; NXP's driver gives the same names, `docs/es2-cts-failures.md`), here judged Fail |
-| shaders, single cases | 9 | e27, e43, e45, e47 | `precision.tanh.highp_{fragment,vertex}.{scalar,vec2}` 4 (they build and draw on the host: not an RC13 refusal, unexplained), `precision.int.highp_div_fragment`, `random.basic_expression.fragment.38` (unexplained), and 3 CRC pair mates that did not fail: `random.scalar_conversion.combined.87` (the pair with `random.texture.fragment.143`; the slice README resolves it to the texture case), `constant_expressions.builtin_functions.common.max_vec4_vertex` and `conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment` (the e27 pairs with `precision.transpose.highp_vertex.mat4x2` and `precision.step.lowp_vertex.vec3`, which the host fails with a GL error and which e27's names hold in full only with these slots) |
+| shaders, single cases | 9 | e27, e43, e45, e47 | `precision.tanh.highp_{fragment,vertex}.{scalar,vec2}` 4 (`gc-tanh-rcp-denormal`: the tanh lowering's `rcp(e^x + e^-x)` is a denormal for 87.34 < |x| < 88.03, which the GC7000UL most likely flushes to 0; dEQP draws 87.955 and 87.853), `precision.int.highp_div_fragment` (`gc-idiv-float-quotient`: the signed divide is exact only below 2^24), and 4 CRC pair mates that did not fail: `random.basic_expression.fragment.38` (the pair `354b` with the non-mustpass `random.all_features.fragment.72`, a texture look-up refusal like the other e45 fails),  `random.scalar_conversion.combined.87` (the pair with `random.texture.fragment.143`; the slice README resolves it to the texture case), `constant_expressions.builtin_functions.common.max_vec4_vertex` and `conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment` (the e27 pairs with `precision.transpose.highp_vertex.mat4x2` and `precision.step.lowp_vertex.vec3`, which the host fails with a GL error and which e27's names hold in full only with these slots) |
 | `negative_api` | 4 | e23 | `shader.uniformui{,v}_incompatible_type`, `texture.texsubimage2d`, `texture.texsubimage3d` |
 | RGBA32I/UI `fbo.invalidate.format` (RC1) | 2 | e8 | the host has no row for these two |
-| `lifetime.attach.deleted_output.buffer_transform_feedback` (RC3) | 1 | e22 | |
+| `lifetime.attach.deleted_output.buffer_transform_feedback` (RC3) | 1 | e22 | fixed on main by `da0eede3` (`move_orphan`), absent from the `9bc82915` image |
 | **total** | **400** | | |
 
 **Per cause (cause map).** `imx8mp-gles3-compare.py --causes tools/cts/imx8mp-gles3-causes.tsv` over the 873 named
@@ -234,20 +234,20 @@ vivante rows). The first matching line of the map decides; 0 cases are unclassif
 | `gc-16f-attach-n` | 0 | 12 | 12 | none (fixed on main by `c558647b`) |
 | `gc-16f-target` (unexplained remainder: `fragment_out.array.float.rgba16f_*`) | 0 | 12 | 12 | none |
 | `gc-srgb-target` | 0 | 46 | 46 | none |
-| `rc17-fbo-completeness` | 14 | 14 | 28 | #335, #355, #354 |
+| `rc17-fbo-completeness` | 12 | 14 | 26 | #335, #355, #354 |
 | `gc-narrow-target` | 0 | 27 | 27 | none |
 | `rc13-shader-compiler` | 25 | 0 | 25 | none |
-| `appendix-a-t1-default-vertex-attrib` | 0 | 24 | 24 | none |
+| `gc-select-nonsquare-attrib` | 0 | 24 | 24 | none (host fix text in `src/shaderc/online/select.rs`) |
 | `gc-depth-clamp` | 0 | 10 | 10 | none |
 | `gc-draw-int-byte-short-attrib` | 0 | 7 | 7 | none |
 | `rc10-limits-state` | 0 | 6 | 6 | none |
-| `appendix-a-t6-instanced` | 0 | 6 | 6 | none |
+| `appendix-a-t6-instanced` | 0 | 6 | 6 | none (image older than `6c4759ea`; fixed on main) |
 | `gc-line-interpolation` | 0 | 5 | 5 | none |
-| `gc-negative-api-fixed` | 0 | 4 | 4 | none (fixed after `9bc82915`) |
-| `unexplained-precision-tanh-highp` | 0 | 4 | 4 | none |
-| `crc-pair-mate` (not a fail) | 0 | 4 | 4 | none |
+| `gc-negative-api-fixed` | 2 | 4 | 6 | none (fixed after `9bc82915`: `8f019dae`, `bc200f21`, `bece11ec`) |
+| `gc-tanh-rcp-denormal` | 0 | 4 | 4 | none (fix: clamp x to [-10, 10] in `builtin_call.rs`) |
+| `gc-idiv-float-quotient` | 0 | 1 | 1 | none (fix: Mesa's `emit_idiv` over `udiv`) |
+| `crc-pair-mate` (not a fail) | 0 | 5 | 5 | none |
 | `rc7-srgb` | 0 | 2 | 2 | none |
-| `unexplained-shader-single-case` | 0 | 2 | 2 | none |
 | `rc3-transform-feedback` | 0 | 1 | 1 | none |
 | **total** | **473** | **400** | **873** | |
 
@@ -255,9 +255,11 @@ Against the earlier map, 151 cases moved: the 138 e27 `precision` cases from `rc
 `rc1-int-color-rt` (120) and `rc14-mrt-draw-buffers` (18), since the host reads a GL error on the executor's draw or
 framebuffer for them and not a compile refusal (the owners of `docs/es3/host-gles3-notpass.tsv` say RC1 and RC14
 too); the 4 `precision.tanh.highp` scalar and `vec2` cases from `rc13-shader-compiler` to
-`unexplained-precision-tanh-highp`; the 5 line-interpolation cases from `unexplained-rasterization` to
+`gc-tanh-rcp-denormal`; the 5 line-interpolation cases from `unexplained-rasterization` to
 `gc-line-interpolation`; and 4 CRC pair mates (e2 1, e27 2, e47 1) to `crc-pair-mate`. Cases on `unexplained-*`
-lines: 10 before, 6 now.
+lines: 10 before, 0 now. The investigation commit then moved 24 e2 cases to `gc-select-nonsquare-attrib`,
+`precision.int.highp_div_fragment` to `gc-idiv-float-quotient`, `random.basic_expression.fragment.38` to
+`crc-pair-mate` and the two e23 `clear_buffer{iv,uiv}` cases from `rc17-fbo-completeness` to `gc-negative-api-fixed`.
 
 **Not named: entries 25, 26 and 29 (969 fails).** Each has more fails than
 40 pages hold. e25 (`shaders.arrays`, `builtin_functions.common`,
@@ -466,7 +468,8 @@ NotSupported counts once all 15 slices are merged.
 Built: the GL core runs the vertex shader on the CPU for every captured
 vertex, on the three GPUs (`docs/es3/transform-feedback.md`). The board agrees:
 `transform_feedback` 882 / 882 on the AM62P, gl_test 203 on the AM62P and the
-Pi 4. Left: `lifetime.attach.deleted_output.buffer_transform_feedback`; a
+Pi 4. Left: nothing known on the host for the case `lifetime.attach.deleted_output.buffer_transform_feedback`
+(e22 failed at `9bc82915`; `da0eede3`, `move_orphan`, fixes it on main and a rerun at a current main confirms it); a
 vertex shader that samples with a shadow look-up, `textureGrad`, a compressed
 texture or a base level other than 0 is refused by name.
 
@@ -913,7 +916,7 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
   The i.MX8MP's is 48 of 133 entries at `9bc82915` ("GC7000UL (i.MX8MP)
   failures by group"): `attribute_location` 298 / 298 pass (T4 closed on
   the board), `default_vertex_attrib` fails the 24 non-square matrix cases,
-  `instanced.*.mixed.*` fails all 6 (T6's board check), `vertex_arrays` not
+  `instanced.*.mixed.*` fails all 6 (the image predates V1, `6c4759ea`; not a measurement of the divisor), `vertex_arrays` not
   run yet (entry 132).
 
 These verdicts are API-level for `attribute_location` and reproduce on the
