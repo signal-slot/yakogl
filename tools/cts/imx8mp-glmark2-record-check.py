@@ -4,6 +4,7 @@
 """Check that an i.MX8MP glmark2 by-eye record directory is complete and redacted.
 
   imx8mp-glmark2-record-check.py RECORD_DIR
+  imx8mp-glmark2-record-check.py --scene LABEL RECORD_DIR
 
 RECORD_DIR is records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/ (gitignored): the
 layout of tools/board.sh (RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8" with
@@ -38,6 +39,23 @@ Photograph naming scheme (matches glmark2-fb.py --rundir's <NN>-<slug>.png):
         into '-', stripped of '-', cut at 48 characters (glmark2-fb.py slug())
   Only the NN prefix is matched (NN.png and NN-anything.png are accepted); the
   slug is for the reader. A second file for the same NN is a problem.
+
+--scene LABEL checks one record of the one-record-per-scene layout that
+tools/cts/imx8mp-glmark2-dumps.sh writes (<YYYYMMDD-HHMM>-<label>-<sha8>/, the
+decoded picture <label>.png beside meta.txt and the console log). LABEL is
+gmNN-<label> (as `imx8mp-glmark2-dumps.sh scenes` prints it) or NN (1..33).
+Only these are checked, with the rules above:
+  name, sha8  the record name and its sha8 against meta.txt image_sha256
+  commit      a commit= (or origin_main=/build=) line in meta.txt, or file commit
+  console     the `glmark2-picture:` line of that scene only
+  picture     the decoded <label>.png (the dump route; with a label given as NN,
+              the one gmNN-*.png of that NN), valid PNG; or, when there is none,
+              the photograph NN-<slug>.png (photograph route) in the record or
+              in photos/. Neither present, or more than one, is a problem; a
+              <label>.damaged.png is not a picture.
+  redaction   as above
+The other 32 scenes' lines and pictures and the sha256 file are not looked at.
+The default mode (no --scene) is unchanged.
 
 Last line: `record-check: <dir>: complete|incomplete (<n> problems)`.
 Exit 0 complete, 1 incomplete, 2 bad argument.
@@ -156,7 +174,28 @@ def png_problem(path):
     return None
 
 
-def check(rd):
+def scene_picture(rd, files, sn, slabel):
+    """Problems of scene sn's picture in a per-scene record (--scene)."""
+    dec, photo = [], []
+    for p in files:
+        d = os.path.relpath(os.path.dirname(p), rd)
+        b = os.path.basename(p)
+        if d == "." and re.fullmatch(r"gm%02d-[A-Za-z0-9._-]+\.png" % sn, b) and not b.endswith(".damaged.png"):
+            if slabel is None or b == slabel + ".png":
+                dec.append(p)
+        if d in (".", "photos") and re.fullmatch(r"%02d(-[A-Za-z0-9._-]*)?\.png" % sn, b):
+            photo.append(p)
+    ps = dec or photo
+    if not ps:
+        return ["picture: missing %s.png (decoded picture) or %02d-%s.png (photograph) for scene %02d %s"
+                % (slabel or "gm%02d-<label>" % sn, sn, slug(SCENES[sn - 1]), sn, SCENES[sn - 1])]
+    if len(ps) > 1:
+        return ["picture: scene %02d has %d files" % (sn, len(ps))]
+    why = png_problem(ps[0])
+    return ["picture: %s: %s" % (os.path.relpath(ps[0], rd), why)] if why else []
+
+
+def check(rd, scene=None):
     probs = []
     base = os.path.basename(os.path.normpath(rd))
     m = NAME_RE.match(base)
@@ -165,6 +204,15 @@ def check(rd):
         probs.append("name: '%s' is not <YYYYMMDD-HHMM>-<name>-<sha8>" % base)
     else:
         sha8 = m.group(3)
+
+    sn = slabel = None
+    if scene is not None:
+        mm = re.fullmatch(r"(?:gm)?(\d{1,2})(?:-([A-Za-z0-9._-]+))?", scene)
+        if not mm or not 1 <= int(mm.group(1)) <= len(SCENES):
+            raise ValueError("bad scene '%s' (gmNN-<label> or NN, NN 1..%d)" % (scene, len(SCENES)))
+        sn = int(mm.group(1))
+        if mm.group(2):
+            slabel = "gm%02d-%s" % (sn, mm.group(2))
 
     files = list(all_files(rd))
     rel = lambda p: os.path.relpath(p, rd)
@@ -195,20 +243,27 @@ def check(rd):
     logs = [p for p in texts if p.lower().endswith(TEXT_EXT)]
     blob = "\n".join(l for p in logs for l in texts[p].splitlines() if "glmark2-picture:" in l)
     for i, info in enumerate(SCENES, 1):
+        if sn is not None and i != sn:
+            continue
         if ("glmark2-picture: " + info + ": ") not in blob:
             probs.append("console: no glmark2-picture line for scene %02d %s" % (i, info))
 
+    if sn is not None:
+        probs += scene_picture(rd, files, sn, slabel)
+
     # photographs
     found = {}
-    for p in files:
+    for p in (files if sn is None else []):
         d = os.path.relpath(os.path.dirname(p), rd)
         mm = re.fullmatch(r"(\d\d)(-[A-Za-z0-9._-]*)?\.png", os.path.basename(p))
         if mm and d in (".", "photos"):
             found.setdefault(int(mm.group(1)), []).append(p)
     for n in sorted(found):
-        if not 1 <= n <= len(SCENES):
+        if sn is None and not 1 <= n <= len(SCENES):
             probs.append("photograph: %s has no scene (NN is 01..%d)" % (rel(found[n][0]), len(SCENES)))
     for i, info in enumerate(SCENES, 1):
+        if sn is not None:
+            break
         ps = found.get(i, [])
         if not ps:
             probs.append("photograph: missing %02d-%s.png (scene %s)" % (i, slug(info), info))
@@ -231,7 +286,7 @@ def check(rd):
         if vals:
             ok = True
             img = vals[-1]  # board.sh's mget: meta.txt's last line wins
-    if not ok:
+    if not ok and sn is None:
         probs.append("sha256: no image sha256 (file sha256 / *.sha256 with a 64-hex digest, or image_sha256= in meta.txt)")
 
     # sha8: tools/board.sh names the record by ${IMG_SHA:0:8} and writes meta
@@ -264,14 +319,22 @@ def check(rd):
 
 
 def main(argv):
-    if len(argv) != 2 or argv[1] in ("-h", "--help"):
-        print("usage: imx8mp-glmark2-record-check.py RECORD_DIR", file=sys.stderr)
+    usage = "usage: imx8mp-glmark2-record-check.py [--scene LABEL] RECORD_DIR"
+    args, scene = argv[1:], None
+    if len(args) == 3 and args[0] == "--scene":
+        scene, args = args[1], args[2:]
+    if len(args) != 1 or args[0] in ("-h", "--help"):
+        print(usage, file=sys.stderr)
         return 2
-    rd = argv[1]
+    rd = args[0]
     if not os.path.isdir(rd):
         print("record-check: not a directory: " + rd, file=sys.stderr)
         return 2
-    probs = check(rd)
+    try:
+        probs = check(rd, scene)
+    except ValueError as e:
+        print("record-check: " + str(e), file=sys.stderr)
+        return 2
     for p in probs:
         print(p)
     print("record-check: %s: %s (%d problems)" % (rd, "incomplete" if probs else "complete", len(probs)))
