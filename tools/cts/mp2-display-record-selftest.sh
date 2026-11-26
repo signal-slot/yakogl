@@ -9,7 +9,9 @@
 # path and USB serial that must be redacted; the crc and per-check lines, a
 # FAIL naming a check, and two KVM verdicts with offsets.
 # Verdict-line shapes: resets=/record= before or after back_after=, record:<KIND>,
-# bad_record, lifetime, unknown trailing fields. Exits 0 when all match.
+# bad_record, lifetime, unknown trailing fields; the render echoes resets=/record=
+# raw when the line has them and a line without them renders byte for byte as
+# before. Exits 0 when all match.
 set -u
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tool() { python3 -I "$here/mp2-display-record.py" "$@"; }
@@ -140,6 +142,16 @@ vcase verdict-bad-record "FAIL" "rc=4 verdict=bad_record $B result=none back_aft
 vcase verdict-lifetime "FAIL" "rc=8 verdict=lifetime $B result=none back_after=90s lifetime_after=100s" 'verdict=lifetime'
 vcase verdict-unknown-trailing "PASS" "rc=0 verdict=done $B result=pass:mp2_display back_after=41s console=ok ramlog=none future=1" 'Linux answered 41s after'
 vcase verdict-unknown-middle "PASS" "rc=0 verdict=done $B result=pass:mp2_display future=1 back_after=41s" 'Linux answered 41s after'
+
+# the render shows the runner's resets=/record= words (raw), before or after
+# back_after; a line with neither renders byte for byte as before. Fixtures only.
+vcase render-fields-before-back "PASS" "rc=0 verdict=done $B result=pass:mp2_display resets=1 record=0,0,0,0 back_after=41s" 'result=pass:mp2_display resets=1 record=0,0,0,0'
+vcase render-fields-after-back "PASS" "rc=0 verdict=done $B result=pass:mp2_display back_after=41s resets=absent record=0a0b0c0d,00000000,00000000,00000000" 'result=pass:mp2_display resets=absent record=0a0b0c0d,00000000,00000000,00000000'
+cp "$work/pass.log" "$work/vnone.log"
+vline "$work/vnone.log" "board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=done $B result=pass:mp2_display back_after=41s console=ramlog"
+out_ref=$(tool "$work/pass.log" --judge "$work/j.pass" 2>&1)
+out=$(tool "$work/vnone.log" --judge "$work/j.pass" 2>&1); rc=$?
+if [ $rc = 0 ] && [ "$out" = "$out_ref" ] && ! grep -Eq 'resets=|record=' <<<"$out"; then ok render-fields-absent; else ko "render-fields-absent (rc $rc)"; echo "$out"; fi
 
 if [ $bad = 0 ]; then echo "mp2-display-record-selftest: all ok"; else echo "mp2-display-record-selftest: $bad failed"; fi
 exit $((bad != 0))

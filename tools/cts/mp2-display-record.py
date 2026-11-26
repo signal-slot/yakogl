@@ -30,8 +30,11 @@ and error are shown. PASS is only written when the probe printed it.
 Prints the Markdown record block for docs/notes/stm32mp257f-dk-display-bringup.md:
 commit, probe, mode and its source (EDID or fallback), the PASS/FAIL line,
 the hold window, the judge verdict, the stock boot files and the return to
-Linux. Exit 0 with the block (a FAIL session is a valid record: the block
-says FAIL); exit 1, saying why, when a required line is missing (the commit,
+Linux. The runner verdict row shows rc=, verdict=, boot_verdict= and
+result=, plus the runner's resets= and record= words (raw, as printed,
+no decoding) when the verdict line has them; a line without them
+renders as before. Exit 0 with the block (a FAIL session is a valid
+record: the block says FAIL); exit 1, saying why, when a required line is missing (the commit,
 the probe's PASS/FAIL line, its chain and mode lines,
 stock-boot-file and verdict lines, and the judge's verdict when --judge is
 given); exit 2 on usage or an unreadable file.
@@ -107,6 +110,9 @@ def find(lines, rx, what):
 RE_RESULT = re.compile(r"^\s*(mp2_display|mp2_gpu_scanout): (PASS|FAIL)\b.*$")
 RE_VERDICT = re.compile(r"board-stm32mp2\.sh \S+ \S+ rc=(\d+) verdict=(\S+) .*boot_verdict=(\S+) "
                         r"result=(\S+) (?:\S+ )*?back_after=(\S+)")
+# the runner's optional pair on the verdict line, before or after back_after;
+# echoed raw into the verdict row (result=record:<KIND> has no 'record=')
+RE_RUNNER_WORDS = re.compile(r"\b(?:resets|record)=\S+")
 RE_HOLD = re.compile(r"^hold: result seen at (\S+), holding (\d+)s")
 RE_FRAMES = re.compile(r"^\s*(?:mp2_display|mp2_gpu_scanout): hold: (\d+) frames ok, (\d+) failed")
 RE_STOCK = re.compile(r"stock boot files: (?:unchanged since install|no record[^\n]*)|"
@@ -187,6 +193,9 @@ def build(lines, jlines, commit, hold_opt=None, meta=None):
 
     v = find(lines, RE_VERDICT, "the runner's verdict line 'board-stm32mp2.sh <board> <name> rc=.. verdict=..'")[1]
     out["verdict"] = "rc=%s verdict=%s boot_verdict=%s result=%s" % (v.group(1), v.group(2), v.group(3), v.group(4))
+    extra = [m.group(0) for m in RE_RUNNER_WORDS.finditer(v.string)]
+    if extra:
+        out["verdict"] += " " + " ".join(extra)
     out["back"] = "verdict=%s, Linux answered %s after the reboot" % (v.group(2), v.group(5))
     if v.group(2) not in ("done", "returned"):
         passed = False
