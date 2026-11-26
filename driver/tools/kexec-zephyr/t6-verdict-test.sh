@@ -419,6 +419,9 @@ done
 # is a PASS; a hung image (no PASS line) is a FAIL naming what is missing,
 # from where it stopped (Z4a on; Z4d on), never a pass.
 check t6_submit-uboot-wdt0-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-uboot-wdt0-pass.uart" T6_ROUTE=uboot
+# the same record with the feeder's first-feed line and a nonzero GICR_ISACTIVER0
+# (synthetic) judges as before: both are informational lines
+check t6_submit-uboot-wdt0-pass-newlines 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-uboot-wdt0-pass-newlines.uart" T6_ROUTE=uboot
 check t6_submit-uboot-wdt0-hung 1 "VERDICT t6_submit FAIL (13 of $SUB)" "$((SUB - 13)) 13 0" t6_submit "$D/t6_submit-uboot-wdt0-hung.uart" T6_ROUTE=uboot
 check t6_submit-uboot-wdt0-hung-z4 1 "VERDICT t6_submit FAIL (10 of $SUB)" "$((SUB - 10)) 10 0" t6_submit "$D/t6_submit-uboot-wdt0-hung-z4.uart" T6_ROUTE=uboot
 # the same pass record on the kexec route has no WDT0 allowance
@@ -907,6 +910,8 @@ fi
 # (t6_cold is a display probe: it never calls gpu_up and prints none of
 # these lines, so the move is judged on t6_gpu, the probe that prints it.)
 check t6_gpu-uboot-clock-move 0 'VERDICT t6_gpu PASS' "$UG 0 0" t6_gpu "$D/t6_gpu-uboot-move-pass.uart" T6_ROUTE=uboot
+# with the first-feed line and a nonzero GICR_ISACTIVER0 (synthetic): the same verdict
+check t6_gpu-uboot-clock-move-newlines 0 'VERDICT t6_gpu PASS' "$UG 0 0" t6_gpu "$D/t6_gpu-uboot-move-pass-newlines.uart" T6_ROUTE=uboot
 # the move that reads back the SPLL again is not a PASS line the run can reach:
 # the record is judged as written, so a wrong "now" word is a plain line check
 runs=$((runs + 1))
