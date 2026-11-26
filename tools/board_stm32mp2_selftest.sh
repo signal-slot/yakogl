@@ -146,7 +146,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=255
+WANT_CHECKS=257
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -772,6 +772,19 @@ mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1090
 : > "$d/console.txt"
 out=$("$B" tally "$d" 2>&1)
 check "an empty console: no_end_line, no_lines" grep -q "verdict=no_end_line boot=uboot-sd row boot_verdict=no_lines" <<<"$out"
+# dk_verdict's testdata logs that it calls "verdict image FAIL:no-image": the
+# runner's judge must fail them too (never a pass), as no_end_line, rc 4
+VD="$REPO/tools/probes/stm32mp257f_dk/verdict/testdata"
+for t in banner-only cut-off; do
+    d="$S/runs/20261108-1210-trial-0123abcd"
+    rm -rf "$d"
+    mkrun "$d" name=trial blind=1 back=1 t_reboot=1000 t_back=1090
+    cp "$VD/image.$t-fail.log" "$S/ext-$t.log"
+    "$B" judge "$d" "$S/ext-$t.log" >"$S/out-$t.txt" 2>&1
+    rc=$?
+    check "judge: dk_verdict's $t log (no image end line): rc 4, no_end_line, never a pass" \
+        eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=no_end_line " "$S/out-'$t'.txt" && ! grep -q "result=pass" "$S/out-'$t'.txt"'
+done
 d="$S/runs/20261108-1206-trial-0123abcd"
 mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1090
 printf '%s\n%s\n12:00:06 mp2: mp2_identify done: PSCI SYSTEM_RESET at 4120 ms\n12:00:06 mp2: PSCI SYSTEM_RESET returned -1: halted\n' "$UBOOT" "$LAYER" > "$d/console.txt"
