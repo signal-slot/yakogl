@@ -1,0 +1,3 @@
+A1.console.txt: deqp: done: complete=1 | deqp: summary: 1 cases begun, 1 with a result, 0 without
+group pass fail n/s other
+TOTAL 1 0 0 0
