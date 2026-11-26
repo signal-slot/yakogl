@@ -507,3 +507,122 @@ i.MX8MP row). Two things stay open, as a follow-up and not in this note: the
 `glLineWidth` clamp (`src/gl/state.rs:789`) and the ST row as the DK build's
 `ACTIVE`. At [1, 16], the 21 names in the exclude file are expected to run as
 in the `a5f1dc8e` Q11 shard. They stay listed until that follow-up lands.
+
+### Cause of the DK-only failures (source study, not yet board-confirmed)
+
+A source study of `src/shaderc/online/vivante` and `src/vivante` against
+Mesa's etnaviv, plus the arithmetic below, found a likely cause. Nothing here
+was run on the board.
+
+**The rule.** A literal encoded directly in an instruction source (an f20
+immediate, `build::Src::imm_f32`, `src/shaderc/online/vivante/build.rs:127`:
+the value's top 20 bits, so `0.5` is payload `0x3f000`) is read wrong in
+lane z (blue) by about half the threads, in two-pixel columns. The payload
+comes back with bits 8-10 set (`| 0x700`):
+
+| written | payload | read as |
+| --- | --- | --- |
+| 0.5 | `0x3f000` | `0x3f700` = 0.9375 |
+| 1.0 | `0x3f800` | `0x3ff00` = 1.875 |
+| 8.0 | `0x41000` | `0x41700` = 15.0 |
+
+On the i.MX8MP the same instructions read right, so the cause is the
+GCNANOULTRA31_VIP2 core, not the compile. The earlier DK session
+(`dk-ab-session`) ran with clock gating on and off and got the same wrong
+values: clock gating is not the cause. That session also saw the
+half-of-the-pixels, two-pixel-column pattern in dEQP-GLES2 fragment
+arithmetic and in the colour-texture cases, which are the bulk of the 1,496
+new Fail (failure classes (a) and (b) above).
+
+**Each failing case against the rule.** The arithmetic uses the shaders in
+`driver/tools/pvrlab/gl_test_shaders.h`; "got" and "want" are the checks in
+the bring-up note, "Board verdicts". The pixel's byte order is
+`0xAABBGGRR`, so `0xff5a3050` is R `0x50`, G `0x30`, B `0x5a`. "Matches"
+below means only that the number follows from the rule; the compiled
+instructions were not read.
+
+- **189 `mulone`: matches, both checks.** Only blue is wrong; red, green
+  and alpha are right.
+  - Check 2 (`M * vec3(0.5)`): blue is `(u_b - u_q + u_x) * 0.5 =
+    0.375 * 0.5 = 0.1875` (`0x30`). With the literal 0.5 read as 0.9375 it is
+    `0.375 * 0.9375 = 0.3516`, `0x5a`: the board read `0x5a`.
+  - Check 3 (the third column, `(u_b * 1.0) * u_q * 8.0`): `0.25 * 0.125 *
+    8.0 = 0.25` (`0x40`). With 8.0 read as 15.0 it is `0.46875`, `0x78`: the
+    board read `0x78`. (Both ratios are 1.875.)
+  - Check 1 (`M * vec3(0.5, 0.5, 1.0)`) passes. The rule does not say
+    whether it should: the study did not read the compiled blue lane, and a
+    sampled pixel can fall in the half of the threads that read right.
+- **6 `fbo` (checks 1 and 6) and 11 `persist` (check 2): consistent, not
+  shown.** The apex pixel (31,12) reads blue `0x12` for a wanted `0x09`.
+  The fragment shader is `o_color = v_color * vec4(v_uv, 1.0, 1.0)`, so
+  blue is `v_color.b * 1.0`, a literal 1.0 in lane z. Red and green are
+  right. A 1.0 read as 1.875 gives `0x09 * 1.875 = 16.9`, so `0x11` or `0x12`
+  only if the unrounded blue is about 9.5 of 255 or more. The board read
+  exactly `0x12`, twice the wanted value. That fits at the edge, and the
+  study cannot say more without the compiled instruction. A 1.0 multiply may
+  also have been folded away. Cases 6 and 11 pass in state A (the first
+  `dd6cfa02` run and the default walk), which fits a fault that hits about
+  half the threads, but it is not shown that this is the same fault.
+- **47 `es3inst` (checks 4 and 9): a different stage.** Instance 3's colour
+  is `icol * 0.5` with `icol = (1,1,1,1)` in the **vertex** shader, and
+  blue is wrong (`0xb4`, `0xf1`; `0x93`, `0xa9` in state A; want `0x80`);
+  red and green are right. A 0.5 read as 0.9375 gives at most `0xef`, and the
+  varying is interpolated, so a vertex whose lane z reads wrong and one that
+  reads right would give values between `0x80` and `0xef`. `0xb4`, `0x93`
+  and `0xa9` fit that. `0xf1` (241) is 2 above `0xef` (239) and does not
+  follow from the rule. At `670913e1` and `a5f1dc8e` alpha was right
+  (`0x80`); in state B at `dd6cfa02` it reads `0x99` and `0xb5`, and alpha is
+  lane w, not z. Partial match: the lane-z error fits; `0xf1` and the later
+  alpha excess do not.
+- **182 `fsat` (check 2): a different stage, partial.** The failing check is
+  the vertex-shader quad; the fragment-shader quad passes. Blue is
+  `max(min(u_a, 1.0), 0.0) * 0.5 + 0.25 = 0.75` (`0xbf`) and the board read
+  `0xfa` (`0xfa` in state B, `0xd5` in state A). A literal 0.5 read as
+  0.9375 gives a vertex value up to `1.0 * 0.9375 + 0.25 = 1.1875`, and an
+  interpolated mix of that and 0.75 clamps near `0xfa`. So the direction
+  fits and the size is not shown. At `a5f1dc8e` alpha was right; in state B at `dd6cfa02` it is
+  `0x7e` for a wanted `0x73`. Alpha is lane w, so the rule does not explain it.
+
+So the rule reproduces case 189 to the byte. For 6 and 11 it fits at the
+edge. For 47 and 182 it explains the lane-z excess only if the wrong read
+also happens in the vertex shader, which the study found only by arithmetic:
+the "two-pixel columns" the dk-ab-session saw are a fragment-stage pattern.
+The alpha excess in state B (47 and 182) is not explained, and it may be a
+second fault or the same one in another lane. This is a likely cause, not a
+shown one.
+
+**Immediate sites to look at.** `literal_src`
+(`src/shaderc/online/select.rs:2176`) already is the one place where a
+`ConstF32` becomes an f20 immediate (`:2094`), so the gate goes there. The
+other sites that build one directly, checked in the tree:
+
+- `src/shaderc/online/select.rs:2265` (the zero, `Src::imm_f32(0.0)`),
+  `:2586` (a constant integer `lod`, through `imm_f32`), `:2863` and `:2898`
+  (the `imm` closures).
+- `src/shaderc/online/vivante/builtins.rs:300` (`B2f`, the 1.0) and `:316`
+  (`F2b`, the 0.0); `:960` (the lowering of a `ConstF32`). `:1080` is a test,
+  not a site.
+- Integer immediates (`imm_s20`, `imm_u20`, `build.rs:136` and `:144`) share
+  the 20-bit encoding in a source field. Whether lane z reads them wrong is
+  not known: the study found no failing case that uses one. They are listed
+  for the confirming run, not claimed.
+
+**The proposed fix.** A field in `src/vivante/profile.rs`'s `ChipProfile`
+(say `reads_lane_z_literals`) says whether the core reads lane-z literal
+sources right. It is `true` on the i.MX8MP row, so that output is unchanged,
+and `false` on the ST row. `src/vivante/backend.rs` reads it and passes it to
+the compile. When it is `false`, `literal_src` and the direct sites above
+move the constant to a uniform (`const_file_src`) instead of an immediate.
+Owners: plan #397 owns `src/vivante`, plan #400 owns `src/shaderc`. The DK
+image still builds with the i.MX8MP row as `ACTIVE`
+(`src/vivante/profile.rs:172`), so the fix reaches the DK only once the
+`gpu-vivante-st` plumbing exists (`dk-st-profile-study`).
+
+**The confirming run.** From a `gpu-vivante-st` image with the gate, run
+gl_test cases 6, 11, 47, 182 and 189 alone (`GL_TEST_MP2_CASES`), then a few
+dEQP-GLES2 fragment-arithmetic names (for example `dEQP-GLES2.functional.
+shaders.operator.binary_operator.*` and `...filtering.2d.*` colour cases).
+If the rule is right, 189 passes and so do the colour-texture and arithmetic
+names; 47 and 182 will show whether the vertex stage is hit. Anything that
+still fails (the state-B alpha excess is the first candidate) is a second
+cause.
