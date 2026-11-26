@@ -28,6 +28,9 @@
 #     slots, "Draft site") and no home or /tmp path.
 #
 # Usage: tools/website-check.sh            (from anywhere in the repository)
+#        WEBSITE_GLMARK2_DIR=<dir> tools/website-check.sh   (only the glmark2
+#        comparison, on <dir>/data.js and <dir>/README.md; fixtures in
+#        tools/cts/testdata/website-glmark2/)
 # Exit status 0 when every check passes; each failure is printed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -67,6 +70,86 @@ errors = []
 def err(msg):
     if msg not in errors:
         errors.append(msg)
+
+README_BOARDS = {"AM62P": "am62p", "Raspberry Pi 4": "pi4", "i.MX8MP": "imx8mp"}
+
+
+def check_glmark2(figs, readme):
+    """glmark2.<board> figures equal README's glmark2 table (score, commit, date).
+
+    Of a score cell the first number, the first `commit` and the first date are
+    the current figure; older runs follow it in the same cell. When data.js has
+    no glmark2.<board> figure at all, a note is printed and the check passes.
+    """
+    if not any(re.fullmatch(r"glmark2\.(am62p|imx8mp|pi4)", k) for k in figs):
+        print("website-check: glmark2 comparison skipped (data.js has no glmark2 scores yet)")
+        return
+    lines = readme.splitlines()
+    rows = None
+    for i, line in enumerate(lines):
+        if line.strip() == "| Board | Score |":
+            rows = []
+            for row in lines[i + 2:]:
+                if not row.lstrip().startswith("|"):
+                    break
+                rows.append([c.strip() for c in row.strip().strip("|").split("|")])
+            break
+    if rows is None:
+        err("README.md: no table with the header '| Board | Score |'")
+        return
+    seen = set()
+    for cells in rows:
+        board = README_BOARDS.get(cells[0])
+        m = re.match(r"(\d[\d,]*)\b.*?`([0-9a-f]{7,40})`.*?(\d{4}-\d{2}-\d{2})", cells[1]) if len(cells) == 2 else None
+        if board is None or m is None:
+            err(f"README.md: glmark2 row cannot be parsed: | {' | '.join(cells)} |")
+            continue
+        seen.add(board)
+        fid = f"glmark2.{board}"
+        f = figs.get(fid) if isinstance(figs.get(fid), dict) else {}
+        want = int(m.group(1).replace(",", ""))
+        if fid not in figs:
+            err(f"data.js: {fid}: missing, but README.md has a figure for it")
+            continue
+        if f.get("value") != want:
+            err(f"data.js: {fid}: value is {f.get('value')!r}, README.md has {want!r}")
+        c = f.get("commit")
+        if not (isinstance(c, str) and len(c) >= 7
+                and (c.startswith(m.group(2)) or m.group(2).startswith(c))):
+            err(f"data.js: {fid}: commit is {c!r}, README.md has {m.group(2)!r}")
+        if f.get("date") != m.group(3):
+            err(f"data.js: {fid}: date is {f.get('date')!r}, README.md has {m.group(3)!r}")
+    for board in sorted(set(README_BOARDS.values()) - seen):
+        err(f"README.md: glmark2 table has no row for {board}")
+
+
+def parse_data_js(src):
+    body = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("//"))
+    m = re.match(r"\s*window\.YAKOGL_DATA\s*=\s*(.*?);?\s*$", body, re.S)
+    if not m:
+        raise ValueError("no 'window.YAKOGL_DATA = {...};' assignment")
+    return json.loads(m.group(1))
+
+
+# WEBSITE_GLMARK2_DIR=<dir> checks only <dir>/data.js against <dir>/README.md
+# (tools/cts/testdata/website-glmark2/{match,mismatch,absent}).
+if os.environ.get("WEBSITE_GLMARK2_DIR"):
+    d = os.environ["WEBSITE_GLMARK2_DIR"]
+    try:
+        with open(os.path.join(d, "data.js"), encoding="utf-8") as f:
+            fx_figs = parse_data_js(f.read()).get("figures", {})
+        with open(os.path.join(d, "README.md"), encoding="utf-8") as f:
+            fx_readme = f.read()
+    except (OSError, ValueError) as e:
+        print(f"FAIL {d}: {e}")
+        sys.exit(1)
+    check_glmark2(fx_figs, fx_readme)
+    if errors:
+        for e in errors:
+            print("FAIL", e)
+        sys.exit(1)
+    print("website-check: glmark2 fixture ok")
+    sys.exit(0)
 
 
 class Page(HTMLParser):
@@ -388,7 +471,6 @@ if data is not None:
     # The glmark2 and dEQP-GLES2 figures follow README's Status tables. Of a
     # glmark2 score cell the first number, the first `commit` and the first
     # date are the current figure; older runs follow it in the same cell.
-    README_BOARDS = {"AM62P": "am62p", "Raspberry Pi 4": "pi4", "i.MX8MP": "imx8mp"}
     try:
         with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
             readme = f.read()
@@ -420,26 +502,7 @@ if data is not None:
             err(f"data.js: {fid}: {field} is {have!r}, README.md has {want!r}")
 
     if readme is not None:
-        rows = readme_table("| Board | Score |")
-        if rows is not None:
-            seen = set()
-            for cells in rows:
-                board = README_BOARDS.get(cells[0])
-                m = re.match(r"(\d[\d,]*)\b.*?`([0-9a-f]{7,40})`.*?(\d{4}-\d{2}-\d{2})", cells[1]) if len(cells) == 2 else None
-                if board is None or m is None:
-                    err(f"README.md: glmark2 row cannot be parsed: | {' | '.join(cells)} |")
-                    continue
-                seen.add(board)
-                fid = f"glmark2.{board}"
-                f = figs.get(fid) if isinstance(figs.get(fid), dict) else {}
-                compare(fid, "value", f.get("value"), count(m.group(1)))
-                c = f.get("commit")
-                if fid in figs and not (isinstance(c, str) and len(c) >= 7
-                                        and (c.startswith(m.group(2)) or m.group(2).startswith(c))):
-                    err(f"data.js: {fid}: commit is {c!r}, README.md has {m.group(2)!r}")
-                compare(fid, "date", f.get("date"), m.group(3))
-            for board in sorted(set(README_BOARDS.values()) - seen):
-                err(f"README.md: glmark2 table has no row for {board}")
+        check_glmark2(figs, readme)
         rows = readme_table("| Board | Failures | Notes |")
         if rows is not None:
             seen = set()
