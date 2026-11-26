@@ -202,7 +202,7 @@ stand-in back end replaces the real one. The real back ends differ only in
   `draw.random` case gets a GL error on the host. That holds for the 118
   shape replayed above; the other 150 are not replayed.
 
-## 5. GC7000UL: integer byte/short arrays fetched in place (suspected, not one of the 14)
+## 5. GC7000UL: integer byte/short arrays fetched in place (D1 board-confirmed, not one of the 14)
 
 The Vivante back end claims `BYTE`, `UBYTE`, `SHORT`, `USHORT` and `FIXED`
 as native (`yakogl_backend_vivante`, `src/vivante/backend.rs` line 3493).
@@ -216,8 +216,27 @@ for a pure-integer format, and `fui(1.0f)` otherwise. If the GC FE converts an
 element to float unless that scale is the integer 1, an `ivec`/`uvec` input
 reads float bits. The draw.random cases on that path are 14, 72, 141, 162,
 179, 200 and 209 (byte/ubyte/short/ushort -> `int`/`ivec2`/`uint`/`uvec2`/`uvec3`, buffer, full
-width). The same holds for `vertex_arrays.*` integer rows. The i.MX8MP has
-not run dEQP-GLES3 (#316), so this is a reading of code.
+width). The same holds for `vertex_arrays.*` integer rows. 
+
+**Board evidence.** The i.MX8MP ran entry 3 (`dEQP-GLES3.functional.draw.*`)
+at 9bc82915; the record is
+`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/results.tsv`: 7 Fail,
+76 NotSupported, every other mustpass name passes. It was decoded against the
+generator of VK-GL-CTS 93bca01.
+
+- **D1 confirmed.** The 7 Fails are 14, 72, 141, 162, 179, 200 and 209, the
+  list above: the pass/fail split follows the D1 shape (integer byte/short
+  array in a buffer, scale 1.0f).
+- **D2 contradicted for float and fixed.** Normalised `GL_FLOAT` buffer arrays
+  (cases 131 and 177) and `GL_FIXED` arrays (cases 2 and 83) are fetched with
+  `GC_NORMALIZE_SIGN_EXTEND` and pass. D2 as written does not hold for those
+  shapes.
+- **D3 ruled out for 1-byte types only.** Byte arrays with stride 7 or 17 and
+  offset 1 or 5 pass. Multi-byte types at those layouts are not in
+  `draw.random`; slices s95 and s129 (`vertex_arrays`) test them, so D3 stays
+  open for them.
+
+The code citations below are unchanged.
 
 - **Fix, two options.** (i) GL core: `attrib_in_place_layout` returns false
   for an integer 8/16-bit array, so `convert_attrib` widens it to 32-bit
