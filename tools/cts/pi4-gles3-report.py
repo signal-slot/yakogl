@@ -474,6 +474,13 @@ def report(args, out):
         if rc != 0:
             problems.append('gles3-notpass.py --pi4 could not run: %s' % (e.strip() or o.strip() or 'exit %d' % rc))
         else:
+            # a console gles3-notpass.py skipped (its label is gone from the tree, every case it ran is
+            # counted under a label of the tree) is not counted here either: each case once
+            for l in e.splitlines():
+                m = re.match(r'gles3-notpass: note: (\S+) \(.*\) is skipped', l)
+                if m:
+                    tallies.pop(m.group(1), None)
+                    superseded.add(m.group(1))
             for l in o.splitlines():
                 m = re.match(r'(\S+)\.console\.txt:NoResult ', l)
                 if m:
@@ -691,6 +698,16 @@ def self_test():
                and 'Console scan:' in out, out)
         figs, prob = console_figures([s1, s2], {'A1'})
         expect('a superseded label is not counted', figs['images'] == 2 and figs['secs'] == 45.0 and figs['rec'] == 0 and figs['skipped'] == ['A1'], repr(figs))
+        # a record whose label the tree no longer has (B1 re-split into B1a, B1b) counts no case twice
+        fx = os.path.join(HERE, 'testdata', 'pi4-gles3-report')
+        p = subprocess.run([sys.executable, '-I', me, '--table', os.path.join(fx, 'tree.txt'),
+                            '--mustpass', os.path.join(fx, 'mustpass.txt'), '--date', '2026-11-08',
+                            '--root', os.path.join(td, 'docs'), os.path.join(fx, 's1'), os.path.join(fx, 's2')],
+                           capture_output=True, text=True)
+        out = p.stdout + p.stderr
+        expect('superseded tally: each mustpass case counted once, 4 of 4, the old B1 record not added',
+               p.returncode == 0 and '4 mustpass cases of 4 in them' in out
+               and '2 pass / 1 fail / 0 NotSupported / 1 other / 0 without a result' in out and 'PARTIAL' not in out, out)
         expect('no absolute path in the output', td not in out and '/home/' not in out, out)
 
         os.remove(os.path.join(s2, 'C1.tally.txt'))

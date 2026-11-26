@@ -1,0 +1,7 @@
+*** Booting Zephyr OS build x ***
+deqp: case filter 'x'
+deqp: Fail dEQP-GLES3.b.zeta
+deqp: Pass dEQP-GLES3.b.alpha
+deqp: Pass dEQP-GLES3.b.omega
+deqp: done: complete=1
+deqp: summary: 3 cases begun, 3 with a result, 0 without

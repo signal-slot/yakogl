@@ -1,0 +1,4 @@
+12:01:01 deqp: Fail dEQP-GLES3.b.zeta
+12:01:02 deqp: Pass dEQP-GLES3.b.alpha
+12:01:03 deqp: Pass dEQP-GLES3.b.omega
+12:01:04 deqp: summary: 3 cases begun, 3 with a result, 0 without

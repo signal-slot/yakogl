@@ -1,0 +1,7 @@
+# Synthetic tree: B1 was re-split into B1a and B1b after its run; its old record is superseded.
+# image A1: the a group
+dEQP-GLES3.a.*
+# image B1a: one b case
+dEQP-GLES3.b.zeta
+# image B1b: the other b cases
+dEQP-GLES3.b.alpha,dEQP-GLES3.b.omega

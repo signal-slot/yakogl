@@ -406,6 +406,22 @@ def pi4_rows(dirs, mustpass, tree):
             with open(c, encoding="utf-8", errors="replace") as f:
                 got[label] = tally.scan(f.read())["got"]
             where[label] = d
+    # A console whose label the tree no longer has (S32c re-split into S32c1..4,
+    # T14a cut into T14a1, T14aa...) is superseded when every case it ran
+    # belongs to a label the tree has that ran: those labels count the cases
+    # and the old console is skipped, with a note.
+    ran = [tally.filter_regex(f) for l, f in tree if l in got]
+    for label in sorted(parts):
+        if got[label] and all(any(r.match(case) for r in ran) for case in got[label]):
+            sys.stderr.write("gles3-notpass: note: %s (%s) is skipped: the tree no longer has it and "
+                             "every case it ran is counted under a label of the tree that ran\n"
+                             % (label, os.path.basename(os.path.normpath(where[label]))))
+            del got[label], where[label], parts[label]
+            continue
+        # a part that ran and holds none of this console's cases is a later cut, not a re-split of it
+        mine = [l for l in parts[label] if l not in got
+                or any(tally.filter_regex(filters[l]).match(case) for case in got[label])]
+        parts[label] = mine
     for parent, split in parts.items():
         twice = [l for l in split if l in got]
         if twice:
@@ -853,6 +869,18 @@ def pi4_self_test(check):
     check("pi4: after a cut the images-run header counts both labels and marks none",
           crun == ["A1", "B1", "B1x"] and cstopped == [] and "# images run (3 of 3): A1 B1 B1x\n" in ctext,
           "(%s, %s)" % (crun, cstopped))
+    sd = os.path.join(d, "superseded")
+    sdirs = [os.path.join(sd, "s1"), os.path.join(sd, "s2")]
+    r = subprocess.run([sys.executable, "-I", os.path.abspath(__file__), "--pi4", "--tree",
+                        os.path.join(sd, "tree.txt"), "--mustpass", os.path.join(sd, "mustpass.txt")] + sdirs,
+                       capture_output=True, text=True)
+    body = [l for l in r.stdout.splitlines() if not l.startswith("#")]
+    check("pi4: a superseded console (its label re-split, every case under tree labels) is skipped and named",
+          r.returncode == 0 and "note: B1 (s1) is skipped" in r.stderr,
+          "(rc %d, %s)" % (r.returncode, r.stderr[:200]))
+    check("pi4: a case of a superseded console is counted once, under the label the tree gives it",
+          body == ["B1b.console.txt:Crash dEQP-GLES3.b.omega", "B1a.console.txt:Fail dEQP-GLES3.b.zeta"]
+          and "# images run (3 of 3): A1 B1a B1b\n" in r.stdout, "(%s)" % r.stdout)
 
 
 def splice_self_test(check):
