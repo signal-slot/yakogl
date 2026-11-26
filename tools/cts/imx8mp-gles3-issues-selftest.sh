@@ -50,3 +50,17 @@ if python3 -I "$tool" "$tmp/bad.tsv" --causes "$tmp/causes.tsv" 2>/dev/null; the
 : > "$tmp/empty.tsv"
 [ -z "$(python3 -I "$tool" "$tmp/empty.tsv" --causes "$tmp/causes.tsv")" ] || fail "empty input prints"
 echo "ok: unknown cause, bad input, empty input"
+
+# no-record / unexplained causes: stderr WARNING with the case count, exit 0; --strict exits 1; stdout unchanged.
+printf 'board-only\tunexplained-ubo-no-record\te5\tFail\tdEQP-GLES3.u1\nboard-only\tunexplained-ubo-no-record\te5\tFail\tdEQP-GLES3.u2\nboard-only\tx-no-record\te6\tFail\tdEQP-GLES3.u3\nboard-only\tunexplained-no-record\te6\tFail\tdEQP-GLES3.u4\nboard-only\tc1\te1\tFail\tdEQP-GLES3.a.k\nhost-predicted\tunexplained-zz\te1\tFail\tdEQP-GLES3.p\n' > "$tmp/nr.tsv"
+nr() { python3 -I "$tool" "$tmp/nr.tsv" --causes "$tmp/causes.tsv" "$@"; }
+nr > "$tmp/nr.out" 2> "$tmp/nr.err" || fail "warning changed the exit status"
+grep -q 'WARNING: cause unexplained-ubo-no-record has 2 case(s): triage must give' "$tmp/nr.err" || fail "no-record warning"
+grep -q 'WARNING: cause x-no-record has 1 case' "$tmp/nr.err" || fail "-no-record suffix warning"
+grep -q 'WARNING: cause unexplained-no-record has 1 case' "$tmp/nr.err" || fail "unexplained warning"
+[ "$(grep -c WARNING "$tmp/nr.err")" = 3 ] || fail "warning count (other verdicts must not warn)"
+if nr --strict >/dev/null 2>&1; then fail "--strict exit 0 with a no-record cause"; fi
+nr --strict > "$tmp/nr2.out" 2>/dev/null || true; cmp -s "$tmp/nr2.out" "$tmp/nr.out" || fail "--strict changed stdout"
+[ -z "$(run 2>&1 >/dev/null)" ] || fail "warning without a no-record cause"
+run --strict >/dev/null || fail "--strict failed without a no-record cause"
+echo "ok: no-record warning, --strict"

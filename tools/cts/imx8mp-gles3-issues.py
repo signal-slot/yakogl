@@ -3,13 +3,15 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """One issue draft per cause from the i.MX8MP dEQP-GLES3 board vs HOST-ONLY comparison.
 
-  imx8mp-gles3-issues.py COMPARE.tsv [--causes FILE] [--commit SHA8] [--examples N] [--verdict board-only]
+  imx8mp-gles3-issues.py COMPARE.tsv [--causes FILE] [--commit SHA8] [--examples N] [--verdict board-only] [--strict]
 
 COMPARE.tsv is `imx8mp-gles3-compare.py --tsv`: one line per board not-pass case,
 'verdict<TAB>cause<TAB>eNN<TAB>outcome<TAB>case'. --causes is imx8mp-gles3-causes.tsv ('id<TAB>glob<TAB>title',
 default: next to this script). Prints markdown, one block per cause with cases of --verdict (default
 board-only), the largest first: proposed title, case count, table entries, example cases, campaign commit and
-a Reproduce line. Nothing but the TSV's case names, entry ids and outcomes is printed (no address, no path).
+a Reproduce line. A cause id ending in '-no-record' or starting with 'unexplained-' only fits an entry
+without a board record: each such cause with cases prints a stderr WARNING (exit status stays 0; --strict
+makes it 1). Nothing but the TSV's case names, entry ids and outcomes is printed (no address, no path).
 """
 import argparse
 import os
@@ -24,6 +26,7 @@ def main():
     ap.add_argument("--commit", default="")
     ap.add_argument("--examples", type=int, default=5)
     ap.add_argument("--verdict", default="board-only")
+    ap.add_argument("--strict", action="store_true", help="exit 1 if a no-record/unexplained cause has cases")
     a = ap.parse_args()
 
     titles = {}
@@ -58,6 +61,11 @@ def main():
     def eidx(e):
         return (0, int(e[1:]), "") if e[1:].isdigit() else (1, 0, e)
 
+    placeholder = sorted(c for c in groups if c.endswith("-no-record") or c.startswith("unexplained-"))
+    for c in placeholder:
+        print("imx8mp-gles3-issues: WARNING: cause %s has %d case(s): triage must give these cases a real cause"
+              % (c, len(groups[c])), file=sys.stderr)
+
     commit = a.commit or "not given"
     order = sorted(groups, key=lambda c: (-len(groups[c]), c))
     for cause in order:
@@ -78,7 +86,7 @@ def main():
         print("- Reproduce: docs/es3/board-recipe-imx8mp.md ('Running a GLES3 slice session'), "
               "the table entries above")
         print()
-    return 0
+    return 1 if a.strict and placeholder else 0
 
 
 if __name__ == "__main__":
