@@ -430,6 +430,34 @@ else
 	echo "ok   t6_submit-uboot-wdt0-as-kexec: FAIL"
 fi
 
+# T6:A's CNTFRQ_EL0 field: banner_a_el2 prints it, and every fixture's T6:A
+# line carries it, so the PASS cases above already judge the form with the
+# field. The record of an image built before the banner gained it prints the
+# line without it: the verdict takes no value from the field, so the stripped
+# copies pass on both routes (the WDT0 one through T6:G and the reset
+# synthesis), and a value that is not a decimal differs on the line.
+strip_cntfrq() { sed '/^T6:A EL2 /s/ CNTFRQ_EL0 [0-9]*$//' "$1" >"$2"; }
+strip_cntfrq "$D/t6_hello-pass.uart" "$WORK/t6a-nc-k.log"
+check t6_hello-t6a-no-cntfrq 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$WORK/t6a-nc-k.log"
+strip_cntfrq "$D/t6_submit-uboot-wdt0-pass.uart" "$WORK/t6a-nc-u.log"
+check t6_submit-uboot-wdt0-t6a-no-cntfrq 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$WORK/t6a-nc-u.log" T6_ROUTE=uboot
+sed 's/CNTFRQ_EL0 24000000/CNTFRQ_EL0 x/' "$D/t6_hello-pass.uart" >"$WORK/t6a-cbad.log"
+check t6_hello-t6a-cntfrq-not-decimal 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/t6a-cbad.log"
+# the fixtures themselves: every T6:A line of every fixture carries the field
+runs=$((runs + 1))
+loose=''
+for f in "$D"/*.uart; do
+	a=$(grep -c '^T6:A EL2 ' "$f" || true)
+	c=$(grep -c '^T6:A EL2 .* CNTFRQ_EL0 [0-9]*$' "$f" || true)
+	if [ "$a" != "$c" ]; then loose="$loose ${f##*/}"; fi
+done
+if [ -z "$loose" ]; then
+	echo "ok   t6-fixture-banner: every fixture's T6:A line carries CNTFRQ_EL0"
+else
+	echo "FAIL t6-fixture-banner: T6:A without CNTFRQ_EL0 in$loose"
+	fails=$((fails + 1))
+fi
+
 # t6_display (step D2): the line count is the table's, read from the pass
 # run (every line ok), not kept by hand here
 DISP=$(bash "$V" t6_display "$D/t6_display-pass.uart" | grep -c '^ok ' || true)
