@@ -22,10 +22,10 @@
 //! compose4's.
 //!
 //! Packets of the dumps the modules do not model are in
-//! [`KNOWN_WORD_GAPS`], each with its reason. The three these shapes are
-//! about (`LINE_WIDTH`, `POINT_SIZE`, `BLEND_CCOLOR`) are pinned twice: a
-//! passing test holds the reference's values, and an `#[ignore]` test
-//! (`gap_*`) fails until `draw71` has a `PacketSpec` for the packet.
+//! [`KNOWN_WORD_GAPS`], each with its reason. `LINE_WIDTH`, `POINT_SIZE` and
+//! `BLEND_CCOLOR` have a `PacketSpec` in `draw71` (the `gap_*` tests assert
+//! it); the shape tests hold the reference's values. `gap_depth_equal_z_updates` holds Mesa's
+//! Z updates 0 under GL_EQUAL.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_compose5
@@ -180,6 +180,8 @@ fn draw_lay(s: &draw71::PacketSpec) -> Layout {
             "Maximum Zw",
             "Minimum Zw",
             "Limit",
+            "Point Size",
+            "Line width",
         ],
         signed: &["Coarse X", "Coarse Y"],
     }
@@ -421,7 +423,12 @@ fn is_prim(name: &str) -> bool {
 /// before the draw's prim packet. A kind sent twice before one draw (the
 /// two `STENCIL_CFG` of a two-sided stencil) keeps the second as `KIND#1`.
 fn states_at_draws(j: &ClifJob) -> Vec<BTreeMap<String, Pk>> {
-    let kinds: Vec<&str> = draw71::ALL_SPECS.iter().map(|s| s.clif_name).collect();
+    // LINE_WIDTH, POINT_SIZE and BLEND_CCOLOR are specs only: translate sends none
+    let kinds: Vec<&str> = draw71::ALL_SPECS
+        .iter()
+        .map(|s| s.clif_name)
+        .filter(|n| !["LINE_WIDTH", "POINT_SIZE", "BLEND_CCOLOR"].contains(n))
+        .collect();
     let mut last: BTreeMap<String, Pk> = BTreeMap::new();
     let mut fresh: Vec<String> = vec![];
     let mut out = vec![];
@@ -453,26 +460,10 @@ struct Gap {
 /// stale entry fails) and pin the values where they matter.
 const KNOWN_WORD_GAPS: &[Gap] = &[
     Gap {
-        packet: "BLEND_CCOLOR",
-        reason: "draw71 has no PacketSpec for the constant blend colour (four F16 words of glBlendColor);                  gl_blend_equations checks the dump's words are the half floats of glBlendColor's arguments",
-    },
-    Gap {
-        packet: "POINT_SIZE",
-        reason: "draw71 has no PacketSpec for Point Size (glPointSize / gl_PointSize); gl_prims_points_lines_strip \
-                 pins the dump's value 1.0",
-    },
-    Gap {
-        packet: "LINE_WIDTH",
-        reason: "draw71 has no PacketSpec for Line width (glLineWidth); gl_prims_points_lines_strip pins 1.0",
-    },
-    Gap {
         packet: "PRIM_LIST_FORMAT",
         reason: "frame71 has no Primitive List Format packet (tile list: triangles, not strip or fan)",
     },
-    Gap {
-        packet: "SET_INSTANCEID",
-        reason: "frame71 has no Set InstanceID packet (tile list, Instance ID 0)",
-    },
+    Gap { packet: "SET_INSTANCEID", reason: "frame71 has no Set InstanceID packet (tile list, Instance ID 0)" },
     Gap {
         packet: "VCM_CACHE_SIZE",
         reason: "the binner's VCM cache size is the 7.1 table's own (vpm71q, not a module here)",
@@ -916,13 +907,12 @@ fn gl_depthfuncs() {
     );
 }
 
-/// GAP (draw71, `CFG_BITS` / `Z updates enable` under GL_EQUAL): with the GL
+/// (draw71, `CFG_BITS` / `Z updates enable` under GL_EQUAL): with the GL
 /// state as the application set it (depth mask on, glDepthFunc(GL_EQUAL)),
 /// Mesa packs `Z updates enable` 0 (gl_depthfuncs.clif, the second draw);
 /// `draw71::translate` packs 1. A passing EQUAL test writes the value
 /// already there, so the pixels are the same; the word differs.
 #[test]
-#[ignore = "draw71 packs Z updates enable 1 for GL_EQUAL with the depth mask on; Mesa packs 0 (gl_depthfuncs.clif draw 2)"]
 fn gap_depth_equal_z_updates() {
     let jobs = gl_jobs("gl_depthfuncs");
     check_job(
@@ -988,7 +978,6 @@ fn assert_modelled(packet: &str) {
 /// 2.0 at its three line draws; draw71 has no packet for it (the width goes
 /// from fill71's `DrawIn::line_width` to the C job's state).
 #[test]
-#[ignore = "draw71 has no PacketSpec for LINE_WIDTH (gl_primswide.clif: 2.0, 4.0, 2.0)"]
 fn gap_line_width_packet() {
     assert_modelled("LINE_WIDTH");
 }
@@ -997,7 +986,6 @@ fn gap_line_width_packet() {
 /// draw (the 16.0 is the shader's gl_PointSize, which the 7.1 table refuses:
 /// backend71's "a vertex program writing gl_PointSize").
 #[test]
-#[ignore = "draw71 has no PacketSpec for POINT_SIZE (gl_primswide.clif: 1.0 at each draw)"]
 fn gap_point_size_packet() {
     assert_modelled("POINT_SIZE");
 }
@@ -1006,7 +994,6 @@ fn gap_point_size_packet() {
 /// (0 here); draw71 has no packet for it (fill71 passes the F16 words to
 /// the C job's state).
 #[test]
-#[ignore = "draw71 has no PacketSpec for BLEND_CCOLOR (gl_blendsub.clif: four zero F16 words)"]
 fn gap_blend_ccolor_packet() {
     assert_modelled("BLEND_CCOLOR");
 }
