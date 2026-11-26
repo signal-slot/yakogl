@@ -98,6 +98,11 @@
 # The two tables were built by two different generators, so agreeing with one
 # says nothing about the other.
 #
+# Disk: every test row links one binary per tests/ file, each with the whole
+# library in it, once per feature set; `[profile.test] debug = false`
+# (Cargo.toml) keeps their DWARF out: 5.7 GiB -> 0.76 GiB for one feature set
+# (docs/ci.md, 3.4).
+#
 # Wall clock on a warm tree, measured 2026-10-25: 190 s for the 147 rows of
 # --quick on four lanes. A cold tree pays for a build of the crate and its
 # dev-dependencies per configuration, which is minutes; run it once and it

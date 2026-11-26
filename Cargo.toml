@@ -206,8 +206,21 @@ opt-level = 1
 # overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
 # harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
 # applies. The edit loop's `dev` profile keeps opt-level 1.
+#
+# `debug = false`: no DWARF in the test builds. Every integration test is its
+# own binary and statically links the whole library, so each binary carried a
+# full copy of the library's debug information: of `es3_srgb`'s 30 MiB, 1 MiB
+# was code. Measured 2026-11-26 (host-test,gpu-powervr,shaderc-online, `cargo
+# test --no-run`, 296 binaries, 4 cores): 5.7 GiB and 4 min 6 s with the
+# inherited `dev` debug info, 3.3 GiB and 2 min 48 s with `line-tables-only`,
+# 0.76 GiB and 2 min 18 s without. The gate builds this once per feature set
+# (36 times in a run), which is where 120 GiB came from. A failing test still
+# prints its file and line (the panic location is not DWARF) and, with
+# RUST_BACKTRACE, the function names (the symbol table is kept); a debugger
+# session on a test binary builds with CARGO_PROFILE_TEST_DEBUG=true.
 [profile.test]
 opt-level = 3
+debug = false
 debug-assertions = true
 overflow-checks = true
 
