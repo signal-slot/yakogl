@@ -336,8 +336,9 @@ Reading the run: the runner's verdict line
 `pass:gl_test`, anything else `fail:gl_test`). Sub-lines (`gc_triangle:
 linear: PASS ...`, `gl_test: case 1 ...: PASS`) are not results. The
 sample's own last line `gl_test: PASS` matches the generic `<prog>: PASS`
-form, so the one-case image, which prints no tally (below, "How steps 7-8
-were run and judged"), still reads `result=pass:gl_test`; a run that stops
+form, so the one-case image read `result=pass:gl_test` even before it
+printed a tally (below, "How steps 7-8 were run and judged"; since
+`b7236e03` it prints `gl_test: all: <0|1> of 1`); a run that stops
 before both reads `result=none`. A FAIL turns the verdict to `failed`.
 
 ## When it looks like a hardware fault: supply first
@@ -454,7 +455,7 @@ runner record directory name) and folds the findings into the pre-study
 | 5 `gc_fence` | fence-clear | **PASS** 2026-11-21, `20261121-1855-gc_fence-55ae8385`: `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us`, back after 58 s (runner rc=6: its own post-cycle fault, below; the board was fine) |
 | 6 `gc_clear` | fence-clear | **PASS** 2026-11-21, `20261121-1859-gc_clear-e1a37b77`: `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, back after 45 s |
 | 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
-| 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
+| 8 `gl_test` case 1 (`gc_gl_triangle`) | gltest-board | **PASS** 2026-11-26, built from origin/main `dd6cfa02`, `20261126-0118-gl_test_case1_tally-d3a5c59e`: `gl_test: case 1 uniform: PASS` (10 checks), tally `gl_test: all: 0 of 1 cases failed (1 passed; …)`, `verdict gl-case1 case1=PASS tally=PASS:0/1 final=PASS record=PASS:kind=1`, `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), PSCI reset at 3,312 ms of the 100 s lifetime, back after 60 s; console excerpt `tools/cts/log/2026-11-mp2-gltest-p9/tally/`. The 2026-11-23 run (`20261123-0454-gl_test_case1-ed1e6361`, triangle-rerun) passed the case without the tally line, the defect fixed below |
 
 ### The `gl_test` regression set (P9 result, 2026-11-24, `a5f1dc8e`): 5 FAIL, 1 SKIP, 44 PASS
 
@@ -473,7 +474,71 @@ flaky 0; expected 0; case 16 counts through its own SKIP line, commit `1e546068`
 `mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0` (back on Linux after 70 s of 100 s lifetime)
 
 The per-case verdicts below are the same at `a5f1dc8e` and in the rerun that
-follows. The rerun at `670913e1` is a confirmation, not the P9 result.
+follows. The rerun at `670913e1` is a confirmation, not the P9 result. At
+`dd6cfa02` (next section), cases 6 and 11 passed in two of three runs: their
+FAIL depends on the run (state B below).
+
+#### The set at `dd6cfa02` (2026-11-26, gltest-board): 3 or 5 FAIL, by run
+
+Every image was built from origin/main `dd6cfa02` (banner `sample: build
+tree=dd6cfa02 table=6c5b8a70`) with `-DYAKOGL_WERROR=ON
+-DCONFIG_GL_TEST_MP2_SKIP='""'`.
+`mp2-gltest-shards.py --skip "" --budget-ms 90000` plans 1 shard of 50
+cases. The shard image takes the list (`shard-0000.conf`,
+`GL_TEST_MP2_CASES`). The default-walk image is the `670913e1` rerun's
+build. Each ran as a one-shot with `tools/board-stm32mp2.sh`
+(`MP2_NO_CONSOLE=1`) and was judged on the A35 console. The logs and
+README are in `tools/cts/log/2026-11-mp2-gltest-p9/set/`.
+
+| run | record | `gl_test: the suite took` | `PSCI SYSTEM_RESET at` | `CONFIG_YAKOGL_STM32MP2_LIFETIME_S` | back on Linux | failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| shard 0 of 1 | `20261126-0119-gltest_set-46b5cec3` | 11,415 ms | 14,404 ms | 100 s (14 % used, no `mp2: lifetime` line) | 57 s | 3 of 49: 47, 182, 189 |
+| shard 0 of 1, rerun | `20261126-0123-gltest_set_rerun-46b5cec3` | 11,419 ms | 14,408 ms | 100 s (14 %) | 70 s | 5 of 49: 6, 11, 47, 182, 189 |
+| default walk | `20261126-0124-gltest_set_default-f0b0e969` | 11,414 ms | 14,387 ms | 100 s (14 %) | 57 s | 3 of 49: 47, 182, 189 |
+
+`gl_test: all: 3 of 49 cases failed (46 passed; 0 timed out; first failure case 47 at index 30; second failure case 182; 1 skipped, first skip case 16); precompiled hits 0, compiler runs 190`
+
+- runner: `board-stm32mp2.sh stm32mp257f-dk gltest_set rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=57s`
+- judged on the captured serial console: `board-stm32mp2.sh stm32mp257f-dk gltest_set rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:gl_test back_after=57s console=external`
+- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py shard-0000.console.txt`,
+  defaults): new 47, 182 and 189; flaky 0, expected 0, stale 0, skip
+  differences 0, no verdict 0. The shard's last line:
+
+`mp2-gltest-diff: new 3, flaky 0, expected 0, missing 0` (shard 0 of 1 at `dd6cfa02`: 14.4 s of the 100 s lifetime, the suite 11.4 s of it)
+
+The rerun's line is `mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0`
+(14.4 s of 100 s), and the default walk's is `mp2-gltest-diff: new 3, flaky
+0, expected 0, missing 0` (14.4 s of 100 s).
+
+- Two states. The wrong pixels repeat exactly within each state, and every
+  wrong channel is too large.
+  - State A (the first run and the default walk): 6 and 11 pass. 47 reads
+    `0x80938080`/`0x80a98080` (want `0x80808080`), 182 reads `0x73d57340`
+    (want `0x73bf7340`), and 189 reads `0xff3f3050`/`0xff542040`.
+  - State B (the rerun, and every earlier set run): 6 and 11 read
+    `0xff120fe7` at the apex (want `0xff090fe7`). 47 reads
+    `0x99b48080`/`0xb5f18080`, 182 reads `0x7efa7340`, and 189 reads
+    `0xff5a3050`/`0xff782040`. Alpha was right at `670913e1`, but here
+    47's and 182's alpha is high as well.
+
+  The first run and the rerun booted the same `zephyr.bin`. Between
+  `670913e1` and `dd6cfa02`, the only commits under `src/vivante/` are
+  licence headers. So 6 and 11 were not fixed, and the DK's verdict for
+  them depends on the run. The cause is open and is not fixed here. It is
+  given as a new cause for the Vivante back end, not as an expected
+  difference.
+- no hang and no refusal in any of the three: `yakogl: draws refused 0`,
+  fences 173 of 173, `irq errors 0`. The stall dump after
+  `gl_test: FAIL rc=-1` shows the front end idle with nothing pending.
+- `tools/cts/mp2-gltest-expected.txt` is unchanged. Q11 is decided (option
+  A, pre-study), and its wide-line entries were dropped in `fb2e449c`, so
+  the list has nothing stale.
+- Board state: the card's `u-boot-env` (`d1fa271c…`) and `/boot` (25 files,
+  `dc6c9b99…`) were the same after `uninstall`. The 16 KiB that U-Boot's
+  `saveenv` rewrote were written back to the card's partition, resolved
+  again from the disk `/boot` is mounted on and checked as type SD
+  (`mmcblk0p7` by then, `mmcblk1p7` at `install`). Nothing was written to
+  the eMMC.
 
 #### Confirmation: the rerun at `670913e1` (2026-11-25), one run of 100 s
 
@@ -954,8 +1019,20 @@ so the runner's `result=` is right either way.
 Fixed (P9): `main_stm32mp2.c` prints the runner's `all_line` format for a
 one-case run (`one_case_tally`, `0 of 1` or `1 of 1`); the first option was
 taken. `CONFIG_GL_TEST_MP2_CASES` gives a shard's case list
-(`tools/cts/mp2-gltest-shards.py` writes `shard-NNNN.conf`). Not yet built
-on the board.
+(`tools/cts/mp2-gltest-shards.py` writes `shard-NNNN.conf`). It was confirmed
+on the board on 2026-11-26 (gltest-board). The case-1 image, built from
+origin/main `dd6cfa02` with `-DCONFIG_GL_TEST_MP2_SET_HEAD=y`, printed
+
+```
+gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 6
+```
+
+`dk_verdict.py --expect gl-case1` now reads `tally=PASS:0/1` (record
+`20261126-0118-gl_test_case1_tally-d3a5c59e`, the step 8 row above; log
+`tools/cts/log/2026-11-mp2-gltest-p9/tally/`). The record line is unchanged
+(`yk-record: 594b0103 0001ff01 0000000a 00000000`). The shard images'
+list path (`GL_TEST_MP2_CASES`, 50 cases) ran on the board in the same
+session (`tools/cts/log/2026-11-mp2-gltest-p9/set/`).
 
 ## What these runs answer
 
