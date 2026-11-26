@@ -322,3 +322,18 @@ Items 1, 2, 3, 5 and 10 are done at main `445c5653`. Item 7 is done by value.
 - AM62P display: a camera look at the panel for torn frames in a light
   scene, the line-buffer read-ahead question, and whether to wire
   `am62p_dss_wait_vsync` as `wait_vblank` (`docs/notes/am62p-flip-latch.md`).
+
+## Armadillo-X2 stops, 2026-11-25
+
+- 2026-11-25, X2: the measurement of terrain, shadow and refract (`72972ba4`,
+  and `3c3fe33b` with `gc_tiled_rt` off and on) did not run. The podman
+  container `slint-launcher` runs with autostart on and `tools/board.sh x2 run`
+  refuses a jump while it does. Same stop as 2026-11-24
+  (`records/x2/20261124-1035-before-72972ba4`). The 2026-11-25 attempts left no
+  record, because no run started. See `x2-glmark2-slow-scenes.md`.
+- 2026-11-25, X2: the look by eye at the 33 glmark2-es2 scenes stopped for the
+  same cause (`x2-glmark2-pictures-by-eye.md`, commit `fe72e2a9`). The
+  i.MX8MP `[texture] texture-filter=mipmap` picture change stays unexplained,
+  cause open.
+- The X2 is the same SoC (i.MX8MP) and GPU (GC7000UL) as the Verdin iMX8MP but
+  not the stage-2 board. Every speed figure for the i.MX8MP stays host-derived.

@@ -1049,6 +1049,27 @@ private; `YakoglBackend` is not touched by any item).
 
 ## Session A: the run sheet
 
+**Session A (2026-11-25): stopped, not run.** The podman container
+`slint-launcher` runs with autostart on, and `tools/board.sh x2 run` refuses a
+jump while a container runs; the plan's rules forbid stopping it and the owner
+did not answer. No measurement exists (`x2-glmark2-slow-scenes.md`, "Stop,
+2026-11-25: session A not run"). **W6, W7, W8 and W9 stay undecided because
+session A stopped.** The rule for when a session runs (noise threshold
++-3 ms per scene; the table's W6 to W9 rows above hold the gates):
+
+- W6 (default on): go if session A is green, the on arm's pictures match, and
+  terrain on minus off is at most +3 ms with shadow and refract within +-3 ms.
+  Hold if a picture or a case differs or the delta is above +3 ms (narrow the
+  W4 rule first). Drop if the knob costs more than +3 ms on terrain and no
+  narrowing recovers it.
+- W7: go only if probe (iii) shows a TS clear and resolve landing with the MMU
+  off (arm 0 `YES`); hold while that is unanswered (case 243 and an X2 run);
+  drop if it answers no.
+- W8: go only after W7 is go and an X2 run confirms the colour TS; otherwise
+  hold; drop with W7.
+- W9: go only after W8 and a depth-TS check on an X2 run; otherwise hold; drop
+  with W8. Session A moves only W6.
+
 The X2 session that W4 and W5 name ("Board check (session A ...)", above). It
 only measures: no code changes, and no default moves (W6 is a separate item,
 ordered after plan #351's i.MX8MP board run). Every fact below is read from the
