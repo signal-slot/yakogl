@@ -7,7 +7,9 @@
 # Cases: PASS, FAIL, a judge FAIL, a missing result line, a missing hold
 # line, a missing judge verdict, and a log carrying an address, host, tty
 # path and USB serial that must be redacted; the crc and per-check lines, a
-# FAIL naming a check, and two KVM verdicts with offsets. Exits 0 when all match.
+# FAIL naming a check, and two KVM verdicts with offsets.
+# Verdict-line shapes: resets=/record= before or after back_after=, record:<KIND>,
+# bad_record, lifetime, unknown trailing fields. Exits 0 when all match.
 set -u
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tool() { python3 -I "$here/mp2-display-record.py" "$@"; }
@@ -101,6 +103,27 @@ if [ $rc = 0 ] && grep -q 'mp2_display, PASS' <<<"$out" && grep -q '25 s after t
     && grep -q '45 s after the result line.*still ok' <<<"$out"; then ok two-screenshots; else ko "two-screenshots (rc $rc)"; echo "$out"; fi
 out=$(tool "$work/pass.log" --judge "$work/j25@25" --judge "$work/j.fail@45" 2>&1); rc=$?
 if [ $rc = 0 ] && grep -q 'mp2_display, FAIL' <<<"$out" && grep -q '45 s after' <<<"$out"; then ok two-screenshots-fail; else ko "two-screenshots-fail (rc $rc)"; fi
+
+# verdict-line shapes: optional fields absent/present, both orders, record:<KIND>,
+# bad_record (rc 4), lifetime (rc 8), unknown trailing fields. Fixtures only.
+vline() { # file, new verdict line (replaces the runner's one)
+    sed -i "s|^board-stm32mp2.*back_after=.*|$2|" "$1"
+}
+vcase() { # name, expected result (PASS|FAIL), rc= part, tail after result, grep pattern
+    cp "$work/pass.log" "$work/v.log"
+    vline "$work/v.log" "board-stm32mp2.sh stm32mp257f-dk mp2_display $3"
+    out=$(tool "$work/v.log" --judge "$work/j.pass" 2>&1); rc=$?
+    if [ $rc = 0 ] && grep -q "mp2_display, $2" <<<"$out" && grep -Eq "$4" <<<"$out"; then ok "$1"; else ko "$1 (rc $rc)"; echo "$out"; fi
+}
+B='boot=uboot-sd row boot_verdict=complete'
+vcase verdict-resets-record-after "PASS" "rc=0 verdict=done $B result=pass:mp2_display back_after=41s resets=1 record=0,0,0,0" 'Linux answered 41s after'
+vcase verdict-uboot-order "PASS" "rc=0 verdict=done $B result=pass:mp2_display resets=1 record=0,0,0,0 back_after=41s" 'Linux answered 41s after'
+vcase verdict-resets-absent "PASS" "rc=0 verdict=done $B result=pass:mp2_display back_after=41s resets=absent" 'Linux answered 41s after'
+vcase verdict-record-kind "FAIL" "rc=4 verdict=bad_record $B result=record:KIND_X resets=1 record=1,2,3,4 back_after=12s" 'result=record:KIND_X'
+vcase verdict-bad-record "FAIL" "rc=4 verdict=bad_record $B result=none back_after=12s resets=1 record=1,2,3,4" 'verdict=bad_record'
+vcase verdict-lifetime "FAIL" "rc=8 verdict=lifetime $B result=none back_after=90s lifetime_after=100s" 'verdict=lifetime'
+vcase verdict-unknown-trailing "PASS" "rc=0 verdict=done $B result=pass:mp2_display back_after=41s console=ok ramlog=none future=1" 'Linux answered 41s after'
+vcase verdict-unknown-middle "PASS" "rc=0 verdict=done $B result=pass:mp2_display future=1 back_after=41s" 'Linux answered 41s after'
 
 if [ $bad = 0 ]; then echo "mp2-display-record-selftest: all ok"; else echo "mp2-display-record-selftest: $bad failed"; fi
 exit $((bad != 0))
