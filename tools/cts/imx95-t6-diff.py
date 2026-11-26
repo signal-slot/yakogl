@@ -4,7 +4,7 @@
 """Per-case diff of Verdin iMX95 (Mali-G310) dEQP-GLES2 slices against the
 NanoPC-T6's (Mali-G610).
 
-  python3 -I tools/cts/imx95-t6-diff.py [--markdown] [--absent] [--limit N]
+  python3 -I tools/cts/imx95-t6-diff.py [--markdown|--tsv] [--absent] [--limit N]
                                         [--rows LABEL[,LABEL|LABEL-LABEL]...]
                                         --imx95 SLICE [--imx95 SLICE]...
                                         [--t6 SLICE]...
@@ -55,8 +55,15 @@ Pass->hang, ...), per transition and the two causes, and per case (T6 state
 and cause, iMX95 state and cause), in mustpass order of the T6 side.
 --limit N lists at most N cases (the counts stay whole). A case of a row outside
 the set is not a difference; --absent counts it as one (state "absent"). Text
-by default, --markdown for tables. A slice against itself reports 0
-differences. Exit 0 (differences are the report, not an error), 2 for a
+by default, --markdown for tables, --tsv for the cause tool. A slice against itself reports 0
+differences. --tsv
+prints no report but one line a difference of the compared rows (the cases
+the text lists as per case, --limit ignored), the columns case, T6 result,
+iMX95 result, tab-separated, no header: the input of imx95-g310-cause.py. A
+result is the dEQP status; a Lost case (missing, hang, crash, not-run, on
+either side) reads "Lost" and ResourceError reads InternalError, the cause
+tool's results. Extra cases and rows not run (also with --absent) are not
+printed. Exit 0 (differences are the report, not an error), 2 for a
 slice that cannot be read or a usage error.
 """
 import glob
@@ -69,7 +76,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINE = os.path.join(HERE, "log", "2026-11-24-t6-gles2-S*-8ff01055")
 LOST_STATE = {"chunk-hang": "hang", "chunk-crash": "crash"}
 MIN_PREFIX = 20
-USAGE = ("usage: imx95-t6-diff.py [--markdown] [--absent] [--limit N] "
+USAGE = ("usage: imx95-t6-diff.py [--markdown|--tsv] [--absent] [--limit N] "
          "[--rows LABEL[,LABEL|LABEL-LABEL]...] "
          "--imx95 SLICE [--imx95 SLICE]... [--t6 SLICE]...")
 
@@ -348,8 +355,18 @@ def render_markdown(t6p, imxp, res, limit, info):
     return "\n".join(out) + "\n"
 
 
+TSV_STATE = {"hang": "Lost", "crash": "Lost", "not-run": "Lost",
+             "ResourceError": "InternalError"}
+
+
+def render_tsv(t6p, imxp, res, limit, info):
+    """case, T6 result, iMX95 result per difference (no absent, no header)."""
+    return "".join("%s\t%s\t%s\n" % (c, TSV_STATE.get(sa, sa), TSV_STATE.get(sb, sb))
+                   for c, (sa, _ca), (sb, _cb) in res[3] if sb != "absent")
+
+
 def main(argv):
-    md = absent = False
+    md = absent = tsv = False
     limit = None
     rows_spec = None
     t6p, imxp = [], []
@@ -358,6 +375,8 @@ def main(argv):
         a = argv[i]
         if a == "--markdown":
             md = True
+        elif a == "--tsv":
+            tsv = True
         elif a == "--absent":
             absent = True
         elif a in ("--imx95", "--t6", "--limit", "--rows"):
@@ -408,8 +427,9 @@ def main(argv):
     t6r, imxr, info = restrict(t6, imx, rows, of, set(run),
                                [c for _l, c in extra_rows], absent)
     res = diff(t6r, imxr, info, absent)
-    lim = len(res[3]) if limit is None else limit
-    sys.stdout.write((render_markdown if md else render_text)(t6p, imxp, res, lim, info))
+    lim = len(res[3]) if limit is None or tsv else limit
+    render = render_tsv if tsv else render_markdown if md else render_text
+    sys.stdout.write(render(t6p, imxp, res, lim, info))
     return 0
 
 
