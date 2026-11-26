@@ -31,7 +31,13 @@ in the table and again at the end: the log shows a new boot banner or a new
 row before any "deqp: summary:" (a reset: the 600 s WDOG1 window ran out or
 the SoC faulted), or the "gc_wdog_arm: feeding bound ... over" line (the
 watchdog end), or simply stops (a hang with the console still open). The
-last case that printed a result is named, which is where the hang is.
+last case that printed a result is named. The console prints a case at its
+RESULT, so the case that hung is the one after it; only a console built with
+CONFIG_DEQP_ECHO_QPA ("qpa: #beginTestCaseResult NAME") names it ("case begun,
+no result"). A log that ends inside a line (no final newline) does not read
+that line (it could be a cut case name, selector or summary): it is listed as
+CUT. A row that ran twice in one log (a rerun after a reset) counts by its last
+run: an earlier unfinished run is "superseded" when the last one finished.
 
 --watch SPEC (e.g. 13-15,57,95,122-127,58-60) marks those rows with WATCH
 when they appear, and lists the watched rows absent from a log (the host
@@ -65,6 +71,10 @@ ROW_START = re.compile(r'deqp: selector (\d+)\b')
 CASE_FILTER = re.compile(r"deqp: case filter '(.*)'")
 # deqp_log.c:80: printk("deqp: %s %s\n", status, cur_case)
 CASE_RESULT = re.compile(r'deqp: (\w+) (dEQP-\S+)')
+# deqp_log.c:70, only with CONFIG_DEQP_ECHO_QPA: the QPA log is echoed as "qpa: <line>", so
+# "qpa: #beginTestCaseResult NAME" names a case that BEGAN (without the echo the console
+# shows a case only at its result, and the hung case itself is never named)
+CASE_BEGIN = re.compile(r'qpa: #beginTestCaseResult (\S+)')
 BAD_STATUS = {'Crash', 'Timeout', 'InternalError', 'ResourceError'}
 # deqp_log.c:121: "deqp: summary: %u cases begun, %u with a result, %u without"
 # main.cpp:177:   "deqp: done: %d passed, %d failed, ..., complete=%d"
@@ -104,7 +114,9 @@ WDOG_OTHER = re.compile(r'RTI feeder lifetime over|rti_arm: feeding bound of')
 # A boot banner: Zephyr's "*** Booting Zephyr OS build ..." (the image
 # starts), U-Boot's "U-Boot SPL 20xx" / "U-Boot 20xx" (the SoC reset and
 # the board went through the boot loader again)
-BOOT = re.compile(r'Booting Zephyr OS|U-Boot SPL \d|^U-Boot \d{4}\.|\bU-Boot \d{4}\.\d\d')
+# the Linux kernel's own banners count too (the boot loader may go on to boot Linux after a reset)
+BOOT = re.compile(r'Booting Zephyr OS|U-Boot SPL \d|^U-Boot \d{4}\.|\bU-Boot \d{4}\.\d\d|'
+                  r'Booting Linux on physical CPU|^Linux version \d')
 
 # Zephyr's fatal handler: ">>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0"
 # (tools/board.sh finds it in the image's console), the AArch64 dump lines
@@ -194,6 +206,8 @@ class Row:
         self.results = 0
         self.bad = 0
         self.last_case = ''
+        self.begun = ''        # a case that began (qpa echo) and has no result yet
+        self.cut = ''          # the cut-off last line of the log, if it ended inside this row
         self.recoveries = 0
         self.t_end = None      # the finish line's time
         self.t_stop = None     # where an unfinished row stopped
@@ -204,7 +218,7 @@ class Row:
         self.faults = 0
 
 
-def scan(lines, watch, out):
+def scan(lines, watch, out, partial=False):
     rows, cur = [], None
     boots = 0
 
@@ -218,6 +232,13 @@ def scan(lines, watch, out):
 
     for i, (t, text) in enumerate(lines, 1):
         tag = None
+        if partial and i == len(lines):
+            # the capture stops inside this line (no newline): a case name, a selector
+            # number or a summary may be cut, so it is not read; it is only noted
+            if cur is not None:
+                cur.cut = text.strip()
+            out.append('%s CUT   %s   (log ends inside this line; not counted)' % (fmt_t(t), text.strip()))
+            break
         m = ROW_START.search(text)
         if m:
             close('next row' if cur is not None else '', t)
@@ -255,8 +276,12 @@ def scan(lines, watch, out):
                 cur.faults += 1
         else:
             m = CASE_RESULT.search(text)
-            if m and cur is not None:
+            b = CASE_BEGIN.search(text)
+            if b and cur is not None:
+                cur.begun = b.group(1)
+            elif m and cur is not None:
                 cur.results += 1
+                cur.begun = ''
                 cur.last_case = m.group(2)
                 if m.group(1) in BAD_STATUS:
                     cur.bad += 1
@@ -273,6 +298,14 @@ def scan(lines, watch, out):
         cur.how = 'hang'   # the log stops with the row open
         cur.t_stop = lines[-1][0] if lines else None
     return rows, boots
+
+
+def case_note(r):
+    if r.begun:
+        s = 'case begun, no result: %s' % r.begun
+    else:
+        s = 'no case shown as begun (the console prints a case at its result: the hung case is the one after the last result)'
+    return s + ('; log cut inside: %s' % r.cut if r.cut else '')
 
 
 def main(argv=None):
@@ -296,11 +329,14 @@ def main(argv=None):
             path = resolve(path)
             lines = read_log(path)
             is_d, size = is_dark(path)
+            with open(path, 'rb') as f:
+                data = f.read()
+            partial = bool(data.strip(b'\0 \t\r\n')) and not data.endswith(b'\n')
         except OSError as e:
             print('imx8mp-console-scan: %s' % e, file=sys.stderr)
             return 2
         events = []
-        rows, boots = scan(lines, watch, events)
+        rows, boots = scan(lines, watch, events, partial)
         print('== %s (%d lines, %d boot banner(s), %d row(s))' % (path, len(lines), boots, len(rows)))
         if is_d:
             dark += 1
@@ -309,7 +345,14 @@ def main(argv=None):
             print('\n'.join(events))
         print('-- rows: selector, start, elapsed board time, results, recoveries, end')
         unfinished = []
+        # a row that ran twice in one log (a rerun after a reset): the last run counts
+        last_run = {}
         for r in rows:
+            last_run[r.n] = r
+        for r in rows:
+            if r.how != 'finish' and last_run[r.n] is not r and last_run[r.n].how == 'finish':
+                print('row %3d  %s  superseded: a later run of this row in this log finished' % (r.n, fmt_t(r.t0)))
+                continue
             if r.how == 'finish':
                 el = fmt_el(r.t0, r.t_end)
                 end = 'finish   ' + r.summary
@@ -323,11 +366,12 @@ def main(argv=None):
                 r.n, fmt_t(r.t0), el, r.results, r.recoveries, end, w))
             if r.how != 'finish':
                 print('         last result: %s' % (r.last_case or '(none)'))
+                print('         %s' % case_note(r))
         seen = {r.n for r in rows}
         missing = sorted(watch - seen)
         for r in unfinished:
-            print('!! NO FINISH row %d (%s) at %s; last result %s; %d result(s), %d recovery(ies)%s' % (
-                r.n, r.how, fmt_t(r.t0), r.last_case or 'none', r.results, r.recoveries,
+            print('!! NO FINISH row %d (%s) at %s; last result %s; %s; %d result(s), %d recovery(ies)%s' % (
+                r.n, r.how, fmt_t(r.t0), r.last_case or 'none', case_note(r), r.results, r.recoveries,
                 '  [WATCH: expected]' if r.n in watch else ''))
         if missing:
             print('-- watched rows not in this log: %s' % ','.join(str(n) for n in missing))
