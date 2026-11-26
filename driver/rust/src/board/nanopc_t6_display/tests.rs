@@ -1076,3 +1076,188 @@ fn any_order_of_shows_and_frames_never_frees_the_buffer_scanned() {
         assert_eq!(soc.violations(), Vec::<String>::new(), "{name}");
     }
 }
+
+// The adopt where U-Boot left no Linux scan-out (the T6's U-Boot route:
+// the cold chain starts the display when the adopt found no picture). The
+// stops the cold chain takes over from are VopDomain, VopClock and Standby
+// (restated here from nanopc_t6_display_cold::no_picture, whose own tests
+// are not this file's); the verdict tools read the stop number in "adopt rc
+// -19 stop N (name)" and the "found" words, which are the `Adopt` fields.
+
+/// The stops after which the board starts cold (restated).
+const COLD_STOPS: [Stop; 3] = [Stop::VopDomain, Stop::VopClock, Stop::Standby];
+
+/// The dump with every VOP word zero: a reset VOP2 whose power and clocks
+/// are on (PMU and CRU as the dump has them).
+fn vop_zeroed() -> Vec<(usize, u32)> {
+    parse_dump(DUMP).keys().filter(|a| (VOP..VOP + 0x2000).contains(a)).map(|a| (*a, 0)).collect()
+}
+
+/// The adopt's whole-state check for a state that must stop before it
+/// writes: the stop, index and detail, no write at all, and no violation.
+fn refused(soc: &Soc, name: &str, stop: Stop, index: u32, detail: u32) -> Adopt {
+    let a = run(soc, FB);
+    assert_eq!((a.stop, a.refusal, a.index, a.detail), (stop as u32, 0, index, detail), "{name}: {a:?}");
+    assert_eq!(soc.writes(), vec![], "{name}: a scan-out register was written from a stale state");
+    assert_eq!(soc.violations(), Vec::<String>::new(), "{name}");
+    // nothing after the stop was read into the record
+    assert_eq!((a.fb, a.stride, a.shown, a.ovl_port_sel, a.cfg_done_written), (0, 0, [0; 4], 0, 0), "{name}");
+    a
+}
+
+/// Every clock of PD_VOP and HCLK_VOP gated (CLKGATE_CON(52) bits 0, 2, 3, 9
+/// and 8), alone and all together: the adopt stops at the clock, naming the
+/// first gated bit in its check order and the word, reads and writes
+/// nothing of the VOP, and the cold chain takes over.
+#[test]
+fn each_gated_vop_clock_stops_the_adopt_as_no_picture_with_nothing_touched() {
+    let open = parse_dump(DUMP)[&(CRU + 0x8d0)];
+    for bit in [0u32, 9, 2, 3, 8] {
+        let word = open | 1 << bit;
+        let soc = Soc::with(Faults::default(), &[(CRU + 0x8d0, word)]);
+        let a = refused(&soc, &format!("bit {bit}"), Stop::VopClock, bit, word);
+        assert_eq!(a.cru_gate52, word);
+        assert_eq!(a.version, 0, "bit {bit}: VERSION_INFO was read");
+        assert!(!soc.vop_accessed(), "bit {bit}");
+        assert!(COLD_STOPS.contains(&Stop::VopClock));
+    }
+    // all gated: the first of the check order (bit 0)
+    let soc = Soc::with(Faults::default(), &[(CRU + 0x8d0, 0xffff)]);
+    refused(&soc, "all gated", Stop::VopClock, 0, 0xffff);
+    assert!(!soc.vop_accessed());
+}
+
+/// PD_VOP not powered, in each way U-Boot can leave it (power gated, memory
+/// repair off, idle requested without acknowledge): the stop is the domain
+/// with the PMU words as found, before any clock or VOP read.
+#[test]
+fn an_unpowered_pd_vop_stops_before_the_clocks_and_the_vop() {
+    let pmu_repair = PMU + 0x290;
+    // a gated clock too: the domain is checked first
+    let gate_all = (CRU + 0x8d0, 0xffff);
+    for (name, edit, detail) in [
+        ("repair off", (pmu_repair, 0xfad4_0001), 0xfad4_0001),
+        ("idle requested", (PMU + 0x10c, 0x0000_a3cf), 0xfad5_0001),
+    ] {
+        let soc = Soc::with(Faults::default(), &[edit, gate_all]);
+        let a = refused(&soc, name, Stop::VopDomain, 0, detail);
+        assert_eq!(a.cru_gate52, 0, "{name}: CLKGATE_CON(52) was read before the domain was judged");
+        assert!(!soc.vop_accessed(), "{name}");
+        assert!(soc.ops().iter().all(|o| !matches!(o, Op::R(a, _) if (CRU..CRU + 0x1000).contains(a))), "{name}");
+    }
+}
+
+/// A VOP2 held in reset (clocks and power on, every register reads 0): the
+/// version is not the RK3588's, the stop is named with the word read, no
+/// register is written, and the cold chain does not take it over (a mode
+/// switch nobody asked for is not a missing picture).
+#[test]
+fn a_vop_in_reset_reads_zero_and_stops_at_the_version() {
+    let soc = Soc::with(Faults::default(), &vop_zeroed());
+    let a = refused(&soc, "reset", Stop::Version, 0, 0);
+    assert_eq!((a.dsp_ctrl, a.timing, a.dsp_if_en), ([0; 4], [0; 4], 0));
+    assert!(!COLD_STOPS.contains(&Stop::Version));
+    // only the PMU, the CRU gate words and VERSION_INFO were read
+    assert!(!soc.ops().iter().any(|o| matches!(o, Op::R(a, _) if (MMU0..MMU1 + 0x100).contains(a))));
+}
+
+/// The first show over a stopped adopt: -ENODEV, the screen is final, the
+/// record keeps the stop, nothing was written, and every buffer of the
+/// show counts as busy (the adopt may have pointed Esmart0 at it).
+#[test]
+fn the_first_show_over_a_gated_clock_or_standby_is_final_and_writes_nothing() {
+    let standby = (VOP + VP0_DSP_CTRL, 0x8000_000f);
+    let gated = (CRU + 0x8d0, 0xffff);
+    for (name, edit, stop) in [("standby", standby, Stop::Standby), ("gated", gated, Stop::VopClock)] {
+        let soc = Soc::with(Faults::default(), &[edit]);
+        let (mut s, mut a) = (Screen::default(), Adopt::default());
+        let rc = show(&Mapped(&soc), &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a);
+        assert_eq!((rc, a.stop, s.state, s.last), (-ENODEV, stop as u32, SCREEN_STOPPED, FB), "{name}");
+        assert!(COLD_STOPS.contains(&stop));
+        assert_eq!(soc.writes(), vec![], "{name}");
+        let (ops, first) = (soc.ops().len(), a);
+        // a second show does not try again and keeps the record
+        assert_eq!(show(&Mapped(&soc), &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), -ENODEV);
+        assert_eq!((soc.ops().len(), a), (ops, first), "{name}");
+    }
+}
+
+/// U-Boot's VOP2 up but no port running: every port in STANDBY with no
+/// window enabled, the timing words of a former setup still in place: the
+/// stop is STANDBY (a cold-start state), whatever else the words say, and
+/// nothing is written.
+#[test]
+fn vop_on_with_every_port_in_standby_and_no_window_stops_as_standby() {
+    let mut edit = vec![];
+    for p in 0..4 {
+        edit.push((VOP + 0xc00 + 0x100 * p, 0x8000_000f));
+    }
+    for n in 0..4 {
+        edit.extend([(VOP + 0x1000 + 0x200 * n, 0), (VOP + 0x1100 + 0x200 * n, 0), (VOP + 0x1810 + 0x200 * n, 0)]);
+    }
+    let soc = Soc::with(Faults::default(), &edit);
+    let a = refused(&soc, "standby, no window", Stop::Standby, 0, 0x8000_000f);
+    assert_eq!(a.dsp_ctrl, [0x8000_000f; 4]);
+    // the words were read as found for the record
+    assert_eq!(a.version, vop2::VERSION_RK3588);
+    assert_eq!(a.cluster0, [0, 0]);
+    assert_eq!(a.esmart0_ctrl, 0);
+}
+
+/// VOP2 powered, clocks on, registers at their reset values (VERSION_INFO
+/// right, everything else 0): VP0 is not in STANDBY and not the build's
+/// HDMI RGB `DSP_CTRL`: a partly set up state is refused by name (VpState,
+/// word 0), not adopted, with no write.
+#[test]
+fn a_vop_with_only_its_version_set_is_refused_as_a_vp_state() {
+    let mut edit = vop_zeroed();
+    edit.retain(|e| e.0 != VOP + 4);
+    edit.push((VOP + 4, vop2::VERSION_RK3588));
+    let soc = Soc::with(Faults::default(), &edit);
+    let a = refused(&soc, "reset values", Stop::VpState, 0, 0);
+    assert_eq!(a.version, vop2::VERSION_RK3588);
+    assert!(!COLD_STOPS.contains(&Stop::VpState));
+}
+
+/// Partly set up: each state with the picture's pieces half in place is
+/// refused by name at the first piece missing, and writes nothing. The dump
+/// is the full picture; one piece differs in each case.
+#[test]
+fn each_partly_set_up_state_is_refused_at_its_first_missing_piece() {
+    // the timing words zero: VP0 running with the right DSP_CTRL, no mode
+    let zero_timing: Vec<(usize, u32)> = [0xc48, 0xc4c, 0xc50, 0xc54].iter().map(|o| (VOP + o, 0)).collect();
+    let soc = Soc::with(Faults::default(), &zero_timing);
+    refused(&soc, "timing zero", Stop::Mode, 0, 0);
+    // the mode right, HDMI0 not routed (DSP_IF_EN 0)
+    let soc = Soc::with(Faults::default(), &[(VOP + 0x028, 0)]);
+    refused(&soc, "no route", Stop::Route, 0, 0);
+    // route and mode right, the Esmart windows' power off
+    let soc = Soc::with(Faults::default(), &[(VOP + 0x034, 0xff)]);
+    refused(&soc, "esmart off", Stop::EsmartPower, 0, 0xff);
+    // the timing of the first mode, the second mode's DSP_CTRL
+    // (U-Boot's P888 setup): VpState before the mode is looked at
+    let soc = Soc::with(Faults::default(), &[(VOP + VP0_DSP_CTRL, 0x0000_0000)]);
+    refused(&soc, "P888", Stop::VpState, 0, 0);
+    // each of these is a stop the cold chain does not take over
+    for s in [Stop::Mode, Stop::Route, Stop::EsmartPower, Stop::VpState] {
+        assert!(!COLD_STOPS.contains(&s));
+    }
+}
+
+/// VP0 running with the build's mode but every window disabled: the adopt
+/// is not a refusal; it writes its own window and Esmart0 scans the buffer.
+#[test]
+fn a_running_vp0_with_no_window_enabled_is_adopted_without_turning_anything_off() {
+    let mut edit = vec![];
+    for n in 0..4 {
+        edit.extend([(VOP + 0x1000 + 0x200 * n, 0), (VOP + 0x1100 + 0x200 * n, 0), (VOP + 0x1810 + 0x200 * n, 0)]);
+    }
+    let soc = Soc::with(Faults::default(), &edit);
+    let a = run(&soc, FB);
+    assert_eq!(a.stop, Stop::None as u32, "{a:?}");
+    // take_over writes every window but Esmart0 off whether it was on or
+    // not (all of them but the kept one, 0xef): nothing was on to disturb
+    assert_eq!((a.running, a.off), (1, 0xef), "{a:?}");
+    assert_eq!(soc.scanned(), FB);
+    assert_eq!(soc.violations(), Vec::<String>::new());
+}
