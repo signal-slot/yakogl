@@ -61,5 +61,19 @@ e1=$(run "$t/hide" MESA_ETNA_TREE="$t/etna/mesa-26.2.1")
 want "etna incomplete is a gap" '^warn +MESA_ETNA_TREE +missing: .*not a complete tree.*gap: MESA_ETNA_TREE' "$e1"
 checks=$((checks + 1))
 if printf '%s\n' "$e1" | grep -Eq '^ok +MESA_ETNA_TREE'; then echo "FAIL etna incomplete reported ok"; fails=$((fails + 1)); fi
+# an uninstalled locale in LC_ALL/LC_CTYPE/LANG is a missing line with the fix;
+# a fake locale on the PATH makes the installed list the same on every host
+mkdir -p "$t/loc"
+printf '#!/bin/sh\nprintf "C\\nC.utf8\\nPOSIX\\nen_US.utf8\\n"\n' >"$t/loc/locale"
+chmod +x "$t/loc/locale"
+l0=$(run "$t/loc" LC_ALL=C)
+checks=$((checks + 1))
+if printf '%s\n' "$l0" | grep -Eq '^[a-z]+ +locale '; then echo "FAIL LC_ALL=C reported a locale line"; fails=$((fails + 1)); fi
+l1=$(run "$t/loc" LC_ALL=xx_YY.UTF-8)
+want "uninstalled LC_ALL" '^missing +locale +LC_ALL=xx_YY.UTF-8 .*export LC_ALL=C.*install the locale' "$l1"
+l2=$(run "$t/loc" LC_ALL=EN_us.UTF-8)
+want "installed locale, case and utf8 spelling" '^ok +locale +LC_ALL=EN_us.UTF-8' "$l2"
+l3=$(run "$t/loc" LC_ALL= LC_CTYPE= LANG=xx_YY.UTF-8)
+want "uninstalled LANG" '^missing +locale +LANG=xx_YY.UTF-8 ' "$l3"
 echo "setup-gate-host_selftest: $((checks - fails))/$checks ok"
 [ "$fails" -eq 0 ]

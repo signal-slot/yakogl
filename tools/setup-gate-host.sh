@@ -717,7 +717,33 @@ check_disk() {
   done
 }
 
+# The locale the environment names (LC_ALL, else LC_CTYPE, else LANG) must be
+# installed: with LC_ALL=ja_JP.UTF-8 and no such locale, nine tools rows of
+# tools/check.sh fail, and LC_ALL=C passes them. Names compare case-insensitively
+# with utf8 and UTF-8 the same; C, POSIX and an unset or empty value are fine.
+check_locale() {
+  local var="" val="" v want have
+  for v in LC_ALL LC_CTYPE LANG; do
+    if [ -n "${!v-}" ]; then
+      var=$v val=${!v}
+      break
+    fi
+  done
+  case $val in
+    "" | C | POSIX | C.* ) return ;;
+  esac
+  command -v locale >/dev/null 2>&1 || return
+  want=$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]' | sed 's/utf-8/utf8/')
+  have=$(locale -a 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/utf-8/utf8/')
+  if printf '%s\n' "$have" | grep -qxF -- "$want"; then
+    line ok locale "$var=$val"
+  else
+    line missing locale "$var=$val is not an installed locale (locale -a does not list it; tools rows of tools/check.sh fail): export LC_ALL=C, or install the locale"
+  fi
+}
+
 run_checks() {
+  check_locale
   check_disk
   check_gate_disk
   check_cargo
