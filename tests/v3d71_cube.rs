@@ -391,12 +391,3 @@ fn tfu_plan_makes_one_job_per_cube_face() {
         assert_eq!((j.layer, j.in_level, j.out_level, j.nummm), (f as u32, 0, 1, 2));
     }
 }
-
-/// Gap: Tex71 -> V3dTex71State -> `v3d_tex71_pack_state` is the C packer
-/// (ffi71, built by tests/v3d71_texfill.rs); this file is pure Rust and
-/// compares fields, not the packed bytes.
-#[test]
-#[ignore = "gap: the packed cube texture state bytes are not compared with gl_cube's words; needs the ffi71 C packer"]
-fn packed_texture_state_bytes_equal_the_reference() {
-    unreachable!();
-}
