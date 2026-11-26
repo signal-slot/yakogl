@@ -291,6 +291,7 @@ def judge(probe, log, out):
 
 
 RETURN_RE = re.compile(rb"PSCI SYSTEM_RESET at \d+ ms")
+FEED_RE = re.compile(rb"yakogl-wdt: nanopc_t6 first feed at (\d+) ms")
 
 
 def note_return(log, out):
@@ -306,9 +307,12 @@ def note_return(log, out):
         note = "return: PSCI SYSTEM_RESET (%s)" % ln
     else:
         note = "return: no PSCI SYSTEM_RESET line in image.log (WDT0 expiry or another reset: the image printed none)"
+    fm = FEED_RE.search(data)
+    feeder = "feeder: first feed at %s ms" % fm.group(1).decode() if fm else "feeder: no first-feed line"
     with open(out) as f:
         lines = f.read().splitlines()
-    lines.insert(max(len(lines) - 1, 0), note)
+    # informational only; above the return line, VERDICT stays last
+    lines[max(len(lines) - 1, 0):max(len(lines) - 1, 0)] = [feeder, note]
     with open(out, "w") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -652,6 +656,17 @@ def self_test():
     check(v1[-2].startswith("return: no PSCI SYSTEM_RESET line") and "WDT0" in v1[-2] and v1[-2] != v0[-2]
           and v1[-1].startswith("VERDICT") and rc1 == (0 if v1[-1].endswith("PASS") else 11),
           "return: WDT0-style return is named apart; its exit follows the verdict (rc %d, %r)" % (rc1, v1[-2:]))
+
+    # 5b. The WDT0 feeder's first-feed line: noted either way, no effect on
+    # the verdict or the exit code.
+    fl = "yakogl-wdt: nanopc_t6 first feed at 1002 ms"
+    rcf, _, ff = case(lines=image_lines() + [fl])
+    vf = ff.get("verdict.txt", b"").decode().splitlines()
+    check(rcf == 0 and vf[-3] == "feeder: first feed at 1002 ms" and vf[-2].startswith("return:")
+          and vf[-1].startswith("VERDICT"), "feeder: first-feed line is noted, VERDICT last (rc %d, %r)" % (rcf, vf[-3:]))
+    check(rc0 == 0 and v0[-3] == "feeder: no first-feed line" and v0[-1].startswith("VERDICT")
+          and rc1 == (0 if v1[-1].endswith("PASS") else 11) and v1[-3] == "feeder: no first-feed line",
+          "feeder: no first-feed line is noted, verdict and exit unchanged (%r)" % v0[-3:])
 
     # 6. The image ran, no login after it: exit 10, nothing written.
     rc, f, files = case("nologin")
