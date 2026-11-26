@@ -1810,10 +1810,20 @@ pub static mut g_backend: *const YakoglBackend = &crate::pvr::backend::yakogl_ba
 #[no_mangle]
 pub static mut g_backend: *const YakoglBackend = &crate::vivante::backend::yakogl_backend_vivante;
 
+/// The V3D table a `gpu-v3d` build links as `g_backend`: the Raspberry Pi
+/// 4's 4.2 table, or with `gpu-v3d71` (which implies `gpu-v3d`) the Pi 5's
+/// 7.1 table (docs/notes/v3d71-gl-table.md section 4). Also in a host-test
+/// build, where `g_backend` starts null, so a test can see the pick.
+#[cfg(all(feature = "gpu-v3d", not(feature = "gpu-v3d71")))]
+pub use crate::v3d::backend::yakogl_backend_v3d as v3d_table;
+/// The V3D table a `gpu-v3d` build links as `g_backend`; see above.
+#[cfg(feature = "gpu-v3d71")]
+pub use crate::v3d::table71::yakogl_backend_v3d71 as v3d_table;
+
 /// The GPU backend of this build; see above.
 #[cfg(all(not(feature = "host-test"), feature = "gpu-v3d"))]
 #[no_mangle]
-pub static mut g_backend: *const YakoglBackend = &crate::v3d::backend::yakogl_backend_v3d;
+pub static mut g_backend: *const YakoglBackend = &v3d_table;
 
 /// The GPU backend of this build; see above.
 #[cfg(all(not(feature = "host-test"), feature = "gpu-mali"))]
