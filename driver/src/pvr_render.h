@@ -150,8 +150,9 @@ struct pvr_render_frag_regs {
  * state for this frame": the 3D_PR is then a byte copy of the 3D command, as
  * every firmware word is without the partial-render knob. With the knob a
  * filled block gives the 3D_PR its pbe_word and eot_pds_data (and both
- * commands the SPM scratch flag); pds_pr_bgnd is not written yet. Fixed-width
- * fields with explicit padding (112 bytes), mirrored by src/osal/render.rs and
+ * commands the SPM scratch flag), and its ISP_ZLSCTL when isp_zlsctl is not
+ * zero; pds_pr_bgnd is not written yet. Fixed-width fields with explicit
+ * padding (120 bytes), mirrored by src/osal/render.rs and
  * driver/rust/src/gpu/pvr/render.rs. */
 struct pvr_render_frag_pr {
 	/* The SPM colour scratch the PR EOT stores the tiles to and the
@@ -174,6 +175,11 @@ struct pvr_render_frag_pr {
 	/* The PR background-object PDS (CR_PDS_PR_BGRND0/1/3, next to the 3D
 	 * command's pds_bgnd): the program that loads the scratch back. */
 	uint64_t pds_pr_bgnd[3];
+	/* The 3D_PR's CR_ISP_ZLSCTL: the frame's word with the depth/stencil
+	 * stores on (pr_zs_words, src/pvr/pr_zs.rs; docs/notes/pvr-pr-zs.md), so
+	 * a frame whose 3D drops the stores at a swap keeps its depth across the
+	 * partial render. 0: the 3D_PR keeps the 3D command's word. */
+	uint64_t isp_zlsctl;
 };
 
 /* One render = one GEOM kick + one FRAG kick on the same HWRT dataset. */

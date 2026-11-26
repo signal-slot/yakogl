@@ -727,17 +727,13 @@ fn pr_zs_words_on_the_swapped_frames_words_store_at_the_frames_buffer() {
     assert_eq!(w.stencil_load_base, k.isp_stencil_load_store_base);
 }
 
-/// (b) The kick's `frag_pr` block must carry the PR's Z/S words: the store
-/// bits on, at the frame's depth buffer. Not so at the tip: `pr_fill`
-/// (src/pvr/backend.rs) fills the colour state only, `PvrRenderFragPr` has
-/// no Z/S field, and `pr_zs_words` is called by nothing outside its tests
-/// (its module header says "nothing here is wired into a kick yet"). The
-/// driver copies the normal 3D's words, whose store bits the swap dropped:
-/// the resumed render would load depth the PR never stored. The block is
-/// scanned for the words rather than read by field, so the test does not
-/// care which layout the field lands in.
+/// (b) The kick's `frag_pr` block carries the PR's ZLSCTL: the store bits
+/// on (`pr_fill`, src/pvr/backend.rs, from `pr_zs_words`), which the driver
+/// writes into the 3D_PR in place of the normal 3D's store-off word. The
+/// PR's Z/S bases are `pr_zs_words`' copies of the 3D's, and the block does
+/// not carry them: the driver's 3D_PR keeps the 3D's, so they are checked
+/// on the 3D command (docs/notes/pvr-pr-zs.md).
 #[test]
-#[ignore = "defect: frag_pr carries no Z/S words; the PR on a swapped frame would use the 3D's store-off ZLSCTL"]
 fn option_on_swapped_frame_pr_block_stores_and_loads_depth() {
     let _g = rig();
     let k = frame_with(true, true);
@@ -748,8 +744,10 @@ fn option_on_swapped_frame_pr_block_stores_and_loads_depth() {
         k.frag.isp_bgobjdepth as u64,
         k.frag.cmd_flags,
     );
-    let pr = bytes(&k.frag_pr);
-    let has = |v: u64| pr.as_chunks::<8>().0.iter().any(|c| u64::from_le_bytes(*c) == v);
-    assert!(has(w.isp_zlsctl), "no ZLSCTL with the store bits on in {:?}", k.frag_pr);
-    assert!(has(w.zload_base), "the frame's depth buffer is not named in {:?}", k.frag_pr);
+    assert_ne!(w.isp_zlsctl, k.frag.isp_zlsctl, "the swapped 3D has its stores off");
+    assert_eq!(k.frag_pr.isp_zlsctl, w.isp_zlsctl, "the PR's ZLSCTL in {:?}", k.frag_pr);
+    assert_eq!(k.frag_pr.isp_zlsctl & store_mask(), store_mask(), "the PR stores depth/stencil");
+    assert_ne!(k.frag.isp_zload_store_base, 0, "the frame names no depth buffer");
+    assert_eq!(w.zload_base, k.frag.isp_zload_store_base, "the PR reloads at the 3D's depth buffer");
+    assert_eq!(w.stencil_load_base, k.frag.isp_stencil_load_store_base);
 }

@@ -142,6 +142,12 @@ pub struct PvrRenderFragPr {
     /// The PR background-object PDS (`CR_PDS_PR_BGRND0/1/3`, next to the 3D
     /// command's `pds_bgnd`): the program that loads the scratch back.
     pub pds_pr_bgnd: [u64; 3],
+    /// The 3D_PR's CR_ISP_ZLSCTL: the frame's word with the depth/stencil
+    /// stores on (`pr_zs_words`, src/pvr/pr_zs.rs; docs/notes/pvr-pr-zs.md),
+    /// so a frame whose 3D drops the stores at a swap still keeps its depth
+    /// across the partial render. 0: the 3D_PR keeps the 3D command's word
+    /// (a frame with no depth/stencil buffer).
+    pub isp_zlsctl: u64,
 }
 
 /// `struct pvr_render_kick`: one GEOM kick + one FRAG kick on one HWRT dataset.

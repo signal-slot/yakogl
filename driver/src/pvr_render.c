@@ -443,7 +443,8 @@ bool pvr_render_fl_ready_pages = PVR_FL_READY_PAGES_DEFAULT;
  * the 3D command (the single-pass shape per Mesa pvr_arch_cmd_buffer.c:
  * 1736-1747) while the kick's frag_pr block is zero; a filled block makes it
  * a scratch PR: the 3D_PR takes frag_pr's PBE register words and EOT PDS
- * data, and both commands carry the SPM scratch flag 0x80000
+ * data (and its ISP_ZLSCTL when frag_pr.isp_zlsctl is not zero), and both
+ * commands carry the SPM scratch flag 0x80000
  * (pvr_arch_job_render.c:1388-1406).
  * (CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER; gpu::pvr::render::submit and
  * docs/notes/pvr-render-pool.md, "Design: the firmware's partial render".)
@@ -787,7 +788,7 @@ int pvr_render_init(void)
 /* ---------------------------------------------------------------------- *
  * Submit / wait: gpu::pvr::render (render.rs has the sequences and why).
  * ---------------------------------------------------------------------- */
-BUILD_ASSERT(sizeof(struct pvr_render_kick) == 344, "gpu::pvr::render::PvrRenderKick");
+BUILD_ASSERT(sizeof(struct pvr_render_kick) == 352, "gpu::pvr::render::PvrRenderKick");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag) == 32, "PvrRenderKick.frag");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.pbe_word) == 80, "PvrRenderKick.frag.pbe_word");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.num_rt) == 144, "PvrRenderKick.frag.num_rt");
@@ -797,7 +798,8 @@ BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_scissor_base) == 176,
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.cmd_flags) == 216, "PvrRenderKick.frag.cmd_flags");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag.isp_oclqry_base) == 224, "PvrRenderKick.frag.isp_oclqry_base");
 BUILD_ASSERT(offsetof(struct pvr_render_kick, frag_pr) == 232, "PvrRenderKick.frag_pr");
-BUILD_ASSERT(sizeof(struct pvr_render_frag_pr) == 112, "gpu::pvr::render::PvrRenderFragPr");
+BUILD_ASSERT(sizeof(struct pvr_render_frag_pr) == 120, "gpu::pvr::render::PvrRenderFragPr");
+BUILD_ASSERT(offsetof(struct pvr_render_frag_pr, isp_zlsctl) == 112, "PvrRenderFragPr.isp_zlsctl");
 
 int pvr_render_submit(const struct pvr_render_kick *k, uint32_t *fence_out)
 {

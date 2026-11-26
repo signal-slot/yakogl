@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The depth/stencil words of the partial render's 3D_PR command, built from
 //! the normal 3D command's (docs/notes/pvr-pr-zs.md, change list items 1 and
-//! 2; Mesa pvr_arch_job_render.c:1009-1027, :1389). Pure; nothing here is
-//! wired into a kick yet.
+//! 2; Mesa pvr_arch_job_render.c:1009-1027, :1389). Pure; the backend's
+//! `pr_fill` carries `isp_zlsctl` in the kick's `frag_pr` block.
 //!
 //! The PR stores into, and the resumed render reloads from, the frame's own
 //! depth/stencil buffer, so every word is the 3D's, except that

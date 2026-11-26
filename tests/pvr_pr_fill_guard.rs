@@ -676,6 +676,7 @@ fn is_zero(p: &PvrRenderFragPr) -> bool {
         && p.eot_pds_data == 0
         && p.eot_pds_data_bytes == 0
         && p.pds_pr_bgnd == [0; 3]
+        && p.isp_zlsctl == 0
 }
 
 /// One RGBA8 attachment at 800x600, one sample: the block is filled with
@@ -692,6 +693,7 @@ fn one_rgba8_attachment_at_800x600_gets_the_block() {
     assert_ne!(p.spm_scratch_gpu, 0);
     assert_ne!(p.eot_pds_data, 0);
     assert!(p.pds_pr_bgnd.iter().all(|&w| w != 0), "{:x?}", p.pds_pr_bgnd);
+    assert_eq!(p.isp_zlsctl, 0, "no depth/stencil buffer: the 3D_PR keeps the 3D's ZLSCTL");
     for k in kicks_of(&[GL_RGBA8], 1, 0) {
         assert!(is_zero(&k.frag_pr), "knob off: {:?}", k.frag_pr);
     }
