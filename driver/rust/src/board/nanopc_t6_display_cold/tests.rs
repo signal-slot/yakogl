@@ -470,3 +470,83 @@ fn a_bad_mode_or_window_is_refused_before_anything_is_read() {
     assert_eq!((st, s), (Start::default(), Screen::default()));
     assert!(m.writes().is_empty() && m.lines().is_empty());
 }
+
+// The state U-Boot's `go` hands over (driver/docs/nanopc-t6-display.md,
+// section 2 (c)): mainline U-Boot does not touch RK3588 HDMI, so the
+// display blocks are as the reset left them.
+
+/// A cold chip with one domain's PWR bit cleared (the domain on, its bus
+/// clocks still gated and its blocks in reset), as a partly set up chip.
+fn cold_with_domain_on(bit: u32) -> Rk3588Display {
+    let m = chip(Faults::default());
+    let pwr = crate::model_rk3588_display::PMU + 0x14c + 4;
+    m.poke(pwr, m.peek(pwr) & !bit);
+    m
+}
+
+#[test]
+fn from_u_boots_state_the_first_block_reads_nothing_and_names_why() {
+    let m = chip(Faults::default());
+    let _ = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, stage::START, FB);
+    // power-cycle's START puts blocks in reset: CRU words only, no domain,
+    // GRF, VOP, HDMI or PHY word
+    assert!(m.writes().iter().all(|(a, _)| Rk3588Display::block_of(*a) == Some("cru")), "{:#x?}", m.writes());
+    let l = lines(&m);
+    let before: Vec<&String> = l.iter().filter(|x| x.starts_with("t6 display: before: ")).collect();
+    // PWR, powered/usable, one line per block, the mux line
+    assert_eq!(before.len(), 2 + rk3588_display::BLOCKS.len() + 1, "{before:#?}");
+    assert!(before[1].starts_with("t6 display: before: PD_VOP powered 0 usable 0, PD_VO1 powered 0 usable 0"));
+    for x in &before[2..before.len() - 1] {
+        assert!(x.contains(" not readable: "), "{x}");
+    }
+    assert_eq!(
+        before.last().unwrap().as_str(),
+        "t6 display: before: CLKSEL_CON(112) 0x00000000 (DCLK_VOP0 mux 0), PHY GRF not read"
+    );
+    // without power-cycle the same read-only block writes nothing at all
+    let m = chip(Faults::default());
+    let _ = cold(&Mapped(&m), &B, &m, 0, stage::START, FB);
+    assert!(m.writes().is_empty(), "{:#x?}", m.writes());
+    assert!(has(&m, "t6 display: before: PD_VOP powered 0 usable 0, PD_VO1 powered 0 usable 0"));
+}
+
+#[test]
+fn from_u_boots_state_the_chain_powers_both_domains_and_runs_through_in_every_flag_form() {
+    // power-cycle (the probe's), force-cold and neither: with nothing running
+    // none of them stops the chain
+    for f in [flags::POWER_CYCLE, flags::FORCE_COLD, flags::POWER_CYCLE | flags::FORCE_COLD, 0] {
+        let m = chip(Faults::default());
+        let r = cold(&Mapped(&m), &B, &m, f, 0, FB);
+        assert_eq!(r, Ok(Cold::default()), "flags {f:#x}: {:#?}", lines(&m));
+        assert_eq!(m.refused(), Vec::<String>::new(), "flags {f:#x}");
+        assert!(m.usable("vop") && m.usable("vo1"), "flags {f:#x}");
+        assert!(m.port_runs(0) && m.fetching() == WIN_ESMART0, "flags {f:#x}");
+        assert!(has(&m, "t6 display: found VOP off"), "flags {f:#x}");
+    }
+}
+
+#[test]
+fn from_u_boots_state_a_dead_domain_stops_at_power_with_its_name() {
+    // if U-Boot's PMU left PD_VOP unable to power, the chain stops at POWER
+    let m = chip(Faults { dead: Some("vop"), ..Faults::default() });
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    assert_eq!((c.stage, c.error), (stage::POWER, ColdError::Display as u32), "{c:?} {:#?}", lines(&m));
+    assert!(m.lines().iter().any(|(lv, l)| *lv == Level::Err && l.starts_with("t6 display: stage 2 POWER failed: ")));
+    assert!(!m.port_runs(0));
+}
+
+#[test]
+fn from_a_partly_set_up_chip_pd_vop_alone_or_pd_vo1_alone_runs_through() {
+    for (bit, up) in [(1 << 1, "PD_VOP powered 1"), (1 << 3, "PD_VO1 powered 1")] {
+        let m = cold_with_domain_on(bit);
+        let r = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB);
+        assert_eq!(r, Ok(Cold::default()), "{up}: {:#?}", lines(&m));
+        assert_eq!(m.refused(), Vec::<String>::new(), "{up}");
+        assert!(m.port_runs(0) && m.fetching() == WIN_ESMART0, "{up}");
+        let l = lines(&m);
+        assert!(
+            l.iter().any(|x| x.starts_with("t6 display: before: PD_VOP powered ") && x.contains(up)),
+            "{up}: {l:#?}"
+        );
+    }
+}
