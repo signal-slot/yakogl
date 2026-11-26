@@ -343,10 +343,10 @@ Session `tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/` (plan #398, issue
 #2): eleven of its 14 images stopped again, each at one refused case. Section
 E has one row per image; this section groups them by cause and says, for each,
 the error kind and whether the limit is the V3D 4.2 hardware or a missing
-driver path. Code is read at `35e03a2e`. Four V3D 7.1 commits (1ee37fe7,
+driver path. Code is read at `441f5780` (origin/main). Four V3D 7.1 commits (1ee37fe7,
 7f791cde, 96ade25d, b066d160) lie between `89d3e1c3` and it in `src/v3d` and
 `driver/src/v3d`; `git diff 89d3e1c3 35e03a2e` is empty for `backend.rs`,
-`texture.rs`, `src/backend.rs`, `v3d_job.c` and `src/gl/draw.rs`, so E's lines hold. The locations in the table below were re-read at `870e7fe2`.
+`texture.rs`, `src/backend.rs`, `v3d_job.c` and `src/gl/draw.rs`, so E's lines hold. The locations in the table below were taken at `870e7fe2` and checked again at `441f5780`: `git diff 870e7fe2 441f5780` is empty for `src/v3d`, `driver/src/v3d`, `src/backend.rs` and `src/gl/draw.rs`, so they hold.
 The console strings are the `draw refused:` lines of the console files;
 `b1b5b845` answered every one with `-EINVAL`, which the GL core turns into
 GL_OUT_OF_MEMORY (`src/gl/draw.rs:683`), dEQP's ResourceError, and the image
@@ -358,6 +358,25 @@ ends. At the tip `-ENOTSUP` fails one case instead; `-E2BIG` still aborts on `rp
 | (b) ETC2 not sampled | T05ca `texture.format.compressed.etc2_eac_rgba8_cube_pot`; T05cb `...etc2_rgb8_cube_npot`; T05cc `...etc2_rgb8_cube_pot`; T17a `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | `texture.rs:396` (`NOT_SAMPLED`), `:445-446`; `GAPS` `texture.rs:410`, answered at `backend.rs:4498-4499`; the set is `V3D_SAMPLED_TEXFMTS`, `src/backend.rs:290-309` | `-ENOTSUP` for a format outside the set. The four ETC2 classes are in the set, so these cases are no longer refused; `tests/es3_etc2_cube_wrap_v3d.rs` (ffab15d4) draws the cube and wrap cases of T05ca-cc and T17a with no refusal. Board-only: the TMU decode of the texels | driver: the TMU has the types (below) | drafted: "V3D: ETC2/EAC texture formats outside the four GL-core classes (ETC2 RGB8 A1, EAC R11/RG11) are not sampled" |
 | (c) no GPU memory for an empty job | T14a `texture.units.8_units.only_cube.2` | no empty job holds the draw (its lists, or its client data with no memory of its own), after `osal(v3d): out of GPU memory` for 2,117,632, 3,149,824 and 4,206,592 bytes | `backend.rs:6217-6218` (`count_refusal` then `-E2BIG`); the kept copy finds no memory at `backend.rs:4878-4890`; the arena fallback `Attempt::Full` at `backend.rs:4768` | on `rpi_4b.conf` `-E2BIG`, **the image aborts** (GL_OUT_OF_MEMORY), unchanged since `b1b5b845`; with `texture-2048.conf` the host replay (`tests/v3d_units_cube_mem.rs`, a6219832) allocates every case, Pass (no abort) expected, board run pending | driver and board config: eight cube units of 2-4 MiB kept copies against a 48 MiB carve-out with 9.5 MiB live (`tiled_budget`, `backend.rs:1401`, `:4849`); V3D 4.2 itself addresses 32 bits. Sized on the host since: `tests/v3d_units_cube_mem.rs` (3a9b0515, d3295967) replays the T14/T14a cube and mixed cases; with `rpi_4b.conf` an 8_units.only_cube case fails to allocate, with `driver/samples/zephyr/deqp/texture-2048.conf` (a6219832: 117440512-byte carve-out, 33554432-byte tiled budget) every case allocates (the minimum is 105 MiB). Board-only: T14a with `texture-2048.conf` has not run, and the TMU decode | drafted: "V3D: eight cube units (texture.units.8_units.only_cube.2) lose the draw for lack of GPU memory and abort the image" |
 | (d) job builder catch-all | TF1a `transform_feedback.array.interleaved.lines.highp_mat3`; TF1b `...array.separate.lines.highp_mat3`; TF2a `...basic_types.interleaved.lines.lowp_mat4`; TF2b `...basic_types.separate.lines.highp_mat4`; TF2c `...random_full_array_capture.interleaved.lines.1` | the job builder refused the draw (a uniform, program or primitive it does not write) | `backend.rs:3988-3990` (`Attempt::Unsupported`) over `v3d_job_draw`'s one `V3D_JOB_REFUSED` (`driver/src/v3d/v3d_job.c:1077-1078`, `:1093`); `draw_is_supported`, `:868`, with the fragment-input cap `num_inputs > 64` at `:876` | `-ENOTSUP` at the tip (one Fail, no abort). `b1b5b845` capped inputs at 24 | driver for the 24-input cap (Mesa's `V3D_MAX_FS_INPUTS` is 64, `third_party/mesa-26.2.1/src/broadcom/common/v3d_limits.h:32`). TF2a's `lowp_mat4` is 32 fragment inputs (2 x 16), over the 24 of `b1b5b845`, so the cap explains it; TF2c's random programs are the same class. No cause is unknown on the host: `tests/es3_tf_v3d.rs` (78741eae) draws the TF1/TF2 mat3/mat4 line cases at lowp, mediump and highp, and `tests/es3_tf_random_capture_v3d.rs` (929a64a4) draws the 60 `random_full_array_capture` cases, through the real job builder with no refusal. Board-only: the job builder on hardware | drafted: "V3D: split V3D_JOB_REFUSED so a refused draw names its cause" (first step); TF2a/TF2c cause after it |
+
+Still refused after three cut rounds at `b1b5b845`, from the record
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts2/` (plan #320, README
+'Still aborted'): seven cases, each the last one begun in its console, under
+the same four causes (`dEQP-GLES3.functional.`):
+
+- (a) none.
+- (b) ETC2 not sampled: T17aaaa `texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_npot`.
+- (c) no GPU memory for an empty job: T14aa `texture.units.8_units.only_cube.3`
+  (out of GPU memory also with `texture-2048.conf`; the cases after it in the
+  label never began).
+- (d) job builder catch-all: TF1aaaa `transform_feedback.array.interleaved.lines.highp_mat4x3`;
+  TF1baaa `...array.separate.lines.highp_mat4x3`; TF2aaaa
+  `...basic_types.interleaved.points.lowp_mat4`; TF2baa
+  `...basic_types.separate.lines.mediump_mat4`; TF2caa
+  `...random_full_array_capture.interleaved.lines.9`.
+
+Of the 838 cases in those labels' filters 128 have a result and 710 never
+began (texture 82, transform_feedback 628).
 
 Hardware side of (b), read in the vendored Mesa (read only): the v3d format
 table maps `ETC2_RGB8`, `ETC2_SRGB8` to `RGB8_ETC2`, `ETC2_RGBA8` and
