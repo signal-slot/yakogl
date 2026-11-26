@@ -23,6 +23,7 @@
 //! | [`pe_zs`] | when the pixel engine may skip depth and stencil (PE_DEPTH_CONFIG DISABLE_ZS), clears included |
 //! | [`pe_overwrite`] | the PE colour COMPONENTS mask and OVERWRITE bit of a draw |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
+//! | [`depth_copy`] | outcome (b).1's super-tiled depth-copy buffers, one per sampled depth object, freed after the kick that read them (not yet used; gc-depth-sample-wire.md) |
 //! | [`depth_dump`] | case 247's depth-layout override plan, the dump pages of a readback, and its `test-knobs` hook `gc_debug_depth_dump` |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
 //! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (a draw into a tiled shadow, `gc_tiled_rt`; every other draw keeps "never") |
@@ -45,6 +46,7 @@
 pub mod backend;
 pub mod cmd;
 pub mod dedup;
+pub mod depth_copy;
 pub mod depth_dump;
 pub mod depth_format;
 pub mod depth_sample;
