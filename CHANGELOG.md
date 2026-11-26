@@ -27,14 +27,14 @@ records at the tip.
   (2026-11-01, record `99156df8`; shadow 10.62, refract 35.09 and
   terrain 83.06 ms a frame). Common-set re-runs since: i.MX8MP 42 (33
   scenes, 0 failed, 0 GL errors, main `f87dde43`, 2026-11-07) and Pi 4
-  195 (33 scenes, 0 failed, 0 GL errors, main `141ddcd5`, 2026-11-21,
-  `1c08b363`); the figures are the "Common set" rows of
+  195 (33 scenes, 0 failed, 0 GL errors, main `bdd2ba1c`, 2026-11-25;
+  pictures 28 of 33 match); the figures are the "Common set" rows of
   `tools/cts/RESULTS.md`. The README table stays #1196's one-commit table.
 - `gl_test` on the common set: the AM62P 49 of 50 — case 20 `etc` fails
   its first check alone, a stale expectation, its other 16 checks pass
   (record `99156df8`); the i.MX8MP 49 of 49 run, case 16 skipped, from
-  main `f87dde43` (`8737e5a3`); the Pi 4 13 of 13 from main `141ddcd5`
-  (`1c08b363`).
+  main `f87dde43` (`8737e5a3`); the Pi 4 13 of 13 from main `bdd2ba1c`
+  (2026-11-25).
 - `gl_test` on the NanoPC-T6 (its own Linux, panthor): 165 of 256 cases
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
@@ -60,12 +60,13 @@ records at the tip.
 - dEQP-GLES3 (ES 3.0) is partial. The `tools/cts/RESULTS.md` rows read: the
   AM62P's whole tree 36,552 of 42,810 pass (`ad2b5ed`, 2026-10-14; 2,880
   fail, 2,195 not supported, 185 quality warnings, 998 without a result);
-  the Pi 4 nine of 91 images at `925dbca9`, 4,917 cases, 3,943 pass, 643
-  fail, 331 not supported, 0 GPU recoveries; the i.MX8MP not run on the
-  board. A later Pi 4 record, rows 0-15 (sixteen images) from main
-  `b1b5b845`, read 8,350 cases all with a result, 7,346 pass, 558 fail,
-  446 not supported, 0 GPU recoveries (`d498d5ad`); it is a log record,
-  not yet a RESULTS.md row. Failures by cause: `docs/es3-cts-failures.md`.
+  the Pi 4's whole tree at `b1b5b845` (2026-11-25; 131 of 131 images
+  run, 42,810 cases: 36,031 pass, 2,683 fail, 2,199 not supported, 46
+  other, 1,851 without a result because dEQP aborts on a refused draw in
+  nine images; 0 GPU recoveries, 0 hung jobs; every case that is not Pass:
+  `docs/es3/pi4-gles3-fails.tsv`); the i.MX8MP not run on the board
+  (host-only capability work, "Host, ES 3.0 back-end capability" in
+  `tools/cts/RESULTS.md`). Failures by cause: `docs/es3-cts-failures.md`.
 - dEQP-GLES2 on the NanoPC-T6 on Zephyr (kexec-started, a development
   result): the 76 rows of `tools/cts/mali-gles2-tree.txt`, one image per
   row, from main `de2f2c103`, 2026-11-17: all 76 images reached their
@@ -83,9 +84,14 @@ records at the tip.
   our own 7.1 compiler's (0 of 4096 pixels wrong, build `0c58c457`,
   2026-11-20), one TFU mip-chain job reads back within 2 (`5857cc88`),
   the property mailbox answers 7 of 7 with cache maintenance (`0e7742f0`),
-  and the first frame on the firmware's HDMI plane reads back byte for
-  byte (`2b88a9f6`, 2026-11-21; registers and bytes only, no camera). No
-  GLES result on the Pi 5: `gpu-v3d` still selects the V3D 4.2 back end.
+  one textured quad and seamless cube-map samples pass (`rpi5_tex`, 0 of
+  4096 pixels and 0 of 54 samples wrong, origin/main `a6f49077`,
+  2026-11-25), and the first frame on the firmware's HDMI plane reads back
+  byte for byte (`2b88a9f6`, 2026-11-21; registers and bytes only, no
+  camera). The display's second stage, our own plane with a vblank list
+  swap (`rpi5_scanout32`, `77ddb606`, 2026-11-26), is not a PASS: swap 1
+  landed in vblank, then the image took a CPU exception and the loop did
+  not finish (Q4 unanswered). No GLES result on the Pi 5: `gpu-v3d` still selects the V3D 4.2 back end.
 - STM32MP257F-DK (GC8000, Zephyr, one-shot off the card's U-Boot): a
   bring-up result, not the sign-off (the "Vivante: STM32MP257F-DK" section
   of `tools/cts/RESULTS.md`). Eight steps PASS from 2026-11-21 and
