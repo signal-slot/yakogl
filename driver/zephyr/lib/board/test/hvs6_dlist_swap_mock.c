@@ -73,6 +73,21 @@
  * the restore passing; untimed ("none"), a tight miss, and HVS6S_AT_ONCE
  * (the old restore, no restore-vblank line).
  *
+ * Whole-memory walk (scanout32-fold; the board record 458834ea): the cases
+ * above that test the fixed window set cfg.walk_words to the old 256. With
+ * the default bound: the board's layout (HEADE 672, the firmware plane and
+ * ten NEXT-32 entries with VALID clear, the END at 1024, 619 non-zero words
+ * in 32..671) walked to its END (11 entries, 10 VALID clear, 353 words) and
+ * our list placed right after it at 1025, swap and byte-equal restore of
+ * 672..1024; the same layout with walk_words 256 refused as on the board
+ * (PLACE_NOEND); no END anywhere: a zero word after the entries (FW_WALK,
+ * nothing written) and a memory tiled with entries to its last word (the
+ * 3424-word window, PLACE_NOEND); an END at the memory's last word (4095),
+ * placed at 32, or PLACE_FIT with 32..671 in use; 4:skip on the long span
+ * (word 676 and entry 7's offset 4, word 900, skipped, 11 declared words,
+ * word 901 named); another channel's HEADE or DL.LACT after the END refused
+ * or stepped past (PLACE_CHAN, "lact=").
+ *
  * Build: tools/v3d/check71.d/hvs6_dlist_swap.sh. Prints one line per check,
  * then "hvs6_dlist_swap_mock: N of N checks, 0 failed"; exits nonzero on a
  * failure.
@@ -129,6 +144,7 @@ struct hvs {
 	uint32_t ctrl1_writes, other_writes;
 	uint32_t nreads, oob_reads; /* list-memory reads, and reads past MEMW */
 	uint32_t olptrs[3];         /* LPTRS of the other channels (read only) */
+	uint32_t olact[3];          /* DL of the other channels (read only; scanout32-fold) */
 	int64_t stick_word;         /* a write to this word stores stick_val (HVS write-back) */
 	uint32_t stick_val;
 	/* DL.LACT (swap-lact-lib): by default it follows LPTRS at the next edge */
@@ -218,9 +234,12 @@ static uint32_t m_read(void *ctx, uint32_t off)
 		return h->lptrs;
 	if (off == hvs6s_ctrl1_reg(CH))
 		return h->ctrl1;
-	for (unsigned int ch = 0; ch < 3; ch++)
+	for (unsigned int ch = 0; ch < 3; ch++) {
 		if (ch != CH && off == hvs6s_lptrs_reg(ch))
 			return h->olptrs[ch];
+		if (ch != CH && off == hvs6s_dl_reg(ch))
+			return h->olact[ch];
+	}
 	return 0;
 }
 
@@ -784,6 +803,7 @@ static void case_args(void)
 		h.mem[i] = HVS6_CTL0_VALID | (1u << HVS6_CTL0_NEXT_SHIFT);
 	io = model_io(&h);
 	c = base_cfg();
+	c.walk_words = HVS6S_FW_WALK_OLD; /* the old 256-word walk */
 	check(hvs6s_run(&io, &c, &s, &r) == HVS6S_ERR_PLACE_NOEND && s.taken && s.fw_noend &&
 	      s.fw_entries == 256 && s.fw_len == 256 && !r.swapped && writes_confined(&h, 0, 0) &&
 	      r.restore_equal,
@@ -1094,13 +1114,17 @@ static void case_noend_window(void)
 	int same = 1;
 	const char *t = "noend-window";
 
+	/* these cases keep the old 256-word walk (cfg.walk_words); the default,
+	 * whole-memory walk is case_fold_* */
+	c.walk_words = HVS6S_FW_WALK_OLD;
+
 	model_noend(&h, BHEAD, 12);
 	io = model_io(&h);
 	e = hvs6s_run(&io, &c, &s, &r);
 	print_record(&s, &r);
 	name_check(t, s.taken && s.fw_noend && !s.fw_end_found && s.fw_head == BHEAD,
 		   "(a) no END within 256 words: snapshot taken as a window from HEADE 672");
-	name_check(t, s.fw_len == HVS6S_FW_MAX && s.fw_entries == 8 && s.walk_stop == BHEAD + 224u &&
+	name_check(t, s.fw_len == HVS6S_FW_WALK_OLD && s.fw_entries == 8 && s.walk_stop == BHEAD + 224u &&
 		      s.walk_word == h.mem[BHEAD],
 		   "(a) window 672..927, clamped at 256 words; 8 entries walked, last at 896");
 	for (uint32_t i = 0; i < s.fw_len; i++)
@@ -1192,6 +1216,10 @@ static void case_noend_place(void)
 	struct hvs6s_report r;
 	enum hvs6s_err e;
 	const char *t = "noend-place";
+
+	/* these cases keep the old 256-word walk (cfg.walk_words); the default,
+	 * whole-memory walk is case_fold_* */
+	c.walk_words = HVS6S_FW_WALK_OLD;
 
 	/* HEADE 40: words 32..39 are 8, our list needs 10 */
 	model_noend(&h, 40, 8);
@@ -1285,6 +1313,10 @@ static void case_noend_chan(void)
 	enum hvs6s_err e;
 	const char *t = "noend-chan";
 
+	/* these cases keep the old 256-word walk (cfg.walk_words); the default,
+	 * whole-memory walk is case_fold_* */
+	c.walk_words = HVS6S_FW_WALK_OLD;
+
 	model_noend(&h, BHEAD, 12);
 	h.olptrs[1] = 36;
 	io = model_io(&h);
@@ -1295,8 +1327,8 @@ static void case_noend_chan(void)
 	name_check(t, e == HVS6S_ERR_PLACE_CHAN && r.place_err == HVS6S_ERR_PLACE_CHAN &&
 		      r.place_chan == 1 && r.place_bad_word == 36,
 		   "(f) channel 1's HEADE 36 inside 32..41: refused as HVS6S_ERR_PLACE_CHAN, ch 1");
-	name_check(t, strcmp(hvs6s_err_name(e), "place: another channel's LPTRS.HEADE in range") == 0,
-		   "(f) named 'place: another channel's LPTRS.HEADE in range'");
+	name_check(t, strcmp(hvs6s_err_name(e), "place: another channel's LPTRS.HEADE or DL.LACT in range") == 0,
+		   "(f) named 'place: another channel's LPTRS.HEADE or DL.LACT in range'");
 	name_check(t, !r.swapped && writes_confined(&h, 0, 0) && r.restore_equal && h.lptrs == BHEAD,
 		   "(f) nothing but the restore's LPTRS written; restore equal");
 	name_check(t, has_line("dlswap snapshot ok") && strstr(lines_buf[0], "window=noend") &&
@@ -1322,14 +1354,23 @@ static void case_noend_chan(void)
 	name_check(t, e == HVS6S_OK && r.start == 41 && writes_confined(&h, 41, 10) && r.restore_equal,
 		   "(f) auto steps past channel 1's 36 and channel 2's 40 to word 41");
 
-	/* (g) with an END found the other channels are not consulted */
+	/* (g) with an END found the other channels are consulted too
+	 * (scanout32-fold) */
 	model_board(&h, BHEAD, 1);
 	h.olptrs[1] = 36;
 	io = model_io(&h);
 	c.start = 32;
 	e = hvs6s_run(&io, &c, &s, &r);
-	name_check(t, e == HVS6S_OK && r.start == 32 && !s.fw_noend,
-		   "(g) END at 704: start 32 accepted as before (no other-channel check)");
+	name_check(t, e == HVS6S_ERR_PLACE_CHAN && r.place_chan == 1 && !r.place_chan_lact &&
+		      r.place_bad_word == 36 && !s.fw_noend && !r.swapped && writes_confined(&h, 0, 0),
+		   "(g) END at 704: channel 1's HEADE 36 in 32..41 refused too (scanout32-fold)");
+	model_board(&h, BHEAD, 1);
+	h.olptrs[1] = 36;
+	io = model_io(&h);
+	c.start = HVS6S_AUTO;
+	e = hvs6s_run(&io, &c, &s, &r);
+	name_check(t, e == HVS6S_OK && r.start == 37 && writes_confined(&h, 37, 10) && r.restore_equal,
+		   "(g) END at 704: auto steps past channel 1's HEADE 36 to 37");
 }
 
 /* (i) a changed word inside the window, found by the restore. */
@@ -1343,6 +1384,10 @@ static void case_noend_restore(void)
 	enum hvs6s_err e;
 	uint32_t w;
 	const char *t = "noend-restore";
+
+	/* these cases keep the old 256-word walk (cfg.walk_words); the default,
+	 * whole-memory walk is case_fold_* */
+	c.walk_words = HVS6S_FW_WALK_OLD;
 
 	model_noend(&h, BHEAD, 12);
 	w = h.mem[BHEAD + 200u];
@@ -1540,7 +1585,9 @@ static void case_hw_restore(void)
 		      has_line("dlswap restore-diff word 704 entry none off none"),
 		   "0:skip: a changed END word (704, in no entry) still fails, 'entry none off none'");
 
-	/* every entry of a window: entry 3's offset 4 (word 772) */
+	/* every entry of a window: entry 3's offset 4 (word 772), the old
+	 * 256-word walk */
+	c.walk_words = HVS6S_FW_WALK_OLD;
 	model_noend(&h, BHEAD, 12);
 	h.corrupt_word = BHEAD + 32u * 3u + 4u;
 	h.our_start = 32;
@@ -2323,6 +2370,251 @@ static void case_rvb_none(void)
 	name_check(t, vb_writes_ok(&h, 2), "writes: our list and LPTRS twice");
 }
 
+/* ---- the whole-memory walk (scanout32-fold) ----------------------------- */
+
+#define FEND 1024u /* the END of the board-shaped list in these cases */
+
+/* The board's layout (458834ea): the firmware plane at BHEAD (VALID, NEXT
+ * 32), then entries of NEXT 32 with VALID clear (0x20000000) below end_at,
+ * their bodies filled for odd k and zero for even k; the END at end_at
+ * unless end_at is MEMW. With busy, words 32..671 non-zero except every
+ * 31st from 40 (21 zero words, none adjacent): 619 non-zero words. */
+static void model_fold(struct hvs *h, uint32_t end_at, int busy)
+{
+	model_board(h, BHEAD, 0);
+	for (uint32_t k = 1; BHEAD + 32u * k < end_at; k++) {
+		uint32_t at = BHEAD + 32u * k;
+
+		h->mem[at] = 32u << HVS6_CTL0_NEXT_SHIFT;
+		for (uint32_t i = 1; i < 32 && at + i < MEMW; i++)
+			h->mem[at + i] = (k & 1u) ? (0x5c000000u | (k << 8) | i) : 0u;
+	}
+	if (end_at < MEMW)
+		h->mem[end_at] = HVS6_CTL0_END;
+	if (busy) {
+		for (uint32_t i = 32; i < BHEAD; i++)
+			h->mem[i] = 0x5a000000u | i;
+		for (uint32_t i = 40; i < BHEAD; i += 31)
+			h->mem[i] = 0;
+	}
+}
+
+static int busy_words(const struct hvs *h)
+{
+	int n = 0;
+
+	for (uint32_t i = 32; i < BHEAD; i++)
+		n += h->mem[i] != 0;
+	return n;
+}
+
+/* (F1) the board's layout walked to its END, our list after it; (F2) the
+ * old 256-word walk on it refused as on the board. */
+static void case_fold_board(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	uint32_t want[HVS6W_LIST_WORDS];
+	int same = 1;
+	const char *t = "fold-board";
+
+	model_fold(&h, FEND, 1);
+	name_check(t, busy_words(&h) == 619, "layout: 619 non-zero words in 32..671, as on the board");
+	h.our_start = FEND + 1u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.err == HVS6S_OK, "run returns ok with the default (whole-memory) bound");
+	name_check(t, s.taken && s.fw_end_found && !s.fw_noend && s.fw_head == BHEAD &&
+		      s.fw_len == FEND - BHEAD + 1u && s.walk_stop == FEND && s.walk_word == HVS6_CTL0_END,
+		   "walk: past word 928 to the END at 1024, span 672..1024 (353 words)");
+	name_check(t, s.fw_entries == 11 && s.fw_invalid == 10,
+		   "walk: 11 entries, the 10 with VALID clear walked by NEXT and counted");
+	for (uint32_t i = 0; i < s.fw_len; i++)
+		if (s.fw[i] != h.mem[BHEAD + i])
+			same = 0;
+	name_check(t, same, "the snapshot holds words 672..1024 exactly");
+	name_check(t, r.place_err == HVS6S_OK && r.start == FEND + 1u && r.len == 10 && r.place_skipped > 0,
+		   "auto steps past 32..671 and the span: placed right after the END, at 1025");
+	(void)hvs6w_write_plane(want, HVS6W_LIST_WORDS, &c.plane);
+	name_check(t, memcmp(&h.mem[FEND + 1u], want, sizeof(want)) == 0 &&
+		      writes_confined(&h, FEND + 1u, 10) && count_writes(&h, hvs6s_lptrs_reg(CH)) == 2,
+		   "our 10 words at 1025..1034; writes only there and LPTRS (swap, restore)");
+	name_check(t, r.lptrs_written == FEND + 1u && r.lptrs_ok && r.frcnt_ok && r.settle_ok && r.lact_pickup,
+		   "swap: LPTRS 1025 read back, FRCNT advanced, settled, LACT picked up");
+	name_check(t, r.restored && r.restore_lptrs_ok && r.restore_equal && r.restore_lact_ok &&
+		      r.diff_word == -1 && h.lptrs == BHEAD,
+		   "restore: LPTRS 672 back, words 672..1024 byte-equal");
+	name_check(t, h.oob_reads == 0 && h.ctrl1_writes == 0, "no read past the memory; CTRL1 never written");
+	name_check(t, has_line("dlswap snapshot ok lptrs=0x000002a0 fw_head=672 fw_len=353 entries=11 invalid=10 end=1024 hwskip=none") &&
+		      has_line("dlswap place ok start=1025 len=10") &&
+		      has_line("dlswap restore-words ok fw 672..1024"),
+		   "lines: snapshot entries=11 invalid=10 end=1024, place start=1025, restore 672..1024");
+
+	/* the END word changed while ours was shown: named */
+	model_fold(&h, FEND, 1);
+	h.corrupt_word = FEND;
+	h.our_start = FEND + 1u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == FEND && r.diff_want == HVS6_CTL0_END,
+		   "a changed END word (1024) is named by the restore");
+
+	/* (F2) the old 256-word walk on the same memory */
+	model_fold(&h, FEND, 1);
+	c.walk_words = HVS6S_FW_WALK_OLD;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_PLACE_NOEND && s.fw_noend && s.fw_len == 256 && s.fw_entries == 8 &&
+		      s.walk_stop == 896 && s.walk_word == 0x20000000u && !r.swapped &&
+		      writes_confined(&h, 0, 0) && r.restore_equal,
+		   "walk_words 256: no END, 8 entries, last 896 = 0x20000000, PLACE_NOEND (458834ea)");
+	/* a bound past the memory is clamped */
+	model_fold(&h, FEND, 1);
+	c.walk_words = 100000u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && s.fw_len == 353 && r.start == FEND + 1u && h.oob_reads == 0,
+		   "walk_words 100000 is clamped to the memory: the same END and placement");
+}
+
+/* (F3) no END anywhere still refuses. */
+static void case_fold_noend(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "fold-noend";
+
+	/* the board's 8 entries, then zero words: NEXT 0 at 928 */
+	model_fold(&h, BHEAD + 256u, 1);
+	h.mem[BHEAD + 256u] = 0;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_FW_WALK && !s.taken && s.walk_stop == 928 && s.walk_word == 0 &&
+		      s.fw_entries == 8 && s.fw_invalid == 7 && h.nlog == 0,
+		   "8 entries then a zero word at 928 (no END): FW_WALK at 928, nothing written");
+	name_check(t, has_line("dlswap snapshot FAIL snapshot: entry with NEXT 0") &&
+		      has_sub("entries=8 invalid=7 stop=928"),
+		   "lines: snapshot FAIL names entries=8 invalid=7 stop=928");
+
+	/* entries to the memory's last word, no END: the whole rest is the window */
+	model_fold(&h, MEMW, 1);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, s.taken && s.fw_noend && !s.fw_end_found && s.fw_len == MEMW - BHEAD &&
+		      s.fw_entries == 107 && s.fw_invalid == 106 && h.oob_reads == 0,
+		   "107 entries tile 672..4095, no END: window of 3424 words, no read past the memory");
+	name_check(t, e == HVS6S_ERR_PLACE_NOEND && !r.swapped && writes_confined(&h, 0, 0) &&
+		      count_writes(&h, hvs6s_lptrs_reg(CH)) == 1 && r.restore_equal && h.lptrs == BHEAD,
+		   "32..671 in use and no END: PLACE_NOEND, only the restore's LPTRS written, equal");
+	name_check(t, has_sub("window=noend") && has_sub("fw_len=3424"), "lines: window=noend fw_len=3424");
+}
+
+/* (F4) an END at the memory's last word. */
+static void case_fold_lastword(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "fold-lastword";
+
+	/* 106 entries of 32 from 672, one of 31 at 4064, the END at 4095 */
+	model_fold(&h, MEMW - 32u, 0);
+	h.mem[MEMW - 32u] = 31u << HVS6_CTL0_NEXT_SHIFT;
+	h.mem[MEMW - 1u] = HVS6_CTL0_END;
+	h.our_start = 32;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, s.taken && s.fw_end_found && !s.fw_noend && s.fw_len == MEMW - BHEAD &&
+		      s.walk_stop == MEMW - 1u && s.fw_entries == 107 && h.oob_reads == 0,
+		   "END at 4095: span 672..4095 (3424 words), 107 entries, no read past the memory");
+	name_check(t, e == HVS6S_OK && r.start == 32 && writes_confined(&h, 32, 10) && r.restore_equal &&
+		      h.lptrs == BHEAD,
+		   "words 32..671 free: placed at 32, swap and byte-equal restore of 672..4095");
+
+	model_fold(&h, MEMW - 32u, 1);
+	h.mem[MEMW - 32u] = 31u << HVS6_CTL0_NEXT_SHIFT;
+	h.mem[MEMW - 1u] = HVS6_CTL0_END;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_PLACE_FIT && s.fw_end_found && !r.swapped && writes_confined(&h, 0, 0) &&
+		      r.restore_equal,
+		   "32..671 in use, nothing after the END: PLACE_FIT, nothing written");
+}
+
+/* (F5) the hardware-written word (4:skip) on the long span. */
+static void case_fold_hw(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	uint32_t w;
+	const char *t = "fold-hw";
+
+	model_fold(&h, FEND, 1);
+	w = h.mem[BHEAD + 32u * 7u + 4u];
+	h.corrupt_word = BHEAD + 32u * 7u + 4u; /* 900: entry 7 off 4 */
+	h.our_start = FEND + 1u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 900 && r.diff_want == w,
+		   "empty set: word 900 (entry 7 off 4) changing is RESTORE_WORD");
+
+	model_fold(&h, FEND, 1);
+	h.corrupt_word = BHEAD + 32u * 7u + 4u;
+	h.wb_word = BHEAD + 4u; /* the board's word 676 too */
+	h.wb_val = 0x00ff0000u;
+	h.our_start = FEND + 1u;
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.restore_equal && r.rdiff.total == 2 && r.rdiff.skip == 2 &&
+		      r.rdiff.undeclared == 0 && r.rdiff.hw_words == 11,
+		   "4:skip: words 676 and 900 skipped; offset 4 of all 11 entries declared");
+	name_check(t, has_sub("restore-diff word 676 entry 0 off 4") &&
+		      has_sub("restore-diff word 900 entry 7 off 4") &&
+		      has_line("dlswap restore-words ok fw 672..1024 byte-equal except hw words off 4 (2 differed) hwskip=4:skip"),
+		   "4:skip: both named, 'byte-equal except hw words off 4' over 672..1024");
+
+	model_fold(&h, FEND, 1);
+	h.corrupt_word = BHEAD + 32u * 7u + 5u;
+	h.our_start = FEND + 1u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 901 && r.rdiff.undeclared == 1 &&
+		      has_sub("restore-diff word 901 entry 7 off 5"),
+		   "4:skip: word 901 (entry 7 off 5) is not declared: named");
+}
+
+/* (F6) other channels' HEADE and DL.LACT after the END. */
+static void case_fold_chan(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "fold-chan";
+
+	model_fold(&h, FEND, 1);
+	h.olptrs[1] = FEND + 3u; /* 1027 */
+	h.olact[2] = FEND + 7u;  /* 1031 */
+	h.our_start = FEND + 8u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.start == FEND + 8u && writes_confined(&h, FEND + 8u, 10) &&
+		      r.restore_equal,
+		   "auto steps past channel 1's HEADE 1027 and channel 2's LACT 1031 to 1032");
+
+	model_fold(&h, FEND, 1);
+	h.olact[2] = 0x3000u | (FEND + 6u); /* 1030, bits above LACT ignored */
+	c.start = FEND + 1u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_PLACE_CHAN && r.place_chan == 2 && r.place_chan_lact &&
+		      r.place_bad_word == FEND + 6u && r.place_bad_val == (0x3000u | (FEND + 6u)) &&
+		      !r.swapped && writes_confined(&h, 0, 0) && r.restore_equal,
+		   "caller's start 1025 over channel 2's LACT 1030: PLACE_CHAN, nothing written");
+	name_check(t, has_line("dlswap place FAIL place: another channel's LPTRS.HEADE or DL.LACT in range ch=2 lact=1030 dl=0x00003406"),
+		   "lines: place FAIL names ch=2 lact=1030 and its DL");
+}
+
 int main(void)
 {
 	case_pass();
@@ -2367,6 +2659,11 @@ int main(void)
 	case_rvb_found();
 	case_rvb_inside();
 	case_rvb_none();
+	case_fold_board();
+	case_fold_noend();
+	case_fold_lastword();
+	case_fold_hw();
+	case_fold_chan();
 	printf("hvs6_dlist_swap_mock: %d of %d checks, %d failed\n", total - failed, total, failed);
 	return failed ? 1 : 0;
 }
