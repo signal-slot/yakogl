@@ -138,9 +138,25 @@ def failure_units(groups, must):
     return len(singles) + multi
 
 
-def read_rows(path):
+def read_corrections(path):
+    """{(entry, token as recorded): corrected token} of the crc-resolved.tsv next to results.tsv, if any: the
+    CRC names re-resolved against the entry's full filter (board.sh resolved them against its mustpass cases
+    only). Columns: entry, token, corrected token (comma-joined candidates of one CRC)."""
+    fix = {}
+    p = os.path.join(os.path.dirname(path), 'crc-resolved.tsv')
+    if os.path.isfile(p):
+        for l in open(p):
+            f = l.rstrip('\n').split('\t')
+            if len(f) == 3 and not l.startswith('#') and parse_int(f[0]) is not None:
+                fix[(int(f[0]), f[1])] = f[2]
+    return fix
+
+
+def read_rows(path, problems=None):
     """[(index, filter, [begun, passed, failed, notsup, other, noresult] or None, [names])]"""
     rows = []
+    fix = read_corrections(path)
+    used = set()
     for l in open(path):
         l = l.rstrip('\n')
         if not l.strip() or l.startswith('#'):
@@ -157,9 +173,21 @@ def read_rows(path):
         tally = None if any(n is None for n in nums[1:5]) else [n or 0 for n in nums]
         if tally is not None and nums[0] is None:
             tally[0] = sum(tally[1:6])
-        groups = [] if f[8] in ("-", "") else collision_groups(f[8])
+        cell = f[8]
+        if fix and cell not in ("-", ""):
+            toks = cell.split(';')
+            for k, t in enumerate(toks):
+                if (idx, t) in fix:
+                    used.add((idx, t))
+                    toks[k] = fix[(idx, t)]
+            cell = ';'.join(toks)
+        groups = [] if cell in ("-", "") else collision_groups(cell)
         names = [n for g in groups for n in g]
         rows.append((idx, f[1], tally, names, f[2:8], groups))
+    if problems is not None:
+        for k in sorted(set(fix) - used):
+            problems.append('%s: crc-resolved.tsv line for entry %d names no token "%s" of results.tsv' % (
+                os.path.dirname(path), k[0], k[1]))
     return rows
 
 
@@ -206,7 +234,7 @@ class Merge:
         if not path:
             self.problems.append('%s: no results.tsv' % d)
             return
-        for idx, filt, tally, names, raw, groups in read_rows(path):
+        for idx, filt, tally, names, raw, groups in read_rows(path, self.problems):
             if not 0 <= idx < len(self.table):
                 self.problems.append('%s: entry %d is not in the table (%d entries)' % (d, idx, len(self.table)))
                 continue
@@ -224,11 +252,15 @@ class Merge:
             for n in names:
                 if n in must:
                     placed.append(n)
-                elif n.startswith('crc:') or n.startswith('PAGE'):
+            for g in groups:     # a CRC group with a mustpass candidate is placed; one without is outside
+                if any(n in must for n in g):
+                    continue
+                if g[0].startswith('crc:') or g[0].startswith('PAGE'):
                     crc += 1
                 else:
                     outside += 1
             self.rec[idx] = dict(dir=d, tally=tally, names=placed, outside=outside, crc=crc,
+                                 outnames=[n for n in names if n not in must and not n.startswith(('crc:', 'PAGE'))],
                                  units=failure_units(groups, must))
 
     def read_verdicts(self, d):
@@ -368,6 +400,9 @@ def do_notpass(m, out, skip_noresult=False):
                          if extra else '',
                          ', %d names unresolved crc' % r['crc'] if r['crc'] else '',
                          ', %d names outside the mustpass' % r['outside'] if r['outside'] else ''))
+        if r.get('outnames'):
+            out.write('# e%d: cases outside the mustpass that the record names (the entry\'s filter begins them; a name in a '
+                      'crc group with a mustpass case is a candidate): %s\n' % (i, ', '.join(r['outnames'])))
         order = {n: k for k, n in enumerate(m.per[i])}
         for n in sorted(shown, key=order.get):
             out.write('e%d:%s %s\n' % (i, shown[n], n))
@@ -582,6 +617,30 @@ def selftest():
         expect('amb: an ambiguous crc group of two is one failure, both candidates still listed',
                'fail 1 of which 1 named' in out and '1 more candidate names' in out and
                [l for l in out.splitlines() if l.startswith('e2:')] == ['e2:Fail dEQP-GLES3.d.1', 'e2:Fail dEQP-GLES3.d.2'])
+
+        # crc-resolved.tsv: names re-resolved against the entry's full filter (cases the mustpass lacks)
+        def with_fix(d, lines):
+            with open(os.path.join(d, 'crc-resolved.tsv'), 'w') as fh:
+                fh.write('# comment\n' + ''.join(lines))
+        CRX = slice_('crcfix', c1, [(2, entries[2], 5, 3, 2, 0, 0, 0, 'dEQP-GLES3.d.0;crc:beef')])
+        rc, out, _ = call(*base_args, '--notpass', CRX)
+        expect('crcfix: without the file the crc stays unresolved', '1 names unresolved crc' in out)
+        with_fix(CRX, ['2\tcrc:beef\tdEQP-GLES3.nonmust.9\n'])
+        rc, out, _ = call(*base_args, '--notpass', CRX)
+        expect('crcfix: the corrected name is outside the mustpass and named', '1 names outside the mustpass' in out and
+               'unresolved crc' not in out and 'dEQP-GLES3.nonmust.9' in out)
+        rc, out, _ = call(*base_args, '--check', '--partial', CRX)
+        expect('crcfix: check takes the corrected record', 'crc-resolved' not in out)
+        CRP = slice_('crcpair', c1, [(2, entries[2], 5, 4, 1, 0, 0, 0, 'dEQP-GLES3.d.1')])
+        with_fix(CRP, ['2\tdEQP-GLES3.d.1\tdEQP-GLES3.nonmust.9,dEQP-GLES3.d.1\n'])
+        rc, out, _ = call(*base_args, '--notpass', CRP)
+        expect('crcfix: a widened pair keeps the mustpass candidate, one failure, no outside count',
+               [l for l in out.splitlines() if l.startswith('e2:')] == ['e2:Fail dEQP-GLES3.d.1'] and
+               'names outside' not in out and 'dEQP-GLES3.nonmust.9' in out)
+        CRS = slice_('crcstale', c1, [(2, entries[2], 5, 4, 1, 0, 0, 0, 'dEQP-GLES3.d.1')])
+        with_fix(CRS, ['2\tcrc:0000\tdEQP-GLES3.d.1\n'])
+        rc, out, _ = call(*base_args, '--check', '--partial', CRS)
+        expect('crcfix: a line naming no token of results.tsv is a problem', rc == 1 and 'names no token' in out)
 
         rc, out, _ = call(*base_args, '--totals', A, B)
         expect('totals: overall row', re.search(r'^total\s+14\s+11\s+8\s+1\s+1\s+0\s+4$', out, re.M) is not None)

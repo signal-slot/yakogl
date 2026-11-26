@@ -252,7 +252,8 @@ e6:Fail dEQP-GLES3.functional.fbo.color.texcube.rgba32i
 e6:Fail dEQP-GLES3.functional.fbo.color.texcube.rgba32ui
 e6:Fail dEQP-GLES3.functional.fbo.color.texcube.srgb8_alpha8
 e7:Fail dEQP-GLES3.functional.fbo.completeness.renderable.renderbuffer.color0.r32f
-# e8: unresolved 3 (mustpass 387, begun 398, pass 312, fail 75 of which 72 named, n.s. 11, other 0, 3 names unresolved crc)
+# e8: unresolved 3 (mustpass 387, begun 398, pass 312, fail 75 of which 72 named, n.s. 11, other 0, 3 names outside the mustpass)
+# e8: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.red_float, dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg_float, dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgb16f
 e8:Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16i
 e8:Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r16ui
 e8:Fail dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.r32f
@@ -1853,9 +1854,11 @@ e21:Fail dEQP-GLES3.functional.instanced.draw_arrays_instanced.mixed.4_instances
 e21:Fail dEQP-GLES3.functional.instanced.draw_elements_instanced.mixed.20_instances
 e21:Fail dEQP-GLES3.functional.instanced.draw_elements_instanced.mixed.2_instances
 e21:Fail dEQP-GLES3.functional.instanced.draw_elements_instanced.mixed.4_instances
-# e22: unresolved 0 (mustpass 56, begun 58, pass 56, fail 2 of which 1 named, n.s. 0, other 0, 1 names unresolved crc)
+# e22: unresolved 0 (mustpass 56, begun 58, pass 56, fail 2 of which 1 named, n.s. 0, other 0, 1 names outside the mustpass)
+# e22: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.lifetime.attach.deleted_input.buffer_vertex_array
 e22:Fail dEQP-GLES3.functional.lifetime.attach.deleted_output.buffer_transform_feedback
-# e23: unresolved 42 (mustpass 510, begun 527, pass 452, fail 17 of which 16 named, n.s. 58, other 0, 1 names unresolved crc)
+# e23: unresolved 42 (mustpass 510, begun 527, pass 452, fail 17 of which 16 named, n.s. 58, other 0, 1 names outside the mustpass)
+# e23: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.negative_api.shader.program_parameteri
 e23:Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_alpha_to_coverage
 e23:Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage
 e23:Fail dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_sample_coverage_inverted
@@ -1872,7 +1875,8 @@ e23:Fail dEQP-GLES3.functional.pbo.renderbuffer.rgba32i_clears
 e23:Fail dEQP-GLES3.functional.pbo.renderbuffer.rgba32i_triangles
 e23:Fail dEQP-GLES3.functional.pbo.renderbuffer.rgba32ui_clears
 e23:Fail dEQP-GLES3.functional.pbo.renderbuffer.rgba32ui_triangles
-# e24: unresolved 20 (mustpass 797, begun 805, pass 746, fail 26 of which 31 named, n.s. 26, other 7, 5 of the names are not counted Fail: the record also names n.s./other cases (shown as Fail unless a console says otherwise), 2 names unresolved crc)
+# e24: unresolved 20 (mustpass 797, begun 805, pass 746, fail 26 of which 31 named, n.s. 26, other 7, 5 of the names are not counted Fail: the record also names n.s./other cases (shown as Fail unless a console says otherwise), 2 names outside the mustpass)
+# e24: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide, dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide
 e24:Fail dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines_wide
 e24:Fail dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines_wide
 e24:Fail dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines
@@ -1906,7 +1910,8 @@ e24:Fail dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_3
 e24:Fail dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_5
 # e25: unresolved 284 (mustpass 1000, begun 1080, pass 716, fail 364 of which 0 named, n.s. 0, other 0)
 # e26: unresolved 401 (mustpass 623, begun 500, pass 222, fail 277 of which 0 named, n.s. 0, other 1)
-# e27: unresolved 0 (mustpass 915, begun 1377, pass 1221, fail 152 of which 142 named, n.s. 0, other 4, 2 more candidate names of ambiguous crc groups listed as Fail, each group counted once, 14 names unresolved crc)
+# e27: unresolved 0 (mustpass 915, begun 1377, pass 1221, fail 152 of which 142 named, n.s. 0, other 4, 2 more candidate names of ambiguous crc groups listed as Fail, each group counted once, 14 names outside the mustpass)
+# e27: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.shaders.constant_expressions.builtin_functions.matrix.inverse_mat2_vertex, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_fragment.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_fragment.vec4, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_vertex.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_vertex.vec4, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_fragment.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_fragment.vec4, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_vertex.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_vertex.vec4, dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_fragment.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_fragment.vec4, dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_vertex.vec3, dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_vertex.vec4, dEQP-GLES3.functional.shaders.constant_expressions.other.complex_fragment, dEQP-GLES3.functional.shaders.constant_expressions.other.complex_vertex
 e27:Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.highp_fragment.vec3
 e27:Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.highp_fragment.vec4
 e27:Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.highp_vertex.vec3
@@ -2053,7 +2058,8 @@ e27:Fail dEQP-GLES3.functional.shaders.constant_expressions.builtin_functions.co
 e27:Fail dEQP-GLES3.functional.shaders.conversions.matrix_combine.bvec2_bvec2_to_mat2_fragment
 # e29: unresolved 0 (mustpass 882, begun 1224, pass 896, fail 328 of which 0 named, n.s. 0, other 0)
 e43:Fail dEQP-GLES3.functional.shaders.precision.int.highp_div_fragment
-# e45: unresolved 0 (mustpass 536, begun 600, pass 592, fail 8 of which 4 named, n.s. 0, other 0, 4 names unresolved crc)
+# e45: unresolved 0 (mustpass 536, begun 600, pass 592, fail 8 of which 4 named, n.s. 0, other 0, 4 names outside the mustpass)
+# e45: cases outside the mustpass that the record names (the entry's filter begins them; a name in a crc group with a mustpass case is a candidate): dEQP-GLES3.functional.shaders.random.all_features.fragment.16, dEQP-GLES3.functional.shaders.random.all_features.fragment.21, dEQP-GLES3.functional.shaders.random.all_features.fragment.48, dEQP-GLES3.functional.shaders.random.all_features.fragment.6, dEQP-GLES3.functional.shaders.random.all_features.fragment.72
 e45:Fail dEQP-GLES3.functional.shaders.random.all_features.fragment.10
 e45:Fail dEQP-GLES3.functional.shaders.random.all_features.fragment.17
 e45:Fail dEQP-GLES3.functional.shaders.random.all_features.fragment.42

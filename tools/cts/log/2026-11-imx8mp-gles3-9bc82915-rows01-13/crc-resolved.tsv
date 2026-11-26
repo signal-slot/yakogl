@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# CRC names of results.tsv re-resolved against each entry's full filter (every case the filter begins, not only its mustpass cases): entry, token as recorded, corrected token (comma = one CRC that several cases share)
+8	crc:118d	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.red_float
+8	crc:23fb	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rg_float
+8	crc:579a	dEQP-GLES3.functional.fbo.completeness.renderable.texture.color0.rgb16f

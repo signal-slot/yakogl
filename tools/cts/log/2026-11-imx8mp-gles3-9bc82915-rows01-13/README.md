@@ -272,3 +272,7 @@ under `records/` (gitignored). Addresses: `board.sh` redacted the copies and
 every file here was read again for logins, addresses, ports and device
 paths before the commit; `BOARD_HOST` and `BOARD_UART` are named, never
 their values.
+
+### CRC names re-resolved (`crc-resolved.tsv`)
+
+`results.tsv` is as `board.sh tally` wrote it, with its CRCs resolved against the mustpass cases only. `crc-resolved.tsv` (derived, 3 lines) holds the same CRCs re-resolved against each entry's full filter (every case the filter begins, from a null-target build of VK-GL-CTS 93bca01); `imx8mp-gles3-merge.py` applies it to `results.tsv` before it reads the names. No raw console or uart log is changed.
