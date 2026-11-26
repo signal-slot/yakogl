@@ -1340,6 +1340,10 @@ credentials, set by the session; never in a file, a log or a commit).
    python3 -I tools/cts/imx95-t6-diff.py --markdown --imx95 <logdir> [--imx95 <logdir>]...
    ```
 
+`imx95-t6-diff.py --tsv` prints the differences as `case`, T6 result,
+iMX95 result (a Lost case reads `Lost`, no header); `imx95-gles2-analyze.sh`
+pipes it into `imx95-g310-cause.py --summary`.
+
 The tools' selftests are `imx95-uboot-row-selftest.sh`,
 `imx95-rows-tsv-selftest.sh`, `imx95-uart-slice-selftest.sh` and
 `imx95-t6-diff-selftest.sh` next to them.
