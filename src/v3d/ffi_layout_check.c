@@ -243,4 +243,7 @@ _Static_assert(V3D_PRIM_POINTS == 0 && V3D_PRIM_LINES == 1 && V3D_PRIM_LINE_LOOP
 _Static_assert(V3D_INDEX_TYPE_8 == 0 && V3D_INDEX_TYPE_16 == 1 && V3D_INDEX_TYPE_32 == 2,
 	       "index types");
 _Static_assert(V3D_JOB_OK == 0 && V3D_JOB_FULL == 1 && V3D_JOB_REFUSED == 2, "job results");
+_Static_assert(V3D_JOB_BROKEN == 3 && V3D_JOB_NO_PROGRAM == 4 && V3D_JOB_FS_INPUTS == 5 &&
+		       V3D_JOB_BAD_FIELD == 6 && V3D_JOB_UNRECORDED == 7,
+	       "job refusal causes");
 #endif

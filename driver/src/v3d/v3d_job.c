@@ -864,30 +864,31 @@ static bool threads_ok(uint32_t threads)
 	return threads == 1 || threads == 2 || threads == 4;
 }
 
-/* What this builder refuses before it writes anything. */
-static bool draw_is_supported(const struct v3d_job_draw *d)
+/* What this builder refuses before it writes anything: V3D_JOB_OK, or the
+ * refusal that names the check. */
+static int draw_is_supported(const struct v3d_job_draw *d)
 {
 	if (!d->st || !d->fs || !d->vs || !d->cs)
-		return false;
+		return V3D_JOB_NO_PROGRAM;
 	if (!threads_ok(d->fs->threads) || !threads_ok(d->vs->threads) ||
 	    !threads_ok(d->cs->threads))
-		return false;
+		return V3D_JOB_NO_PROGRAM;
 	/* V3D_MAX_FS_INPUTS: the flag words and the shader record's count stop here */
 	if (d->fs->num_inputs > 64)
-		return false;
+		return V3D_JOB_FS_INPUTS;
 	if (d->prim > V3D_PRIM_TRIANGLE_FAN || d->count == 0)
-		return false;
+		return V3D_JOB_REFUSED;
 	if (d->num_attrs > V3D_MAX_ATTRS || (d->num_attrs && !d->attrs))
-		return false;
+		return V3D_JOB_REFUSED;
 	for (uint32_t i = d->num_attrs; i < V3D_MAX_ATTRS; i++)
 		if (d->vs->vattr_sizes[i] || d->cs->vattr_sizes[i])
-			return false; /* the program reads an attribute with no record */
+			return V3D_JOB_REFUSED; /* the program reads an attribute with no record */
 	for (uint32_t i = 0; i < d->num_attrs; i++)
 		if (d->attrs[i].components < 1 || d->attrs[i].components > 4)
-			return false;
+			return V3D_JOB_REFUSED;
 	if (d->indexed && d->index_type > V3D_INDEX_TYPE_32)
-		return false;
-	return true;
+		return V3D_JOB_REFUSED;
+	return V3D_JOB_OK;
 }
 
 /* v3dx_draw.c v3d_draw_vbo for one draw: the state, the shader state (the
@@ -1074,8 +1075,11 @@ int v3d_job_draw(struct v3d_job *j, const struct v3d_job_draw *d, struct v3d_job
 	struct v3d_job_draw_layout scratch;
 	struct v3d_job_draw_layout *lo = layout ? layout : &scratch;
 
-	if (j->broken || !draw_is_supported(d))
-		return V3D_JOB_REFUSED;
+	if (j->broken)
+		return V3D_JOB_BROKEN;
+	const int supported = draw_is_supported(d);
+	if (supported != V3D_JOB_OK)
+		return supported;
 
 	/* Where the lists stand: a draw that does not go in leaves nothing. */
 	const struct v3d_cl bcl0 = *j->bcl, ind0 = *j->ind;
@@ -1090,7 +1094,9 @@ int v3d_job_draw(struct v3d_job *j, const struct v3d_job_draw *d, struct v3d_job
 	if (!ok || bad || full) {
 		*j->bcl = bcl0;
 		*j->ind = ind0;
-		return (full && !bad) ? V3D_JOB_FULL : V3D_JOB_REFUSED;
+		if (bad)
+			return V3D_JOB_BAD_FIELD;
+		return full ? V3D_JOB_FULL : V3D_JOB_UNRECORDED;
 	}
 	/* the draw is in: what its groups were written with is what the list
 	 * now holds */

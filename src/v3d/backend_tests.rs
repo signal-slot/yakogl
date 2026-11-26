@@ -3583,6 +3583,30 @@ fn a_refused_draw_leaves_the_data_arena_where_it_stood() {
     assert_eq!(rig.logs_with("job builder refused"), 1);
 }
 
+/// Each named job-builder refusal (`v3d_job.h`, plan #399 jobstatus-apply)
+/// is answered -ENOTSUP as the one REFUSED of old was, and the refusal line
+/// prints the cause's own name (`v3d_job_refusal`), so a refusal left on a
+/// board says which check stopped the draw. tests/v3d_job_status.rs drives
+/// the real builder to each result.
+///
+/// Revert check: with the old `_` arm every cause printed the REFUSED text.
+#[test]
+fn a_named_job_builder_refusal_is_enotsup_and_prints_its_cause() {
+    let rig = Rig::new();
+    rig.init();
+    for cause in [V3D_JOB_BROKEN, V3D_JOB_NO_PROGRAM, V3D_JOB_FS_INPUTS, V3D_JOB_BAD_FIELD, V3D_JOB_UNRECORDED] {
+        let name = v3d_job_refusal(cause);
+        assert_ne!(name, v3d_job_refusal(V3D_JOB_REFUSED), "cause {cause} has its own name");
+        rig.answer(&[cause]);
+        assert_eq!(draw(&rig.draw()), -ENOTSUP, "cause {cause}: -ENOTSUP as before");
+        assert_eq!(rig.logs_with(name), 1, "cause {cause}: the refusal line names it: {name}");
+        assert!(rig.draws().is_empty(), "cause {cause}: nothing recorded");
+    }
+    rig.answer(&[V3D_JOB_REFUSED]);
+    assert_eq!(draw(&rig.draw()), -ENOTSUP, "REFUSED: -ENOTSUP as before");
+    assert_eq!(rig.logs_with(v3d_job_refusal(V3D_JOB_REFUSED)), 1, "REFUSED keeps its old text");
+}
+
 /// A draw's kick is pending until the job that holds it has run: the GL core
 /// reads `kick_id()` into a texture's or a buffer's `last_use` at the draw,
 /// and before a CPU write it flushes and finishes while `kick_pending` says

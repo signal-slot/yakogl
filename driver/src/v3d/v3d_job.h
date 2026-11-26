@@ -444,10 +444,22 @@ bool v3d_job_begin(struct v3d_job *j, const struct v3d_job_target *t, struct v3d
 
 /* v3d_job_draw's results. A draw that is not recorded leaves nothing behind:
  * the lists are rolled back to where they stood, so the job's earlier draws
- * are intact and it can still be ended and submitted. */
-#define V3D_JOB_OK      0
-#define V3D_JOB_FULL    1  /* a list is full: end this job, draw into a new one */
-#define V3D_JOB_REFUSED 2  /* the draw asks for something this builder does not write */
+ * are intact and it can still be ended and submitted. Every result from
+ * V3D_JOB_REFUSED up is a refusal; each names its cause, so that a refusal
+ * left on a board says which check stopped the draw (docs/notes/
+ * v3d-refusals.md E3). src/v3d/backend.rs (`job_refusal`) names them. */
+#define V3D_JOB_OK         0
+#define V3D_JOB_FULL       1  /* a list is full: end this job, draw into a new one */
+#define V3D_JOB_REFUSED    2  /* a primitive, vertex count, attribute record or index type
+			       * this builder does not write (draw_is_supported) */
+#define V3D_JOB_BROKEN     3  /* an earlier step broke the job: nothing more goes in */
+#define V3D_JOB_NO_PROGRAM 4  /* the state or a program is missing, or a program's thread
+			       * count is not 1, 2 or 4 (draw_is_supported) */
+#define V3D_JOB_FS_INPUTS  5  /* more than 64 fragment input scalars (V3D_MAX_FS_INPUTS) */
+#define V3D_JOB_BAD_FIELD  6  /* a value does not fit its packet field, or a uniform this
+			       * builder does not write (record_draw, a list's bad_field) */
+#define V3D_JOB_UNRECORDED 7  /* record_draw stopped with no field named and no list full */
+#define V3D_JOB_IS_REFUSAL(r) ((r) >= V3D_JOB_REFUSED)
 
 /* Record one draw. `layout` may be NULL. */
 int v3d_job_draw(struct v3d_job *j, const struct v3d_job_draw *d, struct v3d_job_draw_layout *layout);

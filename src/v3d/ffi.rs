@@ -740,10 +740,47 @@ impl V3dJob {
     };
 }
 
-/// `v3d_job_draw`'s results.
+/// `v3d_job_draw`'s results (`driver/src/v3d/v3d_job.h`). Every result from
+/// [`V3D_JOB_REFUSED`] up is a refusal that names its cause;
+/// [`v3d_job_refusal`] gives the text the refusal line prints.
 pub const V3D_JOB_OK: i32 = 0;
 pub const V3D_JOB_FULL: i32 = 1;
+/// A primitive, vertex count, attribute record or index type the builder
+/// does not write.
 pub const V3D_JOB_REFUSED: i32 = 2;
+/// An earlier step broke the job.
+pub const V3D_JOB_BROKEN: i32 = 3;
+/// The state or a program is missing, or a thread count is not 1, 2 or 4.
+pub const V3D_JOB_NO_PROGRAM: i32 = 4;
+/// More than 64 fragment input scalars.
+pub const V3D_JOB_FS_INPUTS: i32 = 5;
+/// A value outside its packet field, or a uniform the builder does not write.
+pub const V3D_JOB_BAD_FIELD: i32 = 6;
+/// The draw stopped with no field named and no list full.
+pub const V3D_JOB_UNRECORDED: i32 = 7;
+
+/// The refusal line's text for a `v3d_job_draw` result from
+/// `V3D_JOB_REFUSED` up: each names the check in `driver/src/v3d/v3d_job.c`
+/// that stopped the draw (docs/notes/v3d-refusals.md E3). Every text begins
+/// "the job builder refused the draw (" as the one cause of old did, which
+/// `tools/cts/pi4-abort-causes.py` reads. The REFUSED text is the old one;
+/// `backend.rs` (`record_arrays_and_draw`) writes it out itself, where
+/// tests/es3_tex_words_v3d.rs pins it.
+pub fn v3d_job_refusal(result: i32) -> &'static str {
+    match result {
+        V3D_JOB_REFUSED => "the job builder refused the draw (a uniform, program or primitive it does not write)",
+        V3D_JOB_BROKEN => "the job builder refused the draw (an earlier step broke the job)",
+        V3D_JOB_NO_PROGRAM => {
+            "the job builder refused the draw (no state or program, or a thread count other than 1, 2 or 4)"
+        }
+        V3D_JOB_FS_INPUTS => "the job builder refused the draw (more than 64 fragment input scalars)",
+        V3D_JOB_BAD_FIELD => {
+            "the job builder refused the draw (a value outside its packet field, or a uniform it does not write)"
+        }
+        V3D_JOB_UNRECORDED => "the job builder refused the draw (it stopped with no field named and no list full)",
+        _ => "the job builder refused the draw (a result it does not name)",
+    }
+}
 
 extern "C" {
     pub fn v3d_job_begin(
