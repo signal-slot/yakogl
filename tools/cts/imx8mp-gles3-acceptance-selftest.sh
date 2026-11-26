@@ -64,7 +64,7 @@ PYEOF
 # expect <case> <expected exit> <expected FAIL list, space separated or ''>
 run_case() {
 	local name=$1 want_rc=$2 want_fail=$3 out rc got
-	out=$(sh "$ACC" "$R" 2>"$WORK/stderr")
+	out=$(sh "$ACC" ${ARGS:-} "$R" 2>"$WORK/stderr")
 	rc=$?
 	got=$(printf '%s\n' "$out" | sed -n 's/^\(c[0-9]\) FAIL.*/\1/p' | tr '\n' ' ' | sed 's/ $//')
 	lines=$(printf '%s\n' "$out" | grep -Ec '^c[0-9] (ok|FAIL) ')
@@ -141,6 +141,23 @@ run_case "c8 address in an es2 log" 1 "c8"
 fresh empty
 rm -r "$R"/tools/cts/log/*
 run_case "empty log tree: clean FAIL, c7 ok" 1 "c1 c2 c3 c6"
+
+# two campaigns in one tree: the merge tool refuses a directory of the other commit
+mk2() {
+	mkdir -p "$R/tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13"
+	echo "commit 9bc82915" >"$R/tools/cts/log/2026-11-imx8mp-gles3-9bc82915-rows01-13/README.md"
+	sed -i 's/^import os, sys$/import os, sys\nif any("9bc82915" in a for a in sys.argv):\n    print("two commits")\n    sys.exit(1)/' "$R/tools/cts/imx8mp-gles3-merge.py"
+}
+fresh two
+mk2
+run_case "two campaigns without --commit: c1 c2 fail" 1 "c1 c2"
+ARGS="--commit 0123abcd"
+run_case "--commit reads only that campaign's slices" 0 ""
+ARGS="--commit 0123abcdef0123"
+run_case "--commit takes a longer hash (cut to 8)" 0 ""
+ARGS=
+out=$(sh "$ACC" --commit xyz "$R" 2>&1); rc=$?
+if [ "$rc" = 2 ]; then echo "ok   --commit with non-hex: usage error 2"; else echo "FAIL --commit non-hex: rc=$rc"; BAD=$((BAD + 1)); fi
 
 if [ $BAD -eq 0 ]; then
 	echo "imx8mp-gles3-acceptance-selftest: all cases passed"

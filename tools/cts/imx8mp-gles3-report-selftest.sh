@@ -74,11 +74,24 @@ for l in sys.stdin:
     if f and f[0] == "total":
         print("| " + " | ".join("{:,}".format(int(x)) for x in f[3:8]) + " |")')
 [ -n "$want" ] && grep -qxF "$want" "$work/full.out"; expect "totals row equals merge --totals ($want)" $?
-for h in 'RESULTS.md' 'STATUS.md' 'ROADMAP.md' 'issue #2'; do
+for h in 'RESULTS.md' 'STATUS.md' 'ROADMAP.md' 'issue #24'; do
 	grep -q "^--- .*$h" "$work/full.out"; expect "block headed $h" $?
 done
 grep -q 'リセット0' "$work/full.out"; expect "STATUS line is Japanese with 0 resets" $?
 grep -q '(#24)' "$work/full.out"; expect "ROADMAP line cites #24" $?
+
+echo "== record names: numeric slice order, no absolute path"
+python3 "$REPORT" --date 2026-11-10 "${S[2]}" "${S[1]}" "${S[0]}" > "$work/ord.out" 2>&1; rc=$?
+expect "slices given in reverse order: exit 0" "$rc"
+grep -qF "$work" "$work/ord.out"; [ $? = 1 ]; expect "no absolute path of the scratch directory in the drafts" $?
+python3 - "$work/ord.out" <<'PY'
+import re, sys
+t = open(sys.argv[1]).read()
+line = [l for l in t.splitlines() if l.startswith('- Records:')][0]
+rows = [int(x) for x in re.findall(r'-rows(\d+)-', line)]
+sys.exit(0 if len(rows) == 3 and rows == sorted(rows) and 'tools/cts/log/' in line else 1)
+PY
+expect "Records lists the slices by their first row (rows001 before rows0xx), as tools/cts/log/<name>" $?
 
 echo "== incomplete run (entries 90-132 missing)"
 python3 "$REPORT" --date 2026-11-10 "${S[0]}" "${S[1]}" > "$work/part.out" 2> "$work/part.err"; rc=$?
@@ -86,7 +99,7 @@ expect "incomplete run exits 1" "$([ "$rc" = 1 ] && echo 0 || echo 1)"
 grep -q 'PARTIAL' "$work/part.out"; expect "marked PARTIAL" $?
 grep -q '90-132' "$work/part.out"; expect "the missing entries 90-132 are named" $?
 grep -q "$C1" "$work/part.out"; expect "drafts are still printed (commit present)" $?
-grep -q '^--- GitHub issue #2' "$work/part.out"; expect "issue comment still printed" $?
+grep -q '^--- GitHub issue #24 comment' "$work/part.out"; expect "issue comment still printed" $?
 
 echo "== a reset verdict"
 rs="$work/reset"; cp -r "${S[1]}" "$rs"
