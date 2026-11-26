@@ -826,8 +826,13 @@ igroupr=mismatch` and still counted the run failed, because it treated
 expects `GICD_IGROUPRn` to read RAZ from non-secure EL1. Both halves were
 fixed in `c7c06858` ("dk_verdict: gc-irq reads minimal-log level prefixes and
 accepts igroupr=mismatch with route=ours"), as today's
-`tools/probes/stm32mp257f_dk/verdict/dk_verdict.py` shows. The verdict lines
-below are the old parser's output on `console.mcp.txt` as saved.
+`tools/probes/stm32mp257f_dk/verdict/dk_verdict.py` shows: run over the
+three lines quoted in the `gc_fence` subsection below (`I: irq 215
+connected` and the two `gc_irq:` lines), it prints `verdict gc-irq
+route=PASS:ours igroupr=mismatch`, `1 checks, 0 failed`; `c7c06858` added
+that pair to the self-test (`testdata/gc-irq.minimal-pass`, placeholder
+values). The verdict lines below are the old parser's output on
+`console.mcp.txt` as saved.
 
 ### gc_fence: PASS, the fence retires through SPI 183
 
@@ -969,7 +974,7 @@ non-cacheable mapping with no cache maintenance (Q14: GPU-to-CPU visibility
 works for the 3D pipe too, not only for the resolve engine).
 
 - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa0006690 cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-- `verdict gc-irq connected=FAIL route=absent` (the parser's `I: ` prefix defect of steps 5-6; the line itself reads `route=ours`)
+- `verdict gc-irq connected=FAIL route=absent` (the parser's `I: ` prefix defect of steps 5-6, fixed in `c7c06858`; the line itself reads `route=ours`)
 - `verdict gc-triangle model=PASS apex-red=PASS apex-green=PASS apex-blue=PASS outside=PASS covered=PASS final=PASS record=PASS:kind=2`
 - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
 - runner: `board-stm32mp2.sh stm32mp257f-dk gc_triangle rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=44s`
@@ -995,7 +1000,7 @@ is `gl_test: PASS`, and the run ended with `mp2: board: run over: PSCI
 SYSTEM_RESET at 3308 ms`.
 
 - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c68 pc=0xa01fb2e0 cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-- `verdict gc-irq connected=FAIL route=absent` (the same parser defect)
+- `verdict gc-irq connected=FAIL route=absent` (the same parser defect, fixed in `c7c06858`)
 - `verdict gl-case1 case1=PASS tally=FAIL:absent final=PASS record=PASS:kind=1`
 - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
 - runner: `board-stm32mp2.sh stm32mp257f-dk gl_test_case1 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=57s`
