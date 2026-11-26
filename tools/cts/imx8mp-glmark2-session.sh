@@ -153,9 +153,13 @@ ARG=${rest##* -b }
 SCENE_NAME=${ARG%%:*}
 [[ $LABEL =~ ^gm([0-9][0-9])- ]] || step_fail resolve "label '$LABEL' is not gmNN-<name>"
 NN=${BASH_REMATCH[1]}
-# the slug rule of glmark2-host-ref.sh and glmark2-fb.py
-SLUG=$(printf '%s' "$INFO" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-48)
+# SLUG: the slug rule of glmark2-host-ref.sh and judge.py, not truncated; it
+# names the llvmpipe reference <ref-dir>/<slug>.png. The board picture is
+# $LABEL.png in the record (the path given to glmark2-fb.py, whose own
+# 48-character slug only names the PNGs of its --dir mode).
+SLUG=$(printf '%s' "$INFO" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
 echo "session: step resolve: $LABEL, $INFO (-b $ARG)"
+echo "session: reference name: $SLUG.png"
 
 # run
 RECORDS=${IMX8MP_RECORDS:-$REPO/records/imx8mp}

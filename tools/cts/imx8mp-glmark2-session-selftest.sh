@@ -63,11 +63,12 @@ absent() {
 cat > "$work/gen.py" << 'PY'
 import base64, binascii, importlib.util, os, sys
 here, out = sys.argv[1], sys.argv[2]
+sfx = sys.argv[3] if len(sys.argv) > 3 else ""
 spec = importlib.util.spec_from_file_location("fb", os.path.join(here, "glmark2-fb.py"))
 fb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fb)
 W, H = 160, 120
-scene = "[build] use-vbo=false"
+scene = sys.argv[4] if len(sys.argv) > 4 else "[build] use-vbo=false"
 
 
 def px(x, y):
@@ -93,17 +94,21 @@ def wr(name, ls):
         f.write("".join("12:%02d:%02d %s\n" % (i // 600 % 60, i // 10 % 60, l) for i, l in enumerate(ls)))
 
 
-wr("clean.log", lines)
-wr("bad.log", [l for l in lines if not l.startswith("glmark2-fb: 20 ")])
+wr("clean%s.log" % sfx, lines)
+wr("bad%s.log" % sfx, [l for l in lines if not l.startswith("glmark2-fb: 20 ")])
 chg = [bytearray(r) for r in rows]
 for y in range(30, 90):
     for x in range(20, 140):
         chg[y][x * 3:x * 3 + 3] = bytes((0, 0, 255))
-fb.write_png(os.path.join(out, "ref.png"), W, H, [bytes(r) for r in chg])
+fb.write_png(os.path.join(out, "ref%s.png" % sfx), W, H, [bytes(r) for r in chg])
 PY
 mkdir "$work/cap" "$work/ref"
 if ! python3 -I "$work/gen.py" "$here" "$work/cap"; then
     echo "FAIL generating the synthetic capture"
+    exit 1
+fi
+if ! python3 -I "$work/gen.py" "$here" "$work/cap" -loop "[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5"; then
+    echo "FAIL generating the synthetic capture of the loop scene"
     exit 1
 fi
 
@@ -154,6 +159,41 @@ check "(a) the note-fill command names scene, commit, record and route"
 run a2 "$label" --dry-run --ref-dir "$work/ref" --record-dir "$rec"
 [ "$rc" = 0 ] && grep -q "^session: step judge: " "$work/a2.out"
 check "(a) by label, and --dry-run with a record redoes the checks (got $rc)"
+
+# (k) the slug rules: the reference is <ref-dir>/<full host-ref slug>.png, the
+# board picture <label>.png; a short and a long (over 48 characters) slug, and
+# every scene's reference name equals the slug glmark2-host-ref.sh --list prints
+lslabel=gm31-loop
+lslug=loop-fragment-loop-false-fragment-steps-5-vertex-steps-5
+[ ${#lslug} -gt 48 ]
+check "(k) the long-slug scene's slug is over 48 characters (${#lslug})"
+lsrec=$work/k/20261125-1200-$lslabel-${image:0:8}
+mkdir -p "$lsrec" && cp "$work/cap/clean-loop.log" "$lsrec/console.txt"
+printf 'name=%s\ncommit=%s\nimage_sha256=%s\n' "$lslabel" "$commit" "$image" > "$lsrec/meta.txt"
+mkdir "$work/kref" && cp "$work/cap/ref-loop.png" "$work/kref/$lslug.png"
+run k1 "$lslabel" --record-dir "$lsrec" --ref-dir "$work/kref"
+[ "$rc" = 0 ] && [ -s "$lsrec/$lslabel.png" ] && [ -s "$lsrec/$lslabel.picdiff.png" ] && [ -s "$lsrec/$lslabel.sidebyside.png" ] &&
+    grep -q "^session: step judge: ok" "$work/k1.out"
+check "(k) long slug: the reference is found by the full slug, the judge runs (got $rc)"
+[ "$rc" = 0 ] || show k1
+mkdir "$work/kref48" && cp "$work/cap/ref-loop.png" "$work/kref48/${lslug:0:48}.png"
+run k2 "$lslabel" --record-dir "$lsrec" --ref-dir "$work/kref48"
+[ "$rc" != 0 ] && grep -q "no reference picture $lslug.png" "$work/k2.err"
+check "(k) long slug: a reference under the truncated name is not taken (got $rc)"
+rec=$(mkrec "$work/k3" "$work/cap/clean.log")
+run k3 "$label" --record-dir "$rec" --ref-dir "$work/ref"
+[ "$rc" = 0 ] && [ -s "$rec/$label.png" ] && grep -q "^session: reference name: $slug.png\$" "$work/k3.out"
+check "(k) short slug: reference $slug.png found (got $rc)"
+bash "$here/glmark2-host-ref.sh" --list | cut -f1 | sort > "$work/k.list"
+n=0
+: > "$work/k.names"
+while [ "$n" -lt 33 ]; do
+    n=$((n + 1))
+    run kall "$n" --dry-run --ref-dir "$work/ref"
+    sed -n 's/^session: reference name: \(.*\)\.png$/\1/p' "$work/kall.out" >> "$work/k.names"
+done
+[ "$(wc -l < "$work/k.list")" = 33 ] && sort "$work/k.names" | cmp -s - "$work/k.list"
+check "(k) the 33 scenes' reference names equal glmark2-host-ref.sh --list"
 
 # (j) the route, --main and the note-fill command accepted by note-fill.py
 fillnote=$here/imx8mp-glmark2-note-fill.py
