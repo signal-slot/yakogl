@@ -64,15 +64,29 @@
 //! - Interrupt status (`ltdc_irq`): `ISR` (0x38) is read and written back to
 //!   `ICR` (0x3C) to clear; `LIF` (bit 0) is the line interrupt at `LIPCR`
 //!   (vblank), `FUWIF` (1) FIFO underrun warning, `TERRIF` (2) transfer
-//!   error, `FUEIF` (6) FIFO underrun error. [`Ltdc::wait_frame`] polls
-//!   `LIF` with `IER.LIE` set, as r3.1 ltdc.c only ever relies on `LIF`
-//!   with `LIE` set (`ltdc_crtc_enable_vblank` :1454-1456,
-//!   `ltdc_crtc_set_crc_source` :1488-1490); the GIC line is not connected,
-//!   so the flag is still only polled. The scan line `CPSR.CYPOS` (:86,
-//!   :197, `ltdc_crtc_get_scanout_position` :1413-1415) wrapping is a second
-//!   witness, and [`Ltdc::frame_diag`] reads `ISR`, `IER`, `CPSR` twice,
-//!   `CDSR` (:87) and `GCR` after a timeout. At board-display3 (368e7875)
-//!   the poll with `LIE` clear saw no `LIF` in 83 ms after the chain came up.
+//!   error, `RRIF` (3) register reload, `FUIF` (6, ltdc.c's `FUEIF`) FIFO
+//!   underrun error, `CRCIF` (7) CRC mismatch, `FURIF` (8) rotation FIFO
+//!   underrun (RM0457 Rev 5 §53.8.13-15, Table 501). The frame wait follows
+//!   docs/notes/stm32mp257f-dk-display-bringup.md, "CRC and frame wait", fix
+//!   spec steps 4-9: [`Ltdc::wait_frame`] sets `IER.LIE` as ST does
+//!   (`ltdc_crtc_enable_vblank` :1454-1456, `ltdc_crtc_set_crc_source`
+//!   :1488-1490), clears `LIF` and then samples `ISR` and the scan line
+//!   `CPSR.CYPOS` (:86, :197, `ltdc_crtc_get_scanout_position` :1413-1415)
+//!   each step; a frame event is `LIF` or a `CYPOS` wrap, whichever comes
+//!   first ([`FrameVia`]), because on the DK `ISR` read 0 with `LIE` set
+//!   (board-display4, finding 1). Per event `ISR` is written to `ICR`
+//!   (`ltdc_irq` :1051-1052) and, for the CRC, `CCRCR` is read right after
+//!   (:1053-1054). [`Ltdc::frame_diag`] reads `ISR`, `IER`, `CPSR` twice,
+//!   `CDSR` (:87) and `GCR` after a timeout.
+//! - Read-backs (fix spec steps 1-3): `configure` reads `LIPCR` back
+//!   ([`Configured::lipcr`]); `enable` reads `IER` back and, after the reload,
+//!   `LxCR.LEN` and `GCR.LTDCEN`; `set_fb` also `LxCFBAR`. The non-layer
+//!   registers are not shadowed (R5 §53.5.20), so a read-back that differs is
+//!   a write-path fault, not a pending reload.
+//! - Scan-out check (fix spec checks 10-12): [`Ltdc::scanout_check`] counts
+//!   frame events, reads the layer back before and after them and collects
+//!   the error flags, with an `RRIF` positive control so that an `ISR` that
+//!   latches nothing is reported as "errors unobservable", not as clean.
 //! - Stop (`ltdc_plane_atomic_disable`, `ltdc_crtc_atomic_disable`,
 //!   `ltdc_encoder_disable`): `LXCR &= ~0x513` (LEN, COLKEN, CLUTEN, HMEN,
 //!   SCEN), `CACR` = 0, `IER &= ~0x146` (the rotation underrun too), an
@@ -89,21 +103,24 @@
 //!   `ltdc_get_caps` sets `caps.crc = true` for HWVER 0x040100/0x040101
 //!   (:2566) and clears it again when the third layer is secure (:2588-2590,
 //!   "Do not expose the crc to the user if the third layer is secure"); the
-//!   older versions have `caps.crc = false`. `ltdc_crtc_set_crc_source`
-//!   enables the CRC by `regmap_set_bits(LTDC_GCR, GCR_CRCEN)` (`GCR_CRCEN` =
-//!   bit 19, `LTDC_CCRCR` = 0x7C, "Computed CRC value") and disables it by
-//!   clearing the bit; `ltdc_irq` reads `CCRCR` once per line interrupt
-//!   (`LIF`, the event [`Ltdc::wait_frame`] polls) while `crc_active`, and
+//!   older versions have `caps.crc = false`. `ltdc_crtc_set_crc_source` sets
+//!   `IER_LIE` and then `GCR_CRCEN` (bit 19) (:1490-1491), clears them when
+//!   switched off (`LIE` only when no vblank needs it, :1494-1495) and zeroes
+//!   the skip counter (:1501); `ltdc_irq` reads `CCRCR` (0x7C, `CCRC[15:0]`,
+//!   R5 §53.8.25, a 16-bit signature of each frame's pixels, R5 §53.5.17)
+//!   once per line interrupt, right after `ISR` was written to `ICR`, and
 //!   `ltdc_irq_thread` drops the first `CRC_SKIP_FRAMES` (2) values after the
-//!   enable. [`Ltdc::crc_enable`], [`Ltdc::read_crc`] and [`Ltdc::frame_crc`]
-//!   do the same. This module knows the version but not the RIF state: the
-//!   caller passes whether layer 3 is secure (RIFSC entry 120) to
-//!   `crc_enable`. The CRC algorithm is not documented, so nothing here
-//!   computes an expected value: a caller checks that the CRC is stable
-//!   across frames of a static picture and changes when the picture changes.
+//!   enable (:1017-1018). [`Ltdc::crc_enable`] and [`Ltdc::frame_crc`] do the
+//!   same; [`Ltdc::crc_pin`] arms the hardware comparison (`ECRCR` 0x78,
+//!   R5 §53.8.24, `IER.CRCIE` bit 7) for the board's latch-point experiment.
+//!   This module knows the version but not the RIF state: the caller passes
+//!   whether layer 3 is secure (RIFSC entry 120) to `crc_enable`. The CRC
+//!   algorithm is not documented and the line where its value becomes final
+//!   is not stated (the note's verdict), so the CRC is a logged diagnostic:
+//!   nothing here computes an expected value or lets it decide a check.
 
 use crate::env::{Env, Level};
-use crate::errno::{EINVAL, ENODEV, ETIMEDOUT};
+use crate::errno::{EINVAL, EIO, ENODEV, ETIMEDOUT};
 use crate::mmio::{field, Mmio};
 use crate::video::VideoMode;
 
@@ -130,8 +147,15 @@ pub const CDSR: u32 = 0x48;
 pub const CPSR_CYPOS: u32 = 0xffff;
 pub const EDCR: u32 = 0x60;
 pub const FUT: u32 = 0x90;
-/// `LTDC_CCRCR`: the computed frame CRC (MP25 versions only).
+/// `LTDC_ECRCR` (R5 §53.8.24): the expected CRC, `ECRC[15:0]`.
+pub const ECRCR: u32 = 0x78;
+/// `LTDC_CCRCR`: the computed frame CRC (MP25 versions only), `CCRC[15:0]`
+/// (R5 §53.8.25).
 pub const CCRCR: u32 = 0x7c;
+/// The 16 bits of `CCRCR`/`ECRCR` that hold the CRC.
+pub const CRC_MASK: u32 = 0xffff;
+/// `LIPCR.LIPOS[11:0]` (R5 §53.8.16) and the vertical fields of `AWCR`.
+pub const LINE_MASK: u32 = 0xfff;
 
 pub const HWVER_10200: u32 = 0x01_0200;
 pub const HWVER_10300: u32 = 0x01_0300;
@@ -165,8 +189,16 @@ pub const RCR_VBR: u32 = 1 << 1;
 pub const INT_LINE: u32 = 1 << 0;
 pub const INT_FU_WARN: u32 = 1 << 1;
 pub const INT_TRANSFER_ERR: u32 = 1 << 2;
+/// `RRIF`/`RRIE` (bit 3): a register reload took place (R5 §53.8.14).
+pub const INT_RELOAD: u32 = 1 << 3;
+/// `FUIF`/`FUIE` (bit 6; ltdc.c's `FUEIF`/`FUEIE`).
 pub const INT_FU_ERR: u32 = 1 << 6;
+/// `CRCIF`/`CRCIE` (bit 7): `CCRCR` differs from `ECRCR` (R5 §53.8.14).
+pub const INT_CRC: u32 = 1 << 7;
 pub const INT_FU_ROT: u32 = 1 << 8;
+/// What fails the scan-out check (fix spec check 12): FIFO underrun
+/// warning and error, transfer error, rotation FIFO underrun (0x146).
+pub const SCANOUT_ERRORS: u32 = INT_FU_WARN | INT_TRANSFER_ERR | INT_FU_ERR | INT_FU_ROT;
 /// `IER_LIE` (r3.1 ltdc.c :188), the enable of `INT_LINE`.
 pub const IER_LIE: u32 = INT_LINE;
 /// The error interrupts `ltdc_crtc_atomic_enable` unmasks (0x46).
@@ -206,7 +238,7 @@ const PFCR_MASK: u32 = 0x7;
 /// Bounds of the waits: a reload completes at the next vertical blank, so
 /// two frames at 24 Hz is the limit.
 pub const FRAME_WAIT_US: u32 = 2 * 41_667;
-const POLL_STEP_US: u32 = 50;
+pub const POLL_STEP_US: u32 = 50;
 
 /// Layer pixel formats (`ltdc_pix_fmt_*`). `Xrgb8888` is `Argb8888` with
 /// the blender told there is no alpha (`BFCR` 0x405).
@@ -337,6 +369,10 @@ pub struct Output {
 pub struct Configured {
     pub pitch: u32,
     pub line_length: u32,
+    /// `LIPCR` read back right after it was written (fix spec step 1; it
+    /// should equal `accum_act_h + 1`, ltdc.c :1209). Not shadowed (R5
+    /// §53.5.20): a different value is a write that did not land.
+    pub lipcr: u32,
 }
 
 /// A probed LTDC.
@@ -426,6 +462,7 @@ impl Ltdc {
         upd(m, b, AWCR, tm, (acc_w << 16) | acc_h);
         upd(m, b, TWCR, tm, ((mode.htotal() - 1) << 16) | (mode.vtotal() - 1));
         wr(m, b, LIPCR, acc_h + 1);
+        let lipcr = rd(m, b, LIPCR);
         upd(m, b, GCR, GCR_POL_MASK, pol);
         if self.hwver >= HWVER_40100 {
             // ycbcr_output: the output converter off (RGB out)
@@ -453,7 +490,7 @@ impl Ltdc {
         if let (Some(reg), Some(bytes)) = (r.blcr, out.burst_bytes) {
             wr(m, b, reg, bytes);
         }
-        Ok(Configured { pitch, line_length })
+        Ok(Configured { pitch, line_length, lipcr })
     }
 
     fn wait_reload(&self, m: &impl Mmio, env: &impl Env, bit: u32) -> Result<(), i32> {
@@ -470,13 +507,19 @@ impl Ltdc {
         }
     }
 
-    /// Start scanning: error interrupts unmasked, the layer on, a vertical
-    /// blanking reload requested, the FIFO threshold, then `LTDCEN`; waits for
-    /// the hardware to take the reload. `Err(-ETIMEDOUT)` means no frame
-    /// boundary came within two frames: the pixel clock is not running.
+    /// Start scanning: error interrupts unmasked (and `IER` read back, fix
+    /// spec step 2), the layer on, a vertical blanking reload requested, the
+    /// FIFO threshold, then `LTDCEN`; waits for the hardware to take the
+    /// reload. `Err(-ETIMEDOUT)` means no frame boundary came within two
+    /// frames: the pixel clock is not running. `Err(-EIO)`: after the reload
+    /// `LxCR.LEN` or `GCR.LTDCEN` does not read back set (fix spec step 3).
     pub fn enable(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
         let b = self.base;
         upd(m, b, IER, IER_ERRORS, IER_ERRORS);
+        let ier = rd(m, b, IER);
+        if ier & IER_ERRORS != IER_ERRORS {
+            env.log(Level::Wrn, format_args!("ltdc: IER reads {ier:#x} after |= {IER_ERRORS:#x}"));
+        }
         upd(m, b, self.regs.cr, LXCR_MASK, LXCR_LEN);
         wr(m, b, self.reload_reg(), RCR_VBR);
         if self.hwver >= HWVER_40100 {
@@ -486,8 +529,25 @@ impl Ltdc {
         let res = self.wait_reload(m, env, RCR_VBR);
         if res.is_err() {
             env.log(Level::Err, format_args!("ltdc: reload not taken, no pixel clock?"));
+            return res;
         }
-        res
+        let l = self.layer_readback(m);
+        if !l.on() {
+            env.log(
+                Level::Err,
+                format_args!("ltdc: after the reload LxCR {:#x} GCR {:#x}: layer not on", l.lxcr, l.gcr),
+            );
+            return Err(-EIO);
+        }
+        Ok(())
+    }
+
+    /// `LxCFBAR`, `LxCR` and `GCR` as they read now (fix spec step 3 and
+    /// check 11; ltdc.c reads layer registers back through its regmap,
+    /// :563, :583).
+    pub fn layer_readback(&self, m: &impl Mmio) -> LayerReadback {
+        let b = self.base;
+        LayerReadback { cfbar: rd(m, b, self.regs.cfbar), lxcr: rd(m, b, self.regs.cr), gcr: rd(m, b, GCR) }
     }
 
     /// Stop: the layer off with constant alpha 0, errors masked, the change
@@ -507,14 +567,28 @@ impl Ltdc {
         Ok(())
     }
 
-    /// Point the running layer at `phys` and wait for the reload.
+    /// Point the running layer at `phys` and wait for the reload, then read
+    /// the layer back (fix spec step 3): `Err(-EIO)` when `LxCFBAR` is not
+    /// `phys` or the layer or the block is not on.
     pub fn set_fb(&self, m: &impl Mmio, env: &impl Env, phys: u64) -> Result<(), i32> {
         if phys >> 32 != 0 || !phys.is_multiple_of(u64::from(self.bus_bytes)) {
             return Err(-EINVAL);
         }
         wr(m, self.base, self.regs.cfbar, phys as u32);
         wr(m, self.base, self.reload_reg(), RCR_VBR);
-        self.wait_reload(m, env, RCR_VBR)
+        self.wait_reload(m, env, RCR_VBR)?;
+        let l = self.layer_readback(m);
+        if !l.shows(phys) {
+            env.log(
+                Level::Err,
+                format_args!(
+                    "ltdc: after the reload CFBAR {:#x} (want {phys:#x}) LxCR {:#x} GCR {:#x}",
+                    l.cfbar, l.lxcr, l.gcr
+                ),
+            );
+            return Err(-EIO);
+        }
+        Ok(())
     }
 
     /// Whether this version has the frame CRC (`caps.crc`, :2566).
@@ -522,12 +596,14 @@ impl Ltdc {
         matches!(self.hwver, HWVER_40100 | HWVER_40101)
     }
 
-    /// Switch the CRC unit on or off (`ltdc_crtc_set_crc_source`: `GCR_CRCEN`
-    /// set or cleared, nothing else touched). `Err(-ENODEV)` where the
-    /// version has no CRC; `Err(-EINVAL)` when switching on while layer 3 is
-    /// secure (`layer3_secure`, RIFSC entry 120: ltdc.c :2588-2590 then
-    /// offers no CRC source). The first [`CRC_SKIP_FRAMES`] frames after
-    /// switching on are not meaningful.
+    /// Switch the CRC unit on or off as `ltdc_crtc_set_crc_source` does
+    /// (fix spec step 8): on, `IER |= LIE` then `GCR |= CRCEN` (:1490-1491);
+    /// off, `CRCEN` cleared and `LIE` with it (no vblank user here,
+    /// :1494-1495). `Err(-ENODEV)` where the version has no CRC;
+    /// `Err(-EINVAL)` when switching on while layer 3 is secure
+    /// (`layer3_secure`, RIFSC entry 120: ltdc.c :2588-2590 then offers no CRC
+    /// source). The skip counter of :1501 is [`Ltdc::frame_crc`]'s, which
+    /// starts at 0 on every call.
     pub fn crc_enable(&self, m: &impl Mmio, on: bool, layer3_secure: bool) -> Result<(), i32> {
         if !self.has_crc() {
             return Err(-ENODEV);
@@ -535,20 +611,61 @@ impl Ltdc {
         if on && layer3_secure {
             return Err(-EINVAL);
         }
-        upd(m, self.base, GCR, GCR_CRCEN, if on { GCR_CRCEN } else { 0 });
+        let b = self.base;
+        if on {
+            upd(m, b, IER, IER_LIE, IER_LIE);
+            upd(m, b, GCR, GCR_CRCEN, GCR_CRCEN);
+        } else {
+            upd(m, b, GCR, GCR_CRCEN, 0);
+            upd(m, b, IER, IER_LIE | INT_CRC, 0);
+        }
         Ok(())
     }
 
-    /// `CCRCR` as it stands (`ltdc_irq` reads it once per line interrupt).
+    /// `CCRCR[15:0]` as it stands (`ltdc_irq` reads it once per line
+    /// interrupt, :1053-1054; R5 §53.8.25).
     pub fn read_crc(&self, m: &impl Mmio) -> u32 {
-        rd(m, self.base, CCRCR)
+        rd(m, self.base, CCRCR) & CRC_MASK
     }
 
-    /// Wait for a frame ([`Ltdc::wait_frame`]) and return the CRC computed
-    /// for it.
-    pub fn frame_crc(&self, m: &impl Mmio, env: &impl Env) -> Result<u32, i32> {
-        self.wait_frame(m, env)?;
-        Ok(self.read_crc(m))
+    /// The CRC of a frame, as ST reports it (fix spec steps 8-9): frame
+    /// events with `CCRCR` read in each event's step right after `ICR`
+    /// (:1051-1054), the first [`CRC_SKIP_FRAMES`] dropped (:274,
+    /// :1017-1018), the third returned with its line and trigger
+    /// ([`FrameEvent::crc`]). A diagnostic: R5 does not say at which line the
+    /// value is final, so it decides nothing. `Err(-ENODEV)` without a CRC
+    /// unit, `Err(-EINVAL)` while `GCR.CRCEN` is clear, `Err(-ETIMEDOUT)`.
+    pub fn frame_crc(&self, m: &impl Mmio, env: &impl Env) -> Result<FrameEvent, i32> {
+        if !self.has_crc() {
+            return Err(-ENODEV);
+        }
+        if rd(m, self.base, GCR) & GCR_CRCEN == 0 {
+            return Err(-EINVAL);
+        }
+        for _ in 0..CRC_SKIP_FRAMES {
+            self.wait_event(m, env, true)?;
+        }
+        self.wait_event(m, env, true)
+    }
+
+    /// The board's CRC latch-point experiment (the note's (b), fix spec step
+    /// 9's addition): `ECRCR` = `expected` (R5 §53.8.24), `CRCIF` cleared and
+    /// `IER.CRCIE` (bit 7) set, so the hardware flags every frame whose CRC
+    /// differs; `on = false` clears `CRCIE`. `CRCIF` is a diagnostic, never a
+    /// scan-out error. `Err(-ENODEV)` without a CRC unit.
+    pub fn crc_pin(&self, m: &impl Mmio, expected: u32, on: bool) -> Result<(), i32> {
+        if !self.has_crc() {
+            return Err(-ENODEV);
+        }
+        let b = self.base;
+        if on {
+            wr(m, b, ECRCR, expected & CRC_MASK);
+            wr(m, b, ICR, INT_CRC);
+            upd(m, b, IER, INT_CRC, INT_CRC);
+        } else {
+            upd(m, b, IER, INT_CRC, 0);
+        }
+        Ok(())
     }
 
     /// Whether the controller is enabled with the layer on.
@@ -566,50 +683,66 @@ impl Ltdc {
         wr(m, self.base, ICR, bits)
     }
 
-    /// Wait for one frame boundary, the way r3.1 ltdc.c gets its vblank: the
-    /// line interrupt (`LIF` at `LIPCR`, the end of the active area) with
-    /// `IER.LIE` set. ST's driver never reads `LIF` with `LIE` clear: it sets
-    /// `LIE` in `ltdc_crtc_enable_vblank` (:1454-1456) and for the CRC in
-    /// `ltdc_crtc_set_crc_source` (:1488-1490), and clears it only when
-    /// neither needs it (:1472-1473, :1494-1495); `ltdc_crtc_atomic_enable`
-    /// itself unmasks only the error interrupts (:1265-1266). So: `LIE` set if
-    /// it was clear, `LIF` cleared through `ICR` (`ltdc_irq` :1051-1052), then
-    /// `ISR` polled. As a second witness the scan line (`CPSR.CYPOS`, which
-    /// `ltdc_crtc_get_scanout_position` reads, :1413-1415) is sampled each
-    /// step: a wrap to a lower line is a frame boundary too (logged as a
-    /// warning, since then `LIF` did not latch). `LIE` is cleared again
-    /// afterwards when it was clear before; nothing routes the interrupt
-    /// (no IRQ is connected), so the flag is only polled.
-    /// `Err(-ETIMEDOUT)` after two 24 Hz frames.
-    pub fn wait_frame(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
+    /// Wait for one frame event (docs/notes/stm32mp257f-dk-display-bringup.md,
+    /// "CRC and frame wait", fix spec steps 4-7):
+    ///
+    /// 4. `IER |= LIE` if clear (:1456, :1490), `ICR` <- `LIF` (:1052);
+    /// 5. every [`POLL_STEP_US`] `ISR` and `CPSR.CYPOS` (:1413-1415) are
+    ///    sampled; the event is `ISR.LIF` or a `CYPOS` lower than the sample
+    ///    before (a wrap), whichever comes first;
+    /// 6. `Err(-ETIMEDOUT)` after [`FRAME_WAIT_US`] (two 24 Hz frames);
+    /// 7. in the event's step `ISR` as read is written to `ICR` (:1051-1052)
+    ///    before anything else, and returned in [`FrameEvent::isr`] for the
+    ///    caller's error count.
+    ///
+    /// `LIE` is cleared again when it was clear before (no IRQ is connected,
+    /// the flag is only polled). One addition to the spec, so that `LIF` and
+    /// the wrap of one frame are not two frames: a wait that starts at or
+    /// past `LIPOS` (`LIPCR[11:0]`, after this frame's `LIF`) does not count
+    /// the wrap that ends that frame; it waits for the next event.
+    pub fn wait_frame(&self, m: &impl Mmio, env: &impl Env) -> Result<FrameEvent, i32> {
+        self.wait_event(m, env, false)
+    }
+
+    fn wait_event(&self, m: &impl Mmio, env: &impl Env, crc: bool) -> Result<FrameEvent, i32> {
         let b = self.base;
         let lie_was_set = rd(m, b, IER) & IER_LIE != 0;
         if !lie_was_set {
             upd(m, b, IER, IER_LIE, IER_LIE);
         }
         self.clear_status(m, INT_LINE);
-        let res = self.poll_frame(m, env);
+        let res = self.poll_event(m, env, crc);
         if !lie_was_set {
             upd(m, b, IER, IER_LIE, 0);
         }
         res
     }
 
-    fn poll_frame(&self, m: &impl Mmio, env: &impl Env) -> Result<(), i32> {
-        let mut last = rd(m, self.base, CPSR) & CPSR_CYPOS;
+    fn poll_event(&self, m: &impl Mmio, env: &impl Env, crc: bool) -> Result<FrameEvent, i32> {
+        let b = self.base;
+        let lipos = rd(m, b, LIPCR) & LINE_MASK;
+        let start = rd(m, b, CPSR) & CPSR_CYPOS;
+        // past this frame's LIF line: its wrap is the same frame's end
+        let mut armed = lipos == 0 || start < lipos;
+        let mut last = start;
         let mut waited = 0;
         loop {
-            let isr = self.status(m);
-            if isr & INT_LINE != 0 {
-                return Ok(());
-            }
-            let line = rd(m, self.base, CPSR) & CPSR_CYPOS;
-            if line < last {
-                env.log(
-                    Level::Wrn,
-                    format_args!("ltdc: frame seen by CPSR (line {last} -> {line}), ISR.LIF not set (ISR {isr:#x})"),
-                );
-                return Ok(());
+            let isr = rd(m, b, ISR);
+            let line = rd(m, b, CPSR) & CPSR_CYPOS;
+            let via = if isr & INT_LINE != 0 {
+                Some(FrameVia::Lif)
+            } else if line < last && armed {
+                Some(FrameVia::Wrap)
+            } else {
+                if line < last {
+                    armed = true;
+                }
+                None
+            };
+            if let Some(via) = via {
+                wr(m, b, ICR, isr);
+                let crc = crc.then(|| self.read_crc(m));
+                return Ok(FrameEvent { via, line_before: last, line, isr, crc, waited_us: waited });
             }
             last = line;
             if waited >= FRAME_WAIT_US {
@@ -618,6 +751,75 @@ impl Ltdc {
             env.busy_wait_us(POLL_STEP_US);
             waited += POLL_STEP_US;
         }
+    }
+
+    /// The scan-out check the probes' PASS rests on (fix spec checks 10-12):
+    ///
+    /// - the layer read back ([`Ltdc::layer_readback`]) before the frames;
+    /// - `LIPCR` and `IER` read back (diagnostics for the note's (a)(i));
+    /// - the `RRIF` positive control (check 12, R5 §53.8.14 bit 3): `RRIF`
+    ///   cleared, `IER.RRIE` set, one `VBR` reload (`L1RCR`, :2015, or `SRCR`)
+    ///   waited for; `RRIF` must then stand in an event's `ISR`;
+    /// - `frames` frame events ([`Ltdc::wait_frame`]), each within
+    ///   [`FRAME_WAIT_US`] of the one before (check 10);
+    /// - the layer read back again after the last frame (check 11);
+    /// - `RRIE` restored.
+    ///
+    /// Every event's `ISR` is collected (check 12): any of [`SCANOUT_ERRORS`]
+    /// fails; `CRCIF` is counted only. The result says what failed
+    /// ([`ScanoutCheck::rc`]); nothing about the CRC enters it.
+    pub fn scanout_check(&self, m: &impl Mmio, env: &impl Env, frames: u32, phys: u64) -> ScanoutCheck {
+        let b = self.base;
+        let mut c = ScanoutCheck { frames_wanted: frames, cfbar_want: phys as u32, ..ScanoutCheck::default() };
+        let before = self.layer_readback(m);
+        c.layer_ok_before = before.shows(phys);
+        c.lipcr = rd(m, b, LIPCR);
+        c.lipcr_want = (rd(m, b, AWCR) & LINE_MASK) + 1;
+        c.ier = rd(m, b, IER);
+        // the positive control: a VBR reload must latch RRIF
+        let rrie_was_set = c.ier & INT_RELOAD != 0;
+        wr(m, b, ICR, INT_RELOAD);
+        if !rrie_was_set {
+            upd(m, b, IER, INT_RELOAD, INT_RELOAD);
+        }
+        wr(m, b, self.reload_reg(), RCR_VBR);
+        let reload = self.wait_reload(m, env, RCR_VBR);
+        if reload.is_ok() {
+            for _ in 0..frames {
+                match self.wait_frame(m, env) {
+                    Ok(e) => c.count(&e),
+                    Err(_) => break,
+                }
+            }
+        }
+        if !rrie_was_set {
+            upd(m, b, IER, INT_RELOAD, 0);
+        }
+        let after = self.layer_readback(m);
+        c.cfbar = after.cfbar;
+        c.lxcr = after.lxcr;
+        c.gcr = after.gcr;
+        c.layer_ok_after = after.shows(phys);
+        c.rrif_seen = c.isr_or & INT_RELOAD != 0;
+        if reload.is_err() || frames == 0 || c.frames < frames {
+            c.failed |= SCANOUT_FAIL_FRAMES;
+        }
+        if !(c.layer_ok_before && c.layer_ok_after) {
+            c.failed |= SCANOUT_FAIL_LAYER;
+        }
+        if c.isr_or & SCANOUT_ERRORS != 0 {
+            c.failed |= SCANOUT_FAIL_ERRORS;
+        }
+        if c.frames_lif == 0 && c.frames_wrap > 0 {
+            env.log(
+                Level::Wrn,
+                format_args!("ltdc: LIF did not latch in {} frames (counted by the CPSR wrap)", c.frames_wrap),
+            );
+        }
+        if !c.rrif_seen {
+            env.log(Level::Wrn, format_args!("ltdc: errors unobservable (ISR latched no RRIF after a VBR reload)"));
+        }
+        c
     }
 
     /// The registers that tell why no frame came ([`FrameDiag`]): `ISR`,
@@ -664,6 +866,125 @@ pub struct FrameDiag {
     pub lipcr: u32,
     /// `SRCR`, the global reload register (also read where `rcr` is `L1RCR`).
     pub srcr: u32,
+}
+
+/// What triggered a frame event ([`Ltdc::wait_frame`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameVia {
+    /// `CPSR.CYPOS` went below the sample before: the frame ended.
+    Wrap,
+    /// `ISR.LIF`: the line `LIPCR` names was reached.
+    Lif,
+}
+
+/// One frame event: what fired it, the scan lines around it, `ISR` as read
+/// in its step (then written to `ICR`) and, for [`Ltdc::frame_crc`],
+/// `CCRCR[15:0]` read right after.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameEvent {
+    pub via: FrameVia,
+    /// `CYPOS` of the sample before the event's.
+    pub line_before: u32,
+    /// `CYPOS` in the event's step: the line the CRC read landed at.
+    pub line: u32,
+    pub isr: u32,
+    pub crc: Option<u32>,
+    /// Time polled before the event.
+    pub waited_us: u32,
+}
+
+/// `LxCFBAR`, `LxCR` and `GCR` as read back ([`Ltdc::layer_readback`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct LayerReadback {
+    pub cfbar: u32,
+    pub lxcr: u32,
+    pub gcr: u32,
+}
+
+impl LayerReadback {
+    /// `LxCR.LEN` and `GCR.LTDCEN` set.
+    pub const fn on(&self) -> bool {
+        self.lxcr & LXCR_LEN != 0 && self.gcr & GCR_LTDCEN != 0
+    }
+
+    /// On, and scanning `phys`.
+    pub fn shows(&self, phys: u64) -> bool {
+        self.on() && phys >> 32 == 0 && self.cfbar == phys as u32
+    }
+}
+
+/// [`ScanoutCheck::failed`] bits.
+pub const SCANOUT_FAIL_FRAMES: u32 = 1 << 0;
+pub const SCANOUT_FAIL_LAYER: u32 = 1 << 1;
+pub const SCANOUT_FAIL_ERRORS: u32 = 1 << 2;
+
+/// What [`Ltdc::scanout_check`] saw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct ScanoutCheck {
+    pub frames_wanted: u32,
+    /// Frame events seen, and by which trigger.
+    pub frames: u32,
+    pub frames_lif: u32,
+    pub frames_wrap: u32,
+    /// The longest poll before an event.
+    pub max_wait_us: u32,
+    /// The layer after the last frame, and the address it should scan.
+    pub cfbar: u32,
+    pub cfbar_want: u32,
+    pub lxcr: u32,
+    pub gcr: u32,
+    /// `LIPCR` read back and `AWCR.AAH + 1` (ltdc.c :1209).
+    pub lipcr: u32,
+    pub lipcr_want: u32,
+    /// `IER` read back before the check.
+    pub ier: u32,
+    /// Every event's `ISR`, or-ed.
+    pub isr_or: u32,
+    /// Events whose `ISR` had `FUWIF`, `FUIF`, `TERRIF`, `FURIF`, `CRCIF`.
+    pub fuwif: u32,
+    pub fuif: u32,
+    pub terrif: u32,
+    pub furif: u32,
+    pub crcif: u32,
+    /// `SCANOUT_FAIL_*`.
+    pub failed: u32,
+    /// `RRIF` came after the control's `VBR` reload: `ISR` latches, so a
+    /// clean error count means something. Without it the errors are
+    /// unobservable (not a failure, not a pass of check 12).
+    pub rrif_seen: bool,
+    pub layer_ok_before: bool,
+    pub layer_ok_after: bool,
+}
+
+impl ScanoutCheck {
+    fn count(&mut self, e: &FrameEvent) {
+        self.frames += 1;
+        match e.via {
+            FrameVia::Lif => self.frames_lif += 1,
+            FrameVia::Wrap => self.frames_wrap += 1,
+        }
+        self.max_wait_us = self.max_wait_us.max(e.waited_us);
+        self.isr_or |= e.isr;
+        let n = |bit: u32| u32::from(e.isr & bit != 0);
+        self.fuwif += n(INT_FU_WARN);
+        self.fuif += n(INT_FU_ERR);
+        self.terrif += n(INT_TRANSFER_ERR);
+        self.furif += n(INT_FU_ROT);
+        self.crcif += n(INT_CRC);
+    }
+
+    /// 0 when checks 10-12 hold; `-ETIMEDOUT` for missing frames (or the
+    /// control's reload not taken), else `-EIO` for the layer or an error
+    /// flag.
+    pub const fn rc(&self) -> i32 {
+        if self.failed & SCANOUT_FAIL_FRAMES != 0 {
+            -ETIMEDOUT
+        } else if self.failed != 0 {
+            -EIO
+        } else {
+            0
+        }
+    }
 }
 
 /// Eight colour bars (white, yellow, cyan, green, magenta, red, blue, black;
@@ -726,6 +1047,11 @@ mod tests {
         no_lif: bool,
         /// `CPSR` values returned in turn, the last one repeating.
         cpsr: RefCell<Vec<u32>>,
+        /// A taken `VBR` reload latches `RRIF` (R5 §53.8.14 bit 3); off by
+        /// default so the other tests' `ISR` values stay as they were.
+        rrif: bool,
+        /// Offsets whose writes do not land.
+        drop_writes: RefCell<Vec<u32>>,
     }
 
     impl Fake {
@@ -738,6 +1064,8 @@ mod tests {
                 lif_needs_lie: true,
                 no_lif: false,
                 cpsr: RefCell::default(),
+                rrif: false,
+                drop_writes: RefCell::default(),
             };
             f.regs.borrow_mut().insert(B + IDR as usize, idr);
             f.regs.borrow_mut().insert(B + GC2R as usize, bw << 4);
@@ -768,6 +1096,9 @@ mod tests {
             if off == self.reload_off() && on && v & RCR_VBR != 0 {
                 v &= !RCR_VBR;
                 self.regs.borrow_mut().insert(addr, v);
+                if self.rrif {
+                    *self.regs.borrow_mut().entry(B + ISR as usize).or_default() |= INT_RELOAD;
+                }
             }
             let lie = self.peek(IER) & IER_LIE != 0;
             if off == ISR && on && !self.no_lif && (lie || !self.lif_needs_lie) {
@@ -783,6 +1114,9 @@ mod tests {
         fn write32(&self, addr: usize, val: u32) {
             let off = (addr - B) as u32;
             self.log.borrow_mut().push((true, off, val));
+            if self.drop_writes.borrow().contains(&off) {
+                return;
+            }
             let mut r = self.regs.borrow_mut();
             if off == ICR {
                 *r.entry(B + ISR as usize).or_default() &= !val;
@@ -818,7 +1152,7 @@ mod tests {
         let l = Ltdc::probe(&f, B).unwrap();
         f.clear_log();
         let c = l.configure(&f, &M720, &Output::default(), &LAYER).unwrap();
-        assert_eq!(c, Configured { pitch: 5120, line_length: 5127 });
+        assert_eq!(c, Configured { pitch: 5120, line_length: 5127, lipcr: 745 });
         // ltdc_crtc_mode_set_nofb: SSCR/BPCR/AWCR/TWCR, LIPCR, then GCR
         // polarity (HSPOL|VSPOL, DE high) and (a2) EDCR 0; hsync 40-1, vsync 5-1, accum_hbp
         // 40+220-1, accum_vbp 5+20-1, +1280/+720, total 1649/749, LIPCR 745
@@ -969,11 +1303,14 @@ mod tests {
         let e = TestEnv::default();
         let l = running(&f, &e);
         assert_eq!(f.peek(IER) & IER_LIE, 0, "enable leaves LIE clear, as ltdc.c");
-        l.wait_frame(&f, &e).unwrap();
-        assert_eq!(f.writes(), [(IER, IER_ERRORS | IER_LIE), (ICR, INT_LINE), (IER, IER_ERRORS)]);
+        let ev = l.wait_frame(&f, &e).unwrap();
+        assert_eq!(ev.via, FrameVia::Lif);
+        // LIE on, LIF cleared, the event's ISR written to ICR (:1052), LIE off
+        assert_eq!(f.writes(), [(IER, IER_ERRORS | IER_LIE), (ICR, INT_LINE), (ICR, INT_LINE), (IER, IER_ERRORS)]);
         let reads: Vec<u32> = f.log.borrow().iter().filter(|x| !x.0).map(|x| x.1).collect();
-        // IER (for LIE), IER (the modify), CPSR (the start line), ISR (LIF), IER (the restore)
-        assert_eq!(reads, [IER, IER, CPSR, ISR, IER]);
+        // IER (for LIE), IER (the modify), LIPCR (LIPOS), CPSR (the start
+        // line), ISR + CPSR (the step), IER (the restore)
+        assert_eq!(reads, [IER, IER, LIPCR, CPSR, ISR, CPSR, IER]);
         assert!(e.lines.borrow().is_empty());
         // the old poll (LIE clear) sees nothing on such a block
         l.clear_status(&f, INT_LINE);
@@ -1011,26 +1348,88 @@ mod tests {
         upd(&f, B, IER, IER_LIE, IER_LIE);
         f.clear_log();
         l.wait_frame(&f, &e).unwrap();
-        assert_eq!(f.writes(), [(ICR, INT_LINE)]);
+        assert_eq!(f.writes(), [(ICR, INT_LINE), (ICR, INT_LINE)]);
         assert_eq!(f.peek(IER) & IER_LIE, IER_LIE);
     }
 
     #[test]
     fn wait_frame_takes_a_cpsr_wrap_when_lif_does_not_latch() {
-        // CPSR_CYPOS (:197), as ltdc_crtc_get_scanout_position reads it
-        // (:1413-1415): the line counting up then back to a low line is a
-        // frame boundary; the wait says that LIF did not come
+        // fix spec steps 5-6: CPSR_CYPOS (:197), as
+        // ltdc_crtc_get_scanout_position reads it (:1413-1415): the line
+        // counting up then back to a low line is a frame event (`Wrap`), no
+        // longer a warning; LIF never set and a running CPSR: the wait succeeds
         let mut f = Fake::mp25();
         f.no_lif = true;
         let e = TestEnv::default();
         let l = running(&f, &e);
         *f.cpsr.borrow_mut() = vec![(5 << 16) | 700, (9 << 16) | 744, (1 << 16) | 3];
-        l.wait_frame(&f, &e).unwrap();
-        let lines = e.lines.borrow();
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0].0, Level::Wrn);
-        assert!(lines[0].1.contains("line 744 -> 3"), "{}", lines[0].1);
+        let ev = l.wait_frame(&f, &e).unwrap();
+        assert_eq!((ev.via, ev.line_before, ev.line, ev.isr, ev.crc), (FrameVia::Wrap, 744, 3, 0, None));
+        assert_eq!(ev.waited_us, POLL_STEP_US);
+        assert!(e.lines.borrow().is_empty(), "the wrap is no longer logged per frame");
         assert_eq!(f.peek(IER) & IER_LIE, 0, "LIE restored");
+    }
+
+    #[test]
+    fn stm32_ltdc_step6_lif_with_a_stopped_cpsr_and_both_stopped() {
+        // fix spec step 6: LIF set and a standing CPSR succeeds with `Lif`;
+        // with both standing the wait times out after FRAME_WAIT_US
+        let f = Fake::mp25();
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        *f.cpsr.borrow_mut() = vec![412];
+        assert_eq!(l.wait_frame(&f, &e).unwrap().via, FrameVia::Lif);
+        let mut g = Fake::mp25();
+        g.no_lif = true;
+        let l = running(&g, &e);
+        *g.cpsr.borrow_mut() = vec![412];
+        let before = *e.waited_us.borrow();
+        assert_eq!(l.wait_frame(&g, &e), Err(-ETIMEDOUT));
+        assert!(*e.waited_us.borrow() - before >= u64::from(FRAME_WAIT_US));
+    }
+
+    #[test]
+    fn stm32_ltdc_step5_a_wait_past_lipos_does_not_count_its_own_frame_end() {
+        // fix spec step 5 with the guard documented on wait_frame: after a
+        // LIF event at LIPOS (745 for 720p, :1209) the next wait starts in the
+        // vertical blanking; the wrap there ends the frame whose LIF was
+        // already counted, so the next event is the following one
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        *f.cpsr.borrow_mut() = vec![746, 748, 2, 400, 749, 1];
+        let ev = l.wait_frame(&f, &e).unwrap();
+        assert_eq!((ev.via, ev.line_before, ev.line), (FrameVia::Wrap, 749, 1));
+        // a wait that starts before LIPOS counts the first wrap
+        *f.cpsr.borrow_mut() = vec![700, 749, 0];
+        assert_eq!(l.wait_frame(&f, &e).unwrap().line, 0);
+        // LIPCR 0 (a write that did not land): no LIF line known, every wrap counts
+        f.regs.borrow_mut().insert(B + LIPCR as usize, 0);
+        *f.cpsr.borrow_mut() = vec![746, 748, 2];
+        assert_eq!(l.wait_frame(&f, &e).unwrap().line, 2);
+    }
+
+    #[test]
+    fn stm32_ltdc_step7_icr_takes_the_event_isr_before_anything_else() {
+        // fix spec step 7, r3.1 ltdc_irq :1051-1052: the ISR value read in
+        // the event's step is written to ICR first; the error bits are taken
+        // from that value (FrameEvent::isr), so they are not lost
+        let f = Fake::mp25();
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        f.regs.borrow_mut().insert(B + ISR as usize, INT_FU_WARN | INT_TRANSFER_ERR);
+        upd(&f, B, IER, IER_LIE, IER_LIE);
+        f.clear_log();
+        let ev = l.wait_frame(&f, &e).unwrap();
+        assert_eq!(ev.isr, INT_LINE | INT_FU_WARN | INT_TRANSFER_ERR);
+        let log = f.log.borrow();
+        let isr = log.iter().rposition(|x| !x.0 && x.1 == ISR).unwrap();
+        // the step: ISR, CPSR, then ICR <- isr and nothing in between
+        assert_eq!(log[isr + 1].1, CPSR);
+        assert_eq!(log[isr + 2], (true, ICR, ev.isr));
+        drop(log);
+        assert_eq!(f.peek(ISR), 0, "cleared through ICR");
     }
 
     #[test]
@@ -1240,41 +1639,254 @@ mod tests {
     }
 
     #[test]
-    fn mp25_crc_enable_sets_only_crcen_and_read_returns_ccrcr() {
-        // r3.1 ltdc_crtc_set_crc_source: set/clear GCR_CRCEN (bit 19); CCRCR at 0x7c
-        assert_eq!((CCRCR, GCR_CRCEN, CRC_SKIP_FRAMES), (0x7c, 1 << 19, 2));
+    fn mp25_crc_enable_sets_lie_then_crcen_and_read_returns_ccrc_15_0() {
+        // fix spec step 8, r3.1 ltdc_crtc_set_crc_source: IER |= LIE, then
+        // GCR |= GCR_CRCEN (bit 19) (:1490-1491); off clears CRCEN and LIE
+        // (:1494-1495). CCRCR at 0x7c holds CCRC[15:0] (R5 §53.8.25)
+        assert_eq!((CCRCR, ECRCR, GCR_CRCEN, CRC_SKIP_FRAMES), (0x7c, 0x78, 1 << 19, 2));
         let f = Fake::mp25();
         let l = Ltdc::probe(&f, B).unwrap();
         assert!(l.has_crc());
         f.regs.borrow_mut().insert(B + GCR as usize, GCR_LTDCEN | GCR_HSPOL);
+        f.regs.borrow_mut().insert(B + IER as usize, IER_ERRORS);
         f.clear_log();
         l.crc_enable(&f, true, false).unwrap();
-        assert_eq!(f.peek(GCR), GCR_LTDCEN | GCR_HSPOL | GCR_CRCEN);
+        assert_eq!(f.writes(), [(IER, IER_ERRORS | IER_LIE), (GCR, GCR_LTDCEN | GCR_HSPOL | GCR_CRCEN)]);
         f.regs.borrow_mut().insert(B + CCRCR as usize, 0xdead_beef);
-        assert_eq!(l.read_crc(&f), 0xdead_beef);
+        assert_eq!(l.read_crc(&f), 0xbeef, "16 bits");
+        f.clear_log();
         l.crc_enable(&f, false, true).unwrap();
-        assert_eq!(f.peek(GCR), GCR_LTDCEN | GCR_HSPOL);
-        assert!(f.writes().iter().all(|w| w.0 == GCR), "only GCR is written");
+        assert_eq!(f.writes(), [(GCR, GCR_LTDCEN | GCR_HSPOL), (IER, IER_ERRORS)]);
     }
 
     #[test]
-    fn mp25_frame_crc_waits_for_a_frame_then_reads() {
+    fn mp25_frame_crc_skips_two_events_and_reads_ccrcr_in_the_third_events_step() {
+        // fix spec steps 8-9: CRC_SKIP_FRAMES (:274) events dropped
+        // (:1017-1018), the third returned; in every event's step CCRCR is
+        // read right after ICR <- ISR (ltdc_irq :1051-1054), with the CPSR
+        // sample of that step (the line the read landed at)
         let e = TestEnv::default();
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let l = running(&f, &e);
+        l.crc_enable(&f, true, false).unwrap();
+        f.regs.borrow_mut().insert(B + CCRCR as usize, 0x1234_5678);
+        *f.cpsr.borrow_mut() = vec![10, 749, 1, 500, 749, 2, 600, 749, 3];
+        f.clear_log();
+        let ev = l.frame_crc(&f, &e).unwrap();
+        assert_eq!((ev.via, ev.line, ev.crc), (FrameVia::Wrap, 3, Some(0x5678)));
+        let log = f.log.borrow();
+        let icr: Vec<usize> = log.iter().enumerate().filter(|x| x.1 .0 && x.1 .1 == ICR).map(|x| x.0).collect();
+        let crc: Vec<usize> = log.iter().enumerate().filter(|x| !x.1 .0 && x.1 .1 == CCRCR).map(|x| x.0).collect();
+        assert_eq!(crc.len(), 3, "read at every event, as ltdc_irq");
+        // per wait: ICR <- LIF at the start, ICR <- isr at the event
+        assert_eq!(icr.len(), 6);
+        for (k, c) in crc.iter().enumerate() {
+            assert_eq!(*c, icr[2 * k + 1] + 1, "CCRCR right after the event's ICR");
+            assert_eq!(log[c - 2].1, CPSR, "the event's CPSR sample just before");
+        }
+        drop(log);
+        // CRC off: refused before any wait; no pixel clock: no frame, no CRC
+        l.crc_enable(&f, false, false).unwrap();
+        assert_eq!(l.frame_crc(&f, &e), Err(-EINVAL));
+        let mut g = Fake::mp25();
+        g.no_clock = true;
+        let lg = Ltdc::probe(&g, B).unwrap();
+        g.regs.borrow_mut().insert(B + GCR as usize, GCR_CRCEN);
+        assert_eq!(lg.frame_crc(&g, &e), Err(-ETIMEDOUT));
+    }
+
+    #[test]
+    fn mp25_crc_pin_writes_ecrcr_and_sets_crcie() {
+        // fix spec step 9's addition: ECRCR (0x78, ECRC[15:0], R5 §53.8.24),
+        // CRCIF cleared, IER.CRCIE (bit 7, R5 §53.8.13); off clears CRCIE
         let f = Fake::mp25();
         let l = Ltdc::probe(&f, B).unwrap();
-        f.regs.borrow_mut().insert(B + GCR as usize, GCR_LTDCEN);
-        f.regs.borrow_mut().insert(B + CCRCR as usize, 0x1234_5678);
+        f.regs.borrow_mut().insert(B + IER as usize, IER_ERRORS);
         f.clear_log();
-        assert_eq!(l.frame_crc(&f, &e), Ok(0x1234_5678));
+        l.crc_pin(&f, 0x1_2fab, true).unwrap();
+        assert_eq!(f.writes(), [(ECRCR, 0x2fab), (ICR, INT_CRC), (IER, IER_ERRORS | INT_CRC)]);
+        l.crc_pin(&f, 0, false).unwrap();
+        assert_eq!(f.peek(IER), IER_ERRORS);
+        assert_eq!(Ltdc::probe(&Fake::new(HWVER_20101, 3), B).unwrap().crc_pin(&f, 0, true), Err(-ENODEV));
+    }
+
+    #[test]
+    fn stm32_ltdc_step1_lipcr_is_read_back() {
+        // fix spec step 1: LIPCR = accum_act_h + 1 (ltdc.c :1209, LIPOS[11:0]
+        // R5 §53.8.16), read back at once (not shadowed, R5 §53.5.20); a
+        // write that does not land shows in Configured::lipcr
+        let f = Fake::mp25();
+        let l = Ltdc::probe(&f, B).unwrap();
+        f.clear_log();
+        assert_eq!(l.configure(&f, &M720, &Output::default(), &LAYER).unwrap().lipcr, 745);
         let log = f.log.borrow();
-        let isr = log.iter().position(|e| !e.0 && e.1 == ISR).unwrap();
-        let crc = log.iter().position(|e| !e.0 && e.1 == CCRCR).unwrap();
-        assert!(isr < crc, "CCRCR is read after the line interrupt");
+        let w = log.iter().position(|x| *x == (true, LIPCR, 745)).unwrap();
+        assert_eq!(log[w + 1], (false, LIPCR, 745), "read right after the write");
         drop(log);
-        // no pixel clock: no frame, no CRC
         let g = Fake::mp25();
-        let lg = Ltdc::probe(&g, B).unwrap();
-        assert_eq!(lg.frame_crc(&g, &e), Err(-ETIMEDOUT));
+        g.drop_writes.borrow_mut().push(LIPCR);
+        let l = Ltdc::probe(&g, B).unwrap();
+        assert_eq!(l.configure(&g, &M720, &Output::default(), &LAYER).unwrap().lipcr, 0);
+    }
+
+    #[test]
+    fn stm32_ltdc_step2_ier_is_read_back_after_the_error_mask() {
+        // fix spec step 2: IER |= FUWIE|FUIE|TERRIE (0x46, ltdc.c :1266,
+        // R5 Table 501 / §53.8.13: bits 1, 6, 2), then read back; a mask that
+        // does not land is logged (a diagnostic, enable goes on)
+        let f = Fake::mp25();
+        let e = TestEnv::default();
+        let l = Ltdc::probe(&f, B).unwrap();
+        l.configure(&f, &M720, &Output::default(), &LAYER).unwrap();
+        f.clear_log();
+        l.enable(&f, &e).unwrap();
+        let log = f.log.borrow();
+        let w = log.iter().position(|x| *x == (true, IER, IER_ERRORS)).unwrap();
+        assert_eq!(log[w + 1], (false, IER, IER_ERRORS));
+        drop(log);
+        assert!(e.lines.borrow().is_empty());
+        let g = Fake::mp25();
+        g.drop_writes.borrow_mut().push(IER);
+        let l = Ltdc::probe(&g, B).unwrap();
+        l.configure(&g, &M720, &Output::default(), &LAYER).unwrap();
+        l.enable(&g, &e).unwrap();
+        assert!(e.lines.borrow().iter().any(|x| x.0 == Level::Wrn && x.1.contains("IER reads 0x0")), "{:?}", e.lines);
+    }
+
+    #[test]
+    fn stm32_ltdc_step3_layer_read_back_after_the_reload() {
+        // fix spec step 3: after the L1RCR VBR reload (ltdc.c :2015, :2082)
+        // LxCR.LEN and GCR.LTDCEN (enable) and LxCFBAR (set_fb) read back;
+        // a mismatch is -EIO, not a log line
+        let f = Fake::mp25();
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        l.set_fb(&f, &e, FB + 0x1000).unwrap();
+        let log = f.log.borrow();
+        let rel = log.iter().rposition(|x| !x.0 && x.1 == 0x108).unwrap();
+        assert_eq!(log[rel + 1..].iter().map(|x| x.1).collect::<Vec<_>>(), [0x134, 0x10c, GCR]);
+        drop(log);
+        // CFBAR does not take the new address
+        f.drop_writes.borrow_mut().push(0x134);
+        assert_eq!(l.set_fb(&f, &e, FB + 0x2000), Err(-EIO));
+        // the layer enable does not land
+        let g = Fake::mp25();
+        g.drop_writes.borrow_mut().push(0x10c);
+        let l = Ltdc::probe(&g, B).unwrap();
+        l.configure(&g, &M720, &Output::default(), &LAYER).unwrap();
+        assert_eq!(l.enable(&g, &e), Err(-EIO));
+        assert!(e.lines.borrow().iter().any(|x| x.0 == Level::Err && x.1.contains("layer not on")));
+    }
+
+    /// A running MP25 fake with RRIF latching and a CPSR that wraps every
+    /// third sample, LIF never set (the DK's ISR otherwise).
+    fn scanout_rig(lif: bool) -> (Fake, TestEnv, Ltdc) {
+        let mut f = Fake::mp25();
+        f.no_lif = !lif;
+        f.rrif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        let frames: Vec<u32> = (0..64).flat_map(|_| [100, 700, 2]).collect();
+        *f.cpsr.borrow_mut() = frames;
+        (f, e, l)
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_passes_a_running_layer_by_lif_or_by_wrap() {
+        // checks 10-12: N frame events, the layer read back before and after,
+        // no error flag; the RRIF positive control (R5 §53.8.14 bit 3) after
+        // one VBR reload (L1RCR, :2015) with IER.RRIE set, restored after
+        for lif in [true, false] {
+            let (f, e, l) = scanout_rig(lif);
+            let c = l.scanout_check(&f, &e, 8, FB);
+            assert_eq!(c.rc(), 0, "{c:?}");
+            assert_eq!((c.frames, c.frames_wanted, c.failed), (8, 8, 0));
+            assert_eq!((c.frames_lif, c.frames_wrap), if lif { (8, 0) } else { (0, 8) });
+            assert!(c.rrif_seen && c.layer_ok_before && c.layer_ok_after);
+            assert_eq!((c.cfbar, c.cfbar_want, c.lipcr, c.lipcr_want), (FB as u32, FB as u32, 745, 745));
+            assert_eq!(c.ier, IER_ERRORS);
+            assert_eq!(f.peek(IER), IER_ERRORS, "RRIE and LIE restored");
+            let w = f.writes();
+            assert_eq!(w[..3], [(ICR, INT_RELOAD), (IER, IER_ERRORS | INT_RELOAD), (0x108, RCR_VBR)]);
+            // LIF never latching is said once per check, not per frame
+            let warned = e.lines.borrow().iter().filter(|x| x.1.contains("LIF did not latch")).count();
+            assert_eq!(warned, usize::from(!lif));
+        }
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_fails_without_frames() {
+        // check 10: a standing CPSR and no LIF (no pixel clock, a stopped
+        // timing generator): -ETIMEDOUT, frames short
+        let mut f = Fake::mp25();
+        f.no_lif = true;
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        *f.cpsr.borrow_mut() = vec![412];
+        let c = l.scanout_check(&f, &e, 4, FB);
+        assert_eq!((c.rc(), c.frames, c.failed & SCANOUT_FAIL_FRAMES), (-ETIMEDOUT, 0, SCANOUT_FAIL_FRAMES));
+        // the control's reload never taken: the same
+        let mut g = Fake::mp25();
+        let l = running(&g, &e);
+        g.no_clock = true;
+        let c = l.scanout_check(&g, &e, 4, FB);
+        assert_eq!((c.rc(), c.frames), (-ETIMEDOUT, 0));
+        // 0 frames asked is not a pass
+        let (f, e, l) = scanout_rig(true);
+        assert_eq!(l.scanout_check(&f, &e, 0, FB).rc(), -ETIMEDOUT);
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_fails_on_a_wrong_layer_address() {
+        // check 11: LxCFBAR read back after the reload is not the buffer
+        let (f, e, l) = scanout_rig(false);
+        wr(&f, B, 0x134, 0xa000_0000);
+        let c = l.scanout_check(&f, &e, 4, FB);
+        assert_eq!((c.rc(), c.failed), (-EIO, SCANOUT_FAIL_LAYER));
+        assert_eq!((c.cfbar, c.cfbar_want), (0xa000_0000, FB as u32));
+        assert!(!c.layer_ok_before && !c.layer_ok_after);
+        assert_eq!(c.frames, 4, "frames still counted");
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_fails_on_a_disabled_layer() {
+        // check 11: LxCR.LEN clear (or GCR.LTDCEN clear) after the frames
+        let (f, e, l) = scanout_rig(false);
+        upd(&f, B, 0x10c, LXCR_LEN, 0);
+        let c = l.scanout_check(&f, &e, 4, FB);
+        assert_eq!((c.rc(), c.failed & SCANOUT_FAIL_LAYER), (-EIO, SCANOUT_FAIL_LAYER));
+        assert_eq!(c.lxcr & LXCR_LEN, 0);
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_fails_on_each_error_flag() {
+        // check 12: FUIF (bit 6, ltdc.c FUEIF), TERRIF (2), FUWIF (1), FURIF
+        // (8) in an event's ISR fail (ST counts the first three, :1028-1033;
+        // R5 Table 501); CRCIF (7) is counted only
+        for bit in [INT_FU_ERR, INT_TRANSFER_ERR, INT_FU_WARN, INT_FU_ROT] {
+            let (f, e, l) = scanout_rig(false);
+            f.regs.borrow_mut().insert(B + ISR as usize, bit);
+            let c = l.scanout_check(&f, &e, 4, FB);
+            assert_eq!((c.rc(), c.failed), (-EIO, SCANOUT_FAIL_ERRORS), "{bit:#x}");
+            assert_eq!(c.fuif + c.terrif + c.fuwif + c.furif, 1, "{bit:#x}: one event had it, ICR cleared it");
+        }
+        let (f, e, l) = scanout_rig(false);
+        f.regs.borrow_mut().insert(B + ISR as usize, INT_CRC);
+        let c = l.scanout_check(&f, &e, 4, FB);
+        assert_eq!((c.rc(), c.crcif), (0, 1), "CRCIF is a diagnostic");
+    }
+
+    #[test]
+    fn stm32_ltdc_scanout_check_says_errors_unobservable_without_rrif() {
+        // check 12's positive control: an ISR that latches nothing (the DK at
+        // board-display4) passes checks 10-11 by the wrap but reports the
+        // error check unobservable instead of clean
+        let (mut f, e, l) = scanout_rig(false);
+        f.rrif = false;
+        let c = l.scanout_check(&f, &e, 4, FB);
+        assert_eq!((c.rc(), c.rrif_seen, c.frames_wrap), (0, false, 4));
+        assert!(e.lines.borrow().iter().any(|x| x.1.contains("errors unobservable")));
     }
 
     #[test]

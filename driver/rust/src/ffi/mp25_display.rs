@@ -21,7 +21,7 @@
 //! to its 7-bit address on the board's bus (0x3d, 0x3c, 0x3f, 0x38 on the DK).
 
 use crate::env::{Env, YdEnv};
-use crate::errno::{EBUSY, EINVAL, ENODEV, ENOTSUP};
+use crate::errno::{EBUSY, EINVAL, EIO, ENODEV, ENOTSUP};
 use crate::ip::adv7535::{self as adv, Bridge, Sink};
 use crate::ip::dw_mipi_dsi::{self as dsi, DphyTiming, Link, Phy};
 use crate::ip::stm32_dsi_phy::{self as dphy, MipiFormat, Pll};
@@ -321,7 +321,17 @@ pub(crate) fn ltdc_enable_with(m: &impl Mmio, env: &impl Env, c: &YdMp25LtdcConf
     if d.configured == 0 {
         return -EINVAL;
     }
-    let r = ltdc_of(m, c).and_then(|l| l.enable(m, env));
+    let r = ltdc_of(m, c).and_then(|l| {
+        l.enable(m, env)?;
+        // fix spec step 3: the address the reload took over
+        let back = l.layer_readback(m);
+        if back.shows(d.fb) {
+            Ok(())
+        } else {
+            ylog!(env, Err, "ltdc: after the reload CFBAR {:#x}, configured {:#x}", back.cfbar, d.fb);
+            Err(-EIO)
+        }
+    });
     d.on = r.is_ok() as u8;
     rc(r)
 }
@@ -395,7 +405,8 @@ pub unsafe extern "C" fn yd_mp25_ltdc_configure(
 /// Error interrupts unmasked, layer on, a vertical-blanking reload, `FUT`,
 /// `LTDCEN`; waits up to two frames for the reload. `-ETIMEDOUT`: no frame
 /// boundary came, the pixel clock (`ck_ker_ltdc`) is not running.
-/// `-EINVAL` before a configure.
+/// `-EINVAL` before a configure. `-EIO`: after the reload `L1CFBAR` is not
+/// the configured buffer, or `L1CR.LEN` / `GCR.LTDCEN` reads back clear.
 ///
 /// # Safety
 /// As [`yd_mp25_ltdc_probe`].
@@ -430,7 +441,8 @@ pub unsafe extern "C" fn yd_mp25_ltdc_disable(
 }
 
 /// Point the running layer at `fb_phys` (same pitch and format) and wait
-/// for the vertical-blanking reload. `-ENODEV` while not enabled.
+/// for the vertical-blanking reload. `-ENODEV` while not enabled, `-EIO`
+/// when the layer does not read back as `fb_phys` and on after the reload.
 ///
 /// # Safety
 /// As [`yd_mp25_ltdc_probe`].
@@ -448,10 +460,60 @@ pub unsafe extern "C" fn yd_mp25_ltdc_set_fb(
     unsafe { ltdc_set_fb_with(&port(), &*env, &*cfg, &mut *data, fb_phys) }
 }
 
-/// Wait for one frame boundary: the line interrupt at the end of the active
-/// area with `IER.LIE` set for the wait, as r3.1 ltdc.c relies on it
-/// (polled, `LIF` cleared first; a `CPSR` line wrap also counts, logged).
-/// `-ETIMEDOUT` after two frames: read [`yd_mp25_ltdc_frame_diag`] then.
+/// `via` of [`YdMp25LtdcFrame`] ([`ltdc::FrameVia`]).
+pub const YD_MP25_LTDC_VIA_WRAP: u32 = 1;
+pub const YD_MP25_LTDC_VIA_LIF: u32 = 2;
+
+/// `struct yd_mp25_ltdc_frame`: one frame event ([`ltdc::FrameEvent`]).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdMp25LtdcFrame {
+    /// `YD_MP25_LTDC_VIA_*`.
+    pub via: u32,
+    /// `CPSR.CYPOS` of the sample before the event's, and in the event's step.
+    pub line_before: u32,
+    pub line: u32,
+    /// `ISR` as read in the event's step (then written to `ICR`).
+    pub isr: u32,
+    /// `CCRCR[15:0]` read right after (frame CRC only, else 0).
+    pub crc: u32,
+    pub waited_us: u32,
+}
+const _: () = assert!(size_of::<YdMp25LtdcFrame>() == 24);
+const _: () = assert!(offset_of!(YdMp25LtdcFrame, isr) == 12);
+const _: () = assert!(offset_of!(YdMp25LtdcFrame, crc) == 16);
+
+impl From<ltdc::FrameEvent> for YdMp25LtdcFrame {
+    fn from(e: ltdc::FrameEvent) -> Self {
+        YdMp25LtdcFrame {
+            via: match e.via {
+                ltdc::FrameVia::Wrap => YD_MP25_LTDC_VIA_WRAP,
+                ltdc::FrameVia::Lif => YD_MP25_LTDC_VIA_LIF,
+            },
+            line_before: e.line_before,
+            line: e.line,
+            isr: e.isr,
+            crc: e.crc.unwrap_or(0),
+            waited_us: e.waited_us,
+        }
+    }
+}
+
+pub(crate) fn ltdc_wait_frame_with(
+    m: &impl Mmio,
+    env: &impl Env,
+    c: &YdMp25LtdcConfig,
+) -> Result<YdMp25LtdcFrame, i32> {
+    Ok(ltdc_of(m, c)?.wait_frame(m, env)?.into())
+}
+
+/// Wait for one frame event (ip::stm32_ltdc::Ltdc::wait_frame, the bring-up
+/// note's "CRC and frame wait" steps 4-7): `IER.LIE` set for the wait,
+/// `LIF` cleared, then `ISR` and `CPSR` polled; `ISR.LIF` or a `CPSR` line
+/// wrap is the event, and the `ISR` read then is written to `ICR` (so the
+/// error flags it held are cleared: [`yd_mp25_ltdc_wait_frame_event`] returns
+/// them). `-ETIMEDOUT` after two frames: read [`yd_mp25_ltdc_frame_diag`]
+/// then.
 ///
 /// # Safety
 /// As [`yd_mp25_ltdc_probe`].
@@ -462,7 +524,32 @@ pub unsafe extern "C" fn yd_mp25_ltdc_wait_frame(cfg: *const YdMp25LtdcConfig, e
     }
     // SAFETY: the caller's contract.
     let (c, env, hw) = unsafe { (&*cfg, &*env, port()) };
-    rc(ltdc_of(&hw, c).and_then(|l| l.wait_frame(&hw, env)))
+    rc(ltdc_wait_frame_with(&hw, env, c).map(|_| ()))
+}
+
+/// As [`yd_mp25_ltdc_wait_frame`], the event into `*out` (untouched on an
+/// error).
+///
+/// # Safety
+/// `cfg`, `env`, `out` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_wait_frame_event(
+    cfg: *const YdMp25LtdcConfig,
+    env: *const YdEnv,
+    out: *mut YdMp25LtdcFrame,
+) -> i32 {
+    if cfg.is_null() || env.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    match unsafe { ltdc_wait_frame_with(&port(), &*env, &*cfg) } {
+        Ok(f) => {
+            // SAFETY: as above.
+            unsafe { *out = f };
+            0
+        }
+        Err(e) => e,
+    }
 }
 
 /// `struct yd_mp25_ltdc_diag`: [`ltdc::FrameDiag`] for C.
@@ -527,33 +614,27 @@ pub unsafe extern "C" fn yd_mp25_ltdc_frame_diag(
     }
 }
 
-/// `GCR.CRCEN` on or off, as ltdc.c's `ltdc_crtc_set_crc_source` does.
+/// `IER.LIE` and `GCR.CRCEN` on or off, as ltdc.c's
+/// `ltdc_crtc_set_crc_source` does (:1490-1491, :1494-1495).
 /// `layer3_secure` is the RIFSC's answer for layer 3 (ltdc.c drops the CRC
 /// then): switching on is `-EINVAL`. `-ENODEV` where the version has no CRC.
 pub(crate) fn ltdc_crc_enable_with(m: &impl Mmio, c: &YdMp25LtdcConfig, on: bool, layer3_secure: bool) -> i32 {
     rc(ltdc_of(m, c).and_then(|l| l.crc_enable(m, on, layer3_secure)))
 }
 
-/// Skip `CRC_SKIP_FRAMES` frames (`ltdc_irq_thread` drops them), wait for one
-/// more and read `CCRCR`. `-ENODEV` without a CRC unit, `-EINVAL` while the
-/// CRC is switched off, `-ETIMEDOUT` when no frame comes.
-pub(crate) fn ltdc_frame_crc_with(m: &impl Mmio, env: &impl Env, c: &YdMp25LtdcConfig) -> Result<u32, i32> {
-    let l = ltdc_of(m, c)?;
-    if !l.has_crc() {
-        return Err(-ENODEV);
-    }
-    if m.read32(c.base + ltdc::GCR as usize) & ltdc::GCR_CRCEN == 0 {
-        return Err(-EINVAL);
-    }
-    for _ in 0..ltdc::CRC_SKIP_FRAMES {
-        l.wait_frame(m, env)?;
-    }
-    l.frame_crc(m, env)
+/// Skip `CRC_SKIP_FRAMES` frame events (`ltdc_irq_thread` drops them), take
+/// the third, `CCRCR` read in its step right after `ICR` (ltdc.c
+/// :1051-1054). `-ENODEV` without a CRC unit, `-EINVAL` while the CRC is
+/// switched off, `-ETIMEDOUT` when no frame comes.
+pub(crate) fn ltdc_frame_crc_with(m: &impl Mmio, env: &impl Env, c: &YdMp25LtdcConfig) -> Result<YdMp25LtdcFrame, i32> {
+    Ok(ltdc_of(m, c)?.frame_crc(m, env)?.into())
 }
 
-/// Frame CRC on or off (`GCR.CRCEN`; nothing else changes). `on` and
-/// `layer3_secure` are booleans (0 / non-zero). `-ENODEV`: no CRC unit in this
-/// version; `-EINVAL`: switching on with a secure layer 3, or a null pointer.
+/// Frame CRC on or off (`IER.LIE` and `GCR.CRCEN`, ltdc.c
+/// `ltdc_crtc_set_crc_source`; off also clears `IER.CRCIE`). `on` and
+/// `layer3_secure` are booleans (0 / non-zero). `-ENODEV`: no CRC unit in
+/// this version; `-EINVAL`: switching on with a secure layer 3, or a null
+/// pointer.
 ///
 /// # Safety
 /// `cfg`, `data` valid; `cfg->base` mapped.
@@ -571,10 +652,10 @@ pub unsafe extern "C" fn yd_mp25_ltdc_crc_enable(
     unsafe { ltdc_crc_enable_with(&port(), &*cfg, on != 0, layer3_secure != 0) }
 }
 
-/// The CRC of a frame: waits `CRC_SKIP_FRAMES` frames and one more, then
-/// stores `CCRCR` in `*out_crc` (untouched on an error). `-ENODEV` (no CRC
-/// unit), `-EINVAL` (CRC off, which a secure layer 3 always leaves it, or a
-/// null pointer), `-ETIMEDOUT` (no frame).
+/// The CRC of a frame (a diagnostic, it decides nothing): two frame events
+/// skipped, the third's `CCRCR[15:0]` stored in `*out_crc` (untouched on an
+/// error). `-ENODEV` (no CRC unit), `-EINVAL` (CRC off, which a secure layer
+/// 3 always leaves it, or a null pointer), `-ETIMEDOUT` (no frame).
 ///
 /// # Safety
 /// `cfg`, `env`, `out_crc` valid; `cfg->base` mapped.
@@ -589,10 +670,187 @@ pub unsafe extern "C" fn yd_mp25_ltdc_frame_crc(
     }
     // SAFETY: the caller's contract.
     match unsafe { ltdc_frame_crc_with(&port(), &*env, &*cfg) } {
-        Ok(v) => {
+        Ok(f) => {
             // SAFETY: as above.
-            unsafe { *out_crc = v };
+            unsafe { *out_crc = f.crc };
             0
+        }
+        Err(e) => e,
+    }
+}
+
+/// As [`yd_mp25_ltdc_frame_crc`], the third event with its line and trigger
+/// into `*out` (for the log line `crc: 0x<crc> line <line> via <wrap|lif>`).
+///
+/// # Safety
+/// `cfg`, `env`, `out` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_frame_crc_event(
+    cfg: *const YdMp25LtdcConfig,
+    env: *const YdEnv,
+    out: *mut YdMp25LtdcFrame,
+) -> i32 {
+    if cfg.is_null() || env.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    match unsafe { ltdc_frame_crc_with(&port(), &*env, &*cfg) } {
+        Ok(f) => {
+            // SAFETY: as above.
+            unsafe { *out = f };
+            0
+        }
+        Err(e) => e,
+    }
+}
+
+/// The CRC latch-point experiment (ip::stm32_ltdc::Ltdc::crc_pin): `on`
+/// non-zero writes `expected` to `ECRCR`, clears `CRCIF` and sets
+/// `IER.CRCIE`; 0 clears `CRCIE`. `CRCIF` then shows in the frame events'
+/// `isr` (bit 7) and the scan-out check's `crcif` count; it fails nothing.
+/// `-ENODEV` without a CRC unit, `-EINVAL` for a null pointer.
+///
+/// # Safety
+/// `cfg` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_crc_pin(cfg: *const YdMp25LtdcConfig, expected: u32, on: u8) -> i32 {
+    if cfg.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (c, hw) = unsafe { (&*cfg, port()) };
+    rc(ltdc_of(&hw, c).and_then(|l| l.crc_pin(&hw, expected, on != 0)))
+}
+
+/// `failed` bits of [`YdMp25LtdcScanout`].
+pub const YD_MP25_SCANOUT_FAIL_FRAMES: u32 = ltdc::SCANOUT_FAIL_FRAMES;
+pub const YD_MP25_SCANOUT_FAIL_LAYER: u32 = ltdc::SCANOUT_FAIL_LAYER;
+pub const YD_MP25_SCANOUT_FAIL_ERRORS: u32 = ltdc::SCANOUT_FAIL_ERRORS;
+
+/// `struct yd_mp25_ltdc_scanout`: [`ltdc::ScanoutCheck`] for C.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdMp25LtdcScanout {
+    pub frames_wanted: u32,
+    pub frames: u32,
+    pub frames_lif: u32,
+    pub frames_wrap: u32,
+    pub max_wait_us: u32,
+    /// `L1CFBAR` after the last frame, and `data->fb`.
+    pub cfbar: u32,
+    pub cfbar_want: u32,
+    /// `L1CR` and `GCR` after the last frame.
+    pub lxcr: u32,
+    pub gcr: u32,
+    /// `LIPCR` read back, and `AWCR.AAH + 1`.
+    pub lipcr: u32,
+    pub lipcr_want: u32,
+    /// `IER` read back.
+    pub ier: u32,
+    /// The events' `ISR`, or-ed.
+    pub isr_or: u32,
+    /// Events with `FUWIF`, `FUIF`, `TERRIF`, `FURIF`, `CRCIF` set.
+    pub fuwif: u32,
+    pub fuif: u32,
+    pub terrif: u32,
+    pub furif: u32,
+    pub crcif: u32,
+    /// `YD_MP25_SCANOUT_FAIL_*`.
+    pub failed: u32,
+    /// 1: `RRIF` came after the control reload (the error count is real);
+    /// 0: "errors unobservable".
+    pub rrif_seen: u8,
+    pub layer_ok_before: u8,
+    pub layer_ok_after: u8,
+    pub reserved: u8,
+}
+const _: () = assert!(size_of::<YdMp25LtdcScanout>() == 80);
+const _: () = assert!(offset_of!(YdMp25LtdcScanout, cfbar) == 20);
+const _: () = assert!(offset_of!(YdMp25LtdcScanout, isr_or) == 48);
+const _: () = assert!(offset_of!(YdMp25LtdcScanout, failed) == 72);
+const _: () = assert!(offset_of!(YdMp25LtdcScanout, rrif_seen) == 76);
+
+impl From<ltdc::ScanoutCheck> for YdMp25LtdcScanout {
+    fn from(c: ltdc::ScanoutCheck) -> Self {
+        YdMp25LtdcScanout {
+            frames_wanted: c.frames_wanted,
+            frames: c.frames,
+            frames_lif: c.frames_lif,
+            frames_wrap: c.frames_wrap,
+            max_wait_us: c.max_wait_us,
+            cfbar: c.cfbar,
+            cfbar_want: c.cfbar_want,
+            lxcr: c.lxcr,
+            gcr: c.gcr,
+            lipcr: c.lipcr,
+            lipcr_want: c.lipcr_want,
+            ier: c.ier,
+            isr_or: c.isr_or,
+            fuwif: c.fuwif,
+            fuif: c.fuif,
+            terrif: c.terrif,
+            furif: c.furif,
+            crcif: c.crcif,
+            failed: c.failed,
+            rrif_seen: c.rrif_seen as u8,
+            layer_ok_before: c.layer_ok_before as u8,
+            layer_ok_after: c.layer_ok_after as u8,
+            reserved: 0,
+        }
+    }
+}
+
+/// The scan-out check (ip::stm32_ltdc::Ltdc::scanout_check) against
+/// `d.fb`. `Err(-ENODEV)` while not enabled (nothing filled), `Err(-EINVAL)`
+/// for 0 frames; otherwise the record and its rc.
+pub(crate) fn ltdc_scanout_check_with(
+    m: &impl Mmio,
+    env: &impl Env,
+    c: &YdMp25LtdcConfig,
+    d: &YdMp25LtdcData,
+    frames: u32,
+) -> Result<(YdMp25LtdcScanout, i32), i32> {
+    if d.on == 0 {
+        return Err(-ENODEV);
+    }
+    if frames == 0 {
+        return Err(-EINVAL);
+    }
+    let chk = ltdc_of(m, c)?.scanout_check(m, env, frames, d.fb);
+    Ok((chk.into(), chk.rc()))
+}
+
+/// What a probe's PASS rests on (the bring-up note's checks 10-12): an
+/// `RRIF` positive control (one `VBR` reload with `IER.RRIE`), then `frames`
+/// frame events, the layer (`L1CFBAR` = `data->fb`, `L1CR.LEN`,
+/// `GCR.LTDCEN`) read back before and after them, and every event's `ISR`
+/// collected. `*out` is filled whenever the check ran. 0: all held;
+/// `-ETIMEDOUT`: fewer frames than asked (or the control's reload not
+/// taken); `-EIO`: the layer read back wrong or an event had `FUWIF`,
+/// `FUIF`, `TERRIF` or `FURIF`. `out->rrif_seen` 0 means the error flags
+/// could not be observed: print it next to the result. The CRC enters
+/// nothing. `-ENODEV` while not enabled, `-EINVAL` for 0 frames or a null
+/// pointer (nothing filled then).
+///
+/// # Safety
+/// `cfg`, `data`, `env`, `out` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_scanout_check(
+    cfg: *const YdMp25LtdcConfig,
+    data: *const YdMp25LtdcData,
+    env: *const YdEnv,
+    frames: u32,
+    out: *mut YdMp25LtdcScanout,
+) -> i32 {
+    if cfg.is_null() || data.is_null() || env.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    match unsafe { ltdc_scanout_check_with(&port(), &*env, &*cfg, &*data, frames) } {
+        Ok((rec, r)) => {
+            // SAFETY: as above.
+            unsafe { *out = rec };
+            r
         }
         Err(e) => e,
     }
@@ -2249,6 +2507,178 @@ mod tests {
             assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, core::ptr::null(), &mut crc), -EINVAL);
             assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, core::ptr::null_mut()), -EINVAL);
         }
+    }
+
+    /// The scan-out check through `yd_mp25_ltdc_scanout_check` on the display
+    /// model after a 1080p bring-up; `setup` breaks the model before the call.
+    fn scanout_on_the_model(setup: impl FnOnce(&Mp25Display)) -> (i32, YdMp25LtdcScanout, Vec<(u32, String)>) {
+        let soc = Soc::new();
+        let (c, _adv) =
+            rig(&soc, Adv7535Config { edid: i2cm::edid_block(EdidMode::P1080), ..Adv7535Config::default() });
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let ch = bring_up(&m, &e, 4);
+        setup(&m);
+        c.lines.borrow_mut().clear();
+        let mut out = YdMp25LtdcScanout::default();
+        // SAFETY: locals.
+        let r = with_display(&m, || unsafe { yd_mp25_ltdc_scanout_check(&LTDC_CFG, &ch.ld, &e, 60, &mut out) });
+        assert_eq!(m.violations(), Vec::<String>::new());
+        let lines = c.lines.borrow().clone();
+        (r, out, lines)
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_passes_on_the_model_by_lif() {
+        // the bring-up note's checks 10-12 on a model that latches as RM0457
+        // says (LIF at LIPOS with LIE, RRIF on the VBR reload, R5 §53.8.14)
+        let (r, s, lines) = scanout_on_the_model(|_| {});
+        assert_eq!(r, 0, "{s:?}");
+        assert_eq!((s.frames, s.frames_lif, s.frames_wrap, s.failed), (60, 60, 0, 0));
+        assert_eq!((s.rrif_seen, s.layer_ok_before, s.layer_ok_after), (1, 1, 1));
+        assert_eq!((s.cfbar, s.cfbar_want), (FB as u32, FB as u32));
+        // 1080p: AAH = 5 + 36 + 1080 - 1, LIPCR = AAH + 1 (ltdc.c :1209)
+        assert_eq!((s.lipcr, s.lipcr_want), (1121, 1121));
+        assert_ne!(s.lxcr & ltdc::LXCR_LEN, 0);
+        assert_ne!(s.gcr & ltdc::GCR_LTDCEN, 0);
+        assert!(s.max_wait_us <= ltdc::FRAME_WAIT_US);
+        assert!(lines.is_empty(), "{lines:?}");
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_passes_with_the_dks_isr_and_says_errors_unobservable() {
+        // ISR as observed on the DK (board-display4 finding 1: 0 with LIE set):
+        // frames by the CPSR wrap, layer checks real, the error check
+        // reported unobservable (rrif_seen 0) rather than passed
+        let (r, s, lines) = scanout_on_the_model(|m| m.isr_as_observed(true));
+        assert_eq!(r, 0, "{s:?}");
+        assert_eq!((s.frames, s.frames_lif, s.frames_wrap, s.rrif_seen), (60, 0, 60, 0));
+        assert!(lines.iter().any(|x| x.1.contains("LIF did not latch in 60 frames")), "{lines:?}");
+        assert!(lines.iter().any(|x| x.1.contains("errors unobservable")), "{lines:?}");
+        // LIPCR not landing (the note's (a)(i)) is shown, not failed
+        let (r, s, _) = scanout_on_the_model(|m| {
+            m.lipcr_ignores_writes(true);
+            m.write32(LTDC + ltdc::LIPCR as usize, 0);
+        });
+        assert_eq!(r, 0);
+        assert_eq!((s.lipcr, s.lipcr_want), (1121, 1121), "the earlier write stands");
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_fails_without_frames() {
+        // check 10: the timing generator stands (no pixel clock): the
+        // control's reload is not taken and no frame comes
+        let (r, s, _) = scanout_on_the_model(|m| {
+            m.isr_as_observed(true);
+            m.stop_timing(true);
+        });
+        assert_eq!(r, -ETIMEDOUT);
+        assert_eq!((s.frames, s.failed & YD_MP25_SCANOUT_FAIL_FRAMES), (0, YD_MP25_SCANOUT_FAIL_FRAMES));
+        assert_eq!(s.frames_wanted, 60);
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_fails_on_a_wrong_address_after_reload() {
+        // check 11: L1CFBAR taken over by the control's reload is not data->fb
+        let (r, s, _) = scanout_on_the_model(|m| m.write32(LTDC + 0x134, 0xa000_0000));
+        assert_eq!((r, s.failed), (-EIO, YD_MP25_SCANOUT_FAIL_LAYER));
+        assert_eq!((s.cfbar, s.cfbar_want, s.layer_ok_after), (0xa000_0000, FB as u32, 0));
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_fails_on_a_disabled_layer() {
+        // check 11: L1CR.LEN clear
+        let (r, s, _) = scanout_on_the_model(|m| m.write32(LTDC + 0x10c, 0));
+        assert_eq!((r, s.failed), (-EIO, YD_MP25_SCANOUT_FAIL_LAYER));
+        assert_eq!(s.lxcr & ltdc::LXCR_LEN, 0);
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_fails_on_an_underrun_or_transfer_error() {
+        // check 12: FUIF, TERRIF, FUWIF, FURIF latched (R5 Table 501)
+        for (bit, field) in
+            [(ltdc::INT_FU_ERR, 0usize), (ltdc::INT_TRANSFER_ERR, 1), (ltdc::INT_FU_WARN, 2), (ltdc::INT_FU_ROT, 3)]
+        {
+            let (r, s, _) = scanout_on_the_model(|m| m.raise(bit));
+            assert_eq!((r, s.failed), (-EIO, YD_MP25_SCANOUT_FAIL_ERRORS), "{bit:#x}");
+            assert_eq!([s.fuif, s.terrif, s.fuwif, s.furif][field], 1, "{bit:#x}");
+            assert_ne!(s.isr_or & bit, 0);
+        }
+    }
+
+    #[test]
+    fn mp25_display_scanout_check_refuses_before_enable_and_null_pointers() {
+        let soc = Soc::new();
+        let (c, _adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let d = YdMp25LtdcData::default();
+        let mut out = YdMp25LtdcScanout { frames: 7, ..YdMp25LtdcScanout::default() };
+        let mut f = YdMp25LtdcFrame::default();
+        // SAFETY: nulls are the point; the rest are locals.
+        with_display(&m, || unsafe {
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &d, &e, 60, &mut out), -ENODEV);
+            assert_eq!(out.frames, 7, "untouched");
+            let on = YdMp25LtdcData { on: 1, ..d };
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &on, &e, 0, &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_scanout_check(core::ptr::null(), &on, &e, 1, &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, core::ptr::null(), &e, 1, &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &on, core::ptr::null(), 1, &mut out), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &on, &e, 1, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_wait_frame_event(core::ptr::null(), &e, &mut f), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_wait_frame_event(&LTDC_CFG, core::ptr::null(), &mut f), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_wait_frame_event(&LTDC_CFG, &e, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_crc_event(&LTDC_CFG, &e, core::ptr::null_mut()), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_crc_pin(core::ptr::null(), 0, 1), -EINVAL);
+        });
+    }
+
+    #[test]
+    fn mp25_display_frame_events_and_the_crc_pin_on_the_model() {
+        // fix spec steps 5-9 through the entry points: a frame event says
+        // how it came and where; the CRC event's CCRCR is the frame latched
+        // at the last frame end (the model's latch point), read at LIF (line
+        // LIPOS 1121) or at the wrap; ECRCR pinned to it raises no CRCIF,
+        // pinned to another value CRCIF on every frame (R5 §53.8.24, §53.8.14)
+        let soc = Soc::new();
+        let (c, _adv) =
+            rig(&soc, Adv7535Config { edid: i2cm::edid_block(EdidMode::P1080), ..Adv7535Config::default() });
+        let e = env(&c);
+        let m = Mp25Display::new();
+        m.load_fb(FB, &(0..64).collect::<Vec<u32>>());
+        let mut ch = bring_up(&m, &e, 4);
+        let mut f = YdMp25LtdcFrame::default();
+        // SAFETY: locals.
+        with_display(&m, || unsafe {
+            assert_eq!(yd_mp25_ltdc_wait_frame_event(&LTDC_CFG, &e, &mut f), 0);
+            assert_eq!(f.via, YD_MP25_LTDC_VIA_LIF);
+            // ISR is sampled before CPSR in a step: LIF latched while CPSR
+            // passed line 1121 is seen in the next step, one poll step later
+            let step = crate::model_mp25_display::LINES_PER_CPSR_READ;
+            assert!((1121..1121 + step).contains(&f.line_before), "{f:?}");
+            assert_ne!(f.isr & ltdc::INT_LINE, 0);
+            assert_eq!(f.crc, 0);
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, &mut ch.ld, 1, 0), 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc_event(&LTDC_CFG, &e, &mut f), 0);
+            let crc = f.crc;
+            assert!(crc != 0 && crc <= 0xffff, "{crc:#x}");
+            let mut plain = 0u32;
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut plain), 0);
+            assert_eq!(plain, crc, "static buffer, same CRC");
+            // the pin: equal, then different
+            assert_eq!(yd_mp25_ltdc_crc_pin(&LTDC_CFG, crc, 1), 0);
+            let mut s = YdMp25LtdcScanout::default();
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &ch.ld, &e, 4, &mut s), 0);
+            assert_eq!(s.crcif, 0);
+            assert_eq!(yd_mp25_ltdc_crc_pin(&LTDC_CFG, crc ^ 1, 1), 0);
+            assert_eq!(yd_mp25_ltdc_scanout_check(&LTDC_CFG, &ch.ld, &e, 4, &mut s), 0, "CRCIF fails nothing");
+            // CRCIF latches at each frame end; in the model that end falls in
+            // the LIF event's step after its ISR read, so every other event's
+            // ICR clears a fresh flag: seen, not on every event
+            assert!(s.crcif >= 1, "{s:?}");
+            assert_eq!(yd_mp25_ltdc_crc_pin(&LTDC_CFG, 0, 0), 0);
+            assert_eq!(m.ltdc_reg(ltdc::IER) & ltdc::INT_CRC, 0);
+        });
     }
 
     #[test]

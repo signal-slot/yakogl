@@ -128,7 +128,8 @@ int yd_mp25_ltdc_configure(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25
 			   uint32_t format);
 
 /* Layer on, reload at vblank, LTDCEN; waits two frames for the reload.
- * -ETIMEDOUT: no pixel clock. -EINVAL before a configure. */
+ * -ETIMEDOUT: no pixel clock. -EINVAL before a configure. -EIO: after the
+ * reload L1CFBAR is not data->fb, or L1CR.LEN / GCR.LTDCEN read back clear. */
 int yd_mp25_ltdc_enable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
 			const struct yd_env *env);
 
@@ -136,15 +137,36 @@ int yd_mp25_ltdc_enable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_lt
 int yd_mp25_ltdc_disable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
 			 const struct yd_env *env);
 
-/* New buffer address, waits for the vblank reload. -ENODEV while disabled. */
+/* New buffer address, waits for the vblank reload. -ENODEV while disabled,
+ * -EIO when the layer does not read back as fb_phys and on after the reload. */
 int yd_mp25_ltdc_set_fb(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
 			const struct yd_env *env, uint64_t fb_phys);
 
-/* One frame boundary: the line interrupt at the end of the active area with
- * IER.LIE set for the wait (r3.1 ltdc.c only relies on LIF with LIE set),
- * polled; a CPSR line wrap also counts (logged as a warning). -ETIMEDOUT
- * after two frames: read yd_mp25_ltdc_frame_diag() then. */
+/* One frame event (docs/notes/stm32mp257f-dk-display-bringup.md, "CRC and
+ * frame wait", steps 4-7): IER.LIE set for the wait, LIF cleared, then ISR
+ * and CPSR polled every 50 us; ISR.LIF or a CPSR.CYPOS wrap, whichever comes
+ * first, is the event. The ISR read in the event's step is written to ICR
+ * (ltdc.c ltdc_irq), so its error flags are cleared here: take them from
+ * yd_mp25_ltdc_wait_frame_event()'s isr. -ETIMEDOUT after two frames: read
+ * yd_mp25_ltdc_frame_diag() then. */
 int yd_mp25_ltdc_wait_frame(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env);
+
+#define YD_MP25_LTDC_VIA_WRAP 1u /* CPSR.CYPOS went below the sample before */
+#define YD_MP25_LTDC_VIA_LIF  2u /* ISR.LIF (the line LIPCR names) */
+
+/* One frame event. */
+struct yd_mp25_ltdc_frame {
+	uint32_t via;              /* YD_MP25_LTDC_VIA_* */
+	uint32_t line_before;      /* CPSR.CYPOS of the sample before the event's */
+	uint32_t line;             /* CPSR.CYPOS in the event's step (the CRC read's line) */
+	uint32_t isr;              /* ISR as read in that step, then written to ICR */
+	uint32_t crc;              /* CCRCR[15:0] read right after (frame CRC only, else 0) */
+	uint32_t waited_us;        /* polled before the event */
+};
+
+/* As yd_mp25_ltdc_wait_frame(), the event into *out (untouched on an error). */
+int yd_mp25_ltdc_wait_frame_event(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
+				  struct yd_mp25_ltdc_frame *out);
 
 /* What the LTDC shows after a frame timeout (reads only, nothing cleared). */
 struct yd_mp25_ltdc_diag {
@@ -163,20 +185,80 @@ struct yd_mp25_ltdc_diag {
 int yd_mp25_ltdc_frame_diag(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
 			    struct yd_mp25_ltdc_diag *out);
 
-/* Frame CRC (GCR.CRCEN, ltdc.c ltdc_crtc_set_crc_source). on and
+/* Frame CRC (ltdc.c ltdc_crtc_set_crc_source): on sets IER.LIE then
+ * GCR.CRCEN; off clears GCR.CRCEN, then IER.LIE and IER.CRCIE. on and
  * layer3_secure are booleans; layer3_secure is the RIFSC's answer for layer 3
  * (ltdc.c drops the CRC then): switching on gives -EINVAL. -ENODEV: this LTDC
- * version has no CRC. Only GCR.CRCEN changes. */
+ * version has no CRC. */
 int yd_mp25_ltdc_crc_enable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
 			    uint8_t on, uint8_t layer3_secure);
 
-/* Skip CRC_SKIP_FRAMES (2) frames, wait for one more and store CCRCR in
- * *out_crc (untouched on an error). -ENODEV (no CRC unit), -EINVAL (CRC off,
- * which a secure layer 3 always leaves it; null pointers), -ETIMEDOUT (no
- * frame). ST's algorithm is undocumented: compare two reads, never a
+/* A diagnostic, it decides nothing: CRC_SKIP_FRAMES (2) frame events
+ * skipped, the third's CCRCR[15:0] (read in its step right after ICR, as
+ * ltdc_irq) stored in *out_crc (untouched on an error). -ENODEV (no CRC
+ * unit), -EINVAL (CRC off, which a secure layer 3 always leaves it; null
+ * pointers), -ETIMEDOUT (no frame). ST's algorithm is undocumented and the
+ * line where the value is final is not stated: compare reads, never a
  * computed value. */
 int yd_mp25_ltdc_frame_crc(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
 			   uint32_t *out_crc);
+
+/* As yd_mp25_ltdc_frame_crc(), the third event (crc, line, via) into *out,
+ * for "crc: 0x<crc> line <line> via <wrap|lif>". */
+int yd_mp25_ltdc_frame_crc_event(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
+				 struct yd_mp25_ltdc_frame *out);
+
+/* The CRC latch-point experiment: on != 0 writes expected to ECRCR, clears
+ * CRCIF and sets IER.CRCIE; on == 0 clears IER.CRCIE. CRCIF (ISR bit 7) then
+ * shows in the events' isr and the scan-out check's crcif; it fails nothing.
+ * -ENODEV without a CRC unit. */
+int yd_mp25_ltdc_crc_pin(const struct yd_mp25_ltdc_config *cfg, uint32_t expected, uint8_t on);
+
+/* failed bits of struct yd_mp25_ltdc_scanout. */
+#define YD_MP25_SCANOUT_FAIL_FRAMES (1u << 0) /* fewer frame events than asked */
+#define YD_MP25_SCANOUT_FAIL_LAYER  (1u << 1) /* layer read back wrong */
+#define YD_MP25_SCANOUT_FAIL_ERRORS (1u << 2) /* FUWIF/FUIF/TERRIF/FURIF seen */
+
+/* What yd_mp25_ltdc_scanout_check() saw. */
+struct yd_mp25_ltdc_scanout {
+	uint32_t frames_wanted;
+	uint32_t frames;           /* frame events seen ... */
+	uint32_t frames_lif;       /* ... by ISR.LIF */
+	uint32_t frames_wrap;      /* ... by the CPSR wrap */
+	uint32_t max_wait_us;      /* the longest poll before an event */
+	uint32_t cfbar;            /* L1CFBAR after the last frame */
+	uint32_t cfbar_want;       /* data->fb */
+	uint32_t lxcr;             /* L1CR after the last frame */
+	uint32_t gcr;              /* GCR after the last frame */
+	uint32_t lipcr;            /* LIPCR read back ... */
+	uint32_t lipcr_want;       /* ... and AWCR.AAH + 1 */
+	uint32_t ier;              /* IER read back before the check */
+	uint32_t isr_or;           /* every event's ISR, or-ed */
+	uint32_t fuwif;            /* events with FUWIF (bit 1) */
+	uint32_t fuif;             /* FUIF (bit 6) */
+	uint32_t terrif;           /* TERRIF (bit 2) */
+	uint32_t furif;            /* FURIF (bit 8) */
+	uint32_t crcif;            /* CRCIF (bit 7): diagnostic only */
+	uint32_t failed;           /* YD_MP25_SCANOUT_FAIL_* */
+	uint8_t rrif_seen;         /* 1: RRIF came after the control reload; 0: errors unobservable */
+	uint8_t layer_ok_before;
+	uint8_t layer_ok_after;
+	uint8_t reserved;
+};
+
+/* What a probe's PASS rests on (the bring-up note's checks 10-12): an RRIF
+ * positive control (one VBR reload with IER.RRIE), then `frames` frame
+ * events, the layer (L1CFBAR = data->fb, L1CR.LEN, GCR.LTDCEN) read back
+ * before and after them, and every event's ISR collected. *out is filled
+ * whenever the check ran. 0: all held; -ETIMEDOUT: fewer frames than asked
+ * (or the control's reload not taken); -EIO: the layer read back wrong or an
+ * event had FUWIF, FUIF, TERRIF or FURIF. out->rrif_seen 0 means the error
+ * flags could not be observed: print it next to the result. The CRC enters
+ * nothing. -ENODEV while not enabled, -EINVAL for 0 frames or a null pointer
+ * (nothing filled then). */
+int yd_mp25_ltdc_scanout_check(const struct yd_mp25_ltdc_config *cfg,
+			       const struct yd_mp25_ltdc_data *data, const struct yd_env *env,
+			       uint32_t frames, struct yd_mp25_ltdc_scanout *out);
 
 /* ISR read and cleared through ICR, kept in data->isr: bit 0 line, 1 FIFO
  * underrun warning, 2 transfer error, 6 FIFO underrun error. */
@@ -335,6 +417,14 @@ _Static_assert(offsetof(struct yd_mp25_hdmi_sink, vic) == 1, "vic");
 _Static_assert(offsetof(struct yd_mp25_hdmi_sink, aspect_16_9) == 2, "aspect_16_9");
 _Static_assert(offsetof(struct yd_mp25_hdmi_sink, refresh_hz) == 4, "refresh_hz");
 _Static_assert(sizeof(struct yd_mp25_ltdc_diag) == 36, "yd_mp25_ltdc_diag");
+_Static_assert(sizeof(struct yd_mp25_ltdc_frame) == 24, "yd_mp25_ltdc_frame");
+_Static_assert(offsetof(struct yd_mp25_ltdc_frame, isr) == 12, "frame isr");
+_Static_assert(offsetof(struct yd_mp25_ltdc_frame, crc) == 16, "frame crc");
+_Static_assert(sizeof(struct yd_mp25_ltdc_scanout) == 80, "yd_mp25_ltdc_scanout");
+_Static_assert(offsetof(struct yd_mp25_ltdc_scanout, cfbar) == 20, "scanout cfbar");
+_Static_assert(offsetof(struct yd_mp25_ltdc_scanout, isr_or) == 48, "scanout isr_or");
+_Static_assert(offsetof(struct yd_mp25_ltdc_scanout, failed) == 72, "scanout failed");
+_Static_assert(offsetof(struct yd_mp25_ltdc_scanout, rrif_seen) == 76, "scanout rrif_seen");
 _Static_assert(sizeof(struct yd_mp25_ltdc_config) == 24, "yd_mp25_ltdc_config");
 _Static_assert(offsetof(struct yd_mp25_ltdc_config, flags) == 8, "ltdc flags");
 _Static_assert(offsetof(struct yd_mp25_ltdc_config, background) == 12, "background");

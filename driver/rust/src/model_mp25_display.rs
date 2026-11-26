@@ -40,15 +40,36 @@
 //! shadow when the register is written or in the copy a reload takes over;
 //! the timing registers (`SSCR`..`TWCR`) written with `LTDCEN` high.
 //!
+//! **Timing** (docs/notes/stm32mp257f-dk-display-bringup.md, "CRC and frame
+//! wait"). The scan line `CPSR.CYPOS` advances [`LINES_PER_CPSR_READ`] lines
+//! on every `CPSR` read while `GCR.LTDCEN` is set (about one 50 us poll step
+//! at 1080p60), wrapping after `TWCR`'s vertical total. Passing line
+//! `LIPCR[11:0]` latches `ISR.LIF` while `IER.LIE` is set (what r3.1 ltdc.c
+//! relies on, :1454-1456, and p8-ltdc-lie's model); passing `AWCR.AAH + 1`
+//! takes a pending `VBR` reload (R5 §53.8.10), as does a read of the reload
+//! register; every reload latches `ISR.RRIF` (R5 §53.8.14 bit 3, whatever
+//! `IER.RRIE` says, §53.8.13). Flags stand until `ICR` clears them
+//! (§53.8.15). [`Mp25Display::isr_as_observed`] makes `ISR` read as on the DK
+//! at board-display4 (finding 1): nothing latches, so `ISR` reads 0 and
+//! frames are seen only through the `CPSR` wrap. [`Mp25Display::stop_timing`]
+//! stands the scan line (no pixel clock), [`Mp25Display::lipcr_ignores_writes`]
+//! drops `LIPCR` writes (the note's (a)(i)), [`Mp25Display::raise`] latches
+//! error flags.
+//!
 //! **The frame CRC** (`CCRCR`, 0x7c) is a model, not ST's algorithm (which is
 //! undocumented): FNV-1a over the 32-bit pixels of the buffer loaded with
 //! [`Mp25Display::load_fb`] at the active layer-1 `CFBAR` (0 when none is
-//! loaded there). It reads as that value only while `GCR.CRCEN` and
-//! `GCR.LTDCEN` are both set, else 0. It follows the active copy, so a new
-//! address counts from its reload. No ordering rule is attached to it.
+//! loaded there), folded to 16 bits (`CCRC[15:0]`, R5 §53.8.25). It is
+//! latched at the end of each frame (the wrap) while `GCR.CRCEN` and
+//! `GCR.LTDCEN` are set and reads as the last latched value (0 before one,
+//! or while either bit is clear). R5 does not state the latch line; the
+//! frame end is the model's choice, so a read at `LIF` (line `LIPOS`, before
+//! the wrap) returns the previous frame's value. With `IER.CRCIE` set a
+//! latched value that differs from `ECRCR` latches `ISR.CRCIF`. No ordering
+//! rule is attached to it.
 //!
 //! Status as the block shows it: `LTDC_IDR` 0x040101, `LCR` 2 layers, `GC2R`
-//! a 64-bit bus; `ISR.LIF` set while `LTDCEN` and `IER.LIE`; the DSI `VERSION` 1.41;
+//! a 64-bit bus; the DSI `VERSION` 1.41;
 //! `PHY_STATUS` `PHY_LOCK` and the clock lane's stop state follow the rules
 //! above. Any other offset in the two blocks reads and writes as plain
 //! storage; an access outside them, or a byte access, panics.
@@ -73,6 +94,8 @@ const L1RCR: u32 = 0x108;
 const L1CR: u32 = 0x10c;
 const L1CFBAR: u32 = 0x134;
 const L1CFBLR: u32 = 0x138;
+/// How far `CPSR.CYPOS` moves on each read of `CPSR` while the block runs.
+pub const LINES_PER_CPSR_READ: u32 = 3;
 const DSI_VERSION_VALUE: u32 = w::HWVER_141 | 0x2a;
 
 /// Host registers that Linux writes only with the host in reset.
@@ -108,6 +131,17 @@ struct State {
     reload_pending: bool,
     /// Buffers the CRC model reads, by physical address.
     fb_mem: BTreeMap<u32, Vec<u32>>,
+    /// `CPSR.CYPOS`.
+    line: u32,
+    /// The latched `ISR` flags.
+    isr: u32,
+    /// `CCRCR` as latched at the last frame end.
+    crc_latched: u32,
+    /// The board's `ISR` (nothing latches), a standing scan line, `LIPCR`
+    /// writes dropped.
+    isr_as_observed: bool,
+    timing_stopped: bool,
+    lipcr_ignores_writes: bool,
     violations: Vec<String>,
 }
 
@@ -233,13 +267,50 @@ impl State {
         self.reload_pending = false;
         self.ltdc.remove(&L1RCR);
         self.ltdc.remove(&l::SRCR);
+        self.latch(l::INT_RELOAD);
     }
 
-    /// The model CRC of the layer-1 buffer in the active copy.
+    fn latch(&mut self, bits: u32) {
+        if !self.isr_as_observed {
+            self.isr |= bits;
+        }
+    }
+
+    fn running(&self) -> bool {
+        self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 && !self.timing_stopped
+    }
+
+    /// The model CRC of the layer-1 buffer in the active copy, 16 bits.
     fn model_crc(&self) -> u32 {
         let base = self.layer_active.get(&L1CFBAR).copied().unwrap_or(0);
         let Some(px) = self.fb_mem.get(&base) else { return 0 };
-        px.iter().flat_map(|p| p.to_le_bytes()).fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193))
+        let h = px
+            .iter()
+            .flat_map(|p| p.to_le_bytes())
+            .fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+        (h ^ (h >> 16)) & l::CRC_MASK
+    }
+
+    /// One scan line on: the frame end (CRC latch), the `LIF` line, the
+    /// vertical-blanking reload line.
+    fn next_line(&mut self) {
+        let vtotal = (self.ltdc_get(l::TWCR) & l::LINE_MASK) + 1;
+        self.line += 1;
+        if self.line >= vtotal {
+            self.line = 0;
+            let gcr = self.ltdc_get(l::GCR);
+            self.crc_latched = if gcr & l::GCR_CRCEN != 0 { self.model_crc() } else { 0 };
+            let ier = self.ltdc_get(l::IER);
+            if gcr & l::GCR_CRCEN != 0 && ier & l::INT_CRC != 0 && self.crc_latched != self.ltdc_get(l::ECRCR) {
+                self.latch(l::INT_CRC);
+            }
+        }
+        if self.line == self.ltdc_get(l::LIPCR) & l::LINE_MASK && self.ltdc_get(l::IER) & l::IER_LIE != 0 {
+            self.latch(l::INT_LINE);
+        }
+        if self.line == (self.ltdc_get(l::AWCR) & l::LINE_MASK) + 1 && self.reload_pending {
+            self.take_reload();
+        }
     }
 
     fn ltdc_read(&mut self, off: u32) -> u32 {
@@ -247,27 +318,29 @@ impl State {
             l::IDR => l::HWVER_40101,
             l::LCR => 2,
             l::GC2R => 3 << 4,
-            l::ISR => {
-                // LIF only while IER.LIE is set: r3.1 ltdc.c never relies on
-                // it otherwise (ltdc_crtc_enable_vblank :1454-1456), and the
-                // DK did not show it with LIE clear (board-display3)
-                if self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 && self.ltdc_get(l::IER) & l::IER_LIE != 0 {
-                    l::INT_LINE
-                } else {
-                    0
+            // the latched flags; LIF latches only while IER.LIE is set (r3.1
+            // ltdc.c never relies on it otherwise, ltdc_crtc_enable_vblank
+            // :1454-1456; the DK did not show it with LIE clear, board-display3)
+            l::ISR => self.isr,
+            l::CPSR => {
+                if self.running() {
+                    for _ in 0..LINES_PER_CPSR_READ {
+                        self.next_line();
+                    }
                 }
+                self.line
             }
             l::CCRCR => {
                 let gcr = self.ltdc_get(l::GCR);
                 if gcr & l::GCR_CRCEN != 0 && gcr & l::GCR_LTDCEN != 0 {
-                    self.model_crc()
+                    self.crc_latched
                 } else {
                     0
                 }
             }
             L1RCR | l::SRCR => {
                 // the next frame boundary, once the block runs
-                if self.reload_pending && self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 {
+                if self.reload_pending && self.running() {
                     self.take_reload();
                 }
                 self.ltdc_get(off)
@@ -281,7 +354,8 @@ impl State {
             l::IDR | l::LCR | l::GC2R | l::ISR | l::CCRCR => {
                 self.violate(format!("LTDC: write to read-only {off:#x}"));
             }
-            l::ICR => {}
+            l::ICR => self.isr &= !v,
+            l::LIPCR if self.lipcr_ignores_writes => {}
             L1RCR | l::SRCR => {
                 if v & l::RCR_IMR != 0 {
                     self.take_reload();
@@ -336,6 +410,35 @@ impl Mp25Display {
     /// Replacing the pixels at the same address changes the CRC at once.
     pub fn load_fb(&self, phys: u64, pixels: &[u32]) {
         self.s.borrow_mut().fb_mem.insert(u32::try_from(phys).expect("fb below 4 GiB"), pixels.to_vec());
+    }
+
+    /// `ISR` as the DK showed it at board-display4: no flag ever latches.
+    pub fn isr_as_observed(&self, on: bool) {
+        let mut s = self.s.borrow_mut();
+        s.isr_as_observed = on;
+        if on {
+            s.isr = 0;
+        }
+    }
+
+    /// The scan line stands (no pixel clock): `CPSR` stays, no reload is taken.
+    pub fn stop_timing(&self, on: bool) {
+        self.s.borrow_mut().timing_stopped = on;
+    }
+
+    /// `LIPCR` writes do not land (the note's (a)(i)).
+    pub fn lipcr_ignores_writes(&self, on: bool) {
+        self.s.borrow_mut().lipcr_ignores_writes = on;
+    }
+
+    /// Latch `ISR` flags (an underrun, a transfer error), as the block would.
+    pub fn raise(&self, bits: u32) {
+        self.s.borrow_mut().latch(bits);
+    }
+
+    /// `CPSR.CYPOS` without advancing it.
+    pub fn line(&self) -> u32 {
+        self.s.borrow().line
     }
 
     /// The PLL registers (`WPCR1`, `WRPCR0`, `WRPCR1`) after a commit.
@@ -488,6 +591,97 @@ mod tests {
         let m = Mp25Display::new();
         dsi::set_mode(&m, DSI_BASE, &link(), true);
         assert!(m.violations().iter().any(|s| s.contains("video mode with the PLL not locked")));
+    }
+
+    fn running_720p(m: &Mp25Display, env: &TestEnv) -> l::Ltdc {
+        let ltdc = l::Ltdc::probe(m, LTDC_BASE).unwrap();
+        let layer = l::Layer { phys: FB, pitch: 0, format: l::Format::Xrgb8888 };
+        ltdc.configure(m, &HD720_60, &l::Output::default(), &layer).unwrap();
+        ltdc.enable(m, env).unwrap();
+        ltdc
+    }
+
+    #[test]
+    fn mp25_display_model_cpsr_wraps_and_latches_lif_rrif_until_icr() {
+        // the model's timing: CYPOS wraps at TWCR's vertical total (750 for
+        // 720p); LIF latches at LIPOS (745) with LIE, RRIF on every reload
+        // (R5 §53.8.14), both stand until ICR (§53.8.15)
+        let m = Mp25Display::new();
+        let env = TestEnv::default();
+        running_720p(&m, &env);
+        let isr = m.read32(LTDC_BASE + l::ISR as usize);
+        assert_eq!(isr, l::INT_RELOAD, "the enable's reload");
+        m.write32(LTDC_BASE + l::ICR as usize, isr);
+        let cpsr = |m: &Mp25Display| m.read32(LTDC_BASE + l::CPSR as usize);
+        let mut last = cpsr(&m);
+        let mut wraps = 0;
+        for _ in 0..600 {
+            let y = cpsr(&m);
+            wraps += u32::from(y < last);
+            assert!(y < 750);
+            last = y;
+        }
+        assert_eq!(wraps, 2, "1800 lines, 750 a frame");
+        assert_eq!(m.read32(LTDC_BASE + l::ISR as usize), 0, "LIE clear: no LIF");
+        m.write32(LTDC_BASE + l::IER as usize, l::IER_LIE);
+        for _ in 0..260 {
+            cpsr(&m);
+        }
+        assert_eq!(m.read32(LTDC_BASE + l::ISR as usize), l::INT_LINE);
+        m.write32(LTDC_BASE + l::ICR as usize, l::INT_LINE);
+        assert_eq!(m.read32(LTDC_BASE + l::ISR as usize), 0);
+        // the DK's ISR: nothing latches; a stopped timing generator: CPSR stands
+        m.isr_as_observed(true);
+        for _ in 0..600 {
+            cpsr(&m);
+        }
+        assert_eq!(m.read32(LTDC_BASE + l::ISR as usize), 0);
+        m.stop_timing(true);
+        let y = m.line();
+        assert_eq!((cpsr(&m), cpsr(&m)), (y, y));
+        assert!(m.violations().is_empty());
+    }
+
+    #[test]
+    fn mp25_display_model_ccrcr_latches_at_the_frame_end() {
+        // the CRC model latch point (the note leaves the hardware's to the
+        // board): CCRCR[15:0] is the frame latched at the last wrap, so a new
+        // buffer shows only after the next frame end
+        let m = Mp25Display::new();
+        let env = TestEnv::default();
+        m.load_fb(FB, &[1, 2, 3, 4]);
+        m.load_fb(0xa000_0000, &[4, 3, 2, 1]);
+        let ltdc = running_720p(&m, &env);
+        ltdc.crc_enable(&m, true, false).unwrap();
+        assert_eq!(ltdc.read_crc(&m), 0, "no frame ended since CRCEN");
+        let one_frame = |m: &Mp25Display| {
+            for _ in 0..250 {
+                m.read32(LTDC_BASE + l::CPSR as usize);
+            }
+        };
+        one_frame(&m);
+        let a = ltdc.read_crc(&m);
+        assert!(a != 0 && a <= 0xffff);
+        ltdc.set_fb(&m, &env, 0xa000_0000).unwrap();
+        assert_eq!(ltdc.read_crc(&m), a, "latched, not live");
+        one_frame(&m);
+        let b = ltdc.read_crc(&m);
+        assert_ne!(b, a);
+        ltdc.crc_enable(&m, false, false).unwrap();
+        assert_eq!(ltdc.read_crc(&m), 0);
+    }
+
+    #[test]
+    fn mp25_display_model_lipcr_can_ignore_writes() {
+        // the note's (a)(i): a LIPCR write that does not land shows in the
+        // read-back of fix spec step 1
+        let m = Mp25Display::new();
+        m.lipcr_ignores_writes(true);
+        let ltdc = l::Ltdc::probe(&m, LTDC_BASE).unwrap();
+        let layer = l::Layer { phys: FB, pitch: 0, format: l::Format::Xrgb8888 };
+        assert_eq!(ltdc.configure(&m, &HD720_60, &l::Output::default(), &layer).unwrap().lipcr, 0);
+        m.lipcr_ignores_writes(false);
+        assert_eq!(ltdc.configure(&m, &HD720_60, &l::Output::default(), &layer).unwrap().lipcr, 745);
     }
 
     #[test]
