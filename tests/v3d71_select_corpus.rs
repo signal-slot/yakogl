@@ -65,7 +65,7 @@ fn compiling_sources(root: &Path) -> BTreeMap<String, String> {
     let mut files = Vec::new();
     sources(root, &mut files);
     files.sort();
-    assert_eq!(files.len(), 324, "tools/shaders holds 324 .vert/.frag sources");
+    assert_eq!(files.len(), 325, "tools/shaders holds 325 .vert/.frag sources");
     let mut ok = BTreeMap::new();
     for p in files {
         let rel = p.strip_prefix(root).expect("under the root").to_string_lossy().into_owned();

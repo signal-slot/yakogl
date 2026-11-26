@@ -1681,6 +1681,11 @@ struct Backend {
     /// draws level n of a chain by sampling level n-1 at the centre of each
     /// of its texels ([`pvr_generate_mipmap`]).
     mipgen_fs: OsalGpuMem,
+    /// The three-levels quad's fragment program ([`PVR_INTERNAL_MIPGEN3`],
+    /// [`record_mip_levels`]): uploaded at the first chain drawn with
+    /// [`pvr_backend_set_mip_three_levels`] on, so that with it off no
+    /// allocation moves.
+    mipgen3_fs: OsalGpuMem,
     /// The fence of the last kick of the last chain made on the GPU (0:
     /// none): what [`pvr_return_mipmap_chain`] waits for before the GL core
     /// reads or writes such a chain's levels on the CPU.
@@ -1708,6 +1713,14 @@ struct Backend {
     /// texels through this clip ([`pbe_reg_words`] maxclip).
     mip_clip: (u32, u32),
     frame_clip: (u32, u32),
+    /// The row pitch, in texels, of each colour attachment past the first in
+    /// the next frame [`record_mip_levels`] opens, and in the open frame (0:
+    /// the target's width rounded up to even, every frame but a
+    /// three-levels render's): a chain level's storage pitch is its
+    /// power-of-two-rounded width ([`mip_chain_layout`]). Set, moved and
+    /// reset as `mip_clip` is.
+    mip_pitch: [u32; PVR_BACKEND_MAX_RT as usize],
+    frame_pitch: [u32; PVR_BACKEND_MAX_RT as usize],
     /// fbload FS variants that pack what they read for a float target
     /// (index = gles_surf_rt_class - 1: RGBA16F, R16F, R32F).
     fbload_fs_rt: [OsalGpuMem; 3],
@@ -1973,6 +1986,11 @@ struct FbLoad {
     /// ([`record_mip_level`]; its draw is [`MIP_DRAW`]).
     mip_fs_sh: ShcShader,
     mip_scale: [f32; 2],
+    /// The three-levels quad's program as our compiler recorded it
+    /// (`mipgen3.frag`: one texture, the block `u_l1`, `u_l2`, `u_l3`) and
+    /// the block, (1/W, 1/H, W, H) of each level ([`record_mip_levels`]).
+    mip3_fs_sh: ShcShader,
+    mip3_u: [f32; 12],
 }
 
 /// Keep a framebuffer's depth and stencil apart when they are two
@@ -3002,6 +3020,26 @@ pub fn pvr_backend_set_pds_once(on: bool) {
     PDS_ONCE_OFF.store(!on, core::sync::atomic::Ordering::Relaxed);
 }
 
+/// Off: a GPU mipmap chain is one kick a level. On: level 1 is one kick,
+/// then each render draws the next three levels from the one above them
+/// ([`record_mip_levels`], docs/notes/pvr-mip-three-levels.md). A switch,
+/// not a `PVR_BACKEND_OPT_*` ([`pvr_backend_set_mip_three_levels`]).
+static MIP_THREE_LEVELS: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(MIP_THREE_LEVELS_DEFAULT);
+
+/// [`MIP_THREE_LEVELS`] at start: off. An AM62P board session's on arm (image E)
+/// builds its image with this `true` (or calls
+/// [`pvr_backend_set_mip_three_levels`] before the first GL call).
+const MIP_THREE_LEVELS_DEFAULT: bool = false;
+
+/// GPU mipmap chains draw three levels a render (`true`) or one level a
+/// kick (`false`, the default): candidate 2 of
+/// docs/notes/am62p-slow-terrain.md, kept off until a board run measures it
+/// (tests/pvr_mip_three_levels.rs). Read at each chain; survives
+/// [`pvr_backend_init`] and [`pvr_backend_shutdown`].
+pub fn pvr_backend_set_mip_three_levels(on: bool) {
+    MIP_THREE_LEVELS.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
 /* ------------------------------------------------------------------------- */
 #[no_mangle]
 pub extern "C" fn pvr_backend_heap_base(heap: GlesHeap) -> u64 {
@@ -3729,6 +3767,8 @@ fn static_objects_init(b: &mut Backend, fl: &mut FbLoad) -> i32 {
     /* the GPU mipmap quad's FS: the same shape (one texture at sh0..19, a
      * two-float block after it, gl_FragCoord.y's pair after that) */
     fl.mip_fs_sh = *internal(PVR_INTERNAL_MIPGEN);
+    /* the three-levels quad's: the same, with a 12-dword block */
+    fl.mip3_fs_sh = *internal(PVR_INTERNAL_MIPGEN3);
     /* EOT (pixel event) DATA segment slot; rewritten per frame with the
      * framebuffer address. The CODE lives at the static PDS offset the
      * firmware expects (PVR_RENDER_EOT_PDS_CODE_OFF, placed by the driver). */
@@ -3928,6 +3968,7 @@ pub extern "C" fn pvr_backend_shutdown() {
         &mut b.fbload_fs,
         &mut b.fbload_vs,
         &mut b.mipgen_fs,
+        &mut b.mipgen3_fs,
         &mut b.fbload_quad,
         &mut b.black_tex,
         &mut b.seq_idx,
@@ -3956,6 +3997,8 @@ pub extern "C" fn pvr_backend_shutdown() {
         osal::gpu_free(&mut b.vis);
     }
     b.vis = OsalGpuMem::ZERO;
+    /* uploaded on demand: the next backend's first chain uploads it again */
+    b.mipgen3_fs = OsalGpuMem::ZERO;
     (b.vis_frame, b.vis_fence, b.vis_mask, b.vis_lost) = (0, [0; VIS_SLOTS], [0; VIS_SLOTS], 0);
     b.vis_sum = [0; GLES_QUERY_HANDLES as usize];
     b.inited = false;
@@ -6054,6 +6097,8 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     /* a chain level's frame clips its store to the level (`record_mip_level`) */
     b.frame_clip = b.mip_clip;
     b.mip_clip = (0, 0);
+    b.frame_pitch = b.mip_pitch;
+    b.mip_pitch = [0; PVR_BACKEND_MAX_RT as usize];
     b.target_pitch = crate::backend::draw_pitch(d);
     b.target_format = d.target_format;
     b.target_alpha_bits = d.target_alpha_bits;
@@ -7243,22 +7288,66 @@ const RGBA8_BYTES: u32 = 4;
 /// that rendered level 0, or the level before) is submitted first. 0, or
 /// the draw's error.
 fn record_mip_level(p: &mut Pvr, base: u64, src: &MipLevel, dst: &MipLevel, hwrt: (u32, u32)) -> i32 {
+    record_mip_levels(p, base, src, core::slice::from_ref(dst), hwrt)
+}
+
+/// [`record_mip_level`] for `dst` = levels l+1, l+2 (and l+3) of the chain
+/// at `base`, drawn from level l (`src`) in one render
+/// ([`pvr_backend_set_mip_three_levels`], docs/notes/pvr-mip-three-levels.md):
+/// slot 0 is level l+1 as `record_mip_level` makes it, slots 1 and 2 the
+/// smaller levels, each stored to its GL extent (its `GlesDrawTarget` size)
+/// at its storage pitch (`Backend::mip_pitch`), by the quad's program
+/// [`PVR_INTERNAL_MIPGEN3`] with (1/W, 1/H, W, H) of each level in its
+/// block. One level is [`record_mip_level`]'s draw, word for word.
+fn record_mip_levels(p: &mut Pvr, base: u64, src: &MipLevel, dst: &[MipLevel], hwrt: (u32, u32)) -> i32 {
     // SAFETY: single-threaded by contract; `d` is read by draw_one alone
     // until it returns, and nothing else refers to the static meanwhile.
     let d = unsafe { MIP_DRAW.get() };
     let fl = &mut p.fbload;
-    fl.mip_scale = [1.0 / dst.w as f32, 1.0 / dst.h as f32];
-    let scale: *const f32 = fl.mip_scale.as_ptr();
-    let (vs_sh, fs_sh): (*const ShcShader, *const ShcShader) = (&fl.vs_sh, &fl.mip_fs_sh);
+    let three = dst.len() > 1;
+    let (block, dwords, fs_sh, fs_gpu): (*const f32, u16, *const ShcShader, u64) = if three {
+        fl.mip3_u = [0.0; 12];
+        for (k, l) in dst.iter().enumerate().take(3) {
+            fl.mip3_u[4 * k..4 * k + 4].copy_from_slice(&[1.0 / l.w as f32, 1.0 / l.h as f32, l.w as f32, l.h as f32]);
+        }
+        (fl.mip3_u.as_ptr(), 12, &fl.mip3_fs_sh, p.b.mipgen3_fs.gpu)
+    } else {
+        fl.mip_scale = [1.0 / dst[0].w as f32, 1.0 / dst[0].h as f32];
+        (fl.mip_scale.as_ptr(), 2, &fl.mip_fs_sh, p.b.mipgen_fs.gpu)
+    };
+    let vs_sh: *const ShcShader = &fl.vs_sh;
+    let dst0 = &dst[0];
 
     /* the frame this draw opens clips its store to the level */
-    p.b.mip_clip = (dst.w, dst.h);
+    p.b.mip_clip = (dst0.w, dst0.h);
     *d = GlesDraw::ZERO;
-    d.target_gpu = base.wrapping_add(dst.off as u64);
-    d.target_w = hwrt.0.max(dst.w);
-    d.target_h = hwrt.1.max(dst.h);
-    d.target_pitch = dst.pitch;
+    d.target_gpu = base.wrapping_add(dst0.off as u64);
+    d.target_w = hwrt.0.max(dst0.w);
+    d.target_h = hwrt.1.max(dst0.h);
+    d.target_pitch = dst0.pitch;
     d.target_format = GLES_SURF_RGBA8888;
+    if three {
+        /* the smaller levels: slots 1 and 2, their extents and pitches */
+        let m = dst.len().min(3);
+        d.num_targets = m as u8;
+        d.targets[0] = GlesDrawTarget {
+            gpu: d.target_gpu,
+            w: d.target_w,
+            h: d.target_h,
+            format: GLES_SURF_RGBA8888,
+            out_shift: 0,
+        };
+        for (k, l) in dst.iter().enumerate().take(m).skip(1) {
+            d.targets[k] = GlesDrawTarget {
+                gpu: base.wrapping_add(l.off as u64),
+                w: l.w,
+                h: l.h,
+                format: GLES_SURF_RGBA8888,
+                out_shift: 0,
+            };
+            p.b.mip_pitch[k] = l.pitch;
+        }
+    }
     d.target_alpha_bits = 8; /* the sampled alpha, as the CPU filter averages it */
     /* the frame's background clear: the quad covers every pixel, so the
      * colour never shows, and the frame loads nothing first */
@@ -7269,7 +7358,7 @@ fn record_mip_level(p: &mut Pvr, base: u64, src: &MipLevel, dst: &MipLevel, hwrt
     d.vs = vs_sh;
     d.fs = fs_sh;
     d.vs_usc_gpu = p.b.fbload_vs.gpu;
-    d.fs_usc_gpu = p.b.mipgen_fs.gpu;
+    d.fs_usc_gpu = fs_gpu;
     d.attribs[0] =
         GlesAttrib { vi_reg: 0, components: 4, stride: 16, buffer_gpu: p.b.fbload_quad.gpu, ..GlesAttrib::ZERO };
     d.num_attribs = 1;
@@ -7293,11 +7382,11 @@ fn record_mip_level(p: &mut Pvr, base: u64, src: &MipLevel, dst: &MipLevel, hwrt
         ..GlesTextureBind::ZERO
     };
     d.num_textures = 1;
-    d.viewport = [0, 0, dst.w as i32, dst.h as i32];
+    d.viewport = [0, 0, dst0.w as i32, dst0.h as i32];
     d.depth_range = [0.0, 1.0];
     d.depth_func = GLES_CMP_ALWAYS;
-    d.fs_uniform_cpu = scale as *const c_void;
-    d.fs_uniform_dwords = 2;
+    d.fs_uniform_cpu = block as *const c_void;
+    d.fs_uniform_dwords = dwords;
     d.color_write = true;
     d.color_mask = 0xf;
     d.line_width = 1.0;
@@ -7305,6 +7394,7 @@ fn record_mip_level(p: &mut Pvr, base: u64, src: &MipLevel, dst: &MipLevel, hwrt
     /* the clip lives for this draw alone: a draw refused before it opened
      * its frame must not clip the next unrelated frame's store */
     p.b.mip_clip = (0, 0);
+    p.b.mip_pitch = [0; PVR_BACKEND_MAX_RT as usize];
     rc
 }
 
@@ -7342,6 +7432,21 @@ fn mip_gpu_last(lv: &[MipLevel], n: usize, tail: bool) -> usize {
     (1..n).take_while(|&l| !tail || l == 1 || lv[l].w * lv[l].h > MIP_CPU_TAIL_TEXELS).last().unwrap_or(1)
 }
 
+/// Upload [`PVR_INTERNAL_MIPGEN3`] the first time a chain asks for it
+/// (`Backend::mipgen3_fs`). False when the upload fails: the chain is then
+/// drawn a kick a level.
+fn mip3_program(b: &mut Backend) -> bool {
+    if !b.mipgen3_fs.impl_.is_null() {
+        return true;
+    }
+    if upload_words(&mut b.mipgen3_fs, internal_words(internal(PVR_INTERNAL_MIPGEN3))) != 0 {
+        glog_once!("pvr_backend: the three-levels mipmap program did not upload; a kick a level");
+        b.mipgen3_fs = OsalGpuMem::ZERO;
+        return false;
+    }
+    true
+}
+
 /// [`pvr_generate_mipmap`]: the levels drawn -- `None` the whole chain, its
 /// last kick in flight; `Some(n)` levels 1 ..= n, every kick of them
 /// complete -- or why the chain is left to the GL core.
@@ -7372,8 +7477,20 @@ fn mip_chain_gpu(p: &mut Pvr, t: &GlesTextureBind, levels: u32) -> Result<Option
         return Err("a level one texel wide above a taller tail: the PBE writes pixel pairs");
     }
     let last = mip_gpu_last(&lv, n, p.b.mip_cpu_tail);
-    for l in 1..=last {
-        let rc = record_mip_level(p, t.base_gpu, &lv[l - 1], &lv[l], (lv[1].w, lv[1].h));
+    /* three levels a render: only on the all-GPU arm (path B's prefix keeps
+     * a kick a level), and only with the program uploaded */
+    let three = last + 1 == n && MIP_THREE_LEVELS.load(core::sync::atomic::Ordering::Relaxed) && mip3_program(&mut p.b);
+    let mut l = 1;
+    while l <= last {
+        /* level 1 alone, then up to three levels from the one above them */
+        let m = if three && l > 1 { (last + 1 - l).min(3) } else { 1 };
+        let hwrt = (lv[1].w, lv[1].h);
+        let rc = if m == 1 {
+            record_mip_level(p, t.base_gpu, &lv[l - 1], &lv[l], hwrt)
+        } else {
+            record_mip_levels(p, t.base_gpu, &lv[l - 1], &lv[l..l + m], hwrt)
+        };
+        l += m;
         if rc != 0 {
             /* the levels recorded so far may be in flight, and the CPU
              * filter is about to rewrite them: wait them out first */
@@ -10072,7 +10189,14 @@ fn flush(p: &mut Pvr) -> i32 {
         } else {
             b.target_h
         };
-        let pitch = if slot != 0 { tw.wrapping_add(1) & !1 } else { b.target_pitch };
+        /* a three-levels render's secondary levels: their storage pitch */
+        let pitch = if slot != 0 && b.frame_pitch[slot] != 0 {
+            b.frame_pitch[slot]
+        } else if slot != 0 {
+            tw.wrapping_add(1) & !1
+        } else {
+            b.target_pitch
+        };
 
         /* a view's padded rows are not a twiddled surface */
         let twiddle = rt == 0
@@ -10565,6 +10689,7 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
         &b.fbload_fs,
         &b.fbload_vs,
         &b.mipgen_fs,
+        &b.mipgen3_fs,
         &b.fbload_quad,
         &b.black_tex,
         &b.seq_idx,

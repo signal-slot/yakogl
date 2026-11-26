@@ -179,6 +179,10 @@ internal powervr fbload_u32x4   internal/es/fbload_int.frag replace@rgba32ui
 # (src/pvr/backend.rs pvr_generate_mipmap; the chain is otherwise the GL
 # core's CPU box filter).
 internal powervr mipgen         internal/es/mipgen.frag
+# Three levels of that chain in one render, levels l+1..l+3 from level l
+# into three colour targets (src/pvr/backend.rs record_mip_levels, behind
+# pvr_backend_set_mip_three_levels, off by default).
+internal powervr mipgen3        internal/es/mipgen3.frag
 
 # The GC7000's: its clear quad (blending and colour masks are pixel-engine
 # state there, so one fragment shader clears every mask), and the GPU

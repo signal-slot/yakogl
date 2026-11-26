@@ -96,7 +96,7 @@ fn every_corpus_source_compiles_on_v3d_or_is_a_listed_refusal() {
     sources(&root, &mut files);
     files.sort();
     /* The population first: an empty walk would make "nothing refused" true. */
-    assert_eq!(files.len(), 324, "tools/shaders holds 324 .vert/.frag sources; re-derive the pin if it changed");
+    assert_eq!(files.len(), 325, "tools/shaders holds 325 .vert/.frag sources; re-derive the pin if it changed");
     let rel_of = |p: &PathBuf| p.strip_prefix(&root).expect("under the root").to_string_lossy().into_owned();
 
     let mut refused: BTreeMap<String, String> = BTreeMap::new();
