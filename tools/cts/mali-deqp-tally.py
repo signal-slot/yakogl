@@ -241,6 +241,8 @@ def slice_board(s):
     tag = re.search(r"-(t6|imx95)-gles2-", s["name"])
     tagged = BOARD_TAG[tag.group(1)] if tag else None
     key = s["meta"].get("board")
+    if key:
+        key = key.replace("_", "-")  # verdin_imx95 is verdin-imx95
     if key and key not in BOARDS:
         return key, "RULE board-unknown: %s: board %r is not %s" % (
             s["name"], key, "|".join(BOARDS))
@@ -1020,6 +1022,10 @@ def self_test():
         must("imx95: an unknown board", "board-unknown",
              "--check-cover", "--no-git", imp,
              cp(ia, "x3", [("meta.txt", "board=verdin-imx95", "board=zx")]))
+        rc, o, _e = run("--check-cover", "--no-git", imp,
+                        cp(ia, "x5", [("meta.txt", "board=verdin-imx95",
+                                       "board=verdin_imx95")]), ib)
+        chk("imx95: board=verdin_imx95 covers like verdin-imx95", rc == 0)
         must("t6: '-' in kmsg on a done row is still refused", "chunk-field",
              "--check-cover", "--no-git", mp,
              cp(good[0], "x4", [("chunks.tsv", "\t0\t0\tyes\tyes\t-",
