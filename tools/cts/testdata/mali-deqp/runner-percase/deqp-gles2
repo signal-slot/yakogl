@@ -43,9 +43,22 @@ while read -r c; do
   sleep 0.2
   {
     echo "#beginTestCaseResult $c"
-    if [ "$(action "$c")" = info ]; then
-      printf '<ShaderProgram LinkStatus="false"><InfoLog>%s</InfoLog></ShaderProgram>\n' \
-        "$(infolog "$c" | sed 's/&/\&amp;/g; s/</\&lt;/g')"
+    # A 4th and 5th scenario column ("stage<TAB>file", the file beside the
+    # scenario) gives the case a <Shader> with that GLSL in its <ShaderProgram>.
+    stage=$(awk -F'\t' -v c="$c" '$1 == c { print $4; exit }' "${FAKE_SCENARIO:-/dev/null}")
+    src=$(awk -F'\t' -v c="$c" '$1 == c { print $5; exit }' "${FAKE_SCENARIO:-/dev/null}")
+    if [ "$(action "$c")" = info ] || [ -n "$stage" ]; then
+      printf '<ShaderProgram LinkStatus="%s">\n' "$([ "$st" = Pass ] && echo true || echo false)"
+      if [ -n "$stage" ]; then
+        printf '<Shader Type="%s" CompileStatus="true">\n<ShaderSource>' "$stage"
+        sed 's/&/\&amp;/g; s/</\&lt;/g' "$(dirname "$FAKE_SCENARIO")/$src"
+        printf '</ShaderSource>\n'
+      fi
+      if [ "$(action "$c")" = info ]; then
+        printf '<InfoLog>%s</InfoLog>\n' "$(infolog "$c" | sed 's/&/\&amp;/g; s/</\&lt;/g')"
+      fi
+      [ -n "$stage" ] && printf '</Shader>\n'
+      printf '</ShaderProgram>\n'
     fi
     echo "<TestCaseResult Version=\"0.3.4\" CasePath=\"$c\" CaseType=\"SelfValidate\">"
     echo "<Result StatusCode=\"$st\">$st</Result>"
