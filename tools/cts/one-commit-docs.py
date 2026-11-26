@@ -49,6 +49,21 @@ Under --root (required, so the real tree is never edited by accident) it edits:
                             open; the Pi 4 terrain figure '<n> ms at `<sha>`' is
                             updated, the rest of the Pi 4 wording stays.
 
+  tools/cts/RESULTS.md      also the bullet 'The README glmark2 table's runs:'
+                            (the 'README columns' passage above the per-scene
+                            table): it names the one commit and the three rows
+                            instead of the old per-board commits;
+  tools/website-check.sh    PRE_PUBLICATION_BUILDS: the six glmark2.<board> /
+                            gltest.<board> lines are dropped. The registry is
+                            read only for provenance kind 'pre-publication';
+                            this edit makes every one of the six figures
+                            'repository' (the commit is an ancestor of HEAD,
+                            checked against git), and a pre-publication entry
+                            cannot be moved to the new commit: it must name a
+                            hash in the first public snapshot's section and a
+                            date before 2026-10-27. Dropping is the only
+                            correct edit, and it keeps stale entries out.
+
 An edit whose anchor is not found is reported as a warning (exit 0 still);
 --dry-run prints the warnings and writes nothing. Paths printed are relative
 to records/; no host, address or credential is read.
@@ -57,7 +72,8 @@ to records/; no host, address or credential is read.
 common-row.py's synth(), applies them to a temporary copy of the six real
 files and runs readme-glmark2-check.py (--ref HEAD --scenes
 terrain,shadow,refract --verdicts --status --checklist --roadmap) and the
-website-check.sh glmark2 comparison against the copy; it also checks that the
+website-check.sh glmark2 comparison against the copy, and the full
+website-check.sh on a git clone of HEAD with the edited files copied in; it also checks that the
 refusals fire on mismatched sha8s and on a GL error.
 """
 import argparse
@@ -85,6 +101,7 @@ FILES = {
     "datajs": os.path.join("website", "data.js"),
     "checklist": os.path.join("docs", "release", "checklist.md"),
     "roadmap": "ROADMAP.md",
+    "webcheck": os.path.join("tools", "website-check.sh"),
 }
 STATUS_MARK = "- **glmark2 の一本化（#1196）"
 CHECKLIST_LEAD = "The glmark2 figures in `website/data.js` follow the README table at main"
@@ -339,7 +356,44 @@ def edit_results(text, cr, ds, warn):
         return text
     lo, hi = span
     replace_rows(lines, (lo + 1, hi), {b: results_line(cr, ds[b]) for b in ORDER}, warn, "RESULTS")
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    return edit_results_columns(text, ds, warn)
+
+
+RESULTS_COLS_TAIL = "keeps the earlier runs its column heads name."
+RESULTS_COLS_RE = re.compile(
+    r"(?ms)^(?P<ind>[ \t]*)- The README glmark2 table's runs:.*?"
+    r"(?:\(2026-10-22, below\)\.|" + re.escape(RESULTS_COLS_TAIL) + r")")
+
+
+def edit_results_columns(text, ds, warn):
+    m = RESULTS_COLS_RE.search(text)
+    if not m:
+        warn.append("RESULTS: no 'The README glmark2 table's runs:' passage; left out")
+        return text
+    ind = m.group("ind")
+    para = ("- The README glmark2 table's runs: the GM rows of the common set "
+            "from one main commit, `%s` (%s), on all three boards: the three "
+            "rows above, %s. The per-scene table below %s"
+            % (ds["am62p"]["sha8"], dates(ds), scores_en(ds), RESULTS_COLS_TAIL))
+    new = "\n".join(ind + (ln if i == 0 else "  " + ln) for i, ln in enumerate(wrap(para)))
+    return text[:m.start()] + new + text[m.end():]
+
+
+REGISTRY_IDS = ["%s.%s" % (k, b) for k in ("gltest", "glmark2") for b in ORDER]
+
+
+def edit_webcheck(text, warn):
+    """drop the PRE_PUBLICATION_BUILDS lines of the six figures (see the header)"""
+    out = []
+    for ln in text.split("\n"):
+        if any(re.match(r'\s*"%s":\s*\(' % re.escape(i), ln) for i in REGISTRY_IDS):
+            continue
+        out.append(ln)
+    if "PRE_PUBLICATION_BUILDS = {" not in text:
+        warn.append("website-check.sh: no PRE_PUBLICATION_BUILDS dict; left out")
+        return text
+    return "\n".join(out)
 
 
 def status_line(cr, ds, sha8):
@@ -537,6 +591,7 @@ def apply(root, recs, cites, record_commit=None, dry_run=False, today=None, out=
         "datajs": edit_datajs(texts["datajs"], cr, ds, warn, record_commit),
         "checklist": edit_checklist(texts["checklist"], ds, sha8, warn),
         "roadmap": edit_roadmap(texts["roadmap"], cr, ds, sha8, warn),
+        "webcheck": edit_webcheck(texts["webcheck"], warn),
     }
     for k in FILES:
         changed = new[k] != texts[k]
@@ -603,6 +658,28 @@ def self_test():
                            capture_output=True, text=True, env=dict(os.environ, WEBSITE_GLMARK2_DIR=wd))
         check("website-check.sh glmark2 comparison passes (exit %d)" % r.returncode,
               r.returncode == 0, "\n" + r.stdout + r.stderr)
+        # the RESULTS passage and the registry
+        res = open(os.path.join(tree, FILES["results"]), encoding="utf-8").read()
+        check("RESULTS 'README columns' names the one commit",
+              re.search(r"The README glmark2 table's runs: the GM rows of the common set\s+from\s+one\s+main\s+commit, `%s`" % sha8, res)
+              is not None and "(2026-10-22, below)" not in res and "445c5653` (2026-10-20); the README" not in res)
+        wc = open(os.path.join(tree, FILES["webcheck"]), encoding="utf-8").read()
+        check("registry: no glmark2/gltest line left",
+              not any(re.search(r'"%s":\s*\(' % re.escape(i), wc) for i in REGISTRY_IDS)
+              and '"deqp2.am62p": (' in wc)
+        # the full website-check.sh on a clone of HEAD with the edited files copied in
+        full = os.path.join(tmp, "full")
+        r = subprocess.run(["git", "clone", "-q", "--local", REPO, full], capture_output=True, text=True)
+        if r.returncode == 0:
+            subprocess.run(["git", "-C", full, "checkout", "-q", sha8], capture_output=True)
+            for rel in FILES.values():
+                shutil.copy(os.path.join(tree, rel), os.path.join(full, rel))
+            r = subprocess.run(["bash", os.path.join(full, "tools", "website-check.sh"), full],
+                               capture_output=True, text=True)
+            check("full website-check.sh passes the edited clone (exit %d)" % r.returncode,
+                  r.returncode == 0, "\n" + r.stdout + r.stderr)
+        else:
+            check("git clone for the full website-check.sh", False, r.stderr.strip())
         # a second run changes nothing
         snap = {k: open(os.path.join(tree, v), encoding="utf-8").read() for k, v in FILES.items()}
         apply(tree, recs, cites, today="2026-11-26", out=log)
