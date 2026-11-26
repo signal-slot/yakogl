@@ -404,6 +404,11 @@ def run(argv, out=None):
     a = ap.parse_args(argv)
     table = load_table(a.table)
     m = Merge(table, entry_cases(table, a.mustpass), a.dirs)
+    shortfalls = []
+    for i in range(len(table)):
+        c = m.counts(i)
+        if c is not None and isinstance(c[1], int) and c[1] < c[0]:
+            shortfalls.append('WARNING: e%d: begun %d of %d mustpass (shortfall)' % (i, c[1], c[0]))
     if a.check:
         missing = [i for i in range(len(table)) if m.counts(i) is None]
         if missing and not a.partial:
@@ -412,9 +417,13 @@ def run(argv, out=None):
         for p in m.problems:
             print('FAIL:', p)
         print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(m.rec), 'FAILED' if m.problems else 'OK'))
+        for w in shortfalls:
+            print(w, file=sys.stderr)
         return 1 if m.problems else 0
     for p in m.problems:
         print('warning:', p, file=sys.stderr)
+    for w in shortfalls:
+        print(w, file=sys.stderr)
     if a.notpass:
         do_notpass(m, out, a.skip_noresult)
     else:
@@ -621,6 +630,16 @@ def selftest():
                'no record: 2 of 4 entries (1,3), 5 mustpass' in out)
         rc, out, _ = call(*base_args, '--check', '--partial', A, XF)
         expect('x2: a Verdin slice and an x2 slice of other entries merge', rc == 0)
+        # shortfall warning: stderr only; stdout and exit status unchanged
+        rc, out, err = call(*base_args, '--check', '--partial', A, B)
+        expect('shortfall: entry 2 began 3 of 5 warns on stderr',
+               'WARNING: e2: begun 3 of 5 mustpass (shortfall)' in err and 'e0:' not in err and 'e1:' not in err)
+        expect('shortfall: --check stdout and exit status carry no warning',
+               rc == 0 and 'WARNING' not in out and out.startswith('checked 2 inputs'))
+        rc, out, err = call(*base_args, '--notpass', '--skip-noresult', A, B)
+        expect('shortfall: --notpass stdout has no warning', rc == 0 and 'WARNING' not in out and 'WARNING: e2:' in err)
+        rc, out, err = call(*base_args, '--check', '--partial', A)
+        expect('no shortfall: complete rows print no warning', rc == 0 and 'WARNING' not in err)
         expect('x2: no w3 value is printed', 'w3' not in out and '00000000' not in out)
     finally:
         shutil.rmtree(root, ignore_errors=True)
