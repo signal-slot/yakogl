@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 r"""Check a NanoPC-T6 gl_test sweep record: two identical runs, README fields, redaction.
 
-  mali-sweep-record-check.py RECORD_DIR [--reference SHA]
+  mali-sweep-record-check.py RECORD_DIR [--reference SHA] [--user NAME]
 
 RECORD_DIR is a T6 sweep record directory (the tools/cts/log/<date>-t6-sweep-<sha8>/
 layout a panthor-gltest --sweep session leaves: README.md plus sweep-1.verdicts.txt
@@ -43,6 +43,23 @@ Checks, printed in this order, one `ok   <name>` or `FAIL <name>: <detail>` line
                       A hit is printed as <file>:<line>: <pattern name> and at most
                       8 hits are printed per check; the matched text is never printed.
 
+Three more checks follow redaction:
+
+  userhost            no file anywhere under RECORD_DIR holds a <word>@<host> form
+                      (e.g. user@host; also matches an e-mail address). Hits are
+                      printed as <file>:<line>: user@host, the text never printed.
+  user-name           only with --user NAME, or $BOARD_USER when --user is not given
+                      and it is non-empty: no file holds NAME as a word (case
+                      sensitive). With neither, the check is skipped and no line is
+                      printed. The name is never printed.
+  verdicts-format     each of the two verdict files that exists: starts with the two
+                      SPDX comment lines the 1a22bd38 record's verdict files carry
+                      (`# SPDX-License-Identifier: ...`, `# SPDX-FileCopyrightText: ...`),
+                      holds exactly one summary line `panthor-gltest: N case(s) run:`
+                      (none at all is left to verdicts-summary),
+                      that line is the last non-empty line, and the number of
+                      `panthor-gltest: verdict case ` lines equals N.
+
 Last line: `mali-sweep-record-check: <RECORD_DIR>: complete (n ok, 0 failed)` or
 `... incomplete (n ok, m failed)`.
 Exit 0 all checks ok, 1 any FAIL, 2 bad argument, unreadable RECORD_DIR or a
@@ -61,6 +78,10 @@ V2 = "sweep-2.verdicts.txt"
 DEFAULT_REFERENCE = "1a22bd38"
 
 SUMMARY_RE = re.compile(r"^panthor-gltest: [0-9]+ case(?:\(s\)|s)? run:")
+SUMMARY_N_RE = re.compile(r"^panthor-gltest: ([0-9]+) case(?:\(s\)|s)? run:")
+VERDICT_LINE_RE = re.compile(r"^panthor-gltest: verdict case ")
+SPDX_HEADER = ("# SPDX-License-Identifier:", "# SPDX-FileCopyrightText:")
+USERHOST_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*@[A-Za-z0-9][A-Za-z0-9-]*")
 HEX_RUN_RE = re.compile(r"[0-9a-fA-F]{4,}")
 SHA_TOKEN_RE = re.compile(r"`([0-9a-fA-F]{8,40})`")
 BEFORE_VALUE_RE = re.compile(r"\bbefore\b[^0-9a-fA-F]*([0-9a-fA-F]{4,})")
@@ -182,6 +203,69 @@ def redaction_check(record):
     return True, ""
 
 
+def scan_lines(record, matcher, label):
+    """Hits `<file>:<line>: <label>` for every line matcher(line) is true on."""
+    hits = []
+    for root, dirs, files in os.walk(record):
+        dirs.sort()
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, record)
+            try:
+                data = read_bytes(path)
+            except OSError:
+                hits.append("%s: unreadable" % rel)
+                continue
+            for lineno, line in enumerate(data.decode("utf-8", "replace").split("\n"), 1):
+                if matcher(line):
+                    hits.append("%s:%d: %s" % (rel, lineno, label))
+    if hits:
+        shown = "; ".join(hits[:8])
+        if len(hits) > 8:
+            shown += " (%d more hits)" % (len(hits) - 8)
+        return False, shown
+    return True, ""
+
+
+def userhost_check(record):
+    return scan_lines(record, lambda line: USERHOST_RE.search(line), "user@host")
+
+
+def user_name_check(record, user):
+    pat = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(user) + r"(?![A-Za-z0-9_])")
+    return scan_lines(record, lambda line: pat.search(line), "user name")
+
+
+def verdicts_format_check(record):
+    problems = []
+    for name in (V1, V2):
+        path = os.path.join(record, name)
+        if not os.path.isfile(path):
+            continue  # verdicts-identical reports a missing file
+        lines = read_bytes(path).decode("utf-8", "replace").split("\n")
+        while lines and lines[-1] == "":
+            lines.pop()
+        if (len(lines) < 2 or not lines[0].startswith(SPDX_HEADER[0])
+                or not lines[1].startswith(SPDX_HEADER[1])):
+            problems.append("%s: no SPDX header comment lines" % name)
+        sums = [(i, SUMMARY_N_RE.match(l)) for i, l in enumerate(lines)]
+        sums = [(i, m) for i, m in sums if m]
+        if not sums:
+            continue  # verdicts-summary reports a missing summary line
+        if len(sums) != 1:
+            problems.append("%s: %d summary lines, want 1" % (name, len(sums)))
+            continue
+        i, m = sums[0]
+        if i != len(lines) - 1:
+            problems.append("%s: summary line is not last" % name)
+        n = sum(1 for l in lines if VERDICT_LINE_RE.match(l))
+        if n != int(m.group(1)):
+            problems.append("%s: %d verdict lines, summary says %s" % (name, n, m.group(1)))
+    if problems:
+        return False, "; ".join(problems)
+    return True, ""
+
+
 def main(argv):
     ap = argparse.ArgumentParser(
         prog="mali-sweep-record-check.py",
@@ -194,7 +278,11 @@ def main(argv):
                     help="earlier sweep record's commit sha the README must name "
                          "(default %s); '' drops the readme-reference check"
                          % DEFAULT_REFERENCE)
+    ap.add_argument("--user", default=None, metavar="NAME",
+                    help="login user name that must not occur as a word anywhere in "
+                         "the record (default $BOARD_USER if set)")
     ns = ap.parse_args(argv[1:])
+    user = ns.user if ns.user is not None else os.environ.get("BOARD_USER", "")
     reference = ns.reference
     if reference and not REFERENCE_RE.fullmatch(reference):
         print("mali-sweep-record-check: --reference must be '' or 7 to 40 hex digits",
@@ -227,6 +315,10 @@ def main(argv):
             checks.append(("readme-reference", lambda: reference_check(text, reference)))
         checks.append(("readme-commit-sha", lambda: commit_sha_check(text, reference)))
     checks.append(("redaction", lambda: redaction_check(record)))
+    checks.append(("userhost", lambda: userhost_check(record)))
+    if user:
+        checks.append(("user-name", lambda: user_name_check(record, user)))
+    checks.append(("verdicts-format", lambda: verdicts_format_check(record)))
 
     failed = 0
     for name, fn in checks:
