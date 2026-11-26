@@ -1,6 +1,6 @@
 # v3d-tex's C reference functions on their own fixtures; written by tools/v3d/texref_fixture.sh,
 # read by src/shaderc/online/texref.rs. Floats are bit patterns in hex.
-# tex_filter_ref.h: 53cee6764c47742948610519981e6a5c21c6d0168a31b9f60f86e65d7e29b504
+# tex_filter_ref.h: 1888ec05dec04df668da23717d7045efbc7bb8dbf980b6acafd857ea2a1089af
 # tex_mip_case.h: 4de35c6fe17436ee6cb0401de0a79e893b1ca4f65bdee0b0f1a2e6d0b3b69f05
 # cube rows: 6154
 # level rows: 1154
