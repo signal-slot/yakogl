@@ -44,6 +44,24 @@ printf '%s.a\n%s.q\n' $P $P >"$D/scope.txt"
 out=$(run --scope "$D/scope.txt" --uboot "$D/ub.log" --kexec "$D/kx.txt" --armbian "$D/ar.tsv")
 chk "--scope: q missing" has "$out" "$P.q uboot=- kexec=- armbian=- missing"
 
+# --kexec optional (no per-case kexec baseline is in the tree): without it the
+# header says so (also with --quiet), the kexec column is left out, and the
+# tally compares U-Boot against Armbian only.
+out=$(run --uboot "$D/ub.log" --armbian "$D/ar.tsv"); rc=$?
+chk "no --kexec: exit 0" test $rc -eq 0
+chk "no --kexec: header" has "$out" "kexec: no per-case baseline"
+chk "no --kexec: a same" has "$out" "$P.a uboot=Pass armbian=Pass same"
+chk "no --kexec: b same (kexec side gone)" has "$out" "$P.b uboot=Fail armbian=Fail same"
+chk "no --kexec: c newly passing" has "$out" "$P.c uboot=Pass armbian=Fail newly passing"
+chk "no --kexec: e missing" has "$out" "$P.e uboot=Pass armbian=- missing"
+chk "no --kexec: no kexec column" lacks "$out" "kexec="
+chk "no --kexec: summary (vs Armbian only)" has "$out" \
+  "t6-uboot-deqp-compare: 5 cases, same 3, newly failing 0, newly passing 1, missing 1"
+out=$(run --quiet --uboot "$D/ub.log" --armbian "$D/ar.tsv"); rc=$?
+chk "no --kexec --quiet: exit 0" test $rc -eq 0
+chk "no --kexec --quiet: header kept" has "$out" "kexec: no per-case baseline"
+chk "no --kexec --quiet: same dropped" lacks "$out" "$P.a "
+
 # Chain: t6-uboot-rows.sh (fake prompt-go that makes a record dir like the real
 # one: image.log with the deqp lines, plus uart.log/typed.log/verdict.txt)
 # -> its rows.tsv / out-dir / one record dir as --uboot.
@@ -88,6 +106,13 @@ chk "unreadable file: exit 2" test $? -eq 2
 echo noise >"$D/empty.log"
 run --uboot "$D/empty.log" --kexec "$D/kx.txt" --armbian "$D/ar.tsv" >/dev/null
 chk "no outcome line: exit 2" test $? -eq 2
+# An explicit --kexec file that is missing or has no outcome line is an error
+# with its own exit code 3 (the same files are exit 2 on the --uboot side):
+# no baseline is said by omitting --kexec, not by a bad file.
+run --uboot "$D/ub.log" --kexec "$D/nope" --armbian "$D/ar.tsv" >/dev/null
+chk "explicit missing kexec file: exit 3" test $? -eq 3
+run --uboot "$D/ub.log" --kexec "$D/empty.log" --armbian "$D/ar.tsv" >/dev/null
+chk "explicit kexec file with no outcome line: exit 3" test $? -eq 3
 run --kexec "$D/kx.txt" >/dev/null
 chk "usage error: exit 2" test $? -eq 2
 
