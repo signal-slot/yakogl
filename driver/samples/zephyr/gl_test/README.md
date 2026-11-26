@@ -199,7 +199,15 @@ one case gives the set summary (status 7). Raise the lifetime (and the
 runner's `RUN_BOUND`, 120 s) for anything longer than a few cases: past it
 the layer resets the board in the middle of the suite.
 
-Built for the DK with `-Werror`; not run on the board yet.
+Built for the DK with `-Werror`. The one-case tally line is confirmed on the
+board: the one-case image built with `GL_TEST_MP2_SET_HEAD=y` from origin/main
+`dd6cfa02` printed `gl_test: all: 0 of 1 cases failed (1 passed; ...)` and
+passed, record
+`records/stm32mp257f-dk/20261126-0118-gl_test_case1_tally-d3a5c59e`, console
+excerpt committed in `08f03625`
+(`docs/notes/stm32mp257f-dk-bringup.md`, "Board verdicts", step 8). The
+`CONFIG_GL_TEST_MP2_CASES` single-number form builds (host build, `269e1839`)
+but has not been run on the board.
 
 ## Raspberry Pi 4 (V3D 4.2)
 
