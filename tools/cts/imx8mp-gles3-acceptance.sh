@@ -168,7 +168,8 @@ else
 	out=$(tool imx8mp-gles3-report.py --date "$DATE" "${dirs[@]}" 2>&1)
 	rc=$?
 	if [ $rc -ne 0 ]; then
-		res 3 FAIL "report exit $rc: $(printf '%s\n' "$out" | tail -1)"
+		why=$(printf '%s\n' "$out" | sed -n 's/^  problem: //p' | head -1)
+		res 3 FAIL "report exit $rc: ${why:-$(printf '%s\n' "$out" | tail -1)}"
 	elif printf '%s\n' "$out" | grep -q PARTIAL; then
 		res 3 FAIL "report says PARTIAL"
 	else

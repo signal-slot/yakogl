@@ -103,6 +103,20 @@ fresh c3
 touch "$R/fail-imx8mp-gles3-report.py"
 run_case "c3 report fails" 1 "c3"
 
+fresh c3p
+cat >"$R/tools/cts/imx8mp-gles3-report.py" <<'PYEOF'
+import sys
+print("  problem: entry 7 has no record")
+print("with the ROADMAP.md draft above")
+sys.exit(1)
+PYEOF
+out=$(sh "$ACC" "$R" 2>/dev/null)
+if printf '%s\n' "$out" | grep -q '^c3 FAIL .*report exit 1: entry 7 has no record$'; then
+	echo "ok   c3 FAIL names report.py's problem line"
+else
+	echo "FAIL c3 problem line"; printf '%s\n' "$out" | grep '^c3'; BAD=$((BAD + 1))
+fi
+
 fresh c3b
 mv "$R/tools/cts/log/2026-11-12-imx8mp-gles3-0123abcd-rows01-13" "$R/tools/cts/log/2026-11-imx8mp-gles3-0123abcd-rows01-13"
 run_case "c3 no day in the rows01-13 name" 1 "c3"
