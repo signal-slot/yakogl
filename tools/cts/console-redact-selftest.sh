@@ -9,6 +9,7 @@
 # acceptance grep. Samples are built by concatenation so no sample string appears whole in this file.
 # Host only; scratch under ${TMPDIR:-$PWD}, never /tmp.
 set -uo pipefail
+unset BOARD_USER
 here=$(cd "$(dirname "$0")" && pwd)
 tool=$here/console-redact.py
 case "${TMPDIR:-$PWD}" in /tmp|/tmp/*|/var/tmp|/var/tmp/*) echo "refusing a scratch dir under /tmp; set TMPDIR" >&2; exit 2 ;; esac
@@ -91,6 +92,36 @@ done
 for want in "$want_version" "$want_testnet" "BVNC <addr> <addr>" "<uart> <home>" "<addr>"; do
     if printf '%s\n' "$want" | grep -Eq -- "$acc"; then bad "a redacted form still trips the grep"; else ok "redacted form clean: <...>"; fi
 done
+
+# --- user@host and the login user name (rules f and g; fake names only)
+un='ali''ce'
+uh1="root@$bare_addr"
+out=$(printf '%s\n' "$uh1" | python3 -I "$tool")
+if [ "$out" = "<userhost>" ]; then ok "user@<addr> -> <userhost>"; else bad "user@addr: $out"; fi
+out=$(printf '%s\n' "$un@nanopc-t6:~\$ ls" | python3 -I "$tool")
+if [ "$out" = '<userhost>:~$ ls' ]; then ok "shell prompt name@host:~\$ -> <userhost>"; else bad "prompt: $out"; fi
+out=$(printf '%s\n' "${un}@board.exa""mple.org:/srv" | python3 -I "$tool")
+if [ "$out" = '<userhost>:/srv' ]; then ok "dotted host in prompt form redacted"; else bad "dotted prompt: $out"; fi
+at=@; mail="Author: Jane Doe <jane${at}exa""mple.org> (c) mesa"
+out=$(printf '%s\n' "$mail" | python3 -I "$tool")
+if [ "$out" = "$mail" ]; then ok "e-mail-like line kept (documented: dotted host, no prompt colon)"; else bad "mail over-redacted: $out"; fi
+out=$(printf '%s\n' "$uh1" | python3 -I "$tool" | python3 -I "$tool")
+if [ "$out" = "<userhost>" ]; then ok "userhost rule idempotent"; else bad "userhost not idempotent: $out"; fi
+line="login $un on tty; home of $un; ${un}x and x$un and my-$un stay"
+want_user="login <user> on tty; home of <user>; ${un}x and x$un and my-$un stay"
+out=$(printf '%s\n' "$line" | python3 -I "$tool")
+if [ "$out" = "$line" ]; then ok "no user name given: rule off"; else bad "rule not off: $out"; fi
+out=$(printf '%s\n' "$line" | python3 -I "$tool" --user "$un")
+if [ "$out" = "$want_user" ]; then ok "--user rewrites the name as a word only"; else bad "--user: $out"; fi
+out=$(printf '%s\n' "$line" | BOARD_USER="$un" python3 -I "$tool")
+if [ "$out" = "$want_user" ]; then ok "BOARD_USER is the default name"; else bad "BOARD_USER: $out"; fi
+out=$(printf '%s\n' "$line" | BOARD_USER=other python3 -I "$tool" --user "$un")
+if [ "$out" = "$want_user" ]; then ok "--user wins over BOARD_USER"; else bad "--user precedence: $out"; fi
+printf '%s\n%s\n' "$un@host ran" "by $un" > "$tmp/user.txt"
+python3 -I "$tool" --user "$un" "$tmp/user.txt" >/dev/null 2>&1
+if [ "$(cat "$tmp/user.txt")" = "$(printf '<userhost> ran\nby <user>')" ]; then ok "in place rewrites both rules"; else bad "in place: $(cat "$tmp/user.txt")"; fi
+out=$(python3 -I "$tool" --user "$un" "$tmp/user.txt" 2>&1)
+if printf '%s\n' "$out" | grep -qF -- "0 rewritten"; then ok "user rules idempotent in place"; else bad "user in place not idempotent: $out"; fi
 
 # --- --check-readme
 sha='b1b5b8456ec69247c64d1bd07e42461266dc5136'
