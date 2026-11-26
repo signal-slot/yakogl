@@ -31,6 +31,8 @@ pub mod program;
 #[cfg(test)]
 mod blend_choice_tests;
 #[cfg(test)]
+mod frame_attrrec_tests;
+#[cfg(test)]
 mod frame_blend_tests;
 #[cfg(test)]
 mod frame_boolunif_tests;

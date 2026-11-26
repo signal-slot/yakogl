@@ -1092,7 +1092,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a float32 attribute in a buffer object", why(&vbo_attrib), built),
             ("a buffer object of 4 GiB", why(&huge_vbo), not_built(NOT_BUILT_ATTRIBUTE_BUFFER_SIZE)),
             ("an attribute with neither staged data nor a buffer", why(&no_data), not_built(NOT_BUILT_ATTRIBUTE)),
-            ("the shader's location is not staged", why(&moved_attrib), not_built(NOT_BUILT_ATTRIBUTE_RECORDS)),
+            ("the shader's location is not staged: its initial current value is read", why(&moved_attrib), built),
             ("an instanced draw is built", why(&instanced), built),
             ("a divisor-1 attribute in a buffer object, 40 instances, is built", why(&per_instance), built),
             ("a staged per-instance attribute (divisor 0 read as 1) is built", why(&per_instance_staged), built),
@@ -1371,7 +1371,6 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_CLEAR_PROGRAM,
         NOT_BUILT_ATTRIBUTE,
         NOT_BUILT_ATTRIBUTE_BUFFER_SIZE,
-        NOT_BUILT_ATTRIBUTE_RECORDS,
         NOT_BUILT_PRELOAD_PROGRAM,
         frame::NOT_BUILT_PRELOAD_STRIDE,
         INVALID_INDEX_SIZE,
@@ -1397,6 +1396,7 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             frame::INVALID_TEXTURE,
             frame::NOT_BUILT_NO_CLEAR,
             frame::INVALID_BLEND_SHADER,
+            INVALID_ATTRIBUTE_RECORDS,
         ],
     ]
     .concat();
