@@ -1112,6 +1112,28 @@ statement about what the hardware *does* with a register is **provisional**
 and marked so; the statements about what ST's driver does are read from the
 file and are not.
 
+**Update 2026-11-26 (item rm0457-read).** RM0457's LTDC chapter **has now
+been read**: not from ST's server (the download failed again from this farm
+machine: `curl --http1.1 --retry 3 --max-time 600` on the URL Zephyr's
+`boards/st/stm32mp257f_dk/doc/index.rst:212` names, 600 s, exit 28, 0 bytes;
+the HTTP/2 attempt returns a stream error; the stmcu.jp portal answers 404 /
+redirects to its home page), but from a full-text HTML mirror of **RM0457
+Rev 5** (19-Sep-2024 — the revision history's last row, and the chapter
+pages' own "RM0457 Rev 5" footer), saved with provenance under
+`$CONNECTED_DEPS_DIR/st-docs/rm0457-rev5/`. A citation **R5:** gives a
+section, table or register number of that chapter (its §53 is the LTDC
+chapter). The mirror is an unofficial converted copy (the site says
+conversion may introduce errors); the two glitches found — `LTDC_IE2R` for
+`LTDC_IER2` in Table 502, and the `FUTR` reset row `0x10` against the section
+text's `0x80`, which ST's driver's `FUT = 128` follows — are recorded in the
+provenance file, and every offset and bit cited below also matches L's
+regmap (:82-84, :188-205). Rev 5 is what this farm can fetch; whether a
+newer published Rev changed this chapter is unknown. In (a) to (c) below,
+each point the chapter settles now carries an **R5:** citation and lost its
+provisional mark; where the chapter is silent the mark stays, listed at the
+end of each block. A manual says what hardware is designed to do; it does not
+prove what the running image reads — the read-backs stay.
+
 **What ST's driver does, and what ours already matches.** One table, so the
 answers below can cite it.
 
@@ -1127,81 +1149,153 @@ answers below can cite it.
 | `CPSR.CYPOS` read for the scan-out position | :1413-1415 | `poll_frame` |
 | `CCRCR` is read **only** at :1054 with `readl_relaxed`; it is not in the regmap's readable or volatile lists (:525-560, :655-670) | :1054 | |
 
-**(a) Why `ISR` stays 0: not answered by any source read; provisional.**
-ST's file offers no explanation, and the table shows our wait is the same
-sequence ST relies on, so the cause is not a missing step of ST's. What the
-sources settle:
+**(a) Why `ISR` stays 0: RM0457 settles the register semantics; the cause
+is still the board's to show.** ST's file offers no explanation, and the
+table shows our wait is the same sequence ST relies on, so the cause is not
+a missing step of ST's. What the sources settle:
 
-- *There is no second register set and no secure view.* The MP25's LTDC has
-  the one `IER`/`ISR`/`ICR` at 0x34/0x38/0x3C (:82-84; the register list
-  has no `IER2`/`ISR2`), `ltdc.c` has no `RIF`/secure handling of the
-  interrupt, `CCRCR` or `LIPCR` registers (its only security code is the
-  layer-3 RIFSC check that clears `caps.crc`, :2407, :2453-2460,
-  :2588-2590), and the DT gives the block one access controller for the
-  common registers (`rifsc 80` "cmn", L:`stm32mp251.dtsi:2162`) and one per
-  layer group (119, 120, 121, `:2165-2177`). Our image reads `ISR` from the
+- *A second, secure interrupt register set exists — Correction, and our set
+  is the right one.* R5:§53.8.20-23 and Table 502 place `IER2`/`ISR2`/`ICR2`/`LIPCR2`
+  at 0x64/0x68/0x6C/0x70; R5:§53.6: "The following **non-secure** registers
+  are used to handle the interrupts: `LTDC_LIPCR`, `LTDC_IER`, `LTDC_ISR`,
+  `LTDC_ICR`, `LTDC_CPSR`, `LTDC_FUTR`", and "the duplicated **secure**
+  registers ... `LTDC_LIPCR2`, `LTDC_IER2`, `LTDC_ISR2`, `LTDC_ICR2`" — the
+  first set (0x34/0x38/0x3C/0x40, ours and Linux's) is the open set for
+  non-secure software; the duplicated set is the secure one. `GC2R` (0x020)
+  bit 11 `SISA`, "second interrupt set ability", reads 1 in its reset value
+  0xBF30 (R5:§53.8.9), so the duplication is implemented. `ltdc.c` still has
+  no `IER2` handling (its register list has none, :82-84; its only security
+  code is the layer-3 RIFSC check that clears `caps.crc`, :2407,
+  :2453-2460, :2588-2590); the DT gives the block one access controller for
+  the common registers (`rifsc 80` "cmn", L:`stm32mp251.dtsi:2162`) and one
+  per layer group (119, 120, 121, `:2165-2177`), and R5:§9.3 Table 38 lists
+  exactly those as RISUP 80 `LTDC common` and 119/120/121
+  `LTDC_L1L2`/`LTDC_L3`/`LTDC_ROT`. Our image reads `ISR` from the
   non-secure window at 0x48010000, the same registers Linux reads
   [D].
-- *The two GIC lines are not the cause.* `nb_irq` is 2 for 0x040100 and
-  0x040101 (:2562) and the DT has two SPIs, 158 and 159 (L:`stm32mp251.dtsi:2155-2156`);
-  `ltdc_probe` requests the same handler on both (:2751-2763). The driver does
-  not tell the lines apart, so which SPI carries which cause is not known
-  from the source; and a flag in `ISR` is read from the register, not from
-  the GIC.
-- *`LIPCR` is not shown to be effective.* Linux writes it once (:1209) and
-  never reads it back. Our image does not read it back either: `frame_diag`
-  reads `ISR`, `IER`, `CPSR` x2, `CDSR`, `GCR`, the reload register
-  and not `LIPCR` or `IER` after the write. A `LIPCR` or `IER` write that did
-  not take (a shadowed register that needs a reload, or a write ignored
-  while `GCR.LTDCEN` is clear) is consistent with every board line and is
-  the first thing the board can discriminate. RM0457 would say whether
-  `LIPCR` and `IER` are shadowed (provisional [D]: ST reloads nothing after
-  writing them, :1209, :1456, so Linux itself relies on them taking effect
-  without a reload).
-- *Whether `ISR` latches at all on this block is open.* Nothing was read
-  that says a flag sets while the controller is unobserved by an
-  interrupt route. ST never reads `ISR` except in the handler (:1051), so
-  "the flags latch without a connected IRQ" is an assumption of our poll,
-  **not** a fact of the sources [D]. RM0457 and the board decide.
+- *The two GIC lines, and what each carries: settled.* `nb_irq` is 2 for
+  0x040100 and 0x040101 (:2562) and the DT's SPIs 158 and 159
+  (L:`stm32mp251.dtsi:2155-2156`) are, in R5:§31's interrupt list, `LTDC`
+  "LTDC global interrupt" and `LTDC_ER` "LTDC global error interrupt"
+  (160/161 are `LTDC_SEC`/`LTDC_SEC_ER`, the secure pair no software here
+  requests). R5:Table 501 assigns the events: `LIF`, `RRIF`, `FUWIF` drive
+  the working signal `ltdc_lo_li` (SPI 158); `FUIF`, `FURIF`, `TERRIF`,
+  `CRCIF` drive the error signal `ltdc_lo_err_it` (SPI 159);
+  `ltdc_probe` requests the same handler on both (:2751-2763). So which SPI
+  carries which cause **is** documented. And a flag in `ISR` is read from
+  the register, not from the GIC, so routing is not in the question anyway.
+- *`LIPCR` and `IER` are not shadowed — settled: "needs a reload" is out as
+  a mechanism.* R5:§53.5.20: "The non-layer registers (not prefixed with
+  `LTDC_Lx`) are **all non-shadowed**. They contain static configurations
+  ... They do not require update during an ongoing display", and
+  R5:§53.8.10 (`SRCR`) limits the shadow set to the layer registers;
+  reload control lives in `SRCR` (`IMR`/`VBR`, §53.8.10) and per layer in
+  `LxRCR` (`GRMSK`/`IMR`/`VBR`, §53.8.33, reset 0x4: `GRMSK` = 1, layer 1
+  follows the global reload). `LIPCR` (0x40, field `LIPOS[11:0]`, §53.8.16)
+  and `IER` (0x34) therefore take effect as written; ST writes them with no
+  reload after (:1209, :1456) and Linux works that way, as the manual
+  intends. The `LIPCR`/`IER` read-backs stay as step 1/2 of the spec below,
+  but they now test the *write path* (bus, RIFSC gate), not reload
+  semantics. What `LIF` is: `ISR` bit 0, "line interrupt generated when a
+  programmed line is reached" (§53.8.14), `LIPOS` in the same absolute line
+  numbers as the timing registers (§53.5.18, Figure 474) [D] — so 1121 =
+  `AAH + 1` for our mode is "the beginning of the first line after the
+  active display area" (§53.8.10 `VBR`'s reload position, the same line)
+  [D], reached every frame the CPSR runs (observed 1121..1124 -> 0..3).
+- *`ISR` flags vs the mask: settled; flag latching on this board stays open
+  — that is the one thing RM0457 cannot close from here.* R5:§53.8.13: `IER`
+  "determines which status flags generate an interrupt request, by setting
+  the corresponding bit to 1" — the status flags exist per event and `IER`
+  gates only the request generation, so our poll design (read `ISR` without
+  a GIC route) is what the manual describes; the study's assumption gets
+  manual support [D]. It then sharpens the board question: `LIPCR` resets to
+  0 (Table 502), so even with a `LIPCR` write that never landed the line
+  event would fire at line 0 of every frame — both candidate `LIPOS` values,
+  reset 0 and written 1121, are lines the observed `CYPOS` passes — and a
+  flag, once set, stands until `ICR` clears it (§53.8.15). Per the manual a
+  running frame must leave a non-zero `ISR` at some 50 us poll step; the
+  board's every-sample 0 therefore says the `LIF` flag is not being set at
+  all. The discriminating one-frame experiment is `RRIF` (check 12 below):
+  `RRIF` "is generated when a vertical blanking reload occurs (and the first
+  line after the active area is reached)" (§53.8.14 bit 3) and our `set_fb`
+  does exactly such a `VBR` reload — `RRIF` seen but no `LIF` pins the fault
+  on the `LIPOS`/line-compare path; `RRIF` absent pins it on flag latching
+  itself, and check 12 then reports `errors: unobservable` as the spec says.
 
-So (a) is: **the cause is not in what ST's driver does; it is one of
-(i) `LIPCR`/`IER` not effective, (ii) `ISR` flags not latching without the
-interrupt route, (iii) a documented behaviour of this IP's line interrupt
-that the sources do not state.** The spec below does not wait for the answer:
-it takes the frame from `CPSR`, and adds the read-backs that tell (i), (ii)
-and (iii) apart on the next board session.
+So (a) is: **the cause is not in what ST's driver does. RM0457 documents the
+line interrupt fully (its event, position, flag, clear bit and pin group —
+nothing in the chapter makes `LIF` conditional on a GIC route, a mask or a
+reload), so (iii) closes as "no documented behaviour exempts it"; what is
+left is (i) the `LIPCR`/`IER` write not landing at the bus (not a shadow
+effect — §53.5.20) or (ii) the flag not latching as §53.8.13-15 describe —
+either way a board fact, not a manual one.** The spec below does not wait
+for the answer: it takes the frame from `CPSR`, and adds the read-backs and
+the `RRIF` experiment that tell (i) and (ii) apart on the next board
+session.
 
-**(b) When `CCRCR` is valid: ST's rule is read, the hardware's is
-provisional.** What ST does: set `GCR_CRCEN` (:1491), set `LIE` (:1490), and
+**(b) When `CCRCR` is valid: ST's rule is read; RM0457 settles what
+`CCRCR` is; the line where its value becomes final is the chapter's one
+silent point.** What ST does: set `GCR_CRCEN` (:1491), set `LIE` (:1490), and
 consume **no** value until two line interrupts have passed since the enable
 (`CRC_SKIP_FRAMES` 2, :274, :1017-1018, `crc_skip_count = 0` :1501), the
 comment at :270-273 giving the reason: "to be sure CRC value is relevant for
 the frame" (the enable may land mid-frame). The value is then read in the
 handler right after `ISR` is read and cleared (:1051-1054), once per LIF,
-which is the line `LIPCR` = end of the active area + 1 (:1209) [D]: the CRC
-is read **after** the frame's active area, before the next one starts.
+which is the line `LIPCR` = end of the active area + 1 (:1209), now
+confirmed by R5:§53.8.16/§53.8.14 (and the same line the `VBR` reload
+completes on, §53.8.10): the CRC is read **after** the frame's active area,
+before the next one starts.
 No reload is involved: ST does not touch `SRCR` or `L1RCR` for the CRC
-(:1491). Our code differs in two ways, both mattering: it reads the first
-frame after the enable (the skip would drop it), and it reads at the `CPSR`
-wrap, line 1121..1124 of the *old* frame or 0..3 of the next, with a poll
-step of 50 us (3 lines), so the read lands at an arbitrary line in a
-~7-line window around the frame end instead of at the LIF line. If `CCRCR`
-is a running value that is final only after the active area and cleared or
-overwritten when the next frame starts (**not stated by any source; the
-register's behaviour is RM0457's**), a read at lines 0..3 of the next frame
-may see a restarted accumulation and one at 1121..1124 the final one, and
-the GPU probe's `0x7f01`, `0xda5b`, `0x8895` on a static buffer is what
-that would look like. It does not explain `mp2_display`'s constant `0x2fab`
-(next paragraph), so the read point is *a* cause, not *the* cause.
+(:1491); the manual agrees — CRC control is a `GCR` bit and two common
+registers, not part of the shadow set (R5:§53.5.17/§53.5.20). Our code
+differs in two ways, both mattering: it reads the first frame after the
+enable (the skip would drop it), and it reads at the `CPSR` wrap, line
+1121..1124 of the *old* frame or 0..3 of the next, with a poll step of 50 us
+(3 lines), so the read lands at an arbitrary line in a ~7-line window
+around the frame end instead of at the LIF line. **`CCRCR` is a per-frame
+value, not a running one — settled:** R5:§53.5.17, "The CRC operator allows
+a 16-bit signature to be extracted **for each frame**, by hashing the R,G,B
+components of all the frame pixels", and R5:§53.8.25, `CCRC[15:0]`, "This
+register returns the computed CRC of a frame" (0x07C); the hardware is built
+to compare the computed CRC against `ECRCR` (`ECRC[15:0]`, 0x078, §53.8.24)
+and raise `CRCIF` (`ISR` bit 7, error group, Table 501) on a mismatch — a
+comparison that only makes sense against a finished frame's value [D]. What
+the chapter does **not** say: at which line that value becomes final (the
+comparison happens at the frame boundary — LIF at 1121 is the *first line
+after the active area*, not the frame end; the frame ends at the `CYPOS`
+wrap, `TOTALH` 1124 -> 0 [D]) and whether a read inside the active area
+returns a partial accumulation — so the read point stays a logged
+diagnostic. What the chapter does pin is the expectation: **a static
+displayed frame must hash the same every frame** [D]. The GPU probe's
+`0x7f01`, `0xda5b`, `0x8895` on a static buffer break that expectation, and
+the board can now split the two explanations without any guess: pin
+`ECRCR` to a value read once and enable `IER.CRCIE` (bit 7) — over the
+following frames, **no** `CRCIF` means every frame hashes to the pinned
+value and the `CCRCR` variation is a read-point artifact, while `CRCIF`
+means the hardware itself saw frames that hash differently — the content
+changes frame to frame. `mp2_display`'s constant `0x2fab` under two changed
+pixels is the other half of the same experiment: pinned `0x2fab` with a
+changed picture should raise `CRCIF`, and a silence there says the change
+never reached the hashed stream.
 
-**(c) What it covers: not stated; provisional.** ST registers it as the
-CRTC's CRC: `drm_crtc_add_crc_entry(crtc, ...)` with source `"auto"`
-(:1020-1023, :1488), which makes it a CRC of the CRTC output, the blended
-pixel stream, not of one layer, [D]; no source says whether that is the
-active area only, whether the background colour (`BCCR`, :1263) or the
-blanking enter it, or what the polynomial and the word width are.
-The board's four values (`0x2fab`, `0x7f01`, `0xda5b`, `0x8895`) all fit 16
-bits [D], so `CCRCR`'s width on this block is at least probably 16 bits.
+**(c) What it covers: settled by RM0457.** R5:§53.5.17: the signature is
+"16-bit ... **for each frame**, by hashing the R,G,B components of all the
+frame pixels", and §53.8.25's field is `CCRC[15:0]` — the width is stated
+(the board's four values `0x2fab`, `0x7f01`, `0xda5b`, `0x8895` fitting in
+16 bits [D] is what the chapter predicts). ST registers it as the CRTC's
+CRC: `drm_crtc_add_crc_entry(crtc, ...)` with source `"auto"`
+(:1020-1023, :1488), and the manual agrees it is the output, not a layer:
+the CRC operator sits in the output pipeline between dithering (§53.5.16)
+and the timing generator (§53.5.18), and `ECRCR`/`CCRCR` are common
+registers (§53.8.24/25), with §53.5.22 listing the CRC configuration as one
+securable block — a CRC of the composited pixel stream, not of one layer.
+Background-colour pixels are blended in (§53.5.12; `BCCR` 0x02C,
+§53.8.12), so they are among "all the frame pixels" [D]; blanking enters
+nothing — §53.8.7 calls blanking "no data/pixel" (`GCR` bit 29 `DEPOL`) and
+the frame pixels are the active-area output [D]. What the chapter still
+does **not** state: the polynomial, the seed and the per-pixel packing —
+open, and irrelevant for a diagnostic that only compares the value of the
+same output stream frame to frame.
 *Cache.* A cached CPU buffer would not be seen by the LTDC's AXI fetch, but
 the probe's buffer is normal non-cacheable with a barrier after the write
 (`display_yakogl_stm32_ltdc.c:15`, `:584`, `:638`), and the KVM showed the
@@ -1215,13 +1309,19 @@ either. What the board *does* show is that over 4 + 1 + 1 frame reads
 different on a static buffer: **a `CCRCR` read this way does not behave as a
 per-frame CRC of the displayed picture** [D].
 
-**Verdict: the CRC is not usable as a pass criterion on this path until
-RM0457 and a board read-back say what it is.** The read point can be fixed
+**Verdict: the CRC is still not usable as a pass criterion on this path.**
+RM0457 now says *what it is* (a 16-bit per-frame hash of the composited
+frame's pixels, R5:§53.5.17) but not *where its value is final on this
+block*, and the board shows it not behaving as a per-frame hash today
+(findings 2 and 3); the missing fact is the latch point, which is a board
+read-back matter, not a manual one. The read point can be fixed
 now (it is cheap and follows ST's order), the value kept as a logged
 diagnostic, and PASS rests on checks that fail when scan-out is broken.
 Whichever way the CRC turns out, the fix below never lets it decide PASS
 or FAIL alone: it can only be promoted after a session shows `CCRCR` stable
-across frames of a static buffer and different with a visible change (an
+across frames of a static buffer and different with a visible change — and
+the `ECRCR`/`CRCIE` test sketched in (b) is that promotion test in
+hardware, run by the hardware itself at the frame boundary it uses (an
 item for after the diagnostics below).
 
 **Fix spec (the sequence the next items implement).** Names are `stm32_ltdc.rs`'s
@@ -1231,11 +1331,16 @@ tests pin the steps against those lines.
 *Setup, once, in `configure` and `enable`:*
 
 1. `SSCR`, `BPCR`, `AWCR`, `TWCR` as now, then `LIPCR` = `accum_act_h + 1`
-   (L:`:1209`; 1121 for 1080p60). **Read `LIPCR` back** and keep it in the
-   diagnostic record (new; discriminates (a)(i)). Value is a test: equals
-   `AWCR.AAH + 1`.
+   (L:`:1209`; 1121 for 1080p60; field `LIPOS[11:0]`, R5:§53.8.16). **Read
+   `LIPCR` back** and keep it in the diagnostic record (new; discriminates
+   (a)(i)). Value is a test: equals `AWCR.AAH + 1`. Not shadowed
+   (R5:§53.5.20), so a mismatch is a write-path fault, not a pending
+   reload.
 2. `IER |= FUWIE|FUEIE|TERRIE` (0x46, L:`:1266`) as now, then **read `IER`
-   back**; the record keeps both (new; (a)(i)).
+   back**; the record keeps both (new; (a)(i)). **Correction (R5:Table 501,
+   §53.8.13):** the chapter names bit 6 `FUIE`/`FUIF` (ltdc.c names the same
+   bit `FUEIE`) — the mask 0x46 = bits 1/2/6 stands; the register also has
+   `CRCIE` (7) and `FURIE` (8), and `IER` is not shadowed either.
 3. Layer, reload and enable as now (`L1RCR` `VBR`, `wait_reload`, L:`:2015`,
    `:2082`). After the reload `wait_reload` returns, **read back**
    `LxCFBAR` (= the buffer's physical address) and `LxCR` (`LEN` set,
@@ -1267,14 +1372,23 @@ tests pin the steps against those lines.
    more, and only returns that third frame's value (the current code reads the
    first).
 9. The CRC read is in the **same step as step 7**, right after `ICR` is
-   written and before any other work: `CCRCR` (L:`:1053-1054`), together with
-   the `CPSR` sample taken in that step (so the log shows at which line the
-   read landed). Reads at the `CPSR` wrap happen within one poll step of the
-   wrap, so lines 0..3 of the next frame [D]; the spec keeps the read there
-   and logs the line, which is the diagnostic that tells whether the read
-   point decides the value. The logged value per frame is
-   `mp2_*: crc: <what> 0x<ccrcr> line <cypos> via <wrap|lif>`; no value
-   decides PASS.
+   written and before any other work: `CCRCR` (L:`:1053-1054`, 0x7C,
+   `CCRC[15:0]`, R5:§53.8.25), together with the `CPSR` sample taken in
+   that step (so the log shows at which line the read landed). Reads at the
+   `CPSR` wrap happen within one poll step of the wrap, so lines 0..3 of the
+   next frame [D]; the spec keeps the read there and logs the line, which is
+   the diagnostic that tells whether the read point decides the value. The
+   logged value per frame is `mp2_*: crc: <what> 0x<ccrcr> line <cypos> via
+   <wrap|lif>`; no value decides PASS. R5 line arithmetic for the log
+   [D]: a `lif`-triggered read lands at `LIPOS` 1121 — 4 lines, ~59 us at
+   2200 px/line and 148.5 MHz, **before** the wrap — so `lif` is ST's
+   position and the earlier one; `wrap` reads are 4..7 lines past it.
+   Addition for the board session (the promotion test of (b), diagnostic
+   only): with `crc_enable` on, also write the frame's `CCRCR` into `ECRCR`
+   (0x78, `ECRC[15:0]`, R5:§53.8.24) and set `IER.CRCIE` (bit 7); `CRCIF`
+   (`ISR` bit 7) then reports *hardware* frame-to-frame CRC stability,
+   independent of our read point. `CRCIF` is logged as the experiment's
+   result; it is not a scan-out error and does not fail check 12.
 
 *PASS checks (what the probes' PASS rests on; each fails on a broken
 scan-out, none on the CRC):*
@@ -1287,18 +1401,37 @@ scan-out, none on the CRC):*
 11. **Layer read back.** `LxCFBAR` equals the address handed in, `LxCR.LEN`
     is set and `GCR.LTDCEN` is set, read back after the reload of steps 3
     and again after the last frame (the layer must still be on).
-12. **No error flag.** Over all frames no `ISR` value (step 7's) has `FUEIF`
-    (bit 6) or `TERRIF` (bit 2); `FUWIF` (bit 1) is counted and logged and
-    fails too (ST counts the three, :1028-1033; the DK showed none).
+12. **No error flag.** Over all frames no `ISR` value (step 7's) has `FUIF`
+    (bit 6; ltdc.c's name for it is `FUEIF` — R5:Table 501/§53.8.14 names
+    the bit `FUIF`) or `TERRIF` (bit 2); `FUWIF` (bit 1) is counted and
+    logged and fails too (ST counts the three, :1028-1033; the DK showed
+    none); `FURIF` (bit 8, rotation FIFO underrun — our probes do not
+    rotate) is counted and logged, and fails if seen. The three
+    underrun/error semantics are as ST assumed: `FUWIF` "if one of the layer
+    FIFO is empty and pixel data is read from the FIFO", `FUIF` when "many
+    pixel data are read" from an empty FIFO, the warning-to-error point set
+    by `FUTR.THRE` (0x90; R5:§53.8.30's text gives the default `0x80` = 128
+    words of 64 bits, which our `FUT = 128` follows — Table 502's reset row
+    there reads `0x10`, a mirror glitch noted in the provenance file).
     **Positive control**, because `ISR` stayed 0 for a reason not yet
-    known: with `IER.RRIE` (bit 3) set, one `L1RCR` reload must show
-    `ISR.RRIF` (bit 3, L:`:191`, `:202`: defined, never used by ST); if
-    `RRIF` is seen the error check counts as verified (`errors: none`), if
-    not it is reported `errors: unobservable (ISR latched nothing)` and does
-    **not** count as a pass of the check, and the probe prints that line
-    next to its result: this keeps check 12 from passing vacuously on a
-    register that reads 0 whatever happens. Checks 10 and 11 stay real in
-    that case. (The `RRIF` read is the experiment that also answers (a)(ii).)
+    known: with `IER.RRIE` (bit 3) set, one `L1RCR` **`VBR`** reload (not
+    `IMR`) must show `ISR.RRIF` (bit 3, L:`:191`, `:202`: defined, never used
+    by ST). **Correction (R5:§53.8.14 bit 3):** `RRIF` "is generated when a
+    vertical blanking reload occurs (and the first line after the active
+    area is reached)" — the control is valid only for a `VBR` reload, and
+    `RRIF` must be read *after* that line has passed (at the `CYPOS` wrap of
+    the same frame, step 5's event); the flag stands until `ICR.CRRIF`
+    (§53.8.15 bit 3); and by §53.8.13 the flag exists whatever `RRIE` says
+    (the enable gates only the GIC request), so the control tests latching
+    itself. `L1RCR` resets to 0x4 (`GRMSK` = 1, R5:§53.8.33): the global
+    `SRCR` reload already covers layer 1. If `RRIF` is seen the error check
+    counts as verified (`errors: none`), if not it is reported `errors:
+    unobservable (ISR latched nothing)` and does **not** count as a pass of
+    the check, and the probe prints that line next to its result: this keeps
+    check 12 from passing vacuously on a register that reads 0 whatever
+    happens. Checks 10 and 11 stay real in that case. (The `RRIF` read is
+    the experiment that also answers (a)(ii), and — if it appears while
+    `LIF` does not — (a)(i)'s surviving variant.)
 13. `mp2_*: PASS` is printed only when checks 10 and 11 hold and check 12
     did not fail; the CRC lines and the diagnostic record (`LIPCR`, `IER`
     read back, `ISR` samples, `RRIF` result) are printed in every case.
@@ -1308,10 +1441,16 @@ needs a `CPSR` that wraps independently of a settable `LIF`, a `LIPCR` that
 can be made to ignore writes, and an `ISR` that latches `RRIF` on reload),
 with tests pinning each step to the L line above. crc-probes: checks 10-13
 in the Zephyr driver and both `main.c`. board-display5 reads the diagnostic
-record: `LIPCR`/`IER` read back and the `RRIF` result settle (a)(i)/(ii).
-What would settle (a)(iii), (b) and (c) is RM0457's LTDC chapter
-(`LIPCR`, `ISR`, `CCRCR`, `GCR.CRCEN`): until then they stay provisional and
-the CRC stays a diagnostic.
+record: `LIPCR`/`IER` read back and the `RRIF` result settle (a)(i)/(ii),
+and the `ECRCR`/`CRCIE` run settles the CRC latch point of (b). RM0457's
+LTDC chapter has now been read (Rev 5 mirror,
+`$CONNECTED_DEPS_DIR/st-docs/rm0457-rev5/`): (a)(iii) closed — the chapter
+documents the line interrupt (`LIF` at the programmed line, §53.8.14/16,
+grouped with `RRIF`/`FUWIF` onto the working pin `ltdc_lo_li` = SPI 158,
+Table 501 with §31's `LTDC`/`LTDC_ER`), (b) settled as to what `CCRCR` is
+(§53.5.17, §53.8.25) with its latch line left to the board, (c) settled.
+What remains open is board-side only: (a)(i)/(ii) and the CRC latch point —
+so the CRC stays a diagnostic.
 
 ## GPU buffer scan-out
 
