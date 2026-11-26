@@ -50,6 +50,8 @@ are in `docs/release/checklist.md`; the walks decide, not this file.
 
 CONTRIBUTING.md's build, test and gate commands, walked on a gate host.
 
+**Not met.** The newest `--quick` walk is still the red one at `a06902bd`. `e52f2e3f` re-indents the list that made it red; its re-walk was not run (the host had 20 GB free against the 50 GB needed, and no `MP2_QEMU`).
+
 **Fresh clone of `a06902bd` (2026-11-26), red on six clippy rows.** `env LC_ALL=C tools/check.sh --quick` in a fresh clone of the then-current integration tip (the walked commit `a06902bd` is itself the commit that fixed the two `nanopc_t6` clippy sites that made the walk before it red), started detached so the run outlives the 2 h command limit (`LANG=C` and `CARGO_INCREMENTAL=0` set too), ran on 2026-11-26 and ended with the summary line:
 
 > check.sh: 553 ok, 6 failed, 0 gap(s) (a gap was not run: it is not a pass), 0 skipped (every row), 0 clippy rows left to the nightly, 2 not run (passed on main) in 7666s; test binaries: 2010 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)
@@ -64,7 +66,7 @@ Before the gate: at the same-day walk of `4f34ffb8`, every CONTRIBUTING command 
 
 The last green `--quick` is "181 ok, 0 failed, 0 gap(s)" at `570cd8c6` (2026-11-12, 3121 s). It is not a reading of the tip.
 
-To close line 3: one small commit re-indenting the `//!` bullet list at `tests/depth_resolve_pvr_edges.rs:20-25`, then a fresh clone of a commit at or after it, `env LC_ALL=C tools/check.sh --quick` started detached on this host with a wall budget above 7667 s, ending "559 ok, 0 failed, 0 gap(s)" (the row count moves with main; this warm-cache `--quick` ran in 7666 s). For the next walk: `MP2_QEMU` is built in the host's dependency cache (`$CONNECTED_DEPS_DIR`), and the stale `ci-target/debug` cache is pruned (172 GB free), so it is a warm rebuild.
+To close line 3: a fresh-clone walk of `e52f2e3f` (which re-indents the `//!` bullet list at `tests/depth_resolve_pvr_edges.rs`) or later, `env LC_ALL=C tools/check.sh --quick` started detached with a wall budget above 7667 s, ending "N ok, 0 failed, 0 gap(s)" with N equal to the plan listing (`YAKOGL_CHECK_PLAN=1 tools/check.sh --quick`) at the walked commit (562 rows at `e52f2e3f`). For the next walk: `MP2_QEMU` is built in the host's dependency cache (`$CONNECTED_DEPS_DIR`), and the stale `ci-target/debug` cache is pruned (172 GB free), so it is a warm rebuild.
 
 CONTRIBUTING's statements, checked at `4f34ffb8`:
 
@@ -77,14 +79,14 @@ CONTRIBUTING's statements, checked at `4f34ffb8`:
 
 README's host steps in order, then CONTRIBUTING, on a fresh clone.
 
-**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps and the API-coverage step are recorded below at `50e70464` (2026-11-26) — the cmake Linux build, the host tools test and the API-coverage step — and step 3's bare-metal forms in the `40b44800` re-walk below it; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "553 ok, 6 failed, 0 gap(s)" at `a06902bd`, red (section "Line 3"). Line 6 is partial until line 3 is met.
+**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps and the API-coverage step are recorded below at `9f286b5e` (2026-11-26) — the cmake Linux build, the host tools test and the API-coverage step — and step 3's bare-metal forms in the `40b44800` re-walk below it; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "553 ok, 6 failed, 0 gap(s)" at `a06902bd`, red (section "Line 3"). Line 6 is not met: it is partial until line 3 is met.
 
-The `50e70464` walk (2026-11-26, the cmake Linux build, the host tools test and
+The `9f286b5e` walk (2026-11-26, the cmake Linux build, the host tools test and
 the API-coverage step; step 2's cross build was not re-run — no toolchain file
 is shipped and README says it is the reader's own — and step 3 is the
 `40b44800` re-walk below):
 
-- Date: 2026-11-26. Main commit walked: `50e70464` (2026-11-26 05:42 UTC), the
+- Date: 2026-11-26. Main commit walked: `9f286b5e`, the
   integration tip when the walk ran. Fresh `git clone`, no build directory at
   the start. All commands ran with `LC_ALL=C` (the host's `ja_JP.UTF-8` locale
   is not installed).
@@ -92,9 +94,9 @@ is shipped and README says it is the reader's own — and step 3 is the
 
 | Step | Command as written | Exit | Wall time |
 | --- | --- | --- | --- |
-| 1 configure | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | 2 s |
-| 1 build | `cmake --build build` | 0 | 85 s |
-| host tools test | `cargo test -p yakogl-tools` | 0 | 66 s |
+| 1 configure | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | <1 s |
+| 1 build | `cmake --build build` | 0 | 66 s |
+| host tools test | `cargo test -p yakogl-tools` | 0 | 57 s |
 | API coverage | `python3 -I tools/api_coverage.py` | 0 | 1 s |
 
 Outputs: `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` ended `-- Build
