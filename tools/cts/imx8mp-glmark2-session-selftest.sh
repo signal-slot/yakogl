@@ -16,7 +16,7 @@
 # console.txt is unchanged; (b) a dump with a dropped row exits 3 at decode
 # and nothing later runs; (c) a record with an unredacted fake address fails
 # at redaction and the address is never printed; (d) a record without the
-# image's sha256, or without this scene's picture line, fails at
+# image's sha256 fails at
 # record-check; (e) a missing reference fails at compare; (f) --dry-run
 # prints the board command and creates nothing; (g) an unknown scene and a
 # record of another scene exit 2; (h) the run step takes the record the run
@@ -234,10 +234,15 @@ check "(d) nothing after record-check ran"
 grep -v "glmark2-picture: " "$work/cap/clean.log" > "$work/cap/nopicture.log"
 rec=$(mkrec "$work/d2" "$work/cap/nopicture.log")
 run d2 1 --record-dir "$rec" --ref-dir "$work/ref"
-[ "$rc" = 1 ] && grep -q "^session: step record-check failed: " "$work/d2.err" && grep -q "^console: .* scene 01 " "$work/d2.err"
-check "(d) a console without this scene's picture line fails at record-check (got $rc)"
-[ "$(grep -c "^console: " "$work/d2.err")" = 1 ]
-check "(d) only this scene's console line is reported"
+
+# (d3) the same capture: decode says "picture value not compared" with exit 0;
+# the session asks for a re-run
+[ "$rc" = 3 ] && grep -q "^session: step decode failed: picture line missing: re-run the scene" "$work/d2.err"
+check "(d) a dump without its picture line exits 3 at decode (got $rc)"
+absent "^session: step \(redaction\|record-check\|compare\|judge\): " "$work/d2.out"
+check "(d) nothing after decode ran"
+[ ! -e "$rec/$label.png" ] && [ -s "$rec/$label.damaged.png" ]
+check "(d) the picture of that dump does not keep the record's name"
 
 # (e) no reference picture
 rec=$(mkrec "$work/e" "$work/cap/clean.log")
