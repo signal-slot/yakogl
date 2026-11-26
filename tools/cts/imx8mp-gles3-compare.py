@@ -5,7 +5,7 @@
 
   imx8mp-gles3-compare.py BOARD_NOTPASS HOST_NOTPASS
       [--causes tools/cts/imx8mp-gles3-causes.tsv] [--table tools/cts/imx8mp-gles3-tree.txt]
-      [--examples N] [--tsv]
+      [--examples N] [--tsv] [--gpu NAME]
 
 Inputs: "<outcome>\\t<case>[\\t<message>]" (docs/es3/am62p-gles3-notpass.tsv), the case-first
 "[<gpu>\\t]<case>\\t<outcome>[\\t...]" (docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv;
@@ -22,6 +22,10 @@ Verdict of each board case:
 Host-only cases (not-pass on the host, not on the board's list: passed or not run there) are only
 counted per cause. Cause: the first matching glob of the cause map, else 'unclassified'. Entry:
 the first table entry (counting non-comment lines from 0) with a matching glob, shown as eNN.
+
+--gpu NAME keeps, of a host list with a gpu column (docs/es3/host-gles3-notpass.tsv), only the rows
+whose first field is NAME (powervr, v3d, vivante); without it such a list warns on stderr and every
+gpu's row counts. Lists without a gpu column are unaffected.
 
 Default output is markdown (summary table, examples per cause and verdict); --tsv prints
 "verdict\\tcause\\teNN\\toutcome\\tcase" per board case.
@@ -42,21 +46,23 @@ CASE_PREFIX = "dEQP-GLES3."
 
 
 def parse_tab_row(path, n, line):
-    """(outcome, case, message) of a tab line, outcome-first or case-first; None for a column row."""
+    """(outcome, case, message, gpu) of a tab line, outcome-first or case-first; None for a column row.
+    gpu is the first field of a case-first line behind a gpu column, else None."""
     p = [x.strip() for x in line.split("\t")]
     if len(p) > 1 and p[0].lower() in STATUS_WORDS and p[1].startswith(CASE_PREFIX):
-        return p[0], p[1], p[2] if len(p) > 2 else ""
+        return p[0], p[1], p[2] if len(p) > 2 else "", None
     for i in (0, 1):  # case-first, optionally behind a gpu column
         if len(p) > i + 1 and p[i].startswith(CASE_PREFIX) and p[i + 1].lower() in STATUS_WORDS:
-            return p[i + 1], p[i], ""
+            return p[i + 1], p[i], "", p[0] if i else None
     if p[:3] == ["gpu", "case", "status"] or p[:2] == ["case", "status"]:
         return None
     sys.exit(f"{path}:{n}: neither '<outcome>\\t{CASE_PREFIX}...' nor "
              f"'[<gpu>\\t]{CASE_PREFIX}...\\t<outcome>' (outcome a dEQP status word): {line[:100]}")
 
 
-def parse_notpass(path):
+def parse_notpass(path, gpu=None, warn=False):
     rows = []
+    gpu_col = False
     with open(path, encoding="utf-8", errors="replace") as f:
         for n, raw in enumerate(f, 1):
             line = raw.rstrip("\n")
@@ -65,12 +71,19 @@ def parse_notpass(path):
             if "\t" in line:
                 r = parse_tab_row(path, n, line)
                 if r:
-                    rows.append(r)
+                    if r[3] is not None:
+                        gpu_col = True
+                        if gpu is not None and r[3] != gpu:
+                            continue
+                    rows.append(r[:3])
             else:
                 m = LINE_RE.match(line)
                 if not m:
                     sys.exit(f"{path}: unrecognised row: {line[:80]}")
                 rows.append((m.group(2), m.group(3), ""))
+    if warn and gpu_col and gpu is None:
+        print(f"{path}: warning: the list has a gpu column and --gpu is not given: "
+              "every gpu's rows count as host not-pass", file=sys.stderr)
     return rows
 
 
@@ -130,11 +143,12 @@ def main():
     ap.add_argument("--table")
     ap.add_argument("--examples", type=int, default=3)
     ap.add_argument("--tsv", action="store_true")
+    ap.add_argument("--gpu", help="keep only host rows of this gpu when the host list has a gpu column")
     a = ap.parse_args()
 
     board = parse_notpass(a.board)
     host = {}
-    for out, case, _ in parse_notpass(a.host):
+    for out, case, _ in parse_notpass(a.host, a.gpu, warn=True):
         host.setdefault(case, out)
     rules, titles = parse_causes(a.causes) if a.causes else ([], {})
     ents = parse_table(a.table) if a.table else None

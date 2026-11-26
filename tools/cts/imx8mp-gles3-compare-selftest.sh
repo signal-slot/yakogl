@@ -91,6 +91,28 @@ grep -qx "host-predicted${t}unclassified${t}-${t}NotSupported${t}$P.fbo.blit.c" 
 grep -q '^Board not-pass cases: 5; host not-pass cases: 3$' \
   <(python3 -I "$cmp" "$tmp/board.txt" "$tmp/mixed.tsv") || fail "mixed: host count"
 
+# --gpu: a host list with several gpus keeps only the named gpu's rows; no --gpu warns
+{
+  cat "$tmp/host-cf.tsv"
+  printf 'v3d\t%s\tFail\tx\n' "$P.weird.e"
+  printf 'powervr\t%s\tFail\tx\n' "$P.nocause.other"
+} >"$tmp/host-multi.tsv"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-multi.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --tsv --gpu vivante >"$tmp/g.tsv" 2>"$tmp/g.err"
+cmp -s "$tmp/o.tsv" "$tmp/g.tsv" || fail "--gpu vivante differs from the vivante-only list"
+[ ! -s "$tmp/g.err" ] || fail "--gpu given: stderr not empty"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-multi.tsv" --gpu vivante | grep -q 'host not-pass cases: 6$' || fail "--gpu vivante host count"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-multi.tsv" --tsv >"$tmp/n.tsv" 2>"$tmp/n.err"
+grep -q 'gpu column and --gpu is not given' "$tmp/n.err" || fail "no --gpu: no warning"
+grep -qx "host-predicted${t}unclassified${t}-${t}Fail${t}$P.weird.e" "$tmp/n.tsv" || fail "no --gpu keeps every gpu's rows"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-multi.tsv" --tsv --gpu v3d >"$tmp/v.tsv" 2>"$tmp/v.err"
+[ ! -s "$tmp/v.err" ] || fail "--gpu v3d warned"
+grep -qx "host-predicted${t}unclassified${t}-${t}Fail${t}$P.weird.e" "$tmp/v.tsv" || fail "--gpu v3d row"
+grep -q '^board-only' "$tmp/v.tsv" || fail "--gpu v3d drops the other gpus"
+# lists without a gpu column: no warning, --gpu changes nothing
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-cf2.tsv" --tsv 2>"$tmp/w.err" >/dev/null
+[ ! -s "$tmp/w.err" ] || fail "no gpu column: warned"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host-cf2.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --tsv --gpu vivante 2>&1 | cmp -s - "$tmp/o.tsv" || fail "--gpu on a list without gpu column"
+
 # a line that fits neither layout is refused, naming the file and line
 printf 'Fail\t%s\n' "$P.transform_feedback.a" >"$tmp/bad0.tsv"
 printf 'Fail\tnot-a-case\n' >>"$tmp/bad0.tsv"                       # no dEQP-GLES3. case
