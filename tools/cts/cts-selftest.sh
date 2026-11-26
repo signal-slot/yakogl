@@ -52,6 +52,9 @@
 # absent exits 0 with a "skipped" note; each fixture must give its own status.
 # Check 67 runs one-commit-rehearsal-selftest.sh (one-commit-docs.py on three
 # synthetic records and a copy of the six doc files, then both checkers).
+# Check 68 runs common-row.py --self-test (the tool that prints the RESULTS.md
+# 'Common set' row, the README table cell and the website/data.js fields from
+# one board's common record), by exit status.
 set -u
 
 HERE=$(dirname "$0")
@@ -1158,6 +1161,20 @@ if ocr_out=$(bash "$HERE/one-commit-rehearsal-selftest.sh" 2>&1); then
 else
     bad "one-commit-rehearsal-selftest.sh failed"
     printf '%s\n' "$ocr_out" | tail -8 | sed 's/^/        | /'
+fi
+
+# 68: common-row.py --self-test judges its own cases and ends on
+# "common-row.py self-test: ok"; this row is its exit status. common-row.py
+# prints the RESULTS.md 'Common set' row, the README table cell and the
+# website/data.js fields from one board's common record, so a broken verdict
+# would move docs the gate otherwise would not notice.
+echo
+echo "== 68. common-row.py --self-test"
+if cr_out=$(python3 "$HERE/common-row.py" --self-test 2>&1); then
+    ok "common-row.py --self-test: verdict, row, cell and data.js fields"
+else
+    bad "common-row.py --self-test failed"
+    printf '%s\n' "$cr_out" | tail -8 | sed 's/^/        | /'
 fi
 
 if [ "$fail" -eq 0 ]; then
