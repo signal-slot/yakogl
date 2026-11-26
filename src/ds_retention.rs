@@ -204,6 +204,99 @@ pub unsafe fn write_depth_texels(dst: *mut f32, w: u32, h: u32, pitch: u32, dept
     }
 }
 
+/// Write `v` into the `w` x `h` floats at `dst`, `pitch` floats a row (the
+/// padding of a row stays as it is). `dst` holds `h` rows of `pitch` floats
+/// less the last row's padding, `w <= pitch`; a shorter slice panics.
+pub fn fill_depth_rows(dst: &mut [f32], w: u32, h: u32, pitch: u32, v: f32) {
+    let (w, pitch) = (w as usize, pitch as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    for row in dst.chunks_mut(pitch.max(1)).take(h as usize) {
+        row[..w].fill(v);
+    }
+}
+
+/// [`fill_depth_rows`] for bytes (a stencil plane).
+pub fn fill_stencil_rows(dst: &mut [u8], w: u32, h: u32, pitch: u32, v: u8) {
+    let (w, pitch) = (w as usize, pitch as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    for row in dst.chunks_mut(pitch.max(1)).take(h as usize) {
+        row[..w].fill(v);
+    }
+}
+
+/// The source words of destination row `y` (`sy` source rows of `stride`
+/// words a row), read every `sx`-th word: pixel (x, y) is the word at
+/// `y * sy * stride + x * sx`, as the PowerVR's `ds_sample0` has it.
+fn d24s8_src_row(
+    words: &[u32],
+    stride: usize,
+    sx: usize,
+    sy: usize,
+    y: usize,
+    n: usize,
+) -> impl Iterator<Item = u32> + '_ {
+    words[y * sy * stride..].iter().copied().step_by(sx.max(1)).take(n)
+}
+
+/// Convert a packed D24S8 buffer's depth into `dst`'s texels by rows, the
+/// bit-identical form of [`write_depth_texels`] over `unorm24_depth(words[
+/// y * sy * stride + x * sx])` for `x < sw && y < sh`: only the
+/// `min(w, sw)` x `min(h, sh)` corner is written, the rest (and the row
+/// padding) is left as it is. `dst` holds `h` rows of `pitch` floats less
+/// the last row's padding, `w <= pitch`.
+#[allow(clippy::too_many_arguments)]
+pub fn d24s8_depth_rows(
+    words: &[u32],
+    stride: usize,
+    sx: usize,
+    sy: usize,
+    sw: u32,
+    sh: u32,
+    dst: &mut [f32],
+    w: u32,
+    h: u32,
+    pitch: u32,
+) {
+    let (n, rows) = (w.min(sw) as usize, h.min(sh) as usize);
+    if n == 0 || rows == 0 {
+        return;
+    }
+    for (y, row) in dst.chunks_mut((pitch as usize).max(1)).take(rows).enumerate() {
+        for (d, word) in row[..n].iter_mut().zip(d24s8_src_row(words, stride, sx, sy, y, n)) {
+            *d = unorm24_depth(word);
+        }
+    }
+}
+
+/// [`d24s8_depth_rows`] for the stencil byte, `(word >> 24) as u8`.
+#[allow(clippy::too_many_arguments)]
+pub fn d24s8_stencil_rows(
+    words: &[u32],
+    stride: usize,
+    sx: usize,
+    sy: usize,
+    sw: u32,
+    sh: u32,
+    dst: &mut [u8],
+    w: u32,
+    h: u32,
+    pitch: u32,
+) {
+    let (n, rows) = (w.min(sw) as usize, h.min(sh) as usize);
+    if n == 0 || rows == 0 {
+        return;
+    }
+    for (y, row) in dst.chunks_mut((pitch as usize).max(1)).take(rows).enumerate() {
+        for (d, word) in row[..n].iter_mut().zip(d24s8_src_row(words, stride, sx, sy, y, n)) {
+            *d = (word >> 24) as u8;
+        }
+    }
+}
+
 /// One parked entry: planes whose buffer was given to another target while
 /// they held only a clear value.
 #[derive(Clone, Copy, Debug)]
