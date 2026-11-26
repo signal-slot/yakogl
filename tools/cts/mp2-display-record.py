@@ -4,6 +4,7 @@
 """mp2-display-record.py - format a DK display session's scan-out record.
 
   tools/cts/mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]
+                                [--meta RUNDIR|meta.txt] [--hold-s N]
 
 RUNNER_LOG is tools/board-stm32mp2.sh's output (its verdict, hold and
 stock-boot-file lines) with the probe's console lines (the record
@@ -12,6 +13,12 @@ the output of display_check/colorbars.py (or triangle.py):
 "<tag>: PASS|FAIL: ...". --judge may be given once per KVM screenshot
 (about 25 s and 45 s after the result line); "@SECONDS" after the path is
 that screenshot's offset after the result line, kept in the row.
+
+Hold time: the runner's "hold: result seen at ..., holding Ns" console line
+when present (source: console). A blind run (MP2_NO_CONSOLE=1) has none; then
+--hold-s N (source: option), else hold_s= in the run's meta.txt given as
+--meta (a run directory or the file; source: meta). With none of them the
+record says "hold: unknown"; a value is never invented.
 
 The probe's "<probe>: crc: ..." lines are kept as a diagnostic row that
 never decides the verdict. Any other "<probe>: <check>: ..." line (frames,
@@ -25,7 +32,7 @@ commit, probe, mode and its source (EDID or fallback), the PASS/FAIL line,
 the hold window, the judge verdict, the stock boot files and the return to
 Linux. Exit 0 with the block (a FAIL session is a valid record: the block
 says FAIL); exit 1, saying why, when a required line is missing (the commit,
-the probe's PASS/FAIL line, its chain and mode lines, the runner's hold,
+the probe's PASS/FAIL line, its chain and mode lines,
 stock-boot-file and verdict lines, and the judge's verdict when --judge is
 given); exit 2 on usage or an unreadable file.
 
@@ -33,6 +40,7 @@ Addresses, host names, /dev/tty* paths and USB serials never go in a file:
 everything printed, a refusal message included, is redacted. Standard
 library only.
 """
+import os
 import re
 import sys
 
@@ -71,6 +79,19 @@ class Refuse(Exception):
     pass
 
 
+def meta_hold(meta):
+    """hold_s from a run's meta.txt (file or run directory), or None."""
+    if not meta:
+        return None
+    path = os.path.join(meta, "meta.txt") if os.path.isdir(meta) else meta
+    val = None
+    for ln in read(path):
+        m = re.match(r"^hold_s=(\d+)\s*$", ln)
+        if m:
+            val = m.group(1)
+    return val
+
+
 def find(lines, rx, what):
     """The last line matching rx, as (line, match); Refuse when none."""
     hit = None
@@ -101,7 +122,7 @@ RE_CHECK = re.compile(r"^\s*(?:mp2_display|mp2_gpu_scanout): ([A-Za-z_][\w-]*): 
 CHECK_SKIP = ("PASS", "FAIL", "crc", "hold", "build")
 
 
-def build(lines, jlines, commit):
+def build(lines, jlines, commit, hold_opt=None, meta=None):
     out = {}
     if not commit:
         try:
@@ -144,8 +165,15 @@ def build(lines, jlines, commit):
     m = find(lines, RE_MODE, "the probe's 'mode WxH N Hz ... vic N' line")[1]
     out["mode"] = "%s, pixel clock %s Hz, %s, VIC %s" % (m.group(1), m.group(2), m.group(3), m.group(4))
 
-    m = find(lines, RE_HOLD, "the runner's 'hold: result seen at ..., holding Ns' line (MP2_HOLD_S unset?)")[1]
-    out["hold"] = "result seen at %s, held %s s" % (m.group(1), m.group(2))
+    mh = [x for x in (RE_HOLD.search(ln) for ln in lines) if x]
+    if mh:
+        out["hold"] = "result seen at %s, held %s s (source: console)" % (mh[-1].group(1), mh[-1].group(2))
+    elif hold_opt is not None:
+        out["hold"] = "held %s s (source: option --hold-s)" % hold_opt
+    elif meta_hold(meta) is not None:
+        out["hold"] = "held %s s (source: meta.txt hold_s)" % meta_hold(meta)
+    else:
+        out["hold"] = "hold: unknown (no console 'hold:' line, no --hold-s, no hold_s in meta.txt)"
     fr = [x for x in (RE_FRAMES.search(ln) for ln in lines) if x]
     if fr:
         out["hold"] += "; probe frames ok %s, failed %s" % (fr[-1].group(1), fr[-1].group(2))
@@ -210,26 +238,33 @@ def render(r):
 
 
 def main(argv):
-    path = commit = None
+    path = commit = meta = hold_opt = None
     judge = []
     it = iter(argv)
     for a in it:
-        if a in ("--judge", "--commit"):
+        if a in ("--judge", "--commit", "--meta", "--hold-s"):
             val = next(it, None)
             if val is None:
                 print("mp2-display-record: %s needs a value" % a, file=sys.stderr)
                 return 2
             if a == "--judge":
                 judge.append(val)
+            elif a == "--meta":
+                meta = val
+            elif a == "--hold-s":
+                if not val.isdigit():
+                    print("mp2-display-record: --hold-s needs a whole number of seconds", file=sys.stderr)
+                    return 2
+                hold_opt = val
             else:
                 commit = val
         elif a.startswith("-") or path:
-            print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]", file=sys.stderr)
+            print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA] [--meta RUNDIR|meta.txt] [--hold-s N]", file=sys.stderr)
             return 2
         else:
             path = a
     if not path:
-        print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA]", file=sys.stderr)
+        print("usage: mp2-display-record.py RUNNER_LOG [--judge JUDGE_OUT[@SECONDS]]... [--commit SHA] [--meta RUNDIR|meta.txt] [--hold-s N]", file=sys.stderr)
         return 2
     lines = read(path)
     jlines = []
@@ -237,7 +272,7 @@ def main(argv):
         m = re.match(r"^(.*)@(\d+)$", j)
         jlines.append((m.group(2), read(m.group(1))) if m else (None, read(j)))
     try:
-        r = build(lines, jlines, commit)
+        r = build(lines, jlines, commit, hold_opt, meta)
     except Refuse as e:
         print("mp2-display-record: refused: %s" % redact(str(e)), file=sys.stderr)
         return 1
