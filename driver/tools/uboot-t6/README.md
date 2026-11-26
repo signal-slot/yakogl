@@ -65,6 +65,82 @@ read; 10 bytes read but not the line (the console reaches this host at
 another rate). Its self-test is `console-check-selftest.sh` (a fake board
 and a fake adapter on a pty; a gate row).
 
+## Session runbook
+
+The T6 sessions from U-Boot (prompt reads, `t6_cold`, `t6_gpu`, `t6_fw`,
+`t6_submit`; then `gl_test`, the triangle probe, one or two dEQP-GLES2 rows)
+run the tools below in this order. Each step names its command, the exit
+that lets the session go on, and the exits that stop it. The meanings are
+those of the tools' own headers and self-tests; the longer account is in
+"Before a session: the console", "Prompt reads", "The route" and "Staging
+under /boot and the undo". Paths are from the checkout's root; `<dir>`,
+`$T6_UART`, `$T6_HAND`, `$T6_RECORD_DIR` and `$BOARD_HOST` come from the
+environment (never written into a file, a log or a commit). Stop at the
+first stop code: record its cause, do not retry it.
+
+| # | Command | Goes on | Stops |
+|---|---|---|---|
+| 1 | `driver/tools/uboot-t6/preflight.sh <image-dir>` (host only) | 0 | 1 a check printed `FAIL`; 2 usage |
+| 2 | `BOARD_HOST=... T6_UART=... driver/tools/uboot-t6/console-check.sh` | 0 | 1 tool failed; 2 usage; 3 board over ssh; 4 `/dev/ttyS2` not at 1500000; 5 local tty unusable; 6 adapter slot busy; 7 RFC 2217 session not opened; 8 adapter did not confirm 1500000 (tool exit 42); 9 no byte read; 10 bytes read, not the line |
+| 3 | `BOARD_HOST=... driver/tools/uboot-t6/stage.sh stage <dir>/<probe>.bin <dir>/t6-boot.fingerprint` | 0 | 1 the copy or a stock file differs; 2 usage or missing tool; 3 refused, nothing written |
+| 4 | `BOARD_HOST=... T6_HAND=... T6_RECORD_DIR=... T6_UART=... driver/tools/uboot-t6/prompt-reads.sh --go` | 0 | 12 no autoboot line, nothing written; 4 autoboot missed, Linux booted; 5 stopped at the prompt, power cut needed; 6 `reset` entered, no sign of Linux; 7 a command made U-Boot reset the board; 1 board not back in Armbian; 2 usage; 3 refused, board not rebooted; 40 RFC 2217 session or line not set; 41 RFC 2217 tool failed in the run |
+| 5 | `BOARD_HOST=... T6_HAND=... T6_RECORD_DIR=... T6_UART=... driver/tools/uboot-t6/prompt-go.sh <dir>/<probe>.bin <probe> --go` | 0 verdict PASS, Armbian back | 12, 4, 5, 6, 7 as step 4; 8 an answer differed, no `go`, Armbian back; 9 `go` not answered; 10 image started, no sign of Linux, needs a person; 11 verdict FAIL, Armbian back; 1, 2, 3, 40, 41 as step 4 |
+| 6 | `T6_ROUTE=uboot driver/tools/kexec-zephyr/t6-verdict.sh <probe> <record>/image.log` | 0 PASS | 1 FAIL (n of m lines not ok); 2 usage |
+| 7 | `python3 -I tools/cts/t6-uboot-handover-summary.py <reads-record> <t6_cold-record>` | 0 | 2 usage; 3 an address in the input; 4 a record unreadable |
+| 8 | `tools/cts/t6-uboot-rows.sh <image-dir> <out-dir> <LABEL>... --go` | 0 | 2 usage or a refused label or image, nothing run; 3 stopped at a prompt-go code other than 0 or 11 (named in `rows.tsv`) |
+| 9 | `python3 -I tools/cts/t6-uboot-deqp-compare.py --uboot ... --kexec ... --armbian ...` | 0 | 2 bad input |
+| 10 | `BOARD_HOST=... driver/tools/uboot-t6/stage.sh undo <dir>/t6-boot.fingerprint` | 0 | 1 `/boot/yakogl` removed but a stock file differs (named); 2 usage; 3 refused |
+| 11 | `tools/cts/t6-redact-check.sh <record>` | 0 | 1 a finding (file, line and kind, never the text); 2 usage or a missing file |
+| 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, a secret survived redaction; 2 usage or no text file; 3 destination exists |
+
+Notes on the steps:
+
+1. A refusal here is a host-side result (a missing variable, module, sum or
+   `COMMIT`), not a board result. Fix the host and run it again; the board
+   has not been touched. Build every image from one origin/main commit.
+2. Run it with Armbian up and before any reboot. Only 0 lets the session
+   go on; an RFC 2217 exit 42 (code 8) stops it.
+3. Stage before the first `--go`. The fingerprint file stays on this host
+   and the first `stage` writes it before anything changes on the board.
+   Copy each build's `zephyr.bin` to `<probe>.bin` first (the staged name is
+   the file's name) and stage each probe image. Keep the fingerprint's path:
+   step 10 needs it, and the undo comes first in any abort.
+4. `prompt-reads.sh` without `--go` is the dry run and changes nothing.
+5. One run per probe, in this order: `t6_cold`, `t6_gpu`, `t6_fw`,
+   `t6_submit`, then `gl_test`, `triangle`; `deqp` for the dEQP rows is
+   step 8's. Each has a dry run without `--go` first. Codes 5 and 10 leave
+   the board at the prompt or running until its power is cut.
+6. `prompt-go.sh` already writes `verdict.txt` (for `gl_test` and `deqp`
+   `prompt-go.py` judges). Run `t6-verdict.sh` again on `image.log` only
+   to judge a record apart; `<probe>` is one of `t6_hello`, `t6_gpu`,
+   `t6_mmu`, `t6_fw`, `t6_submit`, `t6_cold`, `triangle`.
+7. Run it with the prompt reads record and the `t6_cold` go record; it
+   prints which of keep, move or refuse `gpu_clock_set` took and the WDT0
+   gate reads.
+8. Only after `gl_test` passed. 0 and 11 are answers with Armbian back and
+   the next label runs; any other code stops, never retried.
+9. Per-case outcomes against the kexec and Armbian runs.
+10. Run it when the session ends, passed or stopped. A 1 names the stock
+    file that changed (a kernel update); the directory is removed all the
+    same.
+11. Run it on the copy that is going into the tree; a finding is fixed in
+    the copy by hand. Nothing of `records/` leaves unchecked.
+12. `answers.txt` and `uart.log` carry the board's MACs and serial number
+    and are never copied as they are; the log tool refuses what survives.
+
+### Board rules
+
+- Never write the eMMC or the microSD's boot partitions or the loader area.
+  `stage.sh` writes `/boot/yakogl` only.
+- Never touch U-Boot's boot command or environment beyond the runner's own
+  variables, with their undo printed first. The image is only in RAM; `reset`
+  or the power switch returns to the stock boot.
+- No kernel module is loaded or unloaded.
+- Leave Tailscale and sshd alone.
+- A board that does not come back (exit 1, 5 or 10, or 6 with no sign of
+  Linux) is reported as needing a person, with the record directory's name,
+  and not retried: no second `--go`, no extra reboot.
+
 ## Prompt reads
 
 `prompt-reads.sh` reboots the board into U-Boot, stops autoboot on the debug
