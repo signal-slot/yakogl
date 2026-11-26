@@ -155,6 +155,8 @@ struct yd_mp25_ltdc_diag {
 	uint32_t cdsr;             /* bit 0 VDES, 1 HDES, 2 VSYNCS, 3 HSYNCS */
 	uint32_t gcr;
 	uint32_t rcr;              /* L1RCR */
+	uint32_t lipcr;            /* the line LIF is raised at */
+	uint32_t srcr;             /* the global reload register */
 };
 
 /* 0 and *out filled, -ENODEV (block does not probe), -EINVAL (null). */
@@ -332,6 +334,7 @@ _Static_assert(sizeof(struct yd_mp25_hdmi_sink) == 8, "yd_mp25_hdmi_sink");
 _Static_assert(offsetof(struct yd_mp25_hdmi_sink, vic) == 1, "vic");
 _Static_assert(offsetof(struct yd_mp25_hdmi_sink, aspect_16_9) == 2, "aspect_16_9");
 _Static_assert(offsetof(struct yd_mp25_hdmi_sink, refresh_hz) == 4, "refresh_hz");
+_Static_assert(sizeof(struct yd_mp25_ltdc_diag) == 36, "yd_mp25_ltdc_diag");
 _Static_assert(sizeof(struct yd_mp25_ltdc_config) == 24, "yd_mp25_ltdc_config");
 _Static_assert(offsetof(struct yd_mp25_ltdc_config, flags) == 8, "ltdc flags");
 _Static_assert(offsetof(struct yd_mp25_ltdc_config, background) == 12, "background");

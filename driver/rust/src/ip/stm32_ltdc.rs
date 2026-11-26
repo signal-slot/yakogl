@@ -637,6 +637,8 @@ impl Ltdc {
             cdsr: rd(m, b, CDSR),
             gcr: rd(m, b, GCR),
             rcr: rd(m, b, self.reload_reg()),
+            lipcr: rd(m, b, LIPCR),
+            srcr: rd(m, b, SRCR),
         }
     }
 }
@@ -658,6 +660,10 @@ pub struct FrameDiag {
     pub gcr: u32,
     /// `L1RCR` (MP25) or `SRCR`.
     pub rcr: u32,
+    /// `LIPCR`: the line `LIF` is raised at.
+    pub lipcr: u32,
+    /// `SRCR`, the global reload register (also read where `rcr` is `L1RCR`).
+    pub srcr: u32,
 }
 
 /// Eight colour bars (white, yellow, cyan, green, magenta, red, blue, black;
@@ -712,7 +718,9 @@ mod tests {
         rcr: Option<u32>,
         no_clock: bool,
         /// `LIF` latches only while `IER.LIE` is set (what r3.1 ltdc.c
-        /// relies on; whether the MP25 also latches it masked is unproven).
+        /// relies on, and what the DK's LTDC 0x040101 does: the Linux dump
+        /// shows `LIE` set while it scans out). Default on; a test clears it
+        /// to see the old behaviour of the fake.
         lif_needs_lie: bool,
         /// `LIF` never latches (a block whose flag the poll cannot see).
         no_lif: bool,
@@ -727,7 +735,7 @@ mod tests {
                 log: RefCell::default(),
                 rcr: (idr >= HWVER_40100).then_some(0x108),
                 no_clock: false,
-                lif_needs_lie: false,
+                lif_needs_lie: true,
                 no_lif: false,
                 cpsr: RefCell::default(),
             };
@@ -957,8 +965,7 @@ mod tests {
         // (:1265-1266); ltdc_irq clears through ICR (:1051-1052);
         // ltdc_crtc_disable_vblank clears LIE again when unused (:1472-1473).
         // board-display3 (368e7875) polled LIF with LIE clear: -116.
-        let mut f = Fake::mp25();
-        f.lif_needs_lie = true;
+        let f = Fake::mp25();
         let e = TestEnv::default();
         let l = running(&f, &e);
         assert_eq!(f.peek(IER) & IER_LIE, 0, "enable leaves LIE clear, as ltdc.c");
@@ -974,11 +981,31 @@ mod tests {
     }
 
     #[test]
+    fn the_fake_masks_lif_without_lie() {
+        // The default fake raises LIF only with IER.LIE set; a wait that
+        // leaves LIE clear (the code before the fix) times out on it, which
+        // is board-display3's `FAIL: frame -116`.
+        let f = Fake::mp25();
+        let e = TestEnv::default();
+        let l = running(&f, &e);
+        l.clear_status(&f, INT_LINE);
+        for _ in 0..4 {
+            assert_eq!(l.status(&f) & INT_LINE, 0, "LIE clear: no LIF");
+        }
+        upd(&f, B, IER, IER_LIE, IER_LIE);
+        assert_eq!(l.status(&f) & INT_LINE, INT_LINE, "LIE set: LIF");
+        upd(&f, B, IER, IER_LIE, 0);
+        l.clear_status(&f, INT_LINE);
+        // with LIE clear and a standing line the wait would run out; it sets LIE itself
+        l.wait_frame(&f, &e).unwrap();
+        assert!(e.lines.borrow().is_empty(), "LIF came, not the CPSR witness");
+    }
+
+    #[test]
     fn wait_frame_keeps_lie_set_when_the_crc_had_set_it() {
         // ltdc_crtc_set_crc_source :1488-1490 sets LIE; it stays while the CRC
         // is active (:1494-1495): the wait must not clear it
-        let mut f = Fake::mp25();
-        f.lif_needs_lie = true;
+        let f = Fake::mp25();
         let e = TestEnv::default();
         let l = running(&f, &e);
         upd(&f, B, IER, IER_LIE, IER_LIE);
@@ -1037,12 +1064,14 @@ mod tests {
                 cdsr: 0xc,
                 gcr: GCR_HSPOL | GCR_VSPOL | GCR_LTDCEN,
                 rcr: 0,
+                lipcr: 745,
+                srcr: 0,
             }
         );
         assert_eq!(*e.waited_us.borrow(), u64::from(DIAG_CPSR_GAP_US));
         assert!(f.writes().is_empty());
         let reads: Vec<u32> = f.log.borrow().iter().map(|x| x.1).collect();
-        assert_eq!(reads, [ISR, IER, CPSR, CPSR, CDSR, GCR, 0x108]);
+        assert_eq!(reads, [ISR, IER, CPSR, CPSR, CDSR, GCR, 0x108, LIPCR, SRCR]);
     }
 
     #[test]
