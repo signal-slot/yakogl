@@ -302,3 +302,91 @@ lines, and kept dl[672..680], 703..705 and 735. Every other `rpi5_scanout32:`,
 `u3` and `dlswap` line is as the board printed it. The run directory
 `20261125-1059-rpi5_scanout32-92671f49` is under the gitignored `records/`
 and is not committed.
+
+### 2026-11-26: the whole-memory walk placed the list; swap 1 landed in vblank, then the image faulted (Q4 unanswered)
+
+One tryboot session on the Pi 5 (BCM2712 D0), with the image of `77ddb606`
+(origin/main; it printed `rpi5_scanout32: build 77ddb606`; Zephyr
+`af17c0c8aa2a`; sha256 `dabb0e40cb5a`, 86304 bytes), built with
+`-DYAKOGL_WERROR=ON` and the default `RPI5_SCANOUT32_HW_WORDS="4:skip"`.
+`tools/board.sh pi5 run` with `BOARD_END_RE='^rpi5_scanout32: (PASS|FAIL)'`
+and the name argument `rpi5_scanout32`:
+
+```
+board.sh pi5 rpi5_scanout32 rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none resets=0 record=absent back_after=422s
+```
+
+The probe printed no `rpi5_scanout32: PASS` or `FAIL` line: the image took a
+CPU exception after swap 1 and Zephyr halted (see below). `board.sh` waited its
+420 s bound for an end line. The board came back to Linux by itself through
+the PM watchdog and tryboot: the kernel's uptime put its boot about 70 s after
+the tryboot reboot, and `meta.txt` has `back=1`, `throttled_before=0x0`,
+`throttled_after=0x0`, `cleanup=staged image removed, tryboot.txt put back
+(read back)`; no `yakogl*` or `tryboot*` file was left under `/boot/firmware`
+afterwards. No retry was made.
+
+The walk and the placement worked as `rpi5_dlmap` predicted. The whole-memory
+walk found the END at word 928, the list went right after it, the 20 words it
+covers were saved (all `0xb0b0b0b0`), and swap 1 landed in vblank:
+
+```
+rpi5_scanout32: S2 ch0 CTRL0 0x877f0437 LPTRS 0x000002a0 STATUS 0x0081418e DL 0x000002a0
+rpi5_scanout32: S2 ch0 FRCNT series 2 4 5 6 7 8 (6 reads 20 ms apart): 6 frames, advancing
+rpi5_scanout32: S3 list read from word 672: 4096 words; END at word 928 (list index 256)
+rpi5_scanout32: S3 dl[928] = 0x80000000
+rpi5_scanout32: S5 dlswap snapshot ok (ok) mem_words 4096 (CXM_SIZE 0x00001000) lptrs 0x000002a0 fw_head 672 fw_len 257 entries 8, walk stopped at word 928 (0x80000000), END found
+u3 walk: heade=672 end=928 words=257 entries=8 invalid=7 mem=4096 len=20 place=929
+rpi5_scanout32: S6 saved words 929..948: 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0
+u3 dlist: placed word 929 len 20 (slot A 929, slot B 939)
+dlswap lact-pickup ok polls=0 frcnt=14..15 want=929 lact=929
+dlswap restore-lact ok polls=0 frcnt=17..18 want=672 lact=672
+dlswap restore-vblank in-vblank=yes found=yes reads=251577 frcnt=17..18 yline=0..0 since_us=0.019 tight=ok step=126459 dt_us=16666.666 read_us=0.065 boundary=yes
+u3 swap 1: buf A list-ptr=0x000003a1 frcnt 14 -> 15 judge=pointer-named-ours slot=929 plane=0x00009ff000 fw=672+257 ours=10
+u3 vblank 1: landed=yes why=landed frcnt 14 -> 15 steps=1 invblank=yes tight=ok pickup_reads=127834 pickup_us=16666.629 read_us=0.065 boundary=yes since_us=0.038 yline 0 -> 0 (yline record only)
+u3 named: yes LPTRS 0x000003a1 after swap 1, our list at word 929, first read 0x000003a1 poll 0, DL.LACT pickup ok (want 929 lact 929)
+[00:00:01.616,000] <err> os: ELR_ELn: 0x0000000000000020
+[00:00:01.628,000] <err> os:   EC:  0x20 (Instruction Abort from a lower Exception level, that might be using AArch32 or AArch64)
+[00:00:01.649,000] <err> os: FAR_ELn: 0x0000000000000020
+[00:00:01.762,000] <err> os: x18: 0x00000000011f8310  lr:  0x000000000020bd18
+[00:00:01.770,000] <err> os: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0
+[00:00:01.784,000] <err> os: Halting system
+```
+
+Swap 1's own restore also read right: `dlswap restore-diff word 676 entry 0 off
+4 was 0x8000017c now 0x80000007 hw=skip` is the one declared `4:skip` word,
+and `dlswap restore-words ok fw 672..928 byte-equal except hw words off 4 (1
+differed)`. After `u3 named: yes` the image printed no `u3 swap 2`, no
+`u3 vblank 2`, no `u3 restore` and no end line. The fault is an instruction
+fetch from address 0x20 (a jump through a null pointer; `lr` 0x20bd18) at
+1.6 s of Zephyr time, between swap 1 and swap 2. Its cause is not known from
+this log.
+
+`verdicts.sh` on the console with its `HH:MM:SS ` prefix stripped exited 1:
+
+```
+q4: unanswered (incomplete log)
+verdicts: incomplete (the run did not print all expected verdict lines)
+```
+
+(its other lines: `5 of 8 expected verdict lines ... (1 swap line(s))`,
+`missing: u3 swap (need 4, saw 1) u3 restore rpi5_scanout32 terminal`, and
+`after the last seen line [6] u3 named: ...: the image stopped there`.)
+
+Reading it: this run does not answer Q4. One swap of the vblank pointer
+landed (`u3 vblank 1: landed=yes`, `lact-pickup ok`, `restore-lact ok`), but
+the 8-swap loop, the alternation of the two buffers and `u3 restore: PASS`
+were not reached, so `q4: yes` is not given. `u3 named: yes` shows only
+swap 1; the restore compare in swap 1's own library run is not the probe's
+`u3 restore`. The next step is to find the null jump (code, not a board
+retry).
+
+The console was captured as in the 2026-11-25 section: the farm's console
+lease holds the serial bridge, so `BOARD_UART` was a local
+`am62p_netboot_uart.py feed` relay of the lease's copy, appended in place
+after the run had started. The copy left out the boot loader's lines, the
+`S3 dl[...]` lines other than dl[672..680], every 32nd list word and
+dl[927..928], and the fault's register dump except the lines quoted above
+(colour codes removed). Every other `rpi5_scanout32:`, `u3` and `dlswap` line
+is as the board printed it. The run directory
+`20261126-1518-rpi5_scanout32-dabb0e40` is under the gitignored `records/`
+rule's equivalent (outside the tree) and is not committed.
