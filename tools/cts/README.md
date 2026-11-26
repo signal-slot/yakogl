@@ -38,6 +38,7 @@ tools/cts/
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   imx8mp-full-tree-29460f96.results.tsv  the committed reference tally of that tree (2026-10-03)
   imx8mp-gltest-build.sh       one gl_test image in the sweep configuration
+  imx8mp-dtpu-page.py          decode gl_test case 222's dtpu page (w1..w3 or a console log) to checks, verdict, outcome; imx8mp-dtpu-page-selftest.sh
   deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6, Verdin iMX95)
   pi4-deqp-images.sh           stage 2, Pi 4 (deqp-tree-images.sh rpi_4b)
   t6-deqp-images.sh            stage 2, NanoPC-T6 Zephyr (deqp-tree-images.sh nanopc_t6, mali-gles2-tree.txt)
