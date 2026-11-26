@@ -1047,7 +1047,8 @@ Rules that hold for every step:
     grep -v ':NoResult ' docs/es3/imx8mp-gles3-notpass.tsv > notpass-run.tsv
     python3 -I tools/cts/gles3-triage.py notpass-run.tsv \
       --host docs/es3/host-gles3-tip.tsv --table tools/cts/imx8mp-gles3-tree.txt > issue-drafts.md
-    python3 -I tools/cts/imx8mp-gles3-compare.py notpass-run.tsv docs/es3/host-gles3-notpass.tsv \
+    python3 -I tools/cts/imx8mp-gles3-compare.py notpass-run.tsv \
+      docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv --gpu vivante \
       --causes tools/cts/imx8mp-gles3-causes.tsv --table tools/cts/imx8mp-gles3-tree.txt > board-vs-host.md
     ```
     `--totals` prints a per-entry table (`mustpass begun pass fail n.s. other none`), the `total` row and
@@ -1065,7 +1066,12 @@ Rules that hold for every step:
     lists it with another outcome), `board-only` (the host list lacks the case); cases the host lists and the
     board list does not are counted per cause. `--causes` groups by the first matching glob of the cause map
     (`tools/cts/imx8mp-gles3-causes.tsv`), `--table` names each case's entry, `--tsv` prints one row per
-    case. It does not filter the board list either: it reads `NoResult` as an outcome like any other, so
+    case. The host list is the committed HOST-ONLY GC7000UL column
+    `docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv` — the one the earlier campaign's table and
+    `imx8mp-gles3-finish.sh` compare against — not the three-GPU `docs/es3/host-gles3-notpass.tsv`, and
+    `--gpu vivante` names its gpu column (every row of it is vivante) so the warning a gpu column read
+    without `--gpu` would print stays off stderr. It does not filter the board list either: it reads
+    `NoResult` as an outcome like any other, so
     unfiltered the unrun entries' `NoResult` rows ride into the `board-only` and `host-other` counts on top
     of the board's real cases (the `grep` in the block above is the filter). Agents never run `gh`: the
     drafts go into the report. Keep `issue-drafts.md`, `notpass-run.tsv` and `board-vs-host.md` out of the
