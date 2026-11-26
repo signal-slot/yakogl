@@ -158,7 +158,7 @@ in `src/gl/context.rs`. "Per GPU" means a `cfg(feature = "gpu-…")` constant.
 | MAX_TEXTURE_IMAGE_UNITS, MAX_COMBINED_TEXTURE_IMAGE_UNITS, MAX_VERTEX_TEXTURE_IMAGE_UNITS | 16, 32, 16 | `state.rs:1185-1189` ← `context.rs:95,107`, `backend.rs:571,582,602` |
 | MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS, MAX_VERTEX/FRAGMENT_UNIFORM_COMPONENTS | 384 / 1536 | `state.rs:1198-1199,1214-1215` ← `context.rs:83,89-90` |
 | MAX_VARYING_VECTORS / MAX_VARYING_COMPONENTS | GC7000UL 15 / 60; PowerVR 15 / 60; V3D 15 / 60 (8 / 32 under `report-es2`, Mali 8 / 32) | `state.rs:1254,1272` ← `context.rs` `MAX_VARYING_VECTORS` (`:169` GC7000UL, `:191` PowerVR, `:204` V3D) |
-| MAX_VERTEX_OUTPUT_COMPONENTS, MAX_FRAGMENT_INPUT_COMPONENTS | GC7000UL 60, 60; PowerVR 60, 60; V3D **64**, 60 (`report-es2`: 32, 32) | `state.rs:1273-1274` ← `context.rs:251` (V3D), `:253` (the others, MAX_VARYING_VECTORS x 4), `:254` |
+| MAX_VERTEX_OUTPUT_COMPONENTS, MAX_FRAGMENT_INPUT_COMPONENTS | GC7000UL 60, 60; PowerVR **64**, 60; V3D **64**, 60 (`report-es2`: 32, 32) | `state.rs:1308-1309` ← `context.rs:271` (V3D and PowerVR), `:273` (the others, MAX_VARYING_VECTORS x 4), `:274` |
 | MAX_VERTEX/FRAGMENT_UNIFORM_BLOCKS, MAX_COMBINED_UNIFORM_BLOCKS | 12, 12, 24 | `state.rs:1283-1284` ← `program.rs:69` |
 | MAX_UNIFORM_BUFFER_BINDINGS | 24 | `state.rs:1285` ← `context.rs` `MAX_UNIFORM_BUFFER_BINDINGS` |
 | MAX_UNIFORM_BLOCK_SIZE | V3D 16384 (the uniform stream reads a stage's whole array); PowerVR, GC7000 and the V3D under `report-es2` 6144 (= 1536 x 4) | `state.rs:1286` ← `context.rs:110` (V3D), `:112` (the others) |
@@ -217,7 +217,7 @@ means the minimum is met.
 | MAX_COMBINED_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 50176 / 50048 | **Reports 1536** | same | Reports 50688 = (1536 + 12 x 16384 / 4) |
 | MAX_VERTEX / FRAGMENT_UNIFORM_COMPONENTS ≥ 1024 / 896 | 1536 = | 1536 = | 1536 = |
 | MAX_VARYING_VECTORS ≥ 15, MAX_VARYING_COMPONENTS ≥ 60, MAX_FRAGMENT_INPUT_COMPONENTS ≥ 60 | Mesa Vulkan: 64 out / 64 in components (`pvr_physical_device.c:655,677`). Reports 15 / 60 / 60 = (`tests/es3_pvr_varyings.rs`) | Hw 16 varyings, one slot is the position (`etnaviv_screen.c:965-968`, `H:18876`). Reports 15 / 60 / 60 = | Hw 64 input components (`v3d_limits.h:32-34`; `v3d_screen.c:323`). Reports 15 / 60 / 60 = (the compiler builds 60 `ldvary` inputs, the shader record counts up to 64 and the flag words of inputs 24..63 go in the second and third word of the packet: `tests/es3_v3d_varyings.rs`; the silicon's interpolation of 60 inputs is the board's) |
-| MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | **Reports 60** (15 x 4, `context.rs:253`); Mesa Vulkan 64; **reachable, issue open**: the PPP varying count and the VDM `vs_output_size` fit 64 dwords (`context.rs:184-186`), what is left is the USC output registers of a 16-vector vertex compile | **Reports 60** (15 x 4); **reachable, issue open**: 64 needs a 16-output-row vertex compile (`tests/es3_gc_vout64.rs`: today `LoadBalancingTempsUnmeasured { num_out: 16 }`, so a `VS_LOAD_BALANCING` entry for 16 outputs) and position is not an `out[]` row; the raise is `context.rs:253`'s per-GPU constant | Reports 64 = (a vertex shader may declare 16 vec4 outputs, the fragment shader reads 15; `tests/es3_v3d_varyings.rs`) |
+| MAX_VERTEX_OUTPUT_COMPONENTS ≥ 64 | Reports 64 = (`context.rs:271`); Mesa Vulkan 64: a vertex shader may declare 16 vec4 outputs, the fragment shader reads 15; the output record is sized by the outputs written and the coefficient program iterates what the fragment shader reads (`tests/es3_pvr_vout64.rs`, `tests/pvr_vertex_outputs_64.rs`) | **Reports 60** (15 x 4); **reachable, issue open**: 64 needs a 16-output-row vertex compile (`tests/es3_gc_vout64.rs`: today `LoadBalancingTempsUnmeasured { num_out: 16 }`, so a `VS_LOAD_BALANCING` entry for 16 outputs) and position is not an `out[]` row; the raise is `context.rs:253`'s per-GPU constant | Reports 64 = (a vertex shader may declare 16 vec4 outputs, the fragment shader reads 15; `tests/es3_v3d_varyings.rs`) |
 | MAX_TEXTURE_SIZE, MAX_CUBE_MAP_TEXTURE_SIZE, MAX_RENDERBUFFER_SIZE ≥ 2048 | Hw state field 16384 (`texstate.xml:276`); Mesa Vulkan 4096 (`pvr_physical_device.c:620-623`). Reports 4096 = | Hw 8192 (`etnaviv_screen.c:970-973`, `H:18986,18992`). Reports 4096 = | Hw 4096 (`v3d_limits.h:62-63`). 4096 = |
 | MAX_TEXTURE_IMAGE_UNITS ≥ 16, VERTEX ≥ 16, COMBINED ≥ 32 | Mesa Vulkan 16 samplers a stage (`pvr_physical_device.c:634`). 16/16/32 = | Hw 16 + 16 (`etnaviv_screen.c:824-827`). 16/16/32 = | Hw 24 (`v3d_limits.h:39`). 16/16/32 = |
 | NUM_COMPRESSED_TEXTURE_FORMATS ≥ 10 | Hw has all ten (`texstate.xml:195-231`; `pvr_arch_formats.c:158-167`). **Reports 11** (ETC1 and the ten; the six EAC and punch-through ones are decoded on the CPU at upload) | ETC2/EAC are hardware EXT formats from HALTI0 (`etnaviv_format.c:244-250`). **Reports 11** (as the PowerVR) | All ten (`v3dx_format_table.c:159-168`). **Reports 11** (the four block classes sampled natively since the mask switch-on, the six decoded) |
@@ -283,7 +283,7 @@ for an entry that now meets its minimum.
 | MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | ok (16384) | V3D done (plan #359); PowerVR and GC7000UL: ubo-uniform |
 | MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | ok (50688) | V3D done (plan #359); PowerVR and GC7000UL: ubo-uniform |
 | MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | ok (15 / 60 / 60) | ok (15 / 60 / 60) | 15 / 60 / 60 (Mali 8 / 32 / 32) | V3D done (v3d-varyings-raise: 15 / 60 / 60 / 64 with MAX_VERTEX_OUTPUT_COMPONENTS); V3D board run |
-| MAX_VERTEX_OUTPUT_COMPONENTS | 64 | 60 | 60 | 64 (Mali 32) | PowerVR and GC7000UL: reachable, issue open (`context.rs:253`: 15 x 4 today) |
+| MAX_VERTEX_OUTPUT_COMPONENTS | 64 | ok (64) | 60 | 64 (Mali 32) | PowerVR done (`tests/es3_pvr_vout64.rs`), board run; GC7000UL: reachable, issue open (`context.rs:273`: 15 x 4 today) |
 
 Host dEQP-GLES3 at `93bca01` (HOST-ONLY, `docs/notes/es3-interface-limits.md`
 section 6) agrees with this table on all three GPUs at `7c39ee92`: the
@@ -492,7 +492,7 @@ counted here.
 |---|---|---|---|
 | S-0 fixed after ad2b5ed | 20 (state_query 18, uniform_block 2) | — | host Pass at `31cdaefc`; board confirm |
 | S-A three draw targets | 4 (state_query) | `src/backend.rs`, the PowerVR arm (the shared back-end table, not `src/gl`) | open; board-gated |
-| S-B MAX_VERTEX_OUTPUT_COMPONENTS 60 | 2 (state_query) | `src/gl` (named only) | open; the change exists on another plan's branch |
+| S-B MAX_VERTEX_OUTPUT_COMPONENTS 60 | 2 (state_query) | `src/gl` | **fixed** (64, `tests/es3_pvr_vout64.rs`); board confirm |
 | S-C RGB10_A2 renderbuffer held as RGBA8 | 1 (state_query) | `src/backend.rs` mask + `src/pvr` | open |
 | S-D random.83 vertex shader over 64 KiB | 1 (uniform_api) | `src/shaderc/online/powervr` | **fixed** `a0ee07e3`; board confirm |
 | S-E centroid scalar varyings, image wrong | 7 (qualification_order) | unknown until the board (likely `src/shaderc/online/powervr`) | no host verdict |
@@ -571,7 +571,7 @@ Cases: `state_query.integers.max_vertex_output_components_{getfloat,getinteger64
   PowerVR vertex shader with 16 vec4 outputs beside gl_Position and
   gl_PointSize compiles and links, and that a 17th output is refused at
   compile.
-- **Change (named, not made; `src/gl` is plan #397's).**
+- **Change (made: the 64 arm covers `gpu-powervr`, `tests/es3_pvr_vout64.rs`; the text below is the design as it was named).**
   `src/gl/context.rs:259` becomes
   `#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]`,
   and `:261` becomes

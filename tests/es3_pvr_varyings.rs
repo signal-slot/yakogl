@@ -19,7 +19,8 @@
 //! The dEQP cases this answers on the host (API verdicts only, HOST-ONLY):
 //! implementation_limits.max_varying_vectors, max_varying_components,
 //! max_fragment_input_components and the state_query.integers forms of
-//! them; max_vertex_output_components still asks 64 of our 60.
+//! them, and max_vertex_output_components, which reads 64: one vec4 more
+//! than the varyings (tests/es3_pvr_vout64.rs draws the sixteen).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_varyings
@@ -421,11 +422,7 @@ mod gl {
         assert_eq!(geti(GL_MAX_VARYING_VECTORS), 15, "GL_MAX_VARYING_VECTORS: ES 3.0 table 6.31 asks 15");
         assert_eq!(geti(GL_MAX_VARYING_COMPONENTS), 60, "GL_MAX_VARYING_COMPONENTS: 15 * 4, ES 3.0 asks 60");
         assert_eq!(geti(GL_MAX_FRAGMENT_INPUT_COMPONENTS), 60, "GL_MAX_FRAGMENT_INPUT_COMPONENTS: ES 3.0 asks 60");
-        assert_eq!(
-            geti(GL_MAX_VERTEX_OUTPUT_COMPONENTS),
-            60,
-            "GL_MAX_VERTEX_OUTPUT_COMPONENTS: 15 * 4 (ES 3.0 asks 64)"
-        );
+        assert_eq!(geti(GL_MAX_VERTEX_OUTPUT_COMPONENTS), 64, "GL_MAX_VERTEX_OUTPUT_COMPONENTS: ES 3.0 asks 64");
         // SAFETY: plain GL call.
         assert_eq!(unsafe { glGetError() }, GL_NO_ERROR);
     }
