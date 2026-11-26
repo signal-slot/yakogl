@@ -48,6 +48,11 @@ grep -Eq 'unexplained Fail in functional.e \| 1 ' <<<"$imx" && grep -Eq 'made-up
     && ok "refusals.tsv: refused counted per case" || bad "refusals.tsv: refused not counted per case"
 grep -q 'Draft issue: .*hang' <<<"$imx" && bad "a hang row opened a draft issue" || ok "no draft issue for a hang row"
 
+# imx95-rows-tsv.py's header (lifetime_s, bbm) in rows.tsv, no chunks.tsv: a hang row still reads as a hang
+rw=$(run "$DATA"/imx95-rows/* 2>&1)
+if [ "$rw" = "$(cat "$DATA/expected-imx95-rows.md")" ]; then ok "rows.tsv (lifetime_s, bbm header) equals expected-imx95-rows.md"; else bad "rows.tsv (lifetime_s, bbm header) differs from expected-imx95-rows.md"; fi
+grep -Eq 'hang: WDOG3 feeding stopped \| 2 ' <<<"$rw" && ok "rows.tsv header: hang row read" || bad "rows.tsv header: hang row not read"
+
 python3 -I "$TOOL" --forecast "$DATA/forecast.md" "$DATA/nope" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "unreadable slice exits 2" || bad "unreadable slice exited $rc"
 
