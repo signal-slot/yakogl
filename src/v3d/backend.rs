@@ -2645,6 +2645,9 @@ pub extern "C" fn v3d_split_zs(on: bool) -> bool {
     if was == on {
         return was;
     }
+    /* a gpu-v3d71 build never runs this module's init, so it has no open job
+     * to flush (and its image has no 4.2 job builder to flush it with) */
+    #[cfg(not(feature = "gpu-v3d71"))]
     if g.inited && flush_job(g) < 0 {
         glog_once!("yakogl/v3d: the job open when depth and stencil were switched failed");
     }
@@ -7261,7 +7264,10 @@ pub unsafe extern "C" fn v3d_bin_last(
     true
 }
 
-/// The V3D backend's table (`g_backend` on a `gpu-v3d` build).
+/// The V3D backend's table (`g_backend` on a `gpu-v3d` build). A
+/// `gpu-v3d71` build has the 7.1 table (`table71`) instead, and the 4.2 job
+/// builder (`v3d_job.c`, `v3d_tex.c`) this table reaches is not in its image.
+#[cfg(not(feature = "gpu-v3d71"))]
 #[no_mangle]
 pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
     name: c"Broadcom V3D 4.2 (Raspberry Pi 4)".as_ptr(),
