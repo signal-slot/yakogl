@@ -2,8 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # The src/gl change that lets the PowerVR answer GL_MAX_VERTEX_OUTPUT_COMPONENTS 64
 
-Plan #400, item vout-gl-design. This note names the change; it is not applied
-here, because `src/gl/**` belongs to plan #397. A later plan applies it.
+Plan #400, item vout-gl-design. This note named the change; plan #388 (item
+knob-native-array) applied it: `src/gl/context.rs`'s 64 arm covers
+`gpu-powervr`, pinned by `tests/es3_pvr_vout64.rs`. Section 1 is the state
+before it.
 
 ## 1. The defect
 

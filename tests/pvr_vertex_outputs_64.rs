@@ -3,15 +3,13 @@
 //! A PowerVR vertex shader with 16 `vec4` outputs, `gl_Position` and
 //! `gl_PointSize` compiles and links, on the host (item pvr-vout64-test).
 //!
-//! The PowerVR answers GL_MAX_VERTEX_OUTPUT_COMPONENTS 60: the GL core
-//! reports `MAX_VARYING_VECTORS * 4` for every GPU but the V3D
-//! (src/gl/context.rs:262, with the expectation at src/gl/state.rs:3251).
-//! That is a software choice, not a hardware limit, and it is why
-//! dEQP-GLES3.functional.implementation_limits.max_vertex_output_components
-//! fails: ES 3.0 asks for at least 64. A later change to src/gl/context.rs
-//! would raise that answer to 64; this file is the guard that the PowerVR
-//! compiler path already carries what such a program declares, so the
-//! change needs no board. It pins tri-vout's probe: a vertex shader
+//! The PowerVR answers GL_MAX_VERTEX_OUTPUT_COMPONENTS 64, ES 3.0's
+//! minimum (src/gl/context.rs MAX_VERTEX_OUTPUT_COMPONENTS; it answered
+//! 60, `MAX_VARYING_VECTORS * 4`, which failed
+//! dEQP-GLES3.functional.implementation_limits.max_vertex_output_components).
+//! tests/es3_pvr_vout64.rs pins the query and draws sixteen outputs, fifteen
+//! read; this file is the guard that the PowerVR compiler path carries what
+//! such a program declares. It pins tri-vout's probe: a vertex shader
 //! declaring 16 `vec4` outputs plus `gl_Position` and `gl_PointSize`,
 //! linked with a fragment shader that reads all 16, compiles and links on
 //! the PowerVR path today. Nothing in the ES 3.0 link refuses it:
@@ -269,8 +267,7 @@ fn build_pair(n: usize) -> Result<GLuint, String> {
 
 /// The tri-vout probe: 16 `vec4` outputs plus `gl_Position` and
 /// `gl_PointSize`, read by the fragment shader in full, compile and link
-/// on the PowerVR path. This is what a src/gl change raising
-/// GL_MAX_VERTEX_OUTPUT_COMPONENTS from 60 to 64 relies on.
+/// on the PowerVR path. GL_MAX_VERTEX_OUTPUT_COMPONENTS 64 relies on it.
 #[test]
 fn sixteen_vec4_outputs_with_builtins_compile_and_link() {
     let _g = context();

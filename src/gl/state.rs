@@ -3246,15 +3246,16 @@ mod tests {
         /* GC7000: 15 varyings reach the fragment stage (16 io rows, one the
          * position); PowerVR: 15, what its records, coefficient program and
          * `ditrp` offsets carry (context.rs MAX_VARYING_VECTORS); V3D: 15
-         * (60 of the 64 fragment inputs the record carries) and 64 vertex
-         * output components; Mali: 8, ES 2.0's minimum, until more are
-         * measured on the board */
+         * (60 of the 64 fragment inputs the record carries); Mali: 8, ES
+         * 2.0's minimum, until more are measured on the board. The V3D and
+         * the PowerVR report 64 vertex output components, one vec4 more
+         * than the varyings (context.rs MAX_VERTEX_OUTPUT_COMPONENTS) */
         let vectors = if fifteen { 15 } else { 8 };
         assert_eq!(geti1(GL_MAX_VARYING_VECTORS), vectors);
         for q in [GL_MAX_VARYING_COMPONENTS, GL_MAX_FRAGMENT_INPUT_COMPONENTS] {
             assert_eq!(geti1(q), vectors * 4, "{q:#x}");
         }
-        let outputs = if cfg!(feature = "gpu-v3d") { 64 } else { vectors * 4 };
+        let outputs = if cfg!(any(feature = "gpu-v3d", feature = "gpu-powervr")) { 64 } else { vectors * 4 };
         assert_eq!(geti1(GL_MAX_VERTEX_OUTPUT_COMPONENTS), outputs);
         /* every colour attachment: three, and four on the Mali, whose draw
          * writes four targets (`mali::backend::DRAW_TARGETS`); the query
