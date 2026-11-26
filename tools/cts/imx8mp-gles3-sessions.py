@@ -6,6 +6,7 @@
   imx8mp-gles3-sessions.py [--table T] [--mustpass M] [--record DIR] [--margin 0.8] [--window 600] [--scale 1.0]
                            [--sessions N | --session-budget SECONDS] [--overhead SECONDS]
                            [--board-slices GLOB] [--no-board-rates] [--pages] [--page-seconds 91.8]
+                           [--rows A..B] [--gles2]
 
 No option: one TSV row per table entry: index, cases (mustpass cases the entry matches), estimated seconds,
 rate source, risk (RISK when the estimate exceeds margin x window), first pattern. Lines starting with '#'
@@ -13,6 +14,18 @@ document the model and the sources of every rate. --sessions N or --session-budg
 contiguous row ranges (start..end inclusive, covering every entry once) with each range's estimated total;
 --sessions minimises the largest total, --session-budget fills each range up to S seconds. --overhead adds a
 fixed per-entry boot/reboot cost to the totals (default 0).
+
+--rows A..B (inclusive, 0-based table entry indices, the TSV index column; 'N' is A..B with A=B=N) restricts the
+per-entry output to those entries and --sessions/--session-budget to ranges within them (a slice's rowsN-M is
+--rows N-1..M-1, see docs/es3/board-recipe-imx8mp.md). Counts and rates are computed over the whole table first, so
+an entry's numbers do not depend on --rows. A bad spec or one outside the table exits 2 with a message.
+
+--gles2 plans the ES 2.0 regression session (imx8mp-es2-regress.py: the 29 rows of imx8mp-full-tree.txt against
+gles2-mustpass.txt): the default --table and --mustpass become those two files, names are dEQP-GLES2.*, and the
+GLES3 board slices and the Pi 4 record are not used (their groups are other tests). Rates come from the --gles2-results
+file per entry when its header has a seconds or ms column (source 'imx8mp-gles2:<file>'; the committed baseline has
+none today), else they are assumed (marked 'assumed', half of 600 s over the group's table budget, as for GLES3).
+The 29 rows are the whole table: '--gles2 --rows 0..28' equals '--gles2'.
 
 Rate order, per dEQP group (group_key): 1. measured on the GC7000UL (rate_source 'imx8mp:<slice>'), 2. Pi 4,
 3. assumed. The GC7000UL rate comes from the committed slices (--board-slices, default
@@ -188,6 +201,48 @@ def board_rates(glob_pat, entry_groups):
     return rates, {k: f / b for k, (f, b) in fpool.items() if b}, notes
 
 
+def gles2_times(results):
+    """entry index -> seconds from a seconds or ms column of the GLES2 results file; {} when it has none"""
+    if not os.path.exists(results):
+        return {}
+    lines = open(results).read().splitlines()
+    if not lines:
+        return {}
+    hdr = [h.strip().lower() for h in lines[0].lstrip('# ').split('\t')]
+    col, div = None, 1.0
+    for j, h in enumerate(hdr):
+        if 'second' in h or h in ('sec', 's', 'time'):
+            col, div = j, 1.0
+            break
+        if h == 'ms' or h.endswith('_ms') or 'millisecond' in h:
+            col, div = j, 1000.0
+            break
+    if col is None:
+        return {}
+    out = {}
+    for l in lines[1:]:
+        f = l.split('\t')
+        if len(f) > col and f[0].isdigit():
+            try:
+                out[int(f[0])] = float(f[col]) / div
+            except ValueError:
+                pass
+    return out
+
+
+def parse_rows(spec, n):
+    m = re.match(r'^(\d+)(?:\.\.(\d+))?$', spec)
+    if not m:
+        raise ValueError('bad --rows %r: expected A..B or N (0-based entry indices)' % spec)
+    lo = int(m.group(1))
+    hi = int(m.group(2)) if m.group(2) is not None else lo
+    if lo > hi:
+        raise ValueError('bad --rows %r: start above end' % spec)
+    if hi >= n:
+        raise ValueError('bad --rows %r: the table has entries 0..%d' % (spec, n - 1))
+    return lo, hi
+
+
 def time_column_note(results):
     if not os.path.exists(results):
         return 'GC7000UL GLES2 results: file not found'
@@ -232,8 +287,8 @@ def split_min_max(sec, n):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--table', default=os.path.join(HERE, 'imx8mp-gles3-tree.txt'))
-    ap.add_argument('--mustpass', default=os.path.join(HERE, 'gles3-mustpass.txt'))
+    ap.add_argument('--table', default=None, help='default imx8mp-gles3-tree.txt (imx8mp-full-tree.txt with --gles2)')
+    ap.add_argument('--mustpass', default=None, help='default gles3-mustpass.txt (gles2-mustpass.txt with --gles2)')
     ap.add_argument('--record', default=os.path.join(HERE, 'log', '2026-10-31-pi4-gles3-a'))
     ap.add_argument('--pi4-table', default=os.path.join(HERE, 'pi4-gles3-tree.txt'))
     ap.add_argument('--gles2-results', default=os.path.join(HERE, 'imx8mp-full-tree-29460f96.results.tsv'))
@@ -246,21 +301,39 @@ def main():
     ap.add_argument('--window', type=float, default=600.0, help='WDOG1 window in seconds (default 600)')
     ap.add_argument('--scale', type=float, default=1.0, help='multiplier on the measured Pi 4 rates (GC7000UL/V3D ratio, unmeasured; default 1)')
     ap.add_argument('--overhead', type=float, default=0.0, help='fixed seconds per entry added to range totals (default 0)')
+    ap.add_argument('--rows', help='only table entries A..B (inclusive, 0-based): the per-entry list and the session ranges')
+    ap.add_argument('--gles2', action='store_true', help='plan the ES 2.0 regression session (29-row full tree, GLES2 mustpass)')
     g = ap.add_mutually_exclusive_group()
     g.add_argument('--sessions', type=int, help='print N contiguous row ranges with balanced totals')
     g.add_argument('--session-budget', type=float, help='print row ranges filled up to this many seconds')
     a = ap.parse_args()
 
+    if a.table is None:
+        a.table = os.path.join(HERE, 'imx8mp-full-tree.txt' if a.gles2 else 'imx8mp-gles3-tree.txt')
+    if a.mustpass is None:
+        a.mustpass = os.path.join(HERE, 'gles2-mustpass.txt' if a.gles2 else 'gles3-mustpass.txt')
     cases = read_cases(a.mustpass)
     entries = read_table(a.table)
     pats = [compile_entry(e) for e in entries]
     hdr = ''.join(l for l in open(a.table) if l.startswith('#'))
     m = re.search(r'\((\d+) cases\)', hdr)
     declared = int(m.group(1)) if m else None
-    measured, notes = pi4_rates(a.record, cases, a.pi4_table)
-    notes.append(time_column_note(a.gles2_results))
-
     n = len(entries)
+    lo, hi = 0, n - 1
+    if a.rows is not None:
+        try:
+            lo, hi = parse_rows(a.rows, n)
+        except ValueError as ex:
+            print('error:', ex, file=sys.stderr)
+            return 2
+    if a.gles2:
+        measured, notes = {}, []
+        times = gles2_times(a.gles2_results)
+        a.no_board_rates = True
+    else:
+        measured, notes = pi4_rates(a.record, cases, a.pi4_table)
+        notes.append(time_column_note(a.gles2_results))
+        times = {}
     cnt, sec, srcs = [0] * n, [0.0] * n, [dict() for _ in range(n)]
     problems = []
     hits = []   # (case, entry)
@@ -279,7 +352,9 @@ def main():
         notes.extend(bn)
     for c, i in hits:
         k = group_key(c)
-        if k in board:
+        if a.gles2 and i in times and egroups[i]:
+            rate, src = times[i] / sum(egroups[i].values()), 'imx8mp-gles2:' + os.path.basename(a.gles2_results)
+        elif k in board:
             rate, src = board[k]
         elif k in measured:
             rate, src = measured[k][0] * a.scale, measured[k][1]
@@ -303,10 +378,19 @@ def main():
                         for s, k in sorted(srcs[i].items(), key=lambda t: -t[1])) or '-'
 
     out = sys.stdout
-    out.write('# i.MX8MP dEQP-GLES3 sessions: %d entries, %d mustpass cases, window %g s, risk above %g%% (%g s)\n'
-              % (n, sum(cnt), a.window, a.margin * 100, a.margin * a.window))
-    out.write('# rates: GC7000UL board slices %s where measured, else Pi 4 record %s (x%g scale), else assumed from the table header\n'
-              % ('(none)' if not board else os.path.relpath(a.board_slices, HERE), os.path.relpath(a.record, HERE), a.scale))
+    out.write('# i.MX8MP dEQP-GLES%d sessions: %d entries, %d mustpass cases, window %g s, risk above %g%% (%g s)\n'
+              % (2 if a.gles2 else 3, n, sum(cnt), a.window, a.margin * 100, a.margin * a.window))
+    if a.rows is not None:
+        out.write('# rows %d..%d of %d entries: %d cases, %.0f s estimated\n'
+                  % (lo, hi, n, sum(cnt[lo:hi + 1]), sum(sec[lo:hi + 1])))
+    if a.gles2:
+        out.write('# ES 2.0 regression session: table %s, mustpass %s; GLES3 board and Pi 4 rates not used; %s\n'
+                  % (os.path.basename(a.table), os.path.basename(a.mustpass),
+                     'rates from the times of %s, else assumed' % os.path.basename(a.gles2_results) if times
+                     else 'no times in %s: every rate assumed' % os.path.basename(a.gles2_results)))
+    else:
+        out.write('# rates: GC7000UL board slices %s where measured, else Pi 4 record %s (x%g scale), else assumed from the table header\n'
+                  % ('(none)' if not board else os.path.relpath(a.board_slices, HERE), os.path.relpath(a.record, HERE), a.scale))
     for k, (r, s_) in sorted(board.items()):
         out.write('# rate %s = %.4f s/case (%s, includes the entry boot)\n' % (k, r, s_))
     if a.pages:
@@ -321,8 +405,10 @@ def main():
     for t in notes:
         out.write('# note: %s\n' % t)
     if a.sessions or a.session_budget:
-        tot = [s + a.overhead for s in sec]
+        tot = [s + a.overhead for s in sec][lo:hi + 1]
         rng = split_min_max(tot, a.sessions) if a.sessions else split_budget(tot, a.session_budget)
+        rng = [(s + lo, e + lo) for s, e in rng]
+        tot = [0.0] * lo + tot
         out.write('session\tstart\tend\tentries\tcases\test_seconds\trisky_entries\n')
         for k, (s, e) in enumerate(rng):
             risky = [str(i) for i in range(s, e + 1) if sec[i] > a.margin * a.window]
@@ -331,6 +417,8 @@ def main():
         return 1 if problems else 0
     out.write('index\tcases\test_seconds\trate_source\trisk\tfirst_pattern\n')
     for i, e in enumerate(entries):
+        if not lo <= i <= hi:
+            continue
         out.write('%d\t%d\t%.1f\t%s\t%s\t%s\n' % (i, cnt[i], sec[i], srctext(i),
                                                   'RISK' if sec[i] > a.margin * a.window else '-', e.split(',')[0]))
     return 1 if problems else 0
