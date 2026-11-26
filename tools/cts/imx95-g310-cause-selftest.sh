@@ -23,11 +23,11 @@ dEQP-GLES2.functional.color_clear.single_rgb	Pass	Pass	no-difference
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.basic_lowp_int_vertex	Fail	Fail	compiler-refusal
 dEQP-GLES2.functional.shaders.misc.x	NotSupported	NotSupported	compiler-refusal
 dEQP-GLES2.info.renderer	Pass	Fail	renderer-name
-dEQP-GLES2.info.vendor	Fail	Timeout	renderer-name
+dEQP-GLES2.info.vendor	Fail	Timeout	hang
 dEQP-GLES2.functional.multisample.common_edge_big_quad	Pass	Fail	tib-budget
 dEQP-GLES2.functional.multisampled_render_to_texture.readpixels	Pass	QualityWarning	tib-budget
 dEQP-GLES2.functional.fbo.render.color.mix_tex2d_rgba	Pass	Fail	tib-budget
-dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.x	Pass	Timeout	tib-budget
+dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.x	Pass	Timeout	hang
 dEQP-GLES2.functional.texture.format.rgba32f_2d	Pass	Fail	tib-budget
 dEQP-GLES2.functional.texture.format.rgb32f_cube	Fail	Pass	tib-budget
 dEQP-GLES2.functional.fbo.render.resize.rbo_rgb565	Pass	Fail	tiler-levels
@@ -41,6 +41,7 @@ dEQP-GLES2.functional.attribute_location.bind_time.relink	Pass	Timeout	hang
 dEQP-GLES2.functional.fragment_ops.blend.x	Pass	Crash	hang
 dEQP-GLES2.functional.fragment_ops.depth.x	Fail	Missing	hang
 dEQP-GLES2.functional.fragment_ops.stencil.x	Timeout	Missing	unexplained
+dEQP-GLES2.functional.fbo.api.lost	Pass	Lost	hang
 dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgba4	Pass	Fail	unexplained
 dEQP-GLES2.functional.fbo.api.x	NotSupported	Pass	unexplained
 dEQP-GLES2.functional.texture.format.rgba16f_2d	CompatibilityWarning	InternalError	unexplained
@@ -76,17 +77,19 @@ cat > "$t/sum.want" <<EOF
 # cause${TAB}count
 # no-difference${TAB}1
 # compiler-refusal${TAB}2
-# renderer-name${TAB}2
-# tib-budget${TAB}6
+# hang${TAB}6
+# compiler-commit${TAB}0
+# renderer-name${TAB}1
+# tib-budget${TAB}5
 # tiler-levels${TAB}4
 # shader-present${TAB}2
-# hang${TAB}3
 # unexplained${TAB}5
-# total${TAB}25
+# total${TAB}26
+# g310-only${TAB}22
 EOF
 if python3 -I "$tool" --summary "$t/in" > "$t/sum.got" 2>&1 \
-	&& head -n 25 "$t/sum.got" | cmp -s "$t/want" - \
-	&& tail -n +26 "$t/sum.got" | cmp -s "$t/sum.want" -; then
+	&& head -n 26 "$t/sum.got" | cmp -s "$t/want" - \
+	&& tail -n +27 "$t/sum.got" | cmp -s "$t/sum.want" -; then
 	ok "--summary"
 else
 	bad "--summary"; cat "$t/sum.got"
@@ -98,6 +101,34 @@ if python3 -I "$tool" "$t/sum.got" > /dev/null 2>&1; then
 else
 	ok "a four-column line is refused"
 fi
+
+# --commit-cases: a listed differing pair is compiler-commit, exact or by
+# prefix; a hang stays hang; an identical pair stays no-difference.
+cat > "$t/cc" <<'EOF'
+# compiler commits a824ec97 d3876279 9fa5bbe0
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.sin.x
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.atan.*
+EOF
+cat > "$t/cc.want" <<'EOF'
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.sin.x	Pass	Fail	compiler-commit
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.atan.y	Fail	Pass	compiler-commit
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.cos.x	Pass	Fail	unexplained
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.sin.x	Pass	Pass	no-difference
+dEQP-GLES2.functional.shaders.builtin_functions.trigonometric.atan.z	Pass	Timeout	hang
+EOF
+cut -f1-3 "$t/cc.want" > "$t/cc.in"
+if python3 -I "$tool" --commit-cases "$t/cc" "$t/cc.in" > "$t/cc.got" 2>&1 && cmp -s "$t/cc.want" "$t/cc.got"; then
+	ok "--commit-cases"
+else
+	bad "--commit-cases"; diff "$t/cc.want" "$t/cc.got"
+fi
+if python3 -I "$tool" --summary --commit-cases "$t/cc" "$t/cc.in" | grep -q "^# g310-only${TAB}2\$"; then
+	ok "--summary g310-only count with commit cases"
+else
+	bad "--summary g310-only count with commit cases"
+fi
+python3 -I "$tool" --commit-cases "$t/no-such" "$t/cc.in" > /dev/null 2>&1
+[ $? -eq 2 ] && ok "missing commit-cases file exits 2" || bad "missing commit-cases file"
 
 # Malformed lines: exit 2, a message naming the line, nothing on stdout.
 malformed() { # name, content, message fragment
@@ -131,8 +162,8 @@ else
 	bad "empty input"
 fi
 if python3 -I "$tool" --summary < /dev/null > "$t/empty.sum" 2>&1 \
-	&& [ "$(grep -c "${TAB}0\$" "$t/empty.sum")" -eq 9 ] \
-	&& [ "$(wc -l < "$t/empty.sum")" -eq 10 ]; then
+	&& [ "$(grep -c "${TAB}0\$" "$t/empty.sum")" -eq 11 ] \
+	&& [ "$(wc -l < "$t/empty.sum")" -eq 12 ]; then
 	ok "empty input --summary"
 else
 	bad "empty input --summary"; cat "$t/empty.sum"
