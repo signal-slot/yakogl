@@ -12,12 +12,29 @@
 # the hook into board.sh (plan #322, board-gpu-identity) is a dispatch.
 #
 #   tools/board-stm32mp2.sh [--dry-run] status | install [image] | uninstall | disarm
+#   tools/board-stm32mp2.sh [--dry-run] restore [pristine u-boot-env image]   (prints the undo, writes nothing)
 #   tools/board-stm32mp2.sh [--dry-run] probe <logdir>
 #   tools/board-stm32mp2.sh [--dry-run] run [--expect-watchdog] <image> <logdir> [name]
 #   tools/board-stm32mp2.sh env-edit hook|unhook|arm|disarm <env.bin> <out.bin> [token file]
 #   tools/board-stm32mp2.sh tally <rundir>
 #   tools/board-stm32mp2.sh judge <rundir> <console-file>   (a blind run, console text from outside)
 #   tools/board-stm32mp2.sh selftest          (tools/board_stm32mp2_selftest.sh, no board)
+#
+# "restore" prints the undo of install/uninstall (the pristine environment
+# image written back to the card's u-boot-env) with the device resolved NOW,
+# and runs none of it. The UNDO lines install and uninstall print name the
+# device of the boot they ran in; mmcblkN names move across a reboot (P10 gap G7), and
+# a hand-typed dd against such a stale name once put a U-Boot environment copy
+# into the eMMC's vendorfs (sectors 992..1023, 16 KiB; emmc-env-audit). So
+# restore resolves the card's partitions as every write does (where_env: the
+# disk /boot is mounted from, its sysfs type SD, the PARTLABEL in that disk's
+# own table; card_check asks the board again), and refuses (rc 3, no undo
+# line) when that gives anything but the card, the eMMC above all. Its board
+# commands are reads (findmnt, lsblk, cat of sysfs, test -b); it never runs
+# dd, writes the board or takes the lock. The image is the argument, else the
+# newest pristine image install kept under MP2_BACKUP_DIR; it must be the whole
+# partition (at least the copies' end) with copies that check. Restoring the
+# eMMC's vendorfs is not this runner's: it needs the owner's approval.
 #
 # Why not tools/board.sh's uboot-mmc backend: that backend arms the one-shot
 # with fw_setenv on the board, and this board's Linux cannot run the envtools:
@@ -144,13 +161,15 @@
 # partition's PARTLABEL, read from that disk alone, is the one expected
 # (u-boot-env, bootfs); and it is none of fsbla1, fsbla2, metadata1,
 # metadata2, fip-a, fip-b, vendorfs, rootfs or userfs. The eMMC is known by
-# its type, never by its number: on the DK the microSD is mmcblk0 (type SD,
-# /boot = mmcblk0p8, u-boot-env = mmcblk0p7, 512 KiB) and the eMMC is mmcblk1
-# (type MMC, not booted, the same labels: its u-boot-env is mmcblk1p5,
-# 1 MiB). Nothing is resolved through /dev/disk/by-partlabel (on the DK it
+# its type, never by its number: in dk-linux-baseline the microSD was mmcblk0
+# (type SD, /boot = mmcblk0p8, u-boot-env = mmcblk0p7, 512 KiB) and the eMMC
+# mmcblk1 (type MMC, not booted, the same labels: its u-boot-env is mmcblk1p5,
+# 1 MiB), but those numbers are one boot's, not the board's (P10 gap G7,
+# below). Nothing is resolved through /dev/disk/by-partlabel (on the DK it
 # names the eMMC's partitions); a /dev/disk/ path is refused. Linux numbers
-# the card and the eMMC differently from boot to boot (mmcblk2 before a
-# reboot and mmcblk0 after it, seen 2026-11-21), so a device resolved before
+# the card and the eMMC differently from boot to boot, in either direction
+# (mmcblk2 before a reboot and mmcblk0 after it on 2026-11-21; mmcblk0 before
+# and mmcblk2 after in another session), so a device resolved before
 # a reboot is never used after it: once the board answers again the card is
 # resolved again by the same rule (meta.txt: card_before=, card_after=), and
 # its partition numbers must be the ones of before. Right before every read
@@ -277,7 +296,19 @@
 #
 # The verdict line:
 #   board-stm32mp2.sh stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=uboot-sd <row|blind>
-#       boot_verdict=<bv> result=<pass:<prog>|fail:<prog>|none> back_after=<s>s
+#       boot_verdict=<bv> result=<record:<KIND>|pass:<prog>|fail:<prog>|none> back_after=<s>s
+#       [resets=<n|absent> record=<w0,w1,w2,w3>]
+# The image's record (P10 gap G3, as tools/board-stm32mp2-uboot.sh and
+# tools/board.sh read it): the console's last result "yk-record: w0 w1 w2 w3"
+# line (driver/zephyr/lib/board/common/record.c) decoded with `yakogl-tools
+# record` (YAKOGL_TOOLS, else built here with cargo) gives result=record:<KIND>
+# and, after back_after, resets= (its GPU reset count) and record= (its four
+# words). A record whose status is fail makes verdict=failed, one whose status
+# is neither pass nor n/a (invalid) verdict=bad_record (rc 4). A console without
+# a record line, or with a garbled one (not exactly four 8-digit hex words), a
+# breadcrumb or a checksum, keeps result= as below and the line has no resets=
+# or record= (it stays byte for byte what it was before P10 G3; a garbled line is
+# never a pass).
 # The image's end is the layer's "mp2: <why>: PSCI SYSTEM_RESET at <n> ms"
 # (stm32mp2.c); its result the image's own final line, as result_of reads it:
 # "<prog>: PASS|FAIL: ...", "<prog>: PASS|FAIL (...)", "mp2_gpu: verdict PASS|FAIL",
@@ -292,9 +323,13 @@
 # boot_verdict is read from the console: U-Boot's "yakogl-mp2: go" line, the
 # layer's "MP2:B console up" and hand-over lines, the end line.
 # After a not_back verdict the runner prints one more line, "NEEDS A PERSON":
-# the board did not answer within the wait, nothing resets it from outside,
-# and the runner never retries; the board is released and reported, and no
-# other item takes it until its owner says it is back (plan #322).
+# the board did not answer within the wait, the runner has no reset of its
+# own and never retries. It names the next step (P10 gap G6): a person
+# power-cycles the board through the farm's reset resource for the DK
+# (resource:stm32mp257f-dk-reset), waits for ST's Linux to answer ssh, runs
+# 'status' and then 'disarm', and does not run the image again until the
+# cause is known; the board is released and reported, and no other item
+# takes it until its owner says it is back (plan #322).
 #
 # Exit codes: 0 done or returned; 2 usage; 3 refused before the board was
 # changed; 4 the verdict is not done; 5 the board did not come back, or an
@@ -368,7 +403,7 @@ for a in "$@"; do
     esac
 done
 set -- "${args[@]+"${args[@]}"}"
-usage() { sed -n '14,20p' "$SELF" >&2; exit 2; }
+usage() { sed -n '14,21p' "$SELF" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 VERB=$1
 shift
@@ -688,6 +723,13 @@ dev_guard() {
     done
     [ "$label" = "$want" ] || die "REFUSED: $dev is labelled '${label:-nothing}', not $want: not a device this runner writes"
 }
+# P10 gap G7: mmcblkN names move across a one-shot reboot (one session saw the card
+# as mmcblk0 before it and mmcblk2 after it, another the other way round), so
+# the card and the eMMC are never found by a fixed name: the card is the disk
+# /boot is mounted from, its type SD, and its partitions are found by their
+# PARTLABEL in that disk's own table (lsblk of that disk), never by number and
+# never system-wide. A name printed in one boot (an UNDO line, a record) is
+# that boot's only: after a reboot, 'restore' resolves it again.
 where_env() {
     local m disk dtype
     bget m 'set -- $(findmnt -n -v -o SOURCE,FSTYPE -T /boot); d=$1; p=${d%p*}; echo "$d $2 $p $(cat /sys/block/${p##*/}/device/type 2>/dev/null)"; lsblk -rno PATH,PARTLABEL "$p"' \
@@ -697,9 +739,9 @@ where_env() {
     [ -z "${CARD_SEEN_FILE:-}" ] || printf '%s\n' "$disk" > "$CARD_SEEN_FILE"   # reresolve's card_after
     PART_TABLE=$(tail -n +2 <<<"$m")
     [ "$fstype" = ext4 ] || die "/boot is '$fstype' on $BOOT_DEV, not ext4 (U-Boot's ext4load reads bootfs)"
-    # the number does not name the eMMC (on the DK the card is mmcblk0 and
-    # the eMMC mmcblk1; probe order can change that): the MMC core's own word
-    # does, "SD" for a card, "MMC" for an eMMC
+    # the number does not name the eMMC (P10 gap G7: the card was mmcblk0 and the
+    # eMMC mmcblk1 in one boot, the card mmcblk2 in another; probe order moves
+    # them): the MMC core's own word does, "SD" for a card, "MMC" for an eMMC
     [ "$dtype" = SD ] ||
         die "REFUSED: /boot is on $disk, whose /sys/block/${disk##*/}/device/type is '${dtype:-unreadable}', not SD: this runner writes the microSD the board booted from, never the eMMC"
     CARD_DISK=$disk
@@ -1090,6 +1132,49 @@ result_of() {
     END { if (res != "") print res }'
 }
 plain() { sed -E 's/^([0-9:]{8}|[0-9]{9,}\.[0-9]+) //' "$1" | tr -d '\0\r'; }
+# ---- the image's own record: its yk-record console lines (P10 gap G3) -----------------
+# ytools ARGS...: yakogl-tools (the repository's record decoder), built once
+# from this checkout unless YAKOGL_TOOLS names the binary (as tools/board.sh
+# and tools/board-stm32mp2-uboot.sh do).
+ytools_resolve() { # called outside $(...), so the variable stays set
+    local td
+    if [ -n "${YAKOGL_TOOLS:-}" ]; then [ -x "$YAKOGL_TOOLS" ] && return 0; return 2; fi
+    (cd "$REPO" && cargo build -q -p yakogl-tools) >&2 || return 2
+    td=$(cd "$REPO" && cargo metadata --no-deps --format-version 1 2>/dev/null |
+        sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+    YAKOGL_TOOLS=$td/debug/yakogl-tools
+    [ -x "$YAKOGL_TOOLS" ] || { YAKOGL_TOOLS=; return 2; }
+    export YAKOGL_TOOLS
+}
+ytools() { "$YAKOGL_TOOLS" "$@"; }
+# decode_record TEXT-FILE: the last result yk-record line of the console
+# (driver/zephyr/lib/board/common/record.c, "yk-record: w0 w1 w2 w3"),
+# decoded by yakogl-tools as tools/board-stm32mp2-uboot.sh decodes it. A line
+# that is not "yk-record: " and four 8-digit hex words is no record (a garbled
+# one is absent, never a pass), nor is a breadcrumb or a checksum. Sets
+# REC_RES (record:<KIND>, else empty), REC_WORDS (w0,w1,w2,w3, else absent),
+# REC_RESETS (n, else absent) and REC_STATUS (the record's own status: pass,
+# fail, n/a, invalid; else empty).
+REC_RES= REC_WORDS=absent REC_RESETS=absent REC_STATUS=
+decode_record() {
+    local f=$1 w line cls kname
+    REC_RES= REC_WORDS=absent REC_RESETS=absent REC_STATUS=
+    { [ -s "$f" ] && grep -aq 'yk-record: ' "$f"; } || return 0
+    ytools_resolve || { echo "$TAG: WARNING: yakogl-tools is not available: the image's yk-record lines are not decoded" >&2; return 0; }
+    w=$(ytools record --log "$f" 2>/dev/null | sed -n 's/^verdict record: //p')
+    [[ $w =~ ^[0-9a-f]{8}( [0-9a-f]{8}){3}$ ]] || return 0
+    # shellcheck disable=SC2086  # four words
+    line=$(ytools record --line $w 2>/dev/null) || return 0
+    cls=$(sed -n 's/^class=\([^ ]*\).*/\1/p' <<<"$line")
+    [ "$cls" = verdict ] || return 0
+    kname=$(sed -n 's/.* name=\([^ ]*\).*/\1/p' <<<"$line")
+    { [ -n "$kname" ] && [ "$kname" != '?' ]; } || return 0
+    REC_RES="record:$kname"
+    REC_WORDS=${w// /,}
+    REC_RESETS=$(sed -n 's/.* resets=\([^ ]*\).*/\1/p' <<<"$line")
+    REC_RESETS=${REC_RESETS:-absent}
+    REC_STATUS=$(sed -n 's/.* status=\([^ ]*\).*/\1/p' <<<"$line")
+}
 redact_words() { # redact_words DIR PLACEHOLDER STRING...
     local dir=$1 as=$2 f s esc files=()
     shift 2
@@ -1134,7 +1219,8 @@ for row in sys.stdin.buffer:
 
 # verdict_line DIR: V_LINE and V_RC from the run's files (meta.txt, console.txt)
 verdict_line() {
-    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect ext= src ramlog kind=row
+    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect ext= src ramlog kind=row rec=
+    REC_RES= REC_WORDS=absent REC_RESETS=absent REC_STATUS=
     expect=$(mget expect_wdog "$dir")
     name=$(mget name "$dir"); back=$(mget back "$dir"); blind=$(mget blind "$dir")
     src=$(mget console_source "$dir"); ramlog=$(mget ramlog "$dir")
@@ -1179,12 +1265,19 @@ verdict_line() {
         lt=$(sed -nE 's/^mp2: lifetime over: PSCI SYSTEM_RESET at ([0-9]+) ms.*/\1/p' <<<"$p" | head -n 1)
         l=$(result_of <<<"$p")
         [ -n "$l" ] && res=$l
+        # the image's own record (P10 gap G3), when it printed one: result=record:<KIND>,
+        # and resets= and record= after back_after (a console without one
+        # keeps the line as it was)
+        printf '%s\n' "$p" > "$TMP/verdict.console"
+        decode_record "$TMP/verdict.console"
+        if [ -n "$REC_RES" ]; then res=$REC_RES; rec=" resets=$REC_RESETS record=$REC_WORDS"; fi
     fi
     if [ "$(mget rebooted "$dir")" = 0 ]; then v=not_rebooted; rc=4; after=absent
     elif [ "$back" != 1 ]; then v=not_back; rc=5
     elif [ "$blind" = 1 ] && [ -n "$ramlog" ]; then v=done; rc=0
     elif [ "$blind" = 1 ]; then v=returned; rc=0
-    elif [ "${res%%:*}" = fail ]; then v=failed; rc=4
+    elif [ "${res%%:*}" = fail ] || [ "$REC_STATUS" = fail ]; then v=failed; rc=4
+    elif [ -n "$REC_RES" ] && [ "$REC_STATUS" != pass ] && [ "$REC_STATUS" != n/a ]; then v=bad_record; rc=4
     elif [ "$bv" = psci_returned ]; then v=psci_returned; rc=4
     elif [ -n "$lt" ] && [ "$expect" != 1 ]; then v=lifetime; rc=8; ext="$ext lifetime_after=$((lt / 1000))s"
     elif [ "$expect" = 1 ] && [ "$bv" = hung ]; then v=watchdog_reset; rc=0
@@ -1194,7 +1287,7 @@ verdict_line() {
     else v=no_end_line; rc=4; fi
     [ "$cycle" = 6 ] && [ "$rc" = 0 ] && rc=6
     [ "$cycle" = 7 ] && rc=7   # the card refused after the reboot: a person
-    V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after$ext"
+    V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after$rec$ext"
     V_RC=$rc
 }
 # the line after a not_back verdict (run and tally): what the plan asks of a
@@ -1209,7 +1302,7 @@ needs_person() {
     [ "$V_RC" = 5 ] || return 0
     bound=$(mget wait_bound "$dir")
     bound=${bound:+$bound s}
-    echo "$TAG: NEEDS A PERSON: the board did not answer ssh from a new boot within ${bound:-the wait} after the reboot (the image $(mget name "$dir"), its staged copy left on the card). Nothing resets it from outside and this runner never retries: release the board, report it, and let no other item take it until its owner says it is back."
+    echo "$TAG: NEEDS A PERSON: the board did not answer ssh from a new boot within ${bound:-the wait} after the reboot (the image $(mget name "$dir"), its staged copy left on the card). This runner has no reset of its own and never retries: do not run it again. The next step is a person's: power-cycle the board through the farm's reset resource (resource:stm32mp257f-dk-reset), wait for ST's Linux to answer ssh, then 'tools/board-stm32mp2.sh status' and 'disarm'. Release the board, report it, and let no other item take it until its owner says it is back."
 }
 write_index() {
     local dir=$1 f
@@ -1226,7 +1319,7 @@ write_index() {
         echo "verdict: $V_LINE"
         echo "console lines of ours:"
         if [ -s "$dir/console.txt" ]; then
-            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL)([: ]|$)|mp2_gpu: verdict |gl_test: all: |mp2_hello: hanging on purpose|\*\*\* Booting Zephyr)' | sed 's/^/  /'
+            plain "$dir/console.txt" | grep -aE '^(yakogl-mp2: |MP2:|mp2: |mp2-handover: |[A-Za-z0-9_]+: (PASS|FAIL)([: ]|$)|mp2_gpu: verdict |gl_test: all: |yk-record: |mp2_hello: hanging on purpose|\*\*\* Booting Zephyr)' | sed 's/^/  /'
         else
             echo "  none (no console: $(mget no_console_why "$dir"))"
         fi
@@ -1440,6 +1533,7 @@ cmd_install() {
     # the undo, before anything changes
     echo "$TAG: UNDO, should anything below go wrong (the pristine environment image is kept as $PRISTINE and on the card as $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin):"
     echo "  host\$ tail -c +$((ENV_LO + 1)) $PRISTINE | head -c $((ENV_HI - ENV_LO)) | ssh <BOARD_HOST> '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync'"
+    echo "  ($ENV_DEV is this boot's name for the card's $ENV_LABEL: after a reboot run 'tools/board-stm32mp2.sh restore $PRISTINE' to print the line with the card resolved again)"
     echo "  board\$ ${SU}rm -rf $STAGE_DIR"
     echo "  (or: tools/board-stm32mp2.sh uninstall, which deletes preboot and the yako_* variables)"
     if [ "$DRY" = 1 ]; then
@@ -1490,6 +1584,7 @@ cmd_uninstall() {
     # the undo, before anything changes
     echo "$TAG: UNDO, should the uninstall go wrong (the environment image as it is now is kept as $PRISTINE):"
     echo "  host\$ tail -c +$((ENV_LO + 1)) $PRISTINE | head -c $((ENV_HI - ENV_LO)) | ssh <BOARD_HOST> '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync'"
+    echo "  ($ENV_DEV is this boot's name for the card's $ENV_LABEL: after a reboot run 'tools/board-stm32mp2.sh restore $PRISTINE' to print the line with the card resolved again)"
     echo "  (or: tools/board-stm32mp2.sh install)"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
@@ -1530,6 +1625,43 @@ cmd_uninstall() {
     esac
     b "${SU}rm -rf $STAGE_DIR"
     note "$EDIT_HOW: no preboot of ours, no yako_* variable, bootcmd '$BOOTCMD_BARE' (not written), $STAGE_DIR removed. Nothing was rebooted."
+}
+# restore [IMAGE]: the undo lines of install/uninstall for the card's
+# u-boot-env as resolved now (header, "restore"). Print-only: every dd below
+# is in an echo; the board is only read (where_env, card_check).
+cmd_restore() {
+    [ $# -le 1 ] || usage
+    local img=${1:-} bdir sz sum dev f
+    env_range
+    if [ -z "$img" ]; then
+        bdir=$(backup_dir)
+        # install's pristine images (<stamp>-u-boot-env.bin), newest last by name
+        for f in "$bdir"/*-u-boot-env.bin; do [ -f "$f" ] && img=$f; done
+        [ -n "$img" ] || die "restore: no pristine image under $bdir (install keeps one there): name the image to restore" 2
+    fi
+    [ -f "$img" ] || die "restore: no image $img" 2
+    sz=$(stat -c %s "$img")
+    [ "$sz" -ge "$ENV_HI" ] || die "restore: $img is $sz bytes, shorter than the environment's end $ENV_HI: not a whole $ENV_LABEL partition image" 2
+    env_tool check "$img" > "$TMP/restore.check" 2>&1 ||
+        die "restore: the environment in $img does not check: $(tr '\n' ';' < "$TMP/restore.check")" 2
+    sum=$(sha256sum "$img" | cut -d' ' -f1)
+    need_board
+    # resolved in a subshell (as reresolve does), so that a refusal ends with
+    # restore's own word and no undo line
+    if ! ( where_env && card_check "$ENV_DEV" "$ENV_LABEL" &&
+        printf '%s\n' "$ENV_DEV" "$CARD_DISK" "$CARD_TYPE" "$BOOT_DEV" > "$TMP/restore.dev" ) 2> "$TMP/restore.err"; then
+        grep -v '^DRY ' "$TMP/restore.err" >&2
+        die "restore: REFUSED: the $ENV_LABEL partition did not resolve to the SD card /boot is on; no undo line is printed. The eMMC is never a restore target (its vendorfs copy needs the owner's approval and is not this runner's)" 3
+    fi
+    { read -r dev; read -r CARD_DISK; read -r CARD_TYPE; read -r BOOT_DEV; } < "$TMP/restore.dev"
+    # the guard once more on what came back, and the type said aloud: never MMC
+    [ "$CARD_TYPE" = SD ] || die "restore: REFUSED: $CARD_DISK has device type '$CARD_TYPE' (the eMMC says MMC): no undo line is printed" 3
+    [ "${dev%p*}" = "$CARD_DISK" ] || die "restore: REFUSED: $dev is not a partition of the card $CARD_DISK: no undo line is printed" 3
+    echo "$TAG: restore: the card's $ENV_LABEL is $dev now (PARTLABEL $ENV_LABEL on $CARD_DISK, the disk /boot is mounted from, device type $CARD_TYPE; bootfs $BOOT_DEV). Nothing was written and nothing below is run: a person runs it, once the board's owner agrees."
+    echo "  the image: $img (sha256 $sum, $sz bytes, its copies check)"
+    echo "  host\$ tail -c +$((ENV_LO + 1)) $img | head -c $((ENV_HI - ENV_LO)) | ssh <BOARD_HOST> '${SU}dd of=$dev bs=512 seek=$((ENV_LO / 512)) conv=fsync'"
+    echo "  host\$ ssh <BOARD_HOST> '${SU}dd if=$dev bs=64k status=none' | tail -c +$((ENV_LO + 1)) | head -c $((ENV_HI - ENV_LO)) | cmp - <(tail -c +$((ENV_LO + 1)) $img | head -c $((ENV_HI - ENV_LO))) && echo 'read back equal'"
+    echo "  ($dev is this boot's name only: after any reboot run restore again. The eMMC is never a target here; its vendorfs copy is the owner's to restore.)"
 }
 # disarm: the undo of whatever a run left (yako_once, yako_file, staged
 # images, a cut-off copy), from the board's own state; safe to repeat
@@ -1952,6 +2084,7 @@ status) cmd_status "$@" ;;
 install) cmd_install "$@" ;;
 uninstall) cmd_uninstall "$@" ;;
 disarm) cmd_disarm "$@" ;;
+restore) cmd_restore "$@" ;;
 probe | run) cmd_run "$@" ;;
 env-edit) cmd_env_edit "$@" ;;
 tally) cmd_tally "$@" ;;

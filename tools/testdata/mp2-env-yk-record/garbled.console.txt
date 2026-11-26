@@ -1,0 +1,11 @@
+12:00:00 yakogl-mp2: once=trial-1
+12:00:00 yakogl-mp2: cleared
+12:00:01 yakogl-mp2: go 0xa0000000
+12:00:02 MP2:B console up (USART2, polled)
+12:00:02 gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xb200005a, timeout 32 s, PET every 1000 ms
+12:00:02 *** Booting Zephyr OS build selftest ***
+12:00:05 yk-record: 594b0101 00010101 0000001 00000000
+12:00:05 yk-record: 594b0101 00010101 zzzzzzzz 00000000
+12:00:05 yk-record: 594b0101 00010101
+12:00:05 gl_test: all: 0 of 1 cases failed (1 passed; 0 timed out)
+12:00:06 mp2: gl_test done: PSCI SYSTEM_RESET at 4120 ms
