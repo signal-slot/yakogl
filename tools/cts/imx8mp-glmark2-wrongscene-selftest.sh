@@ -76,7 +76,7 @@ done
 # 2. the body: title, commit, record path, route, picdiff verbatim, what, label
 out="$T/filled.out"
 scene=$(scene_of "$T/filled.md" "$ROW")
-for want in "**Title**: i.MX8MP GC7000UL: glmark2 $scene renders wrong" \
+for want in "**Title**: $scene: renders wrong on the i.MX8MP (GC7000UL)" \
             "Vivante GC7000UL" "Commit: 0123abcd" \
             "Record: \`records/imx8mp/$REC/\`" "Route: dump" "$PIC" \
             "What differs from llvmpipe: $WHAT" \
@@ -114,6 +114,19 @@ if python3 "$VERDICTS" "$T/pasted.md" --complete > "$T/v1" 2>&1; then
 else
   bad "pasted: verdicts.py --complete refuses: $(cat "$T/v1")"
 fi
+
+# 3a. issue-texts.py prints the title of the pasted entry (the Title line
+#     starts with the scene cell it looks for)
+ISSUE="$HERE/imx8mp-glmark2-issue-texts.py"
+python3 "$ISSUE" --note "$T/pasted.md" > "$T/it.out" 2> "$T/it.err"
+if grep -qF -- "$scene: renders wrong on the i.MX8MP (GC7000UL)" "$T/it.out"; then
+  ok "issue-texts.py prints the entry's title"
+else
+  bad "issue-texts.py lacks the title: $(head -n 3 "$T/it.err") $(grep -c 'issue title not in the note' "$T/it.out") untitled"
+fi
+grep -qF "(issue title not in the note)" "$T/it.out" \
+  && bad "issue-texts.py: '(issue title not in the note)'" \
+  || ok "issue-texts.py: no '(issue title not in the note)'"
 
 # 3b. the row's route cell is used: photograph+probes is a route of a wrong
 #     row, photograph alone ('seen without a value') is not
