@@ -223,7 +223,11 @@
 # Environment (no default for a machine or an address):
 #   BOARD_HOST         user@host of the board's Linux (pi4: PI4_HOST also read; pi5: PI5_HOST)
 #   BOARD_UART         pi4, pi5: the serial device wired to the Pi, or host:port of
-#                      a serial bridge (PI4_UART / PI5_UART also read; the pi5's is
+#                      a serial bridge (pi4, am62p, imx8mp also take
+#                      rfc2217://<host>:<port> of a network serial adapter, read
+#                      through tools/uart_rfc2217.py at 115200 8N1; the address is
+#                      never printed or recorded: <BOARD_UART>, <uart-bridge>;
+#                      not with the typed route; PI4_UART / PI5_UART also read; the pi5's is
 #                      its debug connector, read only: the runner never writes to it); am62p: host:port
 #                      of the serial bridge (UART_ADDR also read); imx8mp: optional,
 #                      host:port of a bridge or a local device; when set, a uboot-
@@ -567,7 +571,7 @@ NB_RECORDS="records/$BOARD/netboot"
 . "$HERE/board-session-lib.sh"
 
 note() {
-    if [ "$BOARD" = pi5 ]; then echo "board.sh $BOARD: $*" | scrub; else echo "board.sh $BOARD: $*"; fi
+    if [ "$BOARD" = pi5 ] || uart_is_rfc2217; then echo "board.sh $BOARD: $*" | scrub; else echo "board.sh $BOARD: $*"; fi
 }
 
 # scrub: stdin to stdout with the pi5's host names, addresses and UART paths
@@ -580,8 +584,20 @@ note() {
 # host names only from six characters ("pi5" in an alias would rewrite
 # "board.sh pi5:").
 scrub() {
-    if [ "$BOARD" != pi5 ]; then cat; return; fi
-    local e=() pair s esc
+    local e=() pair s esc as
+    if [ "$BOARD" != pi5 ]; then
+        # the other boards: only an rfc2217:// console's address (URL, host:port,
+        # host), nothing else (their own addresses print as before)
+        uart_is_rfc2217 || { cat; return; }
+        for s in "$BOARD_UART" "$(uart_rfc2217_hp)" "$(uart_rfc2217_hp | sed 's/:[0-9]*$//')"; do
+            esc=$(printf '%s' "$s" | sed 's/[][\\.*^$/|(){}+?]/\\&/g')
+            case "$s" in "$BOARD_UART" | *:*) as='<BOARD_UART>' ;; *) as='<uart-bridge>' ;; esac
+            e+=(-e "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1$as\\2/g"
+                -e "s/(^|[^A-Za-z0-9_.-])$esc([^A-Za-z0-9_-]|$)/\\1$as\\2/g")
+        done
+        LC_ALL=C sed -E "${e[@]}"
+        return
+    fi
     for pair in "${BOARD_HOST:-}|<BOARD_HOST>" "${BOARD_UART:-}|<BOARD_UART>" "${UART_REAL:-}|<BOARD_UART>" \
         "$(uart_is_bridge && echo "${BOARD_UART%:*}")|<uart-bridge>" "${BOARD_HOST#*@}|<board-host>" "${BHOSTNAME:-}|<board-host>"; do
         s=${pair%|*}
@@ -596,7 +612,7 @@ scrub() {
         -e 's/(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)/\1<address>\3/g'
 }
 # uart_shown: BOARD_UART as the dry run and the messages print it
-uart_shown() { if [ "$BOARD" = pi5 ]; then echo '<BOARD_UART>'; else echo "$BOARD_UART"; fi; }
+uart_shown() { if [ "$BOARD" = pi5 ] || uart_is_rfc2217; then echo '<BOARD_UART>'; else echo "$BOARD_UART"; fi; }
 UART_REAL=
 # die MESSAGE [RC]: the library's die (the pi5's message scrubbed, as note),
 # and a run's refusal kept in its record (run_refused)
@@ -621,7 +637,28 @@ fi
 
 # uart_is_bridge: BOARD_UART is host:port of a serial bridge (a raw TCP stream
 # of the board's UART, one client at a time), not a local device
-uart_is_bridge() { [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
+uart_is_bridge() { uart_is_rfc2217 || [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
+
+# uart_is_rfc2217: the pi4, am62p and imx8mp consoles reached as
+# BOARD_UART=rfc2217://host:port (an RFC 2217 serial server; the nanopc-t6's
+# rfc2217:// is its runner's own and not this). Handled as a bridge, through
+# tools/uart_rfc2217.py at the board's console speed; the address is never
+# printed or recorded (<BOARD_UART>, <uart-bridge>).
+uart_is_rfc2217() {
+    case "$BOARD" in pi4 | am62p | imx8mp) [[ ${BOARD_UART:-} =~ ^rfc2217://[^/:]+:[0-9]+$ ]] ;; *) return 1 ;; esac
+}
+# uart_rfc2217_hp: host:port of an rfc2217:// BOARD_UART
+uart_rfc2217_hp() { echo "${BOARD_UART#rfc2217://}"; }
+# uart_cli_set: UART_CLI and UART_TAIL, the client of BOARD_UART's bridge and
+# what follows its arguments (CLI SUBCOMMAND ADDR ... TAIL)
+uart_cli_set() {
+    if uart_is_rfc2217; then
+        UART_CLI=(python3 "$HERE/uart_rfc2217.py"); UART_TAIL=(--baud 115200)
+    else
+        UART_CLI=(python3 "$HERE/am62p_netboot_uart.py"); UART_TAIL=()
+    fi
+}
+UART_CLI=(); UART_TAIL=()
 
 # bridge_capture: the capture of BOARD_UART's bridge into console.raw and
 # console.ts (tools/am62p_netboot_uart.py capture: the bridge's protocol, no
@@ -629,16 +666,17 @@ uart_is_bridge() { [[ $BOARD_UART =~ ^[^/:]+:[0-9]+$ ]]; }
 # one, retried up to 12 times 10 s apart. Returns 1 when it never connected.
 bridge_capture() {
     local try
+    uart_cli_set
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $(uart_shown) <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
+        echo "DRY host\$ python3 tools/$(uart_is_rfc2217 && echo uart_rfc2217.py || echo am62p_netboot_uart.py) capture $(uart_shown) <rundir>/console.raw <rundir>/console.ts &   # 'busy' retried 12 x 10 s"
         return 0
     fi
     for try in $(seq 1 12); do
         # (the pi5: its errors name the bridge, so they go through scrub)
-        if [ "$BOARD" = pi5 ]; then
-            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" 2> >(scrub >&2) &
+        if [ "$BOARD" = pi5 ] || uart_is_rfc2217; then
+            "${UART_CLI[@]}" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" "${UART_TAIL[@]}" 2> >(scrub >&2) &
         else
-            python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+            "${UART_CLI[@]}" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
         fi
         CAP=$!
         sleep 3
@@ -776,6 +814,10 @@ redact_run() {
     if [ "$BOARD" = pi5 ]; then
         redact_words "$1" "<BOARD_UART>" "$BOARD_UART" "${UART_REAL:-}"
         if uart_is_bridge; then redact_words "$1" "<uart-bridge>" "${BOARD_UART%:*}"; fi
+    fi
+    if uart_is_rfc2217; then
+        redact_words "$1" "<BOARD_UART>" "$BOARD_UART" "$(uart_rfc2217_hp)"
+        redact_words "$1" "<uart-bridge>" "$(uart_rfc2217_hp | sed 's/:[0-9]*$//')"
     fi
     # the NanoPC-T6 runner's record.txt names the UART tty it read; the
     # runner writes the capture unit as <T6_SCREEN> itself, and this catches
@@ -1516,17 +1558,18 @@ pi4_uart_free() {
         # no device on this host: the bridge must accept a connection and not
         # answer "busy" (the capture retries "busy" later; this refuses early)
         if [ "$DRY" = 1 ]; then
-            echo "DRY host\$ python3 tools/am62p_netboot_uart.py probe $(uart_shown)   # the bridge must accept and not be busy"
+            echo "DRY host\$ python3 tools/$(uart_is_rfc2217 && echo uart_rfc2217.py || echo am62p_netboot_uart.py) probe $(uart_shown)   # the bridge must accept and not be busy"
             return 0
         fi
         # rc 4/5: an earlier client may still hold the relay, so retry a few times;
         # rc 3 is a wrong route to the relay and retrying will not help
+        uart_cli_set
         for try in 1 2 3 4 5; do
             rc=0
-            if [ "$BOARD" = pi5 ]; then
-                python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" 2> >(scrub >&2) || rc=$?
+            if [ "$BOARD" = pi5 ] || uart_is_rfc2217; then
+                "${UART_CLI[@]}" probe "$BOARD_UART" "${UART_TAIL[@]}" 2> >(scrub >&2) || rc=$?
             else
-                python3 "$HERE/am62p_netboot_uart.py" probe "$BOARD_UART" || rc=$?
+                "${UART_CLI[@]}" probe "$BOARD_UART" || rc=$?
             fi
             [ "$rc" = 0 ] && return 0
             if [ "$rc" = 4 ] || [ "$rc" = 5 ]; then
@@ -2041,22 +2084,28 @@ run_uboot() {
         # yako_net with its three variables written out, then "boot" when the
         # fetch fails
         if [ "$route" = typed ]; then
+            uart_is_rfc2217 && die "NETBOOT_ROUTE=typed types through the bridge protocol; an rfc2217:// BOARD_UART has no typed client (use the env route)" 2
             net=${YAKO_NET//'${yako_addr}'/$YAKO_ADDR}
             net=${net//'${yako_server}'/$NETBOOT_SERVER}
             net=${net//'${yako_file}'/$file}
             typed_line="echo yakogl-netboot: once=$TOKEN; echo yakogl-netboot: typed; $net; boot"
         fi
         if [ "$DRY" = 1 ] && [ "$route" = typed ]; then
-            echo "DRY host\$ python3 tools/am62p_netboot_uart.py typed $BOARD_UART <rundir>/console.raw <rundir>/console.ts '<line>' 2> <rundir>/typed.log &"
+            echo "DRY host\$ python3 tools/am62p_netboot_uart.py typed $(uart_shown) <rundir>/console.raw <rundir>/console.ts '<line>' 2> <rundir>/typed.log &"
             echo "    line (${#typed_line} bytes): $typed_line"
         elif [ "$DRY" = 1 ]; then
-            echo "DRY host\$ python3 tools/am62p_netboot_uart.py capture $BOARD_UART <rundir>/console.raw <rundir>/console.ts &"
+            echo "DRY host\$ python3 tools/$(uart_is_rfc2217 && echo uart_rfc2217.py || echo am62p_netboot_uart.py) capture $(uart_shown) <rundir>/console.raw <rundir>/console.ts &"
         else
             if [ "$route" = typed ]; then
                 python3 "$HERE/am62p_netboot_uart.py" typed "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" "$typed_line" \
                     2> "$RD/typed.log" &
             else
-                python3 "$HERE/am62p_netboot_uart.py" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+                uart_cli_set
+                if uart_is_rfc2217; then
+                    "${UART_CLI[@]}" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" "${UART_TAIL[@]}" 2> >(scrub >&2) &
+                else
+                    "${UART_CLI[@]}" capture "$BOARD_UART" "$RD/console.raw" "$RD/console.ts" &
+                fi
             fi
             CAP=$!
             sleep 3
