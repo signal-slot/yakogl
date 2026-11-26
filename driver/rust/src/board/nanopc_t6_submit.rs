@@ -2760,6 +2760,106 @@ pub(crate) mod tests {
         assert_eq!((o.step, o.refusal, o.detail), (STEP_AS0_MAP, PtRefusal::AlreadyMapped as u32, 0x0400_0000));
     }
 
+    /// The run over `z` (whose `t6` the caller set to a U-Boot state) with
+    /// Z1's record kept: the Z4 record, Z1's record as `submit_up` returns
+    /// it, and how often `on_handover` was called.
+    fn run_from_uboot(z: &Z4, blob: &[u8]) -> (SubmitUp, GpuUp, u32) {
+        let mut pool = vec![[0u64; ENTRIES]; 16];
+        let mut vm_pool = vec![[0u64; ENTRIES]; 16];
+        let vm = z.backings();
+        let mem = Z4Mem { queue: QUEUE, vm: &vm, vm_pool: &mut vm_pool, vm_tables_pa: VM_TABLES_PA };
+        let (mut z1, mut seen) = (GpuUp::default(), 0u32);
+        let o = submit_up(
+            z,
+            B,
+            blob,
+            &backings(&synth::small()),
+            &mut pool,
+            TABLES_PA,
+            RK3588_TIMER_HZ,
+            mem,
+            &frame(),
+            &|a, n| z.t6.clean(a, n),
+            &mut |_| {},
+            &mut |_| seen += 1,
+            &mut z1,
+        );
+        (o, z1, seen)
+    }
+
+    /// Nothing of Z4 beyond Z3's GPU step ran: no group address space, no
+    /// doorbell, no heap, no pixel.
+    fn assert_z4_untouched(z: &Z4, o: &SubmitUp) {
+        let as1 = GPU + mmu_as(GROUP_AS);
+        let doorbells = [GPU + csf::doorbell(0), GPU + csf::doorbell(1)];
+        assert!(z.log.borrow().iter().all(|&(a, _)| !(as1..as1 + 0x40).contains(&a) && !doorbells.contains(&a)));
+        assert_eq!((o.heap_ctx, o.pixels, o.insert, o.seqno), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn from_u_boot_with_the_supply_off_and_the_clock_on_the_pvtpll_the_run_passes_and_carries_z1_over() {
+        let blob = synth::small();
+        // vdd_gpu_s0 off at 675 mV (0x1c), PD_GPU off, the GPU clock on the
+        // PVTPLL: gpu_up enables the supply, powers the domain, moves the clock
+        let mut z = Z4::new(blob.clone());
+        z.t6 = T6::uboot_supply_off(blob.clone(), 0x1c)
+            .with_clock(0x1f24 | 1 << 14)
+            .with_csg_suspend(BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE);
+        let (o, z1, seen) = run_from_uboot(&z, &blob);
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_NONE, 0, 0));
+        // Z3's hand-over fields in the Z4 record: the supply enabled once and
+        // read on at the voltage the OPP asks for, the GPU answering
+        assert_eq!((o.fw.step, o.fw.stop, o.fw.version), (0, 0, 0x0105_0000));
+        assert_eq!((o.fw.supply_enabled, o.fw.supply_after), (1, [0x0f, 0x1c]));
+        assert_eq!((o.fw.gpu_id, o.fw.shader_present), (0xa867_0005, [0x50005, 0]));
+        // Z1's own record, as the caller keeps it: the clock moved onto the
+        // table, the supply enabled, the handler called once before any write
+        assert_eq!(seen, 1);
+        assert!(!z1.clock_set.kept);
+        assert_eq!(z1.clock_set.wrote[0], 0x40ff_0024);
+        assert_eq!(z1.clock_set.sel[0], 0x1f24);
+        assert!(z1.supply_enabled);
+        assert_eq!((z1.supply_after, z1.vdd_gpu_uv), ([0x0f, 0x1c], 675_000));
+        // the rest of the run is the handed-over run's: a pass
+        assert_eq!((o.seqno, o.sync_status, o.insert, o.extract_at_end), (1, 0, 128, 128));
+        assert_eq!((o.red, o.blue, o.fill, o.other, o.pixels), (2048, 2048, 0, 0, 4096));
+        assert_eq!((o.stop_refusal, o.terminate_refusal), (0, 0));
+    }
+
+    #[test]
+    fn from_u_boot_with_the_supply_on_and_the_clock_on_the_table_nothing_is_enabled_or_moved() {
+        let blob = synth::small();
+        let mut z = Z4::new(blob.clone());
+        z.t6 = T6::uboot_supply_on(blob.clone()).with_csg_suspend(BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE);
+        let (o, z1, seen) = run_from_uboot(&z, &blob);
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_NONE, 0, 0));
+        assert_eq!((o.fw.supply_enabled, o.fw.supply_after, o.fw.supply_waited_us), (0, [0, 0], 0));
+        assert_eq!(seen, 1);
+        assert!(z1.clock_set.kept && !z1.supply_enabled);
+        assert_eq!(z1.clock_set.wrote, [0, 0]);
+        assert_eq!(o.fw.gpu_id, 0xa867_0005);
+        assert_eq!((o.seqno, o.pixels, o.extract_at_end), (1, 4096, 128));
+    }
+
+    #[test]
+    fn from_u_boot_a_supply_below_the_opp_stops_the_run_as_z3_s_gpu_step_and_z4_does_not_start() {
+        let blob = synth::small();
+        // 0x17 = 643.75 mV, under 300 MHz's 675 mV: gpu_up writes nothing
+        let mut z = Z4::new(blob.clone());
+        z.t6 = T6::uboot_supply_off(blob.clone(), 0x17).with_csg_suspend(BOARD_SUSPEND_SIZE, BOARD_SUSPEND_SIZE);
+        let (o, z1, seen) = run_from_uboot(&z, &blob);
+        let below = nanopc_t6_gpu::Stop::SupplyBelowOpp as u32;
+        assert_eq!((o.step, o.refusal, o.detail), (STEP_FW, nanopc_t6_fw::STEP_GPU, 0));
+        assert_eq!((o.fw.step, o.fw.stop, o.fw.refusal), (nanopc_t6_fw::STEP_GPU, below, 0));
+        assert_eq!(o.fw.detail, [300_000_000, 0x17]);
+        // the stop comes before the handler's point (no write that could
+        // fault was reached), and nothing was enabled
+        assert_eq!(seen, 0);
+        assert!(!z1.supply_enabled);
+        assert_z4_untouched(&z, &o);
+        assert_eq!((o.fw.tables_used, o.fw.version), (0, 0));
+    }
+
     #[test]
     fn the_record_is_54_words_of_8_at_fixed_offsets_and_the_steps_are_numbered() {
         assert_eq!((size_of::<SubmitUp>(), align_of::<SubmitUp>()), (448, 8));
