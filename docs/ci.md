@@ -401,6 +401,16 @@ took 2261 s. A document pull request's gate took 4 s there (#225).
 - `[profile.test] opt-level = 3` (inherits dev otherwise): about 2x on the
   compiler-heavy tests, measured above. Debug assertions and overflow
   checks stay on. The dev profile for the edit loop is unchanged.
+- `[profile.test] debug = false`: the disk. Each integration test is a binary
+  that links the whole library, and with the inherited full debug info each
+  carried a copy of the library's DWARF (95% of a 30 MiB binary). One
+  feature set's `cargo test --no-run` (296 binaries, `host-test,gpu-powervr,
+  shaderc-online`, 4 cores, measured 2026-11-26) wrote 5.7 GiB in 4 min 6 s;
+  without debug info 0.76 GiB in 2 min 18 s (`line-tables-only`: 3.3 GiB,
+  2 min 48 s). A full gate run builds about 15 such sets and wrote about
+  120 GiB in a runner VM (four VMs filled a 476 GiB host on 2026-11-24).
+  A failing test still names its file and line; for a debugger build with
+  `CARGO_PROFILE_TEST_DEBUG=true`.
 - The one-test corpus binaries (`es3_ubo`, `stack_survey`, `gc_const_map`,
   `online_corpus`, ...) split their corpus into several `#[test]`s (by
   dEQP group, by shader directory), so the harness runs them on several
