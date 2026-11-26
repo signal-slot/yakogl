@@ -258,10 +258,23 @@ pub fn lower_es3<'a, E: Emit<'a>>(e: &mut E, name: &'a str, args: &[Operand<'a>]
                     "sinh" => alu(e, AluOp::Fmul, [diff, half, half]),
                     /* (e^x + e^-x) / 2 */
                     "cosh" => alu(e, AluOp::Fmul, [sum, half, half]),
-                    /* sinh(x) / cosh(x): the halves cancel */
+                    /* sinh(x) / cosh(x), the halves kept: one divide-like
+                     * step, sinh * rcp(cosh), as dEQP 93bca01's
+                     * builtin_precision derives tanh. The halves do not
+                     * cancel under a flush to zero: for 87.34 < |x| the sum
+                     * e^x + e^-x passes 2^126, so rcp(sum) is subnormal,
+                     * a GPU that flushes (the PowerVR USC, the GC7000) reads
+                     * 0 and tanh(88) came out 0 (dEQP-GLES3
+                     * precision.tanh.highp on the AM62P). cosh stays at or
+                     * below 2^126 for |x| <= 88.03 (ln 2^127), so rcp(cosh)
+                     * is normal over the whole range where dEQP's division
+                     * bound is finite (its Div wants 2^-126 <= |den| <=
+                     * 2^126); past it dEQP accepts any number. */
                     _ => {
-                        let r = alu(e, AluOp::Frcp, [sum, sum, sum])?;
-                        alu(e, AluOp::Fmul, [diff, r, r])
+                        let sh = alu(e, AluOp::Fmul, [diff, half, half])?;
+                        let ch = alu(e, AluOp::Fmul, [sum, half, half])?;
+                        let r = alu(e, AluOp::Frcp, [ch, ch, ch])?;
+                        alu(e, AluOp::Fmul, [sh, r, r])
                     }
                 }
             }
