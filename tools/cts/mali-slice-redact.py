@@ -202,8 +202,8 @@ CASES = [
     ('FTDI converter now attached to ttyUSB0', ['uart']),
     ('console /dev/ttyACM1', ['uart']),
     ('usb 1-1: SerialNumber: A12345', ['usb-serial']),
-    ('=> setenv ethaddr 00:00:5e:00:53:01', ['mac']),
-    ('ethaddr=00:00:5e:00:53:01', ['mac', 'uboot-id']),
+    ('=> setenv ethaddr 00:00:5e:00:53:01', ['mac']),  # redact-scan: ok
+    ('ethaddr=00:00:5e:00:53:01', ['mac', 'uboot-id']),  # redact-scan: ok
     ('ethaddr=<redacted> serial#=<redacted> serverip=<redacted>', []),
     ('eth1addr=garbled', ['uboot-id']),
     ('serial#=12345678', ['uboot-id']),
