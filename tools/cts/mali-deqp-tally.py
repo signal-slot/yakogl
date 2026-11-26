@@ -46,6 +46,10 @@ A slice is tools/cts/log/<YYYY-MM-DD>-t6-gles2-<session>-<sha8>/ with
   refusals.tsv case refusal   (optional; the runner writes it since
                2026-11-15: for each case whose log holds one, the first info
                log in which the library refuses a shader or a program)
+  shaders.tsv  case stage source   (optional; the runner writes it since
+               2026-11-26: the GLSL of each refused case, newlines escaped.
+               Only for a reader of the refusals: this tool never opens it,
+               so --tally, --check-cover and --check-doc ignore it)
   kmsg/<label>.txt   the redacted kernel lines of the chunk
 
 A session the runner ends on board-lost or a wedged process marks the rest
@@ -786,6 +790,17 @@ def self_test():
         "chunk's first refusal",
         re.search(r"^cause Fail +1  Image comparison failed$", o, re.M)
         is not None and "refused:this" not in o)
+    with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
+        plain = os.path.join(t, os.path.basename(own))
+        shutil.copytree(own, plain)
+        os.remove(os.path.join(plain, "shaders.tsv"))
+        chk("shaders.tsv: the fixture slice holds one",
+            os.path.exists(os.path.join(own, "shaders.tsv")))
+        chk("shaders.tsv: --tally gives the same text with and without it",
+            run("--tally", "--per-case", "--no-git", own, good[1])[1:2]
+            == run("--tally", "--per-case", "--no-git", plain, good[1])[1:2])
+        chk("shaders.tsv: --check-cover passes with it",
+            run("--check-cover", "--no-git", mp, own, good[1])[0] == 0)
     must("refusals.tsv naming a case of no result", "refusal-case",
          "--check-cover", "--no-git", mp, b("refusalunknown"), good[1])
     rc, o, _e = run("--tally", "--markdown", *good)

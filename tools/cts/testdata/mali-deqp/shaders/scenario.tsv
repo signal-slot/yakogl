@@ -1,0 +1,2 @@
+dEQP-GLES2.sk.refused	info	online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * is not lowered yet)	VertexShader	refused.vert
+dEQP-GLES2.sk.passing	-	-	FragmentShader	passing.frag
