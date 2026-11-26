@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Classify panthor kernel messages taken around one dEQP chunk.
 
-  tools/cts/mali-kmsg.py [--json] [FILE|-]
+  tools/cts/mali-kmsg.py [--json] [--between-markers] [FILE|-]
 
 Reads a kernel message capture (dmesg text with or without timestamps, or
 `dmesg -r` with <N> prefixes) and prints one line:
@@ -18,6 +18,16 @@ of each CS_FATAL / CS_FAULT report and the tiler heap failure of
 panthor_sched.c; the detail lines of those reports name no device in dmesg and
 are not counted. first= is the first counted panthor line, with the
 <N> prefix and timestamp removed, cut to FIRST_MAX characters.
+
+--between-markers bounds the count by the run markers that
+tools/mali/panthor/run-on-board.sh writes to /dev/kmsg ('yakogl-run-start
+BIN STAMP', 'yakogl-run-end BIN STAMP'). Only the lines strictly between the
+first start marker and the next end marker of the same BIN and STAMP are
+classified (the marker lines are not), and a first line 'kmsg-markers:
+between=N after=M' counts the non-blank lines between them and the
+non-blank lines after the end marker, as run-on-board.sh does. With --json
+the dict gains 'between' and 'after'. A capture lacking either marker
+prints nothing and exits 5. Without the flag the output is unchanged.
 
 Importable: classify(lines) -> dict with the same keys.
 
@@ -123,11 +133,28 @@ def line(r):
     return 'kmsg: ' + ' '.join('%s=%d' % (k, r[k]) for k in KEYS) + ' first=' + r['first']
 
 
+START = re.compile(r'yakogl-run-start (\S+) (\S+)')
+
+
+def split_markers(lines):
+    """Return (between, after) line lists, or None if a marker is missing."""
+    for i, raw in enumerate(lines):
+        m = START.search(raw)
+        if not m:
+            continue
+        end = 'yakogl-run-end %s %s' % m.groups()
+        for j in range(i + 1, len(lines)):
+            if end in lines[j]:
+                return lines[i + 1:j], lines[j + 1:]
+    return None
+
+
 def main(argv):
-    args = [a for a in argv if a != '--json']
-    as_json = len(args) != len(argv)
+    args = [a for a in argv if a not in ('--json', '--between-markers')]
+    as_json = '--json' in argv
+    markers = '--between-markers' in argv
     if len(args) > 1:
-        sys.stderr.write('usage: mali-kmsg.py [--json] [FILE|-]\n')
+        sys.stderr.write('usage: mali-kmsg.py [--json] [--between-markers] [FILE|-]\n')
         return 2
     try:
         if not args or args[0] == '-':
@@ -138,6 +165,21 @@ def main(argv):
     except OSError as e:
         sys.stderr.write('mali-kmsg.py: %s\n' % e)
         return 2
+    if markers:
+        part = split_markers(lines)
+        if part is None:
+            sys.stderr.write('mali-kmsg.py: the capture lacks a run start or end marker\n')
+            return 5
+        between, after = part
+        r = classify(between)
+        r['between'] = sum(1 for x in between if x.strip())
+        r['after'] = sum(1 for x in after if x.strip())
+        if as_json:
+            print(json.dumps(r))
+        else:
+            print('kmsg-markers: between=%d after=%d' % (r['between'], r['after']))
+            print(line(r))
+        return 0
     r = classify(lines)
     print(json.dumps(r) if as_json else line(r))
     return 0
