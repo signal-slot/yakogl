@@ -88,7 +88,7 @@ first stop code: record its cause, do not retry it.
 | 6 | `T6_ROUTE=uboot driver/tools/kexec-zephyr/t6-verdict.sh <probe> <record>/image.log` | 0 PASS | 1 FAIL (n of m lines not ok); 2 usage |
 | 7 | `python3 -I tools/cts/t6-uboot-handover-summary.py <reads-record> <t6_cold-record>` | 0 | 2 usage; 3 an address in the input; 4 a record unreadable |
 | 8 | `tools/cts/t6-uboot-rows.sh <image-dir> <out-dir> <LABEL>... --go` | 0 | 2 usage or a refused label or image, nothing run; 3 stopped at a prompt-go code other than 0 or 11 (named in `rows.tsv`) |
-| 9 | `python3 -I tools/cts/t6-uboot-deqp-compare.py --uboot ... --kexec ... --armbian ...` | 0 | 2 bad input |
+| 9 | `python3 -I tools/cts/t6-uboot-deqp-compare.py --uboot <rows out-dir\|rows.tsv\|record dir> --armbian tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055` | 0 | 2 bad input; 3 only with `--kexec` (a bad kexec file) |
 | 10 | `BOARD_HOST=... driver/tools/uboot-t6/stage.sh undo <dir>/t6-boot.fingerprint` | 0 | 1 `/boot/yakogl` removed but a stock file differs (named); 2 usage; 3 refused |
 | 11 | `tools/cts/t6-redact-check.sh <record>` | 0 | 1 a finding (file, line and kind, never the text); 2 usage or a missing file |
 | 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, a secret survived redaction; 2 usage or no text file; 3 destination exists |
@@ -98,6 +98,24 @@ Notes on the steps:
 1. A refusal here is a host-side result (a missing variable, module, sum or
    `COMMIT`), not a board result. Fix the host and run it again; the board
    has not been touched. Build every image from one origin/main commit.
+   `preflight.sh <image-dir>` touches no board and no network and prints
+   no environment value; one `ok` or `FAIL` line per check: (a) `T6_UART`
+   and `T6_HAND` are set; (b) python3 imports what `prompt-go.py` and
+   `t6-uart-rfc2217.py` import; (c) the image directory (below); (d)
+   `records/` is gitignored; (e) the `console-check.sh` command is printed,
+   not run. Exit 0 all ok, 1 a `FAIL`, 2 usage (not a directory). Check (c)
+   needs one `COMMIT` file in `<image-dir>` (one sha, an ancestor of the
+   local `origin/main`; nothing is fetched) and a `SHA256SUMS` (sha256sum
+   format) whose hashes match, in one of two layouts. Single: each other
+   regular file is an image with a line in `SHA256SUMS`. Rows (the
+   `tools/cts/t6-deqp-images.sh` directory that step 8 reads): each
+   first-level `<LABEL>/` holding `zephyr/` has its image
+   `<LABEL>/zephyr/zephyr.bin`, summed by a top-level `SHA256SUMS` (line
+   `<LABEL>/zephyr/zephyr.bin`) or by one under the label (line
+   `zephyr/zephyr.bin`); a label without `zephyr.bin`, or a top-level file
+   other than `<LABEL>.built`, `SHA256SUMS` and `COMMIT`, is named; both
+   layouts in one directory fail. `t6-deqp-images.sh` writes neither file
+   yet, so write them from the build before the check.
 2. Run it with Armbian up and before any reboot. Only 0 lets the session
    go on; an RFC 2217 exit 42 (code 8) stops it.
 3. Stage before the first `--go`. The fingerprint file stays on this host
@@ -119,7 +137,13 @@ Notes on the steps:
    gate reads.
 8. Only after `gl_test` passed. 0 and 11 are answers with Armbian back and
    the next label runs; any other code stops, never retried.
-9. Per-case outcomes against the kexec and Armbian runs.
+9. Per-case outcomes of the U-Boot run against Armbian's 8ff01055 tree
+   (`--armbian tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055`). Omit
+   `--kexec`: no per-case kexec baseline is in the tree, and the output then
+   starts `kexec: no per-case baseline`. `--uboot` takes step 8's
+   `<out-dir>` or its `rows.tsv`, or one `prompt-go.sh` record directory.
+   Run it before the records are moved (step 12) or redacted: it reads
+   `image.log` through the paths `rows.tsv` names.
 10. Run it when the session ends, passed or stopped. A 1 names the stock
     file that changed (a kernel update); the directory is removed all the
     same.
