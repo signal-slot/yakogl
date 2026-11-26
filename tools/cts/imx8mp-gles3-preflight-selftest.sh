@@ -75,6 +75,43 @@ pick=$(ls -t "$W"/f/out/es3-*/zephyr/zephyr.bin 2>/dev/null | head -1)
 if [ "$pick" = "$W/f/out/es3-01234567/zephyr/zephyr.bin" ]; then echo "  ok   board script's glob picks the Verdin image"
 else echo "  FAIL board script's glob picked '$pick'"; fails=$((fails + 1)); fi
 
+# /boot medium: a stub ssh on PATH answers with fixed read-out lines (no board is used)
+mkdir -p "$W/bin"
+cat > "$W/bin/ssh" <<'STUB'
+#!/bin/sh
+cat "$STUB_PROBE"
+STUB
+chmod +x "$W/bin/ssh"
+probe() { # probe <name> <want rc> <pattern> <lines...>: run with BOARD_HOST set and the stub's answer
+	local name=$1 want=$2 pat=$3; shift 3
+	printf '%s\n' "$@" probe=done > "$W/probe.txt"
+	env -i PATH="$W/bin:$PATH" HOME="$W" IMX8MP_OUT="$W/a/out" DEQP_STAGE1="$W/a/stage1" ZEPHYR_WS="$W/a/ws" \
+		HAL_NXP_DIR="$W/a/hal" BOARD_UART="$SECRET" BOARD_HOST=bootsecrethost STUB_PROBE="$W/probe.txt" \
+		bash "$HERE/imx8mp-gles3-preflight.sh" --commit "$SHA" > "$W/log" 2>&1
+	rc=$?
+	if grep -q bootsecrethost "$W/log"; then echo "  FAIL BOARD_HOST in output"; fails=$((fails + 1)); fi
+	expect "$name" "$want" "$pat"
+}
+probe "SD /boot passes" 0 "ok   /boot is /dev/mmcblk1p1.*SD card mmcblk1" \
+	"mnt=/dev/mmcblk1p1 /boot" plabel=boot disk=mmcblk1 type=SD boot0=no fwenv=/dev/mmcblk2
+grep -q "info U-Boot env device.*mmcblk2" "$W/log" || { echo "  FAIL env device info line"; fails=$((fails + 1)); }
+probe "eMMC /boot fails" 1 "FAIL /boot (/dev/mmcblk2p1) is on the eMMC disk mmcblk2.*person's decision" \
+	"mnt=/dev/mmcblk2p1 /boot" plabel=boot disk=mmcblk2 type=MMC boot0=yes fwenv=/dev/mmcblk2
+probe "eMMC without type fails on boot0" 1 "FAIL .*on the eMMC disk" \
+	"mnt=/dev/mmcblk2p1 /boot" plabel= disk=mmcblk2 type= boot0=yes
+for pl in fsbla1 fsbla2 metadata1 metadata2 fip-a fip-b; do
+	probe "protected partlabel $pl fails" 1 "FAIL .*protected microSD partition '$pl'" \
+		"mnt=/dev/mmcblk1p3 /boot" plabel=$pl disk=mmcblk1 type=SD boot0=no
+done
+probe "no separate /boot fails" 1 "FAIL /boot is not a separate mount" mnt= fwenv=/dev/mmcblk2
+run "$W/a" "$SECRET" --commit "$SHA"
+expect "BOARD_HOST unset: check skipped" 0 "note /boot medium not checked: BOARD_HOST is unset"
+printf '' > "$W/probe.txt"
+env -i PATH="$W/bin:$PATH" HOME="$W" IMX8MP_OUT="$W/a/out" DEQP_STAGE1="$W/a/stage1" ZEPHYR_WS="$W/a/ws" \
+	HAL_NXP_DIR="$W/a/hal" BOARD_UART="$SECRET" BOARD_HOST=x STUB_PROBE="$W/probe.txt" \
+	bash "$HERE/imx8mp-gles3-preflight.sh" --commit "$SHA" > "$W/log" 2>&1; rc=$?
+expect "unreachable board keeps the old behaviour" 0 "note /boot medium not checked: the board did not answer"
+
 if [ "$(find "$W/a" -type f | wc -l)" -eq 2 ]; then echo "  ok   read-only"
 else echo "  FAIL read-only"; fails=$((fails + 1)); fi
 
