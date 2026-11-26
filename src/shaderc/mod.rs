@@ -295,20 +295,23 @@ pub fn native_cube_enabled() -> bool {
 }
 
 /// The PowerVR's native 2D array (`gl::native_array`,
-/// docs/es3/pvr-2darray.md), default OFF until a board run says otherwise:
-/// the online compiler samples a sampler2DArray as Mesa's pco does, an
-/// ordinary 2D image whose layer is reached by the texture address override
-/// (`smp` `tao`, the layer's address in the data block, the layer count from
-/// the image word's `depth` field), and says so in the record
+/// docs/es3/pvr-2darray.md), default ON (since the compile cache key covers
+/// the switch, `tests/pvr_native_switch_cache.rs`, and `guard_sample` keeps a
+/// sample's SampleAddr group with it): the online compiler samples a
+/// sampler2DArray / sampler2DArrayShadow as Mesa's pco does, an ordinary 2D
+/// image whose layer is reached by the texture address override (`smp`
+/// `tao`, the layer's address in the data block, the layer count from the
+/// image word's `depth` field), and says so in the record
 /// (`ShcShader::native_cube` bit 1); the draw binds a twiddled layer-major
-/// copy for such a program. Off, a 2D array stays the stacked image
-/// glsl2usc's pvr_arr samples, filtered across layers. Read when a shader
-/// COMPILES.
+/// copy for such a program. Off (`pvr_set_native_array(0)`, still reachable
+/// for the host tests and the board's DEQP_PVR_NATIVE_ARRAY=0), a 2D array
+/// stays the stacked image glsl2usc's pvr_arr samples, filtered across
+/// layers. Read when a shader COMPILES.
 #[no_mangle]
 pub static mut pvr_native_array: i32 = PVR_NATIVE_ARRAY_DEFAULT;
 
 /// [`pvr_native_array`]'s value at boot.
-pub const PVR_NATIVE_ARRAY_DEFAULT: i32 = 0;
+pub const PVR_NATIVE_ARRAY_DEFAULT: i32 = 1;
 
 /// Set [`pvr_native_array`].
 #[no_mangle]
