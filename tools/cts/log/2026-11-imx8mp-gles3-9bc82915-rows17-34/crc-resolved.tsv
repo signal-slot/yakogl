@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# CRC names of results.tsv re-resolved against each entry's full filter (every case the filter begins, not only its mustpass cases): entry, token as recorded, corrected token (comma = one CRC that several cases share)
+22	crc:3ae1	dEQP-GLES3.functional.lifetime.attach.deleted_input.buffer_vertex_array
+23	crc:808d	dEQP-GLES3.functional.negative_api.shader.program_parameteri
+24	crc:30e6	dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide
+24	crc:c680	dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide
+27	dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.lowp_fragment.vec3	dEQP-GLES3.functional.shaders.builtin_functions.precision.sinh.lowp_fragment.vec3,dEQP-GLES3.functional.shaders.constant_expressions.builtin_functions.matrix.inverse_mat2_vertex
+27	crc:8c86	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_fragment.vec3
+27	crc:fc61	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_fragment.vec4
+27	crc:4794	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_vertex.vec3
+27	crc:3773	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.highp_vertex.vec4
+27	crc:db49	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_fragment.vec3
+27	crc:abae	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_fragment.vec4
+27	crc:ab85	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_vertex.vec3
+27	crc:db62	dEQP-GLES3.functional.shaders.builtin_functions.precision.smoothstep.mediump_vertex.vec4
+27	crc:e71b	dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_fragment.vec3
+27	crc:97fc	dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_fragment.vec4
+27	crc:786d	dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_vertex.vec3
+27	crc:088a	dEQP-GLES3.functional.shaders.builtin_functions.precision.tan.mediump_vertex.vec4
+27	crc:33ff	dEQP-GLES3.functional.shaders.constant_expressions.other.complex_fragment
+27	crc:0b05	dEQP-GLES3.functional.shaders.constant_expressions.other.complex_vertex
