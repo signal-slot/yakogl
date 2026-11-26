@@ -20,7 +20,8 @@ What it does (it never decides a verdict, that is for a person looking):
   2. compares that picture with <reference>/<slug>.png with glmark2-picdiff.py
      (<out>/<name>.picdiff.png) and writes <out>/<name>.sidebyside.png with
      glmark2-sidebyside.py;
-  3. finds the record's commit and prints whether it is an ancestor of --main
+  3. finds the record's commit (first meta.txt's `commit=<40-hex>` line, then
+     a `commit` file; the name's sha8 is not looked at then) and prints whether it is an ancestor of --main
      (default origin/main): yes, no or unknown. A record whose sha8 is its
      commit: the full sha from INDEX.txt or another small text file of the
      record, else git rev-parse in --repo. A record as tools/board.sh names it
@@ -109,6 +110,19 @@ def _small_texts(rec):
                 yield f.read()
 
 
+def _named_commit(rec):
+    """The 40-hex commit the record states: meta.txt `commit=`, else a `commit` file."""
+    for n, rx in (("meta.txt", r"^commit=([0-9a-f]{40})\s*$"),
+                  ("commit", r"^\s*([0-9a-f]{40})\s*$")):
+        p = os.path.join(rec, n)
+        if os.path.isfile(p) and os.path.getsize(p) <= 1 << 20:
+            with open(p, errors="replace") as f:
+                m = re.search(rx, f.read(), re.M)
+            if m:
+                return m.group(1)
+    return None
+
+
 def record_commit(rec, sha8, log, repo):
     """(commit8 or None, full sha or None, dirty, named_by_image).
 
@@ -121,6 +135,9 @@ def record_commit(rec, sha8, log, repo):
     by_image = any(re.search(r"^image_sha256=%s[0-9a-f]{56}\s*$" % sha8, t, re.M)
                    for t in texts)
     commit, dirty = None, False
+    named = _named_commit(rec)
+    if named:
+        return named[:8], named, False, by_image
     if by_image:
         with open(log, errors="replace") as f:
             con = f.read(1 << 20)
@@ -192,6 +209,8 @@ def judge(rec, ref, scene, out, repo, main):
     if rc == 2:
         return 2
     if rc:
+        if os.path.exists(png):
+            os.remove(png)  # no picture of a damaged dump is left to be judged
         print("== damaged dump: rerun the board, never patch pixels; no row")
         return 1
     crc = re.search(r"frame crc32 ([0-9a-f]{8}) agrees", dec)
@@ -372,6 +391,25 @@ def self_test():
                    "rule (c)" in o)
             expect(what + ": dirty %s" % ("named" if "dirty" in tree else "not named"),
                    ("dirty" in tree) == ("built from a dirty tree" in o))
+        # meta.txt commit= wins over the name's sha8 (image sha256)
+        for k, where in enumerate(("meta.txt", "commit")):
+            recc = os.path.join(tmp, "records", "imx8mp",
+                                "20261120-155%d-gm01-build-feedc0de" % k)
+            shutil.copytree(os.path.join(here, "record"), recc)
+            with open(os.path.join(recc, "meta.txt"), "w") as f:
+                f.write("board=imx8mp\nimage_sha256=%s\n" % img)
+                if where == "meta.txt":
+                    f.write("commit=%s\n" % head)
+            if where == "commit":
+                with open(os.path.join(recc, "commit"), "w") as f:
+                    f.write(head + "\n")
+            rc, o = run(recc, ref, "--repo", repo, "--main", "origin/main",
+                        "--out", os.path.join(tmp, "outc%d" % k))
+            rowc = next((x for x in o.splitlines() if x.startswith("| [")), "")
+            expect("sha8 differs from %s commit: commit cell from it, path keeps the name"
+                   % where, rc == 0 and rowc == "| %s | %s | records/imx8mp/%s/ | dump | %s |" % (
+                       scene, head[:8], os.path.basename(recc), PLACEHOLDER) and
+                   "ancestor of origin/main: yes" in o)
         # a damaged dump: exit 1, no row, a note to rerun
         rec3 = os.path.join(tmp, "records", "imx8mp", "20261120-1532-gm01-build-" + head[:8])
         shutil.copytree(os.path.join(here, "record"), rec3)
@@ -383,6 +421,8 @@ def self_test():
         with open(p, "w") as f:
             f.write("\n".join(lines) + "\n")
         rc, o = run(rec3, ref, "--repo", repo, "--out", os.path.join(tmp, "out3"))
+        expect("damaged dump leaves no judge.png",
+               not os.path.exists(os.path.join(tmp, "out3", "gm01-build.judge.png")))
         expect("damaged dump: exit 1, rerun, no row",
                rc == 1 and "rerun" in o and not any(x.startswith("| [") for x in o.splitlines()))
         # bad input
