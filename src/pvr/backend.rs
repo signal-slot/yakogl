@@ -1,5 +1,17 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2022-2023 Imagination Technologies Ltd.
+// SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.
+// Mesa part (MIT, Mesa 26.2.1 src/imagination/), named where used:
+// pbe_emit_words_z_only transcribes pvr_setup_emit_state
+// (pvr_arch_cmd_buffer.c) and the z-only arm of pvr_arch_job_common.c;
+// pbe_int_packmode transcribes the integer rows of pvr_pbe_format_table
+// (pvr_arch_formats.c); the texture format table follows Mesa's format
+// table and setup_pck_info (pvr_arch_tex_state.c); the FS meta word's
+// fields are those of common/pvr_iface.h; the SPM words follow
+// pvr_arch_spm.c and this core's device constants
+// common/device_info/bxs-4-64.h. The upstream part stays under its
+// licence (LICENSES/MIT.txt); our changes are Apache-2.0. See NOTICE.
 //! PowerVR BXS-4-64 command backend for YakoGL.
 //!
 //! The boundary between the GL core (`gl::draw`) and the PowerVR command
