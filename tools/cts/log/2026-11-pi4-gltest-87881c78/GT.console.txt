@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 gl_test image GT (cases 199,206,223-244) at 87881c78: the Zephyr side of the console, excerpted (README.md)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_gl_test: build 87881c78 (the record at the end or at 75 s)
+board: PM watchdog resets the SoC ~210 s after boot (tryboot -> Linux)
+V3D clock 250000000 -> 500000000 Hz (0)
+v3d_gl_test: the list 199,206,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244 (24 cases) on one context
+gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): ready: carve-out 48 MiB at phys 0x24f5000, GPU VA 0x181000..0x3100000
+# ... per-check "ok [check n]" lines, pixel dumps and negative-API GL error lines elided ...
+gl_test: case 199 es3trunc: PASS
+gl_test: case 206 es3levels: SKIP (the V3D does not sample 3D or 2D-array textures)
+gl_test: case 223 msaarbo: SKIP (GL_MAX_SAMPLES 1 < 4: 4x FBOs are off in this build, cargo feature msaa-fbo)
+# ... cases 224-242 elided (the verdict block below lists every case) ...
+gl_test: case 242 es3_precision_uint: PASS
+gl_test: divmix: 24 of 24 instances ok
+gl_test: case 243 divmix: PASS
+gl_test: case 244 w128tex: SKIP (the two-plane RGBA32 path is the GC7000's)
+gl_test: all: 1 of 21 cases failed (20 passed; 0 timed out; first failure case 228 at index 7; second failure case -1; 3 skipped, first skip case 206); precompiled hits 0, compiler runs 134
+gl_test: done
+v3d_gl_test RECORD, build 87881c78, 2 s after boot: DONE
+--- the OSAL ---
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201092 ca 0x201092 ra 0x0 qba 0x201000 qea 0x201092 ct1 ca 0x22306a ra 0x223069 qba 0x223000 qea 0x22306a
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 32 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20146688 bytes used now, 20159232 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 32 jobs ended; emitted 648, skipped 16; groups compared 9, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+--- the verdicts ---
+v3d_gl_test: case 199 PASS
+v3d_gl_test: case 206 SKIP
+v3d_gl_test: case 223 SKIP
+v3d_gl_test: case 224 PASS
+v3d_gl_test: case 225 PASS
+v3d_gl_test: case 226 PASS
+v3d_gl_test: case 227 PASS
+v3d_gl_test: case 228 FAIL
+v3d_gl_test: case 229 PASS
+v3d_gl_test: case 230 PASS
+v3d_gl_test: case 231 PASS
+v3d_gl_test: case 232 PASS
+v3d_gl_test: case 233 PASS
+v3d_gl_test: case 234 PASS
+v3d_gl_test: case 235 PASS
+v3d_gl_test: case 236 PASS
+v3d_gl_test: case 237 PASS
+v3d_gl_test: case 238 PASS
+v3d_gl_test: case 239 PASS
+v3d_gl_test: case 240 PASS
+v3d_gl_test: case 241 PASS
+v3d_gl_test: case 242 PASS
+v3d_gl_test: case 243 PASS
+v3d_gl_test: case 244 SKIP
+v3d_gl_test: 20 of 21 cases passed (2396 ms)
+v3d_gl_test: build 87881c78
+v3d_gl_test RECORD end, build 87881c78
