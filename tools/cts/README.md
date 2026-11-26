@@ -888,6 +888,16 @@ board, through the runner.
   always exits 0 — and 2 on a usage or input error.
   `mp2_p9_diff_selftest.sh` checks every class on synthetic baselines, tsv
   rows and logs. No board.
+- `mp2-p9-c3-check.sh [--notes FILE] [--diff-opt OPT]... [LOG...]` is plan
+  #405's acceptance c3 as one command: it runs `mp2-p9-diff.py --report-only`
+  over the shard logs (default `tools/cts/log/*-mp2-gles2-*/s*/shard-*.log`),
+  prints its last line and the last `mp2-p9-diff: ...` line quoted in the
+  notes file (default `docs/notes/stm32mp257f-dk-p9.md`), and ends with
+  `mp2-p9-c3: ok` or `mp2-p9-c3: failed: <what>`: the lines must be equal,
+  and when `missing` is not 0 every missing case must be on a notes line that
+  says "cause". Exit 0 ok, 1 failed, 2 usage. `mp2-p9-notes-check.py` runs
+  the same check as its c3. `mp2_p9_c3_check_selftest.sh` checks it on
+  synthetic logs and notes. No board.
 - `mp2-gltest-diff.py` is the gl_test side: `tools/cts/mp2-gltest-diff.py
   [--results RESULTS.md] [--set lib.rs] [--expected FILE] [--report-only]
   RESULT...`, a RESULT a DK gl_test UART log (`gl_test: case N <name>:
