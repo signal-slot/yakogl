@@ -1328,8 +1328,47 @@ credentials, set by the session; never in a file, a log or a commit).
    `<sha8>` the commit the images were built from; redacted before they are
    committed), the board records under the gitignored
    `records/verdin-imx95/<YYYYMMDD-HHMM>-<name>-<sha8>/`.
-7. Redaction: see below (imx95-redact-check.py)
-   <!-- placeholder: the redaction step is written by a later item -->
+7. Redaction, before anything is committed under `tools/cts/log/`. The
+   module's own U-Boot prints what the T6's Linux route never showed
+   (`printenv`'s `ethaddr`, `serial#`, `serverip`, `ipaddr`, the Toradex
+   banner's `Serial#`, the module's host name), so each console capture is
+   rewritten and then checked, in this order:
+
+   ```sh
+   python3 -I tools/cts/imx95-redact-check.py <logdir>/console
+   python3 -I tools/cts/imx95-redact-check.py --check <logdir>/console
+   python3 -I tools/cts/mali-slice-redact.py <logdir>
+   python3 -I tools/redact-diff-scan.py origin/main..HEAD
+   ```
+
+   - `imx95-redact-check.py PATH...` rewrites each file (a directory is
+     walked) in place: the values become `<redacted>`, `<serial>`, `<mac>`,
+     `<addr>`, `<addr6>`, `<uart>`, `<home>`, `<host>`, and NUL bytes are
+     removed. `--check PATH...` changes nothing: it prints `path:line:kind`
+     (kinds `env serial somhost mac addr6 addr uart home tailnet secret nul`,
+     never the value) and exits 1 on a hit, 0 when clean, 2 on a usage
+     error or a missing path. After a rewrite `--check` must be clean; a hit
+     then means a rule missed a spelling: fix the line by hand and report
+     the pattern. The UART and home rules take everything up to the next
+     whitespace, a trailing `,` included.
+   - `mali-slice-redact.py [--user NAME] SLICE...` scans every file of the
+     slice, `README.md` and `rows.tsv` included, and prints `REDACT
+     <file>:<line>: <kind>` (ipv4, tailnet, ipv6, mac, userhost, serial-path,
+     uart, usb-serial, uboot-id, ...; never the matched text). Exit 1 on a
+     hit: edit the line (or rerun `imx95-redact-check.py`), never the
+     scanner.
+   - `redact-diff-scan.py origin/main..HEAD` reads only the lines the
+     commit(s) add (ipv4, tailnet-ip, tailnet-dns, tty, mac, credential,
+     private-key) and prints `path:line: class: masked`. Exit 1 on a hit:
+     redact that line and amend the commit; the marker `redact-scan: ok` is
+     for patterns and made-up values, never for a real address or name.
+     Run it once more after the commit (`HEAD~1..HEAD`).
+
+   Their selftests are `imx95-redact-check-selftest.sh` and
+   `mali-slice-redact-selftest.sh`. A host name of the form
+   `verdin-imx95-<hex>` is caught by `imx95-redact-check.py` (somhost), not
+   by `tools/release/redaction-scan.py`, whose `som-serial` class lists only
+   the AM62P and i.MX8MP modules.
 
 8. The slice and the diff. `imx95-uart-slice.py` reads the session's
    `console/<label>.log` and `rows.tsv` and writes, in the same directory,
@@ -1346,6 +1385,21 @@ credentials, set by the session; never in a file, a log or a commit).
    python3 -I tools/cts/imx95-uart-slice.py --commit <sha> <logdir>
    python3 -I tools/cts/imx95-t6-diff.py --markdown --imx95 <logdir> [--imx95 <logdir>]...
    ```
+
+A FAT boot-files partition (S1a's route) needs `--fs fat`: the file name
+`fatload` takes is relative to the partition, so `--stage` must lie under
+`--mount` (default `/boot`). The example call, for a partition U-Boot sees
+as `0:1`:
+
+```sh
+python3 -I tools/cts/imx95-uboot-row.py --storage 0:1 --stage /boot/ --fs fat <img-dir> <labels>
+```
+
+prints `fatload mmc 0:1 0xd0000000 <LABEL>.bin` at the U-Boot side and keeps
+the full `/boot/<LABEL>.bin` in the ssh lines. The staged files are removed
+again (the `rm -f` line of each row, step 3) and the stock boot files of the
+partition stay unchanged: nothing else on it is written, renamed or listed
+in the boot command.
 
 `imx95-t6-diff.py --tsv` prints the differences as `case`, T6 result,
 iMX95 result (a Lost case reads `Lost`, no header); `imx95-gles2-analyze.sh`
