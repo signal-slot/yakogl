@@ -23,11 +23,19 @@
 # "deqp: <Status> <case>" result line is skipped; (4) mp2-p9-diff.py reads all
 # logs (its exit 1, new failures or missing cases, is this script's).
 #
-# Env: MP2_SWEEP_RUNNER the runner command (default tools/board-stm32mp2.sh;
-# RUN_BOUND=600 or more is the caller's to set for deqp), PYTHON (python3).
+# Env: MP2_SWEEP_RUNNER the runner command (default tools/board-stm32mp2.sh),
+# PYTHON (python3), RUN_BOUND (the runner's wait for the image's end; left
+# unset it becomes the dEQP lifetime, CONFIG_YAKOGL_STM32MP2_LIFETIME_S of
+# boards/stm32mp257f_dk_stm32mp257fxx_a35.conf, plus 100 s, and is printed:
+# the runner's own default of 120 s would end a 600 s run as not_back).
+# The runner's exit 5 (the board did not come back) and 7 (needs a person)
+# and SIGINT/SIGTERM stop the sweep at once: the runner's undo lines are
+# printed from the shard log and the sweep says the board needs a person. It
+# never retries a shard, resets or disarms the board itself, and runs no diff.
 # --dry-run prints every command and runs none: the shard files do not exist
 # then, so the per-shard commands are printed once with NNNN for the number.
-# Exit: 0 done, 1 the diff or a step failed, 2 usage.
+# Exit: 0 done, 1 the diff or a step failed, 2 usage, 3 stopped on runner exit
+# 5 or 7 (the board needs a person), 130/143 stopped by SIGINT/SIGTERM.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 RUNNER=${MP2_SWEEP_RUNNER:-$HERE/../board-stm32mp2.sh}
@@ -58,6 +66,18 @@ case $FIRST${LAST:-0} in *[!0-9]*) die "--first/--last take numbers" 2 ;; esac
 [ "$DRY" = 1 ] || [ -f "$BIN" ] || die "no image $BIN" 2
 [ -z "$LIST" ] || [ -f "$LIST" ] || die "no case list $LIST" 2
 [ -z "$TIMES" ] || [ -f "$TIMES" ] || die "no time table $TIMES" 2
+
+# ---- RUN_BOUND: the dEQP lifetime + 100 s unless the caller set it ----
+if [ -z "${RUN_BOUND:-}" ]; then
+    DKCONF=$HERE/../../driver/samples/zephyr/deqp/boards/stm32mp257f_dk_stm32mp257fxx_a35.conf
+    LIFE=$(sed -n 's/^CONFIG_YAKOGL_STM32MP2_LIFETIME_S=\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$DKCONF" 2>/dev/null | tail -n 1)
+    [ -n "$LIFE" ] || die "RUN_BOUND is unset and CONFIG_YAKOGL_STM32MP2_LIFETIME_S is not in $DKCONF" 2
+    RUN_BOUND=$((LIFE + 100))
+    export RUN_BOUND
+    echo "mp2-deqp-sweep: RUN_BOUND=$RUN_BOUND (lifetime $LIFE s + 100 s; RUN_BOUND unset)"
+else
+    echo "mp2-deqp-sweep: RUN_BOUND=$RUN_BOUND (from the caller)"
+fi
 
 # ---- the case list ----
 MUST=$HERE/gles2-mustpass.txt
@@ -131,6 +151,26 @@ run "$PY" -I "$HERE/mp2-deqp-shards.py" "$CASES" "${SARGS[@]}" || die "the shard
 mapfile -t IDX < <(awk -F'\t' 'NR > 1 { print $1 }' "$SH/manifest.tsv")
 [ ${#IDX[@]} -gt 0 ] || die "no shards in $SH/manifest.tsv"
 fails=0 ran=0 skipped=0
+RPID= SIG= SIGRC= LOG=
+undo_lines() {   # what the runner printed about its undo and the stop's cause
+    [ -f "$LOG" ] || return 0
+    grep -aiE 'undo|NEEDS A PERSON|left behind|disarm|^ +tools/board-stm32mp2' "$LOG" | tail -n 40 | sed 's/^/  runner: /'
+}
+stop_person() {   # stop_person <why> <exit>: the board needs a person
+    echo "mp2-deqp-sweep: STOPPED: $1" >&2
+    undo_lines >&2
+    echo "mp2-deqp-sweep: the board needs a person: nothing was retried, reset or disarmed by this sweep; read the shard log $LOG and run the undo lines above by hand. No diff was run." >&2
+    exit "$2"
+}
+on_sig() {   # on_sig <INT|TERM> <exit>: pass it to the runner (its own undo runs), then stop
+    SIG=$1; SIGRC=$2
+    if [ -z "$RPID" ]; then
+        echo "mp2-deqp-sweep: SIG$1: stopped, no runner was running" >&2; exit "$2"
+    fi
+    kill -s "$1" "$RPID" 2>/dev/null
+}
+trap 'on_sig INT 130' INT
+trap 'on_sig TERM 143' TERM
 for i in "${IDX[@]}"; do
     n=$((10#$i))
     [ "$n" -ge "$FIRST" ] || continue
@@ -146,15 +186,30 @@ for i in "${IDX[@]}"; do
         echo "mp2-deqp-sweep: shard $nnnn: slot write failed" >&2; fails=$((fails + 1)); continue
     fi
     rd=$OUT/run/shard-$nnnn
+    LOG=$log
     printf '%s run %s %s shard-%s\n' "$RUNNER" "$bin" "$rd" "$nnnn"
     # MP2_SWEEP_RUNNER may carry arguments, so it is split on purpose
     # shellcheck disable=SC2086
-    $RUNNER run "$bin" "$rd" "shard-$nnnn" > "$log" 2>&1
-    rc=$?
+    # in the background under job control (own process group, default signals)
+    # so that a signal reaches this script's trap while the runner runs
+    set -m
+    $RUNNER run "$bin" "$rd" "shard-$nnnn" > "$log" 2>&1 &
+    RPID=$!
+    set +m
+    wait "$RPID"; rc=$?
+    if [ -n "$SIG" ]; then wait "$RPID"; rc=$?; fi
+    RPID=
     if [ -d "$rd" ]; then
         find "$rd" -name console.txt -print0 | sort -z | xargs -0 -r cat >> "$log"
     fi
     ran=$((ran + 1))
+    if [ -n "$SIG" ]; then
+        stop_person "SIG$SIG during shard $nnnn (runner exit $rc)" "$SIGRC"
+    fi
+    case $rc in
+    5) stop_person "shard $nnnn: runner exit 5 (the board did not come back)" 3 ;;
+    7) stop_person "shard $nnnn: runner exit 7 (needs a person: stock boot files or the environment)" 3 ;;
+    esac
     [ "$rc" -eq 0 ] || { echo "mp2-deqp-sweep: shard $nnnn: runner exit $rc" >&2; fails=$((fails + 1)); }
 done
 echo "mp2-deqp-sweep: $ran run, $skipped skipped, $fails failed"
