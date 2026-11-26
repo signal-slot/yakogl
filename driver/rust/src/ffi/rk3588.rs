@@ -1173,7 +1173,7 @@ fn fw_up_run(
 /// with a `clean` of each section, the MCU's start, the global
 /// configuration and one `PING`. 0 when every step ran (`out->step` is
 /// `YD_T6_FW_STEP_NONE`), `-EIO` when one stopped (`out->step` says which),
-/// `-EINVAL` for a null or misaligned argument or a `gpu_len` below
+/// `-EINVAL` for a null or misaligned argument, a `timer_hz` of 0 or a `gpu_len` below
 /// `YD_T6_GPU_MAP_MIN`. The bases are those of
 /// [`yd_t6_gpu_up`], `gpu` mapped for `gpu_len` = 0x280000 bytes (the doorbells);
 /// `pool` is `pool_pages` 4 KiB pages at physical `tables_pa`, written by
@@ -1217,6 +1217,10 @@ pub unsafe extern "C" fn yd_t6_fw_up(
     use crate::gpu::mali::pgtable::{Table, PAGE};
     let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    // A CNTFRQ_EL0 of 0 is no time base: refused before any hardware write.
+    if timer_hz == 0 {
+        return -EINVAL;
+    }
     if out.is_null()
         || z1.is_null()
         || blob.is_null()
@@ -1389,6 +1393,10 @@ pub unsafe extern "C" fn yd_t6_submit(
     use crate::gpu::mali::pgtable::{Table, PAGE};
     let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay_us), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    // A CNTFRQ_EL0 of 0 is no time base: refused before any hardware write.
+    if timer_hz == 0 {
+        return -EINVAL;
+    }
     if out.is_null()
         || z1.is_null()
         || blob.is_null()
@@ -1582,6 +1590,10 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     use crate::board::nanopc_t6_submit::SubmitUp;
     let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
+    // A CNTFRQ_EL0 of 0 is no time base: refused before any hardware write.
+    if timer_hz == 0 {
+        return -EINVAL;
+    }
     if out.is_null() || z1.is_null() || blob.is_null() || mem.is_null() {
         return -EINVAL;
     }
@@ -2125,6 +2137,124 @@ mod fw_tests {
         assert_eq!(call(MAP, blob.as_ptr(), p, Some(clean_ok), &mut out), -EIO);
         assert_eq!(out.step, fwb::STEP_PARSE);
         assert_eq!(call(MAP - 1, blob.as_ptr(), p, Some(clean_ok), &mut out), -EINVAL);
+    }
+
+    #[test]
+    fn fw_up_and_osal_up_and_submit_refuse_a_zero_cntfrq_before_anything_is_written() {
+        use crate::board::nanopc_t6_submit::SubmitUp;
+        const MAP: usize = crate::board::nanopc_t6_gpu::GPU_MAP_MIN;
+        let mut pool = vec![0u8; 8192 * 2];
+        let off = pool.as_mut_ptr().align_offset(4096);
+        let p = unsafe { pool.as_mut_ptr().add(off) };
+        let bk = [YdT6FwBacking::default()];
+        let blob = [0u8; 4];
+        let sentinel = YdT6GpuUp { stop: 0xdead, ..Default::default() };
+        let fw = |hz: u32, z1: *mut YdT6GpuUp, out: *mut FwUp| unsafe {
+            yd_t6_fw_up(
+                0,
+                0,
+                0,
+                0,
+                0,
+                MAP,
+                blob.as_ptr(),
+                4,
+                bk.as_ptr(),
+                1,
+                p,
+                1,
+                0,
+                hz,
+                Some(clean_ok),
+                Some(no_delay),
+                Some(no_handover),
+                z1,
+                out,
+            )
+        };
+        let mut z1 = sentinel;
+        let mut out = FwUp { step: 0xbeef, ..Default::default() };
+        assert_eq!(fw(0, &mut z1, &mut out), -EINVAL);
+        assert_eq!((z1.stop, out.step), (0xdead, 0xbeef), "nothing written");
+        // 24 MHz, the RK3588's CNTFRQ_EL0: as before (the 4-byte blob stops at the parse)
+        assert_eq!(fw(24_000_000, &mut z1, &mut out), -EIO);
+        assert_eq!(out.step, fwb::STEP_PARSE);
+
+        let mem = YdT6SubmitMem {
+            queue: YdT6FwBacking::default(),
+            regions: [YdT6FwBacking::default(); YD_T6_SUBMIT_REGIONS],
+            vm_pool: unsafe { p.add(4096) },
+            vm_pool_pages: 1,
+            vm_tables_pa: 0,
+        };
+        let mut z1 = sentinel;
+        let mut sout = SubmitUp { step: 0xbeef, ..Default::default() };
+        let rc = unsafe {
+            yd_t6_submit(
+                0,
+                0,
+                0,
+                0,
+                0,
+                MAP,
+                blob.as_ptr(),
+                4,
+                bk.as_ptr(),
+                1,
+                p,
+                1,
+                0,
+                0,
+                &mem,
+                Some(clean_ok),
+                Some(no_delay),
+                Some(no_handover),
+                &mut z1,
+                &mut sout,
+            )
+        };
+        assert_eq!(rc, -EINVAL);
+        assert_eq!((z1.stop, sout.step), (0xdead, 0xbeef), "nothing written");
+
+        let omem = YdT6OsalMem {
+            fw: YdT6FwBacking::default(),
+            pool: p,
+            pool_pages: 1,
+            tables_pa: 0,
+            queue: YdT6FwBacking::default(),
+            ring: YdT6FwBacking::default(),
+            heap_pool: YdT6FwBacking::default(),
+            heap_chunks: YdT6FwBacking::default(),
+            carve: YdT6FwBacking::default(),
+            vm_pool: unsafe { p.add(4096) },
+            vm_pool_pages: 1,
+            vm_tables_pa: 0,
+            heap_initial_chunks: 0,
+            carve_reserved: 0,
+        };
+        let mut z1 = sentinel;
+        let mut sout = SubmitUp { step: 0xbeef, ..Default::default() };
+        let rc = unsafe {
+            yd_t6_osal_up(
+                0,
+                0,
+                0,
+                0,
+                0,
+                MAP,
+                blob.as_ptr(),
+                4,
+                0,
+                &omem,
+                Some(clean_ok),
+                Some(no_delay),
+                Some(no_handover),
+                &mut z1,
+                &mut sout,
+            )
+        };
+        assert_eq!(rc, -EINVAL);
+        assert_eq!((z1.stop, sout.step), (0xdead, 0xbeef), "nothing written");
     }
 
     #[test]
