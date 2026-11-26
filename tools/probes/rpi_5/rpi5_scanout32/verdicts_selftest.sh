@@ -64,6 +64,17 @@
 #              restore left a list word different (dlswap swap1 FAIL
 #              restore: ..., or only dlswap restore-words FAIL) -> judged
 #              FAIL, q4 no naming the stop, not incomplete
+#   dlmap*     placement after the END (selftests-s32b), on rpi5_dlmap's
+#              layout (HEADE 672, END at word 928, 257 words, 0xb0b0b0b0 fill,
+#              word 0 a bare END): every fixture carries a 'u3 walk:' line;
+#              placed at 929 with the 257-word restore skipping offset 4 ->
+#              PASS naming the END; placed inside the list (900), on the END
+#              word (928), below HEADE (32) or at word 0 -> FAIL naming
+#              [0, END] (and word 0); past the walk's mem=, or not where the
+#              walk line says -> FAIL; a snapshot short of the END -> FAIL; no
+#              walk line -> incomplete; no END (end=none, the old 256-word
+#              window) -> 'placement refused', q4 unanswered; placed although
+#              no END -> FAIL
 # `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
@@ -87,7 +98,9 @@ bash -n "$0" && ok "verdicts_selftest.sh parses (bash -n)" || bad "selftest: bas
 
 # ---- fixture logs ----------------------------------------------------------
 SNAP='u3 snapshot: list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef'
-DL='u3 dlist: placed word 32 len 12'  # fw at 672..711, ours at 32
+# the walk (selftests-s32b): END at 711, ours right after it
+WK='u3 walk: heade=672 end=711 words=40 entries=1 invalid=0 mem=4096 len=20 place=712'
+DL='u3 dlist: placed word 712 len 20'  # fw at 672..711, ours at 712
 PL='u3 plane: addr=0x3d000000 fmt=XRGB8888 pitch=7680 w=1920 h=1080'
 S1='u3 swap 1: buf A list-ptr=0x00000020 frcnt 10 -> 11'
 S2='u3 swap 2: buf B list-ptr=0x00000020 frcnt 11 -> 12'
@@ -122,31 +135,32 @@ mk() { # mk <file> <lines...>
     printf '%s\n' "$@" > "$f"
 }
 mk "$T/pass.log" '--- Zephyr rpi5_scanout32 ---' 'get_throttled 0x50020 noise' \
-    "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM" "$FS"
-mk "$T/notnamed.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" \
+    "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM" "$FS"
+mk "$T/notnamed.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" \
     'u3 named: no (channel 0 list pointer stayed 0x0)' "$RS" 'rpi5_scanout32: FAIL (our list not named)'
-mk "$T/stall.log" "$SNAP" "$DL" "$PL" "$S1" 'u3 swap 2: buf B list-ptr=0x00000020 frcnt 11 -> 11' \
+mk "$T/stall.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" 'u3 swap 2: buf B list-ptr=0x00000020 frcnt 11 -> 11' \
     "$S3" "$S4" "${LA[@]}" "$NM" "$RS" 'rpi5_scanout32: FAIL (FRCNT stalled)'
-mk "$T/noalt.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" 'u3 swap 3: buf B list-ptr=0x00000020 frcnt 12 -> 13' \
+mk "$T/noalt.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" 'u3 swap 3: buf B list-ptr=0x00000020 frcnt 12 -> 13' \
     "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
-mk "$T/restorefail.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
+mk "$T/restorefail.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
     'u3 restore: FAIL (word 7 differs)' 'rpi5_scanout32: FAIL (restore)'
-mk "$T/restorehash.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
+mk "$T/restorehash.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
     'u3 restore: PASS (hash=0x12345678)' "$TM"
-mk "$T/word.log" "$SNAP" 'u3 dlist: placed word 660 len 20' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
-mk "$T/past.log" "$SNAP" 'u3 dlist: placed word 4090 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
-mk "$T/after.log" "$SNAP" 'u3 dlist: placed word 712 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
-mk "$T/refused.log" "$SNAP" 'u3 dlist: refused no unused span of 12 words proven' "$TM"
-mk "$T/oldsnap.log" 'u3 snapshot: list-ptr=0x00000000 words=32 hash=0xdeadbeef' "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
-mk "$T/hrestore.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
+mk "$T/word.log" "$SNAP" "$WK" 'u3 dlist: placed word 660 len 20' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
+mk "$T/past.log" "$SNAP" "$WK" 'u3 dlist: placed word 4090 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
+mk "$T/after.log" "$SNAP" "$WK" 'u3 dlist: placed word 712 len 20' "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
+mk "$T/refused.log" "$SNAP" 'u3 walk: heade=672 end=711 words=40 entries=1 invalid=0 mem=4096 len=20 place=refused (no room after the END inside the list memory)' \
+    'u3 dlist: refused no unused span of 12 words proven' "$TM"
+mk "$T/oldsnap.log" 'u3 snapshot: list-ptr=0x00000000 words=32 hash=0xdeadbeef' "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$RS" "$TM"
+mk "$T/hrestore.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
     'u3 restore: PASS (heade=668 hash=0xdeadbeef)' "$TM"
-mk "$T/hrestoreok.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
+mk "$T/hrestoreok.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
     'u3 restore: PASS (heade=672 hash=0xdeadbeef)' "$TM"
-mk "$T/few.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$NM" "$RS" "$TM"
-mk "$T/cut.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}"
-mk "$T/gap.log" "$SNAP" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$RS" "$TM"
+mk "$T/few.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$NM" "$RS" "$TM"
+mk "$T/cut.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}"
+mk "$T/gap.log" "$SNAP" "$WK" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$RS" "$TM"
 mk "$T/redact.log" 'uart bridge arm.example.invalid:40001 on /dev/''tty''AMA0 for 100.64''.7.9' \
-    "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
+    "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" \
     'u3 restore: FAIL (word 7 differs; 100.64''.7.9:443 over /dev/''tty''USB3, link local fe80::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty@ttyS2.service)' \
     'rpi5_scanout32: FAIL (arm.example.invalid:40001 timed out)'
 : > "$T/empty.log"
@@ -166,7 +180,7 @@ CNTE='dlswap restore-diffs total=1 undeclared=0 skip=0 expect=1 shown=1 hwskip=4
 CNT0='dlswap restore-diffs total=0 undeclared=0 skip=0 expect=0 shown=0 hwskip=none'
 RB36S='dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=skip (swap 2, after)'
 RB36N='dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=no (swap 2, after)'
-BODY=("$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM")
+BODY=("$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM")
 mk "$T/hwnone.log" "$SNAPN" "${BODY[@]}" "$CNT0" "$RSN" "$TM"
 mk "$T/hwskip.log" "$SNAPH" "${BODY[@]}" "$D676S" "$CNTS" "$RSH" "$TM"
 mk "$T/hwexpect.log" "$SNAPE" "${BODY[@]}" "$D676E" "$CNTE" "$RSE" "$TM"
@@ -200,41 +214,41 @@ RSPICK='u3 restore: FAIL DL.LACT did not reach the new head list-ptr=0x00000000 
 RSRL='u3 restore: FAIL restore: DL.LACT not back on the firmware'\''s head list-ptr=0x00000000 want 0x00000000 (byte-equal / DL.LACT not back) hash=0xdeadbeef hwskip=none undeclared=0'
 TMF='rpi5_scanout32: FAIL (DL.LACT did not reach the new head)'
 # never picked up at swap 1: the probe stops, named no, restore FAIL
-mk "$T/lactnone.log" "$SNAP" "$DL" "$PL" "$LPF1" "$S1" \
+mk "$T/lactnone.log" "$SNAP" "$WK" "$DL" "$PL" "$LPF1" "$S1" \
     'u3 swap 2: skipped (swap 1: DL.LACT did not reach the new head)' "$NMNO" "$RLOK" "$RSPICK" "$TMF" "$FS"
 # picked up at swaps 1, 2, not at 3: the probe stops after swap 3
-mk "$T/lactno3.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$NM" "$RLOK" "$LPOK" "$S2" "$LPF3" "$S3" \
+mk "$T/lactno3.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$S1" "$NM" "$RLOK" "$LPOK" "$S2" "$LPF3" "$S3" \
     'u3 swap 4: skipped (swap 3 failed)' "$RLOK" "$RSPICK" "$TMF"
 # a probe claiming named, restore PASS and PASS although LACT never picked up
-mk "$T/lactlie.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPF1" "$LPF1" "$LPF1" "$LPF1" \
+mk "$T/lactlie.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPF1" "$LPF1" "$LPF1" "$LPF1" \
     "$RLOK" "$RLOK" "$NM" "$RS" "$TM"
 # an older probe: lact-follows (record only), no lact-pickup lines
-mk "$T/lactold.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" \
+mk "$T/lactold.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" \
     'dlswap swap1 ok ok lptrs-readback ok frcnt-advance ok settle ok lact-follows no (record only)' "$NM" "$RS" "$TM"
 # the summary line's error name stands for a missing lact-pickup line
-mk "$T/lacterr.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$S2" "$S3" "$S4" \
+mk "$T/lacterr.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$S1" "$S2" "$S3" "$S4" \
     'dlswap swap2 FAIL DL.LACT did not reach the new head lptrs-readback ok frcnt-advance ok settle ok' \
     "$NM" "$RLOK" "$RSPICK" "$TMF"
 # four swaps picked up, the final restore's DL.LACT not back
-mk "$T/rlactfail.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
+mk "$T/rlactfail.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$RLOK" "$RLF" "$NM" "$RSRL" 'rpi5_scanout32: FAIL (restore: DL.LACT not back on the firmware'\''s head)'
 # ... and a restore PASS line although it was not back, or with no restore-lact line
-mk "$T/rlactlie.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
+mk "$T/rlactlie.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$RLOK" "$RLF" "$NM" "$RS" "$TM"
-mk "$T/rlactnone.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
+mk "$T/rlactnone.log" "$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$LPOK" "$LPOK" "$LPOK" "$LPOK" "$VB1" "$VB2" "$VB3" "$VB4" \
     "$NM" "$RS" "$TM"
 # swap-1-only: picked up, its own restore's DL.LACT not back: the probe stops
-mk "$T/swap1rl.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLF" "$S1" "$VB1" \
+mk "$T/swap1rl.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$RLF" "$S1" "$VB1" \
     'u3 swap 2: skipped (swap 1: DL.LACT not back on the firmware'\''s head)' "$NM" "$RSRL" \
     'rpi5_scanout32: FAIL (restore: DL.LACT not back on the firmware'\''s head)'
 # swap-1-only, picked up and back, but no more swaps (slot B refused): incomplete as before
-mk "$T/swap1ok.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$S1" "$VB1" \
+mk "$T/swap1ok.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$RLOK" "$S1" "$VB1" \
     'u3 swap 2: skipped (slot B refused: place: target range holds a non-zero word)' "$NM" \
     'u3 restore: PASS byte-equal list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef hwskip=none' \
     'rpi5_scanout32: FAIL (slot B was refused: its words are not known free)'
 # (gap 3) swaps 1, 2 landed, swap 3 picked up but FRCNT did not advance: the
 # probe stops after swap 3 (judged, not incomplete)
-mk "$T/stopfrcnt.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" \
+mk "$T/stopfrcnt.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" \
     'dlswap swap3 FAIL FRCNT did not advance lptrs-readback ok frcnt-advance FAIL settle skip' "$LPOK" \
     'u3 swap 3: buf A list-ptr=0x00000020 frcnt 12 -> 12 judge=frcnt-stalled slot=32' "$VB3" \
     'u3 swap 4: skipped (swap 3 failed)' "$RLOK" \
@@ -245,16 +259,16 @@ mk "$T/stopfrcnt.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$L
 # the dlswap swap1 line naming it, once with only the restore-words line
 RW='dlswap restore-words FAIL word 690 want=0x00000000 got=0x12345678 hwskip=none'
 RSW='u3 restore: FAIL restore: list word differs list-ptr=0x00000000 want 0x00000000 (word 690) hash=0xdeadbeef hwskip=none undeclared=1'
-mk "$T/stoprestore.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
+mk "$T/stoprestore.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
     'dlswap swap1 FAIL restore: list word differs lptrs-readback ok frcnt-advance ok settle ok' \
     'u3 swap 2: skipped (swap 1: the run'\''s restore was not byte-equal)' "$NM" "$RSW" \
     'rpi5_scanout32: FAIL (restore: list word differs)'
-mk "$T/stoprestore2.log" "$SNAP" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
+mk "$T/stoprestore2.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$RLOK" "$RW" "$S1" "$VB1" \
     'u3 swap 2: skipped (swap 1: the run'\''s restore was not byte-equal)' "$NM" "$RSW" \
     'rpi5_scanout32: FAIL (restore: list word differs)'
 
 # vblank landing (swap-lact-probe)
-SW4=("$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4")
+SW4=("$SNAP" "$WK" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4")
 TMV='rpi5_scanout32: FAIL (swap 3 did not land in vblank (missed-frame))'
 mk "$T/vbmissed.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$(vbl 3 no missed-frame 12 14 yes ok)" "$VB4" "$NM" "$RS" "$TMV"
 mk "$T/vbmisswrap.log" "${SW4[@]}" "${LAP[@]}" "$VB1" "$VB2" "$VB3" "$(vbl 4 no missed-frame 63 1 yes ok)" "$NM" "$RS" \
@@ -271,7 +285,7 @@ mk "$T/vbyline.log" "${SW4[@]}" "${LAP[@]}" "$(vbl 1 yes landed 10 11 yes ok no 
     "$(vbl 2 yes landed 11 12 yes ok no '4000 -> 3')" "$VB3" "$(vbl 4 yes landed 63 0 yes ok no '7 -> 7')" "$NM" "$RS" "$TM"
 # no FRCNT step found at swap 1: LPTRS not written, the probe stops
 NOVB='dlswap vblank FAIL mode=vblank reads=1000000 frame_reads=0 frcnt=10 yline=500 since_us=none invblank=no'
-mk "$T/vbnostep.log" "$SNAP" "$DL" "$PL" "$NOVB" 'dlswap write FAIL no FRCNT step (vblank) within the read bound' "$RLOK" \
+mk "$T/vbnostep.log" "$SNAP" "$WK" "$DL" "$PL" "$NOVB" 'dlswap write FAIL no FRCNT step (vblank) within the read bound' "$RLOK" \
     'dlswap swap1 FAIL no FRCNT step (vblank) within the read bound lptrs-readback FAIL frcnt-advance FAIL settle skip' \
     'u3 swap 1: buf A list-ptr=0x000002a0 frcnt 10 -> 11 judge=pointer-not-latched slot=32' \
     'u3 vblank 1: landed=no why=no-vblank frcnt 0 -> 0 steps=0 invblank=no tight=miss pickup_reads=0 pickup_us=none read_us=none boundary=no since_us=none yline 0 -> 0 (yline record only)' \
@@ -279,12 +293,40 @@ mk "$T/vbnostep.log" "$SNAP" "$DL" "$PL" "$NOVB" 'dlswap write FAIL no FRCNT ste
     'u3 named: no LPTRS 0x000002a0 after swap 1, our list at word 32, first read 0x00000000 poll 0, DL.LACT pickup FAIL (want 0 lact 0)' \
     "$RSPICK" 'rpi5_scanout32: FAIL (no FRCNT step (vblank) within the read bound)'
 # ... and at swap 3, after two landed swaps (its lact-pickup FAIL line follows from it)
-mk "$T/vbnostep3.log" "$SNAP" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" "$NOVB" \
+mk "$T/vbnostep3.log" "$SNAP" "$WK" "$DL" "$PL" "$LPOK" "$S1" "$VB1" "$NM" "$RLOK" "$LPOK" "$S2" "$VB2" "$NOVB" \
     'dlswap swap3 FAIL no FRCNT step (vblank) within the read bound lptrs-readback FAIL frcnt-advance FAIL settle skip' \
     'dlswap lact-pickup FAIL polls=0 frcnt=0..0 want=42 lact=672' \
     'u3 swap 3: buf A list-ptr=0x0000002a frcnt 12 -> 13 judge=pointer-not-latched slot=32' \
     'u3 vblank 3: landed=no why=no-vblank frcnt 0 -> 0 steps=0 invblank=no tight=miss pickup_reads=0 pickup_us=none read_us=none boundary=no since_us=none yline 0 -> 0 (yline record only)' \
     'u3 swap 4: skipped (swap 3 failed)' "$RLOK" "$RSPICK" 'rpi5_scanout32: FAIL (no FRCNT step (vblank) within the read bound)'
+
+# rpi5_dlmap's layout (selftests-s32b): HEADE 672, END at word 928 (257
+# words, 8 entries before it, 7 with VALID clear), the rest a 0xb0b0b0b0
+# fill, word 0 a bare END channel 1 runs; ours right after the END at 929
+SNAPD='u3 snapshot: list-ptr=0x000002a0 heade=672 words=257 hash=0x5eed0928 hwskip=4:skip'
+wkd() { # wkd <end> <words> <place> [mem]
+    printf 'u3 walk: heade=672 end=%s words=%s entries=8 invalid=7 mem=%s len=20 place=%s' "$1" "$2" "${4:-4096}" "$3"
+}
+WKD=$(wkd 928 257 929)
+DLD='u3 dlist: placed word 929 len 20 (slot A 929, slot B 939)'
+RSD='u3 restore: PASS byte-equal except hw words off 4 (1 differed: 1 skip, 0 expect) list-ptr=0x000002a0 heade=672 words=257 hash=0x5eed0928 hwskip=4:skip'
+BODYD=("$PL" "$S1" "$S2" "$S3" "$S4" "${LA[@]}" "$NM" "$D676S" "$CNTS" "$RSD" "$TM")
+mk "$T/dlmap.log" "$SNAPD" "$WKD" "$DLD" "${BODYD[@]}"
+mk "$T/dlmapover.log" "$SNAPD" "$(wkd 928 257 900)" 'u3 dlist: placed word 900 len 20' "${BODYD[@]}"
+mk "$T/dlmapend.log" "$SNAPD" "$(wkd 928 257 928)" 'u3 dlist: placed word 928 len 20' "${BODYD[@]}"
+mk "$T/dlmapbefore.log" "$SNAPD" "$(wkd 928 257 32)" 'u3 dlist: placed word 32 len 20' "${BODYD[@]}"
+mk "$T/dlmapzero.log" "$SNAPD" "$(wkd 928 257 0)" 'u3 dlist: placed word 0 len 20' "${BODYD[@]}"
+mk "$T/dlmapmem.log" "$SNAPD" "$(wkd 928 257 929 940)" "$DLD" "${BODYD[@]}"
+mk "$T/dlmapmove.log" "$SNAPD" "$WKD" 'u3 dlist: placed word 949 len 20' "${BODYD[@]}"
+mk "$T/dlmapshort.log" 'u3 snapshot: list-ptr=0x000002a0 heade=672 words=256 hash=0x5eed0928 hwskip=4:skip' \
+    "$WKD" "$DLD" "${BODYD[@]}"
+mk "$T/dlmapnowalk.log" "$SNAPD" "$DLD" "${BODYD[@]}"
+# no END in the walk (the old 256-word bound): the window kept, refused
+SNAPW='u3 snapshot: list-ptr=0x000002a0 heade=672 words=256 hash=0x0badf00d window=noend hwskip=4:skip'
+WKN='u3 walk: heade=672 end=none words=256 entries=8 invalid=7 mem=4096 len=20 place=refused (no END within the walk, walk stopped at word 896 = 0x20000000)'
+mk "$T/dlmapnoend.log" "$SNAPW" "$WKN" 'u3 dlist: refused no END within the walk' \
+    'rpi5_scanout32: FAIL (our list was refused: no place after the firmware list'\''s END)' "$FS"
+mk "$T/dlmapnoendlie.log" "$SNAPW" "$WKN" "$DLD" "${BODYD[@]}"
 
 run() { out=$(bash "$V" "$1" 2>&1); rc=$?; }
 
@@ -293,9 +335,9 @@ run "$T/pass.log"
 want_rc 0 "pass log"
 check "verdicts: PASS (4 swaps alternating" "PASS named"
 check "q4: yes" "q4 yes"
-check "7 of 7 expected verdict lines" "all seven keys counted"
+check "8 of 8 expected verdict lines" "all eight keys counted"
 check "missing: none" "nothing missing"
-check "[8] rpi5_scanout32: feeding stopped, reset expected" "feeding stopped printed next to PASS"
+check "[9] rpi5_scanout32: feeding stopped, reset expected" "feeding stopped printed next to PASS"
 check "frcnt 62 -> 1" "the wrapped FRCNT swap prints"
 nope "get_throttled" "noise lines are not verdict lines"
 nope "FAIL" "no FAIL in the pass output"
@@ -357,9 +399,9 @@ run "$T/cut.log"
 want_rc 1 "cut log"
 check "verdicts: incomplete" "cut: incomplete"
 check "q4: unanswered" "cut: q4 unanswered"
-check "4 of 7 expected verdict lines" "cut: four keys seen"
+check "5 of 8 expected verdict lines" "cut: five keys seen"
 check "missing: u3 named u3 restore rpi5_scanout32 terminal" "cut: missing lines named"
-check "[4] u3 swap 4: buf B" "cut: the stop point is the last swap"
+check "[5] u3 swap 4: buf B" "cut: the stop point is the last swap"
 check "the image stopped there" "cut: stop claimed"
 if grep -q '^verdicts: PASS\|^verdicts: FAIL' <<< "$out"; then bad "cut names a verdict"; else ok "cut names no verdict"; fi
 run "$T/few.log"
@@ -405,7 +447,7 @@ check "firmware list restored byte-equal)" "hwskip=none: plain byte-equal PASS"
 run "$T/hwskip.log"
 want_rc 0 "4:skip, word 676 changed"
 check "restored byte-equal except hw words off 4 (hwskip=4:skip))" "skip: PASS names the words left out"
-check "[6] u3 restore: PASS byte-equal except hw words off 4" "skip: the restore line is shown"
+check "[7] u3 restore: PASS byte-equal except hw words off 4" "skip: the restore line is shown"
 run "$T/hwexpect.log"
 want_rc 0 "4:expect, word 676 changed"
 check "except hw words off 4 (hwskip=4:expect)" "expect: PASS names the expected word"
@@ -567,6 +609,48 @@ want_rc 3 "gap 3: swap 1's restore-words FAIL without a dlswap swap1 line"
 check "the probe stopped at swap 1's restore: dlswap restore-words FAIL" "gap 3 restore: the restore-words line names the stop"
 run "$T/swap1ok.log"
 want_rc 1 "gap 3: swap-1-only with no failed swap or restore line stays incomplete"
+
+# ---- placement after the END (selftests-s32b, rpi5_dlmap's layout) ----------
+run "$T/dlmap.log"
+want_rc 0 "dlmap: placed at 929, after the END at 928"
+check "our list named at word 929 after the firmware list's END at word 928 (heade 672)" "dlmap: PASS names the END"
+check "except hw words off 4 (hwskip=4:skip))" "dlmap: the 257-word restore skips entry offset 4"
+check "[2] u3 walk: heade=672 end=928 words=257" "dlmap: the walk line is shown"
+run "$T/dlmapover.log"
+want_rc 3 "dlmap: placed inside the firmware list"
+check "placed word 900 is not after the firmware list's END at word 928 (overlaps [0, 928])" "dlmap overlap: named"
+check "placed [900,920) overlaps the firmware list [672,929)" "dlmap overlap: the span named"
+run "$T/dlmapend.log"
+want_rc 3 "dlmap: placed on the END word"
+check "placed word 928 is not after the firmware list's END at word 928" "dlmap END word: named"
+run "$T/dlmapbefore.log"
+want_rc 3 "dlmap: placed below HEADE (zero words there are not free)"
+check "placed word 32 is not after the firmware list's END at word 928 (overlaps [0, 928])" "dlmap before: named"
+run "$T/dlmapzero.log"
+want_rc 3 "dlmap: placed at word 0"
+check "placed at word 0 (channel 1's bare END)" "dlmap word 0: named"
+check "placed word 0 is not after the firmware list's END" "dlmap word 0: inside [0, END]"
+run "$T/dlmapmem.log"
+want_rc 3 "dlmap: past the list memory"
+check "placed [929,949) runs past the list memory (mem=940)" "dlmap mem: named"
+run "$T/dlmapmove.log"
+want_rc 3 "dlmap: dlist and walk disagree"
+check "u3 dlist placed word 949 len 20, the walk line place=929 len=20" "dlmap move: named"
+run "$T/dlmapshort.log"
+want_rc 3 "dlmap: snapshot short of the END"
+check "snapshot words=256 does not cover the walked list 672..928 (257 words, END included)" "dlmap short: named"
+run "$T/dlmapnowalk.log"
+want_rc 1 "dlmap: no walk line"
+check "missing: u3 walk" "dlmap no walk: the walk line is required"
+run "$T/dlmapnoend.log"
+want_rc 3 "dlmap: no END found"
+check "verdicts: FAIL (placement refused: no END within the walk)" "dlmap no END: placement refused"
+check "q4: unanswered (placement refused)" "dlmap no END: q4 unanswered"
+check "missing: none" "dlmap no END: nothing more required"
+run "$T/dlmapnoendlie.log"
+want_rc 3 "dlmap: placed although no END"
+check "placed at word 929 although the walk found no END (nothing is known free)" "dlmap no END placed: named"
+check "placed at word 929 although the walk line refused the placement" "dlmap no END placed: the refusal named"
 
 if [ $fail -eq 0 ]; then
     echo "verdicts_selftest: all $nok checks passed"
