@@ -224,10 +224,11 @@ vivante rows). The first matching line of the map decides; 0 cases are unclassif
 
 | Cause id | Host-predicted | Board-only | Total | Issue named in the tree |
 |---|---:|---:|---:|---|
-| `rc1-int-color-rt` | 268 | 7 | 275 | #335, #355 |
+| `rc1-int-color-rt` | 233 | 7 | 240 | #335, #355 |
 | `rc8-blit-msaa` | 94 | 56 | 150 | #339 |
 | `gc-rg-int-attachment` | 0 | 116 | 116 | none |
-| `rc14-mrt-draw-buffers` | 72 | 8 | 80 | none |
+| `gc-int64-mrt-beside` (64-bit integer target beside another draw buffer, `fragment_out`) | 63 | 0 | 63 | none |
+| `rc14-mrt-draw-buffers` | 44 | 8 | 52 | none |
 | `gc-16f-readback` | 0 | 14 | 14 | none (fixed on main by `8428875e`) |
 | `gc-16f-rgb16f-tex` | 0 | 13 | 13 | none (fixed on main by `c558647b`) |
 | `gc-16f-attach-n` | 0 | 12 | 12 | none (fixed on main by `c558647b`) |
