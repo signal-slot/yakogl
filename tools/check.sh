@@ -2210,6 +2210,13 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)"
 # through glCompileShader / glLinkProgram on the PowerVR online compiler.
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_sglr_shaders.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_sglr_shaders
+# A cube face rendered into in the open frame for another framebuffer, then
+# sampled by a native-cube program (dEQP-GLES3 texture.specification, fbo):
+# the frame is submitted and the twiddled copy made from what was drawn; a
+# feedback-loop cube keeps the stacked image. Compiles to nothing under
+# report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_cube_rt.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_cube_rt
 # The six ES 3.0 ETC2/EAC names the GL core decodes at upload (docs/notes/
 # etc2-eac.md): each name accepted by glCompressedTexImage* and stored as the
 # decoder's values in the class the design gives it, the compressed format
