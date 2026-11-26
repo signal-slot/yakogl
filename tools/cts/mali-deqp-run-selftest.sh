@@ -29,7 +29,7 @@ E2E=$HERE/testdata/mali-deqp-e2e
 FIX=$HERE/testdata/mali-deqp/runner-percase
 RUN=$HERE/mali-deqp-run.sh
 TALLY=$HERE/mali-deqp-tally.py
-EXPECT=25
+EXPECT=30
 base=${TMPDIR:-$REPO/build}
 mkdir -p "$base"
 tmp=$(mktemp -d "$base/mali-deqp-run-selftest-XXXXXX")
@@ -174,6 +174,20 @@ tally --tally "$tmp/slices/lk" > "$tmp/lk.txt" 2> /dev/null
 check "the tally gives the link refusals the cause 'refused, link: <why>', the varying's name left out" \
   bash -c "grep -qE '^cause Fail +1  refused, link: a Mali link whose stages place a varying at different offsets is not lowered yet\$' '$tmp/lk.txt' &&
     grep -qE '^cause Fail +1  refused, link: Mali link: .*\(a back-end defect\)\$' '$tmp/lk.txt'"
+
+echo "mali-deqp-run-selftest: shaders.tsv keeps the shader sources of refused cases only"
+SK=$HERE/testdata/mali-deqp/shaders
+runner_env env FAKE_SCENARIO="$SK/scenario.tsv" MALI_DEQP_MUSTPASS="$SK/mustpass.txt" RAW_DIR="$tmp/raw-sk" \
+  bash "$RUN" --build "$tmp/build" --rows 1-1 --tree "$SK/tree.txt" --session smoke --out "$tmp/slices/sk" > "$tmp/out-sk.txt" 2>&1
+SH=$tmp/slices/sk/shaders.tsv
+check "shaders.tsv is written, with its .license" test -s "$SH" -a -f "$SH.license"
+check "the refused case's vertex shader is kept, one line, newlines/tabs/backslashes escaped" \
+  grep -qxF -- "$(printf 'dEQP-GLES2.sk.refused\tvertex\t%s' '#version 100\nattribute highp vec4 a_position;\nvoid main()\n{\n\tgl_Position = a_position / 2.0;\t// a \\ b\n}\n')" "$SH"
+check "the passing case's shader is not kept" bash -c "! grep -q 'sk.passing' '$SH' && [ \$(wc -l < '$SH') = 2 ]"
+check "refusals.tsv names the refused case only" \
+  bash -c "[ \$(grep -c '^dEQP-GLES2.sk' '$tmp/slices/sk/refusals.tsv') = 1 ] && grep -q '^dEQP-GLES2.sk.refused' '$tmp/slices/sk/refusals.tsv'"
+check "the tally and the cover check take the slice with shaders.tsv" \
+  bash -c "cd '$tmp/repo' && python3 -I '$TALLY' --tally --no-git '$tmp/slices/sk' && python3 -I '$TALLY' --check-cover --no-git '$SK/mustpass.txt' '$tmp/slices/sk'"
 
 total=$((passed + failed))
 if [ "$failed" -ne 0 ] || [ "$total" -ne "$EXPECT" ]; then
