@@ -7,9 +7,10 @@
 //!
 //! Measured on the V3D host back end (job builder faked as in
 //! es3_r8_readback.rs, whose "GPU" here also fills an untyped RGBA8 target
-//! with the clear's `rgba8` word). See the results in the tests below: the
-//! plain tests pin today's bytes, the `#[ignore]`d ones state the ES 3.0
-//! bytes.
+//! with the clear's `rgba8` word). The store keeps the clear's green; since
+//! `read_pixels` reads a channel the attachment's format lacks as 0 (alpha
+//! 1), the tests below state the ES 3.0 bytes (they pinned the stored green
+//! until then).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_r8_readback
@@ -634,12 +635,9 @@ mod trampolines {
         px
     }
 
-    const NOTE: &str = "docs/notes/v3d-fbo-blit.md 3.2 (G4): GL core read_pixels returns the stored RGBA8 bytes";
+    const NOTE: &str =
+        "docs/notes/v3d-fbo-blit.md 3.2 (G4): read_pixels reads the channels an R8 image lacks as 0, 0, 1";
 
-    /// A clear of (1, 1, 0, 1) of an R8 image: today green is stored and read.
-    fn clear_r8(texture: bool) {
-        assert!(probe(GL_R8, texture).iter().all(|p| *p == [255, 255, 0, 255]));
-    }
     /// ES 3.0: an R8 image reads (r, 0, 0, 1).
     fn clear_r8_es(texture: bool) {
         let px = probe(GL_R8, texture);
@@ -652,20 +650,10 @@ mod trampolines {
     }
 
     #[test]
-    fn r8_renderbuffer_clear_reads_the_stored_green_today() {
-        clear_r8(false);
-    }
-    #[test]
-    fn r8_texture_clear_reads_the_stored_green_today() {
-        clear_r8(true);
-    }
-    #[test]
-    #[ignore = "G4: GL core read_pixels returns RGBA8 as stored (plan #186); docs/notes/v3d-fbo-blit.md 3.2"]
     fn r8_renderbuffer_clear_reads_r_0_0_1() {
         clear_r8_es(false);
     }
     #[test]
-    #[ignore = "G4: GL core read_pixels returns RGBA8 as stored (plan #186); docs/notes/v3d-fbo-blit.md 3.2"]
     fn r8_texture_clear_reads_r_0_0_1() {
         clear_r8_es(true);
     }
@@ -693,20 +681,10 @@ mod trampolines {
     }
 
     #[test]
-    fn r8_renderbuffer_blit_from_default_leaves_the_stored_green_today() {
-        blit_check(GL_R8, false, [255, 255, 0, 255]);
-    }
-    #[test]
-    fn r8_texture_blit_from_default_leaves_the_stored_green_today() {
-        blit_check(GL_R8, true, [255, 255, 0, 255]);
-    }
-    #[test]
-    #[ignore = "G4: the unblitted part of an R8 image reads green 255 (plan #186); docs/notes/v3d-fbo-blit.md 3.2"]
     fn r8_renderbuffer_blit_from_default_reads_r_0_0_1() {
         blit_check(GL_R8, false, [255, 0, 0, 255]);
     }
     #[test]
-    #[ignore = "G4: the unblitted part of an R8 image reads green 255 (plan #186); docs/notes/v3d-fbo-blit.md 3.2"]
     fn r8_texture_blit_from_default_reads_r_0_0_1() {
         blit_check(GL_R8, true, [255, 0, 0, 255]);
     }

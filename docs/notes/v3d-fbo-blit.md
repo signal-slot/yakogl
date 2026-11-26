@@ -175,6 +175,13 @@ read-back (or in the clear), per `AttachmentBits`. Host test with the real
 GL core: clear an R8 renderbuffer with (1, 1, 0, 1), read RGBA/UNSIGNED_BYTE,
 expect (255, 0, 0, 255); the same for a blit into R8 of a part of the image.
 
+Status: `read_pixels` now reads every channel the colour attachment's
+format lacks (R8, RG8, RGB8, RGB565: `renderbuffer_bits` / `texture_bits`)
+as 0, alpha 1, on its unsigned-byte path as the float path already did.
+Host tests: `tests/es3_r8_readback.rs` (the clear and blit reads above, no
+longer `#[ignore]`d) and `tests/es3_narrow_fb_gc.rs` (GC7000UL). The three
+rows have not been re-run on a board.
+
 ### 3.3 G2, G5: sRGB (29 rows)
 
 The conversion cases and the six `default_framebuffer.srgb8_alpha8_*` rows are

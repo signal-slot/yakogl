@@ -502,6 +502,16 @@ const COLOUR: [(GLenum, &str); 9] = [
     (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8"),
 ];
 
+/// What a zero-filled, untouched image of `f` reads: 0, 0, 0, 0, alpha 255
+/// where the format has no alpha (ES 3.0 4.3.2).
+fn zeros(f: GLenum) -> [u8; 4] {
+    if matches!(f, GL_R8 | GL_RG8 | GL_RGB8 | GL_RGB565) {
+        [0, 0, 0, 255]
+    } else {
+        [0; 4]
+    }
+}
+
 fn linear(f: GLenum) -> GLenum {
     if f == GL_SRGB8_ALPHA8 {
         GL_RGBA8
@@ -535,7 +545,7 @@ fn resolve_per_colour_format() {
         assert!(PENDING.lock().unwrap().is_empty(), "{name}: the blit waited for the 4x job");
         let px = pixels(dst.fb);
         assert!(px.iter().all(|p| *p == px[0]), "{name}: one colour");
-        assert!(px[0] != [0; 4], "{name}: resolved, not zero: {:?}", px[0]);
+        assert!(px[0] != zeros(f), "{name}: resolved, not zero: {:?}", px[0]);
         if matches!(f, GL_RGBA8 | GL_SRGB8_ALPHA8) {
             assert_eq!(px[0], RESOLVED, "{name}");
         }
@@ -588,7 +598,7 @@ fn rectangle_errors_per_colour_format() {
         assert_eq!(blit(src.fb, dst.fb, FULL, [0, 8, 8, 0]), GL_INVALID_OPERATION, "{name} mirrored y");
         assert_eq!(PENDING.lock().unwrap().len(), 1, "{name}: a refused blit waits for nothing");
         PENDING.lock().unwrap().clear();
-        assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "{name}: no copy");
+        assert!(pixels(dst.fb).iter().all(|p| *p == zeros(f)), "{name}: no copy");
     }
 }
 
@@ -604,9 +614,9 @@ fn sub_rectangle_per_colour_format() {
         assert_eq!(blit(src.fb, dst.fb, region, region), GL_NO_ERROR, "{name}");
         for (i, p) in pixels(dst.fb).iter().enumerate() {
             if inside(i, region) {
-                assert!(*p != [0; 4], "{name}: pixel ({}, {}) resolved", i % 8, i / 8);
+                assert!(*p != zeros(f), "{name}: pixel ({}, {}) resolved", i % 8, i / 8);
             } else {
-                assert_eq!(*p, [0; 4], "{name}: pixel ({}, {}) untouched", i % 8, i / 8);
+                assert_eq!(*p, zeros(f), "{name}: pixel ({}, {}) untouched", i % 8, i / 8);
             }
         }
     }
