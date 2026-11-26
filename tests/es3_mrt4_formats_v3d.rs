@@ -1021,7 +1021,9 @@ fn rt3_alone_sets_the_tile_bpp() {
 /// glReadBuffer(GL_COLOR_ATTACHMENT3) + glReadPixels reads RT 3's own
 /// memory, at its address and stride, whatever the format: with the memory
 /// seeded after the clear (this job builder draws nothing), the bytes of an
-/// RGBA8-held and sRGB target come back as they are.
+/// RGBA8-held and sRGB target come back as they are, except the channels the
+/// format lacks, which read 0 (alpha 255) whatever the byte holds (ES 3.0
+/// 4.3.2).
 #[test]
 fn readback_of_attachment_3_reads_rt3s_memory_as_bytes() {
     let _g = rig();
@@ -1031,7 +1033,19 @@ fn readback_of_attachment_3_reads_rt3s_memory_as_bytes() {
     {
         let r = run(fm.gl, fm.class);
         assert_eq!(r.read_error, GL_NO_ERROR, "{}", fm.name);
-        assert_eq!(r.read[..r.seeded.len()], r.seeded[..], "{}: the bytes of RT 3", fm.name);
+        let channels = match fm.name {
+            "R8" => 1,
+            "RG8" => 2,
+            "RGB565" => 3,
+            _ => 4,
+        };
+        let mut want = r.seeded.clone();
+        for px in want.as_chunks_mut::<4>().0 {
+            for (ch, b) in px.iter_mut().enumerate().skip(channels) {
+                *b = if ch == 3 { 255 } else { 0 };
+            }
+        }
+        assert_eq!(r.read[..want.len()], want[..], "{}: the bytes of RT 3", fm.name);
     }
 }
 

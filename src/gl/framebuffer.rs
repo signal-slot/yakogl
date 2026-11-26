@@ -3294,8 +3294,10 @@ pub unsafe fn read_pixels(
     let int_layout = gles_surf_int_layout(fmt);
     let own = fb_target_channel_mask_n(c, 0);
     /* the attachment's channel widths where its format lacks some of the
-     * four a float surface holds */
-    let float_bits = if float_target && c.bound_framebuffer != 0 {
+     * four a float or RGBA8 surface holds (R8, RG8, RGB8 and RGB565 are
+     * kept as RGBA8888 texels, `renderbuffer_surf_format`); all four 0 is
+     * an image whose bits are not known, read as stored */
+    let absent_bits = if int_layout.is_none() && c.bound_framebuffer != 0 {
         c.framebuffer_ref(c.bound_framebuffer).map(|fb| &fb.color).and_then(|a| match a.type_ {
             GL_RENDERBUFFER => c.renderbuffer_ref(a.name).map(|rb| renderbuffer_bits(rb.internalformat).rgba),
             GL_TEXTURE => c.texture_ref(a.name).map(|t| texture_bits(t).rgba),
@@ -3303,7 +3305,8 @@ pub unsafe fn read_pixels(
         })
     } else {
         None
-    };
+    }
+    .filter(|b| b.contains(&0) && b.iter().any(|&n| n != 0));
     let accepted = match int_layout {
         Some(l) => format == GL_RGBA_INTEGER && type_ == if l.signed { GL_INT } else { GL_UNSIGNED_INT },
         None => {
@@ -3426,7 +3429,7 @@ pub unsafe fn read_pixels(
             io_failed |= !read_float_row(ops, m, cpu, src_off, fmt, count, o, type_);
             /* a format without a channel reads 0 there (alpha: 1), whatever the
              * RGBA16F storage holds */
-            if let Some(bits) = float_bits.filter(|b| b.contains(&0)) {
+            if let Some(bits) = absent_bits {
                 for px in o.chunks_exact_mut(out_bpp) {
                     for ch in (0..4).filter(|&ch| bits[ch] == 0) {
                         if type_ == GL_FLOAT {
@@ -3485,6 +3488,17 @@ pub unsafe fn read_pixels(
                 px.swap(0, 2);
                 if opaque {
                     px[3] = 0xff;
+                }
+            }
+        }
+        /* ES 3.0 4.3.2: a channel the attachment's format lacks reads 0 (alpha:
+         * 1), whatever the RGBA8 store's byte there holds -- the G and B a
+         * plain-colour draw or clear left in an R8 / RG8 buffer, the alpha byte
+         * of a zero-filled RGB8 / RGB565 renderbuffer no draw writes */
+        if let Some(bits) = absent_bits {
+            for px in o[..count * 4].as_chunks_mut::<4>().0 {
+                for ch in (0..4).filter(|&ch| bits[ch] == 0) {
+                    px[ch] = if ch == 3 { 255 } else { 0 };
                 }
             }
         }
