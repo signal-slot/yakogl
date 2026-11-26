@@ -595,12 +595,18 @@ No entry exceeds the planner's 480 s risk flag (0.8 x the 600 s window); the lar
 
 Order and reasons:
 - **Run 1, `rows14-16`, alone:** the shortest slice (blend `fbo_srgb`); it proves the image, the slice commit and the
-  route before a long one.
-- **Runs 2 and 3, the 3d filtering slices** (`rows58-61`, then `rows62-67`): their per-case rate (22 s) is
+  route before a long one. Expected (host prediction at `05769bf2`): no hang, abort or refusal; nearly all
+  cases Fail by image compare (the sRGB bit written with its mask bit set).
+- **Runs 2 and 3, the 3d filtering slices** (`rows58-61`, then `rows62-67`): their per-case rate (22-25 s) is
   assumed from the AM62P, not measured, and these two hold the entries nearest the risk flag. They go early so a
-  watchdog end shows while the rest of the plan can still change.
-- **Runs 4 and 5** (`rows95-107`, `rows123-128`): the longest and the ubo slice, both flagged by the plan as
-  worth an early look. **Runs 6-12:** the rest, in row order.
+  watchdog end shows while the rest of the plan can still change. Expected (host prediction at `05769bf2`): no
+  GPU hang; only entries 58-66 (rows59-67) may end in a WDOG1 reset, by run time alone, entry 59 the worst
+  case at about 500 s.
+- **Runs 4 and 5** (`rows95-107`, `rows123-128`): the longest and the ubo slice. Run entries 95 and 122-127 as
+  normal entries: no hang is expected (host prediction at `05769bf2`). If one hangs, the console scan names the
+  last case (ubo: compare with `block_read`; entry 95: mip level >= 1 of a `_3d` case).
+- **Entry 54** (unmeasured texture entry, in run 6, `rows52-57`): run it early in its slice; its measured time
+  rescales the run-time guesses for the other texture entries. **Runs 6-12:** the rest, in row order.
 - One session holds the board at a time; run the slices one after another, each with `RUN_BOUND=800`.
 
 Stop rule: a row that ends `board.sh` rc 5 (`the board did not come back`) stops the chain. Stop the session
@@ -775,13 +781,21 @@ Rules that hold for every step:
    which is what `TREE_ROWS` takes. `risk` is `RISK` when the estimate passes 0.8 x 600 s (`--margin`,
    `--window`, `--scale` change it). The rates are the Pi 4 record's where measured and otherwise assumed from
    the table header; the GC7000UL/V3D ratio is unmeasured, so the figures order the work, they are not limits.
-   Exit 1 with `WARNING:` on stderr when the table and the mustpass list disagree. The host pre-triage expects
-   hangs on entries 13-15, 57, 95 and 122-127 and watchdog ends on 58-60: keep those out of the first slices
-   and run them last, in small ranges. Measured, none of the 48 recorded entries hung or ran out its window,
+   Exit 1 with `WARNING:` on stderr when the table and the mustpass list disagree. Expected (host prediction at
+   `05769bf2`; the slices will confirm): no hang, abort or refusal on entries 13-15 (nearly all of the ~1,150
+   `fbo_srgb` cases Fail by image compare: `pe_logic_op_srgb`, `src/vivante/backend.rs:718-728`, writes the sRGB
+   bit with its mask bit set), 51 (`shaders.uniform_block`: 118/118 Pass; a NoResult there most likely means
+   `texture_functions` hung earlier in the same entry), 57, 95, 117-121 (`transform_feedback`), 122-127 (`ubo`)
+   and 131-132 (`vertex_array_objects`, `vertex_arrays`); run them as normal entries. Nothing in `src/vivante`,
+   `driver` or `src/gl` points to a GPU hang in `texture.filtering.2d_array` and `3d` (entries 57-66); only
+   entries 58-66 may end in a WDOG1 (600 s) reset, by run time alone, entry 59 the worst case at about 500 s
+   (an estimate that assumes 22-25 s per `filtering.3d` case). Entries 58-60 contain no mipmap filter. If entry
+   95 or one of 122-127 hangs anyway, the console scan names the last case: for `ubo` compare it first with
+   `block_read`, for entry 95 with mip level >= 1 of a `_3d` case. Run entry 54 (an unmeasured texture entry)
+   early in its slice: its measured time rescales the run-time guesses for the other texture entries. Measured, none of the 48 recorded entries hung or ran out its window,
    and the estimates were high rather than low for them (`rows35-51` ran 45-105 s an entry where the planner
-   said 106-298 s). None of the RISK-flagged entries has run, so those expectations are still open: run a small
-   range of them first (`TREE_ROWS=13-15` is the nearest unrun one: 450 + 250 + 483 = 1,183 mustpass cases,
-   the rest of `fragment_ops.blend.fbo_srgb`).
+   said 106-298 s). None of the RISK-flagged entries has run, so those expectations are still open (`TREE_ROWS=13-15` is the
+   nearest unrun one: 450 + 250 + 483 = 1,183 mustpass cases, the rest of `fragment_ops.blend.fbo_srgb`).
 
 7. **Preflight** (read-only; no network, no board):
    ```sh
@@ -853,7 +867,7 @@ Rules that hold for every step:
     row, move its run directories (`e<NN>` and `e<NN>-p<page>`) out of `$OUT` first and say so in the README.
     Scan the capture:
     ```sh
-    python3 -I tools/cts/imx8mp-console-scan.py --watch 13-15,57,58-60,95,122-127 \
+    python3 -I tools/cts/imx8mp-console-scan.py --watch 58-66 \
       $(ls -d "$OUT"/*/ | grep -v -e '-p[0-9]\+-[0-9a-f]\{8\}/$')
     ```
     The arguments are files or run directories (a directory means its `console.txt`, else `console.ts`, else
