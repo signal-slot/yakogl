@@ -1,0 +1,38 @@
+MESS:00:00:07.386299:0: Loaded 'yakogl-S07.bin' to 0x200000
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 87881c78
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.*'
+v3d_deqp: case #0 P 495ms k2/9 c20531/20624 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.scalar
+v3d_deqp: case #1 P 730ms k2/9 c20665/21229 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.vec2
+v3d_deqp: case #2 P 1247ms k2/9 c20796/21391 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.vec3
+v3d_deqp: case #3 P 3553ms k2/9 c20927/21653 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.vec4
+
+DONE!
+
+Test run totals:
+  Passed:        4/4 (100.0%)
+  Failed:        0/4 (0.0%)
+  Not supported: 0/4 (0.0%)
+  Warnings:      0/4 (0.0%)
+  Waived:        0/4 (0.0%)
+deqp: done: 4 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 4 cases begun, 4 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.reflect.highp_fragment.*'
+  4 cases in 6030 ms, record at 6 s after boot, reset at ~250 s
+  totals: P 4  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 4 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 4 cases begun, 4 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9; slowest #3 3555 ms
+  carve-out (KiB, of 48636): after #0 20531, last 20927, high-water 21653
+  jobs: slow in 0 cases; no job hung or timed out
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPP
+v3d_deqp: build 87881c78 DONE, all passed: 4 cases, P 4 F 0 R 0 N 0 other 0
