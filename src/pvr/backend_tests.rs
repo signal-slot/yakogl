@@ -6075,12 +6075,19 @@ fn integer_targets_refuse_partial_masks_and_company() {
 /// (`shc_mixed_out_layout`, the compiler's walk) are the ones the
 /// end-of-tile emit and the frame load use for each attachment
 /// ([`attachment_out_reg`], [`surf_out_dwords`]): every colour format that
-/// has a per-target key takes as many registers either way.
+/// has a per-target key takes as many registers either way -- but RGB10_A2,
+/// which `target_key` keys as an RGBA8 slot while the PowerVR accumulates it
+/// in two dwords of halves: never drawn in a mix ([`REFUSE_RGB10A2_MRT`]).
 #[test]
 fn a_mixs_target_keys_take_the_emits_registers() {
     use crate::target_key::{gles_surf_target_key, shc_target_key_dwords};
     let mut keyed = 0;
     for fmt in 0..=u8::MAX {
+        if fmt == GLES_SURF_RGB10_A2 {
+            assert_eq!(gles_surf_target_key(fmt).and_then(shc_target_key_dwords), Some(1));
+            assert_eq!(surf_out_dwords(fmt), 2);
+            continue;
+        }
         if let Some(k) = gles_surf_target_key(fmt) {
             keyed += 1;
             assert_eq!(shc_target_key_dwords(k), Some(surf_out_dwords(fmt)), "{}", gles_surf_name(fmt));
@@ -6685,7 +6692,8 @@ fn surf_out_dwords_holds_the_pinned_target_key_counts() {
         (GLES_SURF_RGBA32I, 4),
         (GLES_SURF_RGBA32UI, 4),
         (GLES_SURF_RGB10_A2UI, 1),
-        (GLES_SURF_RGB10_A2, 1),
+        /* its halves, as Mesa's R10G10B10A2_UNORM (pco_nir_pvfio.c:103-104) */
+        (GLES_SURF_RGB10_A2, 2),
     ];
     for &(fmt, dwords) in PINNED {
         assert_eq!(surf_out_dwords(fmt), dwords, "{}", gles_surf_name(fmt));
@@ -6730,6 +6738,65 @@ fn an_srgb_frame_clears_linear_halves_and_the_pbe_encodes_them() {
     let (k, _) = rig.kicks().last().cloned().expect("a kick");
     assert_eq!((k.frag.pbe_word[0][0] >> 4) & 1, 1, "REG_WORD0 gamma");
     assert_eq!((k.frag.pds_bgnd[0] & 0xffff_ffff) as u32, bg2, "the two-dword background program");
+}
+
+/// A frame into an RGB10_A2 target: the sRGB target's frame without the
+/// gamma -- cleared by a quad through the two-dword clear program with the
+/// colour as clamped halves, the two-dword background program, and the
+/// end-of-tile emit A2R10B10G10 (Mesa's FORMAT(R10G10B10A2_UNORM,
+/// A2R10B10G10, F16), pvr_arch_formats.c:223), normalised, F16 per channel,
+/// with no `gamma` in REG_WORD0.
+#[test]
+fn an_rgb10a2_frame_clears_halves_and_the_pbe_packs_a2r10b10g10() {
+    let rig = Rig::new();
+    let mut d = rig.draw(0);
+    d.target_format = GLES_SURF_RGB10_A2;
+    d.num_targets = 1;
+    d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format: GLES_SURF_RGB10_A2, out_shift: 0 };
+    d.clear_rgba = [0.2, 1.5, -0.5, 1.0];
+    assert_eq!(draw(&d), 0);
+    let (b, fl) = (rig.b(), rig.fbload());
+    let ld = &fl.load_draw;
+    assert_eq!((ld.fs_usc_gpu, ld.fs_uniform_dwords), (b.clear_fs2.gpu, 2), "the two-dword clear");
+    let h = |v: f32| super::f32_to_f16_bits(v);
+    assert_eq!(fl.clear_pack, [h(0.2) | h(1.0) << 16, h(0.0) | h(1.0) << 16, 0, 0], "clamped halves");
+    let bg2 = b.bg_kick2_off;
+    assert_eq!(pvr_backend_flush(), 0);
+    let emits = rig.eot_emits();
+    let w1 = emits.last().expect("an end-of-tile program")[1] as u64;
+    assert_eq!((w1 >> 7) & 0x3f, u64::from(csb::ROGUE_PBESTATE_PACKMODE_A2R10B10G10), "packmode");
+    assert_eq!((w1 >> 13) & 1, 1, "normalised");
+    assert_eq!((w1 >> 19) & 1, u64::from(csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL), "F16 source");
+    let (k, _) = rig.kicks().last().cloned().expect("a kick");
+    assert_eq!((k.frag.pbe_word[0][0] >> 4) & 1, 0, "no gamma");
+    assert_eq!((k.frag.pds_bgnd[0] & 0xffff_ffff) as u32, bg2, "the two-dword background program");
+}
+
+/// A frame into an RGB10_A2 target that does not clear it loads the pixels
+/// through the RGBA16F load program from a texture of the RGB10A2 class
+/// (the TPU's A2R10B10G10 decode); an RGB10_A2 attachment beside another is
+/// refused by name ([`REFUSE_RGB10A2_MRT`]).
+#[test]
+fn an_rgb10a2_frame_loads_it_and_is_drawn_alone() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    d.do_clear = false;
+    d.target_format = GLES_SURF_RGB10_A2;
+    d.num_targets = 1;
+    d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format: GLES_SURF_RGB10_A2, out_shift: 0 };
+    assert_eq!(draw(&d), 0);
+    let (b, fl) = (rig.b(), rig.fbload());
+    assert_eq!(b.frame_quads, 1, "the frame starts with the load quad");
+    let ld = &fl.load_draw;
+    assert_eq!(ld.fs_usc_gpu, b.fbload_fs_rt[0].gpu, "RGBA16F's load");
+    assert_eq!(ld.textures[0].format, GLES_TEXFMT_RGB10A2);
+    assert_eq!(pvr_backend_flush(), 0);
+    let mut m = d;
+    m.num_targets = 2;
+    m.targets[1] =
+        GlesDrawTarget { gpu: d.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 };
+    assert_eq!(draw(&m), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l == REFUSE_RGB10A2_MRT), "{:?}", rig.logs());
 }
 
 /// A frame into an sRGB target that does not clear it loads the pixels

@@ -42,6 +42,13 @@
 //! blended colour (pco's `nir_fsat` before the F16 pack of an sRGB format,
 //! pco_nir_pvfio.c:97-101): the next blend reads it back from the
 //! accumulation, where a value past 1 would otherwise survive.
+//!
+//! The same class is the PowerVR's GL_RGB10_A2 target's
+//! (`pvr::backend::rt_class`): Mesa writes R10G10B10A2_UNORM as
+//! R16G16B16A16_FLOAT too (pco_nir_pvfio.c:103-104) and the PBE packs the
+//! halves A2R10B10G10 on store. The target is unsigned normalised, so its
+//! source and blended colour are clamped exactly as an sRGB target's; only
+//! the PBE's pack mode and gamma differ, which the shader does not see.
 
 use super::assemble::{build_group, build_pixout_read_from, build_unpck, BuildError};
 use super::decode::Group;
