@@ -314,7 +314,7 @@ Items 1, 2, 3, 5 and 10 are done at main `445c5653`. Item 7 is done by value.
   `[texture] texture-filter=mipmap` picture changed at `0d21ab47`, and which
   picture is right is not known (`tools/cts/RESULTS.md`, i.MX8MP notes).
 - Speed: terrain, shadow and refract on the AM62P (94, 353 and 376 ms a
-  frame, CPU GL-call time). Terrain on the Pi 4 (179 ms; #1209). Terrain,
+  frame, CPU GL-call time). Terrain on the Pi 4 is no longer slow: about 34.5 ms in the RESULTS.md row (run of `bdd2ba1c`), 34.77 ms at `0ee17984` / `87881c78` (`pi4-slow-terrain.md`, "Current state"; #1209). Terrain,
   shadow and refract on the i.MX8MP (1 to 2 FPS; the GPU mipmap chain is not
   reached from GL, #1106). On the i.MX8MP (GC7000UL), plan #355 built W1 to W5
   of `gc-tiled-wire.md` on the host (tiled 32-bit shadow targets resolved by
