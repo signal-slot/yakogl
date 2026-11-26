@@ -868,25 +868,26 @@ Mustpass list: 42,810 cases. Images report ES 3.0 (`REPORT_ES2` off).
 resets.
 
 **Pi 4, whole tree** on `b1b5b845` (`b1b5b8456ec69247c64d1bd07e42461266dc5136`; origin/main, tryboot, console
-through the UART bridge in `$BOARD_UART`; `tools/cts/pi4-gles3-tree.txt`, 114 rows: the 91
-images, re-split where dEQP aborted or overran; recipe `docs/es3/board-recipe-pi4.md`),
-2026-11-23: 114 of 114 images run, 42,810 mustpass cases: 35,922 Pass / 2,683 Fail /
-2,197 NotSupported / 29 other (QualityWarning, ResourceError) / 1,979 without a result
-(the case never began), 0 GPU recoveries, 0 hung jobs, 0 resets; the 114 consoles took
-2,094 s of dEQP time in all (longest T04 65 s, FO6 58 s, S12 55 s). Not final: nine
-images stop early because dEQP aborts on a refused draw (S03a, S07, T14a, T17a, TF1a,
-TF1b, TF2a, TF2b, TF2c: the V3D tile-memory refusal, the transform-feedback refusal and
-texture refusals); their 1,979 cases never began and one-case images that isolate them
-are still to run. Records:
-`tools/cts/log/2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts}/`
-(S32c re-split into S32c1-S32c4 in `-s32c`; the S32c console of rows46-60 is superseded).
-Every case that is not Pass: `docs/es3/pi4-gles3-fails.tsv` (6,888 rows; by family:
-`texture.wrap` 1,368 (1,296 NotSupported), `shaders.builtin_functions` 1,147 (never began),
-`texture.specification` 468, `texture.shadow` 432, `transform_feedback` 759 (never began),
-`texture.filtering` 311, `fbo.render` 305, `shaders.texture_functions` 298,
-`texture.format` 298, `texture.compressed` 266 NotSupported). Not run on this commit: the
-ES 2.0 regression rows and the ES 3.0 gl_test cases. Remaining: the one-case images for the
-aborted cases, and a rerun of the images that plan #184's V3D work changes.
+through the UART bridge in `$BOARD_UART`; `tools/cts/pi4-gles3-tree.txt`, 131 rows: the 91
+images, re-split where dEQP aborted or overran and cut after its abort trigger; recipe
+`docs/es3/board-recipe-pi4.md`), 2026-11-25: 131 of 131 images run, 42,810 mustpass
+cases (each counted once, under the label the tree gives it): 36,031 Pass / 2,683 Fail /
+2,199 NotSupported / 46 other (QualityWarning, ResourceError) / 1,851 without a result
+(the case never began), 0 GPU recoveries, 0 hung jobs, 0 resets; the consoles took
+35 min 09 s of dEQP time in all (`tools/cts/pi4-console-scan.py`). Not final: nine
+images still hold cases that never began, because dEQP aborts on a refused draw and one
+more cut moves only 1 to 21 cases per board cycle: S03a (1,140 cases, the V3D tile-memory
+refusal), S07 (1), T14aa (15, out of GPU memory for a tiled copy at
+`texture.units.8_units.only_cube.3`), T17aaaa (67, an ETC2 texel format the V3D does not
+sample), TF1aaaa and TF1baaa (175 each, the transform-feedback job builder refuses
+`lines.highp_mat4x3`), TF2aaaa (93), TF2baa (135) and TF2caa (50). They wait for the V3D
+fixes on main (plan #184). Records:
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts,aborts2}/`
+(S32c re-split into S32c1-S32c4 in `-s32c`, the S32c console of rows46-60 is superseded;
+T14a, T17a, TF1a, TF1b, TF2a, TF2b and TF2c are cut after their triggers in `-aborts2`).
+Every case that is not Pass: `docs/es3/pi4-gles3-fails.tsv` (6,779 rows). Not run on this
+commit: the ES 2.0 regression rows and the ES 3.0 gl_test cases. Remaining: the V3D fixes
+for the nine images, and a rerun of the images that plan #184's V3D work changes.
 
 **Host, ES 3.0 back-end capability (HOST-ONLY, no GPU result)**: the GC7000UL
 samples eight more storage classes in the library (`541975a2`; descriptor
