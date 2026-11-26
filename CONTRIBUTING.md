@@ -127,7 +127,7 @@ pull request (step 1 above).
   summary lines give the counts, ok plus gaps (a row whose tool or file the
   host lacks is listed as a gap). No file keeps the count: a row added by
   one pull request edits no number that another one edits too. The plan
-  at `512f3297` is 494 rows in `--quick` and 554 in the full run (the
+  at `e32b3cdb` is 525 rows in `--quick` and 585 in the full run (the
   summary lines of `YAKOGL_CHECK_PLAN=1`), and a docs-only change run as
   `tools/check.sh --no-clippy --changed <parent>` reaches 4 rows; the dated runs below keep the
   row counts they had then (177 in `--quick` at `570cd8c6` and `18353e05`).
