@@ -107,6 +107,11 @@ fresh c3b
 mv "$R/tools/cts/log/2026-11-12-imx8mp-gles3-0123abcd-rows01-13" "$R/tools/cts/log/2026-11-imx8mp-gles3-0123abcd-rows01-13"
 run_case "c3 no day in the rows01-13 name" 1 "c3"
 
+fresh c3c
+mv "$R/tools/cts/log/2026-11-12-imx8mp-gles3-0123abcd-rows01-13" "$R/tools/cts/log/2026-11-imx8mp-gles3-0123abcd-rows01-13"
+printf '# slice\n\nRun 2026-11-12, 19:47-22:19 UTC (the board clock)\n' >"$R/tools/cts/log/2026-11-imx8mp-gles3-0123abcd-rows01-13/README.md"
+run_case "c3 day from the README run window" 0 ""
+
 fresh c4
 printf 'the GC7000UL board run is pending, see 0123abcd\n' >"$R/docs/es3-cts-failures.md"
 run_case "c4 pending" 1 "c4"
