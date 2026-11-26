@@ -901,6 +901,11 @@ fn ppp_ctrl(pretransform: bool) -> u32 {
     )[0]
 }
 
+/// A draw or clear of several colour attachments one of which is RGB10_A2
+/// (its F16 accumulation has no per-target key yet).
+pub const REFUSE_RGB10A2_MRT: &str =
+    "yakogl/pvr: draw refused: an RGB10_A2 colour attachment beside another (not built)";
+
 /// PBESTATE_REG_WORD0's channel swizzle (chan0..3) for a target of this
 /// surface format: memory R,G,B,A, or B,G,R,A for XRGB8888 scan-out and for
 /// RGB565 (the R5G6B5 pack mode puts channel 0 in the low bits, and an
@@ -952,7 +957,15 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
 /// red, green and blue on store, as Mesa's pvr_arch_pbe_pack_state does for
 /// PVR_PBE_GAMMA_ENABLED (pvr_arch_job_common.c:163-171; `twocomp_gamma`
 /// only for a two-component format, which this is not).
-fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downscale: bool, twiddle: bool) -> [u64; 2] {
+pub fn pbe_reg_words(
+    fmt: u8,
+    alpha_one: bool,
+    tw: u32,
+    th: u32,
+    pitch: u32,
+    downscale: bool,
+    twiddle: bool,
+) -> [u64; 2] {
     let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one);
     let w0 = csb_pack!(
         ROGUE_PBESTATE_REG_WORD0_pack,
@@ -988,16 +1001,6 @@ fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downsca
     [dw64(w0), dw64(w1)]
 }
 
-/// The PBESTATE_STATE_WORD0/1 pair attachment `mrt_index` hands the
-/// end-of-tile program: the surface address, which 32-bit output register
-/// its source starts at (`source_pos`) and how it is packed. An 8-bit target
-/// is 8 per channel and normalised (U8U8U8U8, or R5G6B5); a float target's
-/// registers hold halves or floats (F16_PER_CHANNEL), with its pack mode
-/// F16F16F16F16 / F16 / F32 and no normalisation, and the fragment shader is
-/// the variant compiled for that class. An integer target is 8 per channel
-/// (Mesa pvr_arch_pbe_get_src_format_and_gamma, pvr_arch_job_common.c:51-53:
-/// any integer format), not normalised, in its integer pack mode
-/// ([`pbe_int_packmode`]), its registers the dwords the program packed.
 /// PBESTATE_STATE_WORD0/1 for a render with no colour attachment: word 0
 /// zero, word 1 only `emptytile`, so the PBE writes nothing. Transcribed from
 /// Mesa's pvr (pvr_setup_emit_state, pvr_arch_cmd_buffer.c:1508-1515, and
@@ -1050,11 +1053,43 @@ fn pbe_int_packmode(l: GlesIntLayout) -> csb::ROGUE_PBESTATE_PACKMODE {
 /// dwords of an integer surface ([`ShcIntRt::dwords`], what its program
 /// writes), two for RGBA16F's four halves and for an sRGB target's (its
 /// linear F16 accumulation), one for every other.
-fn surf_out_dwords(fmt: u8) -> u32 {
+pub fn surf_out_dwords(fmt: u8) -> u32 {
     match gles_surf_int_layout(fmt) {
         Some(l) => crate::shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed }.dwords(),
-        None if fmt == GLES_SURF_RGBA16F || gles_surf_is_srgb(fmt) => 2,
+        None if fmt == GLES_SURF_RGBA16F || unorm_halves(fmt) => 2,
         None => 1,
+    }
+}
+
+/// Is the surface unsigned normalised but accumulated as four halves in two
+/// output dwords: the sRGB target (its linear colour, gamma-encoded by the
+/// PBE on store) and RGB10_A2 (Mesa's `to_pbe_format`,
+/// pco_nir_pvfio.c:103-104: R10G10B10A2_UNORM is written as
+/// R16G16B16A16_FLOAT, which the PBE packs A2R10B10G10)? Its clear colour is
+/// clamped to [0, 1] and packed as halves, and its shader class is
+/// [`rt_class`]'s sRGB one.
+const fn unorm_halves(fmt: u8) -> bool {
+    gles_surf_is_srgb(fmt) || fmt == GLES_SURF_RGB10_A2
+}
+
+/// The render-target class (`SHC_RT_*`) a fragment shader drawing into a
+/// surface of format `fmt` is compiled for on the PowerVR: the GL core's
+/// [`gles_surf_rt_class`], but [`SHC_RT_SRGB`](crate::shaderc::SHC_RT_SRGB)
+/// for RGB10_A2 as for SRGB8_ALPHA8. That class's output is the one Mesa
+/// gives an R10G10B10A2_UNORM attachment (pco_nir_pvfio.c:103-104, the
+/// R16G16B16A16_FLOAT pack: four halves in two dwords), with the source of a
+/// blend and the blended colour clamped to [0, 1] as the unsigned normalised
+/// target needs (ES 3.0.6 4.1.7); the compiler builds it from the blend key
+/// `shc_blend_key_target(SHC_RT_SRGB, masked)` (`powervr::blend`). Only the
+/// PBE differs from the sRGB target's: the pack mode and no gamma
+/// ([`pbe_emit_words`], [`pbe_reg_words`]). The GL core's own table still
+/// says RGBA8 for RGB10_A2, which it never hands this back end
+/// ([`rt_format_drawable`], docs/es3/pvr-formats.md section 10.1).
+pub const fn rt_class(fmt: u8) -> u32 {
+    if fmt == GLES_SURF_RGB10_A2 {
+        crate::shaderc::SHC_RT_SRGB
+    } else {
+        gles_surf_rt_class(fmt)
     }
 }
 
@@ -1064,22 +1099,38 @@ fn surf_out_dwords(fmt: u8) -> u32 {
 /// RGBA16F's -- the load's TPU decode and the PBE's encode on store are what
 /// differ, not the program.
 fn pixel_class(fmt: u8) -> u32 {
-    match gles_surf_rt_class(fmt) {
+    match rt_class(fmt) {
         crate::shaderc::SHC_RT_SRGB => crate::shaderc::SHC_RT_F16X4,
         c => c,
     }
 }
 
-fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 2] {
+/// The PBESTATE_STATE_WORD0/1 pair attachment `mrt_index` hands the
+/// end-of-tile program: the surface address, which 32-bit output register
+/// its source starts at (`source_pos`) and how it is packed. An 8-bit target
+/// is 8 per channel and normalised (U8U8U8U8, or R5G6B5); a float target's
+/// registers hold halves or floats (F16_PER_CHANNEL), with its pack mode
+/// F16F16F16F16 / F16 / F32 and no normalisation, and the fragment shader is
+/// the variant compiled for that class. An integer target is 8 per channel
+/// (Mesa pvr_arch_pbe_get_src_format_and_gamma, pvr_arch_job_common.c:51-53:
+/// any integer format), not normalised, in its integer pack mode
+/// ([`pbe_int_packmode`]), its registers the dwords the program packed. An
+/// sRGB or RGB10_A2 target ([`unorm_halves`]) is F16 per channel and
+/// normalised.
+pub fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 2] {
     let float = gles_surf_is_float(fmt);
     let int = gles_surf_int_layout(fmt);
     /* An sRGB target: F16 source (pvr_arch_pbe_get_src_format_and_gamma,
      * pvr_arch_job_common.c:56-60), normalised, packed U8U8U8U8 (Mesa's
      * FORMAT(R8G8B8A8_SRGB, U8U8U8U8, F16), pvr_arch_formats.c:213); the
-     * encode is REG_WORD0's gamma ([`pbe_reg_words`]). */
-    let srgb = gles_surf_is_srgb(fmt);
+     * encode is REG_WORD0's gamma ([`pbe_reg_words`]). An RGB10_A2 target:
+     * F16 source (channel 0 is 10 bits wide, over 8:
+     * pvr_arch_job_common.c:72-73), normalised, packed A2R10B10G10 (Mesa's
+     * FORMAT(R10G10B10A2_UNORM, A2R10B10G10, F16), pvr_arch_formats.c:223). */
+    let halves = unorm_halves(fmt);
     let packmode = match (fmt, int) {
         (_, Some(l)) => pbe_int_packmode(l),
+        (GLES_SURF_RGB10_A2, _) => csb::ROGUE_PBESTATE_PACKMODE_A2R10B10G10,
         (GLES_SURF_RGBA16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16F16F16F16,
         (GLES_SURF_R16F, _) => csb::ROGUE_PBESTATE_PACKMODE_F16,
         _ if float => csb::ROGUE_PBESTATE_PACKMODE_F32,
@@ -1093,7 +1144,7 @@ fn pbe_emit_words(addr: u64, fmt: u8, source_pos: u32, mrt_index: u32) -> [u32; 
         1,
         csb::ROGUE_PBESTATE_STATE_WORD1 {
             address_high: dev_addr(addr),
-            source_format: if float || srgb {
+            source_format: if float || halves {
                 csb::ROGUE_PBESTATE_SOURCE_FORMAT_F16_PER_CHANNEL
             } else {
                 csb::ROGUE_PBESTATE_SOURCE_FORMAT_8_PER_CHANNEL
@@ -2168,7 +2219,7 @@ fn mrt_clear_regs(n: usize, eot_pairs: u32, fmt: impl Fn(usize) -> u8) -> u32 {
     let mut out = 0u32;
     for i in 0..n {
         let f = fmt(i);
-        if gles_surf_rt_class(f) != 0 {
+        if rt_class(f) != 0 {
             return 0;
         }
         let regs = surf_out_dwords(f);
@@ -4187,10 +4238,10 @@ fn f32_to_f16_bits(f: f32) -> u32 {
 /// (the target is unsigned normalised, ES 3.0.6 4.2.3), and the PBE encodes
 /// it on store -- Mesa packs an sRGB clear colour the same way, as
 /// F16F16F16F16 for the gamma'd PBE (pvr_arch_job_transfer.c:2372-2384).
-fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 4] {
+pub fn clear_uniform(surf: u8, c: &[f32; 4]) -> [u32; 4] {
     if let Some(l) = gles_surf_int_layout(surf) {
         pack_clear_int(l, &c.map(f32::to_bits))
-    } else if gles_surf_rt_class(surf) != 0 {
+    } else if rt_class(surf) != 0 {
         let [a, b] = pack_clear_float(surf, c);
         [a, b, 0, 0]
     } else {
@@ -4227,7 +4278,7 @@ fn pack_clear_int(l: GlesIntLayout, v: &[u32; 4]) -> [u32; 4] {
 /// reached for those: [`clear_uniform`] is the way in.
 fn pack_clear_float(surf: u8, c: &[f32; 4]) -> [u32; 2] {
     let c = &clear_colour(surf, c);
-    if surf == GLES_SURF_RGBA16F || gles_surf_is_srgb(surf) {
+    if surf == GLES_SURF_RGBA16F || unorm_halves(surf) {
         [f32_to_f16_bits(c[0]) | (f32_to_f16_bits(c[1]) << 16), f32_to_f16_bits(c[2]) | (f32_to_f16_bits(c[3]) << 16)]
     } else if surf == GLES_SURF_R16F {
         [f32_to_f16_bits(c[0]), 0]
@@ -4242,7 +4293,7 @@ fn pack_clear_float(surf: u8, c: &[f32; 4]) -> [u32; 2] {
 /// past 1 for the next blend to read. (An RGBA8 target's bytes clamp in
 /// `pack_rgba8`; a float target keeps the value.) NaN clamps to 0.
 fn clear_colour(surf: u8, c: &[f32; 4]) -> [f32; 4] {
-    if gles_surf_is_srgb(surf) {
+    if unorm_halves(surf) {
         c.map(|v| {
             if v >= 1.0 {
                 1.0
@@ -4381,7 +4432,7 @@ fn srgb_targets_as_rgba8(d: &GlesDraw) -> GlesDraw {
 /// case 44) and the integer surfaces, whose clear is raw bits the
 /// background program and the USC clear register were never measured with.
 fn clears_by_quad(surf: u8) -> bool {
-    gles_surf_rt_class(surf) != 0 || gles_surf_is_integer(surf)
+    rt_class(surf) != 0 || gles_surf_is_integer(surf)
 }
 
 /// The frame's first object: a full-screen quad that (a) loads the target's
@@ -6976,8 +7027,8 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     if ntargets > 1 && d.index_count != 0 && !d.clear_quad {
         // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
         if let Some(cls) = unsafe { d.fs.as_ref() }.and_then(per_target_float_class) {
-            let other = gles_surf_rt_class(d.target_format) != cls
-                || d.targets[1..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_rt_class(t.format) != cls);
+            let other = rt_class(d.target_format) != cls
+                || d.targets[1..ntargets].iter().any(|t| t.gpu != 0 && rt_class(t.format) != cls);
             if other {
                 glog_once!(
                     "yakogl/pvr: draw refused: several colour outputs of one float class beside an attachment of another class (not built)"
@@ -6985,6 +7036,14 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
                 return -util::ENOTSUP;
             }
         }
+    }
+    /* An RGB10_A2 attachment is drawn alone: its halves ([`rt_class`], two
+     * output dwords) have no per-target key (`target_key` keys the format as
+     * an RGBA8 slot, one dword of bytes), and the sRGB class's several-target
+     * key encodes. Refused by name, never stored from the wrong packing. */
+    if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && t.format == GLES_SURF_RGB10_A2) {
+        glog_once!("{}", REFUSE_RGB10A2_MRT);
+        return -util::ENOTSUP;
     }
     /* Several sRGB attachments are drawn as RGBA8 ones whose bytes are
      * already encoded ([`srgb_targets_as_rgba8`]): an sRGB attachment beside
@@ -10231,7 +10290,7 @@ fn flush(p: &mut Pvr) -> i32 {
         2 => b.bg_kick2_off,
         3 => b.bg_kick3_off,
         4 => b.bg_kick4_off,
-        _ if b.target_format == GLES_SURF_RGBA16F || gles_surf_is_srgb(b.target_format) => b.bg_kick2_off,
+        _ if b.target_format == GLES_SURF_RGBA16F || unorm_halves(b.target_format) => b.bg_kick2_off,
         _ => b.bg_kick_off,
     };
     b.kick.frag.pds_bgnd[0] = dw64(csb_pack!(
@@ -11193,6 +11252,29 @@ mod tests {
         assert_eq!(pixel_class(GLES_SURF_RGBA16F), crate::shaderc::SHC_RT_F16X4);
         assert!(clears_by_quad(GLES_SURF_SRGB8_A8));
         assert_eq!(gles_surf_texfmt(GLES_SURF_SRGB8_A8), GLES_TEXFMT_SRGB8_A8, "the frame load decodes");
+    }
+
+    /// An RGB10_A2 target is the sRGB target's accumulation without the
+    /// gamma: the shader class of unsigned-normalised halves, two output
+    /// dwords, its back-end programs RGBA16F's, cleared by quad (not by the
+    /// RGBA8 background program of several targets), its clear colour
+    /// clamped, its frame load the class's own TPU decode. PBE words:
+    /// tests/es3_pvr_rgb10a2_rt.rs.
+    #[test]
+    fn rgb10a2_accumulates_like_srgb_without_gamma() {
+        assert_eq!(rt_class(GLES_SURF_RGB10_A2), crate::shaderc::SHC_RT_SRGB);
+        assert_eq!(pixel_class(GLES_SURF_RGB10_A2), crate::shaderc::SHC_RT_F16X4);
+        assert_eq!(surf_out_dwords(GLES_SURF_RGB10_A2), 2);
+        assert!(unorm_halves(GLES_SURF_RGB10_A2) && unorm_halves(GLES_SURF_SRGB8_A8));
+        assert!(!unorm_halves(GLES_SURF_RGBA16F) && !unorm_halves(GLES_SURF_RGB10_A2UI));
+        assert!(clears_by_quad(GLES_SURF_RGB10_A2));
+        assert_eq!(mrt_clear_regs(2, 4, |_| GLES_SURF_RGB10_A2), 0);
+        assert_eq!(mrt_clear_regs(2, 4, |_| GLES_SURF_RGBA8888), 2);
+        assert_eq!(clear_mask_of(GLES_SURF_RGB10_A2, 0b0101), 0b0101);
+        assert_eq!(clear_colour(GLES_SURF_RGB10_A2, &[1.5, 0.5, -1.0, f32::NAN]), [1.0, 0.5, 0.0, 0.0]);
+        assert_eq!(gles_surf_texfmt(GLES_SURF_RGB10_A2), GLES_TEXFMT_RGB10A2, "the frame load decodes");
+        let w0 = pbe_reg_words(GLES_SURF_RGB10_A2, false, 64, 64, 64, false, false)[0];
+        assert_eq!(w0 & 1 << 4, 0, "no gamma");
     }
 
     /// An sRGB target's clear is its linear colour as RGBA16F's two dwords

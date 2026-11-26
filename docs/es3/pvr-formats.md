@@ -855,6 +855,49 @@ Tests to add with `int-rt-pvr` / `formats-pvr` (same patterns, no board):
   requires both of GL_RGB10_A2; until the PowerVR renders the class (the
   §2.5 row: A2R10B10G10 packmode, F16 accum, the RGBA16F shader output), the
   two bits are the smaller loss.
+- **The render-target class is built in the back end and the compiler
+  (item rgb10a2-rt), not yet turned on.** For `GLES_SURF_RGB10_A2`:
+  - PBE (`pbe_emit_words`): packmode A2R10B10G10 (14), `norm` 1,
+    `source_format` F16_PER_CHANNEL (Mesa `FORMAT(R10G10B10A2_UNORM,
+    A2R10B10G10, F16)`, `arch-formats.c:223`; `job-common.c:72-73`, channel
+    0 is 10 bits wide); REG_WORD0 the identity swizzle, no gamma.
+  - Layout: two output dwords (`surf_out_dwords`), so an even register pair
+    (`src/pvr/mrt_layout.rs`), as Mesa's R16G16B16A16_FLOAT pixel
+    (`pvfio.c:103-104`).
+  - Shader class (`pvr::backend::rt_class`): the sRGB class `SHC_RT_SRGB`,
+    i.e. the key `shc_blend_key_target(SHC_RT_SRGB, masked)` (with
+    `SHC_BLEND_KEY_REPLACE` for a plain draw). Its output is Mesa's for the
+    format -- four halves in two dwords -- with the blend's source and result
+    clamped to [0, 1] as for any unsigned-normalised target; the shader cannot
+    tell an RGB10_A2 target from an sRGB one, only the PBE can. No compiler
+    code changed: the class existed (`powervr::blend`).
+  - The back end's own programs: the RGBA16F ones (`pixel_class`), cleared
+    by quad with the clamped colour as halves (`clear_uniform`), the
+    two-dword background program, and the frame load samples the
+    `GLES_TEXFMT_RGB10A2` class (`gles_surf_texfmt`).
+  - Drawn alone only: an RGB10_A2 attachment beside another is refused by
+    name (`REFUSE_RGB10A2_MRT`), since `src/target_key.rs` keys the format
+    as a one-dword RGBA8 slot of a mix.
+  - Pinned by `tests/es3_pvr_rgb10a2_rt.rs` (the PBE words, the layout, the
+    clear, and the compiled output run through the host byte model) and by
+    the rig tests `an_rgb10a2_frame_*` in `src/pvr/backend_tests.rs`. Not
+    checked on silicon.
+
+  What the GL side still has to change to turn the class on (files of other
+  items): (1) `PVR_SAMPLED_TEXFMTS` (`src/backend.rs`) gains
+  `GLES_TEXFMT_RGB10A2`, which makes `rt_format_drawable(GLES_SURF_RGB10_A2)`
+  true, so the GL core keeps GL_RGB10_A2 in its own class and hands the
+  surface over; (2) the variant key the GL core builds for the target
+  (`gl::draw::current_blend_key`, from `gles_surf_rt_class`) has to be
+  `SHC_RT_SRGB`'s on the PowerVR, as `pvr::backend::rt_class` says, not
+  RGBA8's -- through `gles_surf_rt_class` gated on `gpu-powervr` or a
+  back-end hook, since the V3D renders the class its own way; (3)
+  glGenerateMipmap of the class on the PowerVR (the GL core's RGB10A2 box
+  filter, `src/gl/texture.rs`) has to be checked; and, for RGB10_A2 beside
+  another attachment, a per-target key for the halves in
+  `src/target_key.rs`. Then a host dEQP run of `fbo.color.*rgb10_a2*`,
+  `fragment_ops.blend.*` and `texture.format.sized.*rgb10_a2*` and an AM62P
+  single-case check.
 - The texture state is `es3_tex_format` (`src/pvr/backend.rs`): the TPU
   formats and swizzles of §2.1-§2.3 (the GL core's classes are four
   components wide, so the swizzle is the identity but for the packed floats'
