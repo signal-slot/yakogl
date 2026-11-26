@@ -37,6 +37,8 @@ pub mod nanopc_t6_display_cold;
 pub mod nanopc_t6_early;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_frame;
+#[cfg(test)]
+mod nanopc_t6_frame_tests;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_fw;
 #[cfg(any(feature = "rk3588", test))]
