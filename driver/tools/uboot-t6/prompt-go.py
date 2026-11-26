@@ -177,9 +177,15 @@ X16 = r"[0-9a-f]{16}"
 T6A_RE = re.compile(r"T6:A EL2 HCR_EL2 0x%s -> 0x%s SCTLR_EL2 0x(%s) VBAR_EL2 0x%s -> 0x%s CNTFRQ_EL0 (\d+)" % (X16, X16, X16, X16, X16))
 T6G_RE = re.compile(r"T6:G go: SCTLR_EL2 0x(%s) -> 0x(%s) \(MMU, D-cache, I-cache off\); 0x10000000-0x20000000 "
                     r"cleaned and invalidated to PoC, TLB and I-cache invalidated" % (X16, X16))
-# gl_test.c's "gl_test: all: F of T cases failed (P passed; X timed out; ..." (the
-# 50/50 record: "gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...")
-GL_ALL_RE = re.compile(r"gl_test: all: (-?\d+) of (\d+) cases failed \((\d+) passed; (\d+) timed out(;.*)?\)")
+# The runner's all_line (driver/tools/pvrlab/runner/src/lib.rs, printed by every
+# gl_test image): "gl_test: all: F of T cases failed (P passed; X timed out; first
+# failure case A at index B; second failure case C; K skipped, first skip case D);
+# precompiled hits H, compiler runs R". Groups: 1 F, 2 T, 3 P, 4 X, 5 K (skipped).
+GL_ALL_RE = re.compile(r"gl_test: all: (-?\d+) of (\d+) cases failed \((\d+) passed; (\d+) timed out;"
+                       r"[^)]*?; (\d+) skipped, first skip case -?\d+\)(?:; .*)?")
+# The size of the regression set: gl_test's list mali_regress, 50 cases ("the list
+# mali_regress (50 cases)"; tools/cts/RESULTS.md's T6 row: 50 of 50 at 9ad07f55f).
+GL_TOTAL = 50
 # deqp/src/main.cpp's "deqp: done: ...", then deqp_log.c's "deqp: summary: ..."
 DEQP_DONE_RE = re.compile(r"deqp: done: -?\d+ passed, -?\d+ failed, -?\d+ not supported, -?\d+ warnings, "
                           r"complete=-?\d+")
@@ -242,9 +248,10 @@ def judge_sample(probe, log, out):
 
         def all_ok(m):
             # one such line only: a second is a second boot (or a defect)
-            return int(m.group(1)) == 0 and int(m.group(4)) == 0 and int(m.group(2)) > 0 and n_all == 1
+            return (int(m.group(1)) == 0 and int(m.group(4)) == 0 and int(m.group(5)) == 0
+                    and int(m.group(2)) == GL_TOTAL and int(m.group(3)) == GL_TOTAL and n_all == 1)
 
-        step("one \"gl_test: all: 0 of T cases failed (P passed; 0 timed out; ...)\" line, T > 0", "gl_test: all: ",
+        step("one \"gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...; 0 skipped ...)\" line", "gl_test: all: ",
              GL_ALL_RE, all_ok)
     else:
         step('"deqp: done: ... complete=C"', "deqp: done: ", DEQP_DONE_RE)
@@ -428,7 +435,8 @@ def sample_lines(probe, how="ok"):
                "gl_test: the list mali_regress (50 cases) on one context",
                "gl_test: case 1 clear: PASS",
                "gl_test: case 2 triangle: %s" % ("FAIL" if failed else "PASS"),
-               "gl_test: all: %d of 50 cases failed (%d passed; 0 timed out; first failure case %d at index %d)"
+               "gl_test: all: %d of 50 cases failed (%d passed; 0 timed out; first failure case %d at index %d; "
+               "second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 529"
                % (failed, 50 - failed, 2 if failed else -1, 1 if failed else -1),
                "gl_test: %s (rc=%d)" % ("FAILED" if failed else "OK", failed),
                "t6: gl_test done: PSCI SYSTEM_RESET at 81234 ms (81 feeds)"]
@@ -741,7 +749,13 @@ def self_test():
                 ("no T6:G line", [l for l in gl if not l.startswith("T6:G ")]),
                 ("another sample's reset line", gl[:-1] + [gl[-1].replace("gl_test done", "deqp done")]),
                 ("0 cases", gl[:at] + ["gl_test: all: 0 of 0 cases failed (0 passed; 0 timed out; first failure "
-                                       "case -1 at index -1)"] + gl[at + 1:]),
+                                       "case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); "
+                                       "precompiled hits 0, compiler runs 0"] + gl[at + 1:]),
+                ("49 cases", gl[:at] + [gl[at].replace("0 of 50 cases failed (50 passed", "0 of 49 cases failed (49 passed")]
+                 + gl[at + 1:]),
+                ("a case skipped", gl[:at] + [gl[at].replace("(50 passed", "(49 passed").replace(
+                    "0 skipped, first skip case -1", "1 skipped, first skip case 16")] + gl[at + 1:]),
+                ("the summary truncated", gl[:at] + [gl[at][:60]] + gl[at + 1:]),
                 ("a dEQP row without its summary", [l for l in sample_lines("deqp")
                                                     if not l.startswith("deqp: summary: ")])):
             rc, last = judged(lines)
