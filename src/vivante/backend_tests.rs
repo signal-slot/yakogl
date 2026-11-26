@@ -5772,3 +5772,6 @@ fn the_dtpu_knob_samples_the_depth_surface_in_place() {
 
 #[path = "backend_tests_tiled_rt.rs"]
 mod tiled_rt_tests;
+
+#[path = "backend_tests_depth_clamp.rs"]
+mod depth_clamp_tests;
