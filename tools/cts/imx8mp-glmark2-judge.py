@@ -27,9 +27,7 @@ What it does (it never decides a verdict, that is for a person looking):
      record, else git rev-parse in --repo. A record as tools/board.sh names it
      (sha8 = the image's sha256, meta.txt image_sha256): the commit is the
      image's YAKOGL_SAMPLE_TREE=<sha8> (meta.txt image_build, INDEX.txt) or the
-     console's `build tree=<sha8>` line; a -dirty build is named. Such a row's
-     record sha8 is not its commit, which the verdicts checker's rule (c)
-     refuses: the helper says so;
+     console's `build tree=<sha8>` line; a -dirty build is named;
   4. prints the table row of docs/notes/imx8mp-glmark2-pictures-by-eye.md with
      the verdict `not yet looked at` (the placeholder; replace it by looking)
      and the opening of the scene's `- **[scene] args**` entry with the crc and
@@ -238,9 +236,6 @@ def judge(rec, ref, scene, out, repo, main):
         print("== note: the record's sha8 %s is the image's sha256 (tools/board.sh), "
               "not the commit%s" % (sha8, "" if commit else
                                     "; no YAKOGL_SAMPLE_TREE or build line gives the commit"))
-        if commit and commit != sha8:
-            print("== note: imx8mp-glmark2-verdicts.py rule (c) wants the record's sha8 "
-                  "to be the commit: it refuses this row once the verdict is filled in")
     if dirty:
         print("== note: a dirty build is not an origin/main commit: rebuild and rerun")
     recpath = "records/imx8mp/%s/" % dname
@@ -392,7 +387,7 @@ def self_test():
                    rc == 0 and rowb.startswith("| %s | %s | " % (scene, head[:8])) and
                    "feedc0de/ | dump |" in rowb and
                    "ancestor of origin/main: yes" in o and "is the image's sha256" in o and
-                   "rule (c)" in o)
+                   "rule (c)" not in o)
             expect(what + ": dirty %s" % ("named" if "dirty" in tree else "not named"),
                    ("dirty" in tree) == ("built from a dirty tree" in o))
         # meta.txt commit= wins over the name's sha8 (image sha256)
