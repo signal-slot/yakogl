@@ -37,7 +37,7 @@ LT sha256=00 boot0=x
 EOF
 
 run() { python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
-        --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent "$@"; }
+        --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --no-board-rates "$@"; }
 
 run > "$tmp/out.tsv" 2> "$tmp/err.txt" || fail "the table run exited nonzero: $(cat "$tmp/err.txt")"
 rows=$(grep -v '^#' "$tmp/out.tsv" | awk -F'\t' '$1 ~ /^[0-9]+$/ {n++} END {print n + 0}')
@@ -81,4 +81,33 @@ for b in 1 50 100000; do
 done
 # a huge budget gives one range
 run --session-budget 100000 | grep -v '^#' | awk -F'\t' 'NR > 1 {n++} END {exit n != 1}' || fail "a huge budget should give 1 range"
+
+# measured GC7000UL rates: a synthetic slice with e00 (lifetime, 4 cases, 40 s) and e02 (a shader row, 3 cases,
+# 30 s; its duplicate line and its e02-p0 page line are not counted); e00 has 1 failure; e04 (ubo) is unmeasured
+sl="$tmp/slices/2026-11-imx8mp-gles3-9bc82915-rows00-02"
+mkdir -p "$sl"
+cat > "$sl/verdicts.txt" <<EOF
+# synthetic
+board.sh imx8mp e00 rc=0 verdict=done boot=x back_after=40s uptime=20s
+board.sh imx8mp e02 rc=0 verdict=done boot=x back_after=30s uptime=20s
+board.sh imx8mp e02 rc=0 verdict=done boot=x back_after=30s uptime=20s
+board.sh imx8mp e02-p0 rc=0 verdict=done boot=x back_after=999s uptime=20s
+EOF
+printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tnames\n0\tx\t4\t3\t1\t0\t0\t0\t-\n2\tx\t3\t3\t0\t0\t0\t0\t-\n' > "$sl/results.tsv"
+runb() { python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+         --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/slices/*" "$@"; }
+runb > "$tmp/outb.tsv" 2> "$tmp/errb.txt" || fail "the measured run exited nonzero: $(cat "$tmp/errb.txt")"
+rowb() { awk -F'\t' -v i="$1" '$1 == i' "$tmp/outb.tsv" | cut -f"$2"; }
+[ "$(rowb 0 3)" = 40.0 ] || fail "measured lifetime seconds: $(rowb 0 3)"
+[ "$(rowb 0 4)" = imx8mp:rows00-02 ] || fail "measured source: $(rowb 0 4)"
+[ "$(rowb 2 3)" = 30.0 ] || fail "measured shader seconds: $(rowb 2 3)"
+[ "$(rowb 1 3)" = 44.0 ] || fail "unmeasured filtering must stay assumed: $(rowb 1 3)"
+[ "$(rowb 4 4 | cut -c1-8)" = assumed: ] || fail "unmeasured ubo source: $(rowb 4 4)"
+grep -q '^# rate functional.lifetime = 10.0000 s/case (imx8mp:rows00-02' "$tmp/outb.tsv" || fail "header lacks the measured rate"
+# --pages: lifetime fail fraction 1/4 x 4 cases = 1 expected fail = 1 page of 90 s; the passing rows gain nothing
+runb --pages --page-seconds 90 | awk -F'\t' '$1 == 0 {print $3}' | grep -qx 130.0 || fail "--pages estimate of row 0"
+runb --pages --page-seconds 90 | awk -F'\t' '$1 == 2 {print $3}' | grep -qx 30.0 || fail "--pages changed a passing row"
+for n in 1 3; do
+  runb --sessions "$n" | grep -v '^#' | check_ranges 4 || fail "measured --sessions $n coverage"
+done
 echo "imx8mp-gles3-sessions-selftest: ok"
