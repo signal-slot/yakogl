@@ -302,6 +302,18 @@ pub const GICR_TYPER_PPINUM_SHIFT: u32 = 27;
 /// `GICR_TYPER.Affinity_Value`, bits 63:32 (arm-gic-v3.h:249;
 /// intc_gicv3_priv.h:66-68).
 pub const GICR_TYPER_AFF_SHIFT: u32 = 32;
+/// `GICR_WAKER` in the RD_base frame (intc_gicv3_priv.h:37).
+pub const GICR_WAKER: usize = 0x0014;
+/// `GICR_WAKER.ProcessorSleep`, bit 1, and `ChildrenAsleep`, bit 2
+/// (intc_gicv3_priv.h:76-78 `GICR_WAKER_PS`, `GICR_WAKER_CA`).
+pub const GICR_WAKER_PROCESSOR_SLEEP: u32 = 1 << 1;
+pub const GICR_WAKER_CHILDREN_ASLEEP: u32 = 1 << 2;
+/// The bound on the `GICR_WAKER` reads that wait for ChildrenAsleep to
+/// clear after a wake. Zephyr's `gicv3_rdist_enable` waits without a bound
+/// (intc_gicv3.c:407-409); this file has no delay source, so the bound is a
+/// count of reads, each a device access (Linux's `gic_enable_redist` counts
+/// a million too, with a microsecond between them).
+pub const GICR_WAKER_POLLS: u32 = 1_000_000;
 /// The first extended PPI (arm-gic-v3.h:136).
 pub const EPPI_BASE_INTID: u32 = 1056;
 /// RD_base and SGI_base, the step to the next redistributor when the
@@ -444,6 +456,52 @@ pub struct GicActiveReset {
     pub still_active: u32,
 }
 
+/// What [`gic_active_reset_woken`] did with `GICR_WAKER` before the SGI
+/// frame, and `GICR_WAKER` as found (0 when no redistributor matched).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GicrWakeState {
+    pub gicr_waker: u32,
+    pub wake: GicrWake,
+}
+
+/// The wake step of [`GicrWakeState`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GicrWake {
+    /// Awake as found (ProcessorSleep and ChildrenAsleep clear: the state
+    /// Linux's kexec leaves), or no redistributor matched: one read at
+    /// most, nothing written.
+    #[default]
+    Awake,
+    /// ProcessorSleep was set and cleared, or ChildrenAsleep was set, and
+    /// ChildrenAsleep read 0 at the `polls`th read after it.
+    Woken { polls: u32 },
+    /// ChildrenAsleep still set after [`GICR_WAKER_POLLS`] reads: the SGI
+    /// frame is not touched, as when no redistributor matches
+    /// (`rdist.rd_base` is `None`).
+    TimedOut,
+}
+
+/// Wake the redistributor at `rd` before its SGI frame is touched, as
+/// Linux's `gic_enable_redist` and Zephyr's `gicv3_rdist_enable`
+/// (intc_gicv3.c:390-410, which runs only after the clear this is for) do:
+/// clear ProcessorSleep when it is set, then wait for ChildrenAsleep to read
+/// 0. An awake redistributor (both bits clear) is read once and not written.
+fn gicr_wake<M: crate::mmio::Mmio>(m: &M, rd: usize) -> (u32, GicrWake) {
+    let waker = m.read32(rd + GICR_WAKER);
+    if waker & (GICR_WAKER_PROCESSOR_SLEEP | GICR_WAKER_CHILDREN_ASLEEP) == 0 {
+        return (waker, GicrWake::Awake);
+    }
+    if waker & GICR_WAKER_PROCESSOR_SLEEP != 0 {
+        m.write32(rd + GICR_WAKER, waker & !GICR_WAKER_PROCESSOR_SLEEP);
+    }
+    for polls in 1..=GICR_WAKER_POLLS {
+        if m.read32(rd + GICR_WAKER) & GICR_WAKER_CHILDREN_ASLEEP == 0 {
+            return (waker, GicrWake::Woken { polls });
+        }
+    }
+    (waker, GicrWake::TimedOut)
+}
+
 /// One range of Active words: the first `ISACTIVER` word's address, the
 /// first `ICACTIVER` word's, the INTID of bit 0 of the first word, and the
 /// number of words.
@@ -482,13 +540,33 @@ struct ActiveRange {
 /// extended PPI words (1056 up), the extended SPI words (4096 up).
 ///
 /// `gicd` is the distributor's base; `region` and `aff` find this CPU's
-/// redistributor ([`gicr_find`]). When none matches, the SGIs and PPIs are
-/// not touched (`rdist.rd_base` is `None`) and the distributor is still
-/// cleared. Nothing else is read or written.
+/// redistributor ([`gicr_find`]). Before its SGI frame is touched the
+/// redistributor is woken ([`GicrWake`]): U-Boot may leave it asleep, and a
+/// sleeping frame reads zero and drops the clear. When none matches, or the
+/// wake times out, the SGIs and PPIs are not touched (`rdist.rd_base` is
+/// `None`) and the distributor is still cleared. Nothing else is read or
+/// written.
 pub fn gic_active_reset<M: crate::mmio::Mmio>(m: &M, gicd: usize, region: GicrRegion, aff: u32) -> GicActiveReset {
+    gic_active_reset_woken(m, gicd, region, aff).0
+}
+
+/// [`gic_active_reset`], and what its wake step found and did.
+pub fn gic_active_reset_woken<M: crate::mmio::Mmio>(
+    m: &M,
+    gicd: usize,
+    region: GicrRegion,
+    aff: u32,
+) -> (GicActiveReset, GicrWakeState) {
     let mut out = GicActiveReset { aff, ..GicActiveReset::default() };
+    let mut woke = GicrWakeState::default();
     out.gicd_typer = m.read32(gicd + GICD_TYPER);
     out.rdist = gicr_find(m, region, aff);
+    if let Some(rd) = out.rdist.rd_base {
+        (woke.gicr_waker, woke.wake) = gicr_wake(m, rd);
+        if woke.wake == GicrWake::TimedOut {
+            out.rdist.rd_base = None;
+        }
+    }
     out.spi_words = gicd_spi_words(out.gicd_typer);
     out.espi_words = gicd_espi_words(out.gicd_typer);
     let (rdist_words, sgi) = match out.rdist.rd_base {
@@ -549,7 +627,7 @@ pub fn gic_active_reset<M: crate::mmio::Mmio>(m: &M, gicd: usize, region: GicrRe
             out.still_active += m.read32(r.set + 4 * w as usize).count_ones();
         }
     }
-    out
+    (out, woke)
 }
 
 /// `MPIDR_EL1`.
@@ -974,6 +1052,8 @@ mod tests {
         espi: RefCell<[u32; 32]>,
         frames: RefCell<Vec<Frame>>,
         sticky_spi: [u32; 32],
+        /// A wake does not take: ChildrenAsleep stays set after the write.
+        waker_stuck: bool,
         writes: RefCell<Vec<(usize, u32)>>,
     }
 
@@ -995,6 +1075,7 @@ mod tests {
                 espi: RefCell::new([0; 32]),
                 frames: RefCell::new(frames),
                 sticky_spi: [0; 32],
+                waker_stuck: false,
                 writes: RefCell::new(Vec::new()),
             }
         }
@@ -1082,7 +1163,10 @@ mod tests {
                     }
                 }
                 // a wake: ProcessorSleep cleared, ChildrenAsleep follows
-                Reg::Waker(i) => self.frames.borrow_mut()[i].waker = v & !WAKER_ASLEEP,
+                Reg::Waker(i) => {
+                    let keep = if self.waker_stuck { WAKER_CHILDREN_ASLEEP } else { 0 };
+                    self.frames.borrow_mut()[i].waker = (v & !WAKER_ASLEEP) | keep
+                }
                 _ => panic!("a write to {a:#x}, which is not an ICACTIVER word"),
             }
         }
@@ -1096,9 +1180,8 @@ mod tests {
         }
     }
 
-    const GICR_WAKER: usize = 0x0014;
-    const WAKER_PROCESSOR_SLEEP: u32 = 1 << 1;
-    const WAKER_CHILDREN_ASLEEP: u32 = 1 << 2;
+    const WAKER_PROCESSOR_SLEEP: u32 = GICR_WAKER_PROCESSOR_SLEEP;
+    const WAKER_CHILDREN_ASLEEP: u32 = GICR_WAKER_CHILDREN_ASLEEP;
     const WAKER_ASLEEP: u32 = WAKER_PROCESSOR_SLEEP | WAKER_CHILDREN_ASLEEP;
 
     // MPIDR_EL1 of the RK3588's CPU 0: MT (bit 24) and the RES1 bit 31 set,
@@ -1336,9 +1419,11 @@ mod tests {
         let mut frames = Gic::four_cpus();
         frames[0].active[0] = 1 << 27;
         let gic = Gic::new(0x0000_000f, frames);
-        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        let (got, woke) = gic_active_reset_woken(&gic, GICD, GICR, 0);
         assert_eq!(got.isactiver0, 1 << 27);
         assert_eq!((got.active, got.intids[0], got.still_active, got.words_cleared), (1, 27, 0, 16));
+        // GICR_WAKER read once, not written: no extra write
+        assert_eq!(woke, GicrWakeState { gicr_waker: 0, wake: GicrWake::Awake });
         assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
         assert_eq!(gic.frames.borrow()[0].active[0], 0);
         assert_eq!(
@@ -1348,43 +1433,38 @@ mod tests {
         );
     }
 
-    /// ProcessorSleep=1, ChildrenAsleep=1, as U-Boot may leave it. What the
-    /// code does today, pinned: it never reads or writes `GICR_WAKER`, writes
-    /// `GICR_ICACTIVER0` into the sleeping frame (dropped), reads the frame
-    /// as zero, and prints "none active, 0 still active" although an
-    /// interrupt may be Active behind the sleep. The wake the next test wants
-    /// is not here (defect, see below).
+    /// ProcessorSleep=1, ChildrenAsleep=1, as U-Boot may leave it: the
+    /// redistributor is woken first (one `GICR_WAKER` write clearing
+    /// ProcessorSleep, ChildrenAsleep read clear at the first poll), then
+    /// the clear runs as in the kexec state and the line is the same format.
     #[test]
-    fn redistributor_asleep_as_uboot_may_leave_it_today() {
+    fn redistributor_asleep_as_uboot_may_leave_it() {
         let mut frames = Gic::four_cpus();
         frames[0].waker = WAKER_ASLEEP;
         frames[0].active[0] = 1 << 27;
         let gic = Gic::new(0x0000_000f, frames);
-        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        let (got, woke) = gic_active_reset_woken(&gic, GICD, GICR, 0);
         assert_eq!(got.rdist.rd_base, Some(GICR.base));
-        assert_eq!((got.isactiver0, got.active, got.still_active, got.words_cleared), (0, 0, 0, 16));
-        // the frame is written while asleep, WAKER untouched
-        assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
-        assert_eq!(gic.frames.borrow()[0].waker, WAKER_ASLEEP);
-        // the Active bit is still there behind the sleep
-        assert_eq!(gic.frames.borrow()[0].active[0], 1 << 27);
+        assert_eq!(woke, GicrWakeState { gicr_waker: WAKER_ASLEEP, wake: GicrWake::Woken { polls: 1 } });
+        assert_eq!((got.isactiver0, got.active, got.still_active, got.words_cleared), (1 << 27, 1, 0, 16));
+        let mut want = vec![(GICR.base + GICR_WAKER, WAKER_CHILDREN_ASLEEP)];
+        want.extend(clear_words(GICR.base, 15));
+        assert_eq!(*gic.writes.borrow(), want);
+        assert_eq!(gic.frames.borrow()[0].waker, 0);
+        assert_eq!(gic.frames.borrow()[0].active[0], 0);
         assert_eq!(
             gic_line(&got),
             "t6: GIC active state: GICD_TYPER 0x0000000f GICR_TYPER 0x0000000000000000 \
-             GICR_ISACTIVER0 0x00000000 as found, 0 INTID(s) active (none), 16 word(s) written ICACTIVER, 0 still active"
+             GICR_ISACTIVER0 0x08000000 as found, 1 INTID(s) active (INTIDs 27), 16 word(s) written ICACTIVER, 0 still active"
         );
     }
 
-    /// DEFECT (Risk A of gic-feeder-study): `gic_active_reset` does not wake
-    /// a redistributor with ProcessorSleep set before it touches the SGI
-    /// frame (Linux's gic_enable_redist clears ProcessorSleep and waits for
-    /// ChildrenAsleep to clear first). A sleeping frame reads zero and drops
-    /// the clear, so an Active PPI is neither seen nor cleared, and "0 still
-    /// active" is false. Wanted: the PPI is found (INTID 27) and really
-    /// cleared. Not fixed here: the fix waits on uboot-s1c's GIC line and
-    /// needs its own pull request.
+    /// Risk A of gic-feeder-study: a sleeping frame reads zero and drops
+    /// the clear, so the redistributor must be woken before the SGI frame
+    /// (Linux's gic_enable_redist clears ProcessorSleep and waits for
+    /// ChildrenAsleep to clear first). The PPI is found (INTID 27) and
+    /// really cleared.
     #[test]
-    #[ignore = "defect: gic_active_reset does not wake the redistributor (GICR_WAKER.ProcessorSleep) before the SGI frame; fix waits on uboot-s1c"]
     fn redistributor_asleep_is_woken_before_the_clear() {
         let mut frames = Gic::four_cpus();
         frames[0].waker = WAKER_ASLEEP;
@@ -1395,6 +1475,39 @@ mod tests {
         assert_eq!((got.isactiver0, got.active, got.intids[0]), (1 << 27, 1, 27));
         assert_eq!(gic.frames.borrow()[0].active[0], 0, "really cleared");
         assert_eq!(got.still_active, 0);
+    }
+
+    /// A wake that does not take (ChildrenAsleep stays set): after
+    /// GICR_WAKER_POLLS reads the SGI frame is left alone, reported as no
+    /// redistributor (the other line), and the distributor still cleared.
+    #[test]
+    fn a_wake_that_times_out_leaves_the_sgi_frame_alone() {
+        let mut frames = Gic::four_cpus();
+        frames[0].waker = WAKER_ASLEEP;
+        let mut gic = Gic::new(0x0000_000f, frames);
+        gic.waker_stuck = true;
+        gic.spi.borrow_mut()[2] = 1 << 7;
+        let (got, woke) = gic_active_reset_woken(&gic, GICD, GICR, 0);
+        assert_eq!(woke.wake, GicrWake::TimedOut);
+        assert_eq!((got.rdist.rd_base, got.rdist.frames), (None, 1));
+        let mut want = vec![(GICR.base + GICR_WAKER, WAKER_CHILDREN_ASLEEP)];
+        want.extend((1..=15).map(|w| (GICD + GICD_ICACTIVER + 4 * w, !0)));
+        assert_eq!(*gic.writes.borrow(), want);
+        assert_eq!((got.active, got.intids[0], got.still_active, got.words_cleared), (1, 71, 0, 15));
+        assert!(gic_line(&got).contains("no redistributor with affinity 0x00000000 in 1 frame(s)"));
+    }
+
+    /// ChildrenAsleep set with ProcessorSleep already clear (a wake under
+    /// way): no write, the wait only.
+    #[test]
+    fn children_asleep_alone_is_waited_for_without_a_write() {
+        let mut frames = Gic::four_cpus();
+        frames[0].waker = WAKER_CHILDREN_ASLEEP;
+        let mut gic = Gic::new(0x0000_000f, frames);
+        gic.waker_stuck = true;
+        let (_, woke) = gic_active_reset_woken(&gic, GICD, GICR, 0);
+        assert_eq!(woke, GicrWakeState { gicr_waker: WAKER_CHILDREN_ASLEEP, wake: GicrWake::TimedOut });
+        assert!(gic.writes.borrow().iter().all(|&(a, _)| a != GICR.base + GICR_WAKER));
     }
 
     /// No redistributor with the affinity: SGIs and PPIs not touched, the
