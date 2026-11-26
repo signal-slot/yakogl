@@ -32,6 +32,9 @@
 #   code of the login seen when ssh finds a new boot_id, and stays when it
 #   finds none (issue #11874); other codes are as before; the two runners
 #   call it with their codes.
+# - prompt-go.sh's own exit codes 3 (an image refused), 40 (a bad rfc2217
+#   address) and 1 (no Armbian back); 41 has no case without a board (see
+#   the comment at its check).
 # - prompt-lib.sh's reboot_and_wait_tool with a fake board() and a process
 #   in the tool's place: the file that ends the tool's wait on a silent UART
 #   is made on a new boot_id only, and both runners hand that file to their
@@ -315,6 +318,51 @@ check "exit_when_back: a code not in the list, no Armbian: exit 1 as before (rc 
 back 5 none 6:8 10:0
 rc=$?
 check "exit_when_back: stopped at the prompt, no Armbian: exit 5 as before (rc $rc)" "$([ "$rc" = 5 ]; echo $?)"
+# prompt-go.sh's own exit codes 1, 3, 40 and 41 (the header's "Exit:" and
+# README.md's exit codes); prompt-go.py's other codes are pinned by its own
+# self-test.
+# - 3, refused before anything was changed: an image that is no AArch64
+#   Image, with the message that says the board was not rebooted, and no
+#   reboot reached the fake ssh.
+mkdir "$tmp/g3"
+head -c 4096 /dev/zero >"$tmp/g3/t6_hello.bin"
+: >"$tmp/g3.log"
+out=$(SSH_LOG=$tmp/g3.log fake bash "$here/prompt-go.sh" "$tmp/g3/t6_hello.bin" t6_hello)
+rc=$?
+check "prompt-go exit 3: an image that is no AArch64 Image is refused, the board not rebooted (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: ' <<<"$out" && grep -qF 'is not an AArch64 Image' <<<"$out" &&
+		grep -qF 'the board was not rebooted' <<<"$out" && ! grep -q 'reboot' "$tmp/g3.log"; echo $?)"
+# - 40, t6-uart-rfc2217.py could not open the session or set the line, so
+#   prompt-go.sh did not start: a T6_UART that is no rfc2217://<host>:<port>
+#   (port 0, a placeholder host that never resolves) is refused by the tool
+#   before it connects; the placeholder is not printed.
+out=$(T6_HAND=test T6_RECORD_DIR=$tmp T6_UART=rfc2217://example.invalid:0 fake_go "$tmp/t6_hello.bin" t6_hello --go)
+rc=$?
+check "prompt-go exit 40: a T6_UART that is no rfc2217://<host>:<port> is refused by t6-uart-rfc2217.py, nothing started (rc $rc)" \
+	"$([ "$rc" = 40 ] && grep -qF 'T6_UART is not rfc2217://<host>:<port>' <<<"$out" &&
+		! grep -qF 'example.invalid' <<<"$out" && ! grep -q 'prompt-go.sh: record' <<<"$out"; echo $?)"
+# - 1, the board did not come back into Armbian: reached by exit_when_back
+#   when the tool's code is none of prompt-go.sh's no-login codes (6, 10) and
+#   neither ssh nor the UART shows Linux; the record says the board needs
+#   the hand. prompt-go.sh itself gets there only after --go has rebooted a
+#   board, so the case drives the function with prompt-go.sh's own list
+#   (6:8 10:0) and its tool's code 9 (`go` not answered).
+back 9 none 6:8 10:0
+rc=$?
+check "prompt-go exit 1: the board did not come back into Armbian: exit 1, a hand needed, in the record (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'no Armbian' "$tmp/back/record.txt" &&
+		grep -qF 'the board needs test at its power switch' "$tmp/back/record.txt"; echo $?)"
+# - 41, t6-uart-rfc2217.py failed while the command ran: no case. It needs
+#   a session that opens and sets 1500000 8N1 (a full RFC 2217 server) and
+#   then a failure of the relay under a running prompt-go.sh --go, which
+#   also needs a pty board, the board lock and a rebooting ssh; none of that
+#   exists without a board. The tool's own self-test (t6-uart-rfc2217.py
+#   --self-test, a fake adapter) pins 41, and prompt-go.sh passes the tool's
+#   status through (`exec`), so it adds no code of its own.
+check "prompt-go exit 41 has no case here: prompt-go.sh execs t6-uart-rfc2217.py, whose self-test pins 41" \
+	"$(grep -qF 'exec python3 -I "$K/t6-uart-rfc2217.py" run -- bash' "$here/prompt-go.sh" &&
+		grep -qx 'FAILED = 41' "$here/../kexec-zephyr/t6-uart-rfc2217.py"; echo $?)"
+
 # The runners hand it their codes: prompt-go.sh 6:8 and 10:<0 when the
 # verdict's last line is PASS, else 11>, prompt-reads.sh 6:0.
 check "prompt-go.sh and prompt-reads.sh call exit_when_back with their no-login codes" \
