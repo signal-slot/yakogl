@@ -957,6 +957,10 @@ mod tests {
         rd: usize,
         typer: u64,
         active: [u32; 3],
+        /// `GICR_WAKER`: ProcessorSleep bit 1, ChildrenAsleep bit 2. While
+        /// ProcessorSleep and ChildrenAsleep are both set the SGI frame reads
+        /// as zero and drops writes (the model of an asleep redistributor).
+        waker: u32,
     }
 
     /// A GICv3 as far as [`gic_active_reset`] may touch it. Any other
@@ -980,6 +984,7 @@ mod tests {
         Espi(usize, bool),
         FrameTyper(usize, u32),
         Sgi(usize, usize, bool),
+        Waker(usize),
     }
 
     impl Gic {
@@ -1003,6 +1008,7 @@ mod tests {
                     rd: GICR.base + i as usize * GICR_FRAME_SIZE,
                     typer: ((i << 8) << 32) | (i << 8) | if i == 3 { GICR_TYPER_LAST } else { 0 },
                     active: [0; 3],
+                    waker: 0,
                 })
                 .collect()
         }
@@ -1027,6 +1033,9 @@ mod tests {
                 if a == f.rd + GICR_TYPER || a == f.rd + GICR_TYPER + 4 {
                     return Reg::FrameTyper(i, if a == f.rd + GICR_TYPER { 0 } else { 32 });
                 }
+                if a == f.rd + GICR_WAKER {
+                    return Reg::Waker(i);
+                }
                 let words = 1 + gicr_eppi_words(f.typer) as usize;
                 for (set, base) in [(true, GICR_ISACTIVER0), (false, GICR_ICACTIVER0)] {
                     let w0 = f.rd + GICR_SGI_BASE + base;
@@ -1046,7 +1055,15 @@ mod tests {
                 Reg::Spi(w, true) => self.spi.borrow()[w],
                 Reg::Espi(w, true) => self.espi.borrow()[w],
                 Reg::FrameTyper(i, sh) => (self.frames.borrow()[i].typer >> sh) as u32,
-                Reg::Sgi(i, w, true) => self.frames.borrow()[i].active[w],
+                Reg::Sgi(i, w, true) => {
+                    let f = &self.frames.borrow()[i];
+                    if f.waker & WAKER_ASLEEP == WAKER_ASLEEP {
+                        0
+                    } else {
+                        f.active[w]
+                    }
+                }
+                Reg::Waker(i) => self.frames.borrow()[i].waker,
                 // the ICACTIVER words read as ISACTIVER on the hardware; the
                 // clear has no reason to read them
                 _ => panic!("read of an ICACTIVER word {a:#x}"),
@@ -1058,7 +1075,14 @@ mod tests {
             match self.decode(a) {
                 Reg::Spi(w, false) => self.spi.borrow_mut()[w] &= !v | self.sticky_spi[w],
                 Reg::Espi(w, false) => self.espi.borrow_mut()[w] &= !v,
-                Reg::Sgi(i, w, false) => self.frames.borrow_mut()[i].active[w] &= !v,
+                Reg::Sgi(i, w, false) => {
+                    let f = &mut self.frames.borrow_mut()[i];
+                    if f.waker & WAKER_ASLEEP != WAKER_ASLEEP {
+                        f.active[w] &= !v;
+                    }
+                }
+                // a wake: ProcessorSleep cleared, ChildrenAsleep follows
+                Reg::Waker(i) => self.frames.borrow_mut()[i].waker = v & !WAKER_ASLEEP,
                 _ => panic!("a write to {a:#x}, which is not an ICACTIVER word"),
             }
         }
@@ -1071,6 +1095,11 @@ mod tests {
             panic!("8-bit write at {a:#x}")
         }
     }
+
+    const GICR_WAKER: usize = 0x0014;
+    const WAKER_PROCESSOR_SLEEP: u32 = 1 << 1;
+    const WAKER_CHILDREN_ASLEEP: u32 = 1 << 2;
+    const WAKER_ASLEEP: u32 = WAKER_PROCESSOR_SLEEP | WAKER_CHILDREN_ASLEEP;
 
     // MPIDR_EL1 of the RK3588's CPU 0: MT (bit 24) and the RES1 bit 31 set,
     // every affinity 0 (Linux's rk3588-base.dtsi gives cpu@0 reg 0x0).
@@ -1211,6 +1240,7 @@ mod tests {
                 rd: GICR.base + i as usize * 2 * GICR_FRAME_SIZE,
                 typer: ((i << 8) << 32) | GICR_TYPER_VLPIS | if i == 1 { GICR_TYPER_LAST } else { 0 },
                 active: [0; 3],
+                waker: 0,
             })
             .collect();
         let gic = Gic::new(0, frames);
@@ -1218,7 +1248,7 @@ mod tests {
         assert_eq!((got.rd_base, got.frames), (Some(GICR.base + 2 * GICR_FRAME_SIZE), 2));
         // a stride from the devicetree wins
         let frames: Vec<Frame> = (0..2u64)
-            .map(|i| Frame { rd: GICR.base + i as usize * 0x8_0000, typer: (i << 8) << 32, active: [0; 3] })
+            .map(|i| Frame { rd: GICR.base + i as usize * 0x8_0000, typer: (i << 8) << 32, active: [0; 3], waker: 0 })
             .collect();
         let gic = Gic::new(0, frames);
         let got = gicr_find(&gic, GicrRegion { stride: 0x8_0000, ..GICR }, 0x100);
@@ -1226,7 +1256,12 @@ mod tests {
         // no Last and no match: the walk ends at the region's end, never past
         // it (the model panics on a frame that is not there)
         let frames: Vec<Frame> = (0..2u64)
-            .map(|i| Frame { rd: GICR.base + i as usize * GICR_FRAME_SIZE, typer: (i << 8) << 32, active: [0; 3] })
+            .map(|i| Frame {
+                rd: GICR.base + i as usize * GICR_FRAME_SIZE,
+                typer: (i << 8) << 32,
+                active: [0; 3],
+                waker: 0,
+            })
             .collect();
         let gic = Gic::new(0, frames);
         let got = gicr_find(&gic, GicrRegion { size: 2 * GICR_FRAME_SIZE, ..GICR }, 0x300);
@@ -1262,5 +1297,122 @@ mod tests {
         assert_eq!(*gic.writes.borrow(), want);
         assert_eq!(gic.frames.borrow()[0].active, [0; 3]);
         assert_eq!(*gic.espi.borrow(), [0; 32]);
+    }
+
+    /// The `t6: GIC active state` line nanopc_t6.c prints from the record
+    /// (`gic_active_report`), the same format strings, for the host to pin.
+    fn gic_line(r: &GicActiveReset) -> String {
+        let rec = crate::ffi::YdGicActiveReset::from_reset(*r, GICR.base);
+        let mut s = if rec.flags & crate::ffi::YD_GIC_RDIST_FOUND != 0 {
+            format!(
+                "t6: GIC active state: GICD_TYPER 0x{:08x} GICR_TYPER 0x{:016x} GICR_ISACTIVER0 0x{:08x} as found, ",
+                rec.gicd_typer, rec.gicr_typer, rec.isactiver0
+            )
+        } else {
+            format!(
+                "t6: GIC active state: GICD_TYPER 0x{:08x}, no redistributor with affinity 0x{:08x} in {} frame(s): SGIs and PPIs not scanned, ",
+                rec.gicd_typer, rec.aff, rec.frames
+            )
+        };
+        s += &format!("{} INTID(s) active (", rec.active);
+        if rec.active == 0 {
+            s += "none";
+        } else {
+            s += "INTIDs";
+            for i in 0..(rec.active as usize).min(GIC_ACTIVE_LISTED) {
+                s += &format!(" {}", rec.intids[i]);
+            }
+            if rec.active as usize > GIC_ACTIVE_LISTED {
+                s += " ...";
+            }
+        }
+        s + &format!("), {} word(s) written ICACTIVER, {} still active", rec.words_cleared, rec.still_active)
+    }
+
+    /// Redistributor awake: the state Linux's kexec leaves (a PPI left Active
+    /// by the kernel is seen, cleared, and printed).
+    #[test]
+    fn redistributor_awake_the_kexec_state() {
+        let mut frames = Gic::four_cpus();
+        frames[0].active[0] = 1 << 27;
+        let gic = Gic::new(0x0000_000f, frames);
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!(got.isactiver0, 1 << 27);
+        assert_eq!((got.active, got.intids[0], got.still_active, got.words_cleared), (1, 27, 0, 16));
+        assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
+        assert_eq!(gic.frames.borrow()[0].active[0], 0);
+        assert_eq!(
+            gic_line(&got),
+            "t6: GIC active state: GICD_TYPER 0x0000000f GICR_TYPER 0x0000000000000000 \
+             GICR_ISACTIVER0 0x08000000 as found, 1 INTID(s) active (INTIDs 27), 16 word(s) written ICACTIVER, 0 still active"
+        );
+    }
+
+    /// ProcessorSleep=1, ChildrenAsleep=1, as U-Boot may leave it. What the
+    /// code does today, pinned: it never reads or writes `GICR_WAKER`, writes
+    /// `GICR_ICACTIVER0` into the sleeping frame (dropped), reads the frame
+    /// as zero, and prints "none active, 0 still active" although an
+    /// interrupt may be Active behind the sleep. The wake the next test wants
+    /// is not here (defect, see below).
+    #[test]
+    fn redistributor_asleep_as_uboot_may_leave_it_today() {
+        let mut frames = Gic::four_cpus();
+        frames[0].waker = WAKER_ASLEEP;
+        frames[0].active[0] = 1 << 27;
+        let gic = Gic::new(0x0000_000f, frames);
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!(got.rdist.rd_base, Some(GICR.base));
+        assert_eq!((got.isactiver0, got.active, got.still_active, got.words_cleared), (0, 0, 0, 16));
+        // the frame is written while asleep, WAKER untouched
+        assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
+        assert_eq!(gic.frames.borrow()[0].waker, WAKER_ASLEEP);
+        // the Active bit is still there behind the sleep
+        assert_eq!(gic.frames.borrow()[0].active[0], 1 << 27);
+        assert_eq!(
+            gic_line(&got),
+            "t6: GIC active state: GICD_TYPER 0x0000000f GICR_TYPER 0x0000000000000000 \
+             GICR_ISACTIVER0 0x00000000 as found, 0 INTID(s) active (none), 16 word(s) written ICACTIVER, 0 still active"
+        );
+    }
+
+    /// DEFECT (Risk A of gic-feeder-study): `gic_active_reset` does not wake
+    /// a redistributor with ProcessorSleep set before it touches the SGI
+    /// frame (Linux's gic_enable_redist clears ProcessorSleep and waits for
+    /// ChildrenAsleep to clear first). A sleeping frame reads zero and drops
+    /// the clear, so an Active PPI is neither seen nor cleared, and "0 still
+    /// active" is false. Wanted: the PPI is found (INTID 27) and really
+    /// cleared. Not fixed here: the fix waits on uboot-s1c's GIC line and
+    /// needs its own pull request.
+    #[test]
+    #[ignore = "defect: gic_active_reset does not wake the redistributor (GICR_WAKER.ProcessorSleep) before the SGI frame; fix waits on uboot-s1c"]
+    fn redistributor_asleep_is_woken_before_the_clear() {
+        let mut frames = Gic::four_cpus();
+        frames[0].waker = WAKER_ASLEEP;
+        frames[0].active[0] = 1 << 27;
+        let gic = Gic::new(0x0000_000f, frames);
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!(gic.frames.borrow()[0].waker & WAKER_PROCESSOR_SLEEP, 0, "woken");
+        assert_eq!((got.isactiver0, got.active, got.intids[0]), (1 << 27, 1, 27));
+        assert_eq!(gic.frames.borrow()[0].active[0], 0, "really cleared");
+        assert_eq!(got.still_active, 0);
+    }
+
+    /// No redistributor with the affinity: SGIs and PPIs not touched, the
+    /// distributor cleared, and the other line printed.
+    #[test]
+    fn no_redistributor_found_prints_the_other_line() {
+        let gic = Gic::new(0x0000_000f, Gic::four_cpus());
+        gic.spi.borrow_mut()[2] = 1 << 7;
+        let got = gic_active_reset(&gic, GICD, GICR, 0x400);
+        assert_eq!(got.rdist.rd_base, None);
+        assert_eq!(got.rdist.frames, 4);
+        let spi_only: Vec<(usize, u32)> = (1..=15).map(|w| (GICD + GICD_ICACTIVER + 4 * w, !0)).collect();
+        assert_eq!(*gic.writes.borrow(), spi_only);
+        assert_eq!((got.active, got.intids[0], got.still_active, got.words_cleared), (1, 71, 0, 15));
+        assert_eq!(
+            gic_line(&got),
+            "t6: GIC active state: GICD_TYPER 0x0000000f, no redistributor with affinity 0x00000400 in 4 frame(s): \
+             SGIs and PPIs not scanned, 1 INTID(s) active (INTIDs 71), 15 word(s) written ICACTIVER, 0 still active"
+        );
     }
 }
