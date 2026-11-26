@@ -945,7 +945,11 @@ board, through the runner.
   `tools/board-stm32mp2.sh`; `RUN_BOUND=600` or more is the caller's to set
   for deqp), skips a shard whose log already holds a result line (`--first` /
   `--last` resume or split a sweep), and ends with `mp2-p9-diff.py` over all
-  the shard logs — its exit 1 (new failures, missing cases) is the sweep's.
+  the shard logs, given `--exclude` of the exclude file in use (`--exclude`,
+  `MP2_DEQP_EXCLUDE`, or the default one; the 21 names pending Q11 are then
+  "excluded", not "missing") — its exit 1 (new failures, missing cases) is
+  the sweep's; last, `mp2-log-redact-check.sh OUT` runs and a hit fails the
+  sweep (the logs must be redacted before commit).
   `mp2_deqp_sweep_selftest.sh` runs the chain against a fake runner, no board.
 - `mp2-deqp-compare.py [--strict] [--imx8mp FILE] [--quiet] DK_RESULT...`
   diffs the DK's per-case dEQP-GLES2 results against the i.MX8MP's failures
