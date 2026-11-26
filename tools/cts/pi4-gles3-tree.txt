@@ -6,7 +6,7 @@
 # exactly one line (tools/cts/check-gles3-tree.py pi4-gles3-tree.txt proves it and pins
 # each "# image" count; check-deqp-images.py runs it). The filters match dEQP's whole
 # tree; the tally (deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt) restricts
-# to the list. Images T14, T14a1, T14aa and T14aa1 (texture.units: 8 cube units of tiled copies)
+# to the list. Images T09 (texture.size.2d.2048x2048_*), T14, T14a1, T14aa and T14aa1 (texture.units: 8 cube units of tiled copies)
 # need texture-2048.conf (the "(with texture-2048.conf)" marker of their comment).
 #
 # Sized for the image's watchdog window, CONFIG_V3D_DEQP_LIFETIME_S 240 s less
@@ -208,7 +208,7 @@ dEQP-GLES3.functional.texture.format.sized.2d_array.*,dEQP-GLES3.functional.text
 dEQP-GLES3.functional.texture.mipmap.*
 # image T08: 288
 dEQP-GLES3.functional.texture.shadow.2d.*,dEQP-GLES3.functional.texture.shadow.2d_array.*
-# image T09: 222
+# image T09: 222 (with texture-2048.conf) (texture.size.2d.2048x2048_* tiled copies)
 dEQP-GLES3.functional.texture.shadow.cube.*,dEQP-GLES3.functional.texture.size.*
 # image T10: 334
 dEQP-GLES3.functional.texture.specification.basic_copyteximage2d.*,dEQP-GLES3.functional.texture.specification.basic_copytexsubimage2d.*,dEQP-GLES3.functional.texture.specification.basic_teximage2d.*,dEQP-GLES3.functional.texture.specification.basic_teximage3d.*,dEQP-GLES3.functional.texture.specification.basic_texsubimage2d.*,dEQP-GLES3.functional.texture.specification.basic_texsubimage3d.*
