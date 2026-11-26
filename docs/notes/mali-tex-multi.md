@@ -107,3 +107,32 @@ terrain's four tilt-shift shaders and the non-separable blur stay refused.
 The next step for terrain is the `vec2(fneg(a), 0.0)` → `ffma(vec2(a, 0.0),
 (-1, 1), v)` form of gm2_texmulti_4 and the step arithmetic of _5, then the
 look-up order of _6.
+
+## 4. effect2d's kernels (plan #367 lower-nonfinite-const, step effect2d)
+
+effect2d fs `3c3d` still stopped at TEX_MULTI after the Laplace kernel of
+gm2_constfold_2 compiled. glmark2 normalises the kernel it writes into
+`3c3d`: the four edge taps are 0.25 and the centre is -1.0. The references
+gm2_fx2d_1..3 (study-effect2d) reduce effect-2d-convolution.frag as
+scene-effect-2d.cpp fills it, three ways: Laplace, sharpen (`-1.0` edges,
+`5.0` centre) and emboss.
+
+What the walk did not take was a kernel's `-1.0`. `texel * -1.0` is an
+fneg of the texel (nir_opt_algebraic.py:296). Mesa folds it into the sum
+that reads it as a source modifier:
+
+- gm2_fx2d_2: `FADD.v2f16 r3, r4^.neg, r6^.neg` of two taps, then
+  `FMA.v2f16 r0, r0^, u2.w1, r3^` of the centre by 5.0;
+- gm2_fx2d_3: `FMA.v2f16 r3, r4^, 0x40000000.neg.h11, r6^.neg` of the
+  emboss `-2.0` tap.
+
+`multi_forms` now admits an fp16 negation of a texel, both as a node and as
+a colour operand. The pair graph already makes the modifier. Nothing else
+changed: the zero taps fold away (CONST_FOLD, done), the centre tap reads
+the varying as it is loaded, and every other tap is an `FADD_IMM.v2f16` of
+the converted pair.
+
+Results (`tests/mali_effect2d_tex.rs`): gm2_fx2d_1, _2 and _3 are
+byte-equal. The reference sweep shows no other change. glmark2: `3c3d`
+compiles, so scene 12 is compile-clean (21 to 22 of 33).
+`tools/mali/corpus-verdicts.txt` does not move.

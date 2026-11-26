@@ -4,27 +4,27 @@
 0 build:use-vbo=false vs ace2: ok
 1 build:use-vbo=true fs 4748: ok
 1 build:use-vbo=true vs ace2: ok
-2 texture:texture-filter=nearest fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
-2 texture:texture-filter=nearest vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
-3 texture:texture-filter=linear fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
-3 texture:texture-filter=linear vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
-4 texture:texture-filter=mipmap fs 425b: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
-4 texture:texture-filter=mipmap vs ace2: link ace2+425b: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet)
+2 texture:texture-filter=nearest fs 425b: ok
+2 texture:texture-filter=nearest vs ace2: ok
+3 texture:texture-filter=linear fs 425b: ok
+3 texture:texture-filter=linear vs ace2: ok
+4 texture:texture-filter=mipmap fs 425b: ok
+4 texture:texture-filter=mipmap vs ace2: ok
 5 shading:shading=gouraud fs 4748: ok
 5 shading:shading=gouraud vs 83cd: ok
-6 shading:shading=blinn-phong-inf fs 994f: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+6 shading:shading=blinn-phong-inf fs 994f: ok
 6 shading:shading=blinn-phong-inf vs 78e3: ok
 7 shading:shading=phong fs 8a64: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 7 shading:shading=phong vs e5f2: ok
-8 shading:shading=cel fs fea0: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+8 shading:shading=cel fs fea0: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 8 shading:shading=cel vs e5f2: ok
-9 bump:bump-render=high-poly fs d442: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+9 bump:bump-render=high-poly fs d442: ok
 9 bump:bump-render=high-poly vs 78e3: ok
-10 bump:bump-render=normals fs 487d: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+10 bump:bump-render=normals fs 487d: Valhall: a texture result's lanes other than its own pairs in order (a swizzle, a lane alone) is not lowered yet
 10 bump:bump-render=normals vs 51d0: ok
-11 bump:bump-render=height fs 77c5: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+11 bump:bump-render=height fs 77c5: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 11 bump:bump-render=height vs 270a: ok
-12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
+12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: ok
 12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; vs 4623: ok
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; fs ba8e: ok
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; vs 4623: ok
@@ -55,7 +55,7 @@
 20 ideas:speed=duration vs c236: ok
 20 ideas:speed=duration vs c265: ok
 21 jellyfish fs 22fc: ok
-21 jellyfish fs 8ee5: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
+21 jellyfish fs 8ee5: ok
 21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
 22 terrain fs 1637: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
@@ -87,7 +87,7 @@
 27 conditionals:vertex-steps=5:fragment-steps=0 vs a21c: ok
 28 function:fragment-steps=5:fragment-complexity=low fs c8ce: ok
 28 function:fragment-steps=5:fragment-complexity=low vs 0162: ok
-29 function:fragment-steps=5:fragment-complexity=medium fs 849c: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet
+29 function:fragment-steps=5:fragment-complexity=medium fs 849c: ok
 29 function:fragment-steps=5:fragment-complexity=medium vs 0162: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false fs e016: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false vs 3cb0: ok
