@@ -1,14 +1,17 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# GC7000: wiring the depth sample, the code for each answer of the X2 depth-TPU session
+# GC7000: wiring the depth sample, the code for each answer of the dtpu board session
 
-A design note for plan #328, item depth-sample-gc (issue #1204). glmark2
+A design note, written for plan #328 (item depth-sample-gc, issue #1204)
+and now carried by plan #417 (its item wire-verdict implements the outcome in
+`src/vivante/**`; `src/gl` belongs to #397). Its (c) section states what
+landed on main. glmark2
 `shadow` and `refract` lose an estimated 350 to 1000 ms a frame to the CPU
 D24S8 to R32F depth resolve (`docs/notes/gc-slow-shadow-refract.md`, cause 1;
 `docs/notes/gc-depth-resolve.md`). `docs/notes/gc-depth-sample.md` explains how
 the texture unit could sample the D24S8 surface itself, and its board case
-`dtpu` (item gt-depth-tpu, run by item x2-depth-tpu-run on the Armadillo-X2)
-decides whether it can. This note writes out the code for each answer, so
+`dtpu` (gl_test case 222, run in the board session: the Verdin iMX8MP, or
+the Armadillo-X2 once its container is stopped) decides whether it can. This note writes out the code for each answer, so
 depth-sample-gc can start as soon as the record arrives: the files, the
 functions, the words, and the host test that proves the path without a board.
 
@@ -100,31 +103,26 @@ reaches the depth path: its binding is the black texel before any descriptor
 
 ### Files, and who owns them now
 
-depth-sample-gc's brief names `src/backend.rs`, `src/vivante/depth_sample.rs`
-and a new host test for the sample path (never committed). Outcome (a) also needs small edits in
-four more files. Each has an owner today:
+Status at `5483d7cf`. The module `src/vivante/depth_sample.rs` and its
+test knob are on main (mode 1's descriptor, the GC arm of
+`samples_rendered_depth`, `src/backend.rs:2073`, which calls
+`depth_sample::gc_depth_sampled`, `:121`; `GC_TEX_FORMAT_D24X8`, `:54`;
+`ds_cache::depth_view`, `ds_cache.rs:860`; the `GC_TEXFMT_DEPTH_VIEW` arm in
+`gc_texfmt`, `src/vivante/texture.rs:98`/`:178`). The tests
+`tests/gc_depth_sample.rs` and `tests/gc_depth_view_golden.rs` exist.
+Plan #417 implements the dtpu outcome for the files below. Owners today:
 
-| file | edit | owner at this tip |
+| file | edit | owner now |
 |---|---|---|
-| `src/vivante/regs.rs` | one const, `GC_TEX_FORMAT_D24X8` | none (plan #310 edits texture formats nearby) |
-| `src/vivante/mod.rs` | `pub mod depth_sample;` (if gt-depth-tpu did not add it) | gc-early-z (running), then gc-groundwork-mod |
-| `src/vivante/ds_cache.rs` | two small functions (the view lookup, the sample stamp) | resolve-wide (running) |
-| `src/vivante/texture.rs` | one `gc_texfmt` arm, one swizzle clause, one substitution in `emit_slot` | tiled-copy-rs (running); plan #310 |
+| `src/vivante/depth_sample.rs`, `ds_cache.rs`, `texture.rs`, `regs.rs`, `mod.rs` | the outcome's code (the table of the sections below) | plan #417, item wire-verdict; plans #400 and #410 also change `src/vivante/**` and `src/shaderc/**`, and connected serializes overlapping items |
+| `src/backend.rs` | the GC arm of `samples_rendered_depth` (landed; (a)/(b) change its doc) | plan #417, item wire-verdict |
+| `src/gl/**` (`texture.rs`, `draw.rs`) | a change only if an outcome needs one | plan #397; #417 names it, does not make it |
+| `driver/samples/zephyr/**` (gl_test case 222) | a needed arm for (b) | plan #407; #417 names it, does not make it |
+| `src/osal/zephyr_gc.c` | none (the (c).3 fix is on main) | none |
 
-So depth-sample-gc starts after resolve-wide, tiled-copy-rs and gc-early-z
-are merged, rebased on the main of that day, and keeps each edit to the
-lines below. The line numbers here move with those merges. The function
-names are the anchors.
-
-`src/vivante/depth_sample.rs` and `tests/gc_depth_sample.rs` do not exist at
-this tip. Item gt-depth-tpu is writing them (the test knob
-`gc_debug_set_depth_tpu(mode)` of `gc-depth-sample.md`, the descriptor for
-modes 1 and 2, and its host test). depth-sample-gc builds on what gt-depth-tpu
-merged: the knob's mode 1 descriptor **is** outcome (a)'s product
-descriptor. The product path drops the knob test, and the knob stays for
-gl_test. If gt-depth-tpu's module already has a function that builds the
-substituted binding (below), depth-sample-gc calls that function and does not
-write a second one.
+wire-verdict starts from the main of that day and keeps each edit to the
+lines below. The line numbers in the sections below were written at
+`723a75c8` and moved since; the function names are the anchors.
 
 ## (a) The TPU samples D24S8 as D24X8: a depth view, no copy
 
@@ -342,7 +340,7 @@ is a real depth value (`D:324-328` restricts only the mip filter), and
   (b.2), which writes the texels the TPU already reads coherently today.
 
 **(a).11 What happens to `ds_cache.rs`.** The CPU resolve
-(`resolve_depth`, `:562-615`, with resolve-wide's loads) stays for the CPU
+(`resolve_depth`, `ds_cache.rs:747`, with the wide loads of (c).1) stays for the CPU
 readers and for every binding the answer refuses: a whole clear (`fill`),
 a parked clear, scale 2, or a texture with levels. On glmark2's frame it is
 no longer called. Its `cache_invd` (`:598`) and the GL core's `cache_flush`
@@ -421,7 +419,7 @@ that touches the depth surface's allocation or the texture's texels. Each case r
 What the host cannot show is whether the TPU returns the depth. That is
 `dtpu`'s check 4, already in the record when this test is written.
 
-### (a) The X2 measurement that confirms it
+### (a) The board measurement that confirms it
 
 Item x2-gm-after, from `gc-slow-shadow-refract.md` "Confirms the real
 fix": PERF page 4 v3 drops from about 15,000 KiB to 0 a frame and v2 drops by
@@ -480,7 +478,7 @@ Steps (a).1, (a).4, (a).5, (a).7 and (a).8 hold as written. These change:
 - **Board check (new, not in `dtpu`).** `dtpu` does not test D24X8 on a
   supertiled copy. Before (b).1 lands, the board must run one more arm:
   knob 3, "RS copy + D24X8 SUPER_TILED", checked as check 4 against P0. It goes in
-  gt-depth-tpu's gl_test case (its files) and runs in a second X2 session.
+  case 222 of gl_test and runs in a second board session (the Verdin iMX8MP, or X2 once its container is stopped).
   If it fails, take (b).2.
 - **Cost.** One 7.68 MB read plus one 7.68 MB write by the RS a frame on the
   GPU, against the CPU's 5.76 M uncached loads. The RS rate on this part is
@@ -530,7 +528,7 @@ writes R32F into the texture's own storage.
   a pixel of `imx8mp-frame-floor.md` candidate 2, more with the decode's ALU)
   plus 7.68 MB written. No CPU loop, no `finish`.
 - **Board check (new).** The R32F write of the decoded value against P0,
-  in gt-depth-tpu's case (knob 4), in the second session.
+  in gl_test's case 222 (knob 4), in the second session.
 
 ### (b) `ds_cache.rs`, compare, glmark2
 
@@ -571,69 +569,70 @@ Cases 1, 3, 4, 5, 6 and 7 of (a), with these changes:
 Record: check 6 fails. The LINEAR descriptor does not address the surface
 even as bytes, so no view and no in-stream copy is known to work.
 depth-sample-gc then makes no code change. It closes with the record and a
-comment on #1204, and `dtpu`'s knob stays test-only. Three CPU fixes
-remain, each its own item of plan #328. They touch none of
-depth-sample-gc's files except `ds_cache.rs`, which belongs to resolve-wide.
+comment on #1204, and `dtpu`'s knob stays test-only. The three CPU fixes this
+outcome leaves are all on main (status at `5483d7cf`); (c) applies nothing
+new for them, it only keeps them. They touch none of depth-sample-gc's files
+except `ds_cache.rs`.
 
-### (c).1 resolve-wide (running): the loads
+### (c).1 landed, `25fa1a96`: the loads
 
-`ds_cache::resolve_depth`'s loop (`ds_cache.rs:604-613`) reads each texel
-with three `ldrb` on `aarch64-unknown-none` (`+strict-align`;
-`gc-slow-shadow-refract.md` "The loop's code"). The fix reads aligned
-`u32` (or 16-byte) words of the 64-byte-aligned surface. Host tests:
-`tests/gc_depth_resolve.rs` stays bit-exact, and resolve-wide's loads test
-(never committed) checks the target's code.
-The same `as_chunks` form is in `copy_plane` (`:474`) and `seed_depth`
-(`:533`), which are not per frame.
+`ds_cache::resolve_row` (`src/vivante/ds_cache.rs:822`, called from
+`resolve_depth`, `:747`) read each texel with three `ldrb` on
+`aarch64-unknown-none` (`+strict-align`; `gc-slow-shadow-refract.md` "The
+loop's code"). It now reads the 16-byte aligned middle of a row with one
+volatile `u128` load (`ldp`) per four words and the head and tail with
+volatile `u32` loads; a row that is not 4-byte aligned (no surface of this
+cache is) keeps the byte-wise loop. The values are the old loop's, bit for
+bit: `tests/gc_depth_resolve.rs` (extended by that commit). The
+`as_chunks` form stays in `copy_plane` (`:545`) and `seed_depth` (`:642`),
+which are not per frame. A check of the target's code (that the
+`aarch64-unknown-none` build issues the wide loads) is not part of that
+commit; it is plan #417's item wide-asm.
 
-### (c).2 resolve-own-kick: wait for the depth kick, not every slot
+### (c).2 landed, `e320630d`: wait for the depth kick, not every slot
 
-- `src/gl/texture.rs:709`: `backend::kick_pending(kick) && (flush() != 0 ||
-  finish() != 0)` becomes `flush()`, then `backend::wait_kick(kick)`
-  (`src/backend.rs:1978-1981`), falling back to `finish()` when it is
-  `None` (the contract the doc of `wait_kick` already gives).
-- `src/vivante/backend.rs:3381`: `wait_kick: Some(gc_wait_kick)`. A new
-  `gc_wait_kick(kick_id)` finds the frame whose `kick_id` matches (the
-  search of `kick_pending`, `:3276-3281`) and `wait_frame`s it (`:3181-3190`).
-  A kick older than every slot has completed. The open frame's kick is
-  submitted by the `flush` before it. Then `retire_wide_targets`
-  (`:3287-3289`), as `finish` does.
+- `src/gl/texture.rs:719`: the resolve's `wait` is
+  `backend::wait_kick(kick)` (`src/backend.rs:2201`), falling back to
+  `flush()` then `finish()` when the backend has none (`None`); it runs only
+  `if backend::kick_pending(kick)` (`:721`).
+- `src/vivante/backend.rs:4111`: `wait_kick: Some(gc_wait_kick)`;
+  `gc_wait_kick` (`:3977`) calls `kick::wait_kick` (`src/vivante/kick.rs:70`),
+  which waits for the one frame whose `kick_id` matches: no wait for a kick
+  that completed or is older than every slot, `gc_flush` first for the open
+  kick, then `wait_fence` of that kick's fence, then `retire_wide_targets`'
+  work for the stamp (as `finish` does).
 - Gain: refract's resolve no longer waits for its 10 mipmap kicks
   (`gc-slow-shadow-refract.md` cause 3). Shadow gains nothing (K1 and K2 are
   the only kicks).
-- Host test: in `src/vivante/backend_tests.rs`, or a new
-  `tests/gc_resolve_wait_kick.rs`, a stand-in whose fences complete on demand. Record
-  a depth kick and three later kicks, call the GL core's `resolve_depth`
-  path, and assert that `wait` was called for the depth kick's fence only.
-  Also `gc_wait_kick` of the open kick after `flush`, and of a retired kick
-  (no wait).
+- Host test: `tests/gc_resolve_wait_kick.rs` (a stand-in whose fences
+  complete on demand; `wait` for the depth kick's fence only).
+  `tests/gc_depth_resolve.rs` was adjusted for the new signature.
 
-### (c).3 gc-cache-skip: no DC maintenance on the non-cacheable carve-out
+### (c).3 landed, `e58be17b`: no DC maintenance on the non-cacheable carve-out
 
-- The two ranges of the frame: `ds_cache.rs:598` (`cache_invd`, the whole
-  surface allocation) and `src/gl/texture.rs:732` (`cache_flush`, the texels).
-- The fix is in the OSAL, where the mapping is known. `z_cache_flush` and
-  `z_cache_invd` (`src/osal/zephyr_gc.c:359-369`) return at once for a range
-  inside the carve-out, which is Normal non-cacheable for every user
-  (`:154`; `z_gpu_write` already says so, `:343-345`). Do the same for
-  `gc_render_cache_flush`/`_invd` (`driver/src/vivante/gc_render.c:461-469`)
-  after fence-irq, which owns `gc_render.c`. The Rust callers
-  (`src/osal/mod.rs:492`, `:505`) do not change.
-- Host test: a C unit test of the range check in the Zephyr OSAL (a pure
-  `in_carveout(base, size, p, n)` function, compiled for the host the way the
-  OSAL's other host-built C is), or a Rust test over a stand-in OSAL that
-  counts the calls reaching the cache ops.
-- Gain: an estimated 2 to 25 ms a frame (unmeasured).
+- The ranges of the frame: `ds_cache.rs:788` (`cache_invd`, the whole surface
+  allocation) and `src/gl/texture.rs:741` (`cache_flush`, the texels).
+- The fix is in the OSAL, where the mapping is known, not in `gc_render.c`
+  (untouched). `src/osal/zephyr_gc.c` records the carve-out's CPU view
+  (`note_carveout_view`, `:122`: the span of the CPU addresses `z_gpu_alloc`
+  and `z_map_phys` hand out) and `in_carveout` (`:140`) tests a range with
+  the pure `gc_cache_range_inside` (`src/osal/gc_cache_range.h`).
+  `z_gpu_write` (`:375`), `z_gpu_read` (`:384`), `z_cache_flush` (`:391`)
+  and `z_cache_invd` (`:397`) skip the cache call for a range inside it. The
+  Rust callers (`src/osal/mod.rs:526`, `:539`) do not change.
+- Host test: `tools/osal/gc_cache_range_check.c`, a C unit test of the range
+  check, wired into `tools/check.sh` by that commit.
+- Gain: an estimated 2 to 25 ms a frame (unmeasured on a board).
 
 ### (c) What else stays
 
 `ds_cache.rs` keeps today's design. No `depth_view` and no `note_sampled`
 are added, because nothing samples the surface. `src/backend.rs`,
 `src/vivante/texture.rs` and `regs.rs` are unchanged. `samples_rendered_depth`'s doc
-(`backend.rs:1848-1850`) and `src/gl/texture.rs:679-684` name the record that
+(`samples_rendered_depth`, `src/backend.rs:2073`) and the doc of `depth_resolve` in `src/gl/texture.rs` name the record that
 answered no.
 
-Even with all three fixes, shadow and refract keep a 1.92 M-texel CPU pass
+With all three fixes on main, shadow and refract keep a 1.92 M-texel CPU pass
 a frame. The resolve-wide estimate is 50 to 350 ms left
 (`gc-slow-shadow-refract.md` cause 1, "Fix, cheap"). The fill-side fixes of
 `gc-tiled-targets.md` (TS-aware resolve, step 3) would then be the next
@@ -642,11 +641,11 @@ lever. Their gain shrinks to 0 in (a) and (b).
 ## What this note does not decide
 
 - Whether the TPU returns the depth, how many bits it returns, and whether
-  the texture cache is coherent: `dtpu` checks 4, 5 and 7, run by
-  x2-depth-tpu-run.
+  the texture cache is coherent: `dtpu` checks 4, 5 and 7, run in
+  the board session.
 - Whether D24X8 reads a supertiled RS copy ((b).1), and whether the RS copies
   D24S8 words unchanged as A8R8G8B8: a second board session, after
-  gt-depth-tpu adds the arm.
+  the gl_test arm is added.
 - The RS's rate on this part, which sets (b).1's cost: gt-tiled-probe.
 - How the depth view changes once depth gets a tile status or a tiled layout
   (tiled-wire-design, `gc-tiled-targets.md` steps 2 and 3). `depth_view`
