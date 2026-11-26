@@ -3844,7 +3844,10 @@ fn invalidate_framebuffer(c: &mut GlContext, target: GLenum, num_attachments: GL
 }
 
 /// Nothing to discard: depth/stencil live on chip per kick and colour is
-/// always kept, so an invalidate is a no-op beyond validation.
+/// always kept, so an invalidate is a no-op beyond validation. ES 3.0 4.5.1
+/// makes the named contents undefined, not cleared, so keeping them is
+/// conformant; the bindings, the attachments and the completeness are not
+/// touched (tests/es3_fbo_invalidate.rs pins both).
 #[no_mangle]
 pub unsafe extern "C" fn glInvalidateFramebuffer(target: GLenum, numAttachments: GLsizei, attachments: *const GLenum) {
     /* the READ framebuffer when it is not the draw one (ES 3.0 4.4.1) */
@@ -3872,10 +3875,25 @@ pub unsafe extern "C" fn glInvalidateSubFramebuffer(
     height: GLsizei,
 ) {
     gl_trace!(glInvalidateSubFramebuffer);
-    if width < 0 || height < 0 {
-        context::set_error_no_ctx(GL_INVALID_VALUE, "glInvalidateSubFramebuffer");
+    const FUNC: &str = "glInvalidateSubFramebuffer";
+    let Some(c) = context::current() else { return };
+    /* The errors in Mesa's order (main/fbobject.c
+     * `_mesa_InvalidateSubFramebuffer`, `invalidate_framebuffer_storage`):
+     * the target (GL_INVALID_ENUM), a negative count, then a negative width
+     * or height (GL_INVALID_VALUE), then the attachments
+     * (invalidate_framebuffer). The size was checked first until 2026-11-26,
+     * which answered GL_INVALID_VALUE to a bad target with a negative width. */
+    if !is_fb_target(target) {
+        c.set_error(GL_INVALID_ENUM, FUNC);
         return;
     }
+    if numAttachments < 0 || width < 0 || height < 0 {
+        c.set_error(GL_INVALID_VALUE, FUNC);
+        return;
+    }
+    /* The rectangle changes nothing beyond that: the invalidation is kept as
+     * a no-op (glInvalidateFramebuffer), and a rectangle partly or wholly
+     * outside the framebuffer is legal (ES 3.0 4.5.1). */
     glInvalidateFramebuffer(target, numAttachments, _attachments);
 }
 
