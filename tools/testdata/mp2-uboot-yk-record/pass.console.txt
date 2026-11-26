@@ -1,0 +1,19 @@
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Reset reason: Power-on Reset (PORRSTN)
+NOTICE:  BL2: v2.10-stm32mp2-r1.0(release):v2.10.0
+I/TC: OP-TEE version: 4.0.0-stm32mp2
+U-Boot 2023.10-stm32mp2 (Jan 01 2025 - 10:00:00 +0000)
+Hit any key to stop autoboot:  0
+STM32MP> @LINE@
+mp2z: go 0xa0000000
+*** Booting Zephyr OS build selftest ***
+yk-record: 594b0101 00010101 00000001 00000000
+mp2_hello: PASS: case
+mp2: lifetime: PSCI SYSTEM_RESET at 1234 ms
+NOTICE:  CPU: STM32MP257FAK Rev.Y
+NOTICE:  Reset reason: Power-on Reset (PORRSTN)
+NOTICE:  BL2: v2.10-stm32mp2-r1.0(release):v2.10.0
+I/TC: OP-TEE version: 4.0.0-stm32mp2
+U-Boot 2023.10-stm32mp2 (Jan 01 2025 - 10:00:00 +0000)
+Hit any key to stop autoboot:  0
+Starting kernel ...
