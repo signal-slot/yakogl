@@ -67,10 +67,12 @@
 # figure is the 2026-11-14 run of 760aad3d, whose shared target directory
 # reached 180 GB (80 GB of it debug/incremental) and filled a 193 GB disk,
 # less the ~80 GB CARGO_INCREMENTAL=0 saves, plus margin. See docs/ci.md 3.7.
-# --check also reports a HAL_NXP_DIR, ZEPHYR_WS or PCO_SHC that is set: unset
+# --check also reports a HAL_NXP_DIR, ZEPHYR_WS, PCO_SHC, DEQP_GLES2_TEST_DIR
+# or DEQP_ES2_PROGRAMS that is set: unset
 # is ok (tools/cts/deps-env.sh --present supplies the layout), but a set value
 # overrides the layout and must hold the marker deps.toml gives for that entry
-# (zephyr/module.yml, .west/config, an executable pco_shc); a stale one is
+# (zephyr/module.yml, .west/config, an executable pco_shc, linkage.test,
+# index.tsv); a stale one is
 # `missing` (it made rows fail or gap in earlier walks).
 # --check also reports the rustup target aarch64-unknown-linux-gnu (check.sh's
 # "clippy yakogl-mali-panthor (aarch64-unknown-linux-gnu)" row gaps without it
@@ -89,7 +91,7 @@
 #     entry that is absent from the layout directory ($CONNECTED_DEPS_DIR, else
 #     deps-env.sh --layout): ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC,
 #     PCO_SPM_LOAD_CAPTURE, MESA_PAN_TREE, GLMARK2_SRC, DEQP_GLES3_TEST_DIR,
-#     MALI_CSFFW, ... Present entries are never touched; the builds are
+#     DEQP_GLES2_TEST_DIR, DEQP_ES2_PROGRAMS, MALI_CSFFW, ... Present entries are never touched; the builds are
 #     deps-env.sh's, none is repeated here. It can take hours on a cold host.
 #     `--install --no-deps` skips it.
 #   - driver/src/fw/pvr_fw_blob.h (gitignored) is copied from the layout's
@@ -588,7 +590,8 @@ check_pco_spm_load_capture() {
   fi
 }
 
-# HAL_NXP_DIR, ZEPHYR_WS and PCO_SHC override the deps layout when set, so a
+# HAL_NXP_DIR, ZEPHYR_WS, PCO_SHC and the two dEQP-GLES2 corpora override
+# the deps layout when set, so a
 # value that names no built tree turns rows into gaps or failures (e.g.
 # "imx8mp regs.rs: no hal_nxp at <HAL_NXP_DIR>"). Unset is ok: deps-env.sh
 # --present supplies the layout. Set, each is tested against the marker
@@ -723,6 +726,11 @@ run_checks() {
   check_env_tree HAL_NXP_DIR zephyr/module.yml file
   check_env_tree ZEPHYR_WS .west/config file
   check_env_tree PCO_SHC pco_shc exe
+  # the 7.1 corpus rows' inputs (check.sh's shaderc71_es2_corpus and
+  # shaderc71_deqp_programs rows gap without them; a set value naming no
+  # corpus fails the row)
+  check_env_tree DEQP_GLES2_TEST_DIR linkage.test file
+  check_env_tree DEQP_ES2_PROGRAMS index.tsv file
 }
 
 # ---------------------------------------------------------------------------

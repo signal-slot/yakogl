@@ -147,6 +147,41 @@ print("; ".join(bad) or "same")
 PY
 )
 check "HOST_DEQP_CTS pins 93bca01 in its own directory, applies the yakogl target and is host-deqp-run.sh's default CTS" "same" "$out"
+# The V3D 7.1 corpus rows' inputs (check.sh's shaderc71_es2_corpus and
+# shaderc71_deqp_programs) are gate entries: board-less, so the gate's
+# --check, its --present (check.sh) and its export (gate.yml) carry them; a
+# board="*" entry would be in none of them and its row a gap for good.
+out=$("$ENV_SH" --check 2>&1)
+check "--check (the gate's) has DEQP_GLES2_TEST_DIR" "missing  DEQP_GLES2_TEST_DIR  $L/VK-GL-CTS-gles2-data/data/gles2/shaders/linkage.test" "$out"
+check "--check (the gate's) has DEQP_ES2_PROGRAMS" "missing  DEQP_ES2_PROGRAMS  $L/deqp-es2-programs-da11eb6b/index.tsv" "$out"
+mkdir -p "$L/VK-GL-CTS-gles2-data/data/gles2/shaders" "$L/deqp-es2-programs-da11eb6b"
+: > "$L/VK-GL-CTS-gles2-data/data/gles2/shaders/linkage.test"
+: > "$L/deqp-es2-programs-da11eb6b/index.tsv"
+out=$("$ENV_SH" --present 2>&1)
+check "--present without a board prints DEQP_GLES2_TEST_DIR" "DEQP_GLES2_TEST_DIR=$L/VK-GL-CTS-gles2-data/data/gles2/shaders" "$out"
+check "--present without a board prints DEQP_ES2_PROGRAMS" "DEQP_ES2_PROGRAMS=$L/deqp-es2-programs-da11eb6b" "$out"
+rm -rf "$L/VK-GL-CTS-gles2-data" "$L/deqp-es2-programs-da11eb6b"
+out=$(python3 -I - "$HERE/deps.toml" "$HERE/../../tests/shaderc71_deqp_programs.rs" <<'PY' 2>&1
+import re, sys, tomllib
+deps = {e["name"]: e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"]}
+pin = lambda e: set(re.findall(r"\b[0-9a-f]{40}\b", e["build"]))
+bad = []
+g2, p = deps["DEQP_GLES2_TEST_DIR"], deps["DEQP_ES2_PROGRAMS"]
+if pin(g2) != pin(deps["DEQP_GLES3_TEST_DIR"]):
+    bad.append(f"DEQP_GLES2_TEST_DIR pins {pin(g2)}")
+if "board" in g2 or "board" in p:
+    bad.append("a board key")
+if p.get("requires") != ["HOST_DEQP_CTS"] or "VK-GL-CTS-host" not in p["build"]:
+    bad.append("DEQP_ES2_PROGRAMS does not harvest with HOST_DEQP_CTS")
+tip = pin(p)
+if len(tip) != 1 or not p["path"].endswith("-" + next(iter(tip))[:8]):
+    bad.append(f"DEQP_ES2_PROGRAMS: pinned commit {tip}, path {p['path']}")
+elif "tip " + next(iter(tip))[:8] not in open(sys.argv[2]).read():
+    bad.append("the harvest's commit is not the one tests/shaderc71_deqp_programs.rs pins")
+print("; ".join(bad) or "same")
+PY
+)
+check "DEQP_GLES2_TEST_DIR pins 93bca01; DEQP_ES2_PROGRAMS harvests at the commit the test pins, with HOST_DEQP_CTS" "same" "$out"
 out=$("$ENV_SH" nosuchboard 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "an unknown board exits 2" || bad "an unknown board: rc $rc"
 
