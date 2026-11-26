@@ -380,6 +380,12 @@ pub fn format_words(t: &GlesTextureBind, tiled: bool) -> [u32; 3] {
         | texdesc_swizzle_b(sw[2])
         | texdesc_swizzle_a(sw[3])
         | if t.type_ == GLES_TEXTYPE_2D_ARRAY { GC_TEXDESC_TEXTURE_ARRAY } else { 0 }
+        /* ES 3.0 3.8.11 (Texture Cube Maps): a cube map's edge texels are
+         * shared with the adjacent face, so filtering that reaches past an
+         * edge samples the neighbouring face, not the edge texel again.
+         * The GC7000UL does this when CONFIG1's SEAMLESS_CUBE_MAP bit is
+         * set; without it a cube filtered near an edge comes back wrong. */
+        | if t.type_ == GLES_TEXTYPE_CUBE { GC_TEXDESC_SEAMLESS_CUBE_MAP } else { 0 }
         | texdesc_halign(0);
     [config0, config1, GC_TEXDESC_CONFIG2_BASE | fmt.config2]
 }

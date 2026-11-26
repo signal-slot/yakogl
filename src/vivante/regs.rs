@@ -870,6 +870,11 @@ pub const GC_TEXTURE_HALIGN_SIXTEEN: u32 = 1;
 pub const GC_TEXTURE_HALIGN_SUPER_TILED: u32 = 2;
 /// CONFIG1: the layers are an array, not the slices of a volume.
 pub const GC_TEXDESC_TEXTURE_ARRAY: u32 = 0x0100_0000;
+/// CONFIG1: a cube map filters seamlessly across face edges (ES 3.0 3.8.11
+/// requires it): state_3d.xml.h VIVS_TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP /
+/// Mesa texdesc_3d.xml.h TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP, supported by
+/// the GC7000UL (chipMinorFeatures2_SEAMLESS_CUBE_MAP, common.xml.h).
+pub const GC_TEXDESC_SEAMLESS_CUBE_MAP: u32 = 0x0200_0000;
 pub const GC_TEXDESC_CONFIG2: u32 = 0x6c;
 /// always set; blob value
 pub const GC_TEXDESC_CONFIG2_BASE: u32 = 0x00030000;

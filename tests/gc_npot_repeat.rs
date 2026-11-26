@@ -575,8 +575,8 @@ fn assert_sampler(shape: &str, s: &Sampled, e: &Expect) {
     assert_eq!(d[D_CONFIG2], 0x0003_0000, "[{shape}] TEXDESC_CONFIG2 is the blob's constant");
     assert_eq!(
         d[D_CONFIG1],
-        (1 << 12) | (2 << 16) | (3 << 20),
-        "[{shape}] TEXDESC_CONFIG1: FORMAT_EXT 0, swizzle R,G,B,A (bits 8-23), no TEXTURE_ARRAY, HALIGN 0"
+        (1 << 12) | (2 << 16) | (3 << 20) | if e.cube { 1 << 25 } else { 0 },
+        "[{shape}] TEXDESC_CONFIG1: FORMAT_EXT 0, swizzle R,G,B,A (bits 8-23), no TEXTURE_ARRAY, SEAMLESS_CUBE_MAP (bit 25) for a cube only, HALIGN 0"
     );
     assert_eq!(d[D_VOLUME], 0, "[{shape}] TEXDESC_VOLUME: log2 of depth 1");
     assert_eq!(d[D_3D_CONFIG], 1, "[{shape}] TEXDESC_3D_CONFIG.DEPTH (bits 0-13): a cube's six faces are not a depth");
