@@ -13,8 +13,9 @@ NOTE defaults to the by-eye note. The '## Verdicts' table has the columns
   (b) the scene cells are the scenes of `tools/cts/imx8mp-glmark2-dumps.sh
       scenes` (or of FILE, same line format), each once;
   (c) a row whose verdict is not `not yet looked at` has an 8-lowercase-hex
-      commit, a record `records/imx8mp/YYYYMMDD-HHMM-<name>-<sha8>/` whose
-      sha8 is the commit, a route of dump, photograph, both or photograph+probes
+      commit, a record `records/imx8mp/YYYYMMDD-HHMM-<name>-<sha8>/` (sha8:
+      8 lowercase hex digits, the image's sha256 prefix as tools/board.sh
+      names the record; it is not compared with the commit), a route of dump, photograph, both or photograph+probes
       (a camera photograph judged by content plus the same boot's
       `glmark2-picture:` value line), and a verdict of right, wrong or `seen
       without a value`; photograph goes only with `seen without a value`, dump,
@@ -117,8 +118,6 @@ def check(text, scenes, complete):
         if not m:
             probs.append(f"{scene}: record '{record}' is not records/imx8mp/"
                          "<YYYYMMDD-HHMM>-<name>-<sha8>/")
-        elif m.group(1) != commit:
-            probs.append(f"{scene}: record sha8 {m.group(1)} is not the commit {commit}")
         if route not in ROUTES:
             probs.append(f"{scene}: route '{route}' is not one of " + ", ".join(ROUTES))
         elif route == "photograph" and verdict != "seen without a value":
@@ -196,7 +195,8 @@ CASES = [
     ("bad-duplicate.md", False, 1, "scene appears twice"),
     ("bad-commit.md", False, 1, "is not 8 lowercase hex digits"),
     ("bad-record.md", False, 1, "is not records/imx8mp/"),
-    ("bad-record-sha.md", False, 1, "is not the commit"),
+    ("partial-sha-differs.md", False, 0, "ok: 33 rows, 1 filled"),
+    ("bad-sha8.md", False, 1, "is not records/imx8mp/"),
     ("bad-route.md", False, 1, "route 'camera' is not one of"),
     ("bad-verdict.md", False, 1, "verdict 'good' is not one of"),
     ("bad-photograph.md", False, 1, "route photograph needs 'seen without a value'"),
