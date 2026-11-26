@@ -50,60 +50,114 @@ are in `docs/release/checklist.md`; the walks decide, not this file.
 
 CONTRIBUTING.md's build, test and gate commands, walked on a gate host.
 
-- Date: 2026-11-25. Main commit walked: `d6d93303` (2026-11-25 07:10 UTC), a
-  fresh clone, no build directory. The walking host could not reach GitHub, so
-  the commit is the newest `origin/main` ref the workspace held, not a live
-  fetch.
-- Host: x86-64 Linux, 4 cores, rustc 1.99.1 (the walk's report did not record
-  the kernel). `tools/setup-gate-host.sh --check` exits 0 with the layout
-  exported and the PowerVR firmware header copied in: every item is ok,
-  including the aarch64 compiler, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
-  `GLMARK2_SRC` and the firmware header. This host would have had no gap row.
-  Its disk was the problem (below).
+Three walks of 2026-11-25 are recorded, oldest first. Walk 1 covers the
+CONTRIBUTING commands before the gate; walks 2 and 3 are the `--quick` rows.
+None of the three produced a green `--quick` line at the tip, and none is
+invented here.
 
-| Command | Exit | Wall time |
-| --- | --- | --- |
-| `tools/cts/deps-env.sh --check` (layout missing `MP2_QEMU`) | 1 | not recorded |
-| `tools/cts/deps-env.sh --build ...` (as CONTRIBUTING.md writes it) | 0 | not recorded |
-| the PowerVR header copy | 0 | not recorded |
-| `tools/setup-gate-host.sh --check` | 0 | not recorded |
-| `tools/check.sh --changed origin/main` (no change) | 0 | not recorded |
-| `tools/check.sh --quick` | stopped, red, **no summary line** | stopped after 18 of 487 rows |
-| `tools/check.sh --local origin/main` | not run | |
-| `tools/check_scope_selftest.sh` | not run | |
-
+**Walk 1 — fresh clone of `d6d93303` (2026-11-25 07:10 UTC; stopped on disk).**
+The walking host could not reach GitHub, so the commit is the newest
+`origin/main` ref the workspace held, not a live fetch; a fresh clone, no
+build directory. Host: x86-64 Linux, 4 cores, rustc 1.99.1 (the walk's report
+did not record the kernel). `tools/setup-gate-host.sh --check` exits 0 with
+the layout exported and the PowerVR firmware header copied in: every item is
+ok, including the aarch64 compiler, `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`,
+`GLMARK2_SRC` and the firmware header; this host would have had no gap row.
 Every CONTRIBUTING command before `--quick` exited 0, apart from the first
-`deps-env.sh --check`, which exits 1 until the next command builds the missing
-entry. The report that carried this walk gave exit codes but no per-command
-times, so none is written here.
+`tools/cts/deps-env.sh --check`, which exits 1 until the next command builds
+the missing entry (`--check`, `--build`, the PowerVR header copy,
+`tools/check.sh --changed origin/main` with no change; exit codes recorded,
+per-command wall times not). `tools/check.sh --quick` was stopped after 18 of
+its 487 rows: those rows used about 16 GB of build output on a host with about
+3 GB free (later 20 GB). A re-walk needs about 50 GB free, or a pruned gate
+cache (it was over 160 GB), with `CARGO_INCREMENTAL=0`.
+`tools/setup-gate-host.sh --check` exits 0 even with only 18 GB free: it does
+not check disk before a walk. That run was red before the stop, on the clippy
+row `host-test,gpu-v3d,shaderc-online,no-shader-table` ("`format!` in
+`format!` args" at `tests/es3_tf_v3d.rs:448`, in from `78741eae`); fixed by
+`8625ca04`. `tools/check.sh --local origin/main` and
+`tools/check_scope_selftest.sh` were not run.
 
-**Result: not green.** There is no `tools/check.sh --quick` summary line at this
-commit, and none is invented here. Two reasons:
+**Walk 2 — fresh clone of `4326fbd9` (2026-11-25 12:40 UTC; ran to its
+summary line, red).** The completed `--quick` walk of these tips: a fresh
+clone, 4 cores, a cold tree, 68 GB pruned from the shared gate cache before
+the run. The host exports `LC_ALL=ja_JP.UTF-8`, a locale the host has not
+installed. Kernel and rustc are not recorded. Exit 1; verbatim:
 
-- Disk: the first 18 of the 487 `--quick` rows used about 16 GB of build output
-  on a host with about 3 GB free (later 20 GB), so the run was stopped. A
-  re-walk needs about 50 GB free, or a pruned gate cache (it was over 160 GB),
-  with `CARGO_INCREMENTAL=0`. `tools/setup-gate-host.sh --check` exits 0 even
-  with only 18 GB free: it does not check disk before a walk.
-- A red clippy row before the stop: `host-test,gpu-v3d,shaderc-online,no-shader-table`
-  fails with "`format!` in `format!` args" at `tests/es3_tf_v3d.rs:448`, which
-  came in with `78741eae` (2026-11-24). A re-walk is red on that row until a
-  `tests:` commit fixes it.
+`check.sh: 474 ok, 16 failed, 0 gap(s) (a gap was not run: it is not a pass), 0 skipped (every row), 0 clippy rows left to the nightly, 2 not run (passed on main) in 5980s; test binaries: 1917 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)`
+
+The plan lists 492 rows, and `0 gap(s)` means the host carried every input the
+gap rows read (`ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, an aarch64 compiler;
+`MESA_V3D_TREE` unset). The 16 failed rows, each with its cause from the
+walk's report:
+
+- six clippy rows, naming `tests/v3d71_texfmt.rs`, `src/v3d/texstate71.rs`,
+  `tests/mali_link_varying_offsets.rs`, `src/mali/frame_uniarray_tests.rs`
+  and `tests/mali_rebind_stencil_gl.rs`: fixed since by `36c51e9a` and
+  `6a54408d`;
+- nine `tools/` rows, failing because the host exports a locale it has not
+  installed; the walk re-ran those nine scripts under `LC_ALL=C` and all nine
+  pass. `tools/check.sh` exports no locale, and `tools/setup-gate-host.sh
+  --check` does not report one: those fixes belong to plans #344/#387 and to
+  this plan's `fix-setup-locale` item;
+- one code defect: `tools/cts/imx95-gles2-accept-selftest.sh` fails even
+  under `LC_ALL=C` — its fixture records say `verdin_imx95` while the tally
+  tool accepts only `verdin-imx95` — with a redaction hit reported in
+  `tools/cts/log/note.txt`; fixed since by `83fc2e44` (plan #407's patch).
+
+Under `LC_ALL=C` at the tip, `tools-rows-lcc` measured every non-cargo row:
+the nine locale rows pass, but the `imx95-gles2-accept` self-test and
+`driver/tools/kexec-zephyr/t6-verdict-test.sh` are red (the latter's fix is a
+running item of this plan, not in the tree at the walked commits), and the
+long rows took `am62p-gles3-acceptance-selftest.sh` 1506 s and
+`cts-selftest.sh` 937 s.
+
+**Walk 3 — checkout of `6a54408d` (2026-11-25 20:17 UTC, the integration tip
+at walk start, also on `origin/main`; killed, no summary line).** The re-walk
+after the clippy fixes, in an existing checkout of that commit, not a fresh
+`git clone` (a fresh clone is part of the line 3 criterion, so this walk does
+not meet it). Host: Linux 7.0.0-38-generic x86-64, rustc 1.99.1
+(`58cf8f9c3 2026-10-13`). `tools/setup-gate-host.sh --check` exits 1 and
+lists three missing items: an aarch64 C compiler, `GLMARK2_SRC` and
+`driver/src/fw/pvr_fw_blob.h`; a completed `--quick` on this host would end
+with gap rows, and a gap is not a pass. `tools/check.sh --quick` ran with
+`LC_ALL=C` and `CARGO_INCREMENTAL=0`; verbatim from the walk's report:
+"`tools/check.sh --quick` has no summary line: the sandbox killed it at the
+2-hour limit after 108 `ok` rows and no failures or gaps. The rows that never
+ran are untested." 108 rows ok, 0 failed, 0 gap(s) at the kill point; every
+row after it is unmeasured, including the `imx95-gles2-accept` self-test row
+(whose fix `83fc2e44` landed one hour after the walked commit).
+
+**Result: not green.** No `--quick` run of the 2026-11-25 tip reached
+"N ok, 0 failed, 0 gap(s)":
+
+- walk 2 ran to its line and is red, "474 ok, 16 failed, 0 gap(s)"; its
+  failing rows are fixed in the tree except that the nine locale rows need
+  `LC_ALL=C` (the gate exports no locale) and `t6-verdict-test.sh` is red
+  under `LC_ALL=C` until that running item lands;
+- walk 3 re-walked the fixed tip under `LC_ALL=C` and never reached a summary
+  line (killed at the harness's 2-hour background limit after 108 ok rows),
+  on a host that could not give a 0-gap run;
+- the last green `--quick` line remains the 2026-11-12 one, from a fresh clone
+  of `570cd8c6`: "181 ok, 0 failed, 0 gap(s)" in 3121 s. It is not a reading
+  of the current tip.
+
+To close line 3: a completed `--quick` from a fresh clone, on a host where
+`tools/setup-gate-host.sh --check` exits 0 and the disk is sufficient, under
+`LC_ALL=C`, with a wall budget above the 5980 s walk 2 took (the run must be
+detached, since a 2-hour command window cannot hold the plan).
 
 CONTRIBUTING's statements, checked at the tip:
 
 - Plan sizes (`YAKOGL_CHECK_PLAN=1`): `--quick` 487 rows and the full plan 547
-  at `d6d93303`. They move with main and no file keeps them.
+  at `d6d93303`; 492 and 552 at `4326fbd9`. CONTRIBUTING.md states 494 and 554
+  at its `512f3297` reading. The sizes move with main and no file keeps them.
 - A docs-only `tools/check.sh --no-clippy --changed <parent>` plans 4 rows:
-  holds.
+  holds at `d6d93303` and at `4326fbd9`.
 - `MESA_V3D_TREE` set to a tree without `build-v3d` turns the three v3d rows
   into one gap (483 ok, 1 gap in the plan listing): holds.
 - The flag order is `--no-clippy --changed <base>`; with `--no-clippy` last,
   `tools/check.sh` ignores it and keeps clippy.
-
-The last complete `--quick` summary line is the 2026-11-12 one, from a fresh
-clone of `570cd8c6`: "181 ok, 0 failed, 0 gap(s)" in 3121 s. It is not a
-reading of the current tip.
 
 ## Line 6
 
@@ -148,4 +202,5 @@ supplies. Outputs: `cargo test -p yakogl-tools` "128 passed; 0 failed";
 0, from the archive (`nm`) and, with no archive, from the source: the same 304.
 
 The criterion of line 6 ends in a passing `tools/check.sh --quick` with no gap.
-That part is the Line 3 walk above, which has no summary line at this commit.
+That part is the Line 3 walk above: red at `4326fbd9` ("474 ok, 16 failed,
+0 gap(s)"), and its newest re-walk at `6a54408d` reached no summary line.
