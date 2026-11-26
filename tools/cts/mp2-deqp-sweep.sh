@@ -21,9 +21,15 @@
 # OUT/shard-NNNN.log is the runner's own output plus every console.txt it left
 # under OUT/run/shard-NNNN; a shard whose log already holds a
 # "deqp: <Status> <case>" result line is skipped; (4) mp2-p9-diff.py reads all
-# logs (its exit 1, new failures or missing cases, is this script's).
+# logs, given --exclude <the exclude file in use> when there is one (the 21
+# names pending Q11 are then "excluded", not "missing"; its exit 1, new
+# failures or missing cases, is this script's); (5) mp2-log-redact-check.sh
+# scans OUT: a hit (exit 1) or an unreadable scan (exit 2) fails the sweep
+# (exit 1): the logs must be redacted before they are committed.
 #
 # Env: MP2_SWEEP_RUNNER the runner command (default tools/board-stm32mp2.sh),
+# MP2_DEQP_EXCLUDE the exclude file (default mp2-deqp-gles2-exclude.txt; the
+# --exclude option wins; for a --case-list run only an explicit one counts),
 # PYTHON (python3), RUN_BOUND (the runner's wait for the image's end; left
 # unset it becomes the dEQP lifetime, CONFIG_YAKOGL_STM32MP2_LIFETIME_S of
 # boards/stm32mp257f_dk_stm32mp257fxx_a35.conf, plus 100 s, and is printed:
@@ -83,9 +89,10 @@ fi
 MUST=$HERE/gles2-mustpass.txt
 if [ -z "$LIST" ]; then
     LIST=$HERE/mp2-deqp-gles2.txt
-    [ "$EXCL_SET" = 1 ] || EXCL=$HERE/mp2-deqp-gles2-exclude.txt
+    [ "$EXCL_SET" = 1 ] || EXCL=${MP2_DEQP_EXCLUDE:-$HERE/mp2-deqp-gles2-exclude.txt}
     EXPAND=1
 else
+    [ "$EXCL_SET" = 1 ] || EXCL=${MP2_DEQP_EXCLUDE:-}
     EXPAND=0
 fi
 [ -z "$EXCL" ] || [ -f "$EXCL" ] || die "no exclude file $EXCL" 2
@@ -139,7 +146,8 @@ if [ "$DRY" = 1 ]; then
     echo "$PY -I $HERE/mp2-deqp-slot.py write $BIN --case-list $SH/shard-NNNN.txt -o $OUT/slot-NNNN.bin"
     echo "$RUNNER run $OUT/slot-NNNN.bin $OUT/run/shard-NNNN shard-NNNN > $OUT/shard-NNNN.log 2>&1"
     echo "cat the console.txt files under $OUT/run/shard-NNNN >> $OUT/shard-NNNN.log"
-    echo "$PY -I $HERE/mp2-p9-diff.py ${REPORT:-} $OUT/shard-*.log"
+    echo "$PY -I $HERE/mp2-p9-diff.py ${REPORT:-} ${EXCL:+--exclude $EXCL} $OUT/shard-*.log"
+    echo "bash $HERE/mp2-log-redact-check.sh $OUT   (a hit fails the sweep)"
     exit 0
 fi
 
@@ -216,7 +224,16 @@ echo "mp2-deqp-sweep: $ran run, $skipped skipped, $fails failed"
 shopt -s nullglob
 LOGS=("$OUT"/shard-*.log)
 [ ${#LOGS[@]} -gt 0 ] || die "no shard logs under $OUT"
-"$PY" -I "$HERE/mp2-p9-diff.py" ${REPORT:+"$REPORT"} "${LOGS[@]}"
+DARGS=()
+[ -z "$REPORT" ] || DARGS+=("$REPORT")
+[ -z "$EXCL" ] || DARGS+=(--exclude "$EXCL")
+"$PY" -I "$HERE/mp2-p9-diff.py" "${DARGS[@]}" "${LOGS[@]}"
 drc=$?
+bash "$HERE/mp2-log-redact-check.sh" "$OUT"
+rrc=$?
+if [ "$rrc" -ne 0 ]; then
+    echo "mp2-deqp-sweep: the redaction check failed (exit $rrc) on $OUT: the logs must be redacted before commit" >&2
+    exit 1
+fi
 [ "$fails" -eq 0 ] || exit 1
 exit "$drc"

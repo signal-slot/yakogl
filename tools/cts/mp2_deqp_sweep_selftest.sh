@@ -45,6 +45,7 @@ at = d.find(b"yakogl-deqp-case-slot/1\0") + 36
 print(d[at:d.index(b"\0", at)].decode())
 PY
 echo "fake runner: $4 done"
+[ -z "${FAKE_LINE:-}" ] || echo "$FAKE_LINE" >> "$3/stamp-$4/console.txt"
 EOS
 chmod +x "$D/runner.sh"
 export FAKE_CALLS=$D/calls.txt
@@ -179,6 +180,41 @@ out=$(bash "$SWEEP" --dry-run "$D/zephyr.bin" "$D/o6" 2>&1)
 n=$(sed -n 's/^mp2-deqp-sweep: dry run: \([0-9]*\) cases.*/\1/p' <<<"$out")
 want=$(sh "$HERE/mp2-deqp-list-check.sh" | sed -n 's/.*, \([0-9]*\) mustpass cases to run/\1/p')
 chk "default: $n cases equal list-check's $want" test -n "$n" -a "$n" = "$want"
+
+echo "exclude and redaction check"
+# the fake diff: a python that records its arguments, then runs the real one
+cat >"$D/pydiff.sh" <<'EOS'
+#!/bin/bash
+case $* in *mp2-p9-diff.py*) echo "$*" >> "$FAKE_DIFF" ;; esac
+exec python3 "$@"
+EOS
+chmod +x "$D/pydiff.sh"
+export FAKE_DIFF=$D/diff.txt
+printf 'dEQP-GLES2.nosuch.case\tQ11 wide line\n' > "$D/excl.txt"
+: > "$D/diff.txt"
+out=$(PYTHON=$D/pydiff.sh sw --exclude "$D/excl.txt" "$D/zephyr.bin" "$D/oe1" 2>&1)
+chk "exclude: the diff is called with --exclude FILE" grep -q -- "--exclude $D/excl.txt " "$D/diff.txt"
+out=$(PYTHON=$D/pydiff.sh MP2_DEQP_EXCLUDE=$D/excl.txt sw "$D/zephyr.bin" "$D/oe2" 2>&1)
+chk "exclude: MP2_DEQP_EXCLUDE is passed too" grep -q -- "--exclude $D/excl.txt " "$D/diff.txt"
+: > "$D/diff.txt"
+out=$(PYTHON=$D/pydiff.sh bash "$SWEEP" --report-only --budget-ms 300 --first 1 --last 1 "$D/zephyr.bin" "$D/oe3" 2>&1)
+chk "exclude: the default list's diff uses the exclude file" grep -q -- "--exclude $HERE/mp2-deqp-gles2-exclude.txt " "$D/diff.txt"
+: > "$D/diff.txt"
+out=$(PYTHON=$D/pydiff.sh sw "$D/zephyr.bin" "$D/oe4" 2>&1)
+chk "exclude: none given for a --case-list run, none passed" bash -c '! grep -q -- --exclude "$1"' _ "$D/diff.txt"
+out=$(sw --dry-run --exclude "$D/excl.txt" "$D/zephyr.bin" "$D/oe5" 2>&1)
+chk "dry: diff command shows --exclude" grep -q -- "mp2-p9-diff.py .*--exclude $D/excl.txt " <<<"$out"
+chk "dry: redaction check shown" grep -q 'mp2-log-redact-check.sh .*oe5' <<<"$out"
+# redaction: a clean output (with the runner's 192.0.2.n placeholder) passes;
+# a planted tty line fails. The fake tty name is assembled here, so this file
+# holds no c6 pattern; the planted line exists only in the temporary output.
+out=$(FAKE_LINE='sshd: connection from 192.0.2.7 port 22' sw "$D/zephyr.bin" "$D/or1" 2>&1); rc=$?
+chk "redact: clean output with 192.0.2.n passes" test $rc -eq 0
+chk "redact: the check ran" grep -q 'mp2-log-redact-check: clean' <<<"$out"
+tty=/dev/tty; tty="${tty}USB9"
+out=$(FAKE_LINE="console on $tty opened" sw "$D/zephyr.bin" "$D/or2" 2>&1); rc=$?
+chk "redact: a planted tty line fails the sweep" test $rc -eq 1
+chk "redact: says the logs must be redacted" grep -q 'must be redacted before commit' <<<"$out"
 
 echo "$pass ok, $fail failed"
 [ "$fail" -eq 0 ]
