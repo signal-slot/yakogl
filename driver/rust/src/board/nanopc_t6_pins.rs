@@ -402,4 +402,100 @@ mod tests {
         let (r, level) = usb_vbus_on(&s, IOC, GPIO4);
         assert_eq!((r.differ, level), (1 << 3, 0));
     }
+
+    /// U-Boot's state at `go`: the debug UART2 (GPIO0_B5 TX, GPIO0_B6 RX,
+    /// function 3 in PMU1_IOC's GPIO0B_IOMUX_SEL_H, IOC + 0x4) already
+    /// selected, the module's pins at the reset values of [`after_reset`].
+    const UART2_IOMUX: usize = IOC + 0x4;
+    const UART2_SEL: u32 = 0x0330;
+
+    fn from_uboot() -> Soc {
+        let s = after_reset();
+        s.regs.borrow_mut().insert(UART2_IOMUX, UART2_SEL);
+        s
+    }
+
+    fn all_writes() -> Vec<Write> {
+        let mut v = hdmi0_writes().to_vec();
+        v.extend(usb_vbus_writes());
+        v
+    }
+
+    #[test]
+    fn uboot_state_leaves_the_uart2_iomux_untouched() {
+        let s = from_uboot();
+        hdmi0_pins(&s, IOC);
+        usb_vbus_on(&s, IOC, GPIO4);
+        assert_eq!(s.regs.borrow()[&UART2_IOMUX], UART2_SEL);
+        assert!(s.ops.borrow().iter().all(|o| o.1 != UART2_IOMUX), "UART2's word is neither read nor written");
+        // the console pins' fields are in no write of the module's list
+        for w in all_writes() {
+            let hit = w.block == Block::Ioc && w.field.off == 0x4;
+            assert!(!hit, "{w:?}");
+        }
+    }
+
+    #[test]
+    fn uboot_state_writes_only_the_modules_own_words() {
+        let s = from_uboot();
+        hdmi0_pins(&s, IOC);
+        usb_vbus_on(&s, IOC, GPIO4);
+        let own: Vec<usize> = all_writes()
+            .iter()
+            .map(|w| match w.block {
+                Block::Ioc => IOC + w.field.off,
+                Block::Gpio4 => GPIO4 + w.field.off,
+            })
+            .collect();
+        for (addr, _) in writes(&s) {
+            assert!(own.contains(&addr), "{addr:#x} is not in the module's list");
+        }
+        // 12 HDMI0 words and 4 vbus words, each exactly once
+        assert_eq!(writes(&s).len(), 16);
+    }
+
+    #[test]
+    fn uboot_state_ends_the_same_as_the_reset_state_without_uart2() {
+        // The UART2 word is the only difference between the starts; the
+        // end states agree everywhere else.
+        let a = from_uboot();
+        let b = after_reset();
+        for s in [&a, &b] {
+            assert_eq!(hdmi0_pins(s, IOC).differ, 0);
+            let (r, level) = usb_vbus_on(s, IOC, GPIO4);
+            assert_eq!((r.differ, level), (0, 1));
+        }
+        let mut ra = a.regs.borrow().clone();
+        ra.remove(&UART2_IOMUX);
+        assert_eq!(ra, *b.regs.borrow());
+    }
+
+    #[test]
+    fn uboot_state_setup_twice_writes_the_same_words_with_the_same_result() {
+        // Each call writes its table again, whole (nothing is skipped);
+        // the second pass changes no word.
+        let s = from_uboot();
+        hdmi0_pins(&s, IOC);
+        let (_, l1) = usb_vbus_on(&s, IOC, GPIO4);
+        let once = s.regs.borrow().clone();
+        let n = writes(&s).len();
+        let h = hdmi0_pins(&s, IOC);
+        let (v, l2) = usb_vbus_on(&s, IOC, GPIO4);
+        assert_eq!(*s.regs.borrow(), once);
+        assert_eq!((h.differ, v.differ, l1, l2), (0, 0, 1, 1));
+        assert_eq!(writes(&s).len(), 2 * n);
+        // the second pass finds the words as the first left them
+        assert_eq!(h.found[..h.count], h.now[..h.count]);
+        assert_eq!(v.found[..v.count], v.now[..v.count]);
+    }
+
+    #[test]
+    fn uboot_state_each_word_is_read_before_its_first_write() {
+        let s = from_uboot();
+        hdmi0_pins(&s, IOC);
+        let ops = s.ops.borrow();
+        for (i, o) in ops.iter().enumerate().filter(|(_, o)| o.0 == 'w') {
+            assert!(ops[..i].iter().any(|r| r.0 == 'r' && r.1 == o.1), "{:#x} written unread", o.1);
+        }
+    }
 }
