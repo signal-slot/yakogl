@@ -1,0 +1,2 @@
+# image K1: 2
+dEQP-GLES2.sk.*

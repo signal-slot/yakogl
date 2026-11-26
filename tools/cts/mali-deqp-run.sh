@@ -99,6 +99,17 @@
 #                (qpa_refusal's LINK_REFUSAL). Other info log text is not.
 #                The exit line of chunks.tsv names only the chunk's first
 #                refusal; this file names each case's own.
+#   shaders.tsv  case stage source: for each case with a row in refusals.tsv,
+#                the GLSL of every <Shader> of its <ShaderProgram>s, as dEQP
+#                writes it in <ShaderSource> to the case's .qpa section (the
+#                generated shaders.random.* cases' text exists nowhere else).
+#                stage is the Shader's Type, lower-cased without "Shader"
+#                (vertex, fragment); source is on one line with backslash,
+#                tab and newline escaped as \\, \t, \n, then redacted like the
+#                other files (GLSL holds no board data). A case without a
+#                refusal row, Pass or not, has none. Only for the reader of
+#                the refusals: mali-deqp-tally.py ignores the file. Written
+#                (header only when no case was refused) for every slice.
 #   refusals/<label>.txt  the chunk's stdout and stderr merged in print order
 #                (each process of the chunk in turn): dEQP's "Test case" lines
 #                and the library's "yakogl-mali-refusal: <errno> <reason>"
@@ -282,10 +293,24 @@ def qpa_refusal(body):
     return ''
 
 
+def qpa_shaders(body):
+    """[(stage, source)] of the <Shader> elements of a case's log: dEQP writes
+    <Shader Type="VertexShader" ...><ShaderSource>text</ShaderSource> inside
+    each <ShaderProgram>. Unescaped; the stage is the Type attribute lower-cased
+    without "Shader" ("vertex", "fragment")."""
+    out = []
+    for m in re.finditer(r'<Shader\b([^>]*)>\s*<ShaderSource>(.*?)</ShaderSource>', body, re.S):
+        t = re.search(r'\bType="([^"]*)"', m.group(1))
+        stage = re.sub(r'(?i)shader$', '', t.group(1)).lower() if t else '?'
+        out.append((stage or '?', html.unescape(m.group(2))))
+    return out
+
+
 def qpa_cases(path):
-    """[(case, status, detail, refusal)] of one .qpa; status None for a case
-    begun and never closed (the process stopped inside it); refusal is
-    qpa_refusal of the case's log."""
+    """[(case, status, detail, refusal, shaders)] of one .qpa; status None for
+    a case begun and never closed (the process stopped inside it); refusal is
+    qpa_refusal of the case's log; shaders is qpa_shaders of it when the case
+    has a refusal, else []."""
     out, cur, buf = [], None, []
     try:
         lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
@@ -294,30 +319,32 @@ def qpa_cases(path):
     for l in lines:
         if l.startswith('#beginTestCaseResult'):
             if cur is not None:
-                out.append((cur, None, '', ''))
+                out.append((cur, None, '', '', []))
             parts = l.split()
             cur, buf = (parts[1] if len(parts) > 1 else '?'), []
         elif l.startswith('#endTestCaseResult') and cur is not None:
             body = '\n'.join(buf)
             m = re.search(r'<Result StatusCode="([^"]*)"[^>]*>(.*?)</Result>', body, re.S)
-            out.append((cur, m.group(1), html.unescape(m.group(2)), qpa_refusal(body)) if m
-                       else (cur, 'Unknown', 'no Result element', ''))
+            why = qpa_refusal(body)
+            out.append((cur, m.group(1), html.unescape(m.group(2)), why,
+                        qpa_shaders(body) if why else []) if m
+                       else (cur, 'Unknown', 'no Result element', '', []))
             cur = None
         elif l.startswith('#terminateTestCaseResult') and cur is not None:
             st = (l.split() + ['Terminated'])[1]
-            out.append((cur, st, 'terminated: ' + st, ''))
+            out.append((cur, st, 'terminated: ' + st, '', []))
             cur = None
         elif cur is not None:
             buf.append(l)
     if cur is not None:
-        out.append((cur, None, '', ''))
+        out.append((cur, None, '', '', []))
     return out
 
 
 def rest(caselist, *qpas):
     begun = set()
     for q in qpas:
-        begun |= {c for c, _, _, _ in qpa_cases(q)}
+        begun |= {x[0] for x in qpa_cases(q)}
     for l in open(caselist):
         c = l.strip()
         if c and c not in begun:
@@ -382,6 +409,13 @@ def redactor():
     return red
 
 
+def esc_src(s):
+    """A shader source on one line: backslash, tab and newline escaped
+    (\\\\, \\t, \\n), carriage returns dropped."""
+    return (s.replace('\r', '').replace('\\', '\\\\').replace('\t', '\\t')
+            .replace('\n', '\\n'))
+
+
 def field(s, n=240):
     s = re.sub(r'\s+', ' ', s).strip()
     return (s[:n] if s else '-')
@@ -415,7 +449,7 @@ def finalize(raw, out):
     meta = [l.rstrip('\n') for l in open(os.path.join(raw, 'meta.txt'))]
     with open(os.path.join(out, 'meta.txt'), 'w') as f:
         f.writelines(red(l) + '\n' for l in meta)
-    res, chk, ref = [], [], []
+    res, chk, ref, shd = [], [], [], []
     for row, lab, n in plan_rows:
         c = chunks.get(lab)
         if c is None:
@@ -430,11 +464,11 @@ def finalize(raw, out):
         for q in sorted(glob.glob(os.path.join(raw, 'qpa', lab + '.r*.qpa')),
                         key=lambda p: int(re.search(r'\.r(\d+)\.qpa$', p).group(1))):
             k = re.search(r'\.r(\d+)\.qpa$', q).group(1)
-            for case, st, det, why in qpa_cases(q):
+            for case, st, det, why, shaders in qpa_cases(q):
                 if st is None:
-                    got.setdefault(case, ('Lost', attempts.get((lab, k), 'chunk-crash'), ''))
+                    got.setdefault(case, ('Lost', attempts.get((lab, k), 'chunk-crash'), '', []))
                 else:
-                    got[case] = (st, det, why)
+                    got[case] = (st, det, why, shaders)
         mrg = sorted(glob.glob(os.path.join(raw, 'log', lab + '.r*.mrg')),
                      key=lambda p: int(re.search(r'\.r(\d+)\.mrg$', p).group(1)))
         if mrg and not wrong:
@@ -447,14 +481,16 @@ def finalize(raw, out):
             if not case:
                 continue
             if wrong:
-                st, det, why = 'Lost', 'wrong-lib', ''
+                st, det, why, shaders = 'Lost', 'wrong-lib', '', []
             elif case in lost:
-                st, det, why = 'Lost', lost[case], ''
+                st, det, why, shaders = 'Lost', lost[case], '', []
             else:
-                st, det, why = got.get(case, ('Lost', 'not-run', ''))
+                st, det, why, shaders = got.get(case, ('Lost', 'not-run', '', []))
             res.append('%s\t%s\t%s' % (case, st, field(red(det))))
             if why:
                 ref.append('%s\t%s' % (case, field(red(why), 600)))
+                shd.extend('%s\t%s\t%s' % (case, stage, esc_src(red(src)))
+                           for stage, src in shaders)
     with open(os.path.join(out, 'chunks.tsv'), 'w') as f:
         f.write('row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line\n')
         f.writelines(l + '\n' for l in chk)
@@ -464,8 +500,11 @@ def finalize(raw, out):
     with open(os.path.join(out, 'refusals.tsv'), 'w') as f:
         f.write('case\trefusal\n')
         f.writelines(l + '\n' for l in ref)
+    with open(os.path.join(out, 'shaders.tsv'), 'w') as f:
+        f.write('case\tstage\tsource\n')
+        f.writelines(l + '\n' for l in shd)
     # A .license sidecar beside each file, so the slice is committed as written.
-    names = ['meta.txt', 'chunks.tsv', 'results.tsv', 'refusals.tsv']
+    names = ['meta.txt', 'chunks.tsv', 'results.tsv', 'refusals.tsv', 'shaders.tsv']
     names += [os.path.join('kmsg', r[1] + '.txt') for r in plan_rows]
     names += [os.path.join('refusals', r[1] + '.txt') for r in plan_rows
               if os.path.exists(os.path.join(out, 'refusals', r[1] + '.txt'))]
