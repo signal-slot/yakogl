@@ -435,6 +435,32 @@ packages.apt = ["git", "python3-venv", "cmake", "ninja-build", "gperf", "ccache"
 packages.portage = ["dev-vcs/git", "dev-build/cmake", "dev-build/ninja", "dev-util/gperf", "dev-util/ccache", "sys-apps/dtc"]
 
 [[dep]]
+name = "HOST_DEQP_CTS"
+path = "VK-GL-CTS-host"
+marker = "VK-GL-CTS-host/targets/yakogl/yakogl.cmake"
+board = "*"
+note = "the host VK-GL-CTS tree of tools/cts/host-deqp-run.sh (CTS=$HOST_DEQP_CTS; MODULE=gles3 builds deqp-gles3 from it in build/host-deqp/deqp-gles3 of the repository and reads its android/cts/main/gles3-main-*.txt): VK-GL-CTS at 93bca01, the commit DEQP_WORK pins, with external/fetch_sources.py run and tools/cts/cts-yakogl-target.patch applied, uncommitted, as tools/cts/cts-build.sh does; about 2.1 GB, in about 95 s on a 4-core host (2026-11-26). A directory of its own: DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as its board tree, and VK-GL-CTS-gles3 is a sparse corpus checkout. DEQP_WORK's clone is the source when it has the commit, else one shallow commit from GitHub; fetch_sources.py needs network either way. The marker is the target file host-deqp-run.sh checks for; it is there only once the tree is complete (built in a .part directory and renamed). In every named board's set and in no board-less one: the gate never reads it, so its --check and a gate image's --build-missing leave it out (`deps-env.sh --build HOST_DEQP_CTS` or `--build-missing <board>` makes it)"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+repo=$PWD
+part="$DEPS/VK-GL-CTS-host.part"
+rm -rf "$part"
+if git -C "$DEPS/VK-GL-CTS" cat-file -e "$want^{commit}" 2>/dev/null; then
+  git clone -q --no-checkout "$DEPS/VK-GL-CTS" "$part"
+else
+  git init -q "$part"
+  git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$part" fetch -q --depth 1 origin "$want"
+fi
+git -C "$part" checkout -q --detach "$want"
+(cd "$part" && python3 external/fetch_sources.py)
+git -C "$part" apply "$repo/tools/cts/cts-yakogl-target.patch"
+mv "$part" "$DEPS/VK-GL-CTS-host"
+'''
+packages.apt = ["git", "python3", "cmake", "ninja-build", "g++"]
+packages.portage = ["dev-vcs/git", "dev-lang/python", "dev-build/cmake", "dev-build/ninja", "sys-devel/gcc"]
+
+[[dep]]
 name = "SLINT_NOSTD_DIR"
 path = "slint-nostd"
 marker = "slint-nostd/internal"
