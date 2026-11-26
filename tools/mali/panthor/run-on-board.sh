@@ -29,6 +29,10 @@
 # The board's boot_id is read before and after: a run across a reboot exits
 # 7 whatever the binary said. /proc/cmdline is printed once.
 #
+# The cross compiler is aarch64-linux-gnu-gcc from PATH; without one the build
+# takes MALI_DEQP_TOOLCHAIN's bin/ (tools/cts/deps-env.sh --present nanopc_t6,
+# cross-cc.sh), and with neither the script exits 2 before the lock and ssh.
+#
 # The whole session holds the board lock the kexec recipe takes
 # (driver/tools/kexec-zephyr/board_lock.sh, sourced as nanopc-t6.sh sources
 # it: one lock file per BOARD_HOST string, so spell the board the same in
@@ -46,6 +50,10 @@ cd "$(dirname "$0")/../../.."
 # shellcheck source=board-profile.sh
 . tools/mali/panthor/board-profile.sh
 board_profile_load || exit 2
+# The C compiler of the build, found before the lock and any ssh (exit 2).
+# shellcheck source=cross-cc.sh
+. tools/mali/panthor/cross-cc.sh
+panthor_cross_cc "$PWD" || exit 2
 node=$MALI_RENDER_NODE
 LOCK_WAIT=${LOCK_WAIT:-0}
 HOLD_MAX=${HOLD_MAX:-1800}
