@@ -449,4 +449,178 @@ mod tests {
         assert_eq!((o.stop, o.refusal, o.detail), (Stop::Fault, 3, 1));
         assert_eq!((o.found_irq[0], o.after_irq[0]), (1, 0x0001_0001));
     }
+
+    /// AS0's `AS_STATUS` reads as active for the first `left` reads, then
+    /// the wrapped mock answers: what a GPU left mid-command by an earlier
+    /// image shows when the domain stayed powered across a WDT0 reset.
+    struct StaleActive<'a> {
+        g: &'a Gpu,
+        left: std::cell::Cell<u32>,
+    }
+    impl Mmio for StaleActive<'_> {
+        fn read32(&self, a: usize) -> u32 {
+            if a == BASE + mmu_as(0) + mmu::AS_STATUS && self.left.get() > 0 {
+                self.left.set(self.left.get() - 1);
+                return mmu::AS_STATUS_AS_ACTIVE;
+            }
+            self.g.read32(a)
+        }
+        fn write32(&self, a: usize, v: u32) {
+            self.g.write32(a, v)
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+
+    fn up(m: &impl Mmio, pool: &mut [Table]) -> MmuUp {
+        mmu_up(m, BASE, 0x2830, pool, TABLES_PA, BACKING_PA, &mut |_, _| 0, &mut |_| {})
+    }
+
+    /// From U-Boot the GPU was never powered before `gpu_up`: AS0's
+    /// TRANSTAB, MEMATTR, TRANSCFG, LOCKADDR, STATUS and the fault words
+    /// read their reset values (0) and the MMU and GPU interrupt words are
+    /// clear.
+    #[test]
+    fn as0_from_reset_values_is_found_idle_and_written_in_order() {
+        let g = Gpu::new(2);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.found, AsRegs::default());
+        assert_eq!(o.found_irq, [0; 4]);
+        assert_eq!((o.after.status, o.after.faultstatus, o.after.faultaddress), (0, 0, 0));
+        // AS0's value registers are written once each, TRANSTAB, MEMATTR,
+        // TRANSCFG in that order, after the whole-VA lock
+        let a = mmu_as(0);
+        let regs: Vec<usize> = g
+            .sequence()
+            .into_iter()
+            .map(|w| w.0)
+            .filter(|&o| (a..a + 0x40).contains(&o) && o != a + AS_COMMAND)
+            .collect();
+        let lo_hi = |r: usize| [a + r, a + r + 4];
+        let want: Vec<usize> =
+            [mmu::AS_LOCKADDR, mmu::AS_TRANSTAB, mmu::AS_MEMATTR, mmu::AS_TRANSCFG, mmu::AS_LOCKADDR]
+                .into_iter()
+                .flat_map(lo_hi)
+                .collect();
+        assert_eq!(regs, want);
+        assert_eq!(*g.latched.borrow(), Some((TABLES_PA, MEMATTR_LIVE, 0x4200_01c6)));
+    }
+
+    /// A stale `AS_ACTIVE` that clears while the commands wait (a command
+    /// the earlier image left running) is waited out, not refused; it is
+    /// still in `found`.
+    #[test]
+    fn a_stale_as_active_that_clears_is_waited_out() {
+        let g = Gpu::new(1);
+        let m = StaleActive { g: &g, left: std::cell::Cell::new(3) };
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&m, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.found.status, mmu::AS_STATUS_AS_ACTIVE);
+        assert_eq!(o.after.status, 0);
+        // the first LOCK waited for the stale activity (2 polls after the
+        // found read took the first of three)
+        assert!(o.enable.flush.lock_polls[0] >= 1, "{:?}", o.enable.flush.lock_polls);
+        assert_eq!(o.after.transtab, TABLES_PA);
+    }
+
+    /// An `AS_ACTIVE` that never clears stops at the enable, with
+    /// `AsActiveStuck` and the status read; no AS0 command or value is
+    /// written.
+    #[test]
+    fn a_stuck_as_active_stops_at_the_enable_before_any_as0_command() {
+        let mut g = Gpu::new(0);
+        g.stuck = true;
+        let m = StaleActive { g: &g, left: std::cell::Cell::new(u32::MAX) };
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&m, &mut pool);
+        assert_eq!(
+            (o.stop, o.refusal, o.detail),
+            (Stop::Enable, mali::MaliRefusal::AsActiveStuck as u32, u64::from(mmu::AS_STATUS_AS_ACTIVE))
+        );
+        assert_eq!(o.found.status, mmu::AS_STATUS_AS_ACTIVE);
+        let a = mmu_as(0);
+        assert!(
+            g.sequence().iter().all(|w| w.0 != a + AS_COMMAND && w.0 != a + mmu::AS_TRANSTAB),
+            "AS0 command or TRANSTAB written"
+        );
+        // the tables were built and cleaned before the enable was tried
+        assert_eq!(o.tables_used, 4);
+        assert_eq!(o.after.transtab, 0);
+    }
+
+    /// A stale `AS_FAULTSTATUS` is not cleared by the enable: the run reads
+    /// it back after the map and stops with `Fault`, refusal 2, the word as
+    /// detail. AS0 itself was programmed.
+    #[test]
+    fn a_stale_as0_faultstatus_stops_with_fault_2() {
+        let g = Gpu::new(0);
+        g.regs.borrow_mut().insert(mmu_as(0) + mmu::AS_FAULTSTATUS, 0xc3);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::Fault, 2, 0xc3));
+        assert_eq!(o.found.faultstatus, 0xc3);
+        assert_eq!(o.after.transtab, TABLES_PA);
+        assert_eq!(o.flush_pt, Default::default(), "no flush after the map once it stopped");
+    }
+
+    /// A stale fault bit in `MMU_INT_RAWSTAT` (any AS, bits 0..16) stops with
+    /// refusal 3 and only the fault bits as detail; a stale command-completed
+    /// bit (16+) alone is no fault.
+    #[test]
+    fn a_stale_mmu_fault_bit_stops_with_fault_3_and_a_completed_bit_does_not() {
+        let g = Gpu::new(0);
+        g.regs.borrow_mut().insert(mmu::MMU_INT_RAWSTAT, 0x0001_0004);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::Fault, 3, 4));
+        assert_eq!(o.found_irq[0], 0x0001_0004);
+
+        let g = Gpu::new(0);
+        g.regs.borrow_mut().insert(mmu::MMU_INT_RAWSTAT, 0x0002_0000);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.after_irq[0], 0x0003_0000);
+    }
+
+    /// With both a stale `AS_FAULTSTATUS` and a stale fault bit the first
+    /// check that fires names the fault status (refusal 2), not the bit.
+    #[test]
+    fn stale_faultstatus_is_named_before_a_stale_raw_fault_bit() {
+        let g = Gpu::new(0);
+        g.regs.borrow_mut().insert(mmu_as(0) + mmu::AS_FAULTSTATUS, 0x5);
+        g.regs.borrow_mut().insert(mmu::MMU_INT_RAWSTAT, 0x1);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::Fault, 2, 5));
+    }
+
+    /// Stale TRANSTAB, MEMATTR and TRANSCFG of an earlier image are
+    /// overwritten and read back as this run's values.
+    #[test]
+    fn stale_as0_translation_registers_are_overwritten() {
+        let g = Gpu::new(0);
+        {
+            let mut r = g.regs.borrow_mut();
+            let a = mmu_as(0);
+            for (off, v) in
+                [(mmu::AS_TRANSTAB, 0xdead_b003u32), (mmu::AS_MEMATTR, 0x1111_1111), (mmu::AS_TRANSCFG, 0x7)]
+            {
+                r.insert(a + off, v);
+                r.insert(a + off + 4, 0x1);
+            }
+        }
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = up(&g, &mut pool);
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!(o.found.transtab, 0x1_dead_b003);
+        assert_eq!((o.after.transtab, o.after.memattr, o.after.transcfg), (TABLES_PA, MEMATTR_LIVE, 0x4200_01c6));
+    }
 }
