@@ -471,6 +471,46 @@ def self_test():
         only("verdict: env changed in the stored verdict line",
              make_record(root, "v4", **{"verdict.txt": "t s n rc=6 verdict=env_changed boot=uboot-mmc row\n"}), "verdict", "env_changed")
 
+        # verdict-line shapes of the runners' new fields (resets=, record=, result=record:<KIND>)
+        def vline(label, line, ok, substr=None):
+            with open(vf, "w") as f:
+                f.write(line + "\n")
+            out = []
+            run_checks(g, vf, out=out.append)
+            v = [l for l in out if l.startswith("ok     verdict") or l.startswith("FAILED verdict")]
+            good = len(v) == 1 and v[0].startswith("ok") == ok and (substr is None or substr in v[0])
+            n[0] += 1
+            print("%s verdict line: %s" % ("ok  " if good else "FAIL", label))
+            if not good:
+                fails.append(label)
+                print("\n".join(out))
+        hd = "board-stm32mp2-uboot.sh stm32mp257f-dk mp2_hello rc=%s verdict=%s boot=uboot-mmc row boot_verdict=done result=%s"
+        tl = " env_diff=empty boot_diff=empty back_after=40s"
+        fld = " resets=1 record=0,1,2,3"
+        vline("uboot order (fields between result= and back_after=)",
+              hd % (0, "done", "record:FENCE") + " resets=1 record=0,1,2,3" + tl, True, "uboot-mmc")
+        vline("uboot order, result=pass:<prog>", hd % (0, "done", "pass:gc_fence") + fld + tl, True)
+        vline("uboot order, result=none", hd % (0, "done", "none") + fld + tl, True)
+        vline("uboot order, fields absent",
+              hd % (0, "done", "none") + " resets=absent record=absent" + tl, True)
+        vline("uboot order, no fields at all (older runner)", hd % (0, "done", "none") + tl, True)
+        vline("runner order (fields after back_after=)",
+              hd % (0, "done", "record:FENCE") + tl + fld, True)
+        vline("runner order, fields absent", hd % (0, "done", "fail:gc_fence") + tl + " resets=absent record=absent", True)
+        vline("runner order, result=pass:<prog>", hd % (0, "done", "pass:gc_fence") + tl + fld, True)
+        vline("record:<KIND> with a bad verdict still fails",
+              hd % (6, "env_changed", "record:FENCE") + fld + tl, False, "env_changed")
+        vline("bad_record (rc 4), fields after back_after=",
+              hd % (4, "bad_record", "record:FENCE") + tl + fld, False, "verdict=bad_record")
+        vline("bad_record (rc 4), fields before back_after=",
+              hd % (4, "bad_record", "none") + " resets=absent record=1,2,3,4" + tl, False, "verdict=bad_record")
+        vline("lifetime (rc 8), fields after back_after=",
+              hd % (8, "lifetime", "none") + tl + " resets=2 record=absent", False, "verdict=lifetime")
+        vline("lifetime (rc 8), fields before back_after=",
+              hd % (8, "lifetime", "fail:gc_fence") + " resets=2 record=absent" + tl, False, "verdict=lifetime")
+        vline("result=fail:<prog> with verdict=done is read as done (the verdict gates, not the result)",
+              hd % (0, "done", "fail:gc_fence") + fld + tl, True)
+
         # 2 scan
         only("scan: image phase absent",
              make_record(root, "s1", scan_line=SCAN_OK.replace("image=+6.0s", "image=absent")), "console scan", "image")
