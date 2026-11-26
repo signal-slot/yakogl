@@ -85,7 +85,7 @@ def find(lines, rx, what):
 
 RE_RESULT = re.compile(r"^\s*(mp2_display|mp2_gpu_scanout): (PASS|FAIL)\b.*$")
 RE_VERDICT = re.compile(r"board-stm32mp2\.sh \S+ \S+ rc=(\d+) verdict=(\S+) .*boot_verdict=(\S+) "
-                        r"result=(\S+) back_after=(\S+)")
+                        r"result=(\S+) (?:\S+ )*?back_after=(\S+)")
 RE_HOLD = re.compile(r"^hold: result seen at (\S+), holding (\d+)s")
 RE_FRAMES = re.compile(r"^\s*(?:mp2_display|mp2_gpu_scanout): hold: (\d+) frames ok, (\d+) failed")
 RE_STOCK = re.compile(r"stock boot files: (?:unchanged since install|no record[^\n]*)|"
