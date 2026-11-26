@@ -284,7 +284,10 @@ heuristic, to `t6-uart-rfc2217.py` for a defect of the adapter.
   and the rule for calling a WDT0 reset proven: docs/notes/nanopc-t6-uboot-handover.md,
   section 6. `prompt-go` has no exit code of its own for a WDT0 return: an
   image that ends by WDT0 or by PSCI exits 0 on a PASS verdict with Armbian
-  back, 11 on FAIL, 10 when no sign of Linux follows ("Exit codes").
+  back, 11 on FAIL, 10 when no sign of Linux follows ("Exit codes"). For the
+  gl_test and deqp kinds the judge takes the PSCI line or, with none, the next
+  U-Boot banner (`DDR V...` or `U-Boot N...`) after the summary, as
+  `t6-verdict.sh` does; verdict.txt names the route (`route: psci|wdt0`).
 - **The GPU.** PD_GPU off and the GPU clock on the SPLL are both states
   `gpu_up` handles (docs/notes/nanopc-t6-uboot-handover.md, sections 1 and
   2); neither has run on the board from U-Boot's state.
