@@ -217,4 +217,72 @@ mod tests {
         let (s, _) = sent(|tx| banner_a_el2(tx, &k));
         assert!(s.starts_with("T6:A EL2 HCR_EL2 0x0000000080000020 kept (VHE exit off) SCTLR_EL2 "), "{s}");
     }
+
+    /// U-Boot's `go` entry at EL2 (HCR_EL2 RW|AMO, SCTLR_EL2 M|C|I, CNTFRQ_EL0
+    /// as U-Boot's timer init sets it: 24 MHz on the RK3588).
+    fn uboot_go_entry(cntfrq: u64) -> El2Entry {
+        El2Entry {
+            hcr_found: HCR_RW | HCR_AMO,
+            hcr_now: Some(HCR_EL2_AT_ENTRY),
+            sctlr: 0x30c5_1835,
+            vbar_found: 0x0000_0000_0020_0800,
+            vbar_now: 0x1000_8000,
+            cntfrq,
+        }
+    }
+
+    #[test]
+    fn banner_a_prints_cntfrq_24mhz_as_uboot_sets_it() {
+        let (s, _) = sent(|tx| banner_a_el2(tx, &uboot_go_entry(24_000_000)));
+        assert!(s.ends_with(" CNTFRQ_EL0 24000000\r\n"), "{s}");
+        assert!(s.starts_with("T6:A EL2 "), "{s}");
+        assert_eq!(s.matches("\r\n").count(), 1);
+        assert_eq!(s.matches('\n').count(), 1);
+    }
+
+    #[test]
+    fn banner_a_prints_cntfrq_zero_as_found_not_a_default() {
+        // CNTFRQ_EL0 0 (nothing programmed it): printed as 0, not replaced
+        // by 24 MHz or left blank.
+        let (s, _) = sent(|tx| banner_a_el2(tx, &uboot_go_entry(0)));
+        assert!(s.ends_with(" CNTFRQ_EL0 0\r\n"), "{s}");
+        assert!(!s.contains("24000000"), "{s}");
+        let e = El2Entry { hcr_now: None, ..uboot_go_entry(0) };
+        let (s, _) = sent(|tx| banner_a_el2(tx, &e));
+        assert!(s.ends_with(" CNTFRQ_EL0 0\r\n"), "{s}");
+    }
+
+    #[test]
+    fn banner_a_cntfrq_does_not_disturb_the_other_fields() {
+        let (a, _) = sent(|tx| banner_a_el2(tx, &uboot_go_entry(24_000_000)));
+        let (b, _) = sent(|tx| banner_a_el2(tx, &uboot_go_entry(0)));
+        let strip = |s: &str| s[..s.find(" CNTFRQ_EL0").unwrap()].to_string();
+        assert_eq!(strip(&a), strip(&b));
+    }
+
+    #[test]
+    fn banner_a_at_other_els_names_the_el_and_prints_no_el2_register() {
+        // If U-Boot jumped at another EL the line names it and prints no
+        // EL2 register (so no CNTFRQ either).
+        for el in [0u64, 1, 3] {
+            let (s, _) = sent(|tx| banner_a_other(tx, el));
+            assert_eq!(s, format!("T6:A EL{el} (not EL2: HCR_EL2 and VBAR_EL2 untouched)\r\n"));
+            assert!(!s.contains("CNTFRQ"), "{s}");
+        }
+    }
+
+    #[test]
+    fn banner_a_prints_sctlr_with_the_mmu_and_caches_as_found() {
+        // `go` leaves the MMU and caches on (M, C, I = bits 0, 2, 12); the
+        // banner prints SCTLR_EL2 verbatim, so a state with them off differs
+        // only in that field.
+        let on = uboot_go_entry(24_000_000);
+        let off = El2Entry { sctlr: on.sctlr & !((1 << 0) | (1 << 2) | (1 << 12)), ..on };
+        assert_eq!(off.sctlr, 0x30c5_0830);
+        let (a, _) = sent(|tx| banner_a_el2(tx, &on));
+        let (b, _) = sent(|tx| banner_a_el2(tx, &off));
+        assert!(a.contains(" SCTLR_EL2 0x0000000030c51835 "), "{a}");
+        assert!(b.contains(" SCTLR_EL2 0x0000000030c50830 "), "{b}");
+        assert_eq!(a.replace("30c51835", "30c50830"), b);
+    }
 }
