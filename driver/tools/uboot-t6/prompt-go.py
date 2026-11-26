@@ -186,6 +186,8 @@ DEQP_DONE_RE = re.compile(r"deqp: done: -?\d+ passed, -?\d+ failed, -?\d+ not su
 DEQP_SUMMARY_RE = re.compile(r"deqp: summary: \d+ cases begun, \d+ with a result, \d+ without")
 # nanopc_t6.c, t6_reset_to_linux: "t6: <why>: PSCI SYSTEM_RESET at N ms (F feeds)"
 RESET_PFX = re.compile(r"t6: [^:]+: PSCI SYSTEM_RESET at ")
+# t6-verdict.sh's banner_re: the next boot's first line after a WDT0 reset
+BANNER_RE = re.compile(r"(DDR[ \t]V[0-9]|U-Boot[ \t][0-9])")
 
 
 def judge_sample(probe, log, out):
@@ -247,12 +249,24 @@ def judge_sample(probe, log, out):
     else:
         step('"deqp: done: ... complete=C"', "deqp: done: ", DEQP_DONE_RE)
         step('"deqp: summary: N cases begun, M with a result, K without"', "deqp: summary: ", DEQP_SUMMARY_RE)
-    step('"t6: %s done: PSCI SYSTEM_RESET at N ms (F feeds)"' % probe, RESET_PFX,
-         re.compile(r"t6: %s done: PSCI SYSTEM_RESET at \d+ ms \(\d+ feeds\)" % probe))
+    # The return: the image's own PSCI line, or (WDT0 expiry prints nothing)
+    # the next U-Boot banner after the summary, as t6-verdict.sh counts it.
+    # A hung image has no summary, so its step above already failed.
+    route = "psci"
+    if not any(RESET_PFX.match(l) for l in lines[cur[0]:]):
+        j = next((k for k in range(cur[0], len(lines)) if BANNER_RE.match(lines[k])), None)
+        if j is not None and all(ok for ok, _ in res):
+            route = "wdt0"
+            res.append((True, 'ok       expected the return by WDT0: no PSCI line, the next U-Boot banner "%s" (line %d)' % (
+                lines[j], j + 1)))
+    if route == "psci":
+        step('"t6: %s done: PSCI SYSTEM_RESET at N ms (F feeds)"' % probe, RESET_PFX,
+             re.compile(r"t6: %s done: PSCI SYSTEM_RESET at \d+ ms \(\d+ feeds\)" % probe))
+    seen = "route: " + route
     bad = sum(1 for ok, _ in res if not ok)
     last = "VERDICT %s PASS" % probe if bad == 0 else "VERDICT %s FAIL (%d of %d)" % (probe, bad, len(res))
     with open(out, "w") as f:
-        f.write("".join(t + "\n" for _, t in res) + last + "\n")
+        f.write("".join(t + "\n" for _, t in res) + seen + "\n" + last + "\n")
     return (0 if bad == 0 else 1), last
 
 
@@ -735,6 +749,27 @@ def self_test():
                   "judge_sample, %s: FAIL (rc %d, %r)" % (what, rc, last))
         rc, last = judged(gl)
         check(rc == 0 and last == "VERDICT gl_test PASS", "judge_sample, the 50/50 record: PASS (%r)" % last)
+
+        # WDT0 return: no PSCI line, the next U-Boot banner after the summary
+        def route_of():
+            with open(out) as f:
+                return [l for l in f.read().splitlines() if l.startswith("route: ")]
+
+        check(route_of() == ["route: psci"], "judge_sample, PASS + PSCI: route psci (%r)" % route_of())
+        for banner in ("DDR V1.18 20220801", "U-Boot 2026.07 (Nov 12 2026)"):
+            for probe in ("gl_test", "deqp"):
+                rc, last = judged(sample_lines(probe)[:-1] + ["", banner])
+                check(rc == 0 and last == "VERDICT %s PASS" % probe and route_of() == ["route: wdt0"],
+                      "judge_sample, %s PASS + WDT0 return (%s): PASS, route wdt0 (%r)" % (probe, banner[:8], last))
+        rc, last = judged(gl[:at] + gl[at + 1:-1] + ["DDR V1.18 20220801"])
+        check(rc == 1 and " FAIL (" in last, "judge_sample, no summary + banner: FAIL (rc %d, %r)" % (rc, last))
+        rc, last = judged(sample_lines("gl_test", "fail1")[:-1] + ["DDR V1.18 20220801"])
+        check(rc == 1 and " FAIL (" in last, "judge_sample, FAIL summary + banner: FAIL (rc %d, %r)" % (rc, last))
+        dq = [l for l in sample_lines("deqp") if not l.startswith("deqp: done: ")][:-1] + ["U-Boot 2026.07"]
+        rc, last = judged(dq)
+        check(rc == 1 and "FAIL" in last, "judge_sample, deqp no summary + banner: FAIL (rc %d, %r)" % (rc, last))
+        rc, last = judged(gl[:-1] + ["U-Boot SPL 2026.07"])
+        check(rc == 1, "judge_sample, an SPL line is no banner: FAIL (rc %d)" % rc)
 
     # 7. What may be typed.
     ok = go_allowed(name, size)
