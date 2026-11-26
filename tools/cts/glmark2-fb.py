@@ -66,6 +66,9 @@ def decode(text, scene=None):
     cur = None
     dumps = []
     for line in text.splitlines():
+        j = line.find("glmark2-picture: ")
+        if j >= 0 and cur is not None:
+            cur["pics"].append(line[j + len("glmark2-picture: "):])
         i = line.find("glmark2-fb: ")
         if i < 0:
             continue
@@ -73,7 +76,7 @@ def decode(text, scene=None):
         m = begin.match(line)
         if m:
             cur = {"scene": m.group(1), "w": int(m.group(2)), "h": int(m.group(3)),
-                   "lines": {}, "end": None, "bad": []}
+                   "lines": {}, "end": None, "bad": [], "pics": []}
             dumps.append(cur)
         elif cur is not None:
             m = re.match(r"glmark2-fb: end crc32 ([0-9a-f]{8})\s*$", line)
@@ -83,7 +86,7 @@ def decode(text, scene=None):
             m = re.match(r"glmark2-fb: (\d+) ([0-9a-f]{4}) (\S+)\s*$", line)
             if m:
                 cur["lines"][int(m.group(1))] = (int(m.group(2), 16), m.group(3))
-            elif not line.startswith("glmark2-fb: end"):
+            else:
                 cur["bad"].append(line[:60])
     dumps = [d for d in dumps if scene is None or scene in d["scene"]]
     if not dumps:
@@ -115,11 +118,10 @@ def decode(text, scene=None):
     if d["bad"]:
         problems.append("%d unreadable fb line(s), first: %r" % (len(d["bad"]), d["bad"][0]))
     pic = None
-    key = "glmark2-picture: " + d["scene"] + ": "
-    for line in text.splitlines():
-        i = line.find(key)
-        if i >= 0:
-            pic = line[i + len(key):].strip()
+    key = d["scene"] + ": "
+    for line in d["pics"]:
+        if line.startswith(key):
+            pic = line[len(key):].strip()
     return d["scene"], w, h, rows, problems, d["end"], pic
 
 
@@ -339,6 +341,22 @@ def self_test():
            for x in lines]
     put(bad)
     expect("picture disagrees", run(log, png), 1)
+    # a damaged end line is counted, not read as a clean dump
+    bad = [x[:-3] if x.startswith("glmark2-fb: end") else x for x in lines]
+    put(bad)
+    expect("damaged end line exits 1", run(log, png), 1)
+    r = decode("\n".join(bad))
+    expect("damaged end line is a problem", len(r[4]), 1)
+    # the picture value comes from the decoded dump's own run only
+    pics = [x for x in lines if x.startswith("glmark2-picture")]
+    other = [x.replace("probes c", "probes c ff", 1) for x in pics]
+    nopic = [x for x in lines if not x.startswith("glmark2-picture")]
+    expect("picture of the first run is not taken",
+           decode("\n".join(lines + other + nopic))[6], None)
+    expect("picture before its begin is not taken",
+           decode("\n".join(pics + nopic))[6], None)
+    expect("picture of the decoded run",
+           decode("\n".join(other + lines))[6], decode("\n".join(lines))[6])
     put(["nothing"])
     expect("no dump", run(log, png), 2)
     # --rundir: two scenes with dumps, one without, one damaged
