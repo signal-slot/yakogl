@@ -2,15 +2,14 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # dEQP-GLES3 on the Verdin i.MX8M Plus (GC7000UL): board recipe
 
-**The campaign commit is `9bc82915`** (`9bc82915e06367b46e3a62b644dbf2bb659d72ad`), the commit of the three
-recorded slices. The remaining slices (plan #316 items s02, s05-s14) run the image built at that commit with
-the integration tip's scripts, `HEAD8=9bc82915` ("Running a GLES3 slice session", step 1), so that all 133 entries
-merge as one campaign. A restart at `05769bf2` (`05769bf2c24a00a8c69c608c2310c0edab3f807c`) was named on
-2026-11-17 and built on the host (section 2), but no slice was recorded at it; its figures below are host
-figures only (`merge.py --check` fails when two slices name different commits, so a slice of it would never
-merge with the `9bc82915` ones).
+**The campaign commit is `05769bf2`** (`05769bf2c24a00a8c69c608c2310c0edab3f807c`). All 133 entries of
+`tools/cts/imx8mp-gles3-tree.txt` are run again at that one commit, as eleven slices named
+`tools/cts/log/2026-11-16-imx8mp-gles3-05769bf2-rowsAA-BB` ("Running a GLES3 slice session", step 1:
+`HEAD8=05769bf2`), built from its image and run with the integration tip's scripts. Its host build figures are in
+section 2. Why the campaign restarted is in "Why the campaign restarts at 05769bf2" below. The three earlier
+slices at `9bc82915` (below) are history; the closing step retires them.
 
-This recipe has run on the board. Three slices of it (plan #316 items s01, s03, s04) came from the one
+This recipe has run on the board at the earlier commit `9bc82915`. Three slices of it (plan #316 items s01, s03, s04) came from the one
 campaign commit `9bc82915e06367b46e3a62b644dbf2bb659d72ad` and are recorded as
 `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51` under `tools/cts/log/`: table
 entries 0-12, 16-33 and 34-50 (48 of 133, 28,459 mustpass cases). **Entries 13-15 and 51-132 (14,351
@@ -534,80 +533,81 @@ Never, in any step of a session:
 One ordered procedure for a board session that runs a row range of the 133-entry table and commits it as a
 slice. Every command below exists in the tree with the flags shown, and the output described is what its script
 prints (read from the script). Steps 1-13 have been run three times on the board, from the one commit
-`9bc82915` (the campaign commit; the remaining slices use it too, step 1), as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
+`9bc82915` (the earlier campaign; this campaign's commit is `05769bf2`, step 1), as `2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51`: what the board
 prints is what those runs recorded. The open board-side unknown is the console's **content** (the bridge
 delivered no text in all three sessions, nor in the probe of 2026-11-15), not the verdict lines, the records or the tallies.
 
-### Why the 9bc82915 campaign is finished, not restarted
+### Why the campaign restarts at 05769bf2
 
-Decision (plan #410): finish the campaign at `9bc82915`; do not restart the 133 entries at a current
-`origin/main`. The reasons, as measured:
+Decision (reverses plan #410, which finished the campaign at `9bc82915`): run all 133 entries again at
+`05769bf2`. The reasons:
 
-- `git diff 9bc82915 HEAD -- tools/cts/imx8mp-gles3-tree.txt tools/cts/gles3-mustpass.txt tools/cts/imx8mp-gles3-gen.py`
-  prints nothing: the tree, the mustpass list and the generator are byte-identical between `9bc82915` and
-  `origin/main`, so the 133 entries and their cases are the same ones either way.
-- `imx8mp-gles3-merge.py --check` exits 1 when the inputs name different commits (its `--check` text: "the
-  inputs name different commits (or none)"; the problem line is `different commits: ...`). A slice from a
-  newer commit would never merge with the three recorded ones, so a restart discards the 48 recorded entries
-  (28,459 cases) and the board time of the three slices, 2,975 s by `imx8mp-gles3-times.py` over
-  `2026-11-imx8mp-gles3-9bc82915-rows01-13` (537 s), `-rows17-34` (1,469 s) and `-rows35-51` (969 s). Finishing
-  leaves 85 entries to run; a restart leaves 133.
-- `git merge-base --is-ancestor 9bc82915 HEAD` succeeds: `9bc82915` is on `origin/main`, so the rule that the
-  board image comes from an `origin/main` commit holds.
+- Acceptance requires every slice to name one commit that is on `origin/main`, and
+  `imx8mp-gles3-merge.py --check` exits 1 when the inputs name different commits (`different commits: ...`).
+  The campaign therefore has one commit, whichever it is.
+- The tree, the mustpass list and the generator have not changed
+  (`git diff 9bc82915 05769bf2 -- tools/cts/imx8mp-gles3-tree.txt tools/cts/gles3-mustpass.txt tools/cts/imx8mp-gles3-gen.py`
+  prints nothing), so the 133 entries and their 42,810 cases are the same ones; only the commit moves.
+- The `05769bf2` image is already built and measured on the host (section 2).
+- 145 or more `src/vivante` and `src/gl` commits lie between `9bc82915` and `05769bf2`
+  (`git rev-list --count 9bc82915..05769bf2 -- src/vivante src/gl`; 145 counted at the snapshot of plan #410
+  against `HEAD`), so the 28,459 cases of the three `9bc82915` slices are stale figures: some Fail cases may be
+  fixed, some Pass cases may have changed.
+- `git merge-base --is-ancestor 05769bf2 origin/main` holds, so the rule that the board image comes from an
+  `origin/main` commit is met.
 
-The cost: the figures predate later work. `git rev-list --count 9bc82915..HEAD -- src/vivante src/gl` counts 145
-commits (at the snapshot of this decision), so some Fail cases may already be fixed on main. A second campaign at
-a current `origin/main` is follow-up work, tracked as a GitHub issue, not in this file.
+The cost: the board time of the three `9bc82915` slices (2,975 s by `imx8mp-gles3-times.py`: `rows01-13` 537 s,
+`rows17-34` 1,469 s, `rows35-51` 969 s) is spent again. The three slice directories
+`2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34` and `-rows35-51` stay in `tools/cts/log/` as history
+until the closing step retires them; nothing here moves or deletes them. What those sessions measured (console,
+verdict lines, records) stays in this recipe, labelled `9bc82915`.
 
-Plan for finishing: twelve slices, one session each (only one session holds the board at a time), each
-`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-<rows>` named after its rows:
-`rows14-16`, `rows52-57`, `rows58-61`, `rows62-67`, `rows68-75`, `rows76-83`, `rows84-94`, `rows95-107`,
-`rows108-117`, `rows118-122`, `rows123-128`, `rows129-133`.
+### The eleven slices
 
-Status: three slices are recorded and the twelve above are planned (to be updated when they run).
+One session each (only one session holds the board at a time), each
+`tools/cts/log/2026-11-16-imx8mp-gles3-05769bf2-<rows>`; `rowsN-M` is tree entries N-1 to M-1, and
+`imx8mp-gles3-slice.py` takes it as `--rows N-M` (with `--commit HASH40 --date YYYY-MM-DD --lines FILE`).
+Case counts are the mustpass cases of `tools/cts/imx8mp-gles3-tree.txt`'s entries (the sum is 42,810).
 
-### Planned order of the remaining slices
+| Run | Slice directory suffix | Entries | Mustpass cases | Largest entry (planner) |
+| --- | --- | --- | --- | --- |
+| 1 | `rows01-13` | 0-12 | 5,291 | 104 s |
+| 2 | `rows14-16` | 13-15 | 1,183 | 80 s |
+| 3 | `rows58-67` | 57-66 | 287 | 440 s (entry 59) |
+| 4 | `rows52-57` | 51-56 | 2,019 | 280 s |
+| 5 | `rows96-107` | 95-106 | 1,461 | 296 s |
+| 6 | `rows123-133` | 122-132 | 5,557 | 298 s |
+| 7 | `rows68-83` | 67-82 | 670 | 300 s |
+| 8 | `rows84-95` | 83-94 | 852 | 300 s |
+| 9 | `rows108-122` | 107-121 | 2,322 | 288 s |
+| 10 | `rows17-34` | 16-33 | 10,873 | 139 s |
+| 11 | `rows35-51` | 34-50 | 12,295 | 138 s |
+| | all eleven | 133 | 42,810 | |
 
-**Planned, not measured.** No time below comes from a board run of these slices. Each is the session planner's
-estimate (`imx8mp-gles3-sessions.py`: Pi 4 rates where the Pi 4 record has the group, else the assumed rates
-printed in its header) plus 60 s per entry for the reboot of a first pass (`NAMES=0`; the recipe's boot is
-45-105 s). The measured times replace this table when the slices have run. Slice directories are
-`tools/cts/log/2026-11-imx8mp-gles3-9bc82915-<rows>`; `rowsN-M` is tree entries N-1 to M-1.
-`imx8mp-gles3-slice.py` accepts all twelve ranges.
-
-| Run | Slice directory suffix | Entries | Mustpass cases | Planned first pass | Largest entry (planner) |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `rows14-16` | 13-15 | 1,183 | 0.07 h (256 s) | 31 s |
-| 2 | `rows58-61` | 57-60 | 190 | 0.48 h (1,740 s) | 440 s (entry 59) |
-| 3 | `rows62-67` | 61-66 | 97 | 0.69 h (2,494 s) | 396 s |
-| 4 | `rows95-107` | 94-106 | 1,579 | 1.09 h (3,938 s) | 296 s |
-| 5 | `rows123-128` | 122-127 | 2,355 | 0.43 h (1,538 s) | 293 s |
-| 6 | `rows52-57` | 51-56 | 2,019 | 0.38 h (1,381 s) | 280 s |
-| 7 | `rows68-75` | 67-74 | 384 | 0.74 h (2,678 s) | 300 s |
-| 8 | `rows76-83` | 75-82 | 286 | 0.73 h (2,625 s) | 300 s |
-| 9 | `rows84-94` | 83-93 | 734 | 0.97 h (3,508 s) | 300 s |
-| 10 | `rows108-117` | 107-116 | 1,440 | 0.97 h (3,480 s) | 288 s |
-| 11 | `rows118-122` | 117-121 | 882 | 0.33 h (1,182 s) | 255 s |
-| 12 | `rows129-133` | 128-132 | 3,202 | 0.42 h (1,498 s) | 298 s |
-| | all twelve | 85 | 14,351 | 7.31 h | |
-
-No entry exceeds the planner's 480 s risk flag (0.8 x the 600 s window); the largest is entry 59 at 440 s.
+The run column is the order below (the slices are named by rows, not by run). Largest-entry figures come from
+`imx8mp-gles3-sessions.py`, whose rates for the entries 0-50 are now the `9bc82915` board rates and for the rest
+Pi 4 or assumed rates; they are estimates, not measurements at `05769bf2`. No entry is above the
+planner's 480 s risk flag (0.8 x the 600 s window); the largest is entry 59 at 440 s.
 
 Order and reasons:
-- **Run 1, `rows14-16`, alone:** the shortest slice (blend `fbo_srgb`); it proves the image, the slice commit and the
-  route before a long one. Expected (host prediction at `05769bf2`): no hang, abort or refusal; nearly all
-  cases Fail by image compare (the sRGB bit written with its mask bit set).
-- **Runs 2 and 3, the 3d filtering slices** (`rows58-61`, then `rows62-67`): their per-case rate (22-25 s) is
-  assumed from the AM62P, not measured, and these two hold the entries nearest the risk flag. They go early so a
-  watchdog end shows while the rest of the plan can still change. Expected (host prediction at `05769bf2`): no
-  GPU hang; only entries 58-66 (rows59-67) may end in a WDOG1 reset, by run time alone, entry 59 the worst
-  case at about 500 s.
-- **Runs 4 and 5** (`rows95-107`, `rows123-128`): the longest and the ubo slice. Run entries 95 and 122-127 as
-  normal entries: no hang is expected (host prediction at `05769bf2`). If one hangs, the console scan names the
-  last case (ubo: compare with `block_read`; entry 95: mip level >= 1 of a `_3d` case).
-- **Entry 54** (unmeasured texture entry, in run 6, `rows52-57`): run it early in its slice; its measured time
-  rescales the run-time guesses for the other texture entries. **Runs 6-12:** the rest, in row order.
+- **Run 1, `rows01-13`, first:** the entries the `9bc82915` campaign already knows best; it proves the image,
+  the slice commit and the route, and shows what the 145+ commits changed.
+- **Run 2, `rows14-16`:** the shortest slice (blend `fbo_srgb`). Expected (host prediction at `05769bf2`): no
+  hang, abort or refusal; nearly all cases Fail by image compare (the sRGB bit written with its mask bit set).
+- **Run 3, `rows58-67`** (3d and 2d_array filtering): their per-case rate (22-25 s) is assumed from the AM62P,
+  not measured, and these entries are nearest the risk flag; they go early so a watchdog end shows while the rest
+  of the plan can still change. Run entry 57 alone first, then entries 58-66 split, because 58-66 may end in a
+  WDOG1 reset. Expected (host prediction at `05769bf2`): no GPU hang; only entries 58-66 (rows59-67) may end in a
+  WDOG1 reset, by run time alone, entry 59 the worst case at about 500 s.
+- **Run 4, `rows52-57`, entry 54 first** (unmeasured texture entry): its measured time rescales the run-time
+  guesses for the other texture entries.
+- **Runs 5 and 6, `rows96-107` and `rows123-133`, in small ranges:** the longest and the ubo slices. Run entries
+  95 and 122-127 as normal entries: no hang is expected (host prediction at `05769bf2`). If one hangs, the console
+  scan names the last case (ubo: compare with `block_read`; entry 95: mip level >= 1 of a `_3d` case).
+- **Runs 7-11:** the rest, in the order of the table (`rows68-83`, `rows84-95`, `rows108-122`, then the two
+  large shader slices `rows17-34` and `rows35-51`).
 - One session holds the board at a time; run the slices one after another, each with `RUN_BOUND=800`.
+
 
 Stop rule: a row that ends `board.sh` rc 5 (`the board did not come back`) stops the chain. Stop the session
 and report; start no further slice.
@@ -615,13 +615,13 @@ and report; start no further slice.
 Not predictable with the current `imx8mp-gles3-sessions.py`: page counts, and the ES 2.0 time (it has no
 `--rows` filter and no GLES2 mustpass option).
 
-Reproduce the table (the planner's per-entry rows, summed over the twelve ranges with 60 s per entry):
+Reproduce the table (case counts and the largest entry's estimate, per range):
 
 ```
 python3 -I tools/cts/imx8mp-gles3-sessions.py | python3 -I -c '
 import sys
 rows=[l.rstrip("\n").split("\t") for l in sys.stdin if l[:1].isdigit()]
-for a,b in [(14,16),(52,57),(58,61),(62,67),(68,75),(76,83),(84,94),(95,107),(108,117),(118,122),(123,128),(129,133)]:
+for a,b in [(1,13),(14,16),(17,34),(35,51),(52,57),(58,67),(68,83),(84,95),(96,107),(108,122),(123,133)]:
     s=rows[a-1:b]; t=sum(float(r[2]) for r in s)+60*len(s)
     print("rows%d-%d" % (a,b), len(s), sum(int(r[1]) for r in s), round(t), round(t/3600,2), max(float(r[2]) for r in s))'
 ```
@@ -688,14 +688,13 @@ Rules that hold for every step:
    moved (pass it as `--commit` in step 7). A new campaign is needed only when the table or the image code
    changed. If `git fetch` fails, say so; do not take a stale ref for the current one.
 
-   **The remaining slices of this campaign** do not take `origin/main`: they fix the commit of the three
-   recorded slices and split the two roles. The image is built at the campaign commit (steps 3-4 in a
+   **The slices of this campaign** do not take `origin/main`: they fix the campaign commit and split the two roles. The image is built at the campaign commit (steps 3-4 in a
    worktree of it); every script (`board.sh`, the wrapper, preflight, merge, slice) runs from the integration
-   tip's checkout, against the same `$IMX8MP_OUT`. That is what the three slices did (their READMEs: "the
+   tip's checkout, against the same `$IMX8MP_OUT`. That is what the three `9bc82915` slices did (their READMEs: "the
    image is the campaign commit's, the runner the current one").
    ```sh
-   COMMIT=9bc82915e06367b46e3a62b644dbf2bb659d72ad; HEAD8=9bc82915
-   git worktree add --detach ../yakogl-9bc82915 "$COMMIT"     # build steps 3-4 from here
+   COMMIT=05769bf2c24a00a8c69c608c2310c0edab3f807c; HEAD8=05769bf2
+   git worktree add --detach ../yakogl-05769bf2 "$COMMIT"     # build steps 3-4 from here
    ```
    Before the session, run the host selftests of the merge and the record pipeline from the integration
    tip with `bash` (both files are not executable, so `./` does not run them; `cts-selftest.sh` calls every
@@ -921,11 +920,10 @@ Rules that hold for every step:
     reboots outside the rows" and "Console" sections are still added by hand.
 
     **The slice record layout**, as the three slices on `origin/main` have it
-    (`2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34`, `-rows35-51`). The name is
-    `2026-11-imx8mp-gles3-9bc82915-rowsAA-BB` — `<YYYY-MM>`, the name shape the Pi 4 gles3 slices of the same
-    shape use, while `tools/cts/log/README.md`'s rule asks for the run day; the remaining slices keep the
-    three's shape (`rowsAA-BB` from 1: entries 51-56 are `rows52-57`). One directory holds:
-    - `README.md`: SPDX comment lines, the title `# i.MX8MP dEQP-GLES3 table image es3-9bc82915, rows AA-BB
+    (`2026-11-imx8mp-gles3-9bc82915-rows01-13`, `-rows17-34`, `-rows35-51`). The name of a slice of this campaign is
+    `2026-11-16-imx8mp-gles3-05769bf2-rowsAA-BB` — the run-day date as `tools/cts/log/README.md`'s rule asks
+    (the three earlier slices used `<YYYY-MM>`); the shape (`rowsAA-BB` from 1: entries 51-56 are `rows52-57`). One directory holds:
+    - `README.md`: SPDX comment lines, the title `# i.MX8MP dEQP-GLES3 table image es3-05769bf2, rows AA-BB
       (entries A-B)`, a `commit <40-hex>` line, the run window in the board's clock (UTC) and the plan item,
       then the sections `## What ran` (build host and worktree, the step 5 artefact lines, preflight and dry run,
       the exact commands with the knob names, `RUN_BOUND=800` and `NAMES=0` explained), `## Verdict lines` (one
