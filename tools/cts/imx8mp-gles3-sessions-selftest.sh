@@ -110,4 +110,45 @@ runb --pages --page-seconds 90 | awk -F'\t' '$1 == 2 {print $3}' | grep -qx 30.0
 for n in 1 3; do
   runb --sessions "$n" | grep -v '^#' | check_ranges 4 || fail "measured --sessions $n coverage"
 done
+# --rows: only the named entries are listed, with the numbers they have without --rows; ranges stay inside
+run --rows 1..3 | grep -v '^#' | awk -F'\t' '$1 ~ /^[0-9]+$/ {printf "%s ", $1}' | grep -qx '1 2 3 ' || fail "--rows 1..3 lists other entries"
+[ "$(run --rows 3 | awk -F'\t' '$1 ~ /^[0-9]+$/' | cut -f1-4)" = "$(row 3 | cut -f1-4)" ] || fail "--rows 3 changes entry 3's numbers"
+run --rows 1..3 | grep -q '^# rows 1\.\.3 of 5 entries: 8 cases' || fail "--rows header line"
+run --rows 1..3 --sessions 2 | grep -v '^#' | awk -F'\t' 'NR > 1 {if (NR == 2 && $2 != 1) bad = 1; last = $3; n++} END {exit bad || last != 3 || n != 2}' || fail "--rows 1..3 --sessions 2 ranges"
+run --rows 2..4 --session-budget 100000 | grep -v '^#' | awk -F'\t' 'NR == 2 {exit !($2 == 2 && $3 == 4)}' || fail "--rows 2..4 --session-budget range"
+for bad in 3..1 x 1..9 7 1..; do
+  rc=0; run --rows "$bad" > "$tmp/badout" 2> "$tmp/baderr" || rc=$?
+  [ "$rc" = 2 ] || fail "--rows $bad exited $rc, expected 2"
+  grep -q 'bad --rows' "$tmp/baderr" || fail "--rows $bad gave no message"
+  [ ! -s "$tmp/badout" ] || fail "--rows $bad wrote output"
+done
+
+# --gles2: the 29-row full tree against the GLES2 mustpass, assumed rates, GLES3 slices and Pi 4 record not used
+{
+  for i in 1 2 3; do echo "dEQP-GLES2.functional.color_clear.c$i"; done
+  for i in 1 2 3 4; do echo "dEQP-GLES2.functional.shaders.loops.s$i"; done
+  for i in 1 2; do echo "dEQP-GLES2.functional.fbo.f$i"; done
+} > "$tmp/mp2.txt"
+{
+  echo 'dEQP-GLES2.functional.color_clear.*'
+  echo 'dEQP-GLES2.functional.shaders.loops.*'
+  echo 'dEQP-GLES2.functional.fbo.*'
+} > "$tmp/t2.txt"
+run2() { python3 "$py" --gles2 --table "$tmp/t2.txt" --mustpass "$tmp/mp2.txt" --record "$tmp/rec" \
+         --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/slices/*" "$@"; }
+run2 > "$tmp/o2.tsv" 2> "$tmp/e2.txt" || fail "--gles2 run failed: $(cat "$tmp/e2.txt")"
+grep -q '^# i.MX8MP dEQP-GLES2 sessions: 3 entries, 9 mustpass cases' "$tmp/o2.tsv" || fail "--gles2 header"
+[ "$(awk -F'\t' '$1 == 1 {print $2, $3}' "$tmp/o2.tsv")" = "4 1.2" ] || fail "--gles2 shader row: $(awk -F'\t' '$1 == 1' "$tmp/o2.tsv")"
+[ "$(awk -F'\t' '$1 == 2 {print $3}' "$tmp/o2.tsv")" = 1.5 ] || fail "--gles2 fbo seconds"
+awk -F'\t' '$1 ~ /^[0-9]+$/ && $4 !~ /^assumed:/ {bad = 1} END {exit bad}' "$tmp/o2.tsv" || fail "--gles2 rate not marked assumed"
+run2 --sessions 2 | grep -v '^#' | check_ranges 2 || fail "--gles2 --sessions coverage"
+# times in the GLES2 results file give measured rates (seconds column, per entry)
+printf '# index\tfilter\tbegun\tseconds\n0\tx\t3\t30\n' > "$tmp/res2.tsv"
+run2 --gles2-results "$tmp/res2.tsv" | awk -F'\t' '$1 == 0 {print $3, $4}' | grep -qx '30.0 imx8mp-gles2:res2.tsv' || fail "--gles2 times not used"
+# the real 29-row table and the GLES2 mustpass plan 29 entries; --rows 0..28 is the same plan
+pyr() { python3 "$py" --gles2 "$@"; }
+pyr > "$tmp/full2.tsv" 2> "$tmp/fe.txt" || fail "real --gles2 run: $(cat "$tmp/fe.txt")"
+[ "$(grep -v '^#' "$tmp/full2.tsv" | awk -F'\t' '$1 ~ /^[0-9]+$/' | wc -l)" = 29 ] || fail "--gles2 did not list 29 rows"
+pyr --rows 0..28 | grep -v '^# rows' | cmp -s - "$tmp/full2.tsv" || fail "--gles2 --rows 0..28 differs from --gles2"
+pyr --sessions 1 | grep -v '^#' | awk -F'\t' 'NR == 2 {exit !($2 == 0 && $3 == 28 && $4 == 29)}' || fail "--gles2 one session over 29 rows"
 echo "imx8mp-gles3-sessions-selftest: ok"
