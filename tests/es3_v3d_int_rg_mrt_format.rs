@@ -23,15 +23,13 @@
 //!   (`fb_target_channel_mask_n`, through the per-target mask), and its bpp
 //!   class and bytes a pixel are the wide surface's; target 1 is RGBA8, 0xf,
 //!   32 bpp;
-//! - the texture at attachment 1, RGBA8 at 0: the same per target. Here the
-//!   format, the bpp class of the 16- and 32-bit formats and the bytes a
-//!   pixel are wrong today and the cases are `#[ignore]`d with the cause:
-//!   targets past the first come from `fb_target_n` (src/gl/framebuffer.rs
-//!   :1398), whose format match names the integer format's own narrow
-//!   surface (`renderbuffer_surf_format(f)`, :1439) instead of the store's
-//!   wide one, as `fb_target_format_n` (:1083) does for target 0
-//!   (review wide-int-store-review). The write mask is right there already
-//!   (`per_target_masks` asks `fb_target_channel_mask_n` per attachment).
+//! - the texture at attachment 1, RGBA8 at 0: the same per target. Targets
+//!   past the first come from `fb_target_n` (src/gl/framebuffer.rs), which
+//!   now names the store's wide surface for such a texture, as
+//!   `fb_target_format_n` does for target 0, so these targets take the wide
+//!   store's format and bpp class (reviews wide-int-store-review; a
+//!   renderbuffer keeps its own narrow surface). The write mask comes from
+//!   `fb_target_channel_mask_n` per attachment (`per_target_masks`).
 //!
 //! What it cannot see: the GPU. The back end here is a stand-in that records
 //! what `GlesDraw` carries and what `state::refusal`, `state::unsupported`
@@ -567,7 +565,6 @@ fn att0_level_1_bpp() {
 /* ---- attachment 1: RGBA8 first, the texture at 1 -------------------------- */
 
 #[test]
-#[ignore = "fb_target_n names the narrow surface of the format, not the wide store's, for a target past 0 (src/gl/framebuffer.rs:1439, into targets[n].format at src/gl/draw.rs:2830)"]
 fn att1_texture_2d_format() {
     expect(&ROWS, Kind::Texture2d, 1, Prop::Format);
 }
@@ -580,12 +577,10 @@ fn att1_texture_2d_bpp_8_bit() {
     expect(&eight_bit(), Kind::Texture2d, 1, Prop::Bpp);
 }
 #[test]
-#[ignore = "bpp class of the narrow surface fb_target_n names for a target past 0, not the wide store's (src/gl/framebuffer.rs:1439; the tile size at src/v3d/backend.rs:828)"]
 fn att1_texture_2d_bpp_16_and_32_bit() {
     expect(&sixteen_and_32_bit(), Kind::Texture2d, 1, Prop::Bpp);
 }
 #[test]
-#[ignore = "fb_target_n names the narrow surface of the format, not the wide store's, for a target past 0 (src/gl/framebuffer.rs:1439, into targets[n].format at src/gl/draw.rs:2830)"]
 fn att1_array_layer_format() {
     expect(&ROWS, Kind::ArrayLayer, 1, Prop::Format);
 }
@@ -598,12 +593,10 @@ fn att1_array_layer_bpp_8_bit() {
     expect(&eight_bit(), Kind::ArrayLayer, 1, Prop::Bpp);
 }
 #[test]
-#[ignore = "bpp class of the narrow surface fb_target_n names for a target past 0, not the wide store's (src/gl/framebuffer.rs:1439; the tile size at src/v3d/backend.rs:828)"]
 fn att1_array_layer_bpp_16_and_32_bit() {
     expect(&sixteen_and_32_bit(), Kind::ArrayLayer, 1, Prop::Bpp);
 }
 #[test]
-#[ignore = "fb_target_n names the narrow surface of the format, not the wide store's, for a target past 0 (src/gl/framebuffer.rs:1439, into targets[n].format at src/gl/draw.rs:2830)"]
 fn att1_level_1_format() {
     expect(&ROWS, Kind::Level1, 1, Prop::Format);
 }
@@ -616,7 +609,6 @@ fn att1_level_1_bpp_8_bit() {
     expect(&eight_bit(), Kind::Level1, 1, Prop::Bpp);
 }
 #[test]
-#[ignore = "bpp class of the narrow surface fb_target_n names for a target past 0, not the wide store's (src/gl/framebuffer.rs:1439; the tile size at src/v3d/backend.rs:828)"]
 fn att1_level_1_bpp_16_and_32_bit() {
     expect(&sixteen_and_32_bit(), Kind::Level1, 1, Prop::Bpp);
 }
