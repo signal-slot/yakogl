@@ -1,4 +1,4 @@
-# slice 1, measured on the DK; run_ms is the layer's 'PSCI SYSTEM_RESET at <n> ms' (uptime of the image), lifetime_ms the image's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, back_after_s the runner's reboot-to-ssh time
+# one row per run shard, measured on the DK (slices 1-2 so far, shards 0..45; each later slice appends its rows with the same header and columns); run_ms is the layer's 'PSCI SYSTEM_RESET at <n> ms' (uptime of the image), lifetime_ms the image's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, back_after_s the runner's reboot-to-ssh time
 index	slice	cases	est_ms	run_ms	lifetime_ms	lifetime_used_pct	back_after_s	pass	fail	notsupported	other	noresult	verdict
 0	1	125	12500	7446	600000	1.2	49	117	0	8	0	0	rc=0 verdict=done result=pass:deqp
 1	1	125	12500	5583	600000	0.9	62	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
