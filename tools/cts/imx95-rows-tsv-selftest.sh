@@ -161,4 +161,49 @@ fi
 if python3 -I "$tool" --tree "$tree" --check "$t/slice" >/dev/null 2>&1; then
     echo "unknown label accepted"; exit 1
 fi
+
+# --- span guard ---------------------------------------------------------------
+# A truncated table is still contiguous; --expect (or the session tag of the
+# directory name) ties it to its span.
+cp "$t/rows.tsv" "$t/slice/rows.tsv"
+python3 -I "$tool" --tree "$tree" --expect T6S4R01-T6S4R04 --check "$t/slice" >/dev/null ||
+    { echo "--expect refused a full span"; exit 1; }
+sed '$d' "$t/rows.tsv" > "$t/slice/rows.tsv"
+python3 -I "$tool" --tree "$tree" --check "$t/slice" >/dev/null 2>&1 ||
+    { echo "contiguity alone should pass a short table"; exit 1; }
+if python3 -I "$tool" --tree "$tree" --expect T6S4R01-T6S4R04 --check "$t/slice" >/dev/null 2>&1; then
+    echo "truncated table accepted by --expect"; exit 1
+fi
+# split session S1b: T6S1R13-R24 with session-wide row numbers
+s1b="$t/2026-11-24-imx95-gles2-S1b-abcdef01"
+mkdir -p "$s1b"
+head -1 "$t/rows.tsv" > "$s1b/rows.tsv"
+grep -E '^# image T6S1R(1[3-9]|2[0-4]):' "$tree" | sed -e 's/^# image //' -e 's/:.*//' |
+    awk '{ printf "%d\t%s\t1\tdone\t40\t360\tmatch\t-\n", substr($0, 6) + 0, $0 }' >> "$s1b/rows.tsv"
+[ "$(awk 'END { print NR }' "$s1b/rows.tsv")" -eq 13 ] || { echo "S1b fixture"; exit 1; }
+cp "$s1b/rows.tsv" "$t/s1b.full"
+python3 -I "$tool" --tree "$tree" --check "$s1b" >/dev/null ||
+    { echo "correct S1b table refused"; exit 1; }
+sed '$d' "$t/s1b.full" > "$s1b/rows.tsv"
+if python3 -I "$tool" --tree "$tree" --check "$s1b" >/dev/null 2>&1; then
+    echo "S1b without T6S1R24 accepted"; exit 1
+fi
+{ head -1 "$t/s1b.full"; tail -n +3 "$t/s1b.full"; } > "$s1b/rows.tsv"
+if python3 -I "$tool" --tree "$tree" --check "$s1b" >/dev/null 2>&1; then
+    echo "S1b without T6S1R13 accepted"; exit 1
+fi
+{ cat "$t/s1b.full"; tail -n 1 "$t/s1b.full"; } > "$s1b/rows.tsv"
+if python3 -I "$tool" --tree "$tree" --check "$s1b" >/dev/null 2>&1; then
+    echo "S1b with a duplicate row accepted"; exit 1
+fi
+# --whole: a part of the tree, and the same rows in two directories
+cp "$t/s1b.full" "$s1b/rows.tsv"
+s1b2="$t/2026-11-24-imx95-gles2-S1b-abcdef02"
+mkdir -p "$s1b2"; cp "$t/s1b.full" "$s1b2/rows.tsv"
+if python3 -I "$tool" --tree "$tree" --whole --check "$s1b" >/dev/null 2>&1; then
+    echo "--whole accepted a part of the tree"; exit 1
+fi
+if python3 -I "$tool" --tree "$tree" --whole --check "$s1b" "$s1b2" >/dev/null 2>&1; then
+    echo "--whole accepted a row in two directories"; exit 1
+fi
 echo ok

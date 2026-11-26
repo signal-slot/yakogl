@@ -210,10 +210,14 @@ EOF
 		[ -z "$e" ] || add "$d/rows.tsv: ${e%; }"
 	done
 	if [ -f "$ROWS" ]; then
+		# The session tag of each directory name gives its span; with all
+		# six there, --whole wants every '# image' row exactly once.
+		whole=
+		[ "$slices_ok" -eq 1 ] && whole=--whole
 		if [ -f tools/cts/mali-gles2-tree.txt ]; then
-			python3 -I "$ROWS" --tree tools/cts/mali-gles2-tree.txt --check "$@" >"$tmp/rows.out" 2>&1
+			python3 -I "$ROWS" --tree tools/cts/mali-gles2-tree.txt $whole --check "$@" >"$tmp/rows.out" 2>&1
 		else
-			python3 -I "$ROWS" --check "$@" >"$tmp/rows.out" 2>&1
+			python3 -I "$ROWS" $whole --check "$@" >"$tmp/rows.out" 2>&1
 		fi
 		r=$?
 		cat "$tmp/rows.out" >&2
