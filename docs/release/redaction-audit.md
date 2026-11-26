@@ -6,9 +6,9 @@
 Audit for checklist line 8 (`docs/release/checklist.md`), in four
 passes:
 
-- **Part 4** (first section): the re-run with `tools/release/redaction-scan.py`
-  on `937161af5beb` (2026-11-23), public and private classes, the current state
-  of the tree.
+- **Part 4** (first section): the public run of `tools/release/redaction-scan.py`
+  on `029d83a27d0b` (2026-11-26), the current state of the tree; the private
+  classes are the owner's run.
 - **Part 3**: the re-run on the tree after the scope cut of #1606 step 5
   (2026-10-26).
 - **Part 1** ("Part 1", down to "Notes for other items"): read-only
@@ -25,202 +25,145 @@ Where parts 1 and 2 disagree on the tree, the status after the merge is
 noted at the finding (H2, H3, M1). Their `file:line` references are at
 their own bases; many of those files have left the tree since.
 
-# Part 4: re-run with the scan tool on the integration tip (2026-11-23, `937161af5beb`)
+# Part 4: public scan of the origin/main tip (2026-11-26, `029d83a27d0b`)
 
 | Item | Value |
 |---|---|
-| Date | 2026-11-23, public and private classes in the same round |
-| Base | `937161af5beb6cd8d3e0964236f6d7b579a3b36c` ("tests: es3_msaa_read_errors pins glReadPixels from a 4x read framebuffer, ignored glCopyTex* error tests"), the integration tip, a commit that `git merge-base --is-ancestor` accepts as an ancestor of the checkout's `HEAD` (it is `HEAD`). 15086 files scanned. The tool skips binaries, `third_party/` and this file. The Part 4 of the 2026-11-21 round (its base was a branch commit that is not in the repository's history; its merged form is `3a0ef3d1`) is replaced by this one; nothing was reworded in the tree for it, the tip was already clean in both runs |
+| Date | 2026-11-26, public classes only |
+| Base | `029d83a27d0b239646d97c03f7ac12fa90ccf1d2` ("tests: the flushes and stalls in front of a draw that samples a depth view, pinned"), the tip of `origin/main` as the clone holds it. 18236 files scanned; the tool skips binaries, `third_party/` and this file |
 | History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
-| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `937161af5beb` (public classes), and the same command with `YAKOGL_REDACTION_PRIVATE` set in the environment of one `python3 -I` wrapper process only (private classes). Self-test: `python3 -I tools/release/redaction-scan.py --self-test` prints "self-test passed"; `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header): 4 passed. Look-alikes are in `tools/release/redaction-scan.allow` |
-| Private values | a **partial** set, held in the wrapper's memory only (never in a file, a log or a commit): 1 owner-login and 1 public-name (the owner's git identity), 3 login (the farm boards' logins and the worker's own account), 42 lab-host (the farm's nodes and the machines the nodes' notes name, the serial-bridge hosts under their current names, the KVM and camera hosts, and device resource ids that are not product names; from `ask_farm` and the farm's resource list). Not in the set: product and board names that are public (including the resource and target names that are a product name plus `-console`, `-reset` or `-x2`, and the public MCP tool name of the camera: a first try with them in the set read 141 lab-host hits, all of them these names), `root` (the public run checks it already), a one-letter machine name (it matches as a word throughout the tree) and the tailnet name (the public `tailnet-dns` class matches every tailnet name). The values come from the answers of `ask_farm`, which named few hosts, and the resource list; any name the owner holds and the farm does not know is not in the set. No `YAKOGL_REDACTION_PRIVATE_FILE` exists on the farm. This section holds no private value and no unmasked hit |
-| Exit status | public run: **3** (`0 H/M finding(s), 3 class(es) not run, 115 informational, 145 look-alike(s) dropped: NOT COMPLETE (private classes not run)`); self-test: "self-test passed"; private run: **0** (`0 H/M finding(s), 0 class(es) not run, 115 informational, 174 look-alike(s) dropped: clean`) |
+| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `029d83a27d0b`. Self-test: `python3 -I tools/release/redaction-scan.py --self-test`. Regression test: `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header). Look-alikes are in `tools/release/redaction-scan.allow` |
+| Private classes | **not run, the owner's run**: no private value was set or written for this round (`YAKOGL_REDACTION_PRIVATE` and `YAKOGL_REDACTION_PRIVATE_FILE` unset). `owner-login` and `lab-host` read "not run", `login-at-host` runs for `root` only |
+| Exit status | scan: **3** (`0 H/M finding(s), 3 class(es) not run, 115 informational, 158 look-alike(s) dropped: NOT COMPLETE (private classes not run)`); self-test: exit 0, "self-test passed"; cargo test: exit 0, 4 passed |
 
-Tool output of the public run on `937161af5beb`, class and summary lines:
+Tool output, class and summary lines:
 
 ```
-[M] home-path      Home path: ok, 10 look-alike(s) dropped
+[M] home-path      Home path: ok, 11 look-alike(s) dropped
 [H] private-ipv4   Private / tailnet IPv4: ok, 29 look-alike(s) dropped
 [H] ipv6-local     IPv6 link-local / ULA: ok, 4 look-alike(s) dropped
 [H] owner-login    Owner login: not run (no private values)
-[H] login-at-host  Login at a real host: ok; not run for the private logins (root only), 22 look-alike(s) dropped
+[H] login-at-host  Login at a real host: ok; not run for the private logins (root only), 24 look-alike(s) dropped
 [M] lab-host       Lab machine name: not run (no private values)
 [M] som-serial     SoM serial in a host name: ok, 7 look-alike(s) dropped
 [H] bridge-port    Serial-bridge port: ok
 [H] tailnet-dns    Tailnet DNS name: ok, 4 look-alike(s) dropped
 [H] token          Token / key: ok
-[H] password       Password / secret value: ok, 8 look-alike(s) dropped
-[M] email          E-mail address: ok, 58 look-alike(s) dropped
+[H] password       Password / secret value: ok, 9 look-alike(s) dropped
+[M] email          E-mail address: ok, 67 look-alike(s) dropped
 [L] lab-layout     Lab checkout layout: 17 informational, 3 look-alike(s) dropped
-summary: 0 H/M finding(s), 3 class(es) not run, 115 informational, 145 look-alike(s) dropped: NOT COMPLETE (private classes not run)
+summary: 0 H/M finding(s), 3 class(es) not run, 115 informational, 158 look-alike(s) dropped: NOT COMPLETE (private classes not run)
 ```
-
-Tool output of the private run on `937161af5beb` (any hit value would be masked
-by the tool: first character, `***`, length; the wrapper also checked that
-no value of the set appears in the output, count 0):
-
-```
-private values: from YAKOGL_REDACTION_PRIVATE (owner-login x1, public-name x1, login x3, lab-host x42)
-[M] home-path      Home path: ok, 10 look-alike(s) dropped
-[H] private-ipv4   Private / tailnet IPv4: ok, 29 look-alike(s) dropped
-[H] ipv6-local     IPv6 link-local / ULA: ok, 4 look-alike(s) dropped
-[H] owner-login    Owner login: ok, 1 look-alike(s) dropped
-[H] login-at-host  Login at a real host: ok, 23 look-alike(s) dropped
-[M] lab-host       Lab machine name: ok, 27 look-alike(s) dropped
-[M] som-serial     SoM serial in a host name: ok, 7 look-alike(s) dropped
-[H] bridge-port    Serial-bridge port: ok
-[H] tailnet-dns    Tailnet DNS name: ok, 4 look-alike(s) dropped
-[H] token          Token / key: ok
-[H] password       Password / secret value: ok, 8 look-alike(s) dropped
-[M] email          E-mail address: ok, 58 look-alike(s) dropped
-[L] lab-layout     Lab checkout layout: 17 informational, 3 look-alike(s) dropped
-summary: 0 H/M finding(s), 0 class(es) not run, 115 informational, 174 look-alike(s) dropped: clean
-```
-
-The private run prints the same lines as the public one except `owner-login`
-and `lab-host` run, `login-at-host` runs for the private logins too, and its
-summary.
 
 The tool counts hits, not lines. "Dropped" is what `redaction-scan.allow`
 drops as a look-alike, "info" is listed but not a finding (upstream authors,
-the L-class lab layout).
+the L-class lab layout). Every hit value is masked by the tool (first
+character, `***`, length).
 
 ## Counts per class
 
-"Found" is the hits of the class (open + dropped + info) in the public run on
-`937161af5beb`; the private classes (`owner-login`, `lab-host`, and
-`login-at-host` for the private logins) are from the private run of the same
-commit, noted in the cells. "Fixed" is the findings that are gone from the
-tree by an edit in this round, not by an allow rule: none.
+"Found" is the hits of the class with an empty allow file
+(`--allow <empty file>`, exit 1 by design); "dropped" and "info" are what the
+allow file turns them into. "Fixed" is a finding removed by an edit in this
+round: none.
 
 | Class | Tool class (sev.) | Found | Dropped by allow rule | Info | Fixed in this round | Open |
 |---|---|---|---|---|---|---|
-| Home path | `home-path` (M) | 10 | 10 | 0 | 0 | 0 |
-| Owner login | `owner-login` (H) | private run: 1 | private run: 1 (a hit inside the owner's public name, the tool's `public-name` look-alike) | 0 | 0 | 0 |
+| Home path | `home-path` (M) | 11 | 11 | 0 | 0 | 0 |
+| Owner login | `owner-login` (H) | not run, the owner's run | | | | |
 | Private / tailnet IPv4 | `private-ipv4` (H) | 29 | 29 | 0 | 0 | 0 |
 | IPv6 link-local / ULA | `ipv6-local` (H) | 4 | 4 | 0 | 0 | 0 |
-| Login at a real host | `login-at-host` (H) | 22 (root only); private run, private logins too: 23 | 22; private run: 23 | 0 | 0 | 0 |
-| Lab machine names | `lab-host` (M) | private run: 27 | private run: 27 (12 by the regs.rs rule, 15 by the `tools/env/*` rule) | 0 | 0 | 0 |
+| Login at a real host | `login-at-host` (H) | 24 (`root` only; the private logins are the owner's run) | 24 | 0 | 0 | 0 |
+| Lab machine names | `lab-host` (M) | not run, the owner's run | | | | |
 | SoM serial in a host name | `som-serial` (M) | 7 | 7 | 0 | 0 | 0 |
 | Serial-bridge ports | `bridge-port` (H) | 0 | 0 | 0 | 0 | 0 |
 | Tailnet DNS name | `tailnet-dns` (H) | 4 | 4 | 0 | 0 | 0 |
 | Token / key | `token` (H) | 0 | 0 | 0 | 0 | 0 |
-| Password / secret value | `password` (H) | 8 | 8 | 0 | 0 | 0 |
-| E-mail addresses | `email` (M) | 156 | 58 | 98 | 0 | 0 |
+| Password / secret value | `password` (H) | 9 | 9 | 0 | 0 | 0 |
+| E-mail addresses | `email` (M) | 165 | 67 | 98 | 0 | 0 |
 | Lab checkout layout | `lab-layout` (L) | 20 | 3 | 17 | 0 | 0 |
-| Total | | | 145 (private run: 174) | 115 | 0 | **0** public H/M; **0** private H/M |
+| Total | | 273 | 158 | 115 | 0 | **0** H/M |
 
-Since the Part 4 of 2026-11-21 (public run: 142 dropped, 98 informational)
-the public drops grew from 142 to 145 (one more login-at-host, two more
-e-mail shapes) and the information from 98 to 115 (17 more e-mail
-information hits: the upstream authors of the Zephyr Raspberry Pi Zero 2 W
-board and BCM2710 files carried unchanged, `driver/UPSTREAM.zephyr-rpi_zero_2w`,
-public by their upstream publication). This round did not attribute each
-drop to its rule. No rule of the allow file was widened in this round.
-
-## Private-class scan: partial value set
-
-The private values were not the owner's file: no `YAKOGL_REDACTION_PRIVATE_FILE`
-is set on the worker, and no node of the farm reports one. They were derived
-on the worker that ran this round, from the owner's git identity, the farm's
-notes (`ask_farm`: machines, logins) and the farm's resource list (serial
-bridges, KVM and camera hosts, device resource ids), and kept in the wrapper
-process's environment only. The set is partial: it holds what the farm knows,
-not necessarily every name the owner considers private; `ask_farm` named few
-hosts this time (the notes of three nodes), so the set leans on the resource
-list. Values in the set: owner-login 1, public-name 1, login 3, lab-host 42
-(37 on 2026-11-21: the worker's account is counted as a login and as a lab
-host, as the pool tool's name shares it, and the set holds the current names
-of the serial bridges only).
-
-A first try put the product-name resource ids (the board's `-console` and
-`-reset` ids, the target name of the X2 board and the camera's MCP tool name)
-into the set; it read 141 lab-host hits, every one of them a public product
-name or tool name in board notes, the website and the board tables.
-`docs/release/snapshot.md` lists such names as public product or tool names.
-They were taken out of the set, as in the earlier rounds; that first read is
-not the run recorded here.
-
-This file is skipped by the tool, so it was checked in the same wrapper with
-the same values (lab hosts and logins as whole words, the owner login and
-public name as substrings), printing only masked counts: 1 hit, `t***[7]`,
-the vendor image's default user inside the placeholder `<login>@<board>` of
-Part 3's login-at-host row. That user is the image vendor's published
-default, not a lab or owner value; no other value of the set is in this file.
-
-Masked counts per private class on `937161af5beb`:
-
-| Class | H/M | Informational | Dropped (look-alike) | What the drops are |
-|---|---|---|---|---|
-| `owner-login` | 0 | 0 | 1 | a hit inside the owner's public name, which the tool itself drops as a look-alike (`public-name`, not a rule of the allow file) |
-| `lab-host` | 0 | 0 | 27 | 12 of one value, `U***[4]`, in `driver/rust/src/soc/imx8mp/regs.rs` (NXP PHY power-domain register names, the rule of `caa4bd6b`); 15 of one value, `o***[5]`/`O***[5]`, in `tools/env/*` (the public command and image names of the pool tool, which a worker's host name shares; the existing `tools/env/*` rule). The `docs/release/snapshot.md` rule of the earlier round drops nothing now: the file no longer quotes the name |
-| `home-path` | 0 | 0 | 10 | the same 10 as the public run (placeholders and fake self-test paths, no user name); no home path of the owner's login |
-| `login-at-host` | 0 | 0 | 23 | the 22 of the public run, plus 1 that the private logins add: `t***[7]@g***[12]` in `tools/check.sh`, a vendor-image login at a `.invalid` host (the existing `.invalid` rule) |
-
-No private class has an H/M hit, so nothing is left to fix in the tree for
-this value set. The owner's run with the full private file
-(`YAKOGL_REDACTION_PRIVATE_FILE`) on the snapshot commit, exit 0, is still
-open for #1606 step 8 (decisions D7/D8).
+Against the public run on `937161af5beb` (2026-11-23: 145 dropped, 115
+informational), the same scan with an empty allow file on both commits shows
+13 new hits, all dropped by rules that were already in the allow file (no
+rule was added or widened since; neither `redaction-scan.py` nor
+`redaction-scan.allow` changed between the two commits). The 115
+informational hits are the same set (same file and masked value; only line
+numbers moved).
 
 ## Every surviving hit
 
 ### Findings
 
-None, in the public or the private run (0 H/M).
+None (0 H/M).
 
-### Fixed in this round
+### Hits new since `937161af5beb`, classified
 
-Nothing was reworded: the public and the private run both read 0 H/M at
-`937161af5beb`. The four lab-host findings of the private run of 2026-11-21 (before
-its fix commit) are gone from the tree: the probe README's capture id was
-reworded, and `docs/release/snapshot.md` no longer quotes the VM-lab tool's
-name.
+| File:line | Class | Masked value | Disposition |
+|---|---|---|---|
+| `driver/tools/uboot-t6/console-check-selftest.sh:125` | login-at-host, e-mail | `r***[4]@s***[20]` | look-alike: fake `SECRET_HOST` of a self-test under the RFC 2606 `.invalid` name (the `.invalid` rule) |
+| `tools/mali/panthor/run-on-board-cc-selftest.sh:86` | login-at-host, e-mail | `r***[4]@b***[13]` | look-alike: fake `BOARD_HOST` of a self-test, `.invalid` name |
+| `tools/cts/mali-glmark2-selftest.sh:87,325,368` | e-mail (one new hit; the file had two before) | `s***[8]@b***[13]` | look-alike: fake `BOARD_HOST` of a self-test, `.invalid` name |
+| `tools/cts/am62p-gles3-e2e-selftest.sh:54,276` | e-mail | `e***[3]@e***[15]` | look-alike: git identity of a throwaway repository, `.invalid` name |
+| `tools/cts/imx95-gles2-accept-selftest.sh:45` | e-mail | `s***[8]@e***[15]` | look-alike: git identity of a throwaway repository, `.invalid` name |
+| `tools/mp2s_dispatch_transcript_selftest.py:47,202` | e-mail | `u***[4]@e***[15]` | look-alike: placeholder `BOARD_HOST` (RFC 2606) that a fake ssh ignores |
+| `tools/redact-diff-scan-selftest.sh:47` | e-mail | `t***[1]@e***[15]` | look-alike: git identity of a throwaway repository, `.invalid` name |
+| `tools/cts/imx95-redact-check.py:28` | home-path | `/***[9]` | look-alike: the elided placeholder `/home/...` in the tool's help text, no user name |
+| `tools/cts/imx95-redact-check.py:77` | password | `r***[13]` | look-alike: the tool's own secret-matching regex, not a value |
+
+No real leak (host name, address, user name, login, credential, serial or
+farm record) is among them, so nothing was reworded in the tree.
+
+### Dropped hits per class (current)
+
+| Class | Where (hits) | Disposition |
+|---|---|---|
+| Home path (11) | `driver/tools/kexec-zephyr/board_lock{,_selftest}.sh` (2), `tools/cts/imx95-redact-check.py` (1), `tools/cts/mali-glmark2-selftest.sh` (7), `tools/cts/mali-glmark2-session-selftest.sh` (1) | look-alike: elided placeholders and the fake board's stage directory of self-tests, no user name |
+| IPv4 (29) | `tools/board_selftest.sh` (11), `driver/tools/uboot-mp2/qemu/{README.md,drive.py}` (7), `tools/cts/mali-slice-redact.py` (3), `tools/probes/rpi5_display/verdicts_selftest.sh` (3), `tools/cts/{mali-fail-triage.py,mali-slice-readme-selftest.sh,pr-session-selftest.sh}`, the mali-fail-triage `kmsg/c.txt` fixture, `driver/tools/mp2-standalone/st-env/stm32mp25-dk-initial-env.txt` (1 each) | look-alike: redaction-test inputs, QEMU's user-network addresses, the vendor's default U-Boot environment |
+| IPv6 (4) | `tools/cts/mali-slice-redact.py` (2), the two Pi 5 `verdicts_selftest.sh` (1 each) | look-alike: redaction-test inputs |
+| Login at host (24) | self-tests and fixtures of the board lock, the T6 U-Boot and display tools, the Mali dEQP/glmark2 tools, `tools/mali/panthor/tests/board_lock.rs` (2) and the allow file itself (2) | look-alike: fake `BOARD_HOST` values under `.invalid`/`.example` names or exact-path rules |
+| SoM serial (7) | `docs/notes/imx8mp-gc-bringup.md`, `driver/docs/am62p-display-dump-linux.txt`, `tools/board_selftest.sh` (2), `tools/testdata/am62p-netboot-probe-20261003.uart.ts` (2), `tools/release/redaction-scan.py` | look-alike: the zeroed form `…-00000000`, the product's default host name |
+| Tailnet DNS (4) | `tools/cts/mali-slice-redact.py`, the mali-slice-redact `meta.txt` fixture, `tools/mp2s_redact_check_selftest.sh` (2) | look-alike: names under the reserved `example` |
+| Password (9) | `driver/tools/kexec-zephyr/board-sudo-setup.sh` (2), `tools/mp2s_redact_check_selftest.sh` (2), `tools/cts/imx8mp-gles3-preflight-selftest.sh`, `tools/cts/imx95-redact-check.py`, `tools/mp2s_env_diff.py`, `tools/release/redaction-scan.{py,allow}` | look-alike: the sudoers keyword, fake fixture strings, regexes named for secrets |
+| E-mail (67) | 36 files: self-tests' git identities and fake `BOARD_HOST` values (`.invalid`, `.example`), `tools/release/make-snapshot.py` (9), UART transcripts under `tools/testdata/` (6, console noise), a `git@` clone URL in `tools/cts/deps.toml`, an upstream patch Message-ID in `docs/notes/pre-study-iq9075.md`, a vendor-image login at a `.invalid` host in `tools/check.sh` | look-alike: RFC 2606 placeholders, a clone URL, a Message-ID, console noise |
+| L (3) | `tools/release/redaction-scan.py` | look-alike: the file that defines the class |
 
 ### Allow rules for fixtures and look-alikes, with their justification
 
-The rules of earlier rounds (the Part 4 of `fb51ce43`) and, last, the one
-added on 2026-11-21. Each rule names one class, one exact path and one value. The tool's
-self-test pins them (a dropped fixture and a near miss: the same value in
-another file stays a finding).
+The exact-path rules of earlier rounds, unchanged in this round. Each rule
+names one class, one exact path and one value. The tool's self-test pins them
+(a dropped fixture and a near miss: the same value in another file stays a
+finding). The generic rules (`.invalid`, `.example`, placeholders) are in the
+allow file with their own comments.
 
 | Class | Where | Masked value | Justification |
 |---|---|---|---|
 | e-mail | `tools/board_selftest.sh` | `t***[6]@p***[16]` (a `.example` host) | RFC 2606 reserved fake `BOARD_HOST` of the pi5 dry-run self-test |
 | IPv4 | `tools/board_selftest.sh` | `1***[10]`, `1***[11]` | private-range inputs of a redaction test: a fake ssh error and a console line the redaction must rewrite |
-| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`, self-test cases with near misses). On `fb51ce43` it drops nothing: the fixture is written with another login there, which no class matches |
+| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`); drops nothing at `029d83a27d0b` (see open items) |
 | IPv4, login at host | `tools/cts/mali-slice-readme-selftest.sh` | `1***[8]`, `r***[4]@b***[5]` | inputs of a refusal test: the slice check must refuse them |
 | e-mail | `tools/cts/x2-glmark2-scenes-selftest.sh` | `t@example.com` | RFC 2606 git identity of the self-test's repository |
-| home path | `tools/cts/mali-glmark2-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test |
+| home path | `tools/cts/mali-glmark2-selftest.sh`, `tools/cts/mali-glmark2-session-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test |
 | IPv4, login at host | `tools/cts/mali-fail-triage.py` | `1***[8]`, `r***[4]@n***[4]` | inputs of the scrub self-check |
 | IPv4, login at host | `tools/cts/testdata/mali-fail-triage/slices/.../kmsg/c.txt` | `1***[8]`, `r***[4]@b***[5]` | a dirty kmsg line the redaction test feeds |
 | login at host, tailnet DNS | `tools/cts/testdata/mali-slice-redact/dirty/` (`kmsg/a.txt`, `meta.txt`) | `r***[4]@b***[5]`, a `board-1.example.ts.net` name | inputs of a redaction test; the tailnet name is under the reserved `example` |
-| home path | `tools/cts/mali-glmark2-session-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test; rule of `b9234557` |
-| lab-host | `driver/rust/src/soc/imx8mp/regs.rs` | `U***[4]` followed by `_PHY` (a lab host's four characters, uppercase, then the suffix; the value itself is never quoted) | generated i.MX8MP register identifiers (PHY power-domain fields, NXP's names) collide with the four characters of a lab host. One class, one path, the uppercase prefix with its `_PHY` suffix: the bare name stays a finding in that file. Rule: last lab-host entry of "Product defaults and keywords" in `tools/release/redaction-scan.allow` (`caa4bd6b`). Self-test: the two `regs` cases in the `rules` list of `self_test()` (a field and its doc line drop; the bare name and an unrelated line stay), with a fake host `lab7` |
+| lab-host | `driver/rust/src/soc/imx8mp/regs.rs` | `U***[4]` followed by `_PHY` (the value itself is never quoted) | generated i.MX8MP register identifiers (NXP's PHY power-domain names) collide with the four characters of a lab host; one class, one path, the uppercase prefix with its `_PHY` suffix (`caa4bd6b`). Only the owner's run exercises it |
 | IPv4, IPv6, login, tailnet DNS, e-mail | `tools/cts/mali-slice-redact.py` | `1***[10]`, `1***[10]`, `f***[4]::1`, `r***[4]@b***[5]`, `r***[4]@192.0.2.7`, the `example.ts.net` name, `s***[11]@t***[11].service` | inputs of the redaction test that the tool's help and checks use; the last is a systemd unit instance, not an address |
-| lab-host | `docs/release/snapshot.md` | `o***[5]` in the rehearsal's question 13: its `git grep` command (`-e <name> -e ccfarm`), its count (`` (4 name `<name>`, 53 `ccfarm` ``) and the question (`` VM-lab tool `<name>` ``); the value itself is never quoted | rule added on 2026-11-21 (merged as `3a0ef3d1`; it drops nothing at the tip, see above): one class, one path, three phrasings of the question with a lowercase word in place of the name. The name anywhere else in that file, and the same phrasings in any other file, stay findings. Self-test: the three `snap` cases in the `rules` list of `self_test()`, with the fake lab host `toolx` and near misses (`ssh <name> first`, ``the host `<name>` runs it``, ``Is the lab host `<name>` public?``). If the owner calls the tool's name private, the question is reworded and the rule removed |
-
-### Dropped by the allow file earlier (as listed at `fb51ce43`; the counts per class above are current)
-
-| Class | Where | Masked value | Disposition |
-|---|---|---|---|
-| Home path | `driver/tools/kexec-zephyr/board_lock.sh:135`, `board_lock_selftest.sh:15` | `/home/.../` | look-alike: the elided placeholder in a comment |
-| Login at host | `docs/notes/x2-direct-boot.md`, `driver/tools/kexec-zephyr/README.md`, `tools/cts/log/2026-10-28-tip/README.md`, `tools/mali/panthor/tests/board_lock.rs` | `r***[4]@l***[9]`, `<user@board>`, `r***[4]@b***[14]` | look-alike: placeholders and a test fixture for the lock's `BOARD_HOST` |
-| SoM serial | 7 hits | `verdin-am62p-00000000`, `verdin-imx8mp-00000000` | look-alike: the zeroed form, the product's default host name |
-| Password | 5 hits | `NOPASSWD:`, `S***[6]=t***[28]`, `S***[6] = r***[11]` | look-alike: the sudoers keyword, a fake UART string, a regex named SECRET |
-| E-mail | the older hits of the 32 | `security-contact@example.invalid`, `t@example.org`, `t***[7]@g***[12]` (a vendor-image login at a `.invalid` host), `git@github.com`, console noise | look-alike: placeholders, the clone URL |
-| L | 3 hits in `tools/release/redaction-scan.py` | the class's own name | look-alike: the file that defines the class |
+| lab-host | `docs/release/snapshot.md` | a lowercase word in three phrasings of the rehearsal's question 13 (the value itself is never quoted) | rule of `3a0ef3d1`; its pattern matches no line of the file at `029d83a27d0b` (see open items) |
 
 ### Information (not findings)
 
 | Class | Where | Masked value | Disposition |
 |---|---|---|---|
-| E-mail | `driver/src/vivante/hw/*.xml.h` (rules-ng headers), `driver/src/v3d/v3d_tex.{c,h}`, `tools/vivante/mesa-cs-golden.patch`, `examples/nostd/slint-nostd.patch` and its `.license`, `examples/slint/ui/assets/slint-logo.png.license` | e.g. `l***[6]@g***[9]`, `r***[8]@f***[15]` | upstream authors and the Slint licence contact, public by their upstream publication (81 hits) |
-| L | 17 hits: `tools/check.sh`, `tools/cts/{cts-build-zephyr.sh,cts-build.sh,cts-selftest.sh,cts-summary.py,cts_resume.py,gen-gles3-mustpass.sh,host-deqp-run.sh}`, `tools/es100_oracle.py`, `tools/setup-gate-host.sh`, `tools/yakogl-tools/src/glsl2usc.rs` | `~***[25]`, `$***[29]`, `~***[24]`, `y***[14]` | the lab's checkout layout under the home directory, no user name or address |
+| E-mail (98) | `driver/boards/raspberrypi/rpi_zero_2w/`, `driver/drivers/interrupt_controller/`, `driver/dts/`, `driver/include/zephyr/`, `driver/soc/brcm/` (17, the Zephyr Raspberry Pi Zero 2 W and BCM2710 files, `driver/UPSTREAM.zephyr-rpi_zero_2w`), `driver/src/vivante/hw/*.xml.h` (rules-ng headers), `driver/src/v3d/v3d_tex.{c,h}`, `tools/vivante/mesa-cs-golden.patch`, `examples/nostd/slint-nostd.patch` and its `.license`, `examples/slint/ui/assets/slint-logo.png.license` | e.g. `j***[3]@a***[14]`, `l***[6]@g***[9]`, `r***[8]@f***[15]` | upstream authors and the Slint licence contact, public by their upstream publication |
+| L (17) | `tools/check.sh`, `tools/cts/{README.md,cts-build-zephyr.sh,cts-build.sh,cts-selftest.sh,cts-summary.py,cts_resume.py,gen-gles3-mustpass.sh,host-deqp-run.sh}`, `tools/es100_oracle.py`, `tools/setup-gate-host.sh`, `tools/yakogl-tools/src/glsl2usc.rs` | `~***[25]`, `$***[29]`, `~***[24]`, `y***[14]` | the lab's checkout layout under the home directory, no user name or address |
 
 ## Regression guard
 
 `tests/redaction_scan.rs` is a cargo integration test in the scanned tree; it
-builds every fixture value at run time and holds none literally:
+builds every fixture value at run time and holds none literally. At
+`029d83a27d0b` it passes, 4 of 4 (the tree scan about 80 s):
 
 - `redaction_scan_self_test` runs `redaction-scan.py --self-test`.
 - `redaction_scan_reports_a_committed_home_path`: a throwaway repository with
@@ -230,13 +173,6 @@ builds every fixture value at run time and holds none literally:
 - `redaction_scan_finds_nothing_in_this_tree` scans `HEAD` of the checkout and
   fails with the `file:line class` of each H/M finding (never the hit). Exit 3
   (private classes not run) or 0 (private values set) passes.
-
-The test runs in every `tools/check.sh` row that runs the root package's
-integration tests without a `--test` filter (the per-feature `test <features>`
-rows). Those rows are selected by GPU and shader scopes, so a change under
-`tools/` or `docs/` alone never reached the scan: three such changes put a
-finding on main, each green in its own run and red for every later pull
-request that reached the Rust tests (#4199).
 
 ### Gate row
 
@@ -259,8 +195,7 @@ plan).
 | 2 | the scan could not run (bad ref, unreadable private file) | **fail** |
 
 It scans `HEAD`, as `tests/redaction_scan.rs` does; a change that is only in
-the working tree is not seen until it is committed. The scan of the tree
-takes several minutes (15086 files at `937161af5beb`, about 4 minutes; about 100 s for 5732 files at an earlier commit).
+the working tree is not seen until it is committed.
 
 A fixture that needs an address uses a documentation range (RFC 5737:
 `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`), which the scan does not
@@ -269,42 +204,33 @@ user-network address under `driver/tools/uboot-mp2/qemu/`.
 
 ## Open items (not fixes of this round)
 
-- **Private classes**: run on `937161af5beb` with a partial value set derived on
-  a farm worker (above): 0 H/M in `owner-login`, `lab-host`, `home-path` and
-  `login-at-host`, exit 0. Still needed: the owner's run with the full private
-  file (with anything the farm's notes do not hold) on the snapshot commit,
-  exit 0.
-- **The `docs/release/snapshot.md` lab-host rule** (merged as `3a0ef3d1`)
-  drops nothing at `937161af5beb`: the file no longer quotes the VM-lab
-  tool's name. The rule and its three self-test cases may be removed by the
-  item that owns `tools/release/redaction-scan.allow`.
-- **The login-at-host rule of `fd11f275`** dropped nothing on `fb51ce43`
-  (not re-checked per rule in this round); the plan that holds
-  `tools/board_selftest.sh` may rename its fake host to an `example.invalid`
-  name and remove the rule with its two self-test cases.
-- **`tools/cts/log/2026-10-31-pi4-gles3-a/*.tally.txt`** (Part 3's home path
-  of the farm worker's account): no longer a finding; line 4 of each tally
-  names its console relatively (`7bac2d8a`); nothing is allowed.
-- **Fixtures in held files** (`tools/board_selftest.sh`, `tools/cts/**`):
-  kept by allow rules; their owners may move them to RFC 5737 / RFC 3849
-  addresses and `example.invalid` names and drop the rules.
+- **Private classes**: not run, the owner's run. The owner runs the scan with
+  `YAKOGL_REDACTION_PRIVATE_FILE` (the full value set) on the snapshot commit
+  and needs exit 0 (#1606 step 8, decisions D7/D8).
 - **History**: not scanned here. The history purge and the one-commit public
-  snapshot are #1606 step 8, owner decisions D7 and D8; this part only keeps
-  the tree ready and the scan re-runnable.
-- **Snapshot rehearsal**: the scan on a one-commit snapshot of origin/main,
-  with its hits and their dispositions, is in `docs/release/snapshot.md`
-  ("Procedure and rehearsal").
+  snapshot are #1606 step 8, owner decisions D7 and D8; this part keeps the
+  tree ready and the scan re-runnable. The scan on a one-commit snapshot
+  rehearsal is in `docs/release/snapshot.md` ("Procedure and rehearsal").
+- **Two exact-path rules match nothing** at `029d83a27d0b`: the
+  login-at-host rule of `fd11f275` for `tools/board_selftest.sh` (the fixture
+  no longer carries that login) and the lab-host rule of `3a0ef3d1` for
+  `docs/release/snapshot.md` (its pattern matches no line of the file). Each
+  may be removed with its self-test cases in `redaction-scan.py`; they hide
+  nothing, so they were left for a change that touches the scan.
+- **Fixtures in other plans' files** (`tools/board_selftest.sh`,
+  `tools/cts/**`, the Mali and T6 tools): kept by allow rules; their owners
+  may move them to RFC 5737 / RFC 3849 addresses and `example.invalid` names
+  and drop the exact-path rules.
 
 ## Verdict of part 4
 
-The tree at `937161af5beb` is clean in every class the tool has: the public run
-finds 0 H/M findings (exit 3, private classes not run), the self-test
-passes, `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the header's feature set) passes, and the private run with a
-partial value set derived on a farm worker finds 0 H/M findings (exit 0); a
-test fails the build if the tree slips back. This is not yet a pass of line
-8: the owner runs the command with `YAKOGL_REDACTION_PRIVATE_FILE` (the full
-value set) on the snapshot commit and needs exit 0, and the history decision
-(D7/D8) is open.
+The tree at `029d83a27d0b` is clean in every public class: 0 H/M findings
+(exit 3, private classes not run), the self-test passes, and
+`cargo test --features gpu-vivante,shaderc-online --test redaction_scan`
+passes, so a test fails the build if the tree slips back. This is not yet a
+pass of line 8: the private classes are the owner's run (with
+`YAKOGL_REDACTION_PRIVATE_FILE`, on the snapshot commit, exit 0), and the
+history decision (D7/D8) is open.
 
 # Part 3: re-run on the cut tree (2026-10-27)
 
