@@ -112,7 +112,7 @@ are this record's.) 21 cases join PASS, 1 leaves it (128).
 - 149, 206, 229, 177, 178, 179, 215 forecast to change: all seven did, each
   to PASS. As forecast.
 - 230 to 249 forecast to be new cases: all twenty now run (NO-CASE 73 to 53,
-  as forecast). Of them 15 PASS, 3 SKIP (244, 246, 247) and 3 are REFUSED
+  as forecast). Of them 14 PASS, 3 SKIP (244, 246, 247) and 3 are REFUSED
   (241, 242 compile, 245 draw); the earlier read-only session at this
   commit also saw 241, 242 and 245 as non-PASS.
 - 128 forecast possibly to become REFUSED: it did (REFUSED compile, the
@@ -219,3 +219,119 @@ The fix for 241/242 reaches src/mali/** too (integer targets).
     Fix: a clear colour per Render Target for a whole clear at frame start, and a
     clear quad writing one output per target (others' writes off) for the rest;
     then drop both guards. Plan #406 (src/mali/backend.rs, src/mali/frame.rs).
+
+## 6. Replacement texts for the owners
+
+Paste-ready, for the owners named in (f). Figures are those of sections 1 to
+5: 256 cases, PASS 185, REFUSED 9, NO-CASE 53, SKIP 8, FAIL 1, FAULT 0, 0
+kernel messages. Issue letters A, B and C are the new issues of section 5's
+"Issues"; 77, 106 and 163 stay on #33, 226, 227 and 228 on #4496. Each text
+keeps the letters until the issues are filed; then replace each letter with
+its number. Nothing here says that an old issue (#4350, #32, #3889) is
+closed: its owner decides.
+
+### (a) tools/cts/RESULTS.md, section "Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep"
+
+Replaces the text from the heading's first paragraph to the bullet on cases
+223 to 229 (the glmark2-es2 subsection after it stays).
+
+    `panthor-gltest --sweep` on the board's own Linux (panthor, not Zephyr), the
+    newest record: `tools/cts/log/2026-11-26-t6-sweep-d9efa418/` (2026-11-26,
+    the board up since 2026-11-24). Code: origin/main `d9efa418`, cross-built
+    and run by `tools/mali/panthor/run-on-board.sh` in a clean tree
+    (`yakogl-build=d9efa418`). Kernel 6.18.55-current-rockchip64, panthor 1.5.0.
+    Two sweeps in one boot; boot_id unchanged; `/boot` (419 files) and loaded
+    modules (100) unchanged. The previous record is
+    `tools/cts/log/2026-11-t6-sweep-1a22bd38/` (main `1a22bd38e`, 2026-11-12).
+
+    | Runs | Cases | PASS | REFUSED | NO-CASE | SKIP | FAIL | FAULT | Kernel messages |
+    |---|---:|---:|---:|---:|---:|---:|---:|---:|
+    | sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **185** | 9 | 53 | 8 | 1 | 0 | 0 |
+
+    - Against 1a22bd38 (165 PASS, 6 REFUSED, 73 NO-CASE, 9 SKIP, 3 FAIL): 28
+      cases differ, the other 228 verdict lines are byte-identical. 21 cases
+      join PASS, 1 leaves it. Seven old cases moved as forecast, each to PASS:
+      149 vsunits (was REFUSED draw), 206 es3levels (was FAIL), 229
+      tf_deleted_output (was FAIL), 177 zonly, 178 heldfree, 179 retile and
+      215 shadowmap (were SKIP). Cases 230 to 249 are new in gl_test (NO-CASE
+      73 to 53): 14 PASS, 3 SKIP (244 w128tex, 246 tsprobe, 247 dlayout) and 3
+      REFUSED (241, 242, 245).
+    - PASS regression, 1: 128 uniidxj, PASS at 1a22bd38, REFUSED compile now.
+      It is a deliberate refusal, not a code generation fault: f4332514 made
+      the fragment colour store accept only measured forms, and a colour of
+      two mediump varying lanes beside an indexed uniform's lanes has no
+      Mesa reference (A).
+    - FAIL, 1 line: 228 negapi_readpix_fmt (`rc -1, first bad check -1`:
+      the Mali back end has no integer texture class and no samples, so
+      `glTexImage2D(GL_RGBA32I)` and a 4x renderbuffer give GL error 0x502,
+      #4496).
+    - REFUSED, 9 lines: 77 transc (compile: `inversesqrt` of a uniform lane
+      in the second program, #33), 106 mrt3 (draw: several colour targets in
+      a frame that does not start from a whole clear, #33), 163 drawbuf0
+      (draw: first draw buffer GL_NONE, #33), 226 and 227 (compile: a fragment
+      shader that mixes highp and mediump float values, #4496), 128 uniidxj
+      (compile: fragment varying load or conversion, A), 241 and 242
+      (compile: an integer colour output other than a highp uvec4, B), 245
+      mrt4 (draw: a colour clear of some of several targets, C).
+    - SKIP, 8: 97, 200, 201, 222, 223, 244, 246, 247. FAULT: none. Kernel
+      messages: 0 between the run markers and 0 in the second after the end
+      marker, in both runs.
+    - Triage of every REFUSED and FAIL line (cause, file:line, fix, owning
+      plan) is in the record's README, section 5.
+
+### (b) tools/cts/RESULTS.md, the row cell
+
+The row of the table in (a) (the NanoPC-T6 (Mali) row of the glmark2 table
+points at this section and needs no change):
+
+    | sweep 1 and 2, equal (the 256 verdict lines are identical) | 256 | **185** | 9 | 53 | 8 | 1 | 0 | 0 |
+
+### (c) ROADMAP.md, stage 5, the sweep bullet
+
+    - `gl_test` sweep (`tools/cts/log/2026-11-26-t6-sweep-d9efa418/`, main
+      `d9efa418`, 2026-11-26): 185 of 256 cases PASS twice, 9 refused, 53 with
+      no case, 8 skipped, 1 FAIL, 0 FAULT, 0 kernel messages. Since
+      1a22bd38 (165 PASS): +21 PASS (149, 206, 229, 177, 178, 179, 215 and
+      14 of the new cases 230 to 249), -1 (128 uniidxj, a deliberate refusal
+      until the form has a Mesa reference). The 10 cases that are not PASS,
+      NO-CASE or SKIP are triaged in the record: 77, 106, 163 (#33), 226,
+      227, 228 (#4496), 128 (A), 241 and 242 (B), 245 (C).
+
+### (d) tools/cts/STATUS.md, the Japanese T6 line
+
+Replaces the bullet that begins "NanoPC-T6（RK3588、Mali Valhall v10、panthor）の gl_test 掃引。".
+
+    - **NanoPC-T6（RK3588、Mali Valhall v10、panthor）の gl_test 掃引。** 最新の記録は tools/cts/log/2026-11-26-t6-sweep-d9efa418（main d9efa418 を tools/mali/panthor/run-on-board.sh でクロスビルドして実行、2026-11-26）。panthor-gltest --sweep は 1 回の起動のうちに 2 回走り、256 件中 185 合格（REFUSED 9、NO-CASE 53、SKIP 8、FAIL 1、FAULT 0）、2 回の判定行は同一、カーネルメッセージは 0 件、boot_id は不変。前の記録（2026-11-t6-sweep-1a22bd38、165 合格）から 28 件が変わった: 21 件が合格に加わり（149 vsunits、206 es3levels、229 tf_deleted_output、177 zonly、178 heldfree、179 retile、215 shadowmap と、新しいケース 230〜249 のうち 14 件）、1 件が合格から外れた（128 uniidxj。fragment の色が mediump の varying のレーンと添字付き uniform のレーンを並べる形に Mesa の参照が無く、意図して拒否している。issue A）。合格でないもの: REFUSED は 77（vtransc の inversesqrt が uniform のレーンを取る、#33）、106（全面クリアで始まらない複数カラーターゲット、#33）、163（先頭の draw buffer が GL_NONE、#33）、226 と 227（highp と mediump が混ざる fragment shader、#4496）、128（issue A）、241 と 242（highp uvec4 以外の整数カラー出力、issue B）、245（複数ターゲットの一部だけのカラークリア、issue C）。FAIL は 228（整数テクスチャとマルチサンプル renderbuffer が未実装、#4496）。詳細は RESULTS.md と記録の README。
+
+### (e) The comment for issue #7
+
+    NanoPC-T6, gl_test sweep at origin/main d9efa418 (2026-11-26), on the
+    board's own Armbian through panthor, twice in one boot:
+    tools/cts/log/2026-11-26-t6-sweep-d9efa418/.
+
+    256 cases: PASS 185, REFUSED 9, NO-CASE 53, SKIP 8, FAIL 1, FAULT 0. The
+    two runs' verdict lines are identical, 0 kernel messages, boot_id
+    unchanged. Against the record at 1a22bd38 (PASS 165, REFUSED 6, NO-CASE
+    73, SKIP 9, FAIL 3): 28 cases changed, +21 PASS (149, 206, 229, 177,
+    178, 179, 215 and 14 of the 20 new cases 230 to 249), -1 PASS (128
+    uniidxj, a deliberate refusal). Every change matches the forecast.
+
+    Not PASS, each traced to a file and line in the record's README:
+    - 77, 106, 163: still #33 (compiler and back end).
+    - 226, 227, 228: still #4496 (226 and 227 the highp/mediump mix, 228 the
+      missing integer texture class and samples).
+    - 128: new issue A (fragment varying lanes beside an indexed uniform).
+    - 241, 242: new issue B (integer colour outputs other than highp uvec4;
+      also needs an integer Render Target class in the back end).
+    - 245: new issue C (a colour clear of some of several targets).
+    Stage 5's criterion is not met yet (1 FAIL, 9 REFUSED).
+
+### (f) Who takes each text
+
+| Text | Goes to | Owner |
+|---|---|---|
+| (a), (b): the RESULTS.md T6 gl_test sweep section and its row | tools/cts/RESULTS.md | plan #387 |
+| (c): the stage 5 sweep bullet | ROADMAP.md | plan #389 |
+| (d): the Japanese T6 line | tools/cts/STATUS.md | plan #392 (README Status; STATUS.md follows it) |
+| (e): the #7 comment | issue #7 | whoever files A, B and C with it |
+| Issues A, B, C (section 5, "Issues") | new issues | whoever files them |
