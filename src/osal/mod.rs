@@ -109,6 +109,11 @@ pub const OSAL_QUERY_V3D_S8_STENCIL: u32 = 13;
 /// `after` without the caller waiting for it (osal_internal.h); -EBUSY when
 /// the OSAL's queue is full, -ENOTSUP without TFU jobs.
 pub const OSAL_QUERY_V3D_TFU_QUEUE: u32 = 17;
+/// out = two `u32` (8 bytes): the V3D 7.1 hub's HUB_IDENT1, then HUB_IDENT3,
+/// as the OSAL read them at init (`v3d_identify`). The 7.1 table's init needs
+/// both (docs/notes/v3d71-table71.md, F1). Answered by the 7.1 OSAL only;
+/// -ENOTSUP elsewhere.
+pub const OSAL_QUERY_V3D_HUB_IDENT: u32 = 20;
 
 /// in = `u32`: the site of the next `wait` (one of `OSAL_WAIT_SITE_*`), so
 /// the render service's 20 ms re-post line names the wait it met. Only the

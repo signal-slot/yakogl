@@ -779,6 +779,12 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		q->cpu = cpu_of((uint32_t)q->gpu, (uint32_t)q->bytes);
 		return q->cpu ? 0 : -EINVAL;
 	}
+	if (what == OSAL_QUERY_V3D_HUB_IDENT && out && out_sz == 2 * sizeof(uint32_t) && s.inited) {
+		/* out = { HUB_IDENT1, HUB_IDENT3 } */
+		((uint32_t *)out)[0] = s.id.hub_ident[1];
+		((uint32_t *)out)[1] = s.id.hub_ident[3];
+		return 0;
+	}
 	if (what == OSAL_QUERY_V3D_JOB_OPEN && out && out_sz == sizeof(uint32_t) && s.inited) {
 		frees.job_open = *(const uint32_t *)out != 0;
 		if (!frees.job_open)
