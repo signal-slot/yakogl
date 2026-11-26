@@ -256,7 +256,7 @@ path_scopes() {
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -4317,6 +4317,8 @@ step "tools   board.sh dry-run matrix and replays" no_board_env tools/board_self
 # No input key: it runs the runner on fake images every time, as the row above.
 scope tools
 step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/board_stm32mp2_selftest.sh
+step "tools   board.sh BOARD_UART=rfc2217:// for pi4, am62p and imx8mp (fake RFC 2217 server)" tools/board_rfc2217_selftest.sh
+step "tools   uart_rfc2217.py client (fake RFC 2217 server)" tools/uart_rfc2217_selftest.sh
 # The STM32MP257F-DK's U-Boot one-shot (driver/tools/uboot-mp2, docs/notes/
 # stm32mp257f-dk-uboot-boot.md), without a board: the scripts and their
 # mkimage step (selftest.sh; without U-Boot's mkimage on PATH it counts the
