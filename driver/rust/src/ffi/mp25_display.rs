@@ -478,8 +478,11 @@ pub struct YdMp25LtdcDiag {
     pub gcr: u32,
     /// `L1RCR` on the MP25.
     pub rcr: u32,
+    pub lipcr: u32,
+    /// The global `SRCR`.
+    pub srcr: u32,
 }
-const _: () = assert!(size_of::<YdMp25LtdcDiag>() == 28);
+const _: () = assert!(size_of::<YdMp25LtdcDiag>() == 36);
 const _: () = assert!(offset_of!(YdMp25LtdcDiag, cpsr1) == 12);
 const _: () = assert!(offset_of!(YdMp25LtdcDiag, rcr) == 24);
 
@@ -493,6 +496,8 @@ pub(crate) fn ltdc_frame_diag_with(m: &impl Mmio, env: &impl Env, c: &YdMp25Ltdc
         cdsr: d.cdsr,
         gcr: d.gcr,
         rcr: d.rcr,
+        lipcr: d.lipcr,
+        srcr: d.srcr,
     })
 }
 
@@ -1901,6 +1906,8 @@ mod tests {
                 cdsr: 5,
                 gcr: 0xc000_0001,
                 rcr: ltdc::RCR_VBR,
+                lipcr: 0,
+                srcr: 0,
             }
         );
         assert_eq!(*e.waited_us.borrow(), u64::from(ltdc::DIAG_CPSR_GAP_US));
