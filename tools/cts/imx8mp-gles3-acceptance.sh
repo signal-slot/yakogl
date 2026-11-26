@@ -6,13 +6,18 @@
 # #24), in one run. Read-only: it runs the record's checkers and greps the
 # result documents, it writes nothing.
 #
-#   tools/cts/imx8mp-gles3-acceptance.sh [--date YYYY-MM-DD] [<repo root>]
+#   tools/cts/imx8mp-gles3-acceptance.sh [--date YYYY-MM-DD] [--commit HASH8] [<repo root>]
 #
 # <repo root>  the repository whose record is checked (default: the one that
 #              holds this script); the checkers are run from its tools/cts.
 # --date       the campaign day for c3 (default: the date in the name of the
 #              tools/cts/log/*-imx8mp-gles3-*-rows01-13 directory, else the
 #              date of the 'Run YYYY-MM-DD, ...' line of its README.md).
+# --commit     the campaign commit (8 hex or more): c1-c3 read only the slices
+#              tools/cts/log/*-imx8mp-gles3-<hash8>*-rows*, as the recipe's
+#              `ls -d ...-<hash8>-rows*`. Without it every slice directory is
+#              read, so a tree holding two campaigns (9bc82915 and 05769bf2
+#              slices) fails c1 with 'different commits' until one is retired.
 #
 #   c1  imx8mp-gles3-merge.py --check over the slice directories
 #       tools/cts/log/*-imx8mp-gles3-*-rows* exits 0 and prints
@@ -41,12 +46,22 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=
-USAGE="usage: $0 [--date YYYY-MM-DD] [<repo root>]"
+USAGE="usage: $0 [--date YYYY-MM-DD] [--commit HASH8] [<repo root>]"
+COMMIT=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--date)
 		[ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }
 		DATE=$2
+		shift 2
+		;;
+	--commit)
+		[ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }
+		case $2 in
+		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
+		*) echo "imx8mp-gles3-acceptance: --commit wants 8 or more hex digits: $2" >&2; exit 2 ;;
+		esac
+		COMMIT=${2:0:8}
 		shift 2
 		;;
 	-h | --help)
@@ -82,10 +97,10 @@ tool() { # tool <script> args... : python3 -I of a tool under the root
 }
 
 shopt -s nullglob
-rows=("$LOG"/*-imx8mp-gles3-*-rows*)
+rows=("$LOG"/*-imx8mp-gles3-"$COMMIT"*-rows*)
 es2=("$LOG"/*-imx8mp-es2-*)
 gles3=("$LOG"/*-imx8mp-gles3-*)
-r01=("$LOG"/*-imx8mp-gles3-*-rows01-13)
+r01=("$LOG"/*-imx8mp-gles3-"$COMMIT"*-rows01-13)
 shopt -u nullglob
 dirs=()
 for d in "${rows[@]}"; do [ -d "$d" ] && dirs+=("$d"); done

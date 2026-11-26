@@ -5,7 +5,7 @@
 
 Runs imx8mp-gles3-merge.py --check and --totals as subprocesses and prints, to stdout, four headed
 blocks: the RESULTS.md entry, the STATUS.md line (Japanese), the ROADMAP stage 4 line and the text of
-the status comment for GitHub issue #2. It edits no file. When --check fails (missing entries, reset
+the status comment for GitHub issue #24. It edits no file. When --check fails (missing entries, reset
 verdicts, several commits) the drafts are still printed, marked PARTIAL, the problems are named, and the
 exit status is 1.
 
@@ -87,9 +87,21 @@ def parse_totals(text):
 
 
 def rel(d):
+    """A slice directory as the texts name it: below the repository root, else (a copy elsewhere) as
+    tools/cts/log/<name>, never an absolute path of this machine."""
     root = os.path.dirname(os.path.dirname(HERE))
     r = os.path.relpath(os.path.abspath(d), root)
-    return (d if r.startswith('..') else r).rstrip('/')
+    if r.startswith('..'):
+        name = os.path.basename(os.path.normpath(d))
+        return ('tools/cts/log/' + name) if re.search(r'-imx8mp-gles3-.*-rows', name) else name
+    return r.rstrip('/')
+
+
+def slice_order(d):
+    """Sort key of a slice directory: its first table row as a number (rows14-16 before rows108-122), then the name."""
+    name = os.path.basename(os.path.normpath(d))
+    m = re.search(r'-rows(\d+)', name)
+    return (int(m.group(1)) if m else 10 ** 9, name)
 
 
 # (file under the repo root, regex of the current text, what it is). Matched in the file, not by line number.
@@ -175,7 +187,8 @@ def main():
         entries_txt = '%d of %d entries (no record: %s)' % (run_n, n_entries, miss[2])
     else:
         entries_txt = 'all %d entries (e0..e%d)' % (n_entries, n_entries - 1)
-    dirs_txt = ', '.join('`%s/`' % rel(d) for d in args.dirs)
+    shown = sorted(args.dirs, key=slice_order)   # display only: merge keeps the order given (the first real row of an entry claims it)
+    dirs_txt = ', '.join('`%s/`' % rel(d) for d in shown)
     partial = '' if ok else 'PARTIAL: '
     bad_verdict = any('verdict' in p for p in problems)
     reset_txt = ('reset verdicts NOT CLEAN, see the problems' if bad_verdict else
@@ -211,7 +224,7 @@ def main():
     status_txt = ('i.MX8MP の dEQP-GLES3 は%s 全 %d エントリのうち %d エントリを %s（%s）のボードで実行し、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / 結果なし %s、'
           'リセット%s。記録は %s。' % (
               '' if ok else '（途中、記録が不完全）', n_entries, run_n, short_txt, args.date, n(mp), *five,
-              'の確認が未完' if bad_verdict else '0', ', '.join(rel(d) for d in args.dirs)))
+              'の確認が未完' if bad_verdict else '0', ', '.join(rel(d) for d in shown)))
     print(status_txt)
     print()
     print('--- ROADMAP.md (stage 4, i.MX8MP line) ---')
@@ -221,7 +234,7 @@ def main():
               short_txt, args.date, *five, n(mp)))
     print(roadmap_txt)
     print()
-    print('--- GitHub issue #2 comment ---')
+    print('--- GitHub issue #24 comment ---')
     print('%s**i.MX8MP dEQP-GLES3, %s**' % (partial, args.date))
     print()
     print('- Commit: %s.' % commit_txt)
