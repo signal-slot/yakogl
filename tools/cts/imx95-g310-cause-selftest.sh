@@ -149,6 +149,18 @@ malformed "unknown imx95 result" 'a.b\tPass\tpass\n' "line 1: imx95_result 'pass
 malformed "empty case" '\tPass\tFail\n' 'line 1: empty case name'
 malformed "bad line after good ones" 'a.b\tPass\tFail\na.c\tPass\n' 'line 2:'
 
+# The shipped case list: 27 distinct cases of three commits, each a
+# compiler-commit for a Fail-to-Pass pair.
+cc="$here/imx95-g310-cause-commits.tsv"
+grep -v '^#' "$cc" | cut -f1 | sort -u | awk -v OFS='\t' '{print $0, "Fail", "Pass"}' > "$t/cc.in"
+if [ "$(wc -l < "$t/cc.in")" -eq 27 ] \
+	&& [ "$(grep -v '^#' "$cc" | awk -F'\t' 'NF != 3' | wc -l)" -eq 0 ] \
+	&& python3 -I "$tool" --commit-cases "$cc" "$t/cc.in" | awk -F'\t' '$4 != "compiler-commit"' | grep -q . ; then
+	bad "commit list"
+else
+	ok "commit list: 27 cases, three fields, all compiler-commit"
+fi
+
 # A missing file and an unknown option: exit 2.
 python3 -I "$tool" "$t/no-such-file" > /dev/null 2>&1
 [ $? -eq 2 ] && ok "missing file exits 2" || bad "missing file"
