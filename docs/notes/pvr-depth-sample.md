@@ -259,14 +259,14 @@ same picture at its four points in both runs:
 | image | ms a frame | depth map Mpx/s | GPU busy a frame (TA\|3D) |
 |---|---:|---:|---:|
 | main `c5dcf5e8` plus the case alone | 355.20 | 5.4 | 6.35 ms |
-| with this design (`c999f2f7`) | 27.75 | 69.1 | 6.37 ms |
+| with this design (board image `c999f2f7`) | 27.75 | 69.1 | 6.37 ms |
 
 The GPU's work is the same 6.4 ms; the 349 ms that went were the CPU
 resolve. What remains above the GPU time (about 21 ms) is the two kicks'
 submit and fence round trips with a glFinish each frame, not the texture.
 
-glmark2 at 800x600 (`tools/cts/RESULTS.md`, the AM62P row): shadow 353.23
-to 10.64 ms a frame (33x), refract 375.53 to 37.03 ms (10x: its depth
+glmark2 at 800x600 (`tools/cts/RESULTS.md`, the AM62P row of `965ac247`, main `86d0b482`, which carries `21099fcd`, the main commit that brought this design): shadow 353.23
+to 10.63 ms a frame (33x), refract 375.53 to 37.05 ms (10x: its depth
 texture takes the same path), score 461 to 467, the other 31 scenes
 unchanged within the run-to-run spread, every picture probe of shadow equal
 to the recorded column, 0 GL errors, 0 resets, 2026 draws a run sampled a
@@ -299,7 +299,7 @@ Read these lines in the console and records:
 | what | where | expect |
 |---|---|---|
 | `gl_test: case 215 shadowmap: PASS` | the gl_test console (`common-tally.py`'s `CASE_LINE_RE`) | PASS (five checks after the setup: the two programs linked, no GL error after setup, framebuffer status, no GL error after the frames, the four points) |
-| `gl_test: shadowmap: 20 frames, <ms> ms a frame (1600x1200 depth map, <Mpx/s> Mpx/s)` | the same | 27.75 ms a frame at `c999f2f7`; the figure on current main is the number to put beside it, with the GPU busy time a frame from the same line (6.37 ms at `c999f2f7`); a frame near 355 ms means the CPU resolve is back |
+| `gl_test: shadowmap: 20 frames, <ms> ms a frame (1600x1200 depth map, <Mpx/s> Mpx/s)` | the same | 27.75 ms a frame at the board image `c999f2f7` (not a commit; `21099fcd` is the main commit of this design); the figure on current main is the number to put beside it, with the GPU busy time a frame from the same line (6.37 ms on that image); a frame near 355 ms means the CPU resolve is back |
 | `depth sampled from the buffer N (refused M)` | the exit line, `ds_report` (`src/pvr/backend.rs`) | N greater than 0 and M = 0: 2026 draws a glmark2 run at the AM62P measurement; N = 0 means no draw sampled the buffer, M > 0 means a binding named a buffer that was not there |
 | `pvr_backend: a 1600x1200 depth texture is sampled from its depth buffer (X8U24, stride 1600): no CPU resolve` | the console, once a run (`depth_buffer_binding`) | present; confirms the stride this note derives |
 | glmark2 `shadow` and `refract` ms a frame | the GM console, `tools/cts/glmark2-ms.py --cells` over it | shadow near 10.6 ms, refract near 35-37 ms (6a7021ec, `tools/cts/RESULTS.md`); 353 and 375 ms mean the CPU path |
