@@ -474,7 +474,7 @@ replaces it.
   image time. Shard 13 is the exception at 159.5 s (`flush_finish.*`),
   26.6 % of the lifetime.
 
-`mp2-p9-diff: shared 0, new 12, fixed 0, missing 0` (slice 1 of 6, image `66fcaa3a`).
+`mp2-p9-diff: shared 0, new 117, fixed 3, missing 0` (slices 1 and 2 of 6, image `66fcaa3a`).
 
 ### Q11: the measured line width
 
