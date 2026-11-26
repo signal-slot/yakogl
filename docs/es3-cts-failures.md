@@ -200,7 +200,7 @@ picture or read-back verdict the host could not see):
 |---|---:|---|---|
 | R and RG integer texture colour attachments (`r8i` .. `rg32ui`, 12 formats) | 135 | e6, e7, e8, e9 | `fbo.color.{tex2d,tex2darray,tex3d,texcube}` 48, `fbo.color.repeated_clear` 24, `fbo.render.{recreate_color,resize}` 24, `fbo.invalidate.format` 12, `fbo.completeness.renderable.texture.color0` 12 and `.depth`/`.stencil` of the 32-bit ones 8, `fbo.completeness.renderable.{texture,renderbuffer}.color0.r32f` 2 (also `rgba8i`/`ui`, `rgba16i`/`ui`, `rgb10_a2ui` in `repeated_clear.blit.tex2d`, 5). The RGBA integer formats pass in `fbo.color.tex2d` |
 | sRGB8_ALPHA8 colour targets (RC7, board checks B1 and B4) | 60 | e5, e6, e8, e9, e12, e18, e19 | `fragment_out.{array,basic}.fixed.srgb8_alpha8_*` 24, `fbo.blit.conversion.srgb8_alpha8_to_*` 12, `fbo.render.*` 12, `fbo.color.*` 9, `fbo.invalidate.format` 1, `fragment_ops.blend.fbo_srgb.{max,min}` 2 (the six `fbo.blit.default_framebuffer.srgb8_alpha8_*` cases are counted with the blits below) |
-| 16F colour targets (`rg16f`, `rgb16f`, `rgba16f`) | 51 | e6, e9, e18, e19 | `fragment_out.array.float.{rg16f,rgba16f}_*` 24 and `basic.float.rg16f_*_vec4` 3 (`rgba16f` and `r16f` pass as a single target), `fbo.render.*` 16 (`rg16f`, `rgb16f`), `fbo.color.*` 8 (`rgb16f` everywhere, `rg16f` blend) |
+| 16F colour targets (`rg16f`, `rgb16f`, `rgba16f`) | 51 | e6, e9, e18, e19 | `fragment_out.array.float.{rg16f,rgba16f}_*` 24 and `basic.float.rg16f_*_vec4` 3 (`rgba16f` and `r16f` pass as a single target), `fbo.render.*` 16 (`rg16f`, `rgb16f`), `fbo.color.*` 8 (`rgb16f` everywhere, `rg16f` blend); the cause map splits them by defect into `gc-16f-rgb16f-tex` 13, `gc-16f-readback` 14, `gc-16f-attach-n` 12 and the unexplained `gc-16f-target` 12 |
 | `glBlitFramebuffer` from the default framebuffer (RC8) | 30 | e5 | every `fbo.blit.default_framebuffer.*_{linear_out_of_bounds,linear_scale,nearest_scale}_blit_from_default` (all 9 formats x 3 = 27) and the three `srgb8_alpha8_*_blit_to_default`; the `*_basic_blit_*` cases pass |
 | R8, RG8, RGB8, RGB565 colour targets after a clear, a blend or sharing | 27 | e6, e9, e19 | `fbo.render.shared_colorbuffer{,_clear}` 16, `fbo.render.recreate_color.rbo_*` 4, `fbo.color.blend.*_src_over` 4, `fbo.color.repeated_clear.blit.tex2d.{r8,rg8}` 2, `fragment_out.basic.fixed.r8_highp_float` 1 (`fbo.color.tex2d.r8`/`rg8` pass) |
 | `default_vertex_attrib` non-square matrices | 25 | e2 | the 24 above; the 25th line is the CRC pair `mat4.vertex_attrib_4f`,`mat4x2.vertex_attrib_4fv`, which the slice README resolves to the `mat4x2` case (the square type passes) |
@@ -228,7 +228,10 @@ vivante rows). The first matching line of the map decides; 0 cases are unclassif
 | `rc8-blit-msaa` | 94 | 56 | 150 | #339 |
 | `gc-rg-int-attachment` | 0 | 116 | 116 | none |
 | `rc14-mrt-draw-buffers` | 72 | 8 | 80 | none |
-| `gc-16f-target` | 0 | 51 | 51 | none |
+| `gc-16f-readback` | 0 | 14 | 14 | none (fixed on main by `8428875e`) |
+| `gc-16f-rgb16f-tex` | 0 | 13 | 13 | none (fixed on main by `c558647b`) |
+| `gc-16f-attach-n` | 0 | 12 | 12 | none (fixed on main by `c558647b`) |
+| `gc-16f-target` (unexplained remainder: `fragment_out.array.float.rgba16f_*`) | 0 | 12 | 12 | none |
 | `gc-srgb-target` | 0 | 46 | 46 | none |
 | `rc17-fbo-completeness` | 14 | 14 | 28 | #335, #355, #354 |
 | `gc-narrow-target` | 0 | 27 | 27 | none |
