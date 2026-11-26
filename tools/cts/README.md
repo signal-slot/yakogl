@@ -1314,8 +1314,25 @@ credentials, set by the session; never in a file, a log or a commit).
 7. Redaction: see below (imx95-redact-check.py)
    <!-- placeholder: the redaction step is written by a later item -->
 
-The tools' selftests are `imx95-uboot-row-selftest.sh` and
-`imx95-rows-tsv-selftest.sh` next to them.
+8. The slice and the diff. `imx95-uart-slice.py` reads the session's
+   `console/<label>.log` and `rows.tsv` and writes, in the same directory,
+   the files `mali-deqp-tally.py`, `mali-family-tree.py` and
+   `mali-fail-triage.py` read (`results.tsv`, `chunks.tsv`, `refusals.tsv`,
+   `refusals/<label>.txt` and, if absent, `meta.txt`, with `os=zephyr`). A
+   case that began and has no result is `Lost` (`chunk-hang`, `chunk-crash`
+   or `not-run`), never `Fail`; a console case of the row's filter that the
+   mustpass list lacks goes to `extra.tsv`. `imx95-t6-diff.py` then lists
+   the cases whose state or refusal differs from the T6's tree at 8ff01055,
+   counted per transition and per cause:
+
+   ```sh
+   python3 -I tools/cts/imx95-uart-slice.py --commit <sha> <logdir>
+   python3 -I tools/cts/imx95-t6-diff.py --markdown --imx95 <logdir> [--imx95 <logdir>]...
+   ```
+
+The tools' selftests are `imx95-uboot-row-selftest.sh`,
+`imx95-rows-tsv-selftest.sh`, `imx95-uart-slice-selftest.sh` and
+`imx95-t6-diff-selftest.sh` next to them.
 
 A dEQP image costs its lifetime (`CONFIG_V3D_DEQP_LIFETIME_S`, 240 s) plus
 the boots, whatever its case count: images D and E took 5 min 24 s and
