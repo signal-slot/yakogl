@@ -1,5 +1,13 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014-2017 Broadcom
+// SPDX-FileCopyrightText: 2012 Rob Clark
+//
+// `utile_width`, `utile_height` and `ub_pad` transcribe `v3d_utile_width`,
+// `v3d_utile_height` (src/broadcom/common/v3d_tiling.c, MIT, Copyright ©
+// 2014-2017 Broadcom) and `v3d_get_ub_pad` (src/gallium/drivers/v3d/
+// v3d_resource.c, MIT, Copyright © 2014-2017 Broadcom, Copyright (C) 2012 Rob
+// Clark) of Mesa 26.2.1, through driver/src/v3d/v3d_tex.c.
 //! The V3D 4.2 (Pi 4, `src/v3d`, `driver/src/v3d`) values of a 4x
 //! multisample framebuffer object: the tile size, the tile buffer's internal
 //! type and bpp per render target, the per-RT sample buffer's layout and
