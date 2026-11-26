@@ -4414,6 +4414,9 @@ step "tools   check.sh test cache: record, skip, run again on a new key" tools/c
 # The row pool (--jobs): the same log with one job and four, and a lane
 # that orders a writer before its reader.
 step "tools   check.sh --jobs: the log in order, the counts, a lane" tools/check_pool_selftest.sh
+# tools/uart_rfc2217.py against a fake RFC 2217 server on 127.0.0.1: IAC stripping,
+# baud ack (exit 42), probe/capture exit codes, the pty relay.
+step "tools   uart_rfc2217.py: probe, capture and pty against a fake RFC 2217 server" tools/uart_rfc2217_selftest.sh
 # The tree key scan (tree_key_scan): every path a literal in the test code
 # names is under TEST_TREE_PATHS. A file a test reads outside them leaves the
 # test cache blind to it. A file scan of a few seconds, with no build. Every
