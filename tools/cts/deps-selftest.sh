@@ -107,6 +107,46 @@ print("same" if pinned == used else f"pinned only: {sorted(pinned - used)} built
 PY
 )
 check "MP2_QEMU unpacks exactly its pinned sources" "same" "$out"
+# HOST_DEQP_CTS (host-deqp-run.sh's CTS): a board-set entry of its own
+# directory, marked by the target file host-deqp-run.sh checks, at the commit
+# DEQP_WORK and DEQP_GLES3_TEST_DIR pin, applying the patch cts-build.sh applies.
+out=$("$ENV_SH" --check 2>&1)
+absent "--check without a board (the gate's) has no HOST_DEQP_CTS" HOST_DEQP_CTS "$out"
+out=$("$ENV_SH" --check am62p 2>&1)
+check "--check am62p has the HOST_DEQP_CTS entry" "missing  HOST_DEQP_CTS  $L/VK-GL-CTS-host/targets/yakogl/yakogl.cmake" "$out"
+out=$("$ENV_SH" rpi_4b 2>&1)
+check "a board prints HOST_DEQP_CTS" "HOST_DEQP_CTS=$L/VK-GL-CTS-host" "$out"
+out=$(python3 -I - "$HERE/deps.toml" "$HERE" <<'PY' 2>&1
+import re, sys, tomllib
+from pathlib import Path
+deps = {e["name"]: e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"]}
+here = Path(sys.argv[2])
+d = deps["HOST_DEQP_CTS"]
+pin = lambda e: set(re.findall(r"\b[0-9a-f]{40}\b", e["build"]))
+bad = []
+if not (pin(d) == pin(deps["DEQP_WORK"]) == pin(deps["DEQP_GLES3_TEST_DIR"])):
+    bad.append(f"pins {pin(d)} {pin(deps['DEQP_WORK'])} {pin(deps['DEQP_GLES3_TEST_DIR'])}")
+paths = {e["path"] for n, e in deps.items() if n != "HOST_DEQP_CTS" and "path" in e}
+if d["path"] in paths or d["path"] in ("VK-GL-CTS", "VK-GL-CTS-gles3"):
+    bad.append(f"path {d['path']} is shared")
+if not re.search(r"git -C \"\$part\" apply \"\$repo/tools/cts/cts-yakogl-target\.patch\"", d["build"]):
+    bad.append("no git apply of cts-yakogl-target.patch")
+if "external/fetch_sources.py" not in d["build"]:
+    bad.append("no external/fetch_sources.py")
+patch = (here / "cts-yakogl-target.patch").read_text()
+if "+++ b/" + d["marker"].split("/", 1)[1] not in patch:
+    bad.append(f"the patch does not add the marker {d['marker']}")
+run = (here / "host-deqp-run.sh").read_text()
+if "targets/yakogl/yakogl.cmake" not in run:
+    bad.append("host-deqp-run.sh does not check targets/yakogl/yakogl.cmake")
+if "CTS=${CTS:-${HOST_DEQP_CTS:-" not in run:
+    bad.append("host-deqp-run.sh does not default CTS to $HOST_DEQP_CTS")
+if not re.search(r'mv "\$part" "\$DEPS/' + re.escape(d["path"]) + '"\n', d["build"]):
+    bad.append("the build does not end with the rename of its .part")
+print("; ".join(bad) or "same")
+PY
+)
+check "HOST_DEQP_CTS pins 93bca01 in its own directory, applies the yakogl target and is host-deqp-run.sh's default CTS" "same" "$out"
 out=$("$ENV_SH" nosuchboard 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "an unknown board exits 2" || bad "an unknown board: rc $rc"
 
