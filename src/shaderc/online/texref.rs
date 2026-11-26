@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
 //! The texture model the V3D interpreter (`v3d::sim`) and the IR evaluator
 //! (`eval`) share: which level and which cube face a look-up reads, and the
 //! texel NEAREST picks there.
