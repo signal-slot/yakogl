@@ -19,6 +19,13 @@ tools/board.sh), so it matches the address alternative. The rewrite rules, in or
   c) a UART device path -> <uart>
   d) a home path -> <home>
   e) a MAC address (aa:bb:cc:dd:ee:ff or aa-bb-..) -> <mac>   (added for the AM62P's U-Boot ethaddr)
+  f) user@host -> <userhost>  (ssh targets such as root@<addr>, prompts such as name@host:~$).
+     An e-mail-like token (host with a dot, e.g. a copyright or author line in a GL log) is kept,
+     as rules a)..e) keep every other line; only a dotless host, an <addr> host, or a host
+     followed by ':~' or ':/' (a prompt) counts as a login. Runs after rule b), so root@<addr> works.
+  g) the login user name, given by --user NAME or $BOARD_USER (never read from a file), when it
+     appears as a word -> <user>. Without a name the rule is off. Rules f) and g) are new; text
+     with no user@host and no name gets byte for byte what a)..e) gave before.
 The UART rule also takes a /dev/serial/by-id/.. path (a USB serial bridge's stable name).
 The rules are idempotent: the <...>, <addr>, <uart> and <home> forms match none of them again.
 A binary file (a NUL byte) is skipped, as grep -I does. The rules keep everything else byte
@@ -42,11 +49,24 @@ VERSION = re.compile(
     rb"vulkan-cts-([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})-(\d+)-g([0-9a-fA-F]{7,64})"
 )
 
+# user@host: a user part, then an <addr> host or a host starting with a letter (a device-tree
+# unit name such as ethernet@8000000 in U-Boot output is not a login); judged in userhost().
+USERHOST = re.compile(rb"(?<![\w.@-])[A-Za-z_][\w.-]*@(<addr>|[A-Za-z](?:[\w.-]*[A-Za-z0-9])?)(?P<prompt>:[~/])?")
+
 VERSION_RULE = "version"
 ADDR_RULE = "addr"
 UART_RULE = "uart"
 HOME_RULE = "home"
 MAC_RULE = "mac"
+USERHOST_RULE = "userhost"
+USER_RULE = "user"
+
+
+def userhost(m):
+    host = m.group(1)
+    if host == b"<addr>" or b"." not in host or m.group("prompt"):
+        return b"<userhost>" + (m.group("prompt") or b"")
+    return m.group(0)  # e-mail-like: kept
 
 
 def bracket(m):
@@ -62,14 +82,18 @@ def step(data, name, rx, rep, tally):
     return data
 
 
-def redact(data, tally=None):
-    """Apply the four rules in order; tally (if given) collects the per-rule replacement counts."""
+def redact(data, tally=None, user=None):
+    """Apply the rules in order; tally (if given) collects the per-rule replacement counts."""
     tally = {} if tally is None else tally
     data = step(data, VERSION_RULE, VERSION, bracket, tally)
     data = step(data, ADDR_RULE, ADDR, b"<addr>", tally)
     data = step(data, UART_RULE, UART, b"<uart>", tally)
     data = step(data, HOME_RULE, HOME, b"<home>", tally)
     data = step(data, MAC_RULE, MAC, b"<mac>", tally)
+    data = step(data, USERHOST_RULE, USERHOST, userhost, tally)
+    if user:
+        rx = re.compile(rb"(?<![\w-])" + re.escape(user) + rb"(?![\w-])")
+        data = step(data, USER_RULE, rx, b"<user>", tally)
     return data
 
 
@@ -93,7 +117,7 @@ def read(path):
     return None if b"\0" in data else data
 
 
-def redact_in_place(paths):
+def redact_in_place(paths, user=None):
     nfiles = nchanged = 0
     for path in files(paths):
         data = read(path)
@@ -101,7 +125,7 @@ def redact_in_place(paths):
             continue
         nfiles += 1
         tally = {}
-        out = redact(data, tally)
+        out = redact(data, tally, user)
         if out != data:
             with open(path, "wb") as f:
                 f.write(out)
@@ -112,9 +136,9 @@ def redact_in_place(paths):
     return 0
 
 
-def redact_stream():
+def redact_stream(user=None):
     data = sys.stdin.buffer.read()
-    sys.stdout.buffer.write(redact(data))
+    sys.stdout.buffer.write(redact(data, None, user))
     return 0
 
 
@@ -154,6 +178,8 @@ def check_readme(dirs):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check-readme", action="store_true", help="check DIR/README.md commit: lines only")
+    ap.add_argument("--user", metavar="NAME", default=os.environ.get("BOARD_USER") or None,
+                    help="login user name to rewrite to <user> as a word (default: $BOARD_USER)")
     ap.add_argument("paths", nargs="*", metavar="FILE|DIR", help="files or dirs to redact in place; "
                     "none (or -) means stdin to stdout")
     a = ap.parse_args()
@@ -162,9 +188,10 @@ def main():
             print("console-redact: --check-readme needs a DIR", file=sys.stderr)
             return 2
         return check_readme(a.paths)
+    user = a.user.encode() if a.user else None
     if not a.paths or a.paths == ["-"]:
-        return redact_stream()
-    return redact_in_place(a.paths)
+        return redact_stream(user)
+    return redact_in_place(a.paths, user)
 
 
 if __name__ == "__main__":
