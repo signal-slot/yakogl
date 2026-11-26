@@ -16,3 +16,8 @@ the repository's first commit and points `refs/remotes/origin/main` at a
 descendant of it, so the ancestor check runs for real; the failing variants
 then break exactly one criterion each. Nothing here is executed; the
 consoles and tallies only need to exist.
+
+The selftest also renames the session directory to the sha8 of the commit it
+was made at (a commit after the repository's first one), and passes the first
+commit's sha8 as `PI4_ABORTS2_BASE`, the stand-in for b1b5b845, so c7's
+ancestry checks (base before session, session on origin/main) run for real.
