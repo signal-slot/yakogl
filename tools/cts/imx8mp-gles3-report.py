@@ -3,18 +3,21 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Draft the i.MX8MP dEQP-GLES3 results lines from the tree slice records.
 
-Runs imx8mp-gles3-merge.py --check and --totals as subprocesses and prints, to stdout, four headed
+Runs imx8mp-gles3-merge.py --check as a subprocess, takes the per-entry totals from its Merge class and prints, to stdout, four headed
 blocks: the RESULTS.md entry, the STATUS.md line (Japanese), the ROADMAP stage 4 line and the text of
-the status comment for GitHub issue #24. It edits no file. When --check fails (missing entries, reset
+the status comment for GitHub issue #24, each in the layout of its target file (RESULTS.md: the board paragraph
+and five-column table of the ES 3.0 section; STATUS.md: the Japanese summary sentence of the ES 3.0
+bullet; ROADMAP.md: a stage-4 board bullet wrapped at 80 columns). It edits no file. When --check fails (missing entries, reset
 verdicts, several commits) the drafts are still printed, marked PARTIAL, the problems are named, and the
 exit status is 1.
 
-"begun" in the drafts counts each mustpass case at most once, with merge's record rule (one record per
-entry: the first input whose row is real; an entry in two inputs is a --check problem). A record's begun
-can exceed its entry's mustpass cases (cases a wildcard selects outside the mustpass list, cases begun
-twice), so a campaign's raw begun total can exceed mustpass; the drafts count it per case, capped per
-entry at its mustpass cases, and a raw begun above mustpass is named as a problem (PARTIAL, exit 1),
-never printed silently.
+The drafts count mustpass cases only, with merge's record rule (one record per entry: the first input whose
+row is real; an entry in two inputs is a --check problem). A record can begin cases outside the mustpass
+list (an entry's wildcards select them too) or begin a case twice; those are left out of every number, so
+"begun" is capped per entry at its mustpass cases and the five-number row (Pass, Fail, NotSupported,
+Other, No result) sums to the mustpass count (see mustpass_counts). They are named in a note, and they
+never make the drafts PARTIAL: a campaign is complete when every entry has a record with a clean verdict
+(merge --check), whatever its records begin beyond the mustpass list.
 
   imx8mp-gles3-report.py [--table T] [--mustpass M] [--date YYYY-MM-DD] [--root R] [--apply R] <slice dir>...
 
@@ -25,10 +28,12 @@ missing or matches more than once (or when the drafts are PARTIAL).
 """
 import argparse
 import datetime
+import importlib.util
 import os
 import re
 import subprocess
 import sys
+import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MERGE = os.path.join(HERE, 'imx8mp-gles3-merge.py')
@@ -71,19 +76,58 @@ def expand(c):
     return c
 
 
-def parse_totals(text):
-    tot = miss = None
-    rows = []  # per-entry totals: [mustpass, begun, pass, fail, n.s., other, none]
-    for line in text.splitlines():
-        f = line.split()
-        if f and f[0] == 'total' and len(f) == 8:
-            tot = [int(x) for x in f[1:]]
-        elif len(f) == 8 and re.fullmatch(r'e\d+', f[0]):
-            rows.append([int(x) for x in f[1:]])
-        m = re.match(r'no record: (\d+) of (\d+) entries \(([^)]*)\), (\d+) mustpass cases', line)
-        if m:
-            miss = (int(m.group(1)), int(m.group(2)), m.group(3), int(m.group(4)))
-    return tot, miss, rows
+def load_merge():
+    spec = importlib.util.spec_from_file_location('imx8mp_gles3_merge', MERGE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def mustpass_counts(c, rec):
+    """[mustpass, begun, pass, fail, ns, other, none] of one entry over its mustpass cases only, and the
+    number of record cases left out.
+
+    Rule (the drafts count mustpass cases only): a record's pass + fail + n.s. + other above the entry's
+    mustpass cases m are cases outside the mustpass list (a wildcard of the entry selects them too) or
+    cases begun twice. They are taken off so that the five numbers (pass, fail, n.s., other, none) sum
+    to m: first the Fail names the record lists outside the mustpass list (merge's `outside`: neither a
+    mustpass case nor an unresolved CRC), then Pass, then NotSupported, then Other. A record keeps only
+    counts for the other cases (a Fail it does not name may be either), so which of them were out of the
+    list cannot be told; Pass first because a wildcard's extra cases are mostly cases of a passing group. begun is
+    capped at m. merge's none (m minus the four, at least 0) is then exactly m minus the four."""
+    m, b, p, f, s, o, _ = c
+    x = max(0, p + f + s + o - m)
+    out = x
+    k = min(x, f, rec.get('outside', 0))
+    f, x = f - k, x - k
+    k = min(x, p); p, x = p - k, x - k
+    k = min(x, s); s, x = s - k, x - k
+    k = min(x, o); o, x = o - k, x - k
+    return [m, min(m, b), p, f, s, o, m - p - f - s - o], out
+
+
+def totals(args):
+    """Per-entry rows [i, mustpass, begun, pass, fail, ns, other, none] over mustpass cases only (no-record
+    entries: begun 0, none = mustpass), their sum, the raw record sum (merge --totals' total row), the
+    no-record tuple (count, entries, span, mustpass cases) and the merge module's problems."""
+    mod = load_merge()
+    table = mod.load_table(args.table)
+    per = mod.entry_cases(table, args.mustpass)
+    mg = mod.Merge(table, per, args.dirs)
+    rows, raw = [], [0] * 7
+    for i in range(len(table)):
+        c = mg.counts(i)
+        if c is None:
+            k = len(per[i])
+            rows.append([i, k, 0, 0, 0, 0, 0, k])
+            raw = [a + b for a, b in zip(raw, (k, 0, 0, 0, 0, 0, k))]
+            continue
+        raw = [a + b for a, b in zip(raw, c)]
+        rows.append([i] + mustpass_counts(c, mg.rec[i])[0])
+    tot = [sum(r[k] for r in rows) for k in range(1, 8)]
+    missing = [i for i in range(len(table)) if mg.counts(i) is None]
+    miss = (len(missing), len(table), mod.span(missing).replace(',', ', '), sum(len(per[i]) for i in missing))
+    return rows, tot, raw, miss
 
 
 def rel(d):
@@ -105,9 +149,15 @@ def slice_order(d):
 
 
 # (file under the repo root, regex of the current text, what it is). Matched in the file, not by line number.
+# The i.MX8MP result goes where its neighbours' results are: RESULTS.md's ES 3.0 board paragraphs, the
+# Japanese ES 3.0 bullet of STATUS.md (after the Pi 4 sentence), ROADMAP.md's stage-4 "On the boards"
+# bullets; the STATUS.md next-steps sentence then drops i.MX8MP.
+STATUS_NEXT = 'Pi 4 と i.MX8MP の GLES3 全ツリー。'
+STATUS_NEXT_DONE = 'Pi 4 の GLES3 全ツリー。'
 ANCHORS = [
     ('tools/cts/RESULTS.md', re.compile(r'^\*\*i\.MX8MP\*\*: not run on the board[^\n]*$', re.M), 'RESULTS.md i.MX8MP line'),
-    ('tools/cts/STATUS.md', re.compile(r'Pi 4 と i\.MX8MP の GLES3 全ツリー。'), 'STATUS.md next-steps sentence'),
+    ('tools/cts/STATUS.md', re.compile(r'i\.MX8MP はまだボードで走らせていない。'), 'STATUS.md ES 3.0 bullet, i.MX8MP sentence'),
+    ('tools/cts/STATUS.md', re.compile(re.escape(STATUS_NEXT)), 'STATUS.md next-steps sentence'),
     ('ROADMAP.md', re.compile(r'^- i\.MX8MP: not run on the board yet[^\n]*(?:\n  [^\n]*)*', re.M), 'ROADMAP.md stage 4 i.MX8MP bullet'),
 ]
 
@@ -135,6 +185,21 @@ def n(x):
     return f'{x:,}'
 
 
+def wrap(text, width=80, indent=''):
+    """Markdown prose wrapped as the target files are (no break inside a path or a hyphenated word)."""
+    return textwrap.fill(text, width=width, subsequent_indent=indent, break_long_words=False,
+                         break_on_hyphens=False)
+
+
+def nice(problem):
+    """A merge problem with the drafts' number format (42,810; spans '13-15, 51-132')."""
+    m = re.match(r'no record: (\d+) of (\d+) entries \(([^)]*)\), (\d+) mustpass cases$', problem)
+    if m:
+        return 'no record: %s of %s entries (%s), %s mustpass cases' % (
+            m.group(1), m.group(2), m.group(3).replace(',', ', '), n(int(m.group(4))))
+    return problem
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--table', default=os.path.join(HERE, 'imx8mp-gles3-tree.txt'))
@@ -146,30 +211,22 @@ def main():
     args = ap.parse_args()
 
     rc_c, out_c, err_c = merge('--check', args)
-    rc_t, out_t, err_t = merge('--totals', args)
-    problems = [l[5:].strip() for l in out_c.splitlines() if l.startswith('FAIL:')]
+    problems = [nice(l[5:].strip()) for l in out_c.splitlines() if l.startswith('FAIL:')]
     if rc_c not in (0, 1):
         problems.append('merge --check could not run: %s' % (err_c.strip() or out_c.strip() or 'exit %d' % rc_c))
-    tot, miss, rows = parse_totals(out_t)
-    if rc_t != 0 or tot is None:
-        problems.append('merge --totals gave no total row: %s' % (err_t.strip() or 'exit %d' % rc_t))
-        tot, rows = [0] * 7, []
-    if miss is None:
-        miss = (0, 0, 'none', 0)
+    try:
+        rows, tot, raw, miss = totals(args)
+    except (OSError, ValueError) as e:
+        problems.append('totals could not be read: %s' % e)
+        rows, tot, raw, miss = [], [0] * 7, [0] * 7, (0, 0, 'none', 0)
     mp, begun, npass, nfail, nns, nother, nnone = tot
-    # begun counts each mustpass case at most once: merge --totals sums one row per entry, one record per
-    # entry (the first input whose row is real; an entry in two inputs is a --check problem named above),
-    # and a record cannot begin more mustpass cases of its entry than the entry has. begun > mustpass is
-    # then overcounting (an entry run twice summed, a case begun twice, wildcards beyond the mustpass
-    # list): the drafts count it once per case, capped per entry, and the raw total is named, not printed.
-    begun_once = sum(min(m_i, b_i) for m_i, b_i, *_ in rows)
-    capped = begun - begun_once if begun > begun_once else 0
-    if begun > mp:
-        problems.append('begun %s exceeds mustpass %s: records begin more cases than their entries have '
-                        'mustpass cases (an entry in two records, a case begun twice, wildcards beyond the '
-                        'mustpass list); the drafts count each case once (%s), the raw total is an '
-                        'inconsistency to fix in the records' % (n(begun), n(mp), n(begun_once)))
-    begun = begun_once
+    # Completeness is judged on mustpass cases only: merge --check (every entry has a record with a clean
+    # verdict, one record per entry, one commit). Cases the records begin outside the mustpass list never
+    # make the drafts PARTIAL; mustpass_counts leaves them out of every number, so the row sums to mp.
+    out_of_list = sum(raw[2:6]) - sum(tot[2:6])
+    if npass + nfail + nns + nother + nnone != mp:
+        problems.append('the five numbers sum to %s, not to the %s mustpass cases' % (
+            n(npass + nfail + nns + nother + nnone), n(mp)))
     ok = rc_c == 0 and not problems
 
     commits = []
@@ -178,15 +235,20 @@ def main():
         if c and not any(c[:8] == x[:8] for x in commits):
             commits.append(c)
     full = [expand(c) for c in commits]
-    commit_txt = ' and '.join('`%s`' % c for c in full) or 'an unnamed commit'
     short_txt = ' and '.join('`%s`' % c[:8] for c in full) or 'an unnamed commit'
+    full_txt = ' and '.join('`%s`' % c for c in full) or 'an unnamed commit'
+    short_ja = ' と '.join(c[:8] for c in full) or '名前のないコミット'
+    results_commit = ' and '.join('`%s` (`%s`; origin/main' % (c[:8], c) for c in full[:1])
+    if len(full) > 1:
+        results_commit += '; also %s' % ' and '.join('`%s`' % c for c in full[1:])
+    results_commit = results_commit or 'an unnamed commit (origin/main'
 
     n_entries = miss[1] or 133
     run_n = n_entries - miss[0]
     if miss[0]:
-        entries_txt = '%d of %d entries (no record: %s)' % (run_n, n_entries, miss[2])
+        entries_txt = '%d of %d entries run (no record: %s)' % (run_n, n_entries, miss[2])
     else:
-        entries_txt = 'all %d entries (e0..e%d)' % (n_entries, n_entries - 1)
+        entries_txt = '%d of %d entries run' % (run_n, n_entries)
     shown = sorted(args.dirs, key=slice_order)   # display only: merge keeps the order given (the first real row of an entry claims it)
     dirs_txt = ', '.join('`%s/`' % rel(d) for d in shown)
     partial = '' if ok else 'PARTIAL: '
@@ -201,56 +263,83 @@ def main():
         print('*** PARTIAL: %s; these drafts are not final ***' % reason)
         for p in problems:
             print('  problem: %s' % p)
-    if capped:
-        print('note: begun counts each mustpass case once: %s cases the records begin outside the mustpass '
-              'list or twice (wildcards, reruns) are not counted' % n(capped))
+    if out_of_list:
+        print('note: mustpass cases only: %s results the records give beyond their entries\' mustpass cases '
+              '(cases outside the mustpass list, cases begun twice; records begin %s cases in all) are not '
+              'counted' % (n(out_of_list), n(raw[1])))
     print()
     print('--- RESULTS.md (ES 3.0 section, replaces "**i.MX8MP**: not run on the board") ---')
-    results_txt = ('%s**i.MX8MP, whole tree** on %s (tools/cts/imx8mp-gles3-tree.txt, %d entries; recipe\n'
-                   '`docs/es3/board-recipe-imx8mp.md`), %s: %s, %s mustpass cases (%s begun):' % (
-                       partial, commit_txt, n_entries, args.date, entries_txt, n(mp), n(begun)))
+    # Layout of the section's board paragraphs (AM62P, Pi 4): bold board name, the commit short and full,
+    # the table and recipe, the date, then the five-column table and "- " bullets wrapped at 80 columns.
+    results_txt = wrap('%s**i.MX8MP, whole tree** on %s; `tools/cts/imx8mp-gles3-tree.txt`, %d entries; '
+                       'recipe `docs/es3/board-recipe-imx8mp.md`), %s: %s, %s mustpass cases (each counted '
+                       'once, %s begun):' % (partial, results_commit, n_entries, args.date, entries_txt,
+                                             n(mp), n(begun)))
     results_txt += '\n\n| Pass | Fail | NotSupported | Other | No result |\n|---:|---:|---:|---:|---:|\n'
     results_txt += '| %s | %s | %s | %s | %s |\n' % five
-    if capped:
-        results_txt += ('\n- begun counts each mustpass case once: %s cases the records begin outside the '
-                        'mustpass list or twice (wildcards, reruns) are not counted.' % n(capped))
-    results_txt += '\n- Records: %s; %s.\n' % (dirs_txt, reset_txt)
-    results_txt += '- Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.'
-    for p in problems:
-        results_txt += '\n- PARTIAL, not final: %s.' % p
+    bullets = ['Other is every status but Pass, Fail and NotSupported (QualityWarning, ResourceError, '
+               'Crash, ...); No result is a mustpass case that never began or gave no result.']
+    if out_of_list:
+        bullets.append('Mustpass cases only: %s results the records give beyond their entries\' mustpass '
+                       'cases (cases a wildcard selects outside the mustpass list, cases begun twice) are '
+                       'not counted, so the five numbers sum to %s.' % (n(out_of_list), n(mp)))
+    bullets.append('Records: %s; %s.' % (dirs_txt, reset_txt))
+    bullets.append('Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.')
+    bullets += ['PARTIAL, not final: %s.' % p for p in problems]
+    results_txt += '\n' + '\n'.join(wrap('- ' + b, indent='  ') for b in bullets)
     print(results_txt)
     print()
-    print('--- STATUS.md (Japanese, current state only) ---')
-    status_txt = ('i.MX8MP の dEQP-GLES3 は%s 全 %d エントリのうち %d エントリを %s（%s）のボードで実行し、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / 結果なし %s、'
-          'リセット%s。記録は %s。' % (
-              '' if ok else '（途中、記録が不完全）', n_entries, run_n, short_txt, args.date, n(mp), *five,
-              'の確認が未完' if bad_verdict else '0', ', '.join(rel(d) for d in shown)))
+    print('--- STATUS.md (Japanese, ES 3.0 bullet, replaces "i.MX8MP はまだボードで走らせていない。") ---')
+    # As the Pi 4 sentence before it: commit without backticks, the date in full-width parentheses,
+    # "必須 N 件中 合格 a / 失敗 b / 未対応 c / その他 d / 結果なし e、リセット 0".
+    if miss[0]:
+        scope = 'ツリー（%d エントリ、tools/cts/imx8mp-gles3-tree.txt）のうち %d エントリ' % (n_entries, run_n)
+        part_ja = '（途中、記録が不完全。記録なし %s）' % miss[2]
+    else:
+        scope = '全ツリー（%d エントリ、tools/cts/imx8mp-gles3-tree.txt）' % n_entries
+        part_ja = '' if ok else '（途中、記録が不完全）'
+    status_txt = ('i.MX8MP は%sを %s（%s）で実行し%s、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / '
+                  '結果なし %s、%s（記録は %s。合格でない一覧は docs/es3/imx8mp-gles3-notpass.tsv）。' % (
+                      scope, short_ja, args.date, part_ja, n(mp), *five,
+                      'リセットの確認が未完' if bad_verdict else 'リセット 0', '、'.join(rel(d) for d in shown)))
+    next_txt = STATUS_NEXT_DONE if ok else STATUS_NEXT
     print(status_txt)
+    print('次の山: "%s" -> "%s"' % (STATUS_NEXT, next_txt))
     print()
     print('--- ROADMAP.md (stage 4, i.MX8MP line) ---')
-    roadmap_txt = ('- i.MX8MP: %sdEQP-GLES3 %s on the board at %s (%s): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result '
-          'of %s mustpass cases (#24).' % (
-              partial, 'whole tree, %d entries,' % n_entries if not miss[0] else '%d of %d entries,' % (run_n, n_entries),
-              short_txt, args.date, *five, n(mp)))
+    # As the AM62P and Pi 4 bullets: "<board>: the whole tree (...) at `sha` (date): N cases, a pass /
+    # b fail / c NotSupported / d other / e without a result", wrapped at 78 columns, 2-space continuation.
+    if miss[0]:
+        scope = '%d of the tree\'s %d entries (`tools/cts/imx8mp-gles3-tree.txt`; no record: %s)' % (
+            run_n, n_entries, miss[2])
+    else:
+        scope = 'the whole tree (%d entries, `tools/cts/imx8mp-gles3-tree.txt`)' % n_entries
+    roadmap_txt = wrap('- i.MX8MP: %s%s at %s (%s): %s cases, %s pass / %s fail / %s NotSupported / %s other / '
+                       '%s without a result, %s (#24).' % (
+                           partial, scope, short_txt, args.date, n(mp), *five,
+                           'reset verdicts not clean' if bad_verdict else '0 resets'), width=78, indent='  ')
     print(roadmap_txt)
     print()
     print('--- GitHub issue #24 comment ---')
     print('%s**i.MX8MP dEQP-GLES3, %s**' % (partial, args.date))
     print()
-    print('- Commit: %s.' % commit_txt)
-    print('- Entries run: %s.' % entries_txt)
+    print('- Commit: %s.' % full_txt)
+    print('- Entries: %s.' % entries_txt)
     print('- Records: %s.' % dirs_txt)
     print('- Resets: %s.' % reset_txt)
-    print('- Totals (%s of %s mustpass cases begun): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result.'
-          % (n(begun), n(mp), *five))
+    print('- Totals over the %s mustpass cases (%s begun): %s Pass / %s Fail / %s NotSupported / %s other / '
+          '%s without a result.' % (n(mp), n(begun), *five))
+    if out_of_list:
+        print('- Not counted: %s results beyond the entries\' mustpass cases (outside the mustpass list or '
+              'begun twice).' % n(out_of_list))
     left = []
     if miss[0]:
-        left.append('entries %s (%d mustpass cases) have no record' % (miss[2], miss[3]))
+        left.append('entries %s (%s mustpass cases) have no record' % (miss[2], n(miss[3])))
     left += [p for p in problems if not p.startswith('no record:')]
     left.append('triage of the not-pass groups into issues (`docs/es3/imx8mp-gles3-notpass.tsv`)')
     print('- Remains: %s.' % '; '.join(left))
 
-    repl = [results_txt, status_txt + 'Pi 4 の GLES3 全ツリー。', roadmap_txt]
+    repl = [results_txt, status_txt, next_txt, roadmap_txt]
     anchors = find_anchors(args.apply or args.root, repl)
     print()
     print('--- anchors (the current text each draft replaces, matched in the file; tree %s) ---' % (args.apply or args.root))
@@ -262,7 +351,8 @@ def main():
         print('%s: %s line %d, replaces' % (label, path, line))
         for l in m.group(0).split('\n'):
             print('  - %s' % l)
-        print('  with the %s draft above%s' % (path.rsplit('/', 1)[-1], ' (followed by "Pi 4 の GLES3 全ツリー。")' if 'STATUS' in path else ''))
+        print('  with %s' % ('"%s"' % new if label.endswith('next-steps sentence') else
+                             'the %s draft above' % path.rsplit('/', 1)[-1]))
     if args.apply:
         bad = [a[4] for a in anchors if a[4]]
         if not ok:
@@ -270,11 +360,16 @@ def main():
         if bad:
             print('--apply: refused, nothing written: %s' % '; '.join(bad))
             return 1
+        texts = {}
         for label, path, text, m, prob, new in anchors:
-            out = text[:m.start()] + new + text[m.end():]
+            texts.setdefault(path, []).append((m.start(), m.end(), new))
+        for path, edits in texts.items():
+            text = [a[2] for a in anchors if a[1] == path][0]
+            for start, end, new in sorted(edits, reverse=True):   # from the end: earlier offsets stay valid
+                text = text[:start] + new + text[end:]
             with open(os.path.join(args.apply, path), 'w', encoding='utf-8', newline='') as f:
-                f.write(out)
-        print('--apply: rewrote %s' % ', '.join(a[1] for a in anchors))
+                f.write(text)
+        print('--apply: rewrote %s' % ', '.join(texts))
     return 0 if ok else 1
 
 
