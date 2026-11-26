@@ -536,13 +536,14 @@ FOUR describes it. The same function says a compressed resource is always
 linear with padding 1 and `TEXTURE_HALIGN_FOUR`, and Mesa's ETC1 descriptor
 does read HALIGN 0 -- which is exactly what we write.
 
-**One real gap, which does not affect case 41.** We never set
-`CONFIG1_SEAMLESS_CUBE_MAP` (0x02000000). GL ES 3.0 filters cube maps
-seamlessly and we do not ask the hardware to. Mesa does not set it here either,
-because `cs_golden` runs an ES 2.0 context. Case 41 samples with NEAREST at the
-face centre and at NDC -0.5, both well inside the face -- its own comment says
-0.8 at the corner would flip the major axis -- so nothing it checks can tell
-the difference. Set it when something filters a cube across an edge.
+**The one real gap is closed; it never affected case 41.** We set
+`CONFIG1_SEAMLESS_CUBE_MAP` (0x02000000) for every cube map: GL ES 3.0 filters
+cube maps seamlessly across face edges and the GC7000UL does that when asked
+(`chipMinorFeatures2_SEAMLESS_CUBE_MAP`). Mesa does not set it in the golden
+capture, because `cs_golden` runs an ES 2.0 context. Case 41 samples with
+NEAREST at the face centre and at NDC -0.5, both well inside the face -- its
+own comment says 0.8 at the corner would flip the major axis -- so nothing it
+checks could tell the difference either way.
 
 ## A uniform array at a run-time index is a load from memory, not `u[a.x]` (2026-09-25)
 

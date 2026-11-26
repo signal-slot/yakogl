@@ -3280,6 +3280,40 @@ fn a_3d_texture_is_the_same_volume_without_the_array_bit() {
 }
 
 #[test]
+fn only_a_cube_map_filters_seamlessly() {
+    /* ES 3.0 3.8.11 makes cube map filtering seamless across face edges,
+     * which the GC7000UL does when CONFIG1's SEAMLESS_CUBE_MAP bit is set
+     * (VIVS_TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP); dEQP
+     * texture.filtering.cube.* fails without it. The bit belongs to the cube
+     * map alone: an array's layers must not filter into each other, a
+     * volume's slices already do, and a 2D texture has no edges to share. */
+    for (type_, layers, seamless) in [
+        (GLES_TEXTYPE_CUBE, 6, true),
+        (GLES_TEXTYPE_2D_ARRAY, 3, false),
+        (GLES_TEXTYPE_3D, 3, false),
+        (GLES_TEXTYPE_2D, 1, false),
+    ] {
+        let rig = Rig::new();
+        let mut d = rig.draw(3);
+        d.num_textures = 1;
+        d.textures[0] = bind(rig.vbo.gpu, 8, 8, 1);
+        d.textures[0].type_ = type_;
+        d.textures[0].layers = layers;
+        let config1 = rig.submit(&d).descriptor(0)[GC_TEXDESC_CONFIG1 as usize / 4];
+        assert_eq!(
+            config1 & GC_TEXDESC_SEAMLESS_CUBE_MAP != 0,
+            seamless,
+            "type {type_} layers {layers}: SEAMLESS_CUBE_MAP"
+        );
+        assert_eq!(
+            config1 & GC_TEXDESC_TEXTURE_ARRAY != 0,
+            type_ == GLES_TEXTYPE_2D_ARRAY,
+            "type {type_}: TEXTURE_ARRAY"
+        );
+    }
+}
+
+#[test]
 fn a_block_formats_rows_are_rows_of_blocks() {
     /* upstream 75e5746: a 16x8 ETC1 texture is four blocks by two. Taking the
      * pitch from stride_texels made it twice too wide and the sampler read the
