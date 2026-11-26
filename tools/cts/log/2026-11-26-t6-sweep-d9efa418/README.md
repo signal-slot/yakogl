@@ -121,3 +121,101 @@ are this record's.) 21 cases join PASS, 1 leaves it (128).
 - 77, 106, 163, 226, 227 and 228: no change forecast, none seen (the same
   verdict lines byte for byte).
 - No change outside the forecast.
+
+## 5. Triage of the non-pass cases
+
+Every REFUSED and FAIL line of `sweep-1.verdicts.txt` (the same in
+`sweep-2.verdicts.txt`), traced from the source. FAULT: none. All file:line
+references are at d9efa418 (`git show d9efa418:<path>`). The five compile
+refusals were reproduced on the host at d9efa418. Each case's program went
+through the online back end's GL-core entry points (`link_records`,
+`src/shaderc/online/mali/tests.rs:9636`; features `host-test,gpu-mali,
+shaderc-online,no-shader-table`), with every return of the named error
+traced in a scratch copy. Each one refused with the board's text at the
+line given below. The scratch copy was not committed. Only one raise site
+of the named error was reached in each program.
+
+The gl_test case code is `driver/tools/pvrlab/gl_test.c` and its
+`gl_test_*.inc` files, built into `panthor-gltest`.
+`tools/mali/panthor/src/bin/panthor-gltest.rs` only runs each case in a
+child process and prints the verdict line.
+
+| Case | Verdict | Cause | file:line at d9efa418 | Fix | Owning plan | Issue |
+|---|---|---|---|---|---|---|
+| 77 transc | REFUSED compile | The case's first program (`transc.frag`: sin, cos, log2, exp2 of uniform lanes) compiles. The second (`vtransc.frag`) refuses on `inversesqrt(vec2(1.0, u_v.w))`. The mediump fragment walk lowers `inversesqrt` only on a lane it computed itself or on a varying's lane. A uniform's lane has no reference. | `src/shaderc/online/mali/nir_fs.rs:7578` (`Frsq`/`Fsqrt` arm: `alu_of(x).is_none() && input_lane(x).is_none()` returns `MaliError::Arithmetic`; text at `src/shaderc/online/mali/mod.rs:424`) | Take a drm-shim reference of `vtransc.frag` (`FRSQ.f16` of a uniform lane read from the FAU, with the constant lane folded). Then accept a uniform lane and a constant lane in that arm when the reference's words match. | #402 / #387 (src/shaderc/online/mali/**) | #33 |
+| 106 mrt3 | REFUSED draw | Part 1 clears the three targets to grey, then calls `glFinish`, so the clear goes to the GPU as a frame of its own. The draw after it opens a new frame of three targets that starts from their old images. The colour preload draws back target 0 only. | `src/mali/backend.rs:2968` (`open_frame`: `clear.is_none() && n > 0` returns `NOT_BUILT_TARGETS_PRELOAD`, text at `src/mali/backend.rs:210`; host test `src/mali/backend_tests.rs:1025` "two targets and no clear") | Give the colour preload one draw-back per colour target: one preload program output and Render Target a target, as Mesa's `pan_preload` does for each cbuf. Then drop the refusal. | #406 (src/mali/backend.rs); frame building also #402 (src/mali/frame.rs) | #33 |
+| 128 uniidxj | REFUSED compile (PASS at 1a22bd38) | `gl_FragColor = vec4(v_color.rg, fcols[fidx].ba)`. The colour's lanes are the mediump varying's `rg` beside an indexed uniform's lanes, and only two of the four varying lanes are read. `colour_keeps_whole` answers only measured forms (the varying's lanes alone, or beside a constant, another varying or gl_PointCoord). A lane beside a uniform is "unsure", and since not every lane is read it refuses. | `src/shaderc/online/mali/nir_fs.rs:9183` (`colour_keeps_whole`: `unsure && !all_read` returns `MaliError::FsVaryingLoad`; the comment at `:9172-9173` names `uniidx_j`; text at `src/shaderc/online/mali/mod.rs:541`) | Take a drm-shim reference of `uniidx_j.frag` with `gl_test_passthrough_vs_src` (Mesa's slot width for `v_color`, and its one-word indexed uniform read where ours used `LD_PKA.i64`). Then add that form (varying lanes beside a uniform's lanes) to `colour_keeps_whole` with the reference as its test. | #402 / #387 (src/shaderc/online/mali/**) | new A |
+| 163 drawbuf0 | REFUSED draw | `glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1})`: fragment output 0 goes nowhere and output 1 goes to target 0. The GL core passes this as `targets[0].out_shift != 0`, and the back end does not shift the outputs. The case's control draw and its checks pass; the case accepts the refusal. | `src/mali/backend.rs:1506` (`check`: `d.targets[0].out_shift != 0` returns `NOT_BUILT_OUTPUT_SHIFT`, text at `src/mali/backend.rs:217`; host test `src/mali/backend_tests.rs:1035`) | Build the shift: bind the blend descriptor and Render Target of output `out_shift` to target 0 (a blend shader or blend descriptor a slot, with the empty slot's write off), as Mesa maps cbufs past a NULL one. Then drop the refusal. | #406 (src/mali/backend.rs, src/mali/frame.rs; frame.rs also #402) | #33 |
+| 226 negapi_uniformui | REFUSED compile | `o_color = vec4_v + vec4(ivec4_f) + vec4(uvec4_f) + texture(sampler_f, ..)` in a mediump shader. The int and uint uniforms are converted to float at fp32 (32-bit words). The fp16 `vec4_v` and the fp16 texel are added to them, so one sum mixes fp32 and fp16 operands. | `src/shaderc/online/mali/nir_fs.rs:6906` (the `Fmul`/`Fadd` arm: an operand neither fp32 nor fp16 nor a raw varying returns `MaliError::MixedPrecision`; text at `src/shaderc/online/mali/mod.rs:441`) | Lower Mesa's edge conversions: `F32_TO_F16` of the converted integer lanes (lower_precision narrows `i2f`/`u2f` results feeding a mediump tree), proven by a drm-shim reference of this shader. | #402 / #387 (src/shaderc/online/mali/**) | #4496 |
+| 227 negapi_uniformuiv | REFUSED compile | The same shader (`negapi_uni_fs_src`, `driver/tools/pvrlab/gl_test_es3_negapi.inc:164`) as 226. The case differs only in its glUniform*uiv calls, which never run because the link refuses first. | `src/shaderc/online/mali/nir_fs.rs:6906`, as 226 | As 226. | #402 / #387 | #4496 |
+| 228 negapi_readpix_fmt | FAIL (rc -1, no pixel check) | rc -1 is the case's `return ok ? 0 : -1` (`driver/tools/pvrlab/gl_test_es3_negapi.inc:340`). Its `na_expect` checks fail because the Mali back end has (1) no texture storage class, so the GL core refuses `glTexImage2D(GL_RGBA32I)` and `(GL_RGBA32UI)` by name with GL_INVALID_OPERATION (`na_expect(what, GL_NO_ERROR)` at `:296`, then an incomplete FBO), and (2) no samples (`max_samples` 0), so `glRenderbufferStorageMultisample(4, GL_RGBA8)` is GL_INVALID_OPERATION (`:314`) and `GL_SAMPLE_BUFFERS` reads 0. "first bad check -1 got 0x0 want 0x0" means no pixel was compared. | `src/gl/texture.rs:6526` (`es3_storage_or_refuse`: GL_INVALID_OPERATION when `storage_here()` is None) with `src/mali/backend.rs:116` (`SAMPLED_TEXFMTS: u32 = 0`); `src/gl/msaa.rs:68` (`requested > max.max(1)`: GL_INVALID_OPERATION), set at `src/gl/framebuffer.rs:3780`, with `src/mali/backend.rs:3819` (`max_samples: 0`) | In the Mali back end: list the RGBA32I/RGBA32UI classes in `SAMPLED_TEXFMTS` once the texture descriptor writes them, and set `max_samples` 4 once a 4x target is resolved (the frame already has a 4x path, `sample_store`). The GL core needs no change; `tests/es3_negapi_readpixels.rs` pins both rules on a stand-in back end. | #406 (src/mali/backend.rs) | #4496 |
+| 241 es3_precision_int | REFUSED compile | `layout(location = 0) out highp int o_out` (then mediump and lowp): an integer colour output that is not a `highp uvec4`. Only `highp uvec4` has a Mesa reference (`BLEND.v4.u32`). All 9 rows refuse; the host check covered `+` at each precision. | `src/shaderc/online/mali/mod.rs:1189` (`ty.base != UVec(4) \|\| ty.precision != High` returns `MaliError::IntColour`; text at `src/shaderc/online/mali/mod.rs:532`) | Take drm-shim references of the scalar `int` and `uint` outputs (and `ivec4`, mediump, lowp) and lower their `BLEND` forms (`.i32`, fewer lanes). The draw then meets the Mali back end's integer target refusal (`INTEGER_RT_FORMATS` 0 at `src/mali/backend.rs:120`, `NOT_BUILT_TARGET_FORMAT` at `src/mali/backend.rs:1593`), which needs an RGBA32I/RGBA32UI Render Target class. | #402 / #387 (compiler); #406 (the integer target in src/mali/backend.rs) | new B |
+| 242 es3_precision_uint | REFUSED compile | As 241 with `uint` (scalar, at each precision): still not a `highp uvec4`. | `src/shaderc/online/mali/mod.rs:1189`, as 241 | As 241 (the scalar `uint` reference and `BLEND.u32` of one lane, and the RGBA32UI target). | #402 / #387; #406 | new B |
+| 245 mrt4 | REFUSED draw | Part 1 clears each of the four draw buffers with its own colour (`glClearBufferfv(GL_COLOR, n, ..)`, `driver/tools/pvrlab/gl_test_es3_mrt4.inc:153`). The first clear names draw buffer 0 alone (`clear_target_mask` 0x1). The back end builds a several-target clear only as one whole clear of every target, because the clear quad writes target 0 only. Part 4's scissored `glClearBufferfv(GL_COLOR, 3, ..)` (`:191`) is the same class. | `src/mali/backend.rs:1567` (`check_targets`: `d.do_clear && (clear_quad \|\| colour_clear_mask != 0xf \|\| !all)` returns `NOT_BUILT_TARGETS_CLEAR`, text at `src/mali/backend.rs:215`; the frame builder's second guard is `:3440`; host test `src/mali/backend_tests.rs:1028` "glClearBuffer of draw buffer 1 alone") | Clear per target: keep a clear colour per Render Target (the frame's clear values, one a target, for a whole clear at frame start), and for a clear after a draw or a scissored/masked one, a clear quad whose program writes one output a target with the other targets' writes off. Then drop both guards. | #406 (src/mali/backend.rs; frame.rs also #402) | new C |
+
+### 128: the PASS regression
+
+`git log -S 'uniidx_j' 1a22bd38..d9efa418 -- src/shaderc/online/mali` and a
+host bisect of the same program (fragment refusal or not at each commit
+from 1a22bd38 to d9efa418) name **f4332514**, "mali: a colour store keeps a
+varying whole by the lanes it writes, each answer a measured form"
+(2026-11-12). Its parent 22527163 compiles the program; f4332514 refuses it
+with the board's text. The commit made `colour_keeps_whole` a whitelist of
+measured forms, and its message says `es100/uniidx_j.frag` moves from ok to
+FsVaryingLoad in `tools/mali/corpus-verdicts.txt`. At 1a22bd38 the program
+compiled to words that are not Mesa's (its indexed uniform read as
+`LD_PKA.i64` where Mesa reads one word). It drew the expected pixel, but
+nothing showed it matched Mesa. The refusal is deliberate, not a code
+generation regression: the case leaves PASS until the form has a
+reference (issue A). babf5f2a, which `git log -S` on the refusal text
+names (it reworded the message), still compiles this program (bisect).
+
+### Grouping against the earlier triage
+
+Confirmed as given: new A (128), new B (241, 242), new C (245); #33 keeps
+77, 106 and 163; #4496 keeps 226, 227 and 228. Three corrections to that
+triage. 228's rc -1 comes from the gl_test case code
+(`driver/tools/pvrlab/gl_test_es3_negapi.inc:340`), not from
+`tools/mali/panthor/src/`. 77's refusal is in its second program
+(`vtransc`, `inversesqrt` of a uniform lane), not in sin/cos/log2/exp2.
+The fix for 241/242 reaches src/mali/** too (integer targets).
+
+### Issues
+
+**A. `mali: a colour of mediump varying lanes beside an indexed uniform's lanes refuses (FsVaryingLoad)`**
+
+    gl_test 128 uniidxj is REFUSED compile on the NanoPC-T6 at d9efa418
+    (tools/cts/log/2026-11-26-t6-sweep-d9efa418); it was PASS at 1a22bd38.
+    Refusal: "Valhall: a fragment varying load or conversion of a form no
+    reference draws (...) is not lowered yet", raised at
+    src/shaderc/online/mali/nir_fs.rs:9183 (colour_keeps_whole, unsure && !all_read).
+    The colour vec4(v_color.rg, fcols[fidx].ba) puts a uniform's lanes beside two
+    of four varying lanes, a form with no drm-shim reference; f4332514 made it refuse.
+    Fix: a drm-shim reference of es100/uniidx_j.frag with the passthrough vertex
+    shader (slot width, one-word indexed uniform read), then that form in
+    colour_keeps_whole with the reference as its test. Plans #402 / #387.
+
+**B. `mali: integer colour outputs other than highp uvec4 refuse (IntColour)`**
+
+    gl_test 241 es3_precision_int and 242 es3_precision_uint are REFUSED compile on
+    the NanoPC-T6 at d9efa418 (tools/cts/log/2026-11-26-t6-sweep-d9efa418).
+    Refusal: "Valhall: an integer colour output other than one declared `highp uvec4`
+    (...) is not lowered yet", raised at src/shaderc/online/mali/mod.rs:1189.
+    The cases write a scalar highp/mediump/lowp int or uint to an RGBA32I/RGBA32UI target.
+    Fix: drm-shim references of scalar int/uint (and ivec4, mediump, lowp) outputs
+    and their BLEND forms in the compiler (plans #402 / #387); then an RGBA32I/RGBA32UI
+    Render Target class in the back end, which refuses it today
+    (INTEGER_RT_FORMATS 0, src/mali/backend.rs:120; NOT_BUILT_TARGET_FORMAT, :1593; plan #406).
+
+**C. `mali: a colour clear of some of several targets (glClearBuffer per buffer, scissored) refuses`**
+
+    gl_test 245 mrt4 is REFUSED draw on the NanoPC-T6 at d9efa418
+    (tools/cts/log/2026-11-26-t6-sweep-d9efa418).
+    Refusal: "mali: a colour clear of several targets other than one whole clear of
+    every target before any draw is not built yet", raised at src/mali/backend.rs:1567
+    (check_targets), with a second guard at :3440 (the clear quad writes target 0 only).
+    The case clears each of four draw buffers with its own glClearBufferfv, then a
+    scissored clear of buffer 3.
+    Fix: a clear colour per Render Target for a whole clear at frame start, and a
+    clear quad writing one output per target (others' writes off) for the rest;
+    then drop both guards. Plan #406 (src/mali/backend.rs, src/mali/frame.rs).
