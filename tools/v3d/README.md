@@ -621,10 +621,12 @@ V3D_SHC=<v3d_shc> tools/cts/deqp-repro-ref71.sh [--out FILE]
 
 The scripts read only `V3D_SHC` (not `MESA_V3D_TREE`): point it at the
 `v3d_shc` of the Mesa 26.2.1 tree built as above. The harvest directory of
-the last table is what the gate will call `DEQP_ES2_PROGRAMS` once its test
-and `tools/cts/deps.toml` entry land; the script takes it as the
-`HARVEST_DIR` argument. Until the glmark2 and dEQP tests land, only
-`es100_counts_71.tsv` has a test that reads it.
+the last table is the gate's `DEQP_ES2_PROGRAMS` (`tools/cts/deps.toml`;
+`tools/cts/deps-env.sh --build DEQP_ES2_PROGRAMS` makes it at the commit the
+test pins), and the library directory is its `DEQP_GLES2_TEST_DIR`; the
+scripts take them as `HARVEST_DIR` and `--cts`. The tables are printed next
+to ours by tests/shaderc71_glmark2_corpus.rs, shaderc71_es2_corpus.rs and
+shaderc71_deqp_programs.rs, the three 7.1 corpus rows of tools/check.sh.
 
 ### What of 7.1 is on main
 

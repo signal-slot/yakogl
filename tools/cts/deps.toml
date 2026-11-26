@@ -56,9 +56,10 @@
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
 # MALI_CSFFW (one pinned file), LZ4 (one small program), MP2_QEMU (one QEMU
-# binary from pinned sources) and DEQP_GLES3_TEST_DIR (one directory at a
-# pinned commit), fetched by .github/workflows/gate.yml when a runner lacks
-# them (their notes).
+# binary from pinned sources), DEQP_GLES3_TEST_DIR and DEQP_GLES2_TEST_DIR
+# (one directory each at a pinned commit) and DEQP_ES2_PROGRAMS (a harvest at
+# a pinned yakogl commit, with HOST_DEQP_CTS as its requirement), fetched or
+# made by .github/workflows/gate.yml when a runner lacks them (their notes).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -275,6 +276,66 @@ packages.apt = ["git"]
 packages.portage = ["dev-vcs/git"]
 
 [[dep]]
+name = "DEQP_GLES2_TEST_DIR"
+path = "VK-GL-CTS-gles2-data/data/gles2/shaders"
+marker = "VK-GL-CTS-gles2-data/data/gles2/shaders/linkage.test"
+note = "the dEQP GLES2 shader library (*.test) of VK-GL-CTS at 93bca01, the commit DEQP_WORK pins: tests/shaderc71_es2_corpus.rs (check.sh's shaderc71_es2_corpus row) compiles its expect-pass version 100 programs at V3D 7.1, and tools/cts/es2lib-ref71.sh takes the same directory (its $CONNECTED_DEPS_DIR/VK-GL-CTS-gles2-data default). A sparse checkout of data/gles2/shaders alone, built the way DEQP_GLES3_TEST_DIR is, in a directory of its own (DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as a complete tree). Test data: read it, never run anything from it"
+build = '''
+want=93bca01861b0e3ef3c387027a9791e6d065f900c
+part="$DEPS/VK-GL-CTS-gles2-data.part"
+rm -rf "$part"
+if git -C "$DEPS/VK-GL-CTS" cat-file -e "$want^{commit}" 2>/dev/null; then
+  git clone -q --no-checkout "$DEPS/VK-GL-CTS" "$part"
+else
+  git init -q "$part"
+  git -C "$part" remote add origin https://github.com/KhronosGroup/VK-GL-CTS
+  git -C "$part" fetch -q --depth 1 --filter=blob:none origin "$want"
+fi
+git -C "$part" sparse-checkout set --no-cone /data/gles2/shaders/
+git -C "$part" checkout -q --detach "$want"
+mv "$part" "$DEPS/VK-GL-CTS-gles2-data"
+'''
+packages.apt = ["git"]
+packages.portage = ["dev-vcs/git"]
+
+[[dep]]
+name = "DEQP_ES2_PROGRAMS"
+path = "deqp-es2-programs-da11eb6b"
+marker = "deqp-es2-programs-da11eb6b/index.tsv"
+requires = ["HOST_DEQP_CTS"]
+note = "every shader program dEQP-GLES2 compiles, harvested by tools/cts/deqp-es2-programs.sh (index.tsv, programs/<id>.vert and .frag, cases-without-program.txt, commit): tests/shaderc71_deqp_programs.rs (check.sh's shaderc71_deqp_programs row) compiles each at V3D 7.1, and tools/cts/deqp-es2-programs-ref71.sh takes the same directory. The harvest runs the whole gles2 mustpass on the host against the V3D 4.2 library, so it is made at a pinned yakogl commit, da11eb6b, the harvest the test's pins come from: a harvest at another commit gives another 4.2 column (COMPILED_42) and is not this entry. The build clones this repository (--shared, when the checkout has the commit, as the gate's full-history checkout does; else one commit fetched from github.com/signal-slot/yakogl) at that commit into a .part directory and runs that commit's deqp-es2-programs.sh there with HOST_DEQP_CTS as its CTS (deqp-gles2 and the library are built inside the .part directory, with cargo from ~/.cargo/bin, and removed with it); the run's .qpa logs (run/) are not kept, only what the test and the ref71 script read. A run that left any case not run (a crashed or timed-out chunk) is refused, not kept: the entry is never rebuilt while its index.tsv is there. Board-less (the gate reads it), unlike HOST_DEQP_CTS, which it builds as a requirement. Once per host: about the cost of HOST_DEQP_CTS plus the deqp-gles2 and library builds, and a mustpass run of minutes. dEQP's output (Apache-2.0), never committed"
+build = '''
+tip=da11eb6b5881bf96bd64bffe9fe103d96e1ed515
+part="$DEPS/deqp-es2-programs-da11eb6b.part"
+rm -rf "$part"
+mkdir -p "$part"
+if git cat-file -e "$tip^{commit}" 2>/dev/null; then
+  git clone -q --shared --no-checkout "$PWD" "$part/yakogl"
+else
+  # a tree without that history (a shallow clone, the gate image's git archive)
+  git init -q "$part/yakogl"
+  GIT_TERMINAL_PROMPT=0 git -C "$part/yakogl" fetch -q --depth 1 https://github.com/signal-slot/yakogl "$tip" || {
+    echo "DEQP_ES2_PROGRAMS: neither this checkout nor github.com/signal-slot/yakogl gives commit $tip: build it from a full clone (git fetch --unshallow)" >&2
+    exit 1
+  }
+fi
+git -C "$part/yakogl" checkout -q --detach "$tip"
+PATH="$HOME/.cargo/bin:$PATH" "$part/yakogl/tools/cts/deqp-es2-programs.sh" \
+  --cts "$DEPS/VK-GL-CTS-host" --out "$part/out"
+# A chunk that crashed or timed out leaves cases not run, and a harvest
+# without them is another corpus (its PROGRAMS); never keep one.
+if grep -q 'not-run$' "$part/out/cases-without-program.txt"; then
+  echo "DEQP_ES2_PROGRAMS: the mustpass run left cases not run ($(grep -c 'not-run$' "$part/out/cases-without-program.txt")): not kept, build it again" >&2
+  exit 1
+fi
+rm -rf "$part/out/run"
+mv "$part/out" "$DEPS/deqp-es2-programs-da11eb6b"
+rm -rf "$part"
+'''
+packages.apt = ["git", "python3", "cmake", "ninja-build", "g++"]
+packages.portage = ["dev-vcs/git", "dev-lang/python", "dev-build/cmake", "dev-build/ninja", "sys-devel/gcc"]
+
+[[dep]]
 name = "LZ4"
 path = "lz4/bin/lz4"
 marker = "lz4/bin/lz4"
@@ -439,7 +500,7 @@ name = "HOST_DEQP_CTS"
 path = "VK-GL-CTS-host"
 marker = "VK-GL-CTS-host/targets/yakogl/yakogl.cmake"
 board = "*"
-note = "the host VK-GL-CTS tree of tools/cts/host-deqp-run.sh (its CTS when CTS is unset and HOST_DEQP_CTS is set, e.g. after set -a; eval \"$(tools/cts/deps-env.sh am62p)\"; set +a; MODULE=gles3 builds deqp-gles3 from it in build/host-deqp/deqp-gles3 of the repository and reads its android/cts/main/gles3-main-*.txt): VK-GL-CTS at 93bca01, the commit DEQP_WORK pins, with external/fetch_sources.py run and tools/cts/cts-yakogl-target.patch applied, uncommitted, as tools/cts/cts-build.sh does; about 2.1 GB, in about 95 s on a 4-core host. A directory of its own: DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as its board tree, and VK-GL-CTS-gles3 is a sparse corpus checkout. DEQP_WORK's clone is the source when it has the commit, else one shallow commit from GitHub; fetch_sources.py needs network either way. The marker is the target file host-deqp-run.sh checks for; it is there only once the tree is complete (built in a .part directory and renamed). In every named board's set and in no board-less one: the gate never reads it, so its --check and a gate image's --build-missing leave it out (`deps-env.sh --build HOST_DEQP_CTS` or `--build-missing <board>` makes it)"
+note = "the host VK-GL-CTS tree of tools/cts/host-deqp-run.sh (its CTS when CTS is unset and HOST_DEQP_CTS is set, e.g. after set -a; eval \"$(tools/cts/deps-env.sh am62p)\"; set +a; MODULE=gles3 builds deqp-gles3 from it in build/host-deqp/deqp-gles3 of the repository and reads its android/cts/main/gles3-main-*.txt): VK-GL-CTS at 93bca01, the commit DEQP_WORK pins, with external/fetch_sources.py run and tools/cts/cts-yakogl-target.patch applied, uncommitted, as tools/cts/cts-build.sh does; about 2.1 GB, in about 95 s on a 4-core host. A directory of its own: DEQP_WORK takes any $DEPS/VK-GL-CTS/.git as its board tree, and VK-GL-CTS-gles3 is a sparse corpus checkout. DEQP_WORK's clone is the source when it has the commit, else one shallow commit from GitHub; fetch_sources.py needs network either way. The marker is the target file host-deqp-run.sh checks for; it is there only once the tree is complete (built in a .part directory and renamed). In every named board's set and in no board-less one: the gate never reads it, so its --check leaves it out and nothing exports it there (`deps-env.sh --build HOST_DEQP_CTS` or `--build-missing <board>` makes it). The gate's board-less DEQP_ES2_PROGRAMS requires it, so a gate runner or image that builds that entry builds this one first and keeps it"
 build = '''
 want=93bca01861b0e3ef3c387027a9791e6d065f900c
 repo=$PWD

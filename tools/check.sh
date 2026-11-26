@@ -115,7 +115,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 # The external inputs (ZEPHYR_WS, HAL_NXP_DIR, PCO_SHC, GLMARK2_SRC,
-# DEQP_GLES3_TEST_DIR, ...) are the entries of the dependency layout,
+# DEQP_GLES3_TEST_DIR, DEQP_GLES2_TEST_DIR, DEQP_ES2_PROGRAMS, ...) are the entries of the dependency layout,
 # tools/cts/deps.toml: the one definition of the gate's environment, which the
 # gate image builds (tools/env/build-gate-image.sh). An entry the caller left
 # unset or empty is taken from the layout here, so the CI, a pool machine and
@@ -1673,6 +1673,17 @@ if ! ls "${DEQP_GLES3_TEST_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
   fi
   unset DEQP_GLES3_TEST_DIR
 fi
+# The two dEQP-GLES2 corpora of the V3D 7.1 rows near the end
+# (shaderc71_es2_corpus, shaderc71_deqp_programs; the deps.toml entries
+# DEQP_GLES2_TEST_DIR and DEQP_ES2_PROGRAMS). Each row is the only one that
+# compiles its corpus: the value is kept here for it and the variable is
+# unset, so the tests/ rows of the V3D feature set, which build the same
+# files, skip the corpus (as they do without it) rather than compile it a
+# second time, or fail in place of the row on a value naming no corpus. The
+# row reports such a value, or none, as a gap naming the entry.
+CORPUS71_ES2_DIR=${DEQP_GLES2_TEST_DIR-}
+CORPUS71_PROGRAMS=${DEQP_ES2_PROGRAMS-}
+unset DEQP_GLES2_TEST_DIR DEQP_ES2_PROGRAMS
 tests_lib_done=0
 for f in "${CONFIGS[@]}"; do
   tier=()
@@ -5319,6 +5330,72 @@ if [ "$QUICK" -eq 0 ]; then
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
   else
     gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"
+  fi
+fi
+
+# The V3D 7.1 (Raspberry Pi 5) online back end over the shader sets P13 meets
+# on the board (plan #386): glmark2-es2's corpus, the dEQP-GLES2 shader
+# library and the dEQP-GLES2 programs a host run harvests. Each test compiles
+# every program through chain71 and checks each word with codec71 and
+# verify71 against its pins. A corpus that is missing is a gap naming its
+# entry, never a pass: the row sets the test's variable, and a test whose
+# variable names no corpus fails instead of skipping. A run that printed the
+# test's skip line anyway is refused as well.
+# corpus71_test <test> <skip line> <VAR=value>: the row's cargo test, its
+# summary on the log and its full output in build/check/<test>.log.
+corpus71_test() {
+  local t=$1 skipped=$2 kv=$3 log="build/check/$1.log"
+  mkdir -p build/check || return 1
+  env "$kv" cargo test --no-default-features --features "$V3D_CONFIG" --test "$t" -- --nocapture >"$log" 2>&1
+  local status=$?
+  grep -E '^(test result|shaderc71 |refused:|mismatched|  7\.1-only)|panicked|FAILED' "$log" | head -40
+  [ "$status" -eq 0 ] || { echo "cargo test --test $t exited $status (the whole output: $log)"; return 1; }
+  if grep -qF "$skipped" "$log"; then
+    echo "$t skipped its corpus although ${kv%%=*} was set: the corpus was NOT compiled"
+    return 1
+  fi
+}
+# glmark2: the corpus build/glmark2-host/shaders when the glmark2 corpus row
+# above made it from GLMARK2_SRC (it writes the tree, so this row runs after
+# it), else this row generates it from GLMARK2_SRC into a directory of its own
+# (the same run.sh line and GPUs, so the same corpus).
+shaderc71_glmark2_tests() {
+  local corpus=build/glmark2-host/shaders
+  if [ ! -f "$corpus/index.txt" ]; then
+    corpus=build/glmark2-host71/shaders
+    GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host71 powervr vivante \
+      >build/glmark2-host71.log 2>&1 || { tail -20 build/glmark2-host71.log; return 1; }
+    [ -f "$corpus/index.txt" ] || { echo "run.sh wrote no $corpus/index.txt"; return 1; }
+  fi
+  corpus71_test shaderc71_glmark2_corpus "SKIP shaderc71_glmark2_corpus" "GLMARK2_CORPUS=$PWD/$corpus"
+}
+if [ "$QUICK" -eq 0 ]; then
+  scope v3d v3d71 precompile tools
+  tests_row shaderc71_glmark2_corpus
+  if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
+    mkdir -p build
+    step "test    glmark2 corpus at V3D 7.1: chain71, codec71, verify71 (tests/shaderc71_glmark2_corpus.rs)" shaderc71_glmark2_tests
+  else
+    gap "shaderc71_glmark2_corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' to make GLMARK2_CORPUS from (tools/cts/deps-env.sh --build GLMARK2_SRC): the glmark2 shaders were NOT compiled at 7.1"
+    tests_row
+  fi
+  scope v3d v3d71 precompile tools
+  tests_row shaderc71_es2_corpus
+  if ls "${CORPUS71_ES2_DIR:-/nonexistent}"/*.test >/dev/null 2>&1; then
+    step "test    dEQP-GLES2 shader library at V3D 7.1 (tests/shaderc71_es2_corpus.rs)" \
+      corpus71_test shaderc71_es2_corpus "DEQP_GLES2_TEST_DIR is not set" "DEQP_GLES2_TEST_DIR=$CORPUS71_ES2_DIR"
+  else
+    gap "shaderc71_es2_corpus: no dEQP GLES2 shader library at DEQP_GLES2_TEST_DIR='$CORPUS71_ES2_DIR' (tools/cts/deps-env.sh --build DEQP_GLES2_TEST_DIR): the library was NOT compiled at 7.1"
+    tests_row
+  fi
+  scope v3d v3d71 precompile tools
+  tests_row shaderc71_deqp_programs
+  if [ -f "${CORPUS71_PROGRAMS:-/nonexistent}/index.tsv" ]; then
+    step "test    harvested dEQP-GLES2 programs at V3D 7.1 (tests/shaderc71_deqp_programs.rs)" \
+      corpus71_test shaderc71_deqp_programs "DEQP_ES2_PROGRAMS is not set" "DEQP_ES2_PROGRAMS=$CORPUS71_PROGRAMS"
+  else
+    gap "shaderc71_deqp_programs: no harvest at DEQP_ES2_PROGRAMS='$CORPUS71_PROGRAMS' (tools/cts/deps-env.sh --build DEQP_ES2_PROGRAMS): the dEQP-GLES2 programs were NOT compiled at 7.1"
+    tests_row
   fi
 fi
 
