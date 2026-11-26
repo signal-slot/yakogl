@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND (GPL-2.0-only OR MIT)
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2023 Imagination Technologies Ltd.
+// Linux part: reconstruction follows drivers/gpu/drm/imagination/pvr_free_list.c (GPL-2.0-only OR MIT, used under MIT).
 //! The parameter manager's freelists: the pages the tiler writes its
 //! parameter buffer into, handed to the PM as a stack of page numbers.
 //!

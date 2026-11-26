@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* SPDX-FileCopyrightText: 2014 The Android Open Source Project */
 /*
  * tex_filter_ref.h: the CPU reference for a board test of 2D texture
  * filtering (docs/online-shaderc/v3d-backend.md, "LINEAR on the board").
