@@ -15,6 +15,12 @@
 # and the UART speed (MALI_UART_BAUD); each may be set in the environment. The
 # binary runs with YAKOGL_MALI_DEV set to the render node.
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp (e.g. a known_hosts file).
+# The cross compiler (the linker, and gl_test.c's compiler in build.rs) is
+# aarch64-linux-gnu-gcc from PATH. With none on PATH, the MALI_DEQP_TOOLCHAIN
+# of tools/cts/deps.toml (`tools/cts/deps-env.sh --present nanopc_t6`) is
+# used: its bin/ goes in front of PATH. With neither, the script exits 2
+# naming the build command, before the board lock and before any ssh
+# (panthor_cross_cc below; run-on-board-cc-selftest.sh).
 # The board runs one GL client at a time: the script refuses to start while a
 # process opens the render node, and names it. A dmesg -w capture of the run
 # is copied back (DMESG_LOG names the local file) and the kernel messages
@@ -37,6 +43,30 @@
 # jump rebooted the T6 between two gl_test runs: the board had been handed
 # over by chat only. LOCK_WAIT defaults to 0 here (refuse, never queue);
 # HOLD_MAX to 1800 s (the build, a sweep and DMESG_TAIL_S fit well inside).
+
+# panthor_cross_cc <repository root>: make aarch64-linux-gnu-gcc resolvable on
+# PATH. One already on PATH wins and PATH is left as it is; else bin/ of
+# MALI_DEQP_TOOLCHAIN goes in front of PATH. Returns 1 with a message when
+# neither has the compiler.
+panthor_cross_cc() {
+  local root=$1 t
+  command -v aarch64-linux-gnu-gcc > /dev/null 2>&1 && return 0
+  t=$("$root/tools/cts/deps-env.sh" --present nanopc_t6 | sed -n 's/^MALI_DEQP_TOOLCHAIN=//p') || t=
+  if [ -n "$t" ] && [ -x "$t/bin/aarch64-linux-gnu-gcc" ]; then
+    PATH=$t/bin:$PATH
+    export PATH
+    echo "run-on-board.sh: cross compiler $t/bin/aarch64-linux-gnu-gcc (MALI_DEQP_TOOLCHAIN)" >&2
+    return 0
+  fi
+  {
+    echo "run-on-board.sh: no aarch64-linux-gnu-gcc on PATH and no MALI_DEQP_TOOLCHAIN in the dependency layout"
+    echo "run-on-board.sh: make it with tools/cts/deps-env.sh --build --board nanopc_t6 MALI_DEQP_TOOLCHAIN (or install gcc-aarch64-linux-gnu)"
+  } >&2
+  return 1
+}
+# The self-test sources the function only.
+if [ "${RUN_ON_BOARD_FUNCS_ONLY:-0}" = 1 ]; then return 0 2> /dev/null || exit 0; fi
+
 set -euo pipefail
 bin=${1:?usage: BOARD_HOST=<user@host> $0 <binary> [args...]}
 shift
@@ -46,6 +76,7 @@ cd "$(dirname "$0")/../../.."
 # shellcheck source=board-profile.sh
 . tools/mali/panthor/board-profile.sh
 board_profile_load || exit 2
+panthor_cross_cc "$PWD" || exit 2
 node=$MALI_RENDER_NODE
 LOCK_WAIT=${LOCK_WAIT:-0}
 HOLD_MAX=${HOLD_MAX:-1800}

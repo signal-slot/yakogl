@@ -9,7 +9,8 @@
 //!
 //! No board and no build: the lock file is a temporary one (BOARD_LOCK),
 //! and a stub `cargo` first on PATH stands for the build the script runs
-//! while it holds the lock. Needs bash and flock(1): board_lock.sh names
+//! while it holds the lock, with a stub aarch64-linux-gnu-gcc next to it for
+//! the script's cross compiler check (the gate's runners carry none). Needs bash and flock(1): board_lock.sh names
 //! the holder from the record the holder writes into the lock file, and
 //! nothing here runs lsof (CI runner A has none).
 //!
@@ -135,6 +136,16 @@ fn release(lock: &Path) {
     }
 }
 
+/// A stub aarch64-linux-gnu-gcc in `bin`: run-on-board.sh stops before the
+/// lock when no cross compiler is found (panthor_cross_cc), and the gate's
+/// runners have none. The stub is never run: the stub cargo stands for the
+/// build.
+fn stub_cross_cc(bin: &Path) {
+    let cc = bin.join("aarch64-linux-gnu-gcc");
+    fs::write(&cc, "#!/bin/sh\necho 'stub aarch64-linux-gnu-gcc' >&2\nexit 99\n").unwrap();
+    Command::new("chmod").arg("+x").arg(&cc).status().unwrap();
+}
+
 #[test]
 fn a_gl_run_refuses_while_another_holds_the_board_and_names_it() {
     tools_present();
@@ -151,6 +162,7 @@ fn a_gl_run_refuses_while_another_holds_the_board_and_names_it() {
     fs::write(bin.join("cargo"), "#!/bin/sh\necho 'stub cargo: run-on-board.sh got past the lock' >&2\nexit 99\n")
         .unwrap();
     Command::new("chmod").arg("+x").arg(bin.join("cargo")).status().unwrap();
+    stub_cross_cc(&bin);
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let out = Command::new(root().join("tools/mali/panthor/run-on-board.sh"))
         .arg("panthor-hello")
@@ -184,6 +196,7 @@ fn a_jump_refuses_while_a_gl_run_holds_the_board_and_names_it() {
     fs::create_dir_all(&bin).unwrap();
     fs::write(bin.join("cargo"), format!("#!/bin/sh\n: > {}\nexec sleep 60\n", building.display())).unwrap();
     Command::new("chmod").arg("+x").arg(bin.join("cargo")).status().unwrap();
+    stub_cross_cc(&bin);
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
     let mut gl = Command::new(root().join("tools/mali/panthor/run-on-board.sh"))
         .arg("panthor-gltest")
