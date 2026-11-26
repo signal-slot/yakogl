@@ -659,4 +659,54 @@ mod tests {
         );
         assert_eq!(sent(|tx| print_el1(tx, 0x30d0_0800)), "");
     }
+
+    // U-Boot's facts read at the prompt on 2026-11-12, docs/notes/
+    // nanopc-t6-uboot-handover.md section 4 (`bdinfo`).
+    /// `relocaddr`: U-Boot's relocated code, top of the first bank.
+    const UBOOT_RELOCADDR: u64 = 0xefec_1000;
+    /// `fdt_blob` and `sp start` (stack top), just under the relocated code.
+    const UBOOT_FDT_BLOB: u64 = 0xedbd_07e0;
+    const UBOOT_SP_START: u64 = 0xedbd_07d0;
+    /// Below 4 GiB U-Boot reserves only 0xecbcd000-0xecbcffff and
+    /// 0xecbd07d0-0xefffffff.
+    const UBOOT_RESERVED_LOW: [(u64, u64); 2] = [(0xecbc_d000, 0xecbd_0000), (0xecbd_07d0, 0xf000_0000)];
+    /// First DRAM bank: 0x200000, 0xefe00000 bytes.
+    const BANK0: (u64, u64) = (0x20_0000, 0x20_0000 + 0xefe0_0000);
+
+    #[test]
+    fn the_image_window_the_entry_cleans_starts_at_0x10000000_where_prompt_go_loads() {
+        // prompt-go.sh links and loads at WINDOW_BASE 0x10000000; the entry
+        // cleans [x2, x3) from the range the glue passes
+        assert_eq!(WIN.0, 0x1000_0000);
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        assert_eq!((r.x[2], r.dc_first), (0x1000_0000, Some(0x1000_0000)));
+        assert!(WIN.1 > WIN.0);
+    }
+
+    #[test]
+    fn the_entry_takes_its_range_from_the_images_own_linker_symbols_not_a_constant() {
+        let t = t6_go_off_asm!();
+        assert!(t.contains("__rom_region_start") && t.contains("__kernel_ram_end"));
+        assert!(!t.contains("0x10000000") && !t.contains("0x1000_0000"));
+    }
+
+    #[test]
+    fn the_window_lies_in_the_first_dram_bank_and_below_u_boots_relocated_area() {
+        assert!(BANK0.0 <= WIN.0 && WIN.1 <= BANK0.1, "inside bank 0");
+        for (lo, hi) in UBOOT_RESERVED_LOW {
+            assert!(WIN.1 <= lo || WIN.0 >= hi, "window overlaps U-Boot's reserved {lo:#x}-{hi:#x}");
+        }
+        assert!(WIN.1 <= UBOOT_RELOCADDR, "end below relocaddr");
+        assert!(WIN.1 <= UBOOT_SP_START && WIN.1 <= UBOOT_FDT_BLOB, "end below the stack and the FDT");
+    }
+
+    #[test]
+    fn every_line_the_entry_cleans_is_below_u_boots_code_stack_and_fdt() {
+        let r = run(2, UBOOT_SCTLR, CTR_A55, WIN.0, WIN.1);
+        let last_end = r.dc_last + 64;
+        for p in [UBOOT_RELOCADDR, UBOOT_SP_START, UBOOT_FDT_BLOB] {
+            assert!(last_end <= p);
+        }
+        assert!(r.dc_first.unwrap() >= BANK0.0);
+    }
 }
