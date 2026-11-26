@@ -97,6 +97,24 @@ out=$(sw --first 2 --last 2 "$D/zephyr.bin" "$D/o3" 2>&1); rc=$?
 chk "range: only shard 2 ran" test "$(wc -l < "$D/calls.txt")" -eq 1
 chk "range: no log for 1" test ! -e "$D/o3/shard-0001.log"
 
+echo "exclude and redaction"
+sed -n 1p "$D/cases.txt" > "$D/excl.txt"
+out=$(sw --dry-run --exclude "$D/excl.txt" "$D/zephyr.bin" "$D/o6" 2>&1)
+chk "excl dry: diff gets --exclude" grep -q "mp2-p9-diff.py .*--exclude $D/excl.txt .*o6/shard-" <<<"$out"
+chk "excl dry: redaction check printed" grep -q 'mp2-log-redact-check.sh .*o6' <<<"$out"
+out=$(sw --exclude "$D/excl.txt" "$D/zephyr.bin" "$D/o6" 2>&1); rc=$?
+chk "excl: exit 0" test $rc -eq 0
+chk "excl: summary says excluded 1" grep -q '^mp2-p9-diff: .*excluded 1' <<<"$out"
+out=$(MP2_DEQP_EXCLUDE=$D/excl.txt sw "$D/zephyr.bin" "$D/o7" 2>&1)
+chk "excl env: MP2_DEQP_EXCLUDE reaches the diff" grep -q '^mp2-p9-diff: .*excluded 1' <<<"$out"
+out=$(sw "$D/zephyr.bin" "$D/o2" 2>&1)
+chk "no exclude: no 'excluded' in the summary" bash -c '! grep -q "^mp2-p9-diff: .*excluded" <<<"$1"' _ "$(grep '^mp2-p9-diff: ' <<<"$out")"
+chk "clean logs: redaction check clean" grep -q 'clean (' <<<"$out"
+echo "uart on /dev/ttyUSB0 at 198.51.100.7" >> "$D/o6/shard-0001.log"
+out=$(sw --exclude "$D/excl.txt" "$D/zephyr.bin" "$D/o6" 2>&1); rc=$?
+chk "redaction hit: exit 1" test $rc -eq 1
+chk "redaction hit: says to redact" grep -q 'must be redacted before commit' <<<"$out"
+
 echo "failures"
 out=$(MP2_SWEEP_RUNNER=false sw "$D/zephyr.bin" "$D/o4" 2>&1); rc=$?
 chk "runner failure: exit 1" test $rc -eq 1
