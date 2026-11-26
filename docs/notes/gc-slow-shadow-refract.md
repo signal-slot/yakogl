@@ -345,6 +345,10 @@ at the first frame past that (`scene.cpp:116`).
 
 ## What the X2 baseline should record (item x2-gm-before)
 
+Kept for the X2; superseded for figures by "Verdin iMX8MP: glmark2 shadow,
+refract and terrain, before and after [plan #417]" at the end of this note
+(the X2 cannot run: `x2-glmark2-slow-scenes.md`, last section).
+
 For each of shadow and refract, page 0, page 1, page 3 and, once on main,
 page 4, with v0..v3 decoded:
 
@@ -424,6 +428,9 @@ a job would be a tiled shadow the host does not show.
 
 ### Rows the X2 sessions fill
 
+Kept for the X2; superseded for figures by the Verdin section at the end of
+this note.
+
 Empty until a session runs; one table per scene (shadow, refract).
 
 | row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
@@ -446,3 +453,43 @@ board. The board answered from the leased worker and `tools/board.sh x2
 status` read `containers 1`: `slint-launcher` still runs, so `board.sh x2 run`
 would refuse the jump and none was made. Details: `x2-glmark2-slow-scenes.md`,
 "Session A: stop, 2026-11-25".
+
+## Verdin iMX8MP: glmark2 shadow, refract and terrain, before and after [plan #417]
+
+The board sessions now run on the Verdin iMX8MP, through connected's leases
+(the X2 sections above are kept for the X2). The table is **empty**: no Verdin
+figure exists yet; every cell is a placeholder until a session fills it.
+
+### What each session records
+
+- the origin/main commit the image was built from (8 hex digits at least);
+- the image sha256 of the glmark2 image;
+- the record directory, `records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/`
+  (gitignored, redacted);
+- PERF page 0 v0, the frames in the 10 s scene, and the ms a frame,
+  10 000 / v0 (page 0 v0 saturates at 65,535, so a value there is a bound);
+- PERF page 4 v3, the KiB of CPU passes a frame (the CPU depth resolve's
+  bytes; cause 1);
+- for each scene, shadow, refract and terrain, one session per row.
+
+### Expected effect
+
+- **Before** (commit with `25fa1a96` and `e320630d`, CPU resolve with wide
+  loads, cause 1 "Fix, cheap"): the byte loads are gone, so ms a frame falls
+  from the 500 to 1000 ms of the 2 FPS baseline; how far is unknown until
+  measured. Page 4 v3 stays at the CPU passes' bytes (about 15,000 KiB
+  predicted), since the resolve still runs.
+- **After** (depth-sample default, outcome (a) or (b) of
+  `gc-depth-sample-wire.md`): no CPU resolve, so page 4 v3 falls to 0 for
+  shadow and refract, and the frame falls to the GPU and wait costs (causes 3
+  and 4, an estimated 10 to 40 ms), as the PowerVR got in `21099fcd`. Terrain
+  is expected unchanged (`gc-slow-terrain.md`). If the verdict is (c), the CPU
+  fixes stay and there is no "after" beyond them.
+
+### Table (empty)
+
+| scene | before: commit | before: image sha256 | before: record | before: page 0 v0 | before: page 4 v3 KiB | before: ms a frame | after: commit | after: image sha256 | after: record | after: page 0 v0 | after: page 4 v3 KiB | after: ms a frame |
+|---|---|---|---|---:|---:|---:|---|---|---|---:|---:|---:|
+| shadow | — | — | — | — | — | — | — | — | — | — | — | — |
+| refract | — | — | — | — | — | — | — | — | — | — | — | — |
+| terrain | — | — | — | — | — | — | — | — | — | — | — | — |
