@@ -1438,7 +1438,19 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
             }
             _ => renderbuffer_surf_format(f),
         },
-        f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
+        /* an integer texture the wide store holds (R8I in RGBA8I, RG32UI in
+         * RGBA32UI) is drawn as the store's surface, as attachment 0 is
+         * (`fb_target_format_n`); a renderbuffer has its own narrow surface */
+        f if is_integer_color_format(f) => match loc {
+            MemLoc::Texture(i) => {
+                let t = &c.objs_ref().textures[i];
+                integer_texture_internalformat(t)
+                    .and_then(|_| integer_texture_surface(t.texfmt))
+                    .unwrap_or_else(|| renderbuffer_surf_format(f))
+            }
+            _ => renderbuffer_surf_format(f),
+        },
+        f if f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
     Some((mem.gpu + st.offset as u64, st.w, st.h, format))
