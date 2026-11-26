@@ -274,8 +274,37 @@ pub static DEPTH_OFFSET_SPEC: PacketSpec = PacketSpec {
     ],
 };
 
+pub static POINT_SIZE_SPEC: PacketSpec = PacketSpec {
+    xml_name: "Point size",
+    clif_name: "POINT_SIZE",
+    c_name: "POINT_SIZE",
+    code: 104,
+    fields: &[fl("Point Size", 0, 32, "float")],
+};
+
+pub static LINE_WIDTH_SPEC: PacketSpec = PacketSpec {
+    xml_name: "Line width",
+    clif_name: "LINE_WIDTH",
+    c_name: "LINE_WIDTH",
+    code: 105,
+    fields: &[fl("Line width", 0, 32, "float")],
+};
+
+pub static BLEND_CCOLOR_SPEC: PacketSpec = PacketSpec {
+    xml_name: "Blend Constant Color",
+    clif_name: "BLEND_CCOLOR",
+    c_name: "BLEND_CONSTANT_COLOR",
+    code: 86,
+    fields: &[
+        fl("Alpha (F16)", 48, 16, "uint"),
+        fl("Blue (F16)", 32, 16, "uint"),
+        fl("Green (F16)", 16, 16, "uint"),
+        fl("Red (F16)", 0, 16, "uint"),
+    ],
+};
+
 /// Every packet of this module, for the test of the layouts.
-pub static ALL_SPECS: [&PacketSpec; 11] = [
+pub static ALL_SPECS: [&PacketSpec; 14] = [
     &CFG_BITS_SPEC,
     &BLEND_ENABLES_SPEC,
     &BLEND_CFG_SPEC,
@@ -287,6 +316,9 @@ pub static ALL_SPECS: [&PacketSpec; 11] = [
     &CLIPPER_XY_SPEC,
     &CLIPPER_Z_SPEC,
     &DEPTH_OFFSET_SPEC,
+    &POINT_SIZE_SPEC,
+    &LINE_WIDTH_SPEC,
+    &BLEND_CCOLOR_SPEC,
 ];
 
 /// A field's value as the packet holds it: the integer, or the float (the
@@ -920,6 +952,73 @@ impl DepthOffset {
     }
 }
 
+/// `Point Size`: the fixed-function size (glPointSize); a shader's
+/// gl_PointSize is not this packet.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointSize {
+    pub size: f32,
+}
+
+impl Packet for PointSize {
+    const SPEC: &'static PacketSpec = &POINT_SIZE_SPEC;
+    fn pairs(&self) -> Vec<(&'static Field, Val)> {
+        vec![(Self::SPEC.field("Point Size"), Val::F(self.size))]
+    }
+}
+
+impl PointSize {
+    pub fn pack(&self) -> [u8; 5] {
+        pack_pairs(Self::SPEC, &self.pairs())
+    }
+}
+
+/// `Line width` (glLineWidth).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LineWidth {
+    pub width: f32,
+}
+
+impl Packet for LineWidth {
+    const SPEC: &'static PacketSpec = &LINE_WIDTH_SPEC;
+    fn pairs(&self) -> Vec<(&'static Field, Val)> {
+        vec![(Self::SPEC.field("Line width"), Val::F(self.width))]
+    }
+}
+
+impl LineWidth {
+    pub fn pack(&self) -> [u8; 5] {
+        pack_pairs(Self::SPEC, &self.pairs())
+    }
+}
+
+/// `Blend Constant Color`: the four F16 words (glBlendColor's half floats).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlendCcolor {
+    pub red: u16,
+    pub green: u16,
+    pub blue: u16,
+    pub alpha: u16,
+}
+
+impl Packet for BlendCcolor {
+    const SPEC: &'static PacketSpec = &BLEND_CCOLOR_SPEC;
+    fn pairs(&self) -> Vec<(&'static Field, Val)> {
+        let s = Self::SPEC;
+        vec![
+            (s.field("Alpha (F16)"), u(u32::from(self.alpha))),
+            (s.field("Blue (F16)"), u(u32::from(self.blue))),
+            (s.field("Green (F16)"), u(u32::from(self.green))),
+            (s.field("Red (F16)"), u(u32::from(self.red))),
+        ]
+    }
+}
+
+impl BlendCcolor {
+    pub fn pack(&self) -> [u8; 9] {
+        pack_pairs(Self::SPEC, &self.pairs())
+    }
+}
+
 /// An f32 as an `f187` field holds it: its top 16 bits (truncated, as Mesa's
 /// packer does).
 pub fn f187(v: f32) -> u16 {
@@ -1319,7 +1418,11 @@ pub fn translate(d: &DrawState) -> Result<StatePackets71, Refusal71> {
     let clip = ClipWindow { left: minx as u16, bottom: miny as u16, width: cw as u16, height: ch as u16 };
 
     /* the depth and the facing: no early-Z bits at 7.1, Z clipping -1..1 */
-    let (depth_func, z_updates) = if d.depth_test { (d.depth_func, d.depth_write) } else { (Compare::Always, false) };
+    let (depth_func, z_updates) = if d.depth_test {
+        (d.depth_func, d.depth_write && d.depth_func != Compare::Equal)
+    } else {
+        (Compare::Always, false)
+    };
     let cull_front = matches!(d.cull, Cull::Front | Cull::FrontAndBack);
     let cull_back = matches!(d.cull, Cull::Back | Cull::FrontAndBack);
     /* gallium's front_ccw: glFrontFace == GL_CCW, inverted for a framebuffer
