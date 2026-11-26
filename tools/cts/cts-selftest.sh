@@ -1093,6 +1093,24 @@ fi
 # ok count pinned and its last line "<name>: N checks passed".
 malicheck 63 glmark2-log-check-selftest.sh 25
 
+# 64: readme-glmark2-strict-selftest.sh on the strict-* fixtures of
+# testdata/readme-glmark2/: readme-glmark2-check.py's row-own-run reading (a
+# row's commit is its own main <sha>, outside parentheses; scene figures outside
+# `at <other>` clauses), the strict check docs-one-commit's one-commit rows
+# rely on. The selftest lands in its own commit (plan #392's checker-strict
+# item), which this hook is built on, so it is in every tree this runs in: a
+# missing or failing one fails the row here rather than skipping. Run like check
+# 62: the child judges its own cases and ends on "readme-glmark2-strict-selftest:
+# all cases passed", this row is its exit status and one ok line.
+echo
+echo "== 64. readme-glmark2-strict-selftest.sh"
+if rgs_out=$(bash "$HERE/readme-glmark2-strict-selftest.sh" 2>&1); then
+    ok "readme-glmark2-check.py: scene ms and the commit read from the row's own run"
+else
+    bad "readme-glmark2-strict-selftest.sh failed"
+    printf '%s\n' "$rgs_out" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
