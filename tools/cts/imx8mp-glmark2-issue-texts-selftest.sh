@@ -80,5 +80,17 @@ if python3 "$tool" --note "$d/short.md" >/dev/null 2>&1; then bad "short note ac
 if printf '%s\n%s\n' "$out" "$out2" | grep -En '([0-9]{1,3}\.){3}[0-9]{1,3}|/dev/tty|ttyUSB|ttyACM|ts\.net|password'; then
   bad "forbidden text in output"
 fi
+# every quoted 'replace' anchor of blocks 3, 4 and 6 exists verbatim in the real file
+for pair in "3:RESULTS.md" "4:STATUS.md" "6:../../ROADMAP.md"; do
+  n=${pair%%:*}; f=$here/${pair#*:}
+  hdr=$(grep "^== $n\. " <<<"$out")
+  [ -n "$hdr" ] || { bad "block $n header missing"; continue; }
+  anchors=$(grep -o "'[^']*'" <<<"$hdr" | sed "s/^'//; s/'\$//")
+  [ -n "$anchors" ] || bad "block $n names no anchor"
+  while IFS= read -r a; do
+    [ -n "$a" ] && { grep -qF -- "$a" "$f" || bad "block $n anchor not in ${pair#*:}: $a"; }
+  done <<<"$anchors"
+done
+
 if [ "$fail" = 0 ]; then echo "imx8mp-glmark2-issue-texts-selftest: ok"; fi
 exit "$fail"
