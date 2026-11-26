@@ -37,7 +37,9 @@
 # the two must be seen at 71 in one build), and what v3d_tex71.c is by itself
 # (the 7.1 texture shader state and sampler packer; its header refuses any
 # other V3D_CL_VER and defaults to 71, as tools/v3d/check71.d/tex71.sh builds
-# it). v3d_frame.c is compiled twice for cortex-a76: once from FILES without
+# it), and v3d_job71.c with ffi71_layout_check.c (the 7.1 job builder and the
+# pins of its structs, the Zephyr module's CONFIG_YAKOGL_GPU_V3D71 list).
+# v3d_frame.c is compiled twice for cortex-a76: once from FILES without
 # the define, as the Zephyr list has it, and once at 71 here. The frame pair
 # is what the Pi 5 triangle images build with V3D_CL_VER 71 and -Werror
 # (tools/probes/rpi_5/rpi5_triangle/probe.cmake), so a warning here is a
@@ -76,6 +78,8 @@ FILES71=(
   driver/src/v3d/v3d_frame.c
   driver/src/v3d/v3d_frame71_tri.c
   driver/src/v3d/v3d_tex71.c
+  driver/src/v3d/v3d_job71.c
+  src/v3d/ffi71_layout_check.c
 )
 for f in "${FILES[@]}" "${FILES71[@]}" tools/v3d/hostshim/zephyr/kernel.h \
          tools/v3d/hostshim/zephyr/sys/sys_io.h tools/v3d/hostshim/zephyr/logging/log.h; do
