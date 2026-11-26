@@ -50,19 +50,15 @@ are in `docs/release/checklist.md`; the walks decide, not this file.
 
 CONTRIBUTING.md's build, test and gate commands, walked on a gate host.
 
-**Fresh clone of `4f34ffb8` (2026-11-26), red.** `tools/check.sh --quick` under `LC_ALL=C` ran to its summary line twice: the first read "487 ok, 8 failed, 0 gap(s)", the second (final) "488 ok, 7 failed, 0 gap(s)". The plan lists 495 rows, so green reads "495 ok, 0 failed, 0 gap(s)"; no row was a gap (the host carried `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, an aarch64 compiler; `MESA_V3D_TREE` unset). A cache of 68 GB was pruned before the walk; the run needs about 50 GB free with `CARGO_INCREMENTAL=0`.
+**Fresh clone of `8f1a5f71` (2026-11-26), red on one row.** `env LC_ALL=C tools/check.sh --quick` in a fresh clone, started detached so the run outlives the 2 h command limit (a single background wait is killed at about 2 h; re-arm waiters on the walked process's real pid, not on `$!`), ended with its summary line "508 ok, 1 failed, 0 gap(s)" after 10760 s (exit 1). No row was a gap: the run used the layout of `tools/cts/deps-env.sh` (CONTRIBUTING's form), whose entries were in the host's dependency cache (`<deps>`); `MP2_QEMU` was built for the walk (about 5 min). The host is a prepared gate host (its walk report names the dependency cache, not the toolchain versions; Linux 7.0.0-38-generic x86-64, rustc 1.99.1 — the versions the step-3 walk of "Line 6" below records on the same date, under the same host requirements). The run counts 509 rows (508 ok + 1 failed), so green reads "509 ok, 0 failed, 0 gap(s)". The failed row and its owner:
 
-Red rows and causes:
+- `host-test,gpu-v3d,shaderc-online,no-shader-table`: the `shaderc71_mali_testdata` test asserts 1800 pairs while `tools/mali/testdata` now has 1814 — a stale count in the test, not a code defect; plan #387 raises `PAIRS` (`COMPILED_42` and `COMPILED_71` may follow). `tests/shaderc71_mali_testdata.rs` still asserts 1800 at this reading. The two rows red in the walks before their fixes, `tools/cts/imx95-gles2-accept-selftest.sh` and the kexec-zephyr `t6-verdict-test.sh` self-test, pass at `8f1a5f71`.
 
-- The `--quick` clippy rows that use the feature sets of the 14 clippy rows that are red at `4f34ffb8` (clippy 0.1.99): `src/v3d/texstate71.rs:15` duplicated `allow(dead_code)`, `tests/v3d71_texfmt.rs:259` `type_complexity`, `tests/v3d71_gltest_rpi5_conf.rs:162` constant assertion, `tests/v3d_pi4_aborts2_refusals.rs:447` nested `format!` (fixed by `36c51e9a`), and in the Mali row `tests/mali_link_varying_offsets.rs:129-130`, `tests/mali_rebind_stencil_gl.rs:375`, `src/mali/frame_uniarray_tests.rs:388` (fixed by `6a54408d`). Re-running the 14 rows at `217f0a19` gives exit 0 and 0 warnings.
-- `tools/cts/imx95-gles2-accept-selftest.sh`: its fixture records say `verdin_imx95` while the tally tool accepts only `verdin-imx95`. A fix is not in the tree (still red on main `90d422fe`); it is a two-file change.
-- Not recorded per row: which of the seven failed rows are the quick-reached clippy rows and which the self-test; the walk's per-row list is not part of what this file was given. A re-walk at a commit with both fixes reads the rest.
-
-Before the gate, every CONTRIBUTING command exited 0, apart from the first `tools/cts/deps-env.sh --check`, which exits 1 until the next command builds the missing entry. Nine `tools/` rows fail on a host that exports a locale it has not installed and pass under `LC_ALL=C`; the gate exports no locale, so export `LC_ALL=C` and keep `TMPDIR` outside every git checkout.
+Before the gate: at the same-day walk of `4f34ffb8`, every CONTRIBUTING command before the gate exited 0, apart from the first `tools/cts/deps-env.sh --check`, which exits 1 until the next command builds the missing entry. Nine `tools/` rows fail on a host that exports a locale it has not installed and pass under `LC_ALL=C`; the gate exports no locale, so export `LC_ALL=C` and keep `TMPDIR` outside every git checkout.
 
 The last green `--quick` is "181 ok, 0 failed, 0 gap(s)" at `570cd8c6` (2026-11-12, 3121 s). It is not a reading of the tip.
 
-To close line 3: a fresh clone of a commit at or after `6a54408d` that also carries the self-test fix, `--quick` under `LC_ALL=C` on a host where `tools/setup-gate-host.sh --check` exits 0, ending "495 ok, 0 failed, 0 gap(s)".
+To close line 3: a fresh clone of a commit at or after the `PAIRS` bump, `env LC_ALL=C tools/check.sh --quick` started detached on this host with a wall budget above 10760 s, ending "509 ok, 0 failed, 0 gap(s)" (the row count moves with main).
 
 CONTRIBUTING's statements, checked at `4f34ffb8`:
 
@@ -75,7 +71,7 @@ CONTRIBUTING's statements, checked at `4f34ffb8`:
 
 README's host steps in order, then CONTRIBUTING, on a fresh clone.
 
-**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps 1 to 3 and the API-coverage step are the `cb36d3c7` walk below; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "488 ok, 7 failed, 0 gap(s)" at `4f34ffb8`, red (section "Line 3"). Line 6 is partial until line 3 is met.
+**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps 1 to 3 and the API-coverage step are the `cb36d3c7` walk below; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "508 ok, 1 failed, 0 gap(s)" at `8f1a5f71`, red (section "Line 3"). Line 6 is partial until line 3 is met.
 
 The `cb36d3c7` walk (2026-11-24, host steps 1 to 3 and the API-coverage step; step 4 was not run there because `west` was absent on that host):
 
@@ -117,6 +113,31 @@ supplies. Outputs: `cargo test -p yakogl-tools` "128 passed; 0 failed";
 `api_coverage.py` `SUMMARY declared=186 exported=304 procaddress=304`, missing
 0, from the archive (`nm`) and, with no archive, from the source: the same 304.
 
+Step 3 alone, re-walked 2026-11-26 at `40b44800` (host Linux 7.0.0-38-generic
+x86-64, rustc 1.99.1, Ubuntu clang 21.1.8 with the LLVM tools installed only
+versioned). The Arm GNU Toolchain was fetched with its sha256 checked
+(`ebaf2d47...3d2be9`, equal to Arm's `.sha256asc`): `aarch64-none-elf-gcc
+(Arm GNU Toolchain 14.3.Rel1 (Build arm-14.174)) 14.3.1 20250623`, kept at
+`<deps>/arm-gnu/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf` for
+later walks. Each row ran in a fresh clone with `build/bm` removed
+beforehand and the default `DRVSRC`; `<arm-gnu>` is that toolchain
+directory.
+
+| Step | Command as written | Exit | Wall time |
+| --- | --- | --- | --- |
+| 3 GCC form, Arm GNU on `PATH` | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-` | 0 | 55 s |
+| 3 clang form, `--sysroot`, versioned tools | `make -f baremetal.mk CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf' AR=llvm-ar-21 NM=llvm-nm-21 OBJCOPY=llvm-objcopy-21` | 0 | 47 s |
+| 3 clang form, unversioned tool names | the same with `AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy` | 2 | 3 s |
+
+The third row fails with `failed to find tool "llvm-ar"` on this host;
+README already says the tools may need their versioned names, so it is the
+documented host condition, not a README fault. Step 3 is thereby verified
+in both forms at a current commit; the "not verified" line and the "To
+close the line" note of "Line 6: cross builds (2026-11-05)" in
+`docs/release/checklist.md` are closed by this table; that older record
+text in the checklist itself is not rewritten here.
+
 The criterion of line 6 ends in a passing `tools/check.sh --quick` with no gap.
-That part is line 3's newest reading above: red at `4f34ffb8` ("488 ok, 7 failed,
-0 gap(s)"). The older readings at `4326fbd9` and `6a54408d` are superseded.
+That part is line 3's newest reading: red at `8f1a5f71` ("508 ok, 1 failed,
+0 gap(s)"). The older readings at `4f34ffb8`, `4326fbd9` and `6a54408d` are
+superseded.
