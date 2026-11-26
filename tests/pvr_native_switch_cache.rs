@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The online compile cache keys on the PowerVR's runtime switches
-//! (`pvr_native_3d`, `pvr_native_array`): the same source compiled with a
-//! switch off is not handed back after it is turned on, nor the reverse.
-//! The record's `native_cube` bits (mask 4: 3D, mask 2: 2D array) say which code a
-//! program has.
+//! (`pvr_native_3d`, `pvr_native_array`, `pvr_native_cube`): the same
+//! source compiled with a switch off is not handed back after it is turned
+//! on, nor the reverse. The record's `native_cube` bits (mask 4: 3D, mask 2:
+//! 2D array, mask 1: cube) say which code a program has.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_native_switch_cache
@@ -16,6 +16,13 @@ use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT};
 const FS_3D: &str = "#version 300 es
 precision highp float;
 uniform highp sampler3D s;
+in vec3 uv;
+out vec4 o;
+void main() { o = texture(s, uv); }
+";
+const FS_CUBE: &str = "#version 300 es
+precision highp float;
+uniform highp samplerCube s;
 in vec3 uv;
 out vec4 o;
 void main() { o = texture(s, uv); }
@@ -56,9 +63,11 @@ fn check(src: &str, set: extern "C" fn(core::ffi::c_int), bit: u32) {
 
 /// One test: each check resets the compiler, and a binary that resets holds one.
 #[test]
-fn the_cache_key_covers_the_native_3d_and_array_switches() {
+fn the_cache_key_covers_the_native_3d_array_and_cube_switches() {
     check(FS_3D, yakogl::shaderc::pvr_set_native_3d, 4);
     check(FS_ARRAY, yakogl::shaderc::pvr_set_native_array, 2);
+    check(FS_CUBE, yakogl::shaderc::pvr_set_native_cube, 1);
     yakogl::shaderc::pvr_set_native_3d(yakogl::shaderc::PVR_NATIVE_3D_DEFAULT);
     yakogl::shaderc::pvr_set_native_array(yakogl::shaderc::PVR_NATIVE_ARRAY_DEFAULT);
+    yakogl::shaderc::pvr_set_native_cube(yakogl::shaderc::PVR_NATIVE_CUBE_DEFAULT);
 }
