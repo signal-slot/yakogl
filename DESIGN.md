@@ -111,8 +111,8 @@ only on the host (`pco_shc`), to make the Mesa reference table. Three back ends 
   `no_std`, allocation-free GLSL ES compiler in the library (`src/shaderc/online/`), so a
   shader an application writes at run time compiles on the board; dEQP-GLES2 writes
   thousands of them. The front end (lexer, parser, sema, IR, `lower.rs`) is shared; the
-  code generators are one directory per GPU: `powervr/` (USC), `vivante/` (GC7000),
-  `v3d/` (QPU, with the V3D 7.1 half in its `*71.rs` files) and `mali/` (Valhall; it
+  code generators are one directory per GPU: `src/shaderc/online/powervr/` (USC), `src/shaderc/online/vivante/` (GC7000),
+  `src/shaderc/online/v3d/` (QPU, with the V3D 7.1 half in its `*71.rs` files) and `src/shaderc/online/mali/` (Valhall; it
   lowers through its own `src/shaderc/online/mali/{nir,bir,sched}.rs`). It is the only shader
   back end the V3D and Mali builds have (`src/lib.rs` refuses a `gpu-v3d` or `gpu-mali`
   build without `shaderc-online`, or with a Mesa reference table).
@@ -206,7 +206,8 @@ yakogl/
   src/shaderc/{precompiled,record_key,packing,es100_twins}.rs  the precompiled back end,
                                 its record key, and helpers the back ends share
   src/shaderc/online/                           the in-process compiler (`shaderc-online`):
-                                the shared front end, and powervr/ vivante/ v3d/ mali/, the
+                                the shared front end, and the directories powervr, vivante, v3d and
+                                mali (src/shaderc/online/powervr/ and so on), the
                                 code generator of each GPU
   tests/reference/{blobs,vivante_blobs}.rs      the Mesa reference tables (measurement-only,
                                 `mesa-reference-table`)
@@ -236,7 +237,8 @@ yakogl/
 
 The library was built in vertical slices, each tested on silicon (clear and a solid
 draw, attributes and varyings, textures, render state, framebuffer objects); the plan
-is in git history (`git show 5ad2fa0e:DESIGN.md`, "Incremental plan"). The silicon test rig is
+was in the earlier DESIGN.md of the non-public working repository ("Incremental plan"; the
+snapshot history does not carry it). The silicon test rig is
 `driver/tools/pvrlab/gl_test.c`, so a known-good reference is never lost.
 
 ## The backend contract (`src/backend.h`)
@@ -245,7 +247,7 @@ The GL core reaches the GPU only through `struct yakogl_backend`, a function tab
 (`init`, `draw`, `flush`, `finish`, `finish_previous`, `kick_id`, `kick_pending`,
 `heap_base`, `counters`, and the hooks for texture uploads and releases, queries,
 depth resolves and mipmap chains; `src/backend.h` has the full table) and the GPU-agnostic types next to it: `struct gles_draw` (the
-fully resolved draw), `gles_attrib`, `gles_texture_bind`, the `GLES_PRIM_/CMP_/CULL_/SOP_`
+fully resolved draw), `gles_attrib`, `gles_texture_bind`, the `GLES_PRIM_`, `GLES_CMP_`, `GLES_CULL_` and `GLES_SOP_`
 enums, `gles_texfmt`, `gles_surf_format` and the three heaps the core allocates in
 (`GLES_HEAP_DATA` = 0, `GLES_HEAP_SHADER` = 1, `GLES_HEAP_PROGRAM` = 2, in `src/backend.rs`). The contract is defined in
 `src/backend.rs` (`YakoglBackend`, `GlesDraw`, ...; `#[repr(C)]`, the C enums as `u32`
@@ -315,9 +317,11 @@ default cross target is `aarch64-unknown-none` (hard float: `CONFIG_FPU` /
 
 The port began as a translation of the upstream C library and diverged from it
 wherever the C was wrong. That account (the fix round, the syncs to the upstream
-commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) is in git
-history (`git show 5ad2fa0e:DESIGN.md`, "The Rust crate"). Those three commits are
-of the old C repository and are not in this one.
+commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) was in the
+earlier DESIGN.md of the non-public working repository ("The Rust crate"; the
+snapshot history does not carry it). The three commits are of the upstream C
+library's own repository: they are not in this repository, and `git cat-file` does
+not resolve them here.
 
 Verification on the host: unit tests on the strict mocks of `src/testutil.rs`, in every
 feature configuration `tools/check.sh` lists, and the host differential harness
