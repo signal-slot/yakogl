@@ -2,6 +2,36 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 terrain: where the 161.8 ms frame goes (host breakdown)
 
+## Current state (2026-11-26)
+
+Terrain is no longer a slow scene on the Pi 4: it runs at about 34.5 to
+34.8 ms a frame (29 fps), against 161.79 ms at `c4af4917`. Everything below
+this section is the history of how that was found and is left as written.
+
+- **The fix.** The ~130 ms was the render-image table thrashing (below), and
+  the board runs section measures it: `31a4cf8d` (the render-image table keeps
+  16 sampled targets, `RT_IMAGES` 8 -> 16) took terrain from 161.923 ms at
+  `c707598d` to 35.720 ms at `17e91019` (2026-11-08; gl -128.7 ms). The other
+  commits there are `21a236e5` (CPU mipmap filter, wide loads) and `8d1488cd`
+  (`v3d_wait_time`, a counter). `c6b16f71` (mark cleared on free) and
+  `4255adf1` (pending clear kept across a bind) followed; at `e07d066a`
+  (2026-11-21) terrain is **34.776 ms** (35.720 -> 34.776).
+- **Later figures.** `a4b9c551` (2026-11-22): 34.722 ms; `e9410974` against its
+  parent: 34.713 against 34.77 ms, no gain (all in "Board runs"). 34.77 ms is
+  the figure `tools/cts/STATUS.md` gives for main `0ee17984` and `ROADMAP.md`
+  for `87881c78`. The `tools/cts/RESULTS.md` "Common set" Pi 4 row is the run
+  of `bdd2ba1c` (commit `5afb3244`, 2026-11-25): score 195, terrain about
+  34.5 ms (29 fps, from whole fps, so it cannot give the second decimal).
+  The two-decimal 34.77 is therefore not the `bdd2ba1c` row's figure; both
+  agree within the rounding of whole fps.
+- **What is left** is "What is left, ranked (current)" below: 28.4 of the
+  34.7 ms is the CPU waiting for the GPU jobs, which are about 29 ms of GPU
+  work; the CPU work outside the waits is about 6 ms.
+- **#1209.** Its title (terrain slow, 161.8 ms) no longer holds. See the report
+  of this item for the verdict; this note records the figures and does not
+  judge them for the roadmap.
+
+
 The host breakdown of glmark2 terrain on the Pi 4 (#1209): at main `c4af4917`
 the board takes 161.79 ms a frame, 156.06 ms of it in GL calls, while the
 GPU work of a frame is 29.1 ms and the timed draw steps sum to 0.17 ms

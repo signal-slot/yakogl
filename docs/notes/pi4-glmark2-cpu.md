@@ -2,6 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 glmark2: terrain, shadow and refract CPU time on the V3D host build
 
+> Current state: the board sections below are history; Pi 4 terrain is now about 34.5 to 34.8 ms a frame, not the 161.79 ms of `c4af4917`. See "Current state" in `docs/notes/pi4-slow-terrain.md`.
+
 On the Pi 4, glmark2 terrain, shadow and refract run at about 6 fps, with
 170 to 188 ms of GL-call time a frame (`c854e0ae`; #1209,
 #995). This note is the host profile of those three scenes: where the CPU time
