@@ -12,12 +12,16 @@ NanoPC-T6), is in progress: on Zephyr it passes the regression set of `gl_test`
 off-screen as a development result, and dEQP-GLES2 has run only on the board's own
 Linux (`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"); its shaders
 come from our own Valhall compiler in `src/shaderc/online/mali/`. The V3D 7.1 of the
-Raspberry Pi 5 (BCM2712) is being added beside the V3D 4.2, not yet as a fifth
-`gpu-*` feature: the cargo crate has no `gpu-v3d71`. What is in the tree is its
-compiler half (the `*71.rs` files of `src/shaderc/online/v3d/`), the job builder's pure
-modules (`src/v3d/*71.rs`, which `src/v3d/mod.rs` does not declare yet) and the Zephyr
-OSAL `src/osal/zephyr_v3d71.c` (`zephyr/Kconfig`, `YAKOGL_GPU_V3D71`;
-`docs/notes/v3d71-backend.md`). Some
+Raspberry Pi 5 (BCM2712) is being added beside the V3D 4.2, not as a fifth
+exactly-one `gpu-*` feature but as the cargo feature `gpu-v3d71`, which implies
+`gpu-v3d` and swaps the 4.2 table for the 7.1 table `yakogl_backend_v3d71`
+(`src/v3d/table71.rs`) as `g_backend`. That table is in progress: a product
+build carries it alone and it refuses every draw by name, because the job
+builder's pure modules (`src/v3d/*71.rs`, declared in `src/v3d/mod.rs` only for a
+`gpu-v3d71` build with `host-test`, apart from `table71`) have no `no_std` form yet.
+Beside it are the compiler half (the `*71.rs` files of `src/shaderc/online/v3d/`) and
+the Zephyr OSAL `src/osal/zephyr_v3d71.c` (`zephyr/Kconfig`, `YAKOGL_GPU_V3D71`;
+`docs/notes/v3d71-backend.md`, `docs/notes/v3d71-table71.md`). Some
 sections below describe the PowerVR first, as it was built.
 
 ## Goals / non-goals
@@ -182,9 +186,11 @@ yakogl/
                                 OSAL's view of the kick
   src/v3d/{backend,state,texture,kick,ffi}.rs   the Raspberry Pi 4's V3D 4.2 backend (cargo
                                 feature gpu-v3d); src/v3d/v3d_kick.h is the OSAL's view of the kick
-  src/v3d/*71.rs               the V3D 7.1 (Raspberry Pi 5) job builder's pure modules
-                                (state packets, attributes, textures ...); not yet declared in
-                                src/v3d/mod.rs (docs/notes/v3d71-backend.md)
+  src/v3d/*71.rs               the V3D 7.1 (Raspberry Pi 5) backend (cargo feature gpu-v3d71,
+                                which implies gpu-v3d): table71.rs, the table `g_backend` points
+                                at, and the job builder's pure modules (state packets, attributes,
+                                textures ...), declared in src/v3d/mod.rs for a host-test build
+                                only (docs/notes/v3d71-backend.md, v3d71-table71.md)
   src/mali/                     the NanoPC-T6's Mali-G610 backend (cargo feature gpu-mali, in
                                 progress; driver/docs/nanopc-t6-mali.md): arena, cs, frame,
                                 program, blend, backend, genxml/ (the descriptor packers
@@ -247,6 +253,7 @@ aliases) and `src/backend.h` is its C view. `src/backend.rs` also names the
 backend of the build (`g_backend`, a pointer to a `YakoglBackend`: the static table
 `yakogl_backend_pvr`, `yakogl_backend_vivante`, `yakogl_backend_v3d` or
 `yakogl_backend_mali`, one per `gpu-*` feature, from that GPU's `src/<gpu>/backend.rs`;
+with `gpu-v3d71` the V3D's table is `yakogl_backend_v3d71` from `src/v3d/table71.rs`;
 a `host-test` build starts with it null and a test installs its own table). Everything PowerVR-specific (the options, the debug hooks,
 `pvr_backend_counters`) stays in `src/pvr/pvr_backend.h`; only the on-silicon test
 suite and the samples' diagnostics include it. Each further GPU adds `src/<gpu>/` with
@@ -268,7 +275,7 @@ wait for the object's stamp while it is pending.
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from
 C to Rust: the crate `yakogl` at the repository root (`no_std`; `[dependencies]` in `./Cargo.toml` is empty, so no runtime dependencies: the
 only dependency is the build-time `cc` of `./build.rs`; an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
-`gpu-v3d` | `gpu-mali` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
+`gpu-v3d` | `gpu-mali` picks the GPU (`gpu-v3d71` implies `gpu-v3d` and selects the Pi 5's V3D 7.1 table), `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
 compile-time default of `g_osal`, `host-test` for host tests only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
 panic handler. The C ABI is the product and did not
 change: `gl*`, `egl*`, `g_osal`, `g_backend`, `g_shaderc` and the structs in `include/`
