@@ -29,6 +29,9 @@
 # Host only, about 30 s. Its gate row in tools/check.sh is added by a separate
 # item of plan #332 (gate-row); this script does not add it.
 set -uo pipefail
+# A known locale: the scripts run below inherit it, so a caller's LC_ALL that
+# is not installed makes no "setlocale" warning in the output checked.
+export LC_ALL=C LANG=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-session
 RFIX=$HERE/testdata/mali-glmark2-run
@@ -257,6 +260,10 @@ check "script text has no write, sudo, module, tailscale or sshd verb" no_verbs 
 no_addr() { ! grep -qE '([0-9]{1,3}\.){3}[0-9]{1,3}|/dev/tty|[0-9a-f]{2}(:[0-9a-f]{2}){5}' "$1"; }
 check "script text has no address or UART path" no_addr "$SESSION"
 check "script is executable" test -x "$SESSION"
+
+echo "mali-glmark2-session-selftest: the locale"
+check "a child bash prints no setlocale warning (the locale is pinned, whatever the caller's LC_ALL)" \
+  bash -c '! bash -c : 2>&1 | grep -q setlocale'
 
 echo "mali-glmark2-session-selftest: $passed checks passed"
 [ "$failed" = 0 ]
