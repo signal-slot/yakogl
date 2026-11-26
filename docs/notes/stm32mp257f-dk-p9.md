@@ -473,6 +473,10 @@ replaces it.
   (shard 10), colour-texture class (b). Each run took 4.1 to 19.6 s of
   image time. Shard 13 is the exception at 159.5 s (`flush_finish.*`),
   26.6 % of the lifetime.
+- Slice 3 (shards 46..68, 2,875 cases, 2026-11-26): 2,718 Pass, 157 Fail,
+  0 NotSupported, 0 QualityWarning, 0 other, every shard returned with all
+  125 of its cases: no hang, no refusal and no lifetime cut-off, and at most
+  3.8 % of the lifetime (4.7 to 23.0 s of image time).
 
 `mp2-p9-diff: shared 0, new 274, fixed 3, missing 0, excluded 21`
 
