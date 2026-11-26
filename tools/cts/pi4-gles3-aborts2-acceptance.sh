@@ -41,6 +41,14 @@
 #       repository has no origin/main (or no git) c2 says SKIP, not PASS.
 #   c3  table.txt's TOTAL row's last column (the 'none' column) is 0: every
 #       mustpass case in the record's scope has a result.
+#   c7  for each tools/cts/log/2026-11-pi4-gles3-<sha8>-aborts2 directory
+#       except the one at b1b5b845 (plan #320's record of the first aborts
+#       session, whose 'none' column is not 0): b1b5b845 is an ancestor of
+#       <sha8>, <sha8> is an ancestor of origin/main (SKIP when origin/main
+#       is missing), and the table's TOTAL 'none' is 0. Session selection
+#       skips the b1b5b845 directory, so c2 and c3 read the later session;
+#       with no later session, or more than one, c2, c3 and c7 FAIL.
+#       (PI4_ABORTS2_BASE overrides the base sha8, for the self-test.)
 #   c6  tools/cts/pi4-gles3-preflight-selftest.sh,
 #       tools/cts/pi4-session-tally-selftest.sh and tools/cts/cts-selftest.sh
 #       exit 0 (behind --selftests).
@@ -89,6 +97,7 @@ TREE="$ROOT/tools/cts/pi4-gles3-tree.txt"
 	{ echo "pi4-gles3-aborts2-acceptance: no tools/cts/pi4-gles3-tree.txt under $ROOT" >&2; exit 2; }
 
 FAILS=0
+BASE=${PI4_ABORTS2_BASE:-b1b5b845}
 
 line() { # line <n> <status> <reason...>
 	printf 'c%s %s %s\n' "$1" "$2" "$3"
@@ -100,8 +109,16 @@ if [ -n "$SESSION" ]; then
 	sds=("$SESSION")
 else
 	shopt -s nullglob
-	sds=("$ROOT"/tools/cts/log/2026-11-pi4-gles3-*-aborts2)
+	all=("$ROOT"/tools/cts/log/2026-11-pi4-gles3-*-aborts2)
 	shopt -u nullglob
+	sds=()
+	based=()
+	for d in "${all[@]}"; do
+		case ${d##*/} in
+		*"$BASE"*) based+=("$d") ;;
+		*) sds+=("$d") ;;
+		esac
+	done
 fi
 SDIR=""
 no_session=""
@@ -113,6 +130,8 @@ if [ -n "$SESSION" ]; then
 	fi
 elif [ ${#sds[@]} -eq 1 ]; then
 	SDIR=${sds[0]}
+elif [ ${#sds[@]} -eq 0 ] && [ ${#based[@]} -gt 0 ]; then
+	no_session="no later aborts2 session: only the $BASE record exists under tools/cts/log/2026-11-pi4-gles3-*-aborts2/ (a session at a commit after $BASE is not recorded here)"
 elif [ ${#sds[@]} -eq 0 ]; then
 	no_session="no aborts2 session: no directory matches tools/cts/log/2026-11-pi4-gles3-*-aborts2/ (the re-split-and-rerun session of plan #398 is not recorded here)"
 else
@@ -277,6 +296,49 @@ PYEOF
 	"FAIL "*) line 3 FAIL "${c3_verdict#FAIL }" ;;
 	*) line 3 FAIL "the c3 check could not run" ;;
 	esac
+fi
+
+# --- c7: the session's commit is after b1b5b845 and on origin/main, none is 0 -
+if [ -n "$no_session" ]; then
+	line 7 FAIL "no session to check: $no_session"
+else
+	c7_name=${SDIR##*/}
+	c7_sha=${c7_name#2026-11-pi4-gles3-}
+	c7_sha=${c7_sha%-aborts2}
+	c7_bad=""
+	c7_skip=0
+	git_ok() { git -C "$ROOT" "$@" >/dev/null 2>&1; }
+	case $c7_name in
+	*"$BASE"*) c7_bad="the session directory $c7_name is at $BASE, not later" ;;
+	esac
+	if [ -z "$c7_bad" ]; then
+		if ! git_ok rev-parse --verify -q "$BASE^{commit}"; then
+			c7_bad="$BASE is not a commit of $ROOT"
+		elif ! git_ok rev-parse --verify -q "$c7_sha^{commit}"; then
+			c7_bad="session commit $c7_sha (from $c7_name) is not a commit of $ROOT"
+		elif [ "$(git -C "$ROOT" rev-parse "$BASE^{commit}" 2>/dev/null)" = \
+			"$(git -C "$ROOT" rev-parse "$c7_sha^{commit}" 2>/dev/null)" ]; then
+			c7_bad="session commit $c7_sha is $BASE itself, not a later commit"
+		elif ! git_ok merge-base --is-ancestor "$BASE" "$c7_sha"; then
+			c7_bad="$BASE is not an ancestor of the session commit $c7_sha"
+		elif git_ok rev-parse --verify -q origin/main; then
+			git_ok merge-base --is-ancestor "$c7_sha" origin/main ||
+				c7_bad="session commit $c7_sha is not an ancestor of origin/main"
+		else
+			c7_skip=1
+		fi
+	fi
+	case ${c3_verdict:-} in
+	"PASS "*) ;;
+	*) c7_bad="${c7_bad:+$c7_bad; }the table's TOTAL none is not 0 (${c3_verdict#FAIL })" ;;
+	esac
+	if [ -n "$c7_bad" ]; then
+		line 7 FAIL "$c7_bad"
+	elif [ $c7_skip -eq 1 ]; then
+		line 7 SKIP "$BASE is an ancestor of $c7_sha and none is 0; $c7_sha's ancestry of origin/main was not checked (origin/main is missing)"
+	else
+		line 7 PASS "$BASE is an ancestor of $c7_sha, $c7_sha is an ancestor of origin/main, TOTAL none is 0"
+	fi
 fi
 
 # --- c6: the three self-tests, behind --selftests (cts-selftest.sh is slow) ----

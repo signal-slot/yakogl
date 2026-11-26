@@ -16,7 +16,9 @@
 # a case unmatched (c1), no session directory, two session directories, a
 # missing cycles.txt, a missing tally, a table.txt naming no label, a README
 # commit that is no commit and one that is no ancestor of origin/main (c2),
-# a TOTAL row whose last column is 1978 (c3), and the --selftests run against
+# a TOTAL row whose last column is 1978 (c3), a session commit that is not on
+# origin/main (c7), a b1b5b845-stand-in record with none 710 next to a good later
+# session (passes: c7 skips it), a tree holding only that record (c2, c3, c7 FAIL), and the --selftests run against
 # stub self-tests that pass and that fail (c6). --session names the directory
 # and names a missing one. c6 of every non-stub run is SKIP. Nothing outside
 # $TMPDIR is read or written; cts-selftest.sh (slow) is never run.
@@ -34,7 +36,10 @@ TD="$HERE/testdata/pi4-gles3-aborts2-acceptance/root"
 W=$(mktemp -d "${TMPDIR:-/tmp}/pi4-gles3-aborts2-acceptance-selftest.XXXXXX") || exit 2
 trap 'rm -rf "$W"' EXIT
 fails=0
-SD=tools/cts/log/2026-11-pi4-gles3-1234abcd-aborts2
+SDP=tools/cts/log/2026-11-pi4-gles3-
+SD0=${SDP}1234abcd-aborts2 # the fixture's directory name
+SD=$SD0                   # prepare renames it to the session commit's sha8
+BASE8=""                  # the fixture's stand-in for b1b5b845: its first commit's sha8
 
 # the git environment of this test: fixed identity, no config of the host,
 # every scratch path trusted (a file mode of the host's must not decide
@@ -66,9 +71,18 @@ prepare() { # prepare <name>: fixture copy + git repo, README names commit A,
 	gitc "$dir" commit -q -m base
 	sha=$(gitq "$dir" rev-parse HEAD)
 	[ -n "$sha" ] || { echo "pi4-gles3-aborts2-acceptance-selftest: empty rev-parse in $dir" >&2; exit 2; }
-	sed -i "s/^commit: .*/commit: $sha/" "$dir/$SD/README.md"
+	BASE8=${sha:0:8}
+	echo "$BASE8" > "$W/$1.base"
+	sed -i "s/^commit: .*/commit: $sha/" "$dir/$SD0/README.md"
 	gitc "$dir" add -A
 	gitc "$dir" commit -q -m readme
+	# the session directory is named for the commit it was made at (the
+	# readme commit), a later commit than the stand-in for b1b5b845
+	sha=$(gitq "$dir" rev-parse HEAD)
+	SD=${SDP}${sha:0:8}-aborts2
+	mv "$dir/$SD0" "$dir/$SD" || exit 2
+	gitc "$dir" add -A
+	gitc "$dir" commit -q -m session
 	gitc "$dir" update-ref refs/remotes/origin/main HEAD
 }
 
@@ -89,22 +103,22 @@ run_acc() { # run_acc <name> [--script <script>] [extra acceptance args...]:
 		script=$2
 		shift 2
 	fi
-	"${GITENV[@]}" HOME="$W" LANG=C LC_ALL=C bash "$script" --root "$W/$v" "$@" \
+	"${GITENV[@]}" HOME="$W" LANG=C LC_ALL=C PI4_ABORTS2_BASE="$(cat "$W/$v.base")" bash "$script" --root "$W/$v" "$@" \
 		> "$W/$v.out" 2> "$W/$v.err"
 	echo "$?" > "$W/$v.rc"
 }
 
-check() { # check <name> <want rc> <want statuses of c1 c2 c3 c6> <substring of stdout or stderr>
+check() { # check <name> <want rc> <want statuses of c1 c2 c3 c7 c6> <substring of stdout or stderr>
 	local v=$1 grc=$2 gstat=$3 sub=$4
-	[ "$(awk 'END { print NR }' "$W/$v.out")" -eq 4 ] || { echo "  FAIL $v: not four stdout lines"; sed 's/^/       out /' "$W/$v.out"; fails=$((fails + 1)); return; }
+	[ "$(awk 'END { print NR }' "$W/$v.out")" -eq 5 ] || { echo "  FAIL $v: not five stdout lines"; sed 's/^/       out /' "$W/$v.out"; fails=$((fails + 1)); return; }
 	# the criteria are c1, c2, c3, c6 (plan numbering, not consecutive), so
 	# the line's first column is checked as 'c<digit>', not as 'c<NR>'
 	awk '$1 !~ /^c[0-9]+$/ || ($2 != "PASS" && $2 != "FAIL" && $2 != "SKIP") || NF < 3 { print "bad line " NR ": [" $0 "]"; exit 1 }' "$W/$v.out" || { echo "  FAIL $v: a line is not 'c<N> PASS|FAIL|SKIP <reason>'"; fails=$((fails + 1)); return; }
 	local stat rc
 	stat=$(awk '{ printf "%s ", $1 }' "$W/$v.out")$(awk '{ printf "%s ", $2 }' "$W/$v.out")
 	rc=$(cat "$W/$v.rc")
-	if [ "$stat" != "c1 c2 c3 c6 $gstat " ] || [ "$rc" != "$grc" ] || ! grep -Fq -- "$sub" "$W/$v.out" "$W/$v.err" 2>/dev/null; then
-		echo "  FAIL $v: rc $rc want $grc, criteria+status '$stat' want 'c1 c2 c3 c6 $gstat ', '$sub' not printed"
+	if [ "$stat" != "c1 c2 c3 c7 c6 $gstat " ] || [ "$rc" != "$grc" ] || ! grep -Fq -- "$sub" "$W/$v.out" "$W/$v.err" 2>/dev/null; then
+		echo "  FAIL $v: rc $rc want $grc, criteria+status '$stat' want 'c1 c2 c3 c7 c6 $gstat ', '$sub' not printed"
 		sed 's/^/       out /' "$W/$v.out"
 		sed 's/^/       err /' "$W/$v.err" | head -5
 		fails=$((fails + 1))
@@ -143,64 +157,94 @@ m10() { sed -i 's/^TOTAL.*/TOTAL                               3      1      0  
 # m11: the origin/main ref is gone (c2 SKIP)
 m11() { gitc "$1" update-ref -d refs/remotes/origin/main; }
 
+# m12: a record at the base commit with none 710 next to the good later session
+m12() {
+	cp -a "$1/$SD" "$1/${SDP}${BASE8}-aborts2"
+	sed -i 's/^TOTAL.*/TOTAL                               3      1      0      0      0    710/' \
+		"$1/${SDP}${BASE8}-aborts2/table.txt"
+}
+# m13: only the base commit's record (the later session is renamed to it)
+m13() { mv "$1/$SD" "$1/${SDP}${BASE8}-aborts2"; }
+# m14: origin/main is the base commit: the session commit is not on it (c7)
+m14() { gitc "$1" update-ref refs/remotes/origin/main "$BASE8"; }
+# m15: a second record at a later commit besides the good one (c7 has no one session)
+m15() { m4 "$1"; }
+
 mkdir -p "$W/home" || exit 2
 
 # --- the passing record and its single-defect variants ------------------------
 variant pass
 run_acc pass
-check pass 0 "PASS PASS PASS SKIP" "2 images (as the table header names), 4 matched once"
+check pass 0 "PASS PASS PASS PASS SKIP" "2 images (as the table header names), 4 matched once"
 
 variant pass-session
 run_acc pass-session --session "$W/pass-session/$SD"
-check pass-session 0 "PASS PASS PASS SKIP" "is an ancestor of origin/main"
+check pass-session 0 "PASS PASS PASS PASS SKIP" "is an ancestor of origin/main"
 
 variant session-missing
 run_acc session-missing --session "$W/session-missing/$SD-deleted"
-check session-missing 1 "PASS FAIL FAIL SKIP" "no such session directory"
+check session-missing 1 "PASS FAIL FAIL FAIL SKIP" "no such session directory"
 
 variant c1-header m1
 run_acc c1-header
-check c1-header 1 "FAIL PASS PASS SKIP" "the table header names 3"
+check c1-header 1 "FAIL PASS PASS PASS SKIP" "the table header names 3"
 
 variant c1-case-unmatched m2
 run_acc c1-case-unmatched
-check c1-case-unmatched 1 "FAIL PASS PASS SKIP" "1 not matched"
+check c1-case-unmatched 1 "FAIL PASS PASS PASS SKIP" "1 not matched"
 
 variant no-session m3
 run_acc no-session
-check no-session 1 "PASS FAIL FAIL SKIP" "no aborts2 session: no directory matches tools/cts/log/2026-11-pi4-gles3-*-aborts2/"
+check no-session 1 "PASS FAIL FAIL FAIL SKIP" "no aborts2 session: no directory matches tools/cts/log/2026-11-pi4-gles3-*-aborts2/"
 
 variant two-sessions m4
 run_acc two-sessions
-check two-sessions 1 "PASS FAIL FAIL SKIP" "2 session directories match"
+check two-sessions 1 "PASS FAIL FAIL FAIL SKIP" "2 session directories match"
 
 variant cycles-missing m5
 run_acc cycles-missing
-check cycles-missing 1 "PASS FAIL PASS SKIP" "no cycles.txt"
+check cycles-missing 1 "PASS FAIL PASS PASS SKIP" "no cycles.txt"
 
 variant tally-missing m6
 run_acc tally-missing
-check tally-missing 1 "PASS FAIL PASS SKIP" "B2.tally.txt missing"
+check tally-missing 1 "PASS FAIL PASS PASS SKIP" "B2.tally.txt missing"
 
 variant table-no-labels m7
 run_acc table-no-labels
-check table-no-labels 1 "PASS FAIL PASS SKIP" "names none of pi4-gles3-tree.txt's image labels"
+check table-no-labels 1 "PASS FAIL PASS PASS SKIP" "names none of pi4-gles3-tree.txt's image labels"
 
 variant commit-unknown m8
 run_acc commit-unknown
-check commit-unknown 1 "PASS FAIL PASS SKIP" "is not a commit of"
+check commit-unknown 1 "PASS FAIL PASS PASS SKIP" "is not a commit of"
 
 variant commit-side-branch m9
 run_acc commit-side-branch
-check commit-side-branch 1 "PASS FAIL PASS SKIP" "is not an ancestor of origin/main"
+check commit-side-branch 1 "PASS FAIL PASS PASS SKIP" "is not an ancestor of origin/main"
 
 variant total-nonzero m10
 run_acc total-nonzero
-check total-nonzero 1 "PASS PASS FAIL SKIP" "last column (none) is 1978, not 0"
+check total-nonzero 1 "PASS PASS FAIL FAIL SKIP" "last column (none) is 1978, not 0"
 
 variant no-origin m11
 run_acc no-origin
-check no-origin 0 "PASS SKIP PASS SKIP" "origin/main"
+check no-origin 0 "PASS SKIP PASS SKIP SKIP" "origin/main"
+
+# --- c7: the base commit's record is skipped, a later session is required -----
+variant base-record-none710 m12
+run_acc base-record-none710
+check base-record-none710 0 "PASS PASS PASS PASS SKIP" "is an ancestor of origin/main, TOTAL none is 0"
+
+variant base-only m13
+run_acc base-only
+check base-only 1 "PASS FAIL FAIL FAIL SKIP" "no later aborts2 session: only the"
+
+variant two-later-sessions m15
+run_acc two-later-sessions
+check two-later-sessions 1 "PASS FAIL FAIL FAIL SKIP" "2 session directories match"
+
+variant c7-not-on-origin m14
+run_acc c7-not-on-origin
+check c7-not-on-origin 1 "PASS PASS PASS FAIL SKIP" "is not an ancestor of origin/main"
 
 # --- c6 runs the self-tests of its own tools/ directory: stubs ---------------
 # the acceptance script with a stub tools/ of its own (its check-gles3-tree.py
@@ -218,14 +262,14 @@ stub_bin() { # stub_bin <dir> <rc>: bin dir with the script, its checker and stu
 variant c6-stub-pass
 stub_bin "$W/bin-pass" 0
 run_acc c6-stub-pass --script "$W/bin-pass/pi4-gles3-aborts2-acceptance.sh" --selftests
-check c6-stub-pass 0 "PASS PASS PASS PASS" "exit 0"
+check c6-stub-pass 0 "PASS PASS PASS PASS PASS" "exit 0"
 
 variant c6-stub-fail
 stub_bin "$W/bin-fail" 0
 printf '#!/bin/sh\necho "stub fails"\nexit 3\n' > "$W/bin-fail/cts-selftest.sh"
 chmod +x "$W/bin-fail/cts-selftest.sh"
 run_acc c6-stub-fail --script "$W/bin-fail/pi4-gles3-aborts2-acceptance.sh" --selftests
-check c6-stub-fail 1 "PASS PASS PASS FAIL" "cts-selftest.sh (exit 3)"
+check c6-stub-fail 1 "PASS PASS PASS PASS FAIL" "cts-selftest.sh (exit 3)"
 
 if [ $fails -eq 0 ]; then
 	echo "pi4-gles3-aborts2-acceptance-selftest: all checks passed"
