@@ -17,7 +17,7 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; fail=1; }
 
 ROW=16
-REC=20261124-1216-gm16-desktop-0123abcd
+REC=20261124-1216-gm16-desktop-89abcdef  # image sha8, not the commit 0123abcd
 PIC='picdiff: mean 41.20 max 255 differing 38.5% (ref glmark2-ref/gm16-desktop.png)'
 WHAT='the four windows are drawn without the blur; their edges are sharp'
 
@@ -69,10 +69,13 @@ gen() { # note [extra args...]
   python3 "$WS" --note "$n" --row "$ROW" --record "$REC" --picdiff "$PIC" --what "$WHAT" "$@"
 }
 
+mkdir -p "$T/$REC"
+printf 'commit=%s\nimage sha256=%s\n' "0123abcd$(printf 'f%.0s' $(seq 32))" \
+  "89abcdef$(printf '0%.0s' $(seq 56))" > "$T/$REC/meta.txt"
 # 1. heading equals the scene cell, on the skeleton and the filled note
 for n in skel filled; do
   want="### $(scene_of "$T/$n.md" "$ROW")"
-  if gen "$T/$n.md" > "$T/$n.out" 2> "$T/$n.err"; then
+  if gen "$T/$n.md" --record "$T/$REC" > "$T/$n.out" 2> "$T/$n.err"; then
     got=$(head -n 1 "$T/$n.out")
     [ "$got" = "$want" ] && ok "$n: heading is row $ROW's scene cell" \
                          || bad "$n: heading '$got', want '$want'"
@@ -194,7 +197,6 @@ refuse() { # label args...
 base=(--note "$T/filled.md" --row "$ROW" --picdiff "$PIC" --what "$WHAT")
 refuse "record without time" "${base[@]}" --record 20261124-gm16-0123abcd
 refuse "record with short sha" "${base[@]}" --record 20261124-1216-gm16-0123abc
-refuse "record with other sha" "${base[@]}" --record 20261124-1216-gm16-89abcdef
 # The redaction-pattern values are built at run time, so this file holds none
 # literally (tools/release/redaction-scan.py scans the tree).
 ipv4="$((190 + 2)).$((160 + 8)).1.20"
@@ -214,6 +216,17 @@ refuse "photograph route (seen without a value)" --note "$T/photo.md" --row "$RO
 refuse "--route photograph" --note "$T/skel.md" --row "$ROW" --record "$REC" \
   --picdiff "$PIC" --what "$WHAT" --route photograph
 refuse "row out of range" --note "$T/filled.md" --row 34 --record "$REC" \
+  --picdiff "$PIC" --what "$WHAT"
+# real-record case: the record's sha8 (image sha256 prefix) differs from the
+# commit; a '-' commit cell takes meta.txt's commit= line of the record dir
+if python3 "$WS" --note "$T/skel.md" --row "$ROW" --record "$T/$REC" \
+     --picdiff "$PIC" --what "$WHAT" > "$T/real.out" 2> "$T/real.err" \
+   && grep -qF -- "Commit: 0123abcd " "$T/real.out"; then
+  ok "real record: sha8 != commit accepted, commit from meta.txt"
+else
+  bad "real record refused: $(cat "$T/real.err")"
+fi
+refuse "'-' commit without meta.txt" --note "$T/skel.md" --row "$ROW" --record "$REC" \
   --picdiff "$PIC" --what "$WHAT"
 # a full records/imx8mp/<dir>/ path is accepted as the name
 gen "$T/filled.md" > /dev/null 2>&1 \

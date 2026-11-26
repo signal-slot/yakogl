@@ -18,11 +18,13 @@ note is never written.
 
 --record takes the record directory name (a leading records/imx8mp/ and a
 trailing / are accepted). The commit is the row's commit cell; when that is
-still `-`, the record's sha8. The route is the row's route cell; when that is
+still `-`, the commit= line of the record's meta.txt (--record then names the
+record directory). The record's sha8 is the image's sha256 prefix and is not
+compared with the commit. The route is the row's route cell; when that is
 still `-`, --route, default dump (a picdiff line comes from a decoded dump).
 
 Refuses (exit 1, message on stderr): a record name that is not
-YYYYMMDD-HHMM-<name>-<sha8>, a record sha8 that is not the row's commit, a
+YYYYMMDD-HHMM-<name>-<sha8>, a
 row outside the table, a route that cannot carry a wrong verdict (photograph
 alone; the routes are imx8mp-glmark2-verdicts.py's, whose table parser this
 uses too), a scene the dump script does not list, an argument
@@ -74,6 +76,24 @@ def label_of(scene):
     raise Refuse(f"scene {scene!r} is not in `imx8mp-glmark2-dumps.sh scenes`")
 
 
+def meta_commit(record):
+    """The first 8 hex digits of the commit= line of <record>/meta.txt."""
+    d = record.rstrip("/")
+    if not os.path.isdir(d):
+        d = os.path.join(os.path.dirname(os.path.dirname(HERE)), d)
+    try:
+        with open(os.path.join(d, "meta.txt"), encoding="utf-8") as f:
+            for line in f:
+                m = re.fullmatch(r"commit=([0-9a-f]{40})\s*", line)
+                if m:
+                    return m.group(1)[:8]
+    except OSError:
+        pass
+    raise Refuse("the row's commit cell is '-' and no commit=<40 hex> line was found "
+                 "in meta.txt of the record (give --record as the record directory, "
+                 "or fill the row with imx8mp-glmark2-note-fill.py first)")
+
+
 def entry(a):
     for name, val in vars(a).items():
         val = str(val)
@@ -83,7 +103,9 @@ def entry(a):
         if "\n" in val or "\r" in val:
             raise Refuse(f"--{name} has a newline")
     rec = a.record
-    if rec.startswith("records/imx8mp/"):
+    if os.path.isdir(rec):
+        rec = os.path.basename(rec.rstrip("/"))
+    elif rec.startswith("records/imx8mp/"):
         rec = rec[len("records/imx8mp/"):]
     rec = rec.rstrip("/")
     m = RECORD.fullmatch(rec)
@@ -98,10 +120,9 @@ def entry(a):
     if len(c) != 5:
         raise Refuse(f"row {a.row} has {len(c)} cells, want 5")
     scene, commit, _, route, _ = c
+    # the record's sha8 is the image's sha256 prefix, never the commit
     if commit == "-":
-        commit = sha8
-    elif commit != sha8:
-        raise Refuse(f"record sha8 {sha8} is not the row's commit {commit}")
+        commit = meta_commit(a.record)
     if route == "-":
         route = a.route or "dump"
     if route not in ROUTES:
