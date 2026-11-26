@@ -68,7 +68,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2-uboot.sh"
-WANT_CHECKS=122
+WANT_CHECKS=126
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -455,7 +455,7 @@ mkdir -p "$S/runs"
 out=$(live run "$S/img/mp2_hello.bin" "$S/runs" 2>&1); rc=$?
 RD=$(ls -d "$S/runs"/*-mp2_hello-* 2>/dev/null | head -1)
 check "mmc run: rc 0, verdict=done row, boot_verdict done, result pass, both diffs empty" \
-    eval '[ "$rc" = 0 ] && [[ "$(vline)" =~ ^board-stm32mp2-uboot\.sh\ stm32mp257f-dk\ mp2_hello\ rc=0\ verdict=done\ boot=uboot-mmc\ row\ boot_verdict=done\ result=pass:mp2_hello\ env_diff=empty\ boot_diff=empty\ back_after=[0-9]+s$ ]]'
+    eval '[ "$rc" = 0 ] && [[ "$(vline)" =~ ^board-stm32mp2-uboot\.sh\ stm32mp257f-dk\ mp2_hello\ rc=0\ verdict=done\ boot=uboot-mmc\ row\ boot_verdict=done\ result=pass:mp2_hello\ resets=absent\ record=absent\ env_diff=empty\ boot_diff=empty\ back_after=[0-9]+s$ ]]'
 check "mmc run: the staged files are gone and the directory it made too" eval '! staged_on_card && [ ! -e "$F/boot/yakogl" ]'
 check "mmc run: the typed line names the bootfs partition (8) and \${scriptaddr}, typed once" \
     eval '[ "$(grep -c . "$F/typed.lines")" = 1 ] && grep -qF "load mmc \${boot_instance}:8 \${scriptaddr} /yakogl/mp2z-mp2_hello-" "$F/typed.lines"'
@@ -488,7 +488,7 @@ check "status, live (dd): rc 0, bootcmd and scriptaddr printed from the dd'd u-b
 reset_board
 out=$(BOARD_BOOT=uboot-tftp NETBOOT_SERVER=192.0.2.77 NETBOOT_TFTP_ROOT=$S/tftp live run "$S/img/mp2_hello.bin" "$S/runs" tftp_hello 2>&1); rc=$?
 check "tftp run: rc 0, verdict=done boot=uboot-tftp, both diffs empty" \
-    eval '[ "$rc" = 0 ] && grep -q "rc=0 verdict=done boot=uboot-tftp row boot_verdict=done result=pass:mp2_hello env_diff=empty boot_diff=empty" <<<"$(vline)"'
+    eval '[ "$rc" = 0 ] && grep -q "rc=0 verdict=done boot=uboot-tftp row boot_verdict=done result=pass:mp2_hello resets=absent record=absent env_diff=empty boot_diff=empty" <<<"$(vline)"'
 check "tftp run: nothing left in the TFTP root, nothing staged on the card" eval '[ -z "$(ls -A "$S/tftp/yakogl")" ] && ! staged_on_card && ! grep -q "\.part" "$F/ssh.log"'
 check "tftp run: the typed line fetches the script to \${scriptaddr} from the server; no address in the output" \
     eval 'grep -qF "tftpboot \${scriptaddr} 192.0.2.77:yakogl/mp2z-tftp_hello-" "$F/typed.lines" && ! leaks "$out"'
@@ -536,7 +536,38 @@ reset_board
 echo "$F/console.refused" > "$F/state/console"
 out=$(live run "$S/img/mp2_hello.bin" "$S/runs" refusal 2>&1); rc=$?
 check "a refusal on the console: rc 4, verdict=refused, cleaned up, diffs empty" \
-    eval '[ "$rc" = 4 ] && grep -q "verdict=refused .* boot_verdict=refused result=none env_diff=empty boot_diff=empty" <<<"$(vline)" && ! staged_on_card'
+    eval '[ "$rc" = 4 ] && grep -q "verdict=refused .* boot_verdict=refused result=none resets=absent record=absent env_diff=empty boot_diff=empty" <<<"$(vline)" && ! staged_on_card'
+
+# the image's yk-record lines (gap G3): result=record:<KIND>, record=, resets=.
+# Fixture consoles carry no address, host name or device path. A record line
+# is four 8-digit hex words; anything else is no record.
+rec_console() { # rec_console NAME LINE...: the done console with LINEs before the end line
+    local name=$1
+    shift
+    { printf '%s\n' "$BOOTLOG"; printf '%s\n' 'mp2z: go 0xa0000000' '*** Booting Zephyr OS build selftest ***' "$@" \
+        'mp2: lifetime: PSCI SYSTEM_RESET at 1234 ms'
+      printf '%s\n' "$BOOTLOG" | head -5; printf '%s\n' 'Hit any key to stop autoboot:  0' 'Starting kernel ...'; } > "$F/console.$name"
+}
+rec_run() { # rec_run NAME: a run on console.NAME
+    reset_board
+    echo "$F/console.$1" > "$F/state/console"
+    out=$(live run "$S/img/mp2_hello.bin" "$S/runs" "$1" 2>&1); rc=$?
+}
+rec_console recpass 'yk-record: 594b0101 00000001 00000005 00000000' 'mp2_hello: PASS: case'
+rec_run recpass
+check "yk-record, a CASE pass: rc 0, verdict=done, result=record:CASE, record= the four words, resets=absent (the legacy PASS line gives way)" \
+    eval '[ "$rc" = 0 ] && grep -q "rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:CASE resets=absent record=594b0101,00000001,00000005,00000000 env_diff=empty" <<<"$(vline)"'
+rec_console recset 'yk-record: 594b0101 ffff0007 ffff0007 ffff0007'
+rec_run recset
+check "yk-record, a CASE_SET record: rc 0, verdict=done, result=record:CASE, record= its words" \
+    eval '[ "$rc" = 0 ] && grep -q "rc=0 verdict=done .* result=record:CASE resets=absent record=594b0101,ffff0007,ffff0007,ffff0007 " <<<"$(vline)"'
+rec_run done
+check "no yk-record line: the earlier result=pass:mp2_hello, resets=absent, record=absent" \
+    eval '[ "$rc" = 0 ] && grep -q " result=pass:mp2_hello resets=absent record=absent env_diff=empty" <<<"$(vline)"'
+rec_console recgarbled 'yk-record: 594b0101 00000001 0000005' 'yk-record: 594b0101 00000001 zzzzzzzz 00000000' 'yk-record: 594b0101 00000001'
+rec_run recgarbled
+check "a garbled yk-record line is absent, never a pass: result=none, resets=absent, record=absent, no record:" \
+    eval 'grep -q " result=none resets=absent record=absent env_diff=empty" <<<"$(vline)" && ! grep -q "result=record:\|result=pass" <<<"$(vline)"'
 
 reset_board
 echo noreboot > "$F/state/mode"
