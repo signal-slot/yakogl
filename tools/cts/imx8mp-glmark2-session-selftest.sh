@@ -149,11 +149,51 @@ check "(a) the decoder's line is shown"
 check "(a) picture, picdiff and side-by-side are in the record"
 cmp -s "$rec/console.txt" "$work/cap/clean.log"
 check "(a) console.txt is unchanged"
-grep -q "imx8mp-glmark2-note-fill.py --note docs/notes/imx8mp-glmark2-pictures-by-eye.md --scene $label --commit $commit --record records/imx8mp/$(basename "$rec")/ --route dump --verdict right" "$work/a.out"
+grep -q "imx8mp-glmark2-note-fill.py --note docs/notes/imx8mp-glmark2-pictures-by-eye.md --scene $label --commit $commit --record records/imx8mp/$(basename "$rec")/ --route dump --verdict right --check-main --main origin/main" "$work/a.out"
 check "(a) the note-fill command names scene, commit, record and route"
 run a2 "$label" --dry-run --ref-dir "$work/ref" --record-dir "$rec"
 [ "$rc" = 0 ] && grep -q "^session: step judge: " "$work/a2.out"
 check "(a) by label, and --dry-run with a record redoes the checks (got $rc)"
+
+# (j) the route, --main and the note-fill command accepted by note-fill.py
+fillnote=$here/imx8mp-glmark2-note-fill.py
+run j1 1 --record-dir "$rec" --ref-dir "$work/ref" --route photograph+probes --main refs/heads/xmain
+[ "$rc" = 0 ] && grep -q -e "--route photograph+probes --verdict right --check-main --main refs/heads/xmain\$" "$work/j1.out" &&
+    grep -q -e "--route photograph+probes --verdict wrong --check-main --main refs/heads/xmain\$" "$work/j1.out"
+check "(j) --route photograph+probes and --main reach the printed commands (got $rc)"
+run j2 1 --record-dir "$rec" --ref-dir "$work/ref" --route photograph
+[ "$rc" = 0 ] && grep -q -e "--route photograph --verdict 'seen without a value' --check-main --main origin/main\$" "$work/j2.out" &&
+    absent "--verdict right" "$work/j2.out"
+check "(j) route photograph prints only the 'seen without a value' command (got $rc)"
+IMX8MP_MAIN=refs/heads/envmain; export IMX8MP_MAIN; run j3 1 --record-dir "$rec" --ref-dir "$work/ref" --route both; unset IMX8MP_MAIN
+[ "$rc" = 0 ] && grep -q -e "--route both --verdict wrong --check-main --main refs/heads/envmain\$" "$work/j3.out"
+check "(j) IMX8MP_MAIN is the default ref (got $rc)"
+run j4 1 --record-dir "$rec" --ref-dir "$work/ref" --route nonsense
+[ "$rc" = 2 ]
+check "(j) an unknown route exits 2 (got $rc)"
+# the printed commands, with a record whose commit is this checkout's HEAD,
+# run on a copy of the note
+head=$(git -C "$here" rev-parse HEAD 2> /dev/null)
+if [ -n "$head" ]; then
+    himage=${head}89abcdef0123456789abcdef
+    hrec=$work/j5/20261125-1200-$label-${himage:0:8}
+    mkdir -p "$hrec" && cp "$work/cap/clean.log" "$hrec/console.txt"
+    printf 'name=%s\ncommit=%s\nimage_sha256=%s\n' "$label" "$head" "$himage" > "$hrec/meta.txt"
+    nrec=$work/j5/note.md
+    cp "$here/../../docs/notes/imx8mp-glmark2-pictures-by-eye.md" "$nrec"
+    for r in dump photograph+probes both; do
+        run j5 1 --record-dir "$hrec" --ref-dir "$work/ref" --route "$r" --main HEAD
+        cmd=$(grep -m1 -e "--verdict right" "$work/j5.out" | sed 's#^ *python3 tools/cts/##; s#--note [^ ]* #--note '"$nrec"' #')
+        # shellcheck disable=SC2086
+        (cd "$here/../.." && eval "python3 tools/cts/$cmd") > "$work/j5.fill" 2>&1
+        check "(j) note-fill.py accepts the printed command, route $r ($(tr '\n' ' ' < "$work/j5.fill"))"
+    done
+    grep -q "photograph+probes" "$nrec" && grep -q "${head:0:8}" "$nrec"
+    check "(j) the note copy holds the route and the commit of meta.txt"
+else
+    echo "FAIL (j) no git HEAD to test note-fill.py against"
+    fail=$((fail + 1))
+fi
 
 # (b) a dropped row
 rec=$(mkrec "$work/b" "$work/cap/bad.log")
@@ -185,7 +225,7 @@ check "(c) the address is never printed"
 rec=$(mkrec "$work/d" "$work/cap/clean.log")
 printf 'name=%s\ncommit=%s\n' "$label" "$commit" > "$rec/meta.txt"
 run d 1 --record-dir "$rec" --ref-dir "$work/ref"
-[ "$rc" = 1 ] && grep -q "^session: step record-check failed: " "$work/d.err" && grep -q "^sha256: " "$work/d.err"
+[ "$rc" = 1 ] && grep -q "^session: step record-check failed: " "$work/d.err" && grep -q "^sha8: " "$work/d.err"
 check "(d) a record without the image's sha256 fails at record-check (got $rc)"
 absent "^\(photograph\|console\): " "$work/d.err"
 check "(d) other scenes' and photograph lines are left out"
@@ -210,7 +250,8 @@ check "(e) judge did not run"
 
 # (f) dry run: the board command, nothing created
 rc=0
-IMX8MP_RECORDS=$work/f-records bash "$session" 24 --dry-run > "$work/f.out" 2> "$work/f.err" || rc=$?
+mkdir "$work/fimg" && echo "$commit" > "$work/fimg/gm24-shadow.commit"
+IMX8MP_IMG_DIR=$work/fimg IMX8MP_RECORDS=$work/f-records bash "$session" 24 --dry-run > "$work/f.out" 2> "$work/f.err" || rc=$?
 [ "$rc" = 0 ]
 check "(f) dry run exits 0 with BOARD_UART unset (got $rc)"
 [ "$rc" = 0 ] || show f
