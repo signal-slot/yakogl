@@ -407,9 +407,13 @@ What stays G610-specific:
   for the frames built here; the tile of a 4x frame follows Mesa 26.2.1,
   half the 25.0.7 tile the T6's Mesa draws (`src/mali/frame_msaa_tests.rs`
   `TILE_25_0_CAUSE`).
-- The kernel side's G310 mock (`driver/rust/src/gpu/mali/mock.rs:99`,
-  `G310_ASSUMED`, `shader_present: 0x3`) is an assumed variant 0 and two
-  cores; it decides nothing but the mock. The board's value is 0x1.
+- The code takes the variant from the board's registers: `tools/cts/RESULTS.md`
+  row `imx95_ident` records GPU_ID 0xac740001, SHADER_PRESENT 0x1 and
+  CORE_FEATURES 0x1, Mesa's G310v2 with one core. `G310_ASSUMED` is gone from
+  `src/` and remains only as a fixture of the kernel side's mock
+  (`driver/rust/src/gpu/mali/mock.rs:95`, plan #401's tree): `core_features: 0`,
+  `mmu_features: 0x2830`, `as_present: 0xff`, `shader_present: 0x3`,
+  `tiler_present: 1`, `l2_present: 1`. It decides nothing but the mock.
 
 ### Not measurable on the host
 
