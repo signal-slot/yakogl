@@ -14,7 +14,7 @@ use crate::gpu::mali::fw::synth;
 use crate::gpu::mali::heap::chunk_link;
 use crate::gpu::mali::pgtable::ENTRIES;
 use crate::gpu::mali::sched::job::{mov48, sync_add64};
-use crate::gpu::mali::sched::RING_MIN_SIZE;
+use crate::gpu::mali::sched::{JOB_POLL_US, RING_MIN_SIZE};
 
 /// The carve-out of the tests: 16 MiB, the backend's two frame slots
 /// (about 1.8 MiB each) and the GL objects with room to spare.
@@ -53,6 +53,11 @@ fn came_up((r, up): (Rig, Result<(), u32>)) -> Rig {
 /// of them the heap's at the start, `reserved` bytes at the carve-out's end
 /// kept from `alloc`.
 fn rig_up(chunks: u64, initial: u32, reserved: u64) -> (Rig, Result<(), u32>) {
+    rig_up_hz(chunks, initial, reserved, RK3588_TIMER_HZ)
+}
+
+/// [`rig_up`] with the arch timer at `timer_hz` (CNTFRQ_EL0).
+fn rig_up_hz(chunks: u64, initial: u32, reserved: u64, timer_hz: u32) -> (Rig, Result<(), u32>) {
     let blob = synth::small();
     let z = Box::new(Z4::with_regions(
         blob.clone(),
@@ -86,7 +91,7 @@ fn rig_up(chunks: u64, initial: u32, reserved: u64) -> (Rig, Result<(), u32>) {
         &backings(&blob),
         &mut pool,
         TABLES_PA,
-        RK3588_TIMER_HZ,
+        timer_hz,
         mem,
         &|a, n| z.t6.clean(a, n),
         &mut |_| {},
@@ -1529,5 +1534,84 @@ mod gl {
             yakogl::osal::osal_set_ops(core::ptr::null());
         }
         GL.store(core::ptr::null_mut(), Ordering::Release);
+    }
+}
+
+/// The GLB timers the group came up with, read back from the interface's
+/// input page: (power-off, idle).
+fn glb_timers(r: &Rig) -> (u32, u32) {
+    let g = r.osal.up.unwrap().iface.glb_input;
+    let at = |f: usize| r.z.read32(g + f);
+    (at(core::mem::offset_of!(csf::GlbInput, poweroff_timer)), at(core::mem::offset_of!(csf::GlbInput, idle_timer)))
+}
+
+/// The arch timer rates U-Boot may leave in CNTFRQ_EL0: the RK3588's 24 MHz,
+/// and others a loader could set. The time base the firmware's timers are
+/// written in follows the rate given, in units of 1024 ticks.
+const TIMER_RATES: [u32; 4] = [24_000_000, 25_000_000, 100_000_000, 1_000_000];
+
+#[test]
+fn the_glb_timers_follow_cntfrq_in_units_of_1024_ticks() {
+    for hz in TIMER_RATES {
+        let (r, up) = rig_up_hz(1, 1, 0, hz);
+        assert_eq!(up, Ok(()), "{hz} Hz");
+        assert_eq!(
+            glb_timers(&r),
+            (csf::conv_timeout(csf::PWROFF_HYSTERESIS_US, hz), csf::conv_timeout(csf::IDLE_HYSTERESIS_US, hz)),
+            "{hz} Hz"
+        );
+    }
+    // 24 MHz: the values the board's trace has
+    assert_eq!(glb_timers(&rig()), (235, 19));
+    // no rate (CNTFRQ_EL0 left 0): the largest value on the GPU counter
+    let (r, up) = rig_up_hz(1, 1, 0, 0);
+    assert_eq!(up, Ok(()));
+    let big = csf::conv_timeout(csf::PWROFF_HYSTERESIS_US, 0);
+    assert_eq!(glb_timers(&r), (big, big));
+}
+
+/// A wait's delays are microseconds of the OSAL's own count, whatever the
+/// timer rate: a 1 ms budget on a kick that does not finish sleeps 1 ms in
+/// steps of `JOB_POLL_US`, and the OSAL goes on.
+#[test]
+fn a_wait_budget_is_counted_in_microseconds_at_every_timer_rate() {
+    use core::cell::Cell;
+    for hz in TIMER_RATES {
+        let mut r = came_up(rig_up_hz(1, 1, 0, hz));
+        queue_init(&mut r);
+        let s = stream(&mut r);
+        r.z.fail_at(2, Fail::Hang);
+        let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+        let (slept, steps_ok) = (Cell::new(0u64), Cell::new(true));
+        let mut delay = |us: u32| {
+            steps_ok.set(steps_ok.get() && us > 0 && us <= JOB_POLL_US);
+            slept.set(slept.get() + u64::from(us));
+        };
+        assert_eq!(r.osal.wait(&*r.z, f, 1000, &mut delay), 1, "{hz} Hz");
+        assert!(steps_ok.get(), "{hz} Hz: one step is at most JOB_POLL_US");
+        assert_eq!(slept.get(), 1000, "{hz} Hz");
+        assert_eq!((r.osal.restarts, r.osal.dead()), (0, None), "{hz} Hz: a short timeout stops nothing");
+        // not a multiple of the step: rounded up
+        slept.set(0);
+        assert_eq!(r.osal.wait(&*r.z, f, 1001, &mut delay), 1, "{hz} Hz");
+        assert_eq!(slept.get(), 1010, "{hz} Hz");
+    }
+}
+
+/// A timeout of panthor's 5 s or more (or none) waits 5 s of delays, then
+/// restarts the group, at every timer rate.
+#[test]
+fn the_five_second_limit_is_five_seconds_of_delays_at_every_timer_rate() {
+    for hz in TIMER_RATES {
+        let mut r = came_up(rig_up_hz(1, 1, 0, hz));
+        queue_init(&mut r);
+        let s = stream(&mut r);
+        r.z.fail_at(2, Fail::Hang);
+        let f = r.osal.submit(&*r.z, s.gpu, 24, &mut no_delay);
+        let mut slept = 0u64;
+        let mut delay = |us: u32| slept += u64::from(us);
+        assert_eq!(r.osal.wait(&*r.z, f, -1, &mut delay), -EIO, "{hz} Hz");
+        assert!(slept >= u64::from(JOB_TIMEOUT_US), "{hz} Hz: slept {slept} us");
+        assert_eq!((r.osal.restarts, r.osal.last_error().map(|d| d.0)), (1, Some(SchedRefusal::JobTimeout)));
     }
 }
