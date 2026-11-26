@@ -5,19 +5,28 @@
 (Mali-G310) dEQP-GLES2 per-case result pair with a candidate G310 cause.
 
 Usage:
-  tools/cts/imx95-g310-cause.py [--summary] [FILE]
+  tools/cts/imx95-g310-cause.py [--summary] [--commit-cases FILE] [FILE]
 
 Input (FILE, or stdin when FILE is absent or '-'): one case a line,
   case<TAB>t6_result<TAB>imx95_result
 with each result one of Pass, Fail, NotSupported, QualityWarning,
-CompatibilityWarning, InternalError, Crash, Timeout, Missing. Lines that
+CompatibilityWarning, InternalError, Crash, Timeout, Missing, Lost. Lines that
 start with '#' and empty lines are copied as they are. A first line
 'case<TAB>...' is taken as the header and gets a 'cause' column too.
 
 Output (stdout): every input line, with a fourth column, the cause. With
 --summary, a per-cause count table follows, as '#' lines (so the output
 can be read again as input): '# cause<TAB>count', one row per cause in
-rule order (zeros included), then '# total<TAB>N'.
+rule order (zeros included), then '# total<TAB>N' and
+'# g310-only<TAB>N': the differences no compiler rule, refusal or renderer
+name explains (total less no-difference, compiler-refusal, compiler-commit
+and renderer-name).
+
+--commit-cases FILE lists the dEQP cases the compiler commits between the
+T6 baseline (8ff01055) and the iMX95 images (e63ab28e: a824ec97, d3876279,
+9fa5bbe0; src/shaderc/online/mali) change: one case a line, '#' comments and
+empty lines ignored; a name ending in '*' is a prefix. A differing pair for
+such a case is 'compiler-commit' (unless it is a hang).
 
 A malformed line (not three fields, an empty case name, an unknown result)
 stops the tool with exit 2 and a message naming the line; nothing is
@@ -38,6 +47,9 @@ The rules, in order, the first that matches wins:
                     which is word-identical for the two GPUs (note section
                     5, `src/shaderc/online/mali/`), refuses or miscompiles
                     on both (issue #11251).
+  hang              Timeout, Crash, Missing or Lost on the iMX95 only; checked
+                    before every name rule.
+  compiler-commit   a differing pair for a case of --commit-cases.
   renderer-name     dEQP-GLES2.info.*: GL_RENDERER is per model
                     ("Arm Mali-G310v2 (YakoGL)" against "Arm Mali-G610
                     (YakoGL)", src/mali/model.rs), so the info cases'
@@ -47,7 +59,6 @@ The rules, in order, the first that matches wins:
   tiler-levels      large framebuffers (see TILER_RULE below).
   shader-present    timing and performance cases: SHADER_PRESENT 0x1 is
                     one shader core against the G610's four (0x50005).
-  hang              Timeout, Crash or Missing on the iMX95 only.
   unexplained       anything else.
 
 Exit status: 0 done, 2 bad usage or malformed input.
@@ -67,19 +78,22 @@ RESULTS = (
     "Crash",
     "Timeout",
     "Missing",
+    "Lost",
 )
-HANG_RESULTS = ("Crash", "Timeout", "Missing")
+HANG_RESULTS = ("Crash", "Timeout", "Missing", "Lost")
 
 CAUSES = (
     "no-difference",
     "compiler-refusal",
+    "hang",
+    "compiler-commit",
     "renderer-name",
     "tib-budget",
     "tiler-levels",
     "shader-present",
-    "hang",
     "unexplained",
 )
+NOT_G310 = ("no-difference", "compiler-refusal", "compiler-commit", "renderer-name")
 
 RENDERER_RULE = re.compile(r"^dEQP-GLES2\.info\.")
 
@@ -145,9 +159,33 @@ def tiler_match(case):
     return bool(m and int(m.group(1)) >= TILER_MIN)
 
 
-def cause_of(case, t6, imx):
+def commit_match(case, commit):
+    exact, prefixes = commit
+    return case in exact or any(case.startswith(p) for p in prefixes)
+
+
+def load_commit_cases(path):
+    exact, prefixes = set(), []
+    with open(path, encoding="utf-8") as fh:
+        for raw in fh:
+            x = raw.strip()
+            if not x or x.startswith("#"):
+                continue
+            x = x.split("\t")[0].strip()
+            if x.endswith("*"):
+                prefixes.append(x[:-1])
+            else:
+                exact.add(x)
+    return exact, tuple(prefixes)
+
+
+def cause_of(case, t6, imx, commit=(frozenset(), ())):
     if t6 == imx:
         return "no-difference" if t6 == "Pass" else "compiler-refusal"
+    if imx in HANG_RESULTS and t6 not in HANG_RESULTS:
+        return "hang"
+    if commit_match(case, commit):
+        return "compiler-commit"
     if RENDERER_RULE.search(case):
         return "renderer-name"
     if TIB_RULE.search(case):
@@ -156,12 +194,10 @@ def cause_of(case, t6, imx):
         return "tiler-levels"
     if SHADER_RULE.search(case):
         return "shader-present"
-    if imx in HANG_RESULTS and t6 not in HANG_RESULTS:
-        return "hang"
     return "unexplained"
 
 
-def tag(lines):
+def tag(lines, commit=(frozenset(), ())):
     out = []
     counts = dict.fromkeys(CAUSES, 0)
     for n, raw in enumerate(lines, 1):
@@ -181,7 +217,7 @@ def tag(lines):
         for who, r in (("t6_result", t6), ("imx95_result", imx)):
             if r not in RESULTS:
                 raise Malformed("line %d: %s %r is not one of %s" % (n, who, r, ", ".join(RESULTS)))
-        c = cause_of(case, t6, imx)
+        c = cause_of(case, t6, imx, commit)
         counts[c] += 1
         out.append(line + "\t" + c)
     return out, counts
@@ -195,6 +231,7 @@ def main(argv):
         epilog="Rules, first match wins: " + ", ".join(CAUSES) + ". Exit 0 done, 2 bad usage or input.",
     )
     ap.add_argument("--summary", action="store_true", help="append a per-cause count table as '#' lines")
+    ap.add_argument("--commit-cases", metavar="FILE", help="dEQP cases the compiler commits 8ff01055..e63ab28e change (one a line)")
     ap.add_argument("file", nargs="?", default="-", help="the TSV (case, t6_result, imx95_result); '-' or absent: stdin")
     a = ap.parse_args(argv)
     try:
@@ -206,8 +243,15 @@ def main(argv):
     except (OSError, UnicodeDecodeError) as e:
         print("imx95-g310-cause: %s: %s" % (a.file, e), file=sys.stderr)
         return 2
+    commit = (frozenset(), ())
+    if a.commit_cases:
+        try:
+            commit = load_commit_cases(a.commit_cases)
+        except (OSError, UnicodeDecodeError) as e:
+            print("imx95-g310-cause: %s: %s" % (a.commit_cases, e), file=sys.stderr)
+            return 2
     try:
-        out, counts = tag(lines)
+        out, counts = tag(lines, commit)
     except Malformed as e:
         print("imx95-g310-cause: %s: %s" % (a.file if a.file != "-" else "stdin", e), file=sys.stderr)
         return 2
@@ -219,6 +263,7 @@ def main(argv):
         for c in CAUSES:
             w("# %s\t%d\n" % (c, counts[c]))
         w("# total\t%d\n" % sum(counts.values()))
+        w("# g310-only\t%d\n" % sum(n for c, n in counts.items() if c not in NOT_G310))
     return 0
 
 
