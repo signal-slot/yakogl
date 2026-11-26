@@ -541,3 +541,18 @@ a later one.
 * The committed `.frag`/`.vert` are byte-equal to the `tools/shaders/` files of
   the table above (`intloop_divnest.vert` to `tools/shaders/es300/bands.vert`); only
   `intloop_plain.vert` has no counterpart there.
+
+## loop fs 3678: still refused (plan #367 lower-nonfinite-const, step mploop)
+
+glmark2's loop fs `3678` (scene 32, fragment-uniform=true) runs `d =
+fract(3.0 * d)` in a loop to the uniform `FragmentLoops`, a run-time bound
+that Mesa keeps as a loop. The value is fp16 and is carried across the back
+edge. gm2_mploop_1 (an original reduction, `uniform int n`) is the Mesa
+26.2.1 reference for it, drawn with `--uniform-values`. Our compiler still
+refuses it at LOOP_FP16 ("a loop Mesa keeps (a run-time bound) in a
+mediump fragment shader"), pinned in `tests/mali_mploop.rs`. The kept-loop
+route (`walk_kept_loop`) is fp32 only. Lowering it needs fp16 phis at the
+loop head, and a guard so that fp16 arithmetic after a mediump kept loop
+reads its constants right: proto-mploop's caveat names
+gm2_intloop_uniform_fs, whose constant after the loop was read as `0x0`
+without it.

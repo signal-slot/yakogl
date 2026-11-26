@@ -363,3 +363,9 @@ mediump compare (fp16 folding, no reference); `h < 0.0 ? 1.0 : 0.25` of a
 highp texel chain, and a chain of distinct scalar locals into a select, hit
 a back-end defect (`IrIndex`, at 74308a71 too), a new cause.
 
+
+`CONST_FOLD` of the lit fragment shaders (`994f`, `fea0`, `d442`, `487d`,
+`77c5`) was a built-in on constants that Mesa's GLSL front end folds at fp32
+before lower_precision rounds it once. That fold is now the mediump walk's
+own (plan #367 lower-nonfinite-const, docs/notes/mali-nonfinite-const.md:
+gm2_nonfin_2 and _4 byte-equal, scenes 6 and 9 compile).
