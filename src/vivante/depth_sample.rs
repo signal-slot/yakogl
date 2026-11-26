@@ -282,6 +282,39 @@ pub(super) fn copy_blit(v: &DepthView, dst: u64) -> Option<RsBlit> {
     })
 }
 
+/// Every `(register, value)` pair `super::backend::emit_rs` writes for
+/// [`copy_blit`]'s copy of `v` to `dst`, in order (the flush and stall in front
+/// included, as LOAD_STATE writes; a STALL is not a register write and is
+/// left out), for host tests. Read-only: it records the stream into a scratch
+/// buffer and changes no state. `-ENOTSUP` when [`copy_blit`] refuses.
+#[cfg(any(test, feature = "host-test"))]
+pub fn copy_rs_writes(v: &DepthView, dst: u64) -> Result<std::vec::Vec<(u32, u32)>, i32> {
+    use super::cmd::GcCmd;
+    let b = copy_blit(v, dst).ok_or(-ENOTSUP)?;
+    let mut buf = std::vec![0u32; 256];
+    let mut c = GcCmd { words: buf.as_mut_ptr(), used: 0, cap: buf.len() as u32, overflow: false };
+    super::backend::emit_rs(&mut c, &b);
+    if c.overflow {
+        return Err(-ENOTSUP);
+    }
+    let words = &buf[..c.used as usize];
+    let mut out = std::vec::Vec::new();
+    let mut i = 0usize;
+    while i < words.len() {
+        let w = words[i];
+        if w & 0xf800_0000 != super::regs::GC_OP_LOAD_STATE {
+            return Err(-ENOTSUP);
+        }
+        let count = ((w >> 16) & 0x3ff) as usize;
+        let base = (w & 0xffff) * 4;
+        for k in 0..count {
+            out.push((base + 4 * k as u32, words[i + 1 + k]));
+        }
+        i += 1 + count + usize::from(count & 1 == 0);
+    }
+    Ok(out)
+}
+
 /// The texture descriptor words that sample (b).1's copy: CONFIG0, CONFIG1,
 /// CONFIG2, LINEAR_STRIDE, SLICE, SIZE and the level 0 address. The rest of
 /// the descriptor (log size, base LOD 0 with max 0, 3D config, the other LOD
