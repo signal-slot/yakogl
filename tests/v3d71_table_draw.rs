@@ -34,10 +34,11 @@
 //! record is the address of its `GL_SHADER_STATE` packet.
 //!
 //! The reference's two jobs are: a full clear; then, scissored to
-//! (0,0,32,32), a clear (Mesa's blitter quad) and the draw. This item's
-//! table draws no clear quad (it refuses that clear by name, checked below),
-//! so the second job here is the scissored draw alone, compared with the
-//! reference's second draw and its state. A difference must be one entry of
+//! (0,0,32,32), a clear (Mesa's blitter quad) and the draw. The first test
+//! here leaves the scissored clear out, so its second job is the scissored
+//! draw alone, compared with the reference's second draw and its state (the
+//! whole of case 5, clear quad included, is tests/v3d71_table_cases.rs's).
+//! A difference must be one entry of
 //! [`ALLOW`] (the names tests/v3d71_backend71_shapes.rs gives the same
 //! differences, plus the ones the table's own choices make: a raster colour
 //! image at the GL core's address, a depth/stencil kept in the tile buffer),
@@ -56,7 +57,7 @@ use yakogl::backend::{
 };
 use yakogl::shaderc::{ShcShader, ShcV3dUniform, ShcV3dVs};
 use yakogl::util::{EINVAL, ENOTSUP};
-use yakogl::v3d::table71::{self, yakogl_backend_v3d71, REFUSAL_PREFIX, REF_CLEAR_QUAD};
+use yakogl::v3d::table71::{self, yakogl_backend_v3d71, REFUSAL_PREFIX};
 use yakogl::v3d::{attr71, record71};
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
@@ -843,7 +844,8 @@ fn decode_job(defs: &[PacketDef], k: &Kick, w: &str) -> Ours {
 /// A named difference from the reference: `(difference glob, id, reason)`.
 /// EZ and PAGE are tests/v3d71_backend71_shapes.rs's `ALLOW` entries for the
 /// same jobs (v3d_job71's and the Pi 5 kernel's); RASTER is the table's
-/// choice of colour image; NOQUAD is this item's scope. The depth/stencil
+/// choice of colour image; NOQUAD is this test's own calls (it makes no
+/// scissored clear). The depth/stencil
 /// the table keeps in the tile buffer makes no difference here: the
 /// reference's jobs neither load nor store the window's D24S8.
 const ALLOW: [(&str, &str, &str); 8] = [
@@ -851,7 +853,7 @@ const ALLOW: [(&str, &str, &str); 8] = [
     ("scissor job * submit #0: 16384 != 12288", "PAGE", "the tile allocation is rounded to the Pi 5 kernel's 16 KiB page (backend71::PAGE_SIZE); the drm-shim's page is 4 KiB"),
     ("scissor job * tiles #* *.Memory Format: 0 != 4", "RASTER", "the colour image is the GL core's raster surface at its own address (docs/notes/v3d71-table71.md 4.3), Mesa's window a UIF image"),
     ("scissor job * tiles #* *.Height in UB or Stride: 256 != 8", "RASTER", "the same: the raster stride in bytes (64 pixels of 4), not the UIF height in blocks"),
-    ("scissor job 1 bcl draws: 1 != 2", "NOQUAD", "the reference's second job clears in the scissor box with Mesa's blitter quad before the draw; this table draws no clear quad yet (REF_CLEAR_QUAD, item table71-cases), so the job is the draw alone"),
+    ("scissor job 1 bcl draws: 1 != 2", "NOQUAD", "the reference's second job clears in the scissor box with Mesa's blitter quad before the draw; this test makes no scissored clear (tests/v3d71_table_cases.rs runs case 5 whole), so the job is the draw alone"),
     ("scissor job 1 records: 1/1 != 2/2", "NOQUAD", "the same: one draw, one record"),
     ("scissor job 1 bcl draw 0 *", "NOQUAD", "the same: our first draw is the triangles, the reference's first the quad; our draw is compared with the reference's second draw apart"),
     ("scissor job 1 draw 0 *", "NOQUAD", "the same, for the records"),
@@ -1208,16 +1210,6 @@ fn a_refused_state_is_a_named_refusal() {
         assert_eq!(table71::refused_draws(), refused, "{why}");
     };
 
-    /* a scissored clear needs the clear quad (gl_test case 5's second clear) */
-    let mut d = c.clear([1.0, 1.0, 0.0, 1.0]);
-    (d.clear_quad, d.scissor, d.scissor_rect) = (true, true, [0, 0, 32, 32]);
-    check(&d, ENOTSUP, &format!("table71: {REF_CLEAR_QUAD}"));
-    check(&d, ENOTSUP, &format!("table71: {REF_CLEAR_QUAD}"));
-    /* and so does a clear under a partial colour mask (case 102) */
-    let mut d = c.clear([1.0, 1.0, 0.0, 1.0]);
-    d.clear_color_mask = 0x9;
-    check(&d, ENOTSUP, &format!("table71: {REF_CLEAR_QUAD}"));
-
     /* the 4.2 table's shared decisions, the same strings (src/v3d/state.rs) */
     let mut d = c.draw(None);
     d.alpha_to_coverage = true;
@@ -1285,7 +1277,7 @@ fn stencil_an_earlier_job_wrote_is_refused_by_the_4_2_name() {
     (d.stencil_func, d.stencil_back_func) = (backend::GLES_CMP_EQUAL, backend::GLES_CMP_EQUAL);
     assert_eq!(backend::draw(&d), -ENOTSUP);
     let want = "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in";
-    assert_eq!(logs_with(want).len(), 1, "{:?}", log_lines());
-    assert!(logs_with(want)[0].starts_with(REFUSAL_PREFIX));
+    /* the 4.2 table's line but for the prefix: no module name in front */
+    assert_eq!(logs_with(want), [format!("{REFUSAL_PREFIX}{want}")], "{:?}", log_lines());
     assert_eq!(osal_counts().0, 1, "only the first job");
 }

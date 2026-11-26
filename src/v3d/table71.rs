@@ -5,7 +5,7 @@
 //! place of the 4.2 table `yakogl_backend_v3d` (roadmap stage 5, P9;
 //! docs/notes/v3d71-table71.md, docs/notes/v3d71-gl-table.md section 4).
 //!
-//! # What it records (plan item `table71-draw`)
+//! # What it records (plan items `table71-draw`, `table71-cases`)
 //!
 //! The table keeps the **open frame**: one framebuffer (`glue71::Frame71`
 //! and the depth/stencil identity `ds_id`) and the GL core's draws and
@@ -40,18 +40,53 @@
 //!   what `glReadPixels` reads once the kick completed (`kick_pending`,
 //!   `wait_kick`, `finish`).
 //!
+//! * **clear quad**: a `glClear` the tile buffer cannot do (scissored, or
+//!   under a partial colour or stencil mask: clearplan71's `Draw`) is
+//!   fill71's clear quad, Mesa's blitter clear: a TRIANGLE_FAN of four
+//!   vertices with the clear program, the 4.2 table's own source
+//!   (`backend::CLEAR_VS`, `CLEAR_FS`: the position passes through, the
+//!   colour is the uniform `u_color`). The program is built through the
+//!   shader back end on the first quad (as an application's program is:
+//!   compile, link, the code uploaded), checked as the 4.2 table checks its
+//!   own (`u_color` at fragment dwords 0 to 3, render target 0 only, one
+//!   attribute) and kept until shutdown. Each quad's four vertices
+//!   (`FilledDraw::quad`) are written into the data arena at the flush, a
+//!   64-byte slot a quad, and the quad's attribute record names its slot.
+//!
 //! # What this cut refuses by name
 //!
-//! * a `glClear` the tile buffer cannot do (masked or scissored: a clear
-//!   quad): [`REF_CLEAR_QUAD`]. The clear program belongs to item
-//!   `table71-cases`;
+//! * a clear quad when the clear program did not build
+//!   ([`REF_CLEAR_PROGRAM`], the 4.2 table's string);
 //! * what `backend71` does not assemble (indexed, instanced, point size) and
 //!   everything `glue71`, `fill71` and their modules refuse (textures among
 //!   them);
 //! * a depth/stencil the framebuffer keeps between jobs: the table keeps it
 //!   in the tile buffer only (`glue71::DsPlace` at address 0), so a draw
 //!   that reads what an earlier job left is zskeep71's refusal, the 4.2
-//!   string (gl_test case 59).
+//!   table's string (`src/v3d/backend.rs`, `fn record`).
+//!
+//! # gl_test's six cases (P9; tests/v3d71_table_cases.rs runs them)
+//!
+//! * 5 (scissor), 58 (clear with scissor), 66 (clear not bounded by the
+//!   viewport), 102 (clear under a partial colour mask): recorded whole. The
+//!   scissored and the masked clears are clear quads.
+//! * 59 (clear with write masks): **refused by name**, as on the 4.2 table
+//!   without a kept buffer. Its colour and depth parts and the stencil clear
+//!   through the 0x0f mask (a quad with REPLACE through the mask) are
+//!   recorded; the last draw tests stencil the job before the `glFinish`
+//!   wrote, the window's stencil was in the tile buffer only, and zskeep71
+//!   still refuses that read: "the draw reads stencil an earlier job wrote,
+//!   and the target has no depth/stencil buffer to keep it in". The GL core
+//!   gets -ENOTSUP (`GL_INVALID_OPERATION`) and the log line names it.
+//! * 67 (FBO limits): **refused by the same name**, at its last frame (8):
+//!   the `GL_STENCIL_INDEX8` framebuffer's stencil box is read across a
+//!   `glFinish`. Frames 1 to 7 are recorded, the GL_RGB frame among them: the
+//!   refusal "a colour format with fewer than 8 alpha bits" the Pi 4's first
+//!   run met is no longer in the shared `state.rs` (tests/v3d71_refuse67.rs),
+//!   so nothing produces it on either table.
+//!
+//! Both refusals end when the table keeps a D24S8 buffer per `ds_id`
+//! (docs/notes/v3d71-table71.md section 2.1); that is not in this cut.
 //!
 //! # A product build records nothing yet
 //!
@@ -91,10 +126,12 @@ pub const NAME: &core::ffi::CStr = c"Broadcom V3D 7.1 (Raspberry Pi 5)";
 pub const REF_NO_RECORDING: &str =
     "V3D 7.1: the table records no draw or clear in this build (the 7.1 modules are host-test only)";
 
-/// A `glClear` that needs a clear quad (masked or scissored): the table has
-/// no clear program yet (item table71-cases).
-pub const REF_CLEAR_QUAD: &str =
-    "V3D 7.1: a masked or scissored glClear needs the clear quad, which the table does not draw yet";
+/// A `glClear` that needs a clear quad (masked or scissored) when the clear
+/// program did not build: the 4.2 table's string (src/v3d/backend.rs
+/// `clear_program`). Why it did not build is logged once, when it is built.
+pub const REF_CLEAR_PROGRAM: &str = "the clear program did not build, so a clear the TLB cannot do is not drawn";
+/// A clear quad's vertices in the data arena: four of x, y, z, w.
+pub const QUAD_BYTES: usize = 64;
 
 /// The log prefix of a refusal, as the 4.2 table's `yakogl/v3d: draw
 /// refused: ` (src/v3d/backend.rs `count_refusal`).
@@ -146,15 +183,16 @@ mod rec {
     use super::backend71::{self, Builder71, CBuilder71, List71, Table71};
     use super::{
         BCL_BYTES_PER_DRAW, BCL_FIXED, DATA_BYTES, DEFAULT_DRAWS_PER_JOB, IND_BYTES_PER_DRAW, IND_FIXED, INITED,
-        RCL_BYTES, REFUSAL_PREFIX, REFUSED, REF_CLEAR_QUAD,
+        QUAD_BYTES, RCL_BYTES, REFUSAL_PREFIX, REFUSED, REF_CLEAR_PROGRAM,
     };
     use crate::backend::GlesDraw;
     use crate::osal::{
         self, OsalGpuMem, OSAL_MEM_DATA, OSAL_QUERY_V3D_DRAWS_PER_JOB, OSAL_QUERY_V3D_HUB_IDENT,
         OSAL_QUERY_V3D_JOB_OPEN, OSAL_QUERY_V3D_VPM_BYTES,
     };
-    use crate::shaderc::{ShcShader, ShcV3dUniform, ShcV3dVs, SHC_V3D_NO_RECORD};
+    use crate::shaderc::{ShcShader, ShcV3dUniform, ShcV3dVs, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_V3D_NO_RECORD};
     use crate::util::{Global, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
+    use crate::v3d::backend::{CLEAR_FS, CLEAR_VS};
     use crate::v3d::kick::{V3dKick, V3D_KICK_MAGIC};
     use crate::v3d::zskeep71::Known71;
     use crate::v3d::{attr71, fill71, glue71, record71, state, uniform71};
@@ -206,6 +244,22 @@ mod rec {
         }
     }
 
+    /// The clear quad's program (module docs).
+    enum ClearProgram {
+        NotBuilt,
+        /// It did not build; why was logged, and every quad is refused.
+        Failed,
+        Built(Box<BuiltClear>),
+    }
+
+    struct BuiltClear {
+        prog: Prog,
+        /// The linked program's record (one reference, given back at
+        /// shutdown) and its code where the V3D fetches it.
+        fs: ShcShader,
+        code: OsalGpuMem,
+    }
+
     /// One GlesDraw of the open frame, owned.
     struct Queued {
         /// The GlesDraw. Its pointers are dead after the call: glue71 reads
@@ -250,6 +304,7 @@ mod rec {
         data_used: usize,
         tile_alloc: OsalGpuMem,
         tile_state: OsalGpuMem,
+        clear_program: ClearProgram,
         open: Option<Open>,
         open_alias: u32,
         in_flight: Option<InFlight>,
@@ -276,6 +331,7 @@ mod rec {
             data_used: 0,
             tile_alloc: OsalGpuMem::ZERO,
             tile_state: OsalGpuMem::ZERO,
+            clear_program: ClearProgram::NotBuilt,
             open: None,
             open_alias: 0,
             in_flight: None,
@@ -307,9 +363,15 @@ mod rec {
 
     impl From<fill71::Refusal> for Fail {
         /// A 7.1 module's refusal: legal GL state this table cannot render
-        /// yet (-ENOTSUP, `GL_INVALID_OPERATION` with the reason in the log).
+        /// yet (-ENOTSUP, `GL_INVALID_OPERATION` with the reason in the log,
+        /// as `<module>: <reason>`). zskeep71's reasons are the 4.2 table's
+        /// own strings (tests/v3d71_zskeep.rs pins them to backend.rs), so
+        /// they are logged as the 4.2 table logs them, with no module in
+        /// front: gl_test cases 59 and 67 name the same refusal on both
+        /// boards.
         fn from(r: fill71::Refusal) -> Fail {
-            Fail::Refused(r.to_string(), -ENOTSUP)
+            let why = if r.module == "zskeep71" { r.reason } else { r.to_string() };
+            Fail::Refused(why, -ENOTSUP)
         }
     }
 
@@ -355,6 +417,10 @@ mod rec {
     }
 
     fn free_all(g: &mut State) {
+        if let ClearProgram::Built(mut b) = core::mem::replace(&mut g.clear_program, ClearProgram::NotBuilt) {
+            crate::shaderc::release_shader(&b.fs);
+            osal::gpu_free(&mut b.code);
+        }
         for mem in [&mut g.bcl, &mut g.rcl, &mut g.ind, &mut g.data, &mut g.tile_alloc, &mut g.tile_state] {
             osal::gpu_free(mem);
         }
@@ -544,7 +610,8 @@ mod rec {
 
     /// The program of a draw, as the 4.2 table's `programs` reads it (the
     /// same checks and strings; -EINVAL, a malformed table).
-    fn program(d: &GlesDraw, fs: &ShcShader) -> Result<Prog, Fail> {
+    /// `code_gpu` is where the program's code was uploaded (`fs_usc_gpu`).
+    fn program(code_gpu: u64, fs: &ShcShader) -> Result<Prog, Fail> {
         let bad = |why: &str| Fail::Refused(why.to_string(), -EINVAL);
         let p = &fs.v3d;
         if p.linked != 1 {
@@ -555,7 +622,7 @@ mod rec {
             if !off.is_multiple_of(8) || len == 0 || off as u64 + len as u64 > bytes {
                 return Err(bad("a program's code lies outside the uploaded code"));
             }
-            gpu32(d.fs_usc_gpu + off as u64)
+            gpu32(code_gpu + off as u64)
                 .ok_or_else(|| bad("the program's code is outside the V3D's 32-bit address space"))
         };
         let list = |u: *const ShcV3dUniform, n: u32| -> Vec<uniform71::Word> {
@@ -647,7 +714,7 @@ mod rec {
         let Some(fs) = (unsafe { d.fs.as_ref() }) else {
             return Ok(q); /* glue71 names it: a draw with no linked program */
         };
-        let prog = program(d, fs)?;
+        let prog = program(d.fs_usc_gpu, fs)?;
         let v3d = &fs.v3d;
         let list = &d.attribs[..(d.num_attribs as usize).min(d.attribs.len())];
         /* stage what the program reads; an array it does not read is never
@@ -705,8 +772,10 @@ mod rec {
     }
 
     /// `fill71::fill` over `queue` (and `extra`, the draw being admitted) on
-    /// the open frame, with what the builder path would refuse later: a
-    /// clear quad ([`REF_CLEAR_QUAD`]) and backend71's own refusals.
+    /// the open frame, with what the builder path would refuse later:
+    /// backend71's own refusals, and a clear quad without its program
+    /// ([`REF_CLEAR_PROGRAM`]; [`NEEDS_CLEAR_PROGRAM`] while it has not been
+    /// built, which the caller answers by building it).
     fn fill(
         g: &State,
         frame: &glue71::Frame71,
@@ -730,9 +799,9 @@ mod rec {
             });
             ops.extend(glue71::ops(&q.d, frame, input.as_ref())?);
         }
-        /* fill71 takes a clear quad's program; the table has none yet. This
-         * stand-in lets fill71 plan the flush: a job that then holds a clear
-         * quad is refused below, so the stand-in is never drawn. */
+        /* fill71 takes the clear quad's program for every flush. Until the
+         * program is built this stand-in lets fill71 plan the flush: a job
+         * that then holds a quad is refused below, so it is never drawn. */
         let vertex = record71::VertexDesc {
             prog: record71::ProgramDesc { code: dummy, threads: 1, single_seg: true, ..Default::default() },
             vpm_input_size: 1,
@@ -760,8 +829,14 @@ mod rec {
             vs_uniforms: &[],
             cs_uniforms: &[],
         };
+        let built = match &g.clear_program {
+            ClearProgram::Built(b) => Some(b.prog.view()),
+            _ => None,
+        };
         let quad = fill71::ClearQuad {
-            program: &stand_in,
+            program: built.as_ref().unwrap_or(&stand_in),
+            /* the dummy here; the flush gives each quad its own slot
+             * (`place_quads`) */
             attr: attr71::Attr {
                 enabled: true,
                 components: 4,
@@ -776,13 +851,151 @@ mod rec {
         let jobs = fill71::fill(&fb, rev, &history(g, frame, ds_id), &quad, &ops)?;
         for j in &jobs {
             for d in &j.draws {
-                if d.is_clear {
-                    return Err(fill71::Refusal { module: "table71", reason: REF_CLEAR_QUAD.to_string() });
+                if d.is_clear && built.is_none() {
+                    let reason = match g.clear_program {
+                        ClearProgram::NotBuilt => NEEDS_CLEAR_PROGRAM,
+                        _ => REF_CLEAR_PROGRAM,
+                    };
+                    return Err(fill71::Refusal { module: "table71", reason: reason.to_string() });
                 }
                 backend71::draw_of(d)?;
             }
         }
         Ok(jobs)
+    }
+
+    /// [`fill`]'s answer for a clear quad before the clear program was
+    /// built. Never logged: the caller builds the program and fills again.
+    const NEEDS_CLEAR_PROGRAM: &str = "the clear program is not built yet";
+
+    /// The clear quads of `jobs`.
+    fn quads(jobs: &[fill71::FilledJob]) -> usize {
+        jobs.iter().flat_map(|j| &j.draws).filter(|d| d.quad.is_some()).count()
+    }
+
+    /// Write each clear quad's vertices into the data arena and point the
+    /// quad's attribute record at them. False: the arena is full (the dry
+    /// run counted the quads, so it is not).
+    fn place_quads(g: &mut State, job: &mut fill71::FilledJob) -> bool {
+        for d in &mut job.draws {
+            let Some(q) = d.quad else { continue };
+            let Ok(at) = stage(g, q.as_ptr() as *const c_void, QUAD_BYTES) else {
+                return false;
+            };
+            match d.attrs.first_mut() {
+                Some(a) => a.address = at,
+                None => return false,
+            }
+        }
+        true
+    }
+
+    /* ---- the clear program ---------------------------------------------------------- */
+
+    /// The text of a compiler log (NUL-terminated in `log`).
+    fn log_text(log: &[core::ffi::c_char]) -> String {
+        log.iter().take_while(|&&c| c != 0).map(|&c| c as u8 as char).collect()
+    }
+
+    /// Build the clear program and say once what happened: its code size, or
+    /// the step that failed and the compiler's own error (the 4.2 table's
+    /// `made_clear_program`).
+    fn build_clear_program(g: &mut State) {
+        let mut log = [0 as core::ffi::c_char; 256];
+        g.clear_program = match clear_program(&mut log) {
+            Ok(p) => {
+                if let ClearProgram::Built(b) = &p {
+                    glog!("yakogl/v3d71: clear program built: {} bytes of code", b.fs.usc_dw * 4);
+                }
+                p
+            }
+            Err(why) => {
+                glog!("yakogl/v3d71: clear program did not build: {}: {}", why, log_text(&log));
+                ClearProgram::Failed
+            }
+        };
+    }
+
+    /// Compile and link the clear program through the shader back end, as
+    /// the GL core compiles an application's, and upload its code: the 4.2
+    /// table's `build_clear_program` with its checks and strings (the
+    /// colour at fragment dwords 0 to 3, which is where fill71 puts it;
+    /// render target 0 and no other; one attribute, the quad's positions).
+    fn clear_program(log: &mut [core::ffi::c_char; 256]) -> Result<ClearProgram, &'static str> {
+        use core::ffi::c_char;
+        let be = crate::shaderc::backend().ok_or("no shader back end")?;
+        let (compile, link) = match (be.compile, be.link) {
+            (Some(c), Some(l)) => (c, l),
+            _ => return Err("the shader back end cannot compile and link"),
+        };
+        let (mut vs, mut fs) = (ShcShader::ZERO, ShcShader::ZERO);
+        // SAFETY: NUL-terminated sources, live out-parameters, a log of the
+        // size given.
+        let rc = unsafe {
+            compile(SHC_STAGE_VERTEX, CLEAR_VS.as_ptr() as *const c_char, &mut vs, log.as_mut_ptr(), log.len())
+        };
+        if rc != 0 {
+            return Err("the vertex shader did not compile");
+        }
+        // SAFETY: as above.
+        let rc = unsafe {
+            compile(SHC_STAGE_FRAGMENT, CLEAR_FS.as_ptr() as *const c_char, &mut fs, log.as_mut_ptr(), log.len())
+        };
+        if rc != 0 {
+            crate::shaderc::release_shader(&vs);
+            return Err("the fragment shader did not compile");
+        }
+        // SAFETY: two compiled shaders; `fs` becomes the linked program.
+        let rc = unsafe { link(&vs, &mut fs, log.as_mut_ptr(), log.len()) };
+        crate::shaderc::release_shader(&vs);
+        if rc == 0 {
+            log[0] = 0; /* what fails below is ours, not the compiler's */
+        }
+        let give_back = |fs: &ShcShader| crate::shaderc::release_shader(fs);
+        if rc != 0 || fs.v3d.linked != 1 {
+            give_back(&fs);
+            return Err("the program did not link");
+        }
+        let placed = fs
+            .uniform_table()
+            .iter()
+            .any(|u| crate::util::name_bytes(&u.name) == b"u_color" && u.dword_off == 0 && u.dwords == 4);
+        if !placed {
+            give_back(&fs);
+            return Err("a colour uniform is not at its four dwords of the fragment block");
+        }
+        if fs.v3d.fs.rt_mask != 1 {
+            give_back(&fs);
+            return Err("the program does not write exactly the colour targets of the clear");
+        }
+        /* the quad's one array is attribute record 0 (fill71's ClearQuad) */
+        if fs.v3d.num_records != 1 || !fs.v3d.record_of_location.contains(&0) {
+            give_back(&fs);
+            return Err("the program does not read exactly one attribute");
+        }
+        let bytes = fs.usc_dw as usize * 4;
+        let mut code = OsalGpuMem::ZERO;
+        if bytes == 0 || fs.usc.is_null() || !alloc(&mut code, bytes) {
+            if !code.impl_.is_null() || code.gpu != 0 {
+                osal::gpu_free(&mut code);
+            }
+            give_back(&fs);
+            return Err("no GPU memory for its code");
+        }
+        // SAFETY: the allocation is `bytes` long, and the program's code is
+        // `usc_dw` dwords.
+        unsafe {
+            core::ptr::copy_nonoverlapping(fs.usc as *const u8, code.cpu as *mut u8, bytes);
+            osal::cache_flush(code.cpu, bytes);
+        }
+        match program(code.gpu, &fs) {
+            Ok(prog) => Ok(ClearProgram::Built(Box::new(BuiltClear { prog, fs, code }))),
+            Err(_) => {
+                give_back(&fs);
+                osal::gpu_free(&mut code);
+                Err("the linked program's code table is malformed")
+            }
+        }
     }
 
     /// The binner's memory for a `w` x `h` frame of `tile` pixels a tile:
@@ -846,7 +1059,7 @@ mod rec {
             return 0;
         }
         job_open_to_osal(false);
-        let jobs = match fill(g, &frame, ds_id, &queue, None) {
+        let mut jobs = match fill(g, &frame, ds_id, &queue, None) {
             Ok(j) => j,
             Err(r) => {
                 /* the dry run admitted every draw of it */
@@ -854,6 +1067,15 @@ mod rec {
                 return -EIO;
             }
         };
+        /* the quads' vertices, after the draws' arrays; every job of the
+         * flush before the first is submitted (a job in flight reads the
+         * arena, and nothing it reads is written again) */
+        for job in &mut jobs {
+            if !place_quads(g, job) {
+                glog!("yakogl/v3d71: flush: the clear quads do not fit the job's data arena: not submitted");
+                return -ENOMEM;
+            }
+        }
         let Some(table) = g.table else {
             return -ENODEV;
         };
@@ -1045,13 +1267,21 @@ mod rec {
             let open = g.open.as_ref().expect("opened above");
             let jobs = match fill(g, &frame, ds_id, &open.queue, Some(&q)) {
                 Ok(j) => j,
+                Err(r) if r.reason == NEEDS_CLEAR_PROGRAM => {
+                    /* the first clear quad: build its program, fill again */
+                    build_clear_program(g);
+                    continue;
+                }
                 Err(r) => {
                     g.data_used = mark;
                     return Err(r.into());
                 }
             };
             let (bcl, ind) = list_bytes(&jobs);
-            let fits = bcl + BCL_FIXED as usize <= g.bcl.size && ind + IND_FIXED as usize <= g.ind.size;
+            /* the flush writes each quad's vertices after the arrays */
+            let data = g.data_used.next_multiple_of(16) + quads(&jobs) * QUAD_BYTES;
+            let fits =
+                bcl + BCL_FIXED as usize <= g.bcl.size && ind + IND_FIXED as usize <= g.ind.size && data <= DATA_BYTES;
             /* a job more than the queue alone: a whole clear after queued
              * draws opens a job. The queue goes first, so that the kick
              * after this call holds the draw. The same when the lists
