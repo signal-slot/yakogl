@@ -479,7 +479,12 @@ fn check_frame(what: &str, a: &Assembled, j: &ClifJob) {
 /// The dump's state packets at each draw: the last one of each kind seen
 /// before the draw's packet.
 fn states_at_draws(j: &ClifJob) -> Vec<BTreeMap<String, Pk>> {
-    let kinds: Vec<&str> = draw71::ALL_SPECS.iter().map(|s| s.clif_name).collect();
+    // LINE_WIDTH, POINT_SIZE and BLEND_CCOLOR are specs only: translate sends none
+    let kinds: Vec<&str> = draw71::ALL_SPECS
+        .iter()
+        .map(|s| s.clif_name)
+        .filter(|n| !["LINE_WIDTH", "POINT_SIZE", "BLEND_CCOLOR"].contains(n))
+        .collect();
     let mut last: BTreeMap<String, Pk> = BTreeMap::new();
     let mut out = vec![];
     for p in between(&j.lists, "NUMBER_OF_LAYERS", "FLUSH") {

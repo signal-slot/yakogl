@@ -421,7 +421,12 @@ fn is_prim(name: &str) -> bool {
 /// before the draw's prim packet. A kind sent twice before one draw (the
 /// two `STENCIL_CFG` of a two-sided stencil) keeps the second as `KIND#1`.
 fn states_at_draws(j: &ClifJob) -> Vec<BTreeMap<String, Pk>> {
-    let kinds: Vec<&str> = draw71::ALL_SPECS.iter().map(|s| s.clif_name).collect();
+    // LINE_WIDTH, POINT_SIZE and BLEND_CCOLOR are specs only: translate sends none
+    let kinds: Vec<&str> = draw71::ALL_SPECS
+        .iter()
+        .map(|s| s.clif_name)
+        .filter(|n| !["LINE_WIDTH", "POINT_SIZE", "BLEND_CCOLOR"].contains(n))
+        .collect();
     let mut last: BTreeMap<String, Pk> = BTreeMap::new();
     let mut fresh: Vec<String> = vec![];
     let mut out = vec![];
@@ -453,26 +458,10 @@ struct Gap {
 /// stale entry fails) and pin the values where they matter.
 const KNOWN_WORD_GAPS: &[Gap] = &[
     Gap {
-        packet: "BLEND_CCOLOR",
-        reason: "draw71 has no PacketSpec for the constant blend colour (four F16 words of glBlendColor);                  gl_blend_equations checks the dump's words are the half floats of glBlendColor's arguments",
-    },
-    Gap {
-        packet: "POINT_SIZE",
-        reason: "draw71 has no PacketSpec for Point Size (glPointSize / gl_PointSize); gl_prims_points_lines_strip \
-                 pins the dump's value 1.0",
-    },
-    Gap {
-        packet: "LINE_WIDTH",
-        reason: "draw71 has no PacketSpec for Line width (glLineWidth); gl_prims_points_lines_strip pins 1.0",
-    },
-    Gap {
         packet: "PRIM_LIST_FORMAT",
         reason: "frame71 has no Primitive List Format packet (tile list: triangles, not strip or fan)",
     },
-    Gap {
-        packet: "SET_INSTANCEID",
-        reason: "frame71 has no Set InstanceID packet (tile list, Instance ID 0)",
-    },
+    Gap { packet: "SET_INSTANCEID", reason: "frame71 has no Set InstanceID packet (tile list, Instance ID 0)" },
     Gap {
         packet: "VCM_CACHE_SIZE",
         reason: "the binner's VCM cache size is the 7.1 table's own (vpm71q, not a module here)",
