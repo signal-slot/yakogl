@@ -110,6 +110,27 @@ cp "$T/a.md" "$T/da/README.md"
 cp "$T/b.md" "$T/db/README.md"
 expect two-dirs 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/da" "$T/db"
 
+# acceptance c3 shapes: the summary is the LAST line, exactly (anchored), for a complete record in a directory's
+# README.md (python3 -I tools/cts/imx8mp-es2-regress.py <record dir>), for one entry missing and for one better
+mkdir "$T/c3"; cp "$T/all.md" "$T/c3/README.md"
+last() { # NAME EXIT LINE ARGS...: the tool's last output line is exactly LINE
+    name=$1 want=$2 line=$3
+    shift 3
+    out=$(python3 -I "$TOOL" "$@" 2>&1)
+    rc=$?
+    if [ "$rc" = "$want" ] && [ "$(printf '%s\n' "$out" | tail -n 1)" = "$line" ]; then
+        echo "ok   $name"
+    else
+        echo "FAIL $name (exit $rc, want $want, last '$(printf '%s\n' "$out" | tail -n 1)')"
+        fails=$((fails + 1))
+    fi
+}
+last c3-exact 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/c3"
+grep -v '^board.sh imx8mp e05 ' "$T/all.md" > "$T/one-missing.md"
+last c3-one-missing 1 'es2 regress: 28/29 entries, 0 worse, 1 missing' "$T/one-missing.md"
+gen "$T/g2.md" 0 28 better14
+last c3-better 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/g2.md"
+
 # one slice only: 14 entries missing
 expect missing 1 'es2 regress: 15/29 entries, 0 worse, 14 missing' "$T/a.md"
 
