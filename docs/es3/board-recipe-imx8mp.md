@@ -602,11 +602,32 @@ Order and reasons:
 - **Run 4, `rows52-57`, entry 54 first** (unmeasured texture entry): its measured time rescales the run-time
   guesses for the other texture entries.
 - **Runs 5 and 6, `rows96-107` and `rows123-133`, in small ranges:** the longest and the ubo slices. Run entries
-  95 and 122-127 as normal entries: no hang is expected (host prediction at `05769bf2`). If one hangs, the console
+  95 and 122-127 as normal entries: no hang is expected (host prediction at `05769bf2`; advice lines below). If one hangs, the console
   scan names the last case (ubo: compare with `block_read`; entry 95: mip level >= 1 of a `_3d` case).
 - **Runs 7-11:** the rest, in the order of the table (`rows68-83`, `rows84-95`, `rows108-122`, then the two
   large shader slices `rows17-34` and `rows35-51`).
 - One session holds the board at a time; run the slices one after another, each with `RUN_BOUND=800`.
+
+Run advice for the risk slices (host investigations; none of these entries has run on the board, so each is a
+prediction the session confirms or corrects):
+- **s58 (entries 57-60, `rows58-61`):** entry 57 (`texture.filtering.2d_array`) is not expected to hang; the
+  hang label came from commit `2ac54a26` and nothing in the sources supports it. Run it unchanged and
+  exclude no case from s58. Watch entry 59 by its run time (the slowest, about 440-500 s of the 600 s window),
+  not for a wedge; a WDOG1 end there is a time overrun, not a GPU hang.
+- **s95 (entries 94-106, `rows95-107`):** entry 95 (`texture.specification.basic_teximage3d`) has no expected
+  hang. Run s95 unchanged with `RUN_BOUND=800`. If it hangs anyway, that points to native 3D mip addressing; the
+  console scan's last case (a mip level >= 1 of a `_3d` case) goes into the issue.
+- **s118 (entries 117-121, `rows118-122`, `transform_feedback`):** only the 2 `gc-xfb-varying-packing` cases are
+  expected not to pass. Any other `transform_feedback` Fail or no-result case is new: triage it as a new cause.
+- **s123 (entries 122-127, `rows123-128`, `ubo`):** run as normal entries, about 255 s an entry planned; no hang
+  is expected. Expected: Pass for nearly all 2,355 cases (122: 432, 123: 323, 124: 586, 125: 363, 126: 411,
+  127: 240) if the constant-offset `load` of `block_read` works on the silicon, which no board run has shown.
+  Wrong pictures in every entry at once point to that `load` or its 16-byte alignment (`packed`/`shared` scalars
+  in 124-125 decide it); a Fail only in `row_major` or only in `column_major` cases of 127 points to the read lane;
+  entry 126's four former link refusals (`single_nested_struct_array` `*_instance_array_both`) are the cheapest
+  first check. The `state_query.integers64` and `implementation_limits` ubo-size cases outside this slice stay
+  Fail at `9bc82915` (limits reported as 6144 and 1536).
+- **Swizzle and 3D wrap-R Fail cases** in any slice at `9bc82915` are expected: their fix `840ea7ec` is later.
 
 
 Stop rule: a row that ends `board.sh` rc 5 (`the board did not come back`) stops the chain. Stop the session
