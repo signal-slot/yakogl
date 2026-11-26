@@ -110,6 +110,11 @@
 # --quick on four lanes. A cold tree pays for a build of the crate and its
 # dev-dependencies per configuration, which is minutes; run it once and it
 # stays warm.
+#
+# Disk: each tests/ file is its own binary linking the whole library, built once
+# per feature set, so a run writes many hundreds of them. [profile.test] in
+# Cargo.toml has `debug = false` (a binary is 1.5 MB, not 39 MB; docs/ci.md 3.9);
+# with DWARF one PR run wrote 121.5 GiB. CARGO_PROFILE_TEST_DEBUG=true restores it.
 set -u
 
 cd "$(dirname "$0")/.." || exit 2

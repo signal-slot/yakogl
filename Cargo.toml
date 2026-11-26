@@ -239,8 +239,17 @@ opt-level = 1
 # overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
 # harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
 # applies. The edit loop's `dev` profile keeps opt-level 1.
+#
+# `debug = false`: no DWARF in any test binary. Every tests/ file is its own
+# binary that statically links the whole library, and a gate row builds all of
+# them once per feature set; with the library's debug information each was
+# 30 to 170 MiB, 96% of it DWARF (es3_srgb: 38.7 MB, 1.5 MB without), which
+# made one PR gate run write about 120 GiB (docs/ci.md 3.9). A test failure's
+# message, file and line are not DWARF, and the symbol table stays for
+# backtraces; a debugging loop sets CARGO_PROFILE_TEST_DEBUG=true.
 [profile.test]
 opt-level = 3
+debug = false
 debug-assertions = true
 overflow-checks = true
 

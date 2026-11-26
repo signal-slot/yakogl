@@ -585,6 +585,42 @@ whose inputs are prepared: false misses. The other inputs `deps-env.sh
 `MALI_CSFFW`) are read the same way; treat a `missing` for any of them from a
 bare shell as unconfirmed until it is repeated after the exports.
 
+### 3.9 Test binaries carry no debug information (2026-11-26)
+
+One PR gate run (`--no-clippy --changed`, `CARGO_TARGET_DIR=~/.cache/yakogl/ci-target`)
+wrote 121.5 GiB into `debug/deps` (34,420 files) in 2 h 16 min and was still
+running; four runner VMs of it filled a 476 GiB host on 2026-11-24. The cause:
+every `tests/` file is its own binary that statically links the library, a
+whole-suite row builds all of them once per feature set (36 compiles of the
+library in that job, 11 to 16 copies of each test), and `[profile.test]`
+inherited `dev`'s `debug = true`, so each binary carried the library's DWARF.
+
+Measured here, one feature set (`host-test,gpu-v3d,shaderc-online,no-shader-table`),
+cold target, `CARGO_INCREMENTAL=0`, three test targets (es3_srgb, v3d_clear,
+es3_int_rt):
+
+| | debug = true (before) | debug = false (after) |
+|---|---|---|
+| each test binary | 38.7 to 38.9 MB | 1.2 to 1.5 MB |
+| target `debug/` | 224 MiB | 53 MiB |
+| wall time of the build | 56 s | 27 s |
+
+So the dominant cost, the debug sections (and the linker's work on them), goes
+away, about 25x per binary; the library's rlibs, the same for every row, are
+what remains. `[profile.test] debug = false` is the whole change: no check is
+removed, no row is changed, no gate or `[[test]]` table to keep in step. A
+panic's message and `file:line` are not DWARF; a debugging loop sets
+`CARGO_PROFILE_TEST_DEBUG=true`.
+
+Not measured: a full gate run before and after (over two hours and the 120 GiB
+the host here does not have; the before figures are the runner's of
+2026-11-26 above). The first runner run after the merge gives the after figure.
+Not done on purpose: merging the tests into one binary per row (about 915
+files, each with its own `mod` tree and `#![cfg]` gate) and sharing builds
+between rows; with the DWARF gone the remaining per-feature-set output is the
+library and the small binaries, and neither change is needed to stop the disk
+growth.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --no-clippy --changed <merge-base>`;
