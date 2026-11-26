@@ -1,8 +1,10 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Self-test of imx8mp-gles3-slice.py. The README of the committed 9bc82915 rows17-34 slice is rebuilt from the
-# verdict lines taken out of that README (fed twice, as a session's run and tally both print them, with page
+# Self-test of imx8mp-gles3-slice.py. The README of the 9bc82915 rows17-34 slice is rebuilt from the fixture's
+# README (tools/cts/testdata/imx8mp-gles3-slice/: a byte-for-byte copy of that slice's README.md, results.tsv
+# and rows.md, so retiring the campaign's slice directories does not break this test), from the verdict lines
+# taken out of that README (fed twice, as a session's run and tally both print them, with page
 # lines and noise between) and its results.tsv; the result has the same verdict lines and passes
 # imx8mp-gles3-merge.py --check --partial and imx8mp-gles3-redact.py --check. A one-row slice (rows58, entry
 # 57) passes the same checks and times.py reads it. Refused: a short hash, a missing entry, two different lines
@@ -14,7 +16,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 tool=$here/imx8mp-gles3-slice.py
 merge=$here/imx8mp-gles3-merge.py
 redact=$here/imx8mp-gles3-redact.py
-slice=$here/log/2026-11-imx8mp-gles3-9bc82915-rows17-34
+slice=$here/testdata/imx8mp-gles3-slice
 full=9bc82915e06367b46e3a62b644dbf2bb659d72ad
 base=${TMPDIR:-$PWD}
 case "$(cd "$base" && pwd -P)" in /tmp | /tmp/* | /var/tmp | /var/tmp/*) echo "slice-selftest: refusing scratch under /tmp; set TMPDIR" >&2; exit 2 ;; esac
@@ -26,7 +28,7 @@ bad() { echo "FAIL: $*" >&2; nfail=$((nfail + 1)); }
 run() { python3 -I "$tool" "$@"; }
 vlines() { grep -E '^board\.sh imx8mp e[0-9]+ rc=' "$1"; }
 
-# 1. the committed rows17-34 slice (entries 16-33), rebuilt. Its README quotes e26 a second time (the rerun, with
+# 1. the fixture rows17-34 slice (entries 16-33), rebuilt. Its README quotes e26 a second time (the rerun, with
 # another uptime): the first line of each entry is the one in its fenced verdict block.
 vlines "$slice/README.md" | awk '!seen[$3]++' > "$tmp/lines.txt"
 {
