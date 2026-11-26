@@ -389,3 +389,123 @@ for an FBO without a depth/stencil attachment
 (`backend_tests.rs:6316-6328`). The board session replaces these predictions
 with its verdicts. Any refusal text not named in this section or in
 `v3d71-refusals.md` section 9 is a defect of the 7.1 path.
+
+## 7. The textured draw route (P10)
+
+Sections 1 to 6 are the untextured table. `gluetex71` (`47b2fcad`) added the
+textured route to the pure modules; this section gives the sequence the table
+runs for a draw that samples, and what P10's table item must add. Read:
+`src/v3d/glue71.rs`, `fill71.rs`, `backend71tex.rs` and
+`tests/v3d71_glue_tex.rs` (gl_tex2d's draw against Mesa's clif).
+
+### 7.1 The sequence
+
+1. **Place the records** (`backend71tex`). Per job an `Arena71`
+   (`Arena71::new(gpu, size)`, 32-byte aligned) and a `Records71`. Each
+   binding of a stage (`Binding71 { unit, filled: &texfill71::Filled71 }`)
+   gets its `ffi71::V3dJob71Tmu` (`unit`, `tex_state`, `sampler`, base-level
+   `width`/`height`, `depth` and `array_size` 1) from the private `tmus`,
+   which `plan_draw` runs. Equal texture states and equal samplers share one
+   record per job; `Arena71::alloc` aligns them to
+   `texuni71::TEX_STATE_ALIGN` and `SAMPLER_STATE_ALIGN`
+   (`TEX_RECORD_BYTES`, `SAMPLER_RECORD_BYTES` bytes each).
+2. **Map the draw** (`glue71::ops_textured`). The table hands the draw's
+   `glue71::TexInputs { fs, vs }`, the `V3dJob71Tmu` entries of step 1, one
+   per `GlesDraw::textures` (`fs`) and `vs_textures` (`vs`) binding and the
+   same units, plus the usual `DrawInputs`. The result is `TexOps { ops, tmu
+   }`: the operations of `glue71::ops` and one `fill71::DrawTmu { fs, vs }`
+   per `Op::Draw` among them (none for a clear alone). A flush with several
+   GlesDraws concatenates both lists.
+3. **Fill the jobs** (`fill71::fill_textured(fb, rev, hist, quad, &t.ops,
+   &t.tmu)`). It needs exactly one `DrawTmu` per `Op::Draw`, empty (`default`)
+   for a draw that samples nothing, and returns `TexFilledJob<'t> { job, tmu
+   }` per job. The filled lists are the program's own, texture words
+   included: `fill71::tmu_word` only checks them against the table by
+   v3d_job71.c's rules and leaves the words to the C builder.
+4. **Record** (`v3d_job71_begin`, then per draw
+   `v3d_job71_draw(&job, &tex_job.ffi(n), layout)`, then `v3d_job71_end`).
+   `TexFilledJob::ffi(n)` is `FilledDraw::ffi` plus `tmu`/`num_tmu` and
+   `vs_tmu`/`num_vs_tmu` (null for an empty table). The pointers point into
+   `tex_job` and the caller's tables, so `'t` keeps the tables alive until
+   the call returns. The texture and sampler records are packed into the
+   arena by `v3d_tex71_pack_state` and `v3d_tex71_pack_sampler`
+   (`CTexBuilder71`, `TexBuilder71::build`).
+5. **Check** (`backend71tex::assemble_filled`, the textured twin of
+   `backend71::assemble_filled`). It takes `&[DrawTex71]`, one per draw, runs
+   `plan_draw` (which places the records of step 1 itself when the table
+   gives it `Binding71`s), calls the builder, and checks each stream,
+   attribute record and that every record lies in the arena
+   (`REF_RECORD_OUTSIDE`).
+
+The order in the table: steps 2 to 4 need the entries of step 1 before
+`fill_textured`, while `assemble_filled` places records inside its own
+`plan_draw`. The table must therefore place once and hand the same `Arena71`
+and `Records71` on, or place for steps 2 and 3 and let `assemble_filled`
+re-place into a fresh `Arena71` of the same size. Equal values place in the
+same order, so the addresses agree; P10 must pin that (see 7.3). The host
+test drives steps 2 and 3 only, with the entry Mesa's clif shows
+(`tmu_of_job`); steps 1 and 5 are `backend71tex`'s own tests.
+
+### 7.2 What the table owns, and the refusals that stay
+
+The pure modules own no memory. The table owns:
+
+* the **record arena**: GPU memory of one job's texture and sampler records,
+  32-byte aligned, sized for the draws it will hold; one `Arena71` per job,
+  reset when a job ends. `Arena71::alloc` refuses a full arena (`"the job's
+  texture record arena is full (end the job, draw into a new one)"`); the
+  table ends the job there, as for a full list;
+* the **texture memory**: the texel BO each `tex_state` points at. The
+  record names its address, nothing keeps it. A job that read a texture
+  holds it until its fence signals, across a flush: a texture respecified,
+  deleted or `texture_released` (section 1) while a job that samples it is
+  in flight must not free or overwrite the BO until then (the table drops it
+  at the fence, as the colour history of section 2.3). A flush that submits
+  does not end the textures' life; only the fence does;
+* **placement across draws**: records and the TMU tables of a flush live
+  until `v3d_job71_end` returns and the job is submitted (`'t`, step 4).
+
+The refusals that stay (quote them as the table's verdicts):
+
+* `glue71`: `"V3D 7.1: the draw's TMU tables are not its sampler bindings
+  (one entry per bound unit and stage)"` (`GLUE71_TEX_REFUSALS`); the table
+  gave tables for other units than the draw binds. `ops` (not
+  `ops_textured`) still refuses `"V3D 7.1: a draw sampling textures (the 7.1
+  texture state is not glued yet)"`, so the table must call `ops_textured`
+  for every draw that binds a texture;
+* `fill71` (`FILL71_TEX_REFUSALS`): `"V3D 7.1: the TMU tables are not one per
+  draw of the flush"`, `"V3D 7.1: a stage's TMU table binds the same sampler
+  unit twice"`, `"V3D 7.1: a texture uniform names a sampler unit the draw's
+  TMU table does not bind"`, `"V3D 7.1: a TMU record address is 0 or has low
+  bits that are a field of its configuration word"`, `"V3D 7.1: a TMU
+  configuration uniform has payload bits outside the word's fields (P0:
+  0..3, P1: 0..2)"` and `"V3D 7.1: a texture size uniform reads a size the
+  TMU table leaves 0"`;
+* `backend71tex`: `"a stage binds the same sampler unit twice"`, `"the
+  sampler bindings are not one entry per draw of the job"`, `"a draw's
+  uniform lists are not its program's lists masked for fill71"`, `"a sampler
+  binding that no uniform of its stage reads (masked lists without the
+  program's own?)"`, the arena-full string above and `"the builder did not
+  write a texture or sampler record inside the arena"`.
+
+None of the six gl_test cases samples a texture (section 1): this route is
+not on their path, and an untextured draw takes `fill_textured` with an empty
+`DrawTmu` to the same jobs as `fill` (pinned by
+`an_untextured_draw_fills_through_the_textured_path_as_through_fill`).
+
+### 7.3 What P10's table item must add
+
+* the table's `texture` entries: compose `Filled71` per bound texture and
+  sampler (`texfill71`, from `texture71` and `sampler71`), keep its texel BO
+  and release it at the fence (7.2). Nothing in the table does this yet;
+* an `Arena71` per job and the call order of 7.1, with one choice of who
+  places (placing twice must give the same addresses, pinned by a test);
+* a switch from `glue71::ops` and `fill71::fill` to `ops_textured` and
+  `fill_textured` for every draw (empty `TexInputs::default()` for an
+  untextured one), and from `backend71::assemble_filled` to
+  `backend71tex::assemble_filled`;
+* the texel uploads and mip chains (the TFU, `rpi5_tfu`) and the cube
+  layout; the table flushes or fences a job before the TFU reads what it
+  wrote;
+* the 3D and array textures: `tmus` fixes `depth` and `array_size` to 1, so
+  the table refuses them until `texture71` composes them.
