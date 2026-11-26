@@ -29,9 +29,14 @@ The 29 rows are the whole table: '--gles2 --rows 0..28' equals '--gles2'.
 
 Rate order, per dEQP group (group_key): 1. measured on the GC7000UL (rate_source 'imx8mp:<slice>'), 2. Pi 4,
 3. assumed. The GC7000UL rate comes from the committed slices (--board-slices, default
-log/2026-11-imx8mp-gles3-9bc82915-rows*): the 'back_after=Ns' of an entry's 'board.sh imx8mp eNN ... verdict=done'
-line in the slice's verdicts.txt (the first line of each entry; the e<NN>-p<page> lines are not entries), divided over
-the entry's mustpass cases. Entries whose cases are all of one group are pooled per group (sum of seconds / sum of
+log/*-imx8mp-gles3-*-rows*, slices of any campaign commit): the 'back_after=Ns' of an entry's 'board.sh imx8mp eNN
+... verdict=done' line in the slice's verdicts.txt (the first line of each entry; the e<NN>-p<page> lines are not
+entries), divided over the entry's mustpass cases. A slice directory is named
+'<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD; the name carries the campaign commit) and
+the rate source is 'imx8mp:rows<AA>-<BB>'. Slices naming more than one commit are refused with exit 2 and a
+message, never mixed (imx8mp-gles3-merge.py --check refuses them the same way): pass an explicit --board-slices
+glob for one commit when the default reaches two campaigns. A matched directory whose name does not follow this
+pattern is skipped with a note. Entries whose cases are all of one group are pooled per group (sum of seconds / sum of
 cases); entries of mixed groups give every group still without a rate their pooled per-case rate. back_after is
 reboot to ssh and so INCLUDES the per-entry boot (Linux's 19-37 s plus the Zephyr boot, about 45-50 s) and the
 failure-name pages are not in it: the measured rate already carries the boot, so with a measured rate do not also
@@ -57,6 +62,10 @@ import argparse, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 PI4_LABELS = 'FO2 FO3 FO4 FO5 FO6 FR1 FR2 LT M1 PR R1 SQ'.split()
 PI4_FIRST_ROW = 9
+
+# board slice directory name '<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD)
+# groups: 1 date, 2 campaign commit (8 hex), 3 'AA-BB'
+SLICE_NAME = re.compile(r'(\d{4}-\d{2}(?:-\d{2})?)-imx8mp-gles3-([0-9a-f]{8})-rows(\d+-\d+)$')
 
 # (prefix after "dEQP-GLES3.", seconds per case, why): first match wins; the rest is budget-derived
 ASSUMED = [
@@ -154,16 +163,33 @@ def pi4_rates(rec, cases, pi4_table):
 
 def board_rates(glob_pat, entry_groups):
     """group key -> (s/case, source), group key -> fail fraction, notes, from the committed board slices.
-    entry_groups: index -> {group: cases}"""
+    entry_groups: index -> {group: cases}
+    Slices are named '<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (any campaign commit); the rate source labels
+    them 'rows<AA>-<BB>'. Slices naming more than one commit raise ValueError (two builds' rates must not be
+    pooled, as imx8mp-gles3-merge.py --check refuses them); a matched directory whose name does not follow the
+    pattern is skipped with a note."""
     import glob
     sec, fail = {}, {}   # entry index -> (back_after, slice); entry index -> (fails, begun)
     notes = []
+    dirs, commits = [], {}   # (dir, 'rowsAA-BB'); commit -> [slice names]
     for d in sorted(glob.glob(glob_pat)):
         v = os.path.join(d, 'verdicts.txt')
         if not os.path.exists(v):
             continue
-        sl = os.path.basename(d).split('9bc82915-', 1)[-1]
+        m = SLICE_NAME.search(os.path.basename(d))
+        if not m:
+            notes.append('skipped %s: the name is not <date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' % os.path.basename(d))
+            continue
+        dirs.append((d, 'rows' + m.group(3)))
+        commits.setdefault(m.group(2), []).append(os.path.basename(d))
+    if len(commits) > 1:
+        raise ValueError('the board slices under %s name %d campaign commits: %s; pass --board-slices with a glob '
+                         'naming the slices of one commit (imx8mp-gles3-merge.py --check refuses mixed commits too)'
+                         % (glob_pat, len(commits),
+                            '; '.join('%s: %s' % (c, ' '.join(ds)) for c, ds in sorted(commits.items()))))
+    for d, sl in dirs:
         mine = set()
+        v = os.path.join(d, 'verdicts.txt')
         for l in open(v):
             m = re.match(r'^board\.sh imx8mp e(\d+) .*verdict=done.* back_after=(\d+)s', l)
             if m and int(m.group(1)) not in sec:
@@ -176,7 +202,7 @@ def board_rates(glob_pat, entry_groups):
                 if len(f) >= 8 and f[0].isdigit() and f[2].isdigit() and int(f[0]) in mine:
                     fail[int(f[0])] = (int(f[4]) + int(f[7]), int(f[2]))
     if not sec:
-        return {}, {}, ['no board slice with verdicts.txt under %s: no measured rates' % glob_pat]
+        return {}, {}, notes + ['no board slice with verdicts.txt under %s: no measured rates' % glob_pat]
     pool, fpool = {}, {}
     for i, (t, sl) in sec.items():
         g = entry_groups.get(i, {})
@@ -292,8 +318,9 @@ def main():
     ap.add_argument('--record', default=os.path.join(HERE, 'log', '2026-10-31-pi4-gles3-a'))
     ap.add_argument('--pi4-table', default=os.path.join(HERE, 'pi4-gles3-tree.txt'))
     ap.add_argument('--gles2-results', default=os.path.join(HERE, 'imx8mp-full-tree-29460f96.results.tsv'))
-    ap.add_argument('--board-slices', default=os.path.join(HERE, 'log', '2026-11-imx8mp-gles3-9bc82915-rows*'),
-                    help='glob of the committed board slice directories (verdicts.txt, results.tsv) for the measured rates')
+    ap.add_argument('--board-slices', default=os.path.join(HERE, 'log', '*-imx8mp-gles3-*-rows*'),
+                    help='glob of the committed board slice directories (verdicts.txt, results.tsv) for the measured '
+                         'rates; slices of any campaign commit, but more than one commit among them is refused')
     ap.add_argument('--no-board-rates', action='store_true', help='ignore the board slices (Pi 4 and assumed rates only)')
     ap.add_argument('--pages', action='store_true', help='add the expected failure-name page cost to every estimate')
     ap.add_argument('--page-seconds', type=float, default=91.8, help='seconds per page boot (default 91.8, the measured mean)')
@@ -348,7 +375,11 @@ def main():
         egroups[hit[0]][k] = egroups[hit[0]].get(k, 0) + 1
     board, failfrac = {}, {}
     if not a.no_board_rates:
-        board, failfrac, bn = board_rates(a.board_slices, dict(enumerate(egroups)))
+        try:
+            board, failfrac, bn = board_rates(a.board_slices, dict(enumerate(egroups)))
+        except ValueError as ex:
+            print('error:', ex, file=sys.stderr)
+            return 2
         notes.extend(bn)
     for c, i in hits:
         k = group_key(c)
