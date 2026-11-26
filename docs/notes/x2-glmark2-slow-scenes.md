@@ -271,7 +271,7 @@ What held, run sheet step 2 (reachability from the leased worker, first):
 What stopped it, unchanged since "Stop, 2026-11-24" above: **the podman
 container `slint-launcher` still runs on the board** (`podman ps`: `Up 2
 days`). `board.sh x2 run`'s readiness check (`x2_kexec_ready`,
-`tools/board.sh:2416-2425`) refuses a jump while a container runs
+`tools/board.sh:2518-2526`) refuses a jump while a container runs
 (`something is running (containers 1)`, rc 3), and the status read's
 `containers 1` is that check's input. Stopping the container or turning its
 autostart off is the board owner's decision (leave the board as found,
@@ -316,3 +316,42 @@ read is the evidence. The stop holds; no image, no staging, no jump.
 To run it: the board with no container running for the whole session (each
 run ends with a SoC reset and the launcher autostarts at boot), then the run
 sheet in `gc-tiled-wire.md` from step 1.
+
+## Stop, 2026-11-25: session A not run (slint-launcher container)
+
+**Session A did not run, and there is no measurement.** Three task machines
+found the board up over ssh on 2026-11-25 (not rebooted, kexec not loaded)
+with the podman container `slint-launcher` running and set to autostart.
+`tools/board.sh x2 run` refuses a jump while any container runs
+(`something is running (containers 1)`), and the plan's rules forbid an agent
+from stopping it or changing its autostart. The owner did not answer. It is
+the same stop as 2026-11-24 (record
+`records/x2/20261124-1035-before-72972ba4`, no measurement) and the same cause
+that stopped the look by eye (`x2-glmark2-pictures-by-eye.md`, commit
+`fe72e2a9`). The 2026-11-25 attempts left no record, because no run started.
+The "Session A: stop, 2026-11-25" section above holds its ssh reads; its
+readiness-check citation is now `tools/board.sh:2518-2526`.
+
+Commits that would have been measured, ms per frame for terrain, shadow and
+refract: `72972ba4` (before), and `3c3fe33b` (`9cdeff6d`, W1 to W5, is its
+ancestor) with `gc_tiled_rt` off and with `CONFIG_GLMARK2_GC_TILED_RT=y`. All
+cells stay `-`.
+
+The host prediction it would have been compared with
+(`gc-slow-host-counts.md`, "Predicted effect of gc_tiled_rt"):
+
+- terrain: about -14 to +3 ms of about 250. At current main the host counts
+  51 terrain draws, not 71 (RS jobs per frame off/on: terrain 11/14, shadow
+  3/3, refract 4/4).
+- shadow and refract: unchanged. The depth-resolve cause is **unconfirmed**:
+  it rests on a 350 to 1000 ms estimate taken from an AM62P figure, and the
+  resolve takes about 1 ms on the host, so the host cannot decide whether it
+  dominates. See `gc-slow-shadow-refract.md` (`gc-shadow-refract-cause.md`
+  does not exist). A session should note whether its commit includes
+  `25fa1a96` (wide loads in the resolve).
+
+The X2 is the same SoC (i.MX8MP) and GPU (GC7000UL) as the Verdin iMX8MP but
+not the stage-2 board; its ms per frame are development numbers. To run it:
+the owner stops the container before each run, or turns its autostart off for
+the session; `board.sh x2 status` must read `containers 0`; one `origin/main`
+commit.
