@@ -47,9 +47,9 @@ use yakogl::shaderc::online::{lower, store};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
 /// `.vert`/`.frag` sources of tools/shaders outside es100.
-const SOURCES: usize = 198;
+const SOURCES: usize = 199;
 /// Programs (single sources with a stub, and linked pairs) that compile at 7.1.
-const COMPILED: usize = 190;
+const COMPILED: usize = 191;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/shaders")

@@ -447,7 +447,7 @@ fn allocate71_is_sound_over_every_corpus_pair() {
     let mut files = Vec::new();
     sources(&root, &mut files);
     files.sort();
-    assert_eq!(files.len(), 324, "tools/shaders holds 324 .vert/.frag sources; re-derive the pins if it changed");
+    assert_eq!(files.len(), 325, "tools/shaders holds 325 .vert/.frag sources; re-derive the pins if it changed");
     let mut c = Counts::default();
     let mut bad = Vec::new();
     let mut pairs = 0usize;
