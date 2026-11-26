@@ -546,5 +546,56 @@ expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 ga
 expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"
+# multisample test files (plan #339): src/ multisample sources select every row;
+# each test file reaches its own row
+want src/gl/msaa.rs all
+want src/msaa_store.rs all
+want src/msaa_hw/gc.rs all
+out=$(plan tests/es3_msaa_v3d.rs)
+expect "msaa: es3_msaa_v3d reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_v3d.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_blitmask.rs)
+expect "msaa: es3_msaa_gl_blitmask reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_blitmask.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_clear.rs)
+expect "msaa: es3_msaa_gl_clear reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_clear.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_complete.rs)
+expect "msaa: es3_msaa_gl_complete reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_complete.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_coverage.rs)
+expect "msaa: es3_msaa_gl_coverage reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_coverage.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_draws.rs)
+expect "msaa: es3_msaa_gl_draws reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_draws.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_ds.rs)
+expect "msaa: es3_msaa_gl_ds reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_ds.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_es31_absent.rs)
+expect "msaa: es3_msaa_gl_es31_absent reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_es31_absent.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_formats.rs)
+expect "msaa: es3_msaa_gl_formats reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_formats.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_iformat.rs)
+expect "msaa: es3_msaa_gl_iformat reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_iformat.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_life.rs)
+expect "msaa: es3_msaa_gl_life reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_life.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_mrt.rs)
+expect "msaa: es3_msaa_gl_mrt reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_mrt.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_query.rs)
+expect "msaa: es3_msaa_gl_query reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_query.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_rect.rs)
+expect "msaa: es3_msaa_gl_rect reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_rect.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_srgb.rs)
+expect "msaa: es3_msaa_gl_srgb reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_srgb.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_state.rs)
+expect "msaa: es3_msaa_gl_state reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_state.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_texdst.rs)
+expect "msaa: es3_msaa_gl_texdst reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_texdst.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_window.rs)
+expect "msaa: es3_msaa_gl_window reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_window.rs\)$' "$out"
+out=$(plan tests/es3_msaa_read_errors.rs)
+expect "msaa: es3_msaa_read_errors reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_read_errors.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_es2ctx.rs)
+expect "msaa: es3_msaa_gl_es2ctx reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online,report-es2 \(tests/es3_msaa_gl_es2ctx.rs\)$' "$out"
+out=$(plan tests/msaa_store_api.rs)
+expect "msaa: msaa_store_api reaches its row" '^plan  test    host-test,gpu-powervr \(tests/msaa_store_api.rs\)$' "$out"
+out=$(plan tests/msaa_hw_gc_api.rs)
+expect "msaa: msaa_hw_gc_api reaches its row" '^plan  test    host-test,gpu-vivante \(tests/msaa_hw_gc_api.rs\)$' "$out"
+out=$(plan tests/pvr_msaa_rb.rs)
+expect "msaa: pvr_msaa_rb reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/pvr_msaa_rb.rs\)$' "$out"
 echo "check_scope_selftest: $checks checks run (planned $checks), $fails failed"
 [ "$fails" -eq 0 ]
