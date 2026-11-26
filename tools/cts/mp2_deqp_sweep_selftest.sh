@@ -12,6 +12,7 @@
 # shard, one log per shard, the final diff call), the resume skip (a shard
 # whose log holds a result is not run again, a damaged one is), the shard
 # range, the default case list with its exclusions, and the refusals; the
+# every runner exit code (0 2 3 4 5 6 7 8 129 130 143, and an unknown one stops); the
 # stop on runner exit 5 and 7 and on SIGINT/SIGTERM (undo lines shown, no next
 # shard, no diff, exit 3 / 130 / 143) and the RUN_BOUND default (lifetime + 100 s).
 set -u
@@ -116,9 +117,10 @@ chk "redaction hit: exit 1" test $rc -eq 1
 chk "redaction hit: says to redact" grep -q 'must be redacted before commit' <<<"$out"
 
 echo "failures"
-out=$(MP2_SWEEP_RUNNER=false sw "$D/zephyr.bin" "$D/o4" 2>&1); rc=$?
+printf "#!/bin/bash\nexit 4\n" > "$D/rc4.sh"; chmod +x "$D/rc4.sh"
+out=$(MP2_SWEEP_RUNNER=$D/rc4.sh sw "$D/zephyr.bin" "$D/o4" 2>&1); rc=$?
 chk "runner failure: exit 1" test $rc -eq 1
-chk "runner failure: counted" grep -q '3 run, 0 skipped, 3 failed' <<<"$out"
+chk "runner failure: counted" grep -q '3 run, 0 skipped, 3 failed, 0 lifetime' <<<"$out"
 out=$(bash "$SWEEP" --dry-run 2>&1); rc=$?
 chk "usage: exit 2" test $rc -eq 2
 out=$(sw "$D/nothere.bin" "$D/o5" 2>&1); rc=$?
@@ -142,9 +144,28 @@ for rc in 5 7; do
     chk "exit $rc: says a person is needed" grep -q 'board needs a person' <<<"$out"
     chk "exit $rc: no diff" bash -c '! grep -q "^mp2-p9-diff" <<<"$1"' _ "$out"
 done
-: > "$D/calls.txt"
-out=$(STOP_RC=1 MP2_SWEEP_RUNNER=$D/stop.sh sw "$D/zephyr.bin" "$D/os1" 2>&1); r=$?
-chk "exit 1: still goes on to the next shard" test "$(wc -l < "$D/calls.txt")" -eq 3
+# every rc of the runner's header table: stop (exit) or go on to the next shard (3 shards)
+for rc in 0 2 3 4 5 6 7 8 129 130 143 1 9 42; do
+    : > "$D/calls.txt"
+    out=$(STOP_RC=$rc MP2_SWEEP_RUNNER=$D/stop.sh sw "$D/zephyr.bin" "$D/ol$rc" 2>&1); r=$?
+    case $rc in
+    2) want_r=2 want_calls=1 ;;
+    5|7|129|130|143|1|9|42) want_r=3 want_calls=1 ;;
+    *) want_r=1 want_calls=3 ;;
+    esac
+    case $rc in 0|8) want_r=$(( r == 0 || r == 1 ? r : 99 )) ;; esac
+    chk "rc $rc: sweep exit $want_r" test $r -eq $want_r
+    chk "rc $rc: $want_calls shard(s) ran" test "$(wc -l < "$D/calls.txt")" -eq $want_calls
+    case $rc in
+    0) ;;
+    8) chk "rc 8: says lifetime" grep -q 'runner exit 8 (verdict=lifetime' <<<"$out"
+       chk "rc 8: counted apart from failures" grep -q ' 0 failed, 3 lifetime' <<<"$out" ;;
+    5|7|2|129|130|143) chk "rc $rc: STOPPED" grep -q 'STOPPED: shard [0-9]*: runner exit '"$rc"' ' <<<"$out" ;;
+    1|9|42) chk "rc $rc: unknown code stops with a message" grep -q "STOPPED: shard [0-9]*: runner exit $rc is not a code the runner documents" <<<"$out"
+            chk "rc $rc: no diff" bash -c '! grep -q "^mp2-p9-diff" <<<"$1"' _ "$out" ;;
+    *) chk "rc $rc: named, goes on" grep -q "shard [0-9]*: runner exit $rc (" <<<"$out" ;;
+    esac
+done
 
 echo "stop: SIGINT and SIGTERM"
 cat >"$D/slow.sh" <<'EOS'

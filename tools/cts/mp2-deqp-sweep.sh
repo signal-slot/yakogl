@@ -157,7 +157,7 @@ run "$PY" -I "$HERE/mp2-deqp-shards.py" "$CASES" "${SARGS[@]}" || die "the shard
 # manifest.tsv: header, then index<TAB>cases<TAB>est_ms<TAB>file
 mapfile -t IDX < <(awk -F'\t' 'NR > 1 { print $1 }' "$SH/manifest.tsv")
 [ ${#IDX[@]} -gt 0 ] || die "no shards in $SH/manifest.tsv"
-fails=0 ran=0 skipped=0
+fails=0 ran=0 skipped=0 lifetimes=0
 RPID= SIG= SIGRC= LOG=
 undo_lines() {   # what the runner printed about its undo and the stop's cause
     [ -f "$LOG" ] || return 0
@@ -213,13 +213,21 @@ for i in "${IDX[@]}"; do
     if [ -n "$SIG" ]; then
         stop_person "SIG$SIG during shard $nnnn (runner exit $rc)" "$SIGRC"
     fi
+    # every code the runner returns (tools/board-stm32mp2.sh, "Exit codes"):
     case $rc in
+    0) ;;
+    4) echo "mp2-deqp-sweep: shard $nnnn: runner exit 4 (the verdict is not done: failed, no end line or bad record)" >&2; fails=$((fails + 1)) ;;
+    8) echo "mp2-deqp-sweep: shard $nnnn: runner exit 8 (verdict=lifetime: the run hit the lifetime; recorded, the diff counts its cases missing)" >&2; lifetimes=$((lifetimes + 1)) ;;
+    3) echo "mp2-deqp-sweep: shard $nnnn: runner exit 3 (refused before the board was changed)" >&2; fails=$((fails + 1)) ;;
+    6) echo "mp2-deqp-sweep: shard $nnnn: runner exit 6 (the one-shot was still set after the cycle; the runner cleared it)" >&2; fails=$((fails + 1)) ;;
+    2) stop_person "shard $nnnn: runner exit 2 (usage: the sweep called the runner wrongly)" 2 ;;
     5) stop_person "shard $nnnn: runner exit 5 (the board did not come back)" 3 ;;
     7) stop_person "shard $nnnn: runner exit 7 (needs a person: stock boot files or the environment)" 3 ;;
+    129|130|143) stop_person "shard $nnnn: runner exit $rc (ended by a signal; its state file says what is left)" 3 ;;
+    *) stop_person "shard $nnnn: runner exit $rc is not a code the runner documents; stopping rather than going on" 3 ;;
     esac
-    [ "$rc" -eq 0 ] || { echo "mp2-deqp-sweep: shard $nnnn: runner exit $rc" >&2; fails=$((fails + 1)); }
 done
-echo "mp2-deqp-sweep: $ran run, $skipped skipped, $fails failed"
+echo "mp2-deqp-sweep: $ran run, $skipped skipped, $fails failed, $lifetimes lifetime"
 shopt -s nullglob
 LOGS=("$OUT"/shard-*.log)
 [ ${#LOGS[@]} -gt 0 ] || die "no shard logs under $OUT"
