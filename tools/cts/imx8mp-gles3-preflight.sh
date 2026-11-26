@@ -5,7 +5,8 @@
 # stage 1 package, the table, the table image and its commit. One 'ok'/'FAIL' line per check; exit 0 only if all pass.
 #   tools/cts/imx8mp-gles3-preflight.sh [--commit <sha, 8+ hex>] [--out <dir>] [--table <file>]
 # Defaults: commit = git rev-parse origin/main, out = $IMX8MP_OUT, table = tools/cts/imx8mp-gles3-tree.txt.
-# Writes nothing, uses no network or board; BOARD_UART is only reported set/unset. imx8mp-env.sh is not sourced
+# Writes nothing; BOARD_UART is only reported set/unset. The one board access is the /boot medium check below
+# (ssh to $BOARD_HOST, read commands only; skipped when BOARD_HOST is unset or the board does not answer). imx8mp-env.sh is not sourced
 # (it exits and creates $IMX8MP_OUT); the image layout is imx8mp-deqp-build.sh's: <out>/es3-<hash8>/zephyr/zephyr.bin.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -65,6 +66,49 @@ if [ -n "$commit" ]; then
 	done
 	if [ -n "$match" ]; then ok "image $match is commit ${commit:0:8}"
 	else bad "no image is named after commit ${commit:0:8}"; fi
+fi
+
+# /boot medium (read-only, over ssh to $BOARD_HOST; ssh options from $BOARD_SSH_OPTS, word-split). The slice runner
+# stages /boot/yakogl/once-*.bin; that must never land on the eMMC, on a protected microSD partition or on the
+# rootfs. A FAIL here needs a person's decision, not a retry: "Which medium is the Verdin's /boot on, and may the
+# runner stage files there?" The board's address and host name are never printed.
+boot_probe='b=$(findmnt -no SOURCE,TARGET /boot 2>/dev/null); echo "mnt=$b"
+src=${b%% *}; src=${src%%\[*}
+if [ -n "$b" ] && [ -b "$src" ]; then
+ echo "plabel=$(lsblk -ndo PARTLABEL "$src" 2>/dev/null)"
+ d=$(lsblk -ndo PKNAME "$src" 2>/dev/null); echo "disk=$d"
+ echo "type=$(cat /sys/block/$d/device/type 2>/dev/null)"
+ if [ -e /sys/block/${d}boot0 ]; then echo boot0=yes; else echo boot0=no; fi
+fi
+echo "fwenv=$(awk '"'"'$1 !~ /^#/ && NF {print $1; exit}'"'"' /etc/fw_env.config 2>/dev/null)"
+echo probe=done'
+if [ -z "${BOARD_HOST:-}" ]; then
+	echo "  note /boot medium not checked: BOARD_HOST is unset"
+else
+	# shellcheck disable=SC2086
+	probe=$(timeout 30 ssh -o BatchMode=yes -o ConnectTimeout=8 ${BOARD_SSH_OPTS:-} "$BOARD_HOST" "$boot_probe" 2> /dev/null)
+	case $probe in
+		*probe=done*)
+			pv() { printf '%s\n' "$probe" | sed -n "s/^$1=//p" | head -1; }
+			b=$(pv mnt); plabel=$(pv plabel); disk=$(pv disk); dtype=$(pv type); boot0=$(pv boot0); fwenv=$(pv fwenv)
+			src=${b%% *}; src=${src%%\[*}
+			why=''
+			if [ -z "$b" ]; then why="/boot is not a separate mount, so staging would land on the rootfs"
+			elif [ -z "$disk" ]; then why="/boot ($src) is not on a partition of a disk"
+			elif [ "$dtype" = MMC ] || [ "$boot0" = yes ]; then why="/boot ($src) is on the eMMC disk $disk"
+			else
+				case $plabel in
+					fsbla1|fsbla2|metadata1|metadata2|fip-a|fip-b) why="/boot ($src) is on the protected microSD partition '$plabel'" ;;
+				esac
+			fi
+			if [ -n "$why" ]; then
+				bad "$why: the slices need a person's decision (which medium is /boot on, may the runner stage files there?)"
+			elif [ "$dtype" = SD ]; then ok "/boot is $src, partlabel '${plabel:-none}', SD card $disk (not eMMC, not protected)"
+			else bad "/boot ($src) is on disk $disk of unknown type '$dtype': not an SD card; the slices need a person's decision"; fi
+			if [ -n "$fwenv" ]; then echo "  info U-Boot env device (/etc/fw_env.config): $fwenv"
+			else echo "  info U-Boot env device: /etc/fw_env.config not readable"; fi ;;
+		*) echo "  note /boot medium not checked: the board did not answer" ;;
+	esac
 fi
 
 if [ $fails -eq 0 ]; then echo "preflight: all ok"; exit 0; fi
