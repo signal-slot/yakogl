@@ -3670,9 +3670,12 @@ fn pr_bgnd_words(pr: &PrLoad, i: usize) -> [u64; 3] {
 /// partial-render state, today's behaviour). `doutu` is the frame's
 /// one-target end-of-tile DOUTU.
 ///
-/// The depth/stencil words of the 3D_PR are not in the block: the kick ABI
-/// has no field for them, and the driver copies the frame's
-/// (docs/notes/pvr-pr-zs.md: right for an unswapped frame).
+/// Of the 3D_PR's depth/stencil words only `isp_zlsctl` is in the block, and
+/// only for a frame with a depth/stencil buffer: the frame's word with the
+/// stores on ([`super::pr_zs::pr_zs_words`]), which a swapped frame's 3D has
+/// off (`swap_drops_zs`). The Z/S bases, the background depth and the flags
+/// are the 3D's, which the driver copies (docs/notes/pvr-pr-zs.md). It reads
+/// the 3D's words, so it runs after `flush` has built them.
 fn pr_fill(b: &mut Backend, doutu: u64) {
     if !pr_load_init(b) {
         return;
@@ -3698,6 +3701,17 @@ fn pr_fill(b: &mut Backend, doutu: u64) {
     pr.eot_pds_data = b.eot_pr_data_off;
     pr.eot_pds_data_bytes = n * 4;
     pr.pds_pr_bgnd = pr_bgnd_words(&b.pr, i);
+    let f = &b.kick.frag;
+    if f.cmd_flags & FRAG_FLAGS_DEPTHBUFFER != 0 {
+        let zs = super::pr_zs::pr_zs_words(
+            f.isp_zlsctl,
+            f.isp_zload_store_base,
+            f.isp_stencil_load_store_base,
+            u64::from(f.isp_bgobjdepth),
+            f.cmd_flags,
+        );
+        b.kick.frag_pr.isp_zlsctl = zs.isp_zlsctl;
+    }
 }
 
 /// Upload one program's words into `mem` (USC heap).

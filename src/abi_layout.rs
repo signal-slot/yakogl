@@ -87,7 +87,7 @@ const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_zlo
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_stencil_load_store_base) == 176);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, cmd_flags) == 184);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragRegs, isp_oclqry_base) == 192);
-const _: () = assert!(size_of::<crate::osal::render::PvrRenderFragPr>() == 112);
+const _: () = assert!(size_of::<crate::osal::render::PvrRenderFragPr>() == 120);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, spm_scratch_gpu) == 0);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, spm_scratch_bytes) == 8);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, reserved) == 12);
@@ -95,7 +95,8 @@ const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, pbe_word)
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, eot_pds_data) == 80);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, eot_pds_data_bytes) == 84);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, pds_pr_bgnd) == 88);
-const _: () = assert!(size_of::<crate::osal::render::PvrRenderKick>() == 344);
+const _: () = assert!(offset_of!(crate::osal::render::PvrRenderFragPr, isp_zlsctl) == 112);
+const _: () = assert!(size_of::<crate::osal::render::PvrRenderKick>() == 352);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, width) == 0);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, height) == 4);
 const _: () = assert!(offset_of!(crate::osal::render::PvrRenderKick, samples) == 8);

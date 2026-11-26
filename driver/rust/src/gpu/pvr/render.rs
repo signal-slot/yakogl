@@ -164,7 +164,8 @@ pub struct PvrRenderFragRegs {
 /// partial-render state, and [`submit`] builds the 3D_PR as a byte copy of
 /// the 3D command. Not all zero, with the knob: the 3D_PR takes its PBE
 /// register words (the whole array) and its EOT PDS data (dword 15) from
-/// here, and both commands carry [`FRAG_FLAGS_SPMSCRATCHBUFFER`].
+/// here, its ISP_ZLSCTL (dwords 24-25) from `isp_zlsctl` when that is not
+/// zero, and both commands carry [`FRAG_FLAGS_SPMSCRATCHBUFFER`].
 /// `spm_scratch_*` and `eot_pds_data_bytes` are the backend's bookkeeping
 /// (no command word); `pds_pr_bgnd` is not written into the 3D_PR yet.
 #[repr(C)]
@@ -182,6 +183,9 @@ pub struct PvrRenderFragPr {
     pub eot_pds_data_bytes: u32,
     /// CR_PDS_PR_BGRND0/1/3: the PR background-object PDS.
     pub pds_pr_bgnd: [u64; 3],
+    /// The 3D_PR's CR_ISP_ZLSCTL: the frame's with the depth/stencil stores
+    /// on (src/pvr/pr_zs.rs, docs/notes/pvr-pr-zs.md). 0: the 3D's word.
+    pub isp_zlsctl: u64,
 }
 
 impl PvrRenderFragPr {
@@ -194,6 +198,7 @@ impl PvrRenderFragPr {
             && self.eot_pds_data == 0
             && self.eot_pds_data_bytes == 0
             && self.pds_pr_bgnd.iter().all(|&w| w == 0)
+            && self.isp_zlsctl == 0
     }
 }
 
@@ -210,7 +215,7 @@ impl PvrRenderFragPr {
 const FRAG_FLAGS_SPMSCRATCHBUFFER: u32 = 0x0008_0000;
 
 const _: () = {
-    assert!(size_of::<PvrRenderKick>() == 344);
+    assert!(size_of::<PvrRenderKick>() == 352);
     assert!(offset_of!(PvrRenderKick, geom) == 16);
     assert!(offset_of!(PvrRenderKick, frag) == 32);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, pbe_word) == 80);
@@ -220,7 +225,7 @@ const _: () = {
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, cmd_flags) == 216);
     assert!(offset_of!(PvrRenderKick, frag) + offset_of!(PvrRenderFragRegs, isp_oclqry_base) == 224);
     assert!(offset_of!(PvrRenderKick, frag_pr) == 232);
-    assert!(size_of::<PvrRenderFragPr>() == 112);
+    assert!(size_of::<PvrRenderFragPr>() == 120);
     assert!(offset_of!(PvrRenderFragPr, spm_scratch_gpu) == 0);
     assert!(offset_of!(PvrRenderFragPr, spm_scratch_bytes) == 8);
     assert!(offset_of!(PvrRenderFragPr, reserved) == 12);
@@ -228,6 +233,7 @@ const _: () = {
     assert!(offset_of!(PvrRenderFragPr, eot_pds_data) == 80);
     assert!(offset_of!(PvrRenderFragPr, eot_pds_data_bytes) == 84);
     assert!(offset_of!(PvrRenderFragPr, pds_pr_bgnd) == 88);
+    assert!(offset_of!(PvrRenderFragPr, isp_zlsctl) == 112);
 };
 
 /// `struct yd_pvr_hwrt`: one render-target dataset (an HWRT data and its
@@ -1522,8 +1528,12 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
         // carry the scratch flag. CMDTA3D_SHARED.asPRBuffer (dwords 2-3)
         // stays 0 in both, as Mesa and Linux leave it: a non-zero slot
         // raises FWCCB requests the driver does not answer
-        // (docs/notes/pvr-render-pool.md, pr-fwccb-read). A zero block, or
-        // the knob off, leaves every word as it was.
+        // (docs/notes/pvr-render-pool.md, pr-fwccb-read). A non-zero
+        // `isp_zlsctl` replaces the 3D_PR's ISP_ZLSCTL (dwords 24-25): the
+        // frame's word with the depth/stencil stores on, which a swapped
+        // frame's 3D has off (docs/notes/pvr-pr-zs.md); the Z/S bases stay
+        // the 3D's. A zero block, or the knob off, leaves every word as it
+        // was.
         let pr_block = pr && !kick.frag_pr.is_zero();
         if pr_block {
             dk[76] |= FRAG_FLAGS_SPMSCRATCHBUFFER;
@@ -1536,6 +1546,9 @@ pub fn submit(k: &mut YdPvrKm, r: &mut YdPvrRender, kick: &PvrRenderKick, fence_
                 let o = 30 + i * PBE_STRIDE_DW;
                 lohi(&mut dk_pr, o, pbe[0]);
                 lohi(&mut dk_pr, o + 2, pbe[1]);
+            }
+            if p.isp_zlsctl != 0 {
+                lohi(&mut dk_pr, 24, p.isp_zlsctl);
             }
         }
         if r.cfg.verbose != 0 {
@@ -4525,6 +4538,7 @@ mod submit_tests {
         c.frag_pr.eot_pds_data = 0x6666_6666;
         c.frag_pr.eot_pds_data_bytes = 0x7777_7777;
         c.frag_pr.pds_pr_bgnd = [0x8080_8080_8080_8080, 0x8181_8181_8181_8181, 0x8282_8282_8282_8282];
+        c.frag_pr.isp_zlsctl = 0x9090_9090_9090_9090;
         // SAFETY: a repr(C) struct of integers, read as its own bytes.
         let b =
             unsafe { core::slice::from_raw_parts(&c as *const PvrRenderKick as *const u8, size_of::<PvrRenderKick>()) };
@@ -4546,6 +4560,44 @@ mod submit_tests {
         assert_eq!(u64_at(bg), 0x8080_8080_8080_8080);
         assert_eq!(u64_at(bg + 8), 0x8181_8181_8181_8181);
         assert_eq!(u64_at(bg + 16), 0x8282_8282_8282_8282);
+        assert_eq!(u64_at(offset_of!(PvrRenderFragPr, isp_zlsctl)), 0x9090_9090_9090_9090);
+        assert_eq!(
+            offset_of!(PvrRenderFragPr, isp_zlsctl) + 8,
+            size_of::<PvrRenderFragPr>(),
+            "isp_zlsctl ends the block"
+        );
+    }
+
+    /// G5 (pr-zs-wire): with the knob, a filled `frag_pr` whose `isp_zlsctl`
+    /// is not zero gives the 3D_PR that ISP_ZLSCTL (dwords 24-25); the 3D
+    /// command keeps the frame's, and every other 3D_PR word is as G3 has
+    /// it. Without the knob the field changes no command byte.
+    #[test]
+    fn g5_a_non_zero_frag_pr_isp_zlsctl_is_the_3d_pr_zlsctl() {
+        let mut c = filled_frag_pr();
+        c.frag.isp_zlsctl = 0x0000_0012_0003_0400;
+        c.frag_pr.isp_zlsctl = 0x0000_0012_0303_0400;
+        let mut base = filled_frag_pr();
+        base.frag.isp_zlsctl = c.frag.isp_zlsctl;
+        let (mut t, mut z) = (rig(1), rig(1));
+        let (mut f1, mut fz) = (0u32, 0u32);
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut z.k, &mut z.r, &base, &mut fz), 0, "log:\n{}", z.log());
+        let (d3, pr) = threed_bodies(&t);
+        let (zd3, zpr) = threed_bodies(&z);
+        let (pr, zpr) = (pr.expect("a 3D_PR"), zpr.expect("a 3D_PR"));
+        assert_eq!(d3, zd3, "the 3D command ignores frag_pr.isp_zlsctl");
+        assert_eq!((d3[24], d3[25]), (0x0003_0400, 0x12), "the 3D keeps the frame's ZLSCTL");
+        assert_eq!((pr[24], pr[25]), (0x0303_0400, 0x12), "the 3D_PR takes frag_pr's ZLSCTL");
+        for i in (0..80).filter(|&i| i != 24 && i != 25) {
+            assert_eq!(pr[i], zpr[i], "3D_PR dw{i}");
+        }
+        // Knob off: the field changes no byte of either ring.
+        let (mut t, mut z) = (rig(0), rig(0));
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f1), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut z.k, &mut z.r, &base, &mut fz), 0, "log:\n{}", z.log());
+        assert_eq!(t.cmds(FCCCB, t.r.fwo), z.cmds(FCCCB, z.r.fwo), "knob off: the fragment CCB");
+        assert_eq!(t.cmds(GCCCB, t.r.gwo), z.cmds(GCCCB, z.r.gwo), "knob off: the geometry CCB");
     }
 
     /// Without the knob, none of that is written: the sRTACtl words and the

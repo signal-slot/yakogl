@@ -96,7 +96,7 @@ _Static_assert(offsetof(struct pvr_render_frag_regs, isp_zload_store_base) == 16
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_stencil_load_store_base) == 176, "struct pvr_render_frag_regs.isp_stencil_load_store_base");
 _Static_assert(offsetof(struct pvr_render_frag_regs, cmd_flags) == 184, "struct pvr_render_frag_regs.cmd_flags");
 _Static_assert(offsetof(struct pvr_render_frag_regs, isp_oclqry_base) == 192, "struct pvr_render_frag_regs.isp_oclqry_base");
-_Static_assert(sizeof(struct pvr_render_frag_pr) == 112, "struct pvr_render_frag_pr");
+_Static_assert(sizeof(struct pvr_render_frag_pr) == 120, "struct pvr_render_frag_pr");
 _Static_assert(offsetof(struct pvr_render_frag_pr, spm_scratch_gpu) == 0, "struct pvr_render_frag_pr.spm_scratch_gpu");
 _Static_assert(offsetof(struct pvr_render_frag_pr, spm_scratch_bytes) == 8, "struct pvr_render_frag_pr.spm_scratch_bytes");
 _Static_assert(offsetof(struct pvr_render_frag_pr, reserved) == 12, "struct pvr_render_frag_pr.reserved");
@@ -104,7 +104,8 @@ _Static_assert(offsetof(struct pvr_render_frag_pr, pbe_word) == 16, "struct pvr_
 _Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data) == 80, "struct pvr_render_frag_pr.eot_pds_data");
 _Static_assert(offsetof(struct pvr_render_frag_pr, eot_pds_data_bytes) == 84, "struct pvr_render_frag_pr.eot_pds_data_bytes");
 _Static_assert(offsetof(struct pvr_render_frag_pr, pds_pr_bgnd) == 88, "struct pvr_render_frag_pr.pds_pr_bgnd");
-_Static_assert(sizeof(struct pvr_render_kick) == 344, "struct pvr_render_kick");
+_Static_assert(offsetof(struct pvr_render_frag_pr, isp_zlsctl) == 112, "struct pvr_render_frag_pr.isp_zlsctl");
+_Static_assert(sizeof(struct pvr_render_kick) == 352, "struct pvr_render_kick");
 _Static_assert(offsetof(struct pvr_render_kick, width) == 0, "struct pvr_render_kick.width");
 _Static_assert(offsetof(struct pvr_render_kick, height) == 4, "struct pvr_render_kick.height");
 _Static_assert(offsetof(struct pvr_render_kick, samples) == 8, "struct pvr_render_kick.samples");

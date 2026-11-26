@@ -668,6 +668,7 @@ fn frag_pr_is_zero(p: &PvrRenderFragPr) -> bool {
         && p.eot_pds_data == 0
         && p.eot_pds_data_bytes == 0
         && p.pds_pr_bgnd == [0; 3]
+        && p.isp_zlsctl == 0
 }
 
 /* ---- the tests --------------------------------------------------------------- */
