@@ -47,7 +47,11 @@
 #    oneshot), a pending one-shot (yako_once, a hook or an environment write
 #    in bootcmd, env_default=1, stored mp2z_*), /boot on the eMMC, files of an
 #    earlier run, a busy console, a dead TFTP server. The command log never
-#    writes the environment or a device.
+#    writes the environment or a device. The image's yk-record lines (gap G3)
+#    give result=record:<KIND>, resets= and record= in the header's verdict
+#    line order, resets= a number when the record carries one, and an invalid
+#    record is bad_record (rc 4); three of these run on fixtures under
+#    tools/testdata/mp2-uboot-yk-record/.
 # 5. The run directory: every live refusal runs under the same name, so
 #    several fall in one second; each run gets a directory of its own, and a
 #    run whose name exists already takes the next -2, -3, ... (before
@@ -68,7 +72,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2-uboot.sh"
-WANT_CHECKS=126
+WANT_CHECKS=129
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -568,6 +572,26 @@ rec_console recgarbled 'yk-record: 594b0101 00000001 0000005' 'yk-record: 594b01
 rec_run recgarbled
 check "a garbled yk-record line is absent, never a pass: result=none, resets=absent, record=absent, no record:" \
     eval 'grep -q " result=none resets=absent record=absent env_diff=empty" <<<"$(vline)" && ! grep -q "result=record:\|result=pass" <<<"$(vline)"'
+
+# The same decoded from the file fixtures (tools/testdata/mp2-uboot-yk-record/
+# README.md), pinned to the whole line: the header's order result=, resets=,
+# record=, env_diff=, boot_diff=, back_after=, resets= a number when the
+# record carries a GPU reset count, and an invalid record bad_record (rc 4).
+TDY=$REPO/tools/testdata/mp2-uboot-yk-record
+rec_fixture() { # rec_fixture NAME FILE: a run whose console plays <FILE> of the fixture directory
+    reset_board
+    echo "$TDY/$2" > "$F/state/console"
+    out=$(live run "$S/img/mp2_hello.bin" "$S/runs" "$1" 2>&1); rc=$?
+}
+rec_fixture recpassord pass.console.txt
+check "fixture pass, the whole line in the header's order: result=record:CASE, resets=absent, record=<the four words comma-joined>, env_diff=, boot_diff=, back_after= (the legacy PASS line gives way)" \
+    eval '[ "$rc" = 0 ] && [[ "$(vline)" =~ ^board-stm32mp2-uboot\.sh\ stm32mp257f-dk\ recpassord\ rc=0\ verdict=done\ boot=uboot-mmc\ row\ boot_verdict=done\ result=record:CASE\ resets=absent\ record=594b0101,00010101,00000001,00000000\ env_diff=empty\ boot_diff=empty\ back_after=[0-9]+s$ ]]'
+rec_fixture recresets resets.console.txt
+check "fixture resets: the record's GPU reset count sits in resets= between result= and record=, before back_after=; status n/a is not bad_record (rc 0, verdict=done)" \
+    eval '[ "$rc" = 0 ] && [[ "$(vline)" =~ ^board-stm32mp2-uboot\.sh\ stm32mp257f-dk\ recresets\ rc=0\ verdict=done\ boot=uboot-mmc\ row\ boot_verdict=done\ result=record:DEQP_CASES\ resets=1\ record=594b0904,00000096,00000000,a1e01001\ env_diff=empty\ boot_diff=empty\ back_after=[0-9]+s$ ]]'
+rec_fixture recbad invalid.console.txt
+check "fixture invalid: an invalid record is verdict=bad_record with rc 4, its words still in record= and the line order unchanged" \
+    eval '[ "$rc" = 4 ] && [[ "$(vline)" =~ ^board-stm32mp2-uboot\.sh\ stm32mp257f-dk\ recbad\ rc=4\ verdict=bad_record\ boot=uboot-mmc\ row\ boot_verdict=done\ result=record:CASE\ resets=absent\ record=594b0103,00010209,ff0000ff,ff00ff00\ env_diff=empty\ boot_diff=empty\ back_after=[0-9]+s$ ]]'
 
 reset_board
 echo noreboot > "$F/state/mode"
