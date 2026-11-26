@@ -79,4 +79,34 @@ fresh; echo "root${A}board" >> "$R/console.log"; expect "user@host" 1 'login' "$
 fresh; echo "uname selftest-host" >> "$R/console.log"; expect "host name" 1 'host-name' "$R"
 fresh; echo "192${D}0${D}2${D}9" >> "$R/console.log"; out=$(run "$R")
 if printf '%s' "$out" | grep -q '192[.]0[.]2'; then bad "hit text printed"; else ok "hit text never printed"; fi
+
+# --scene: the one-record-per-scene layout of imx8mp-glmark2-dumps.sh
+# (<stamp>-<label>-<sha8>/ with <label>.png, meta.txt, a console log)
+mkscene() { # DIR NN LABEL
+    python3 -I -c '
+import importlib.util, os, struct, sys, zlib
+d, chk, n, label = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+s = importlib.util.spec_from_file_location("rc", chk); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+def chunk(t, b): return struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\0\1\2\3")) + chunk(b"IEND", b"")
+os.makedirs(d)
+open(d + "/console-live.txt", "w").write("glmark2-picture: %s: 800x600; probes c 000000ff\n" % m.SCENES[n - 1])
+open(d + "/" + label + ".png", "wb").write(png)
+open(d + "/meta.txt", "w").write("commit=0123456789abcdef0123456789abcdef01234567\nimage_sha256=" + "ab" * 32 + "\n")' "$1" "$chk" "$2" "$3"
+}
+sfresh() { rm -rf "$T/s"; mkdir -p "$T/s"; R="$T/s/20261120-1030-gm05-texture-mipmap-abababab"; mkscene "$R" 5 gm05-texture-mipmap; }
+sfresh; expect "--scene: complete per-scene record passes" 0 'record-check: .*: complete \(0 problems\)$' --scene gm05-texture-mipmap "$R"
+expect "--scene NN form passes" 0 'complete \(0 problems\)$' --scene 5 "$R"
+expect "--scene bad label" 2 'bad scene' --scene 99 "$R"
+sfresh; rm "$R/gm05-texture-mipmap.png"; expect "--scene: missing picture fails" 1 '^picture: missing gm05-texture-mipmap.png' --scene gm05-texture-mipmap "$R"
+sfresh; mv "$R/gm05-texture-mipmap.png" "$R/gm05-texture-mipmap.damaged.png"; expect "--scene: damaged picture is no picture" 1 '^picture: missing' --scene 5 "$R"
+sfresh; sed -i 's/texture-filter=mipmap/texture-filter=linear/' "$R/console-live.txt"; expect "--scene: wrong scene line fails" 1 'console: no glmark2-picture line for scene 05' --scene gm05-texture-mipmap "$R"
+sfresh; echo bad > "$R/gm05-texture-mipmap.png"; expect "--scene: invalid picture fails" 1 'picture: gm05-texture-mipmap.png: not a PNG' --scene 5 "$R"
+sfresh; sed -i '/commit=/d' "$R/meta.txt"; expect "--scene: no commit fails" 1 '^commit: ' --scene 5 "$R"
+sfresh; mv "$R" "$T/s/20261120-1030-gm05-texture-mipmap-fefefefe"; expect "--scene: sha8 differs fails" 1 '^sha8: ' --scene 5 "$T/s/20261120-1030-gm05-texture-mipmap-fefefefe"
+sfresh; echo "root${A}board" >> "$R/console-live.txt"; expect "--scene: redaction fails" 1 'redaction: console-live.txt:[0-9]+: login' --scene 5 "$R"
+sfresh; mkdir "$R/photos"; mv "$R/gm05-texture-mipmap.png" "$R/photos/05-texture-texture-filter-mipmap.png"
+expect "--scene: photograph route passes" 0 'complete \(0 problems\)$' --scene 5 "$R"
+fresh; expect "default mode on a whole-session record still complete" 0 'complete \(0 problems\)$' "$R"
+sfresh; expect "default mode on a per-scene record still fails" 1 'incomplete' "$R"
 exit $fail
