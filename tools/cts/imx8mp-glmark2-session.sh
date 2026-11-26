@@ -204,6 +204,10 @@ if [ "$decrc" != 0 ]; then
     step_fail decode "no dump of $LABEL in the console (glmark2-fb.py exited $decrc): re-run, never patch" 3
 fi
 printf '%s\n' "$decout"
+if printf '%s\n' "$decout" | grep -q "picture value not compared"; then
+    if [ -e "$png" ]; then mv -f "$png" "$RECDIR/$LABEL.damaged.png"; fi
+    step_fail decode "picture line missing: re-run the scene (the dump of $LABEL has no glmark2-picture line of its own; never patch)" 3
+fi
 [ "$runrc" = 0 ] || step_fail run "imx8mp-glmark2-dumps.sh run exited $runrc though the dump decodes"
 echo "session: step decode: ok ($LABEL.png)"
 if [ -f "$HERE/imx8mp-glmark2-uart-stats.py" ]; then
