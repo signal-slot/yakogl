@@ -32,7 +32,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-glmark2-run
 RUN=$HERE/mali-glmark2-run.sh
-EXPECT=97
+EXPECT=99
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-glmark2-selftest-XXXXXX")
 # MALI_GLMARK2_SELFTEST_KEEP=1 keeps the directory and says where it is.
 cleanup() {
@@ -105,12 +105,14 @@ echo "mali-glmark2-selftest: a clean run over scenes 1-3"
 run clean clean --scenes 1-3
 check "a clean run exits 0" rc_is clean 0
 check "scenes.tsv has its header and three ok rows with the full commit" \
-  bash -c "head -1 '$tmp/clean/out/scenes.tsv' | grep -qxP 'scene\tcommit\tverdict\tms_frame\tpicture\tkmsg\texit_line' &&
+  bash -c "head -1 '$tmp/clean/out/scenes.tsv' | grep -qxP 'scene\tcommit\tverdict\tms_frame\tpicture\tkmsg\texit_line\trc' &&
     [ \"\$(awk -F'\t' 'NR > 1 { print \$1, \$2, \$3 }' '$tmp/clean/out/scenes.tsv' | paste -sd,)\" = \
 'build:use-vbo=false $c1 ok,build:use-vbo=true $c1 ok,texture:texture-filter=nearest $c1 ok' ]"
 check "ms/frame is glmark2's FrameTime, kmsg 0, the exit line kept" \
   bash -c "[ '$(col clean 1 4) $(col clean 1 6)' = '0.800 0' ] &&
     [ '$(col clean 1 7)' = 'yakogl-mali-exit: draws=600 refused=0 first_refused=- gpu_faults=0 job_timeouts=0' ]"
+check "rc: 0 for each clean scene (the glmark2 process's exit status, the last column)" \
+  bash -c "[ '$(col clean 1 8)$(col clean 2 8)$(col clean 3 8)' = 000 ]"
 check "the picture column holds the text after 'glmark2-picture: <info>: '" \
   bash -c "[ '$(col clean 2 5)' = '800x600; probes c 336699ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1a2b, crc16q 3c4d; mean 51 102 153; black no' ]"
 check "pictures.txt has one 'mali | <info> | <picture>' line a scene" \
@@ -178,6 +180,8 @@ check "a job timeout: kmsg 1, its frame time 500.000, only its own lines in kmsg
     ! grep -q 'GPU Fault' '$tmp/mixed/out/kmsg/6.log'"
 check "a failed setup has no frame time and no picture" bash -c "[ '$(col mixed 7 4) $(col mixed 7 5)' = '- -' ]"
 check "a crash has no exit line" bash -c "[ '$(col mixed 8 7)' = - ]"
+check "rc: 0 for a scene that ran to its end, non-zero for the aborting one (139), 124 for the hang" \
+  bash -c "[ '$(col mixed 1 8) $(col mixed 2 8) $(col mixed 7 8)' = '0 0 0' ] && [ '$(col mixed 8 8)' = 139 ] && [ '$(col mixed 9 8)' = 124 ]"
 check "the hang was killed and nothing of it is left on the board" \
   bash -c "! pgrep -f '[${tmp:0:1}]${tmp:1}/mixed/board/home/yakogl-mali-glmark2' && grep -q 'scene 9: hang' '$tmp/mixed/out.txt'"
 check "an FPS without FrameTime gives 1000 / FPS" bash -c "[ '$(col mixed 10 4)' = 4.000 ]"
