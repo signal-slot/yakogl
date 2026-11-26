@@ -462,14 +462,20 @@ fn sorted(mut d: Decoded) -> Decoded {
     d
 }
 
+/// Packets with a spec that `translate` does not send (compose5 pins them).
+const SPEC_ONLY: [&str; 3] = ["LINE_WIDTH", "POINT_SIZE", "BLEND_CCOLOR"];
+
 fn module_values<P: Packet>(p: &P) -> Decoded {
     sorted(p.pairs().iter().map(|(f, v)| (f.name.to_string(), v.clif_text())).collect())
 }
 
 /// kind (CLIF name) -> distinct decoded values of the module's packets.
 fn module_sets(draws: &[StatePackets71]) -> Vec<(&'static str, BTreeSet<Decoded>)> {
-    let mut sets: Vec<(&'static str, BTreeSet<Decoded>)> =
-        ALL_SPECS.iter().map(|s| (s.clif_name, BTreeSet::new())).collect();
+    let mut sets: Vec<(&'static str, BTreeSet<Decoded>)> = ALL_SPECS
+        .iter()
+        .filter(|s| !SPEC_ONLY.contains(&s.clif_name))
+        .map(|s| (s.clif_name, BTreeSet::new()))
+        .collect();
     let mut add = |name: &str, v: Decoded| {
         sets.iter_mut().find(|(n, _)| *n == name).unwrap().1.insert(v);
     };
@@ -499,6 +505,7 @@ fn clif_sets(rel: &str) -> Vec<(&'static str, BTreeSet<Decoded>)> {
     let clif = parse_clif(rel);
     ALL_SPECS
         .iter()
+        .filter(|s| !SPEC_ONLY.contains(&s.clif_name))
         .map(|s| {
             let set =
                 clif.iter().filter(|(n, _)| n == s.clif_name).map(|(_, v)| sorted(v.clone())).collect::<BTreeSet<_>>();
@@ -689,4 +696,19 @@ fn mrt8_eight_targets_and_no_state_packets() {
             | (0xf & !8) << 28
     );
     assert_eq!(translate(&fbo(9)).err(), Some(Refusal71::TooManyTargets));
+}
+
+/// The packers of the packets `translate` does not send: the code byte, then
+/// the fields little-endian (Point Size / Line width: the f32; Blend Constant
+/// Color: red in the low 16 bits, alpha in the high).
+#[test]
+fn spec_only_packets_pack_as_mesa_lays_them_out() {
+    let mut b = vec![104u8];
+    b.extend_from_slice(&1.0f32.to_le_bytes());
+    assert_eq!(PointSize { size: 1.0 }.pack().to_vec(), b);
+    let mut b = vec![105u8];
+    b.extend_from_slice(&2.0f32.to_le_bytes());
+    assert_eq!(LineWidth { width: 2.0 }.pack().to_vec(), b);
+    let c = BlendCcolor { red: 0x1111, green: 0x2222, blue: 0x3333, alpha: 0x4444 };
+    assert_eq!(c.pack().to_vec(), vec![86, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44]);
 }
