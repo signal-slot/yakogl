@@ -12,11 +12,24 @@
 #   b  python3 imports every module prompt-go.py and t6-uart-rfc2217.py
 #      import (the RFC 2217 client is that script's own, so pyserial is
 #      needed only if one of them imports `serial`).
-#   c  each regular file in <image-dir> other than SHA256SUMS and COMMIT is
-#      an image with a line in <image-dir>/SHA256SUMS (sha256sum format)
-#      whose hash matches, and the build commit in <image-dir>/COMMIT (one
-#      sha) is an ancestor of origin/main (git merge-base --is-ancestor on
-#      the local ref; nothing is fetched).
+#   c  <image-dir> holds the images, in one of two layouts:
+#      single  each regular file in <image-dir> other than SHA256SUMS and
+#              COMMIT is an image with a line in <image-dir>/SHA256SUMS
+#              (sha256sum format) whose hash matches.
+#      rows    a row image directory (tools/cts/t6-deqp-images.sh's <img-dir>,
+#              read by tools/cts/t6-uboot-rows.sh): a first-level directory
+#              counts as a label when it holds a zephyr directory, its image
+#              is <LABEL>/zephyr/zephyr.bin, checked against a SHA256SUMS at
+#              the top (its line names <LABEL>/zephyr/zephyr.bin) or under
+#              the label (its line names zephyr/zephyr.bin). A label whose
+#              zephyr/ holds no zephyr.bin is named; a top-level file that is
+#              not one of the <LABEL>.built files, SHA256SUMS or COMMIT is
+#              named. Both layouts in one directory fail.
+#      Either layout needs one <image-dir>/COMMIT (one sha) that is an
+#      ancestor of origin/main (git merge-base --is-ancestor on the local
+#      ref; nothing is fetched). tools/cts/t6-deqp-images.sh writes neither
+#      SHA256SUMS nor COMMIT today (as of 2026-11-26): preflight then names
+#      exactly what is missing.
 #   d  records/ is gitignored.
 #   e  if console-check.sh is executable, the command to run it is printed;
 #      it is not run.
@@ -58,17 +71,55 @@ fi
 sums=$DIR/SHA256SUMS
 commit=
 [ -f "$DIR/COMMIT" ] && commit=$(tr -d ' \t\r\n' <"$DIR/COMMIT")
-imgs=()
-while IFS= read -r f; do imgs+=("$f"); done < <(find "$DIR" -maxdepth 1 -type f ! -name SHA256SUMS ! -name COMMIT -printf '%f\n' | sort)
-[ ${#imgs[@]} != 0 ] || fail "c: no image in the image directory"
-for n in "${imgs[@]}"; do
-	if [ ! -s "$DIR/$n" ]; then fail "c: $n is empty"; continue; fi
-	want=$(awk -v n="$n" '{f=$2; sub(/^\*/,"",f); sub(/^\.\//,"",f); if (f==n) print $1}' "$sums" 2>/dev/null | head -n1)
-	if [ -z "$want" ]; then fail "c: $n has no sha256 in SHA256SUMS"; continue; fi
-	have=$(sha256sum "$DIR/$n" | cut -d' ' -f1)
-	if [ "$want" = "$have" ]; then ok "c: $n exists, sha256 matches the list"
-	else fail "c: $n sha256 differs from SHA256SUMS"; fi
-done
+# sumline <sums file> <file as written in it>: the hash of that file, or nothing
+sumline() { awk -v n="$2" '{f=$2; sub(/^\*/,"",f); sub(/^\.\//,"",f); if (f==n) print $1}' "$1" 2>/dev/null | head -n1; }
+# layout: a first-level directory holding a zephyr directory makes this a row
+# image directory; the labels are those directories
+labels=()
+while IFS= read -r p; do labels+=("${p%/zephyr}"); done < <(find "$DIR" -mindepth 2 -maxdepth 2 -type d -name zephyr -printf '%P\n' 2>/dev/null | sort)
+if [ ${#labels[@]} != 0 ]; then
+	# rows layout: <LABEL>/zephyr/zephyr.bin per label. Top-level files are
+	# the builder's metadata (the <LABEL>.built files, SHA256SUMS, COMMIT);
+	# anything else at the top means the directory is not one layout clean.
+	strays=()
+	while IFS= read -r f; do strays+=("$f"); done < <(find "$DIR" -mindepth 1 -maxdepth 1 -type f ! -name SHA256SUMS ! -name COMMIT ! -name '*.built' -printf '%f\n' | sort)
+	if [ ${#strays[@]} != 0 ]; then
+		fail "c: top-level file of a row image directory, not a <LABEL>.built, SHA256SUMS or COMMIT: ${strays[*]}"
+	fi
+	for l in "${labels[@]}"; do
+		rel=$l/zephyr/zephyr.bin
+		if [ ! -e "$DIR/$rel" ]; then fail "c: $rel is missing"; continue; fi
+		if [ ! -s "$DIR/$rel" ]; then fail "c: $rel is empty"; continue; fi
+		want=$(sumline "$sums" "$rel"); used=$sums
+		if [ -z "$want" ] && [ -f "$DIR/$l/SHA256SUMS" ]; then
+			want=$(sumline "$DIR/$l/SHA256SUMS" "zephyr/zephyr.bin"); used=$DIR/$l/SHA256SUMS
+		fi
+		if [ -z "$want" ]; then
+			if [ ! -f "$sums" ] && [ ! -f "$DIR/$l/SHA256SUMS" ]; then
+				fail "c: $rel has no sha256 in SHA256SUMS: no SHA256SUMS at the top or in $l/"
+			else
+				fail "c: $rel has no sha256 in SHA256SUMS"
+			fi
+			continue
+		fi
+		have=$(sha256sum "$DIR/$rel" | cut -d' ' -f1)
+		if [ "$want" = "$have" ]; then ok "c: $rel exists, sha256 matches the list"
+		else fail "c: $rel sha256 differs from ${used#"$DIR"/}"; fi
+	done
+else
+	# single-image layout: regular files at the top of <image-dir>
+	imgs=()
+	while IFS= read -r f; do imgs+=("$f"); done < <(find "$DIR" -maxdepth 1 -type f ! -name SHA256SUMS ! -name COMMIT -printf '%f\n' | sort)
+	[ ${#imgs[@]} != 0 ] || fail "c: no image in the image directory"
+	for n in "${imgs[@]}"; do
+		if [ ! -s "$DIR/$n" ]; then fail "c: $n is empty"; continue; fi
+		want=$(sumline "$sums" "$n")
+		if [ -z "$want" ]; then fail "c: $n has no sha256 in SHA256SUMS"; continue; fi
+		have=$(sha256sum "$DIR/$n" | cut -d' ' -f1)
+		if [ "$want" = "$have" ]; then ok "c: $n exists, sha256 matches the list"
+		else fail "c: $n sha256 differs from SHA256SUMS"; fi
+	done
+fi
 if [ -z "$commit" ]; then
 	fail "c: no build commit (COMMIT file) in the image directory"
 elif ! [[ $commit =~ ^[0-9a-f]{7,40}$ ]]; then
