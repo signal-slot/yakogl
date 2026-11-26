@@ -71,47 +71,37 @@ CONTRIBUTING's statements, checked at `4f34ffb8`:
 
 README's host steps in order, then CONTRIBUTING, on a fresh clone.
 
-**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps 1 to 3 and the API-coverage step are the `cb36d3c7` walk below; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "508 ok, 1 failed, 0 gap(s)" at `8f1a5f71`, red (section "Line 3"). Line 6 is partial until line 3 is met.
+**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps and the API-coverage step are recorded below at `50e70464` (2026-11-26) — the cmake Linux build, the host tools test and the API-coverage step — and step 3's bare-metal forms in the `40b44800` re-walk below it; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "508 ok, 1 failed, 0 gap(s)" at `8f1a5f71`, red (section "Line 3"). Line 6 is partial until line 3 is met.
 
-The `cb36d3c7` walk (2026-11-24, host steps 1 to 3 and the API-coverage step; step 4 was not run there because `west` was absent on that host):
+The `50e70464` walk (2026-11-26, the cmake Linux build, the host tools test and
+the API-coverage step; step 2's cross build was not re-run — no toolchain file
+is shipped and README says it is the reader's own — and step 3 is the
+`40b44800` re-walk below):
 
-- Date: 2026-11-24. Main commit walked: `cb36d3c7` (2026-11-24 15:04 UTC), the
-  newest `origin/main` ref the workspace held (GitHub was not reachable). Fresh
-  `git clone`, detached at that commit, no build directory at the start; each
-  `make` row used its own `BUILD=` directory.
-- Host: Linux 7.0.0-43-generic x86-64, rustc 1.99.1 (stable,
-  `aarch64-unknown-none` installed), cargo 1.99.1, cmake 4.2.3, ninja 1.13.2,
-  GNU Make 4.4.1, Ubuntu clang 21.1.8 with LLVM 21.1.8 (`llvm-ar-21`,
-  `llvm-nm-21`, `llvm-objcopy-21`), Zephyr SDK 1.0.1 (`aarch64-zephyr-elf-gcc`
-  14.3.0), Arm GNU Toolchain 14.3.rel1 (`aarch64-none-elf`, newlib). Every
-  passing build log had 0 warnings.
+- Date: 2026-11-26. Main commit walked: `50e70464` (2026-11-26 05:42 UTC), the
+  integration tip when the walk ran. Fresh `git clone`, no build directory at
+  the start. All commands ran with `LC_ALL=C` (the host's `ja_JP.UTF-8` locale
+  is not installed).
+- Host: Linux 7.0.0-38-generic x86-64, rustc 1.99.1 (58cf8f9c3 2026-10-13).
 
 | Step | Command as written | Exit | Wall time |
 | --- | --- | --- | --- |
-| 1 configure | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | <1 s |
-| 1 build | `cmake --build build` | 0 | 35 s |
-| 2 configure | `cmake -S . -B build/a64 --toolchain <reader's toolchain file> -DYAKOGL_OSAL=baremetal` | 0 | <1 s |
-| 2 build | `cmake --build build/a64` | 0 | 35 s |
-| 3 GCC form, `aarch64-none-elf` GCC on PATH | `make -f baremetal.mk CROSS_COMPILE=aarch64-none-elf-` | 0 | 23 s |
-| 3 GCC form, host without that GCC | the same command | 2 | <1 s |
-| 3 GCC form, Zephyr SDK 1.0 prefix | `make -f baremetal.mk CROSS_COMPILE=<sdk>/gnu/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-` | 0 | 16 s |
-| 3 clang form, no sysroot | `make -f baremetal.mk CC='clang --target=aarch64-none-elf' AR=llvm-ar-21 NM=llvm-nm-21 OBJCOPY=llvm-objcopy-21` | 2 | 15 s |
-| 3 clang form, `--sysroot` (Arm toolchain) | the same with `CC='clang --target=aarch64-none-elf --sysroot=<arm-gnu>/aarch64-none-elf'` | 0 | 22 s |
-| 3 clang form, `--sysroot` (Zephyr SDK newlib) | the same with `--sysroot=<sdk>/gnu/aarch64-zephyr-elf/aarch64-zephyr-elf` | 0 | 18 s |
-| 4 Zephyr (`west`) | not run: `west` is absent on this host | | |
-| host tools test | `cargo test -p yakogl-tools` | 0 | 27 s |
-| API coverage prep | `cargo build -p yakogl-capi --features gpu-powervr,mesa-reference-table` | 0 | 9 s |
+| 1 configure | `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` | 0 | 2 s |
+| 1 build | `cmake --build build` | 0 | 85 s |
+| host tools test | `cargo test -p yakogl-tools` | 0 | 66 s |
 | API coverage | `python3 -I tools/api_coverage.py` | 0 | 1 s |
-| API coverage, no archive | the same with an empty cargo target directory | 0 | <1 s |
 
-All `baremetal.mk` rows used the default `DRVSRC` (`DRVSRC ?= $(HERE)/driver/src`
-in `baremetal.mk`); none passed it. The two exit-2 rows are the documented host
-requirements: the GCC form needs an `aarch64-none-elf` GCC (`failed to find tool
-"aarch64-none-elf-gcc"`), and the clang form needs bare-metal C headers
-(`'string.h' file not found` at `src/osal/baremetal.c:25`) that `--sysroot`
-supplies. Outputs: `cargo test -p yakogl-tools` "128 passed; 0 failed";
-`api_coverage.py` `SUMMARY declared=186 exported=304 procaddress=304`, missing
-0, from the archive (`nm`) and, with no archive, from the source: the same 304.
+Outputs: `cmake -S . -B build -G Ninja -DYAKOGL_OSAL=linux` ended `-- Build
+files have been written to: <workspace>/build`; `cmake --build build` `--
+assembled <workspace>/build/libyakogl.a (73 runtime symbols made local)`;
+`cargo test -p yakogl-tools` "128 passed; 0 failed"; `api_coverage.py` `SUMMARY
+declared=186 exported=304 procaddress=304`, missing 0, and `PINNED
+missing_gl2=0 missing_egl=0`. The `cmake --build` and `cargo test` times
+include a cold build in the fresh clone, on the host's shared cargo cache. The
+archive `api_coverage.py` read (`exported_source=nm`) was a `libyakogl_capi.a`
+in the host's cargo target cache (`<home>/.cache/yakogl/ci-target/debug/`),
+not built in the clone; with no such cache the script parses the source
+instead — the fallback README names — which was not timed here.
 
 Step 3 alone, re-walked 2026-11-26 at `40b44800` (host Linux 7.0.0-38-generic
 x86-64, rustc 1.99.1, Ubuntu clang 21.1.8 with the LLVM tools installed only
