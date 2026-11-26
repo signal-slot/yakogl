@@ -64,12 +64,24 @@
 # below). When the field is printed its value is a token; a value that is
 # not a decimal differs on the line, on both forms of the match.
 #
-# The probes' own tables (t6_gpu and after) predict the GPU hand-over Linux
-# leaves (PD_GPU off with vdd_gpu_s0 on, the clock at CPLL / 5). With
-# T6_ROUTE=uboot those lines are judged against the same values, so a correct
-# image that finds U-Boot's state (the clock on the SPLL, the supply maybe
-# off) can FAIL there; it cannot PASS wrongly. A uboot variant of those
-# tables comes with the first measured U-Boot hand-over.
+# The probes' own tables (t6_gpu and after) judge the GPU hand-over lines
+# per route. kexec: the hand-over line against what Linux left, with
+# vdd_gpu_s0 predicted on and no clock-set or enable line judged (a PD_GPU
+# found powered, the crash route, is taken over the same way on either
+# route). uboot: the RK806 line reads the supply on or off, each form
+# followed by a "clock set: kept {d}" line (1 = the clock kept, 0 = moved;
+# a refused clock set stops the run with its stop line in place of PASS,
+# so the FAIL stands) and an enable line matching the supply ("frame sent"
+# after off, "not sent" after on; any other supply word is FAIL). A
+# passing t6_fw or t6_submit prints none of these lines, so its supply
+# reads alike on either route; one stopped in Z1 prints table_z1_stop,
+# judged for form only. triangle is judged on its first show line: the
+# cold chain when no picture was left running, the adopt when one was
+# (both forms on both routes). A return by WDT0 in place of PSCI
+# SYSTEM_RESET and the T6:A line with or without CNTFRQ_EL0 are judged by
+# their own comments, at that code below and in the paragraph above. A
+# record judged as the other route FAILs, never PASS; the full rules and
+# the fixtures of both routes are README.md, "The U-Boot route".
 #
 # t6_mmu: P (t6_mmu_pool's PA) and B (t6_mmu_backing's) are taken from the
 # "pool" line, or from T6_POOL_PA and T6_BACKING_PA when set (step 1 of the
