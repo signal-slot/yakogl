@@ -30,3 +30,18 @@ dEQP-GLES2.functional.state_query.integers.current_program_binding_getinteger	15
 dEQP-GLES2.functional.state_query.shader.delete_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
 dEQP-GLES2.functional.state_query.shader.program_validate_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
 dEQP-GLES2.functional.state_query.shader.shader_compile_status	159f1d14	compiler: constant gl_Position with w zero lowered (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec2_to_ivec2_fragment	d3876279	compiler: b2i32 of a 16-bit mask widens the lane's own half, cause D1 (src/shaderc/online/mali/nir_fs.rs)
+dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec4_fragment	d3876279	compiler: b2i32 of a 16-bit mask widens the lane's own half, cause D1 (src/shaderc/online/mali/nir_fs.rs)
+dEQP-GLES2.functional.shaders.linkage.uniform_struct	9fa5bbe0	compiler: a struct's float member is fp32 words in a mediump fragment block, byte-equal now (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial	9fa5bbe0	compiler: a struct's float member is fp32 words in a mediump fragment block, byte-equal now (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.shaders.linkage.uniform_struct_use_case_rip	9fa5bbe0	compiler: a struct's float member is fp32 words in a mediump fragment block, byte-equal now (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4	9fa5bbe0	compiler: two struct-member words apart are refused (MaliError::FsUniform) (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4	9fa5bbe0	compiler: two struct-member words apart are refused (MaliError::FsUniform) (src/shaderc/online/mali/mod.rs)
+dEQP-GLES2.functional.shaders.random.trigonometric.vertex.87	a824ec97	compiler: a value of unknown precision class is refused, MaliError::PrecisionUnknown (src/shaderc/online/mali/nir.rs)
+dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_fragment	397351b3	BW: a true bool uniform stored as ~0 (src/gl/program.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.conversions.scalar_to_scalar.float_to_bool_fragment	397351b3	BW: a true bool uniform stored as ~0 (src/gl/program.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.conversions.vector_to_scalar.vec4_to_bool_fragment	397351b3	BW: a true bool uniform stored as ~0 (src/gl/program.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.conversions.scalar_to_vector.int_to_bvec2_vertex	c9eb0307	BW: a true bool uniform pushed as ~0 (src/mali/backend.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.conversions.vector_to_vector.ivec4_to_bvec4_vertex	c9eb0307	BW: a true bool uniform pushed as ~0 (src/mali/backend.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_fragment	c9eb0307	BW: a true bool uniform pushed as ~0 (src/mali/backend.rs); pinned in tests/mali_deqp_boolpix.rs
+dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzyx_fragment	c9eb0307	BW: a true bool uniform pushed as ~0 (src/mali/backend.rs); pinned in tests/mali_deqp_boolpix.rs
