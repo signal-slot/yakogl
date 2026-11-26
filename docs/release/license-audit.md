@@ -13,10 +13,11 @@ does so for the named classes only. `tools/cts/cts-selftest.sh` (run by
 of this tool, and the audit over the repository (below). The repository's own
 allowlist is `tools/license_audit.allow`, read by default.
 
-Measured at `0dce654a8` (origin/main, 2026-10-26) plus the origin pass of
-2026-10-26 ("Remaining findings" below): 6513 tracked files. The figures of
-the SPDX header pass (`c2538996e81`, 6291 files, 79 `undecided`) are kept in
-the sections that describe that pass.
+Measured at `3ec29c70` (origin/main, 2026-11-26): 18458 tracked files, 18423
+audited (`tools/testdata/license_audit/` is not scanned). Earlier reads: 11173
+files at `9767d44d` (2026-11-18), 6513 at `0dce654a8` (2026-10-26). The
+figures of the SPDX header pass (`c2538996e81`, 6291 files, 79 `undecided`) are
+kept in the sections that describe that pass.
 
 ## Gate (check 25)
 
@@ -36,19 +37,20 @@ has headed files, an allowlisted file and an `undecided` patch) and the
 `--fail-on` exit status, including a new headerless `.rs` added to the clean
 tree, which must fail.
 
-Counts (`python3 -I tools/license_audit.py`):
+Counts (`python3 -I tools/license_audit.py`, at `3ec29c70`, exit 0 with the
+six-class `--fail-on` list above; `--self-test` passes):
 
 ```
-licence audit: 6513 files, 1684 with an SPDX line, 4622 allowlisted
+licence audit: 18423 files, 7623 with an SPDX line, 8277 allowlisted
 LICENSES/: Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC-BY-ND-4.0, GPL-2.0-only, GPL-3.0-only, LicenseRef-Slint-Royalty-free-2.0, LicenseRef-Slint-Software-3.0, MIT, Zlib
-identifier use: Apache-2.0=6210, BSD-2-Clause=1, BSD-3-Clause=3, BSL-1.0=1, CC-BY-ND-4.0=1, GPL-2.0-only=1, GPL-3.0-only=1, LicenseRef-Slint-Royalty-free-2.0=1, LicenseRef-Slint-Software-3.0=1, MIT=208, Zlib=1
+identifier use: Apache-2.0=15789, BSD-2-Clause=1, BSD-3-Clause=4, BSL-1.0=1, CC-BY-ND-4.0=1, GPL-2.0-only=4, GPL-3.0-only=127, LicenseRef-Slint-Royalty-free-2.0=1, LicenseRef-Slint-Software-3.0=1, MIT=370, Zlib=1
 missing-spdx: 0
 third-party-unlabelled: 13
 undecided: 0
 unknown-id: 0
 unused-license: 0
 third-party-mismatch: 0
-generated: 59 (mismatch: 0)
+generated: 106 (mismatch: 0)
 findings: 0
 ```
 
@@ -168,7 +170,9 @@ The SPDX header pass parked 79 files as `undecided` (no licence claimed). The
 owner's rule of 2026-10-26: find the origin; if it cannot be established, the
 file leaves the tree. Every item below was settled that way on 2026-10-26.
 No licence was guessed: each row, sidecar or header names the source its
-licence was read from. `undecided: 0`.
+licence was read from. `undecided: 0`. Items 18-23 were found by the
+re-read of 2026-11-26 (provenance scan of the 7000 files added since
+2026-10-26); they are open owner or other-plan decisions, not audit findings.
 
 | # | Item | Files | What was found, and the source | What was done |
 |---|---|---|---|---|
@@ -189,11 +193,17 @@ licence was read from. `undecided: 0`.
 | 15 | `driver/docs/part1-ddk-fw-bringup.md` | 1 | Our article (Qiita front matter; first commit `4402bcb3e`, Tasuku Suzuki). The header after the front matter says `Apache-2.0`, Signal Slot, Inc. | No change: the header states the licence. |
 | 16 | The `*.json` default row | - | `tools/v3d/tri-shaders/*.json`: v3d_shc (Mesa) and our compiler's output for the v3d triangle sample's own probe shaders (commit `2e759bf7b`; the sample left the tree in `5a496fd50`, the shaders stay as test inputs). | No change: the default row (ours) holds. |
 | 17 | `third-party-unlabelled` (13) | 13 | Mesa's `docs/license.rst`, `box.h`, `u_atomic.h`, XML/YAML inputs; DDK `config_kernel.h`, `README`; the Zephyr PR's `LICENSE`. Covered by the licence files UPSTREAM lists. | Information only. |
+| 18 | glmark2 text under `GPL-3.0-only` (open, owner) | 127 uses | `tools/shaders/glmark2/` (123 files), `tools/mali/testdata/gm2_*.frag/.vert` (allowlist rows `Apache-2.0 AND GPL-3.0-only`) and `tools/hostharness/glmark2/host_main.cpp` are glmark2 22c527cb text (GPL-3.0-or-later upstream; offered as `GPL-3.0-only`, the text in `LICENSES/`). `tools/shaders/glmark2/README.md` says glmark2 shader text is never committed, and six commits that added the files (for example `6beeba85`, `72e6ff38`) say "no glmark2 text". | **Owner question**: keep the files as GPL-3.0-only test data, or rewrite or remove them? NOTICE needs a glmark2 entry (plan #391). |
+| 19 | `*.json` rows (open, tool) | 744 | `tools/mali/testdata/*.expect.json` (743) and `tools/testdata/vc4/triangle.shc.json` contain Mesa disassembly but read `Apache-2.0`: the built-in `*.json` row is read before the repository table, so no allowlist row can relabel them. | Open: `load_allow` must read the built-in rows after the repository rows; then rows `tools/mali/testdata/*.expect.json` and `tools/testdata/vc4/*.shc.json` as `Apache-2.0 AND MIT`, and a re-run (the new order can change other matches). Not done here. |
+| 20 | `src/shaderc/online/mali/emit.rs` (open, plan #387) | 1 | Selects the BIR of `bi_emit_alu` (`bifrost_compile.c`, MIT), header `Apache-2.0` only. | Plan #387 owns the file; the header probably needs `Apache-2.0 AND MIT` and Mesa's holder. |
+| 21 | i.MX 95 bring-up files (open, owner) | few | `driver/boards/toradex/verdin_imx95/board.yml` (and probably its `.yaml`) is derived from Zephyr's `imx95_evk` A55 board; it lacks the `2024-2025 NXP` holder line. | Add the line (owner or a small item). |
+| 22 | Linux-derived driver files (open, owner) | 3 | `driver/rust/src/ip/adv7535.rs` is `GPL-2.0-only` (follows Linux code); `gpu/mali/mod.rs` and `gpu/pvr/freelist.rs` are `Apache-2.0 AND (GPL-2.0-only OR MIT)`, used under MIT. STM32 DSI/LTDC/DSIM files may need `GPL-2.0-or-later`, whose text is not in `LICENSES/`. | Owner: confirm the GPL-2.0-only reading and the Apache-2.0 crate wording; NOTICE needs the adv7511/adv7535 entry (plan #391). |
+| 23 | Other owner questions | - | `tests/mali_fragcoord16.rs` and `tests/gc_terrain_shader_count.rs` hold glmark2-derived text under Apache-2.0 (relicense to GPL-3.0 and MIT, or rewrite); `ffi.rs`, `ffi_layout_check.c`, `vdm_field_check.c`, `render_regs_check.c` and genxml/csbgen enum values count as cite-only unless the owner says otherwise; `builtins::udiv` may need `Apache-2.0 AND MIT` and `2015 Red Hat`; `tests/es3_pvr_centroid.rs` headers; `khrplatform.h` in-file SPDX line and `eglplatform.h` provenance. | Owner decisions; none changes the counts today. |
 
-## Generated files (60)
+## Generated files (106)
 
 All outputs were compared with the licence of their generator or upstream;
-`generated-mismatch: 0` (three of the 60 through `generated-ok` rows, item 20). Outputs that take the licence of their input
+`generated-mismatch: 0` (three of them through `generated-ok` rows, item 20). Outputs that take the licence of their input
 (`regs.rs` BSD-3-Clause from NXP's headers; `src/pvr/csbgen.rs`,
 `csbgen_wrap.c` MIT from Mesa's csbgen) carry `generated-ok` rows. Files that
 mix our code with Mesa-derived code (`pvr_pds_render_gen.h`,
@@ -209,5 +219,10 @@ mix our code with Mesa-derived code (`pvr_pds_render_gen.h`,
    pass it, so a file with open provenance fails the gate.
 2. Done: `unused-license` is a `--fail-on` class of check 25 (items 11 and
    12 decided).
-3. Not covered by the tool: copyright holders inside file headers (NOTICE is
-   hand-kept).
+3. Outside `tools/license_audit.py` (it reads the identifier, not the
+   text around it): the copyright holders in file headers against NOTICE, and
+   the `license` fields of the crates against what each crate contains. Both
+   are read by hand (NOTICE is hand-kept); the holder lines added to
+   derived files since 2026-11-18 (Mesa, Linux, AOSP, Khronos, Imagination,
+   Broadcom, Etnaviv, NXP and others) are the list NOTICE is compared with
+   (plan #391 owns NOTICE).
