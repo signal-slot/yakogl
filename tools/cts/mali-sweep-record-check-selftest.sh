@@ -52,12 +52,14 @@ the summary of each run, identical (`cmp` exits 0).
 ## 2. Delta against tools/cts/log/2026-11-t6-sweep-1a22bd38 (both runs)
 EOF
     cat > "$d/sweep-1.verdicts.txt" << 'EOF'
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # panthor-gltest --sweep, one run per file (README.md): the verdict and summary lines
 panthor-gltest: verdict case 0 triangle: PASS
 panthor-gltest: verdict case 1 uniform: PASS
 panthor-gltest: verdict case 7 ?: NO-CASE
 panthor-gltest: verdict case 77 transc: REFUSED compile: online shaderc: arithmetic not lowered yet
-panthor-gltest: 256 case(s) run: FAIL 0, NO-CASE 1, PASS 2, REFUSED 1, SKIP 0
+panthor-gltest: 4 case(s) run: FAIL 0, NO-CASE 1, PASS 2, REFUSED 1, SKIP 0
 EOF
     cp "$d/sweep-1.verdicts.txt" "$d/sweep-2.verdicts.txt"
 }
@@ -69,7 +71,7 @@ fresh() {
     mkgood "$R"
 }
 
-run() { python3 -I "$chk" "$@"; }
+run() { env -u BOARD_USER python3 -I "$chk" "$@"; }
 show() { printf '%s\n' "$out" | sed 's/^/     /'; }
 
 # expect_good NAME N_OK ARGS...: exit 0, no FAIL line, exactly N_OK ok lines
@@ -85,14 +87,14 @@ expect_good() {
 }
 
 # expect_only NAME TARGET FAILPAT ARGS...: exit 1, exactly one FAIL line
-# (and 5 ok lines of six checks), it names TARGET and matches FAILPAT
+# (and 7 ok lines of the eight checks), it names TARGET and matches FAILPAT
 expect_only() {
     what=$1; target=$2; pat=$3; shift 3
     out=$(run "$@"); got=$?
     nfail=$(printf '%s\n' "$out" | grep -c '^FAIL ')
     nok=$(printf '%s\n' "$out" | grep -c '^ok   ')
     line=$(printf '%s\n' "$out" | grep '^FAIL ' | head -1)
-    if [ "$got" = 1 ] && [ "$nfail" = 1 ] && [ "$nok" = 5 ] \
+    if [ "$got" = 1 ] && [ "$nfail" = 1 ] && [ "$nok" = "${NOK:-7}" ] \
         && printf '%s' "$line" | grep -qE "FAIL $target:" \
         && printf '%s' "$line" | grep -qE -- "$pat"; then
         ok "$what"
@@ -109,13 +111,13 @@ expect_rc() {
 }
 
 # good records
-fresh; expect_good "good record (boot_id unchanged form, 1a22bd38 README style)" 6 "$R"
+fresh; expect_good "good record (boot_id unchanged form, 1a22bd38 README style)" 8 "$R"
 fresh; sed -i 's/^boot_id unchanged.*/boot_id before (`5e2a981d-…`) and after (`5e2a981d-…`), the same value./' "$R/README.md"
-expect_good "good record (boot_id before/after form, equal values)" 6 "$R"
+expect_good "good record (boot_id before/after form, equal values)" 8 "$R"
 
-# the real 1a22bd38 record, default --reference: exit 0 with six checks ok
+# the real 1a22bd38 record, default --reference: exit 0 with eight checks ok
 if [ -f "$real_record/README.md" ] && [ -f "$real_record/sweep-1.verdicts.txt" ]; then
-    expect_good "real 2026-11-t6-sweep-1a22bd38 record (names 1a22bd38e, its own commit: the default --reference 1a22bd38 rule holds without a flag)" 6 "$real_record"
+    expect_good "real 2026-11-t6-sweep-1a22bd38 record (names 1a22bd38e, its own commit: the default --reference 1a22bd38 rule holds without a flag)" 8 "$real_record"
 else
     bad "real record log/2026-11-t6-sweep-1a22bd38 missing from tools/cts"
 fi
@@ -124,7 +126,7 @@ fi
 fresh; rm "$R/sweep-2.verdicts.txt"
 expect_only "sweep-2.verdicts.txt missing" verdicts-identical 'missing: sweep-2' "$R"
 fresh; sed -i 's/^panthor-gltest: verdict case 1 uniform: PASS/panthor-gltest: verdict case 1 uniform: FAIL/' "$R/sweep-2.verdicts.txt"
-expect_only "the two verdict files differ" verdicts-identical 'first difference at line 3' "$R"
+expect_only "the two verdict files differ" verdicts-identical 'first difference at line 5' "$R"
 fresh; sed -i '/case(s) run:/d' "$R/sweep-1.verdicts.txt" "$R/sweep-2.verdicts.txt"
 expect_only "summary line missing from both files (still identical)" verdicts-summary 'sweep-1.*sweep-2' "$R"
 
@@ -135,7 +137,7 @@ fresh; sed -i '/^boot_id unchanged/d' "$R/README.md"
 expect_only "README names no boot_id" readme-boot-id 'does not name boot_id' "$R"
 fresh; sed -i 's#sweep-1a22bd38#the previous sweep record#' "$R/README.md"
 expect_only "README does not name 1a22bd38 (default --reference)" readme-reference 'reference commit 1a22bd38' "$R"
-expect_good "--reference '' drops the readme-reference check (the same fixture passes)" 5 "$R" --reference ''
+expect_good "--reference '' drops the readme-reference check (the same fixture passes)" 7 "$R" --reference ''
 fresh; expect_only "--reference 99999999 drives the readme-reference check" readme-reference 'reference commit 99999999' "$R" --reference 99999999
 fresh; sed -i 's/`abcdef1234`, nothing/its tip commit, nothing/' "$R/README.md"
 expect_only "README names no commit sha besides the reference" readme-commit-sha 'no commit sha other than the reference' "$R"
@@ -151,9 +153,32 @@ fresh; printf 'copied from /ho%sme/x\n' "$M" >> "$R/README.md"
 expect_only "README holds a home path" redaction ': home-path' "$R"
 fresh; printf 'console on /dev/t%styACM0\n' "$M" >> "$R/README.md"
 expect_only "README holds a tty path" redaction ': tty-path' "$R"
-fresh; printf 'board 192%s0%s2%s7 reachable now\n' "$D" "$D" "$D" >> "$R/sweep-1.verdicts.txt"
+fresh; sed -i "2a # board 192${D}0${D}2${D}7 reachable now" "$R/sweep-1.verdicts.txt"
 cp "$R/sweep-1.verdicts.txt" "$R/sweep-2.verdicts.txt"
 expect_only "verdict files hold a dotted quad (still identical)" redaction 'sweep-1.*ipv4' "$R"
+
+# user@host, user name and verdict file format: each trips only its own check
+fresh; printf 'ssh to bo%sb@nanopc now\n' "$M" >> "$R/README.md"
+expect_only "README holds a user@host form" userhost ': user@host' "$R"
+out=$(run "$R")
+if printf '%s' "$out" | grep -q 'nanopc'; then bad "userhost hit text was printed"; else ok "userhost hit text never printed"; fi
+fresh; printf 'logged in as alice today\n' >> "$R/README.md"
+expect_good "a user name passes without --user and without BOARD_USER" 8 "$R"
+NOK=8 expect_only "README holds the --user name as a word" user-name ': user name' "$R" --user alice
+expect_good "--user name absent from the record: nine checks ok" 9 "$R" --user bob
+out=$(BOARD_USER=alice python3 -I "$chk" "$R"); got=$?
+if [ "$got" = 1 ] && printf '%s\n' "$out" | grep -q '^FAIL user-name:' \
+    && [ "$(printf '%s\n' "$out" | grep -c '^FAIL ')" = 1 ]; then ok "BOARD_USER names the user without --user"; else bad "BOARD_USER (exit $got)"; show; fi
+out=$(run "$R" --user alice)
+if printf '%s' "$out" | grep -q 'alice'; then bad "user name was printed"; else ok "user name never printed"; fi
+fresh; printf 'alicia and malice\n' >> "$R/README.md"
+expect_good "--user matches whole words only" 9 "$R" --user alice
+fresh; sed -i '1,2d' "$R/sweep-1.verdicts.txt"; cp "$R/sweep-1.verdicts.txt" "$R/sweep-2.verdicts.txt"
+expect_only "verdict files lack the SPDX header (still identical)" verdicts-format 'no SPDX header' "$R"
+fresh; sed -i 's/ 4 case(s) run/ 5 case(s) run/' "$R/sweep-1.verdicts.txt"; cp "$R/sweep-1.verdicts.txt" "$R/sweep-2.verdicts.txt"
+expect_only "summary N differs from the verdict line count" verdicts-format '4 verdict lines, summary says 5' "$R"
+fresh; echo 'panthor-gltest: verdict case 9 late: PASS' >> "$R/sweep-1.verdicts.txt"; cp "$R/sweep-1.verdicts.txt" "$R/sweep-2.verdicts.txt"
+expect_only "summary line is not last" verdicts-format 'summary line is not last' "$R"
 
 # argument handling
 expect_rc "no argument exits 2" 2
