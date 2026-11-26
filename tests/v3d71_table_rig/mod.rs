@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! What a host test of the V3D 7.1 table (`yakogl::v3d::table71`,
 //! `yakogl_backend_v3d71`) stands on: a mock of the OSAL the table calls, and
-//! the C job builder its FFI reaches. Used by tests/v3d71_table.rs and
-//! tests/v3d71_table_draw.rs (`mod v3d71_table_rig;`), built with
+//! the C job builder its FFI reaches. Used by tests/v3d71_table.rs,
+//! tests/v3d71_table_draw.rs and tests/v3d71_table_cases.rs (`mod v3d71_table_rig;`), built with
 //! `--features host-test,gpu-v3d71,shaderc-online,no-shader-table`.
 //!
 //! # The OSAL
@@ -136,7 +136,9 @@ unsafe extern "C" fn p_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut
                 gpu: u64::from(gpu),
                 phys: u64::from(gpu),
                 size,
-                impl_: core::ptr::null_mut(),
+                /* a handle: the GL core takes a null one for "no storage"
+                 * (a buffer object, a texture level) */
+                impl_: w.mem.as_mut_ptr().add(at) as *mut c_void,
             };
         }
         0
