@@ -90,12 +90,29 @@ sed -i '/^| 22 |/d' "$M"
 sed -i 's/^## 10. After$/- row 22a: 7 cases, resets 0\n- row 22b: 8 cases, 0 resets\n\n&/' "$M"
 expect resplit 0 '^c1 PASS ' '^c4 PASS ' -- --root "$R" --sha "$SHA"
 
+# the header gles3-notpass.py --splice --resplit writes: one range over the base
+# rows, the re-split rows named in a parenthesis
+R=$(fixture resplit-head)
+T="$R/docs/es3/am62p-gles3-notpass.tsv"
+sed -i "s/^# rows 0-.*/# rows 0-$((N - 1)) (21 re-split as 21a-21b, 30 re-split as 30a-30c): build $SHA8, run 2026-11-30\/12-01/" "$T"
+expect resplit-head 0 '^c1 PASS .*'"$SHA8" -- --root "$R" --sha "$SHA"
+
 # --- c1 fail ----------------------------------------------------------------
 R=$(fixture c1-two)
 sed -i "s/^# rows 0-.*/# rows 0-10: build b25997e4, run 2026-11-22\n# rows 11-$((N - 1)): build ad2b5ed, run 2026-10-13\/14/" \
 	"$R/docs/es3/am62p-gles3-notpass.tsv"
 expect c1-two-builds 1 '^c1 FAIL .*2 builds' '^c2 PASS ' '^c3 PASS ' '^c4 FAIL ' -- --root "$R"
 expect c1-two-builds-sha 1 '^c1 FAIL .*2 builds' '^c4 PASS ' -- --root "$R" --sha "$SHA"
+
+R=$(fixture c1-resplit-two)
+sed -i "s/^# rows 0-.*/# rows 0-30 (21 re-split as 21a-21b): build $SHA8, run 2026-11-30\n# rows 31-$((N - 1)): build ad2b5ed, run 2026-10-14/" \
+	"$R/docs/es3/am62p-gles3-notpass.tsv"
+expect c1-resplit-two-builds 1 '^c1 FAIL .*2 builds' -- --root "$R"
+
+R=$(fixture c1-resplit-gap)
+sed -i "s/^# rows 0-.*/# rows 0-20 (21 re-split as 21a-21b): build $SHA8, run 2026-11-30\n# rows 22-$((N - 1)): build $SHA8, run 2026-11-30/" \
+	"$R/docs/es3/am62p-gles3-notpass.tsv"
+expect c1-resplit-missing-row 1 '^c1 FAIL .*rows 21 of' -- --root "$R"
 
 R=$(fixture c1-gap)
 sed -i "s/^# rows 0-.*/# rows 0-20: build $SHA8, run 2026-11-30\n# rows 22-$((N - 1)): build $SHA8, run 2026-11-30/" \

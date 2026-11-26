@@ -99,12 +99,18 @@ verdict() { # verdict <n> <PASS ...|FAIL ...|other>
 # --- c1: one build, every tree row covered once ------------------------------
 # Prints 'PASS|FAIL <reason>' on the first line and the one build (or '-') on
 # the second.
-c1_out=$(python3 -I - "$TSV" "$TREE" "$SHA" <<'PYEOF'
+c1_out=$(python3 -I - "$TSV" "$TREE" "$SHA" "$HERE" <<'PYEOF'
 import re
 import sys
 
-tsv, tree, want = sys.argv[1], sys.argv[2], sys.argv[3]
-RANGE = re.compile(r"^# rows (\d+)([a-z]*)-(\d+)([a-z]*): build ([0-9a-fA-F]+), run (\S+)\s*$")
+tsv, tree, want, here = sys.argv[1:5]
+sys.path.insert(0, here)
+import gles3_rows  # the parser of the header gles3-notpass.py --splice writes
+
+# '# rows 0-45 (21 re-split as 21a-21b, 30 re-split as 30a-30c): build X, run Y':
+# the parenthesis names the re-split rows and is not part of the row spec.
+RESPLIT = re.compile(r"^(\d+) re-split as (\d+)a-(\d+)[b-z]$")
+PAREN = re.compile(r"^(# rows [^:(]*?)\s*\(([^)]*)\)(:.*)$")
 
 
 def out(ok, why, build="-"):
@@ -122,39 +128,38 @@ try:
             if l.strip() and not l.lstrip().startswith("#"))
 except OSError:
     out(False, "tools/cts/am62p-gles3-tree.txt does not exist")
-ranges = []
-for l in lines:
-    m = RANGE.match(l)
-    if m:
-        ranges.append((int(m.group(1)), int(m.group(3)), m.group(5).lower()))
-    elif l.startswith("# rows "):
-        print("not a range header: " + l, file=sys.stderr)
-if not ranges:
-    out(False, "the TSV has no '# rows <a>-<b>: build <sha8>, run <date>' header line")
-builds = sorted({b for _, _, b in ranges})
 probs = []
+head = []
+for l in lines:
+    if not l.startswith("#"):
+        break
+    m = PAREN.match(l)
+    if m:
+        for item in m.group(2).split(","):
+            if not RESPLIT.match(item.strip()):
+                probs.append("header %r: %r is not 'N re-split as Na-Nx'" % (l, item.strip()))
+        l = m.group(1) + m.group(3)
+    head.append(l)
+try:
+    parsed = gles3_rows.parse_head(head)
+except gles3_rows.RowsError as e:
+    out(False, "unreadable '# rows' header: %s" % e)
+if not parsed:
+    out(False, "the TSV has no '# rows <a>-<b>: build <sha8>, run <date>' header line")
+builds = sorted({b.lower() for b in gles3_rows.builds(parsed)})
 if len(builds) != 1:
     probs.append("the header names %d builds (%s), not one" % (len(builds), ", ".join(builds)))
-count = {}
-for lo, hi, b in ranges:
-    if hi < lo:
-        probs.append("range %d-%d runs backwards" % (lo, hi))
-    for r in range(lo, hi + 1):
-        count[r] = count.get(r, 0) + 1
-missing = [r for r in range(n) if r not in count]
-extra = sorted(r for r in count if r >= n)
-twice = sorted(r for r in count if count[r] > 1 and r < n)
-if missing:
-    probs.append("rows %s of 0-%d have no header range" % (",".join(map(str, missing)), n - 1))
-if extra:
-    probs.append("rows %s are beyond the tree's %d rows" % (",".join(map(str, extra)), n))
-if twice:
-    # a re-split row is named once per part (22a-22a, 22b-22b): allowed only
-    # when every part is of the same build, which the one-build rule checks.
-    suffixed = {int(m.group(1)) for m in map(RANGE.match, lines) if m and m.group(2)}
-    bad = [r for r in twice if r not in suffixed]
-    if bad:
-        probs.append("rows %s are named by more than one range" % ",".join(map(str, bad)))
+cov = gles3_rows.coverage(n, parsed)
+if cov["missing"]:
+    probs.append("rows %s of 0-%d have no header range" % (",".join(map(str, cov["missing"])), n - 1))
+if cov["incomplete"]:
+    probs.append("rows %s are re-split with parts missing (a, b, ... without a gap)"
+                 % ",".join(map(str, cov["incomplete"])))
+if cov["past_tree"]:
+    probs.append("rows %s are beyond the tree's %d rows" % (",".join(map(str, cov["past_tree"])), n))
+if cov["duplicate"]:
+    probs.append("rows %s are named by more than one range"
+                 % ",".join(gles3_rows.key_str(k) for k in cov["duplicate"]))
 if want and len(builds) == 1 and not (want.startswith(builds[0]) or builds[0].startswith(want)):
     probs.append("the build is %s, not %s" % (builds[0], want[:8]))
 if probs:
