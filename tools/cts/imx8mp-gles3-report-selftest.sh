@@ -2,11 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # imx8mp-gles3-report-selftest.sh - synthetic i.MX8MP dEQP-GLES3 slice records (built as in
-# imx8mp-gles3-pipeline-selftest.sh) through imx8mp-gles3-report.py: a complete run and an incomplete one.
+# imx8mp-gles3-pipeline-selftest.sh) through imx8mp-gles3-report.py: a complete run and an incomplete one,
+# a complete run whose records begin cases outside the mustpass list (not PARTIAL, the row sums to the
+# mustpass count), the three real 9bc82915 slices alone (PARTIAL, exit 1) and completed with synthetic
+# slices (exit 0), the record order by first row, and the drafts checked against the layout of
+# tools/cts/RESULTS.md, STATUS.md and ROADMAP.md.
 #
-#   TMPDIR=<dir> tools/cts/imx8mp-gles3-report-selftest.sh
+#   TMPDIR=<dir> sh tools/cts/imx8mp-gles3-report-selftest.sh
 #
 # Host only. Everything is written under $TMPDIR (never /tmp) and removed at the end.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPORT=$HERE/imx8mp-gles3-report.py
@@ -24,15 +29,27 @@ expect() { if [ "$2" = 0 ]; then ok "$1"; else bad "$1"; fi; }
 C1=0123456789abcdef0123456789abcdef01234567
 
 cat > "$work/gen.py" <<'PY'
+# gen.py ROOT HERE COMMIT [EXTRA [CUTS]]
+#   EXTRA: 0 none; 1 out-of-list cases beyond the mustpass list (extra passes on every 5th entry, a named
+#          out-of-list Fail on every 9th); 2 as 1, plus 2 extra NotSupported on entry 7
+#   CUTS:  'a-b:name,...' (0-based entry spans, end exclusive), default three slices dated 2026-11-10
 import importlib.util, os, sys
 root, here, commit = sys.argv[1:4]
+extra = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 spec = importlib.util.spec_from_file_location('merge', os.path.join(here, 'imx8mp-gles3-merge.py'))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 table = m.load_table(os.path.join(here, 'imx8mp-gles3-tree.txt'))
 per = m.entry_cases(table, os.path.join(here, 'gles3-mustpass.txt'))
 n = len(table)
-cut = [(0, 45), (45, 90), (90, n)]
-names = ['2026-11-10-imx8mp-gles3-%s-rows%03d-%03d' % (commit[:8], a + 1, b) for a, b in cut]
+if len(sys.argv) > 5:
+    cut, names = [], []
+    for part in sys.argv[5].split(','):
+        span, nm = part.split(':')
+        a, b = span.split('-')
+        cut.append((int(a), int(b))); names.append(nm)
+else:
+    cut = [(0, 45), (45, 90), (90, n)]
+    names = ['2026-11-10-imx8mp-gles3-%s-rows%03d-%03d' % (commit[:8], a + 1, b) for a, b in cut]
 
 def row(i):
     c = per[i]; k = len(c)
@@ -41,7 +58,15 @@ def row(i):
         fail, ns, named = 1, 1, [c[1]]
     if i % 11 == 2 and k >= 2:
         other = 1
-    return (i, table[i], k, k - fail - ns - other, fail, ns, other, 0, ';'.join(named) or '-')
+    begun, passed = k, k - fail - ns - other
+    if extra and i % 5 == 0:          # a wildcard that also selects 3 passing cases outside the list
+        begun, passed = begun + 3, passed + 3
+    if extra and i % 9 == 4:          # and one failing case outside the list, named
+        begun, fail = begun + 1, fail + 1
+        named.append('dEQP-GLES3.functional.zz_outside_mustpass.case_%d' % i)
+    if extra == 2 and i == 7:
+        begun, ns = begun + 2, ns + 2
+    return (i, table[i], begun, passed, fail, ns, other, 0, ';'.join(named) or '-')
 
 for (a, b), nm in zip(cut, names):
     d = os.path.join(root, nm)
@@ -66,7 +91,7 @@ expect "complete run exits 0" "$rc"
 grep -q "$C1" "$work/full.out"; expect "full commit is present" $?
 grep -q '`01234567`' "$work/full.out"; expect "short sha is present" $?
 grep -q PARTIAL "$work/full.out"; [ $? = 1 ]; expect "no PARTIAL in a complete run" $?
-grep -q 'all 133 entries' "$work/full.out"; expect "133 entries named" $?
+grep -q '133 of 133 entries run' "$work/full.out"; expect "133 entries named" $?
 want=$(python3 "$HERE/imx8mp-gles3-merge.py" --totals "${S[@]}" | python3 -c '
 import sys
 for l in sys.stdin:
@@ -77,7 +102,7 @@ for l in sys.stdin:
 for h in 'RESULTS.md' 'STATUS.md' 'ROADMAP.md' 'issue #24'; do
 	grep -q "^--- .*$h" "$work/full.out"; expect "block headed $h" $?
 done
-grep -q 'リセット0' "$work/full.out"; expect "STATUS line is Japanese with 0 resets" $?
+grep -q 'リセット 0' "$work/full.out"; expect "STATUS line is Japanese with 0 resets" $?
 grep -q '(#24)' "$work/full.out"; expect "ROADMAP line cites #24" $?
 
 echo "== record names: numeric slice order, no absolute path"
@@ -87,7 +112,7 @@ grep -qF "$work" "$work/ord.out"; [ $? = 1 ]; expect "no absolute path of the sc
 python3 - "$work/ord.out" <<'PY'
 import re, sys
 t = open(sys.argv[1]).read()
-line = [l for l in t.splitlines() if l.startswith('- Records:')][0]
+line = [l for l in t.splitlines() if l.startswith('- Records:')][-1]   # the issue comment's (the RESULTS bullet wraps)
 rows = [int(x) for x in re.findall(r'-rows(\d+)-', line)]
 sys.exit(0 if len(rows) == 3 and rows == sorted(rows) and 'tools/cts/log/' in line else 1)
 PY
@@ -121,12 +146,15 @@ expect "--apply exits 0" "$rc"
 grep -n 'i.MX8MP\*\*: not run on the board' "$work/r1/tools/cts/RESULTS.md" > /dev/null; [ $? = 1 ]; expect "c3 grep RESULTS.md has no match" $?
 grep -n 'i.MX8MP: not run on the board yet' "$work/r1/ROADMAP.md" > /dev/null; [ $? = 1 ]; expect "c3 grep ROADMAP.md has no match" $?
 grep -q 'Pi 4 と i.MX8MP の GLES3 全ツリー' "$work/r1/tools/cts/STATUS.md"; [ $? = 1 ]; expect "STATUS.md sentence replaced" $?
-grep -q 'i.MX8MP の dEQP-GLES3 は' "$work/r1/tools/cts/STATUS.md" && grep -q 'i.MX8MP, whole tree' "$work/r1/tools/cts/RESULTS.md" \
-	&& grep -q '^- i.MX8MP: dEQP-GLES3 whole tree' "$work/r1/ROADMAP.md"; expect "the drafts are in the three docs" $?
-for f in ROADMAP.md tools/cts/RESULTS.md tools/cts/STATUS.md; do
+grep -q 'i.MX8MP は全ツリー' "$work/r1/tools/cts/STATUS.md" && grep -q 'i.MX8MP, whole tree' "$work/r1/tools/cts/RESULTS.md" \
+	&& grep -q '^- i.MX8MP: the whole tree' "$work/r1/ROADMAP.md"; expect "the drafts are in the three docs" $?
+grep -q 'i.MX8MP はまだボードで走らせていない' "$work/r1/tools/cts/STATUS.md"; [ $? = 1 ]; expect "STATUS.md 'not run yet' sentence replaced" $?
+grep -q 'Pi 4 の GLES3 全ツリー。' "$work/r1/tools/cts/STATUS.md"; expect "STATUS.md next steps keep the Pi 4 whole tree only" $?
+for f in ROADMAP.md:1 tools/cts/RESULTS.md:1 tools/cts/STATUS.md:2; do
+	h=${f##*:}; f=${f%:*}
 	diff "$work/r1.orig/$f" "$work/r1/$f" > "$work/d.diff"
 	[ "$(grep -c '^[<>]' "$work/d.diff")" -gt 0 ] || { bad "$f changed by --apply"; continue; }
-	[ "$(grep -c '^[0-9]' "$work/d.diff")" = 1 ]; expect "$f: exactly one changed hunk" $?
+	[ "$(grep -c '^[0-9]' "$work/d.diff")" = "$h" ]; expect "$f: exactly $h changed hunk(s)" $?
 done
 cmp -s "$work/r1.orig/ROADMAP.md" "$ROOT/ROADMAP.md"; expect "the scratch original is the repository's ROADMAP.md" $?
 
@@ -168,20 +196,164 @@ python3 -I "$work/gen1.py" "$work/dup1" "$HERE" "$C1" 46 500 || { echo "rerun ge
 python3 "$REPORT" --date 2026-11-10 "${S[@]}" "$work/dup1" > "$work/dup.out" 2>&1; rc=$?
 { [ "$rc" = 1 ] && grep -q PARTIAL "$work/dup.out" && grep -q 'entry 46 is in both' "$work/dup.out"; }
 expect "entry in two slices: exit 1, PARTIAL, entry 46 named" $?
-grep -Fq 'Totals (42,810 of 42,810 mustpass cases begun)' "$work/dup.out"
+grep -Fq 'Totals over the 42,810 mustpass cases (42,810 begun)' "$work/dup.out"
 expect "the rerun is not summed into begun (42,810, not 43,310 of 42,810)" $?
 
 echo "== a constructed overcount is named, never printed silently"
 python3 -I "$work/gen1.py" "$work/dup2" "$HERE" "$C1" 46 5000 || { echo "rerun generator failed" >&2; exit 2; }
 python3 "$REPORT" --date 2026-11-10 "$work/dup2" "${S[@]}" > "$work/over.out" 2>&1; rc=$?
-{ [ "$rc" = 1 ] && grep -q PARTIAL "$work/over.out" && grep -qF '47,810' "$work/over.out" && grep -q 'exceeds mustpass' "$work/over.out"; }
-expect "overcount: exit 1, PARTIAL, the raw begun 47,810 named as exceeding 42,810" $?
-grep -Fq '42,810 mustpass cases (42,810 begun)' "$work/over.out"
+{ [ "$rc" = 1 ] && grep -q PARTIAL "$work/over.out" && grep -q 'entry 46 is in both' "$work/over.out" \
+	&& grep -qF '5,000 results the records give beyond' "$work/over.out" && grep -qF 'records begin 47,810 cases' "$work/over.out"; }
+expect "overcount: exit 1, PARTIAL for the entry in two slices, the 5,000 excess and the raw 47,810 named" $?
+tr '\n' ' ' < "$work/over.out" | grep -Fq '42,810 mustpass cases (each counted once, 42,810 begun)'
 expect "RESULTS.md draft: begun never above its mustpass count" $?
-grep -Fq 'Totals (42,810 of 42,810 mustpass cases begun)' "$work/over.out"
+grep -Fq 'Totals over the 42,810 mustpass cases (42,810 begun)' "$work/over.out"
 expect "issue comment: each mustpass case counted once (the 5,000-case excess not printed as begun)" $?
-grep -q 'begun counts each mustpass case once' "$work/over.out"
-expect "the cap is stated in the output and in the RESULTS draft" $?
+grep -q '^- Mustpass cases only: 5,000 results' "$work/over.out"
+expect "the mustpass-only rule is stated in the RESULTS draft" $?
+
+cat > "$work/row.py" <<'PY'
+# row.py OUT: the RESULTS.md table row of a report output as "pass fail ns other none sum"
+import re, sys
+t = open(sys.argv[1]).read()
+r = [l for l in t.splitlines() if re.fullmatch(r'\| [0-9,]+ \| [0-9,]+ \| [0-9,]+ \| [0-9,]+ \| [0-9,]+ \|', l)]
+if len(r) != 1:
+    sys.exit('no single five-number row')
+v = [int(x.replace(',', '')) for x in re.findall(r'[0-9,]+', r[0])]
+print(' '.join(map(str, v + [sum(v)])))
+PY
+MP=42810
+sums_to() { set -- $(python3 -I "$work/row.py" "$1" 2>/dev/null); [ "${6:-}" = "$MP" ]; }
+
+echo "== complete run whose records begin cases outside the mustpass list"
+mkdir "$work/x1" "$work/x2"
+python3 -I "$work/gen.py" "$work/x1" "$HERE" "$C1" 1 || { echo "generator failed" >&2; exit 2; }
+python3 -I "$work/gen.py" "$work/x2" "$HERE" "$C1" 2 || { echo "generator failed" >&2; exit 2; }
+mapfile -t X1 < <(ls -d "$work"/x1/*-imx8mp-gles3-*/)
+mapfile -t X2 < <(ls -d "$work"/x2/*-imx8mp-gles3-*/)
+python3 "$HERE/imx8mp-gles3-merge.py" --totals "${X1[@]}" 2>/dev/null | awk '$1=="total"{exit !($3>$2)}'
+expect "the synthetic records begin more cases than the mustpass list has (merge --totals begun > mustpass)" $?
+python3 "$REPORT" --date 2026-11-10 "${X1[@]}" > "$work/x1.out" 2>&1; rc=$?
+expect "out-of-list cases: exit 0" "$rc"
+grep -q PARTIAL "$work/x1.out"; [ $? = 1 ]; expect "out-of-list cases: no PARTIAL marker" $?
+sums_to "$work/x1.out"; expect "out-of-list cases: the five-number row sums to the $MP mustpass cases" $?
+[ "$(python3 -I "$work/row.py" "$work/x1.out")" = "$(python3 -I "$work/row.py" "$work/full.out")" ]
+expect "out-of-list passes and named out-of-list fails are left out: the row equals the run without them" $?
+grep -q '^note: mustpass cases only: [0-9,]* results' "$work/x1.out" && grep -q '^- Mustpass cases only:' "$work/x1.out"
+expect "the left-out cases are named in a note and in the RESULTS draft" $?
+grep -Fq 'Totals over the 42,810 mustpass cases (42,810 begun)' "$work/x1.out"
+expect "out-of-list cases: begun is the mustpass count" $?
+python3 "$REPORT" --date 2026-11-10 "${X2[@]}" > "$work/x2.out" 2>&1; rc=$?
+{ [ "$rc" = 0 ] && ! grep -q PARTIAL "$work/x2.out" && sums_to "$work/x2.out"; }
+expect "extra NotSupported cases too: exit 0, no PARTIAL, the row sums to $MP" $?
+
+echo "== the three real 9bc82915 slices"
+mapfile -t REAL < <(ls -d "$ROOT"/tools/cts/log/*-imx8mp-gles3-9bc82915-rows*/ 2>/dev/null)
+if [ ${#REAL[@]} = 3 ]; then
+	python3 "$REPORT" --date 2026-11-10 "${REAL[@]}" > "$work/real.out" 2>&1; rc=$?
+	{ [ "$rc" = 1 ] && grep -q '^\*\*\* PARTIAL' "$work/real.out" && grep -q 'no record: 85 of 133 entries (13-15, 51-132)' "$work/real.out"; }
+	expect "real slices: exit 1, PARTIAL, entries 13-15, 51-132 named" $?
+	sums_to "$work/real.out"; expect "real slices: the row sums to the $MP mustpass cases" $?
+	# Complete the campaign with synthetic records of the missing entries at the same commit; the real
+	# records begin 29,594 cases for 28,459 mustpass cases. Names out of lexical order and old mtimes.
+	C9=$(python3 -I - "${REAL[0]}" <<'PY'
+import re, sys, os
+for n in sorted(os.listdir(sys.argv[1])):
+    if n.lower().startswith('readme'):
+        m = re.search(r'\b[0-9a-f]{40}\b', open(os.path.join(sys.argv[1], n), errors='replace').read())
+        if m: print(m.group(0)); break
+PY
+)
+	mkdir "$work/fill"
+	python3 -I "$work/gen.py" "$work/fill" "$HERE" "${C9:-9bc82915}" 0 \
+		"13-16:2026-12-02-imx8mp-gles3-9bc82915-rows14-16,51-107:2026-12-01-imx8mp-gles3-9bc82915-rows52-107,107-133:2026-11-30-imx8mp-gles3-9bc82915-rows108-133" \
+		|| { echo "generator failed" >&2; exit 2; }
+	touch -d 2026-11-01 "$work"/fill/*-rows14-16
+	mapfile -t FILL < <(ls -d "$work"/fill/*/)
+	python3 "$REPORT" --date 2026-11-10 "${FILL[@]}" "${REAL[@]}" > "$work/real133.out" 2>&1; rc=$?
+	expect "real slices completed: exit 0" "$rc"
+	grep -q PARTIAL "$work/real133.out"; [ $? = 1 ]; expect "real slices completed: no PARTIAL although they begin cases outside the list" $?
+	sums_to "$work/real133.out"; expect "real slices completed: the row sums to the $MP mustpass cases" $?
+	python3 - "$work/real133.out" <<'PY'
+import re, sys
+t = open(sys.argv[1]).read()
+first = lambda s: [int(x) for x in re.findall(r'-rows(\d+)-', s)]
+rec = ' '.join(l.strip() for l in t.split('--- RESULTS.md')[1].split('--- STATUS.md')[0].splitlines())
+rec = rec.split('Records:')[1].split(';')[0]
+issue = [l for l in t.splitlines() if l.startswith('- Records:')][-1]   # the issue comment's (the RESULTS bullet wraps)
+status = [l for l in t.splitlines() if l.startswith('i.MX8MP は')][0]
+want = [1, 14, 17, 35, 52, 108]
+sys.exit(0 if first(rec) == first(issue) == first(status) == want else 1)
+PY
+	expect "records in the RESULTS, STATUS and issue drafts by first row: rows01, rows14, rows17, rows35, rows52, rows108" $?
+	REPORT_FMT=$work/real133.out
+else
+	bad "real slices: expected 3 tools/cts/log/*-imx8mp-gles3-9bc82915-rows* directories, found ${#REAL[@]}"
+	REPORT_FMT=$work/full.out
+fi
+
+echo "== drafts in the layout of their target files"
+python3 - "$REPORT_FMT" "$ROOT" "$work/part.out" <<'PY'
+import re, sys
+out, root, part = sys.argv[1:4]
+t = open(out).read()
+def block(t, head, nxt):
+    return t.split('--- ' + head)[1].split('\n', 1)[1].split('--- ' + nxt)[0].strip('\n')
+res, sta, road = block(t, 'RESULTS.md', 'STATUS.md'), block(t, 'STATUS.md', 'ROADMAP.md'), block(t, 'ROADMAP.md', 'GitHub')
+fails = []
+def check(what, cond):
+    print(('ok   ' if cond else 'FAIL ') + what)
+    if not cond:
+        fails.append(what)
+R = open(root + '/tools/cts/RESULTS.md', encoding='utf-8').read()
+es3 = R.split('## ES 3.0')[1].split('\n## ')[0]
+heads = [l for l in es3.splitlines() if l.startswith('| Pass |')]
+cols = lambda l: len(l.strip().strip('|').split('|'))
+dh = [l for l in res.splitlines() if l.startswith('| Pass |')]
+check('RESULTS: the table has the column count of the ES 3.0 tables (%d)' % (cols(heads[0]) if heads else -1),
+      heads and len(dh) == 1 and cols(dh[0]) == cols(heads[0]))
+check('RESULTS: header columns 1-3 and 5 as the neighbours, the alignment row as theirs',
+      heads and dh and dh[0].split('|')[1:4] == heads[0].split('|')[1:4] and dh[0].split('|')[5] == heads[0].split('|')[5]
+      and '|---:|---:|---:|---:|---:|' in res and '|---:|---:|---:|---:|---:|' in es3)
+nb = re.search(r'^\*\*Pi 4, whole tree\*\* on `([0-9a-f]{8})` \(`\1[0-9a-f]{32}`;', es3, re.M)
+check('RESULTS: the neighbour Pi 4 paragraph opens "**<board>, whole tree** on `<sha8>` (`<sha40>`;"', bool(nb))
+flat = lambda x: ' '.join(x.split())
+check('RESULTS: the draft opens the same way', bool(re.match(r'\*\*i\.MX8MP, whole tree\*\* on `([0-9a-f]{8})` \(`\1[0-9a-f]{32}`;', flat(res))))
+check('RESULTS: the date follows the recipe, then ": ", as the AM62P and Pi 4 paragraphs',
+      bool(re.search(r'\), \d{4}-\d{2}-\d{2}: ', ' '.join(res.splitlines()))))
+check('RESULTS: lines at most 80 columns, bullets "- " with 2-space continuation',
+      all(len(l) <= 80 for l in res.splitlines() if not l.startswith('|'))
+      and all(l.startswith(('- ', '  ', '|', '**')) or not l or l[0].isalnum() or l[0] in '`(' for l in res.splitlines()))
+nums = lambda s: re.findall(r'(?<![\w.,/-])\d{4,}(?![\w,-])', re.sub(r'\d{4}-\d{2}-\d{2}', '', re.sub(r'`[^`]*`', '', s)))
+check('RESULTS, STATUS, ROADMAP: every count of four digits or more has a thousands comma (42,810)',
+      not nums(res) and not nums(sta) and not nums(road))
+S = open(root + '/tools/cts/STATUS.md', encoding='utf-8').read()
+five_ja = r'必須 [0-9,]+ 件中 合格 [0-9,]+ / 失敗 [0-9,]+ / 未対応 [0-9,]+ / その他 [0-9,]+ / 結果なし [0-9,]+、'
+check('STATUS: the Pi 4 sentence of STATUS.md has the five-number form', bool(re.search(five_ja + r'.*リセット 0', S)))
+line = sta.splitlines()[0]
+check('STATUS: the draft has the same form ("必須 N 件中 合格 ... / 結果なし N、... リセット 0")',
+      bool(re.search(five_ja + r'リセット 0', line)))
+check('STATUS: the commit is written as in STATUS.md (sha8 without backticks, date in full-width parentheses)',
+      '`' not in line and bool(re.search(r' [0-9a-f]{8}（\d{4}-\d{2}-\d{2}）で実行し', line))
+      and bool(re.search(r' [0-9a-f]{8}（\d{4}-\d{2}-\d{2}）で実行し', S)))
+check('STATUS: the draft replaces the ES 3.0 bullet\'s i.MX8MP sentence, which STATUS.md has once',
+      S.count('i.MX8MP はまだボードで走らせていない。') == 1 and 'ES 3.0 bullet' in t)
+check('STATUS: one Japanese sentence ending in 。', line.endswith('。') and line.count('\n') == 0)
+D = open(root + '/ROADMAP.md', encoding='utf-8').read()
+st4 = D.split('## 4.')[1].split('\n## ')[0]
+five_en = r'[0-9,]+ cases,\s+[0-9,]+ pass /\s+[0-9,]+ fail /\s+[0-9,]+ NotSupported /\s+[0-9,]+ other /\s+[0-9,]+\s+without\s+a\s+result'
+check('ROADMAP: the stage-4 Pi 4 bullet has the form "N cases, a pass / b fail / c NotSupported / d other / e without a result"',
+      bool(re.search(r'^- Raspberry Pi 4: the whole tree.*?' + five_en, st4, re.M | re.S)))
+check('ROADMAP: the draft has the same form', bool(re.match(r'- i\.MX8MP: the whole tree .*?at `[0-9a-f]{8}` \(\d{4}-\d{2}-\d{2}\): ' + five_en + r'.*\(#24\)\.$', flat(road))))
+check('ROADMAP: the draft wraps at 78 columns with 2-space continuation lines, as its neighbours',
+      all(len(l) <= 78 for l in road.splitlines()) and all(l.startswith('  ') for l in road.splitlines()[1:]))
+p = open(part).read()
+proad = block(p, 'ROADMAP.md', 'GitHub')
+check('ROADMAP, incomplete run: the draft says PARTIAL and names the entries without a record',
+      proad.startswith('- i.MX8MP: PARTIAL: ') and 'no record: 90-132' in ' '.join(proad.split()))
+sys.exit(1 if fails else 0)
+PY
+expect "the drafts match RESULTS.md, STATUS.md and ROADMAP.md" $?
 
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
