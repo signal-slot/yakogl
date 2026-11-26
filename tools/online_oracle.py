@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# SPDX-FileCopyrightText: 2014 The Android Open Source Project
 """Measure the in-process ("online") front end against dEQP-GLES2's own cases.
 
 `tools/es100_oracle.py` scores the pipeline that ships today. This scores
