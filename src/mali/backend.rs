@@ -261,11 +261,17 @@ pub const NOT_BUILT_ATTRIBUTE: &str =
 /// A buffer object above the Buffer descriptor's 32-bit size.
 pub const NOT_BUILT_ATTRIBUTE_BUFFER_SIZE: &str =
     "mali: a vertex attribute in a buffer object of 4 GiB or more (the Buffer descriptor's size is 32 bits) is not built yet";
-/// The vertex shader reads an attribute the draw does not carry, or its
-/// attribute records are not 0..n (the frame's attribute table is indexed by
-/// record).
-pub const NOT_BUILT_ATTRIBUTE_RECORDS: &str =
-    "mali: a vertex shader whose attribute records are not 0..n of the draw's attributes is not built yet";
+/// Two GL locations of the vertex shader name one attribute record. The
+/// compiler numbers a record per location read (Mesa's
+/// `util_bitcount64(inputs_read & BITFIELD_MASK(loc))`), so this is a
+/// record the compiler did not make, not a shape left unbuilt.
+pub const INVALID_ATTRIBUTE_RECORDS: &str =
+    "mali: the vertex shader's attribute records name one record from two locations";
+
+/// GL's initial current value of a generic attribute, (0, 0, 0, 1) (ES 2.0
+/// section 2.7), as Mesa's current-value element holds it: four floats
+/// (`_mesa_draw_current_attrib`, R32G32B32A32_FLOAT).
+pub const INITIAL_CURRENT_VALUE: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 pub const NOT_BUILT_TEXTURE_FORMAT: &str =
     "mali: a texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (RGB8, RGBA8, RGB8A1) is not built yet";
@@ -2599,28 +2605,60 @@ fn uniform_words<'a>(cpu: *const c_void, dwords: u16) -> &'a [u32] {
 /// (the GL core folds the first vertex in). The OSAL keeps a deleted
 /// buffer's store until the kick being recorded has completed
 /// (`gpu_free`'s contract), so the frame may read it in place. Returns how
-/// many.
-fn vertex_attributes(
+/// many: one past the highest record.
+///
+/// Every record gets an element, as every read input gets a vertex element
+/// in Mesa (`st_setup_arrays` and `st_setup_current`, Mesa 26.2.1
+/// mesa/state_tracker/st_atom_array.cpp:178-183, 371-385) and panfrost packs
+/// one ATTRIBUTE per element (`panfrost_pack_attribute`,
+/// gallium/drivers/panfrost/pan_cmdstream.c:4084-4117). A location the GL
+/// core staged nothing for reads what Mesa's current-value element of an
+/// attribute never given a value reads: GL's initial (0, 0, 0, 1), four
+/// floats at stride 0 from a 16-byte Buffer. A record no location names (a
+/// gap below the highest) takes the same element; no code fetches it.
+pub(super) fn vertex_attributes(
     d: &GlesDraw,
     vs_attributes: &[(u8, u8)],
     data: &mut Pool,
     out: &mut [frame::VertexAttribute; 16],
 ) -> Result<usize, FrameError> {
-    let n = vs_attributes.len();
     /* none is built: a vertex shader that reads no attribute (#11328) draws
      * with whatever arrays the core has enabled left unread, as Mesa's
      * vertex elements of such a shader are empty */
+    let n = vs_attributes.iter().map(|&(_, r)| usize::from(r) + 1).max().unwrap_or(0);
     if n > out.len() {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_ATTRIBUTES));
     }
     let staged = &d.attribs[..usize::from(d.num_attribs).min(d.attribs.len())];
+    /* the current-value element's 16 bytes, uploaded once for the draw */
+    let mut current: Option<frame::VertexAttribute> = None;
     for rec in 0..n {
-        /* record `rec` is read by exactly one location */
+        /* record `rec` is read by at most one location */
         let mut it = vs_attributes.iter().filter(|(_, r)| usize::from(*r) == rec);
-        let (Some(&(loc, _)), None) = (it.next(), it.next()) else {
-            return Err(FrameError::NotBuilt(NOT_BUILT_ATTRIBUTE_RECORDS));
+        let (first, None) = (it.next(), it.next()) else {
+            return Err(FrameError::Invalid(INVALID_ATTRIBUTE_RECORDS));
         };
-        let a = staged.iter().find(|a| a.vi_reg == loc).ok_or(FrameError::NotBuilt(NOT_BUILT_ATTRIBUTE_RECORDS))?;
+        let Some(a) = first.and_then(|&(loc, _)| staged.iter().find(|a| a.vi_reg == loc)) else {
+            let c = match current {
+                Some(c) => c,
+                None => {
+                    let mut bytes = [0u8; 16];
+                    for (b, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(INITIAL_CURRENT_VALUE) {
+                        *b = v.to_le_bytes();
+                    }
+                    let b = data.upload(&bytes, 16)?;
+                    *current.insert(frame::VertexAttribute {
+                        buffer: frame::VertexBuffer { gpu: b.gpu, size: 16 },
+                        offset: 0,
+                        stride: 0,
+                        components: 4,
+                        instance_divisor: 0,
+                    })
+                }
+            };
+            out[rec] = c;
+            continue;
+        };
         if a.format != GLES_ATTRIBF_FLOAT32 {
             return Err(FrameError::NotBuilt(NOT_BUILT_ATTRIBUTE));
         }

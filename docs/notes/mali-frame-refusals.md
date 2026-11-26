@@ -79,7 +79,6 @@ listed.
 | clear that needs the quad, whose program did not build at init (`record_in()`) | `NOT_BUILT_CLEAR_PROGRAM` | `src/mali/backend.rs:248` | `src/mali/backend.rs:3365` |
 | vertex attribute other than float32 data (`vertex_attributes()`) | `NOT_BUILT_ATTRIBUTE` | `src/mali/backend.rs:250` | `src/mali/backend.rs:2546`, `src/mali/backend.rs:2559` |
 | attribute in a buffer object of 4 GiB or more | `NOT_BUILT_ATTRIBUTE_BUFFER_SIZE` | `src/mali/backend.rs:253` | `src/mali/backend.rs:2556` |
-| attribute records not 0..n of the draw's attributes | `NOT_BUILT_ATTRIBUTE_RECORDS` | `src/mali/backend.rs:258` | `src/mali/backend.rs:2542`, `src/mali/backend.rs:2544` |
 | texture stored other than RGBA8, sRGB8_A8, R32F or ETC2 (`stage_texture()`) | `NOT_BUILT_TEXTURE_FORMAT` | `src/mali/backend.rs:261` | `src/mali/backend.rs:2299`, `src/mali/backend.rs:2306`, `src/mali/backend.rs:2316` |
 | texture type other than 2D, cube, 2D array or 3D | `NOT_BUILT_TEXTURE_TYPE` | `src/mali/backend.rs:263` | `src/mali/backend.rs:2305` |
 | mip chain of a non-power-of-two texture | `NOT_BUILT_TEXTURE_NPOT_CHAIN` | `src/mali/backend.rs:268` | `src/mali/backend.rs:2307` |
@@ -121,6 +120,22 @@ gone from `src/mali`:
   (`src/mali/frame_noattr_tests.rs`); `vertex_attributes()` in
   `src/mali/backend.rs` hands an empty list over, an enabled array the shader
   does not read left unread (`tests/mali_vsmin_compile.rs`).
+- A vertex shader whose attribute records are not 0..n of the draw's
+  attributes (`NOT_BUILT_ATTRIBUTE_RECORDS`): built, and the constant is
+  gone. Mesa gives every read input a vertex element, the current value's
+  when no array is enabled (`S/st_atom_array.cpp:178-183`, `:371-385`: four
+  floats at stride 0), and panfrost packs one ATTRIBUTE per element
+  (`G/pan_cmdstream.c:4084-4117`) with its Buffer (`:938-971`).
+  `vertex_attributes()` in `src/mali/backend.rs` now makes one element per
+  record up to the highest: a location the GL core staged nothing for reads
+  GL's initial current value (0, 0, 0, 1) as RGBA32F at stride 0 from a
+  16-byte Buffer uploaded once per draw, and a record below the highest that
+  no location names takes the same element, never fetched. Two locations
+  naming one record is no shape the compiler makes (a record is the count of
+  read locations below the location, Mesa's `util_bitcount64`) and is
+  refused as `INVALID_ATTRIBUTE_RECORDS`; more than 16 records stay
+  `NOT_BUILT_ATTRIBUTES`. Pin: `src/mali/frame_attrrec_tests.rs` (the
+  Attribute and Buffer words against `X:947-965`, `X:1056-1060`).
 
 The first three retired names are in no commit of this history's `src/mali`: the
 history starts at `381b0f09` (the YakoGL 0.1.0 import, 2026-10-27), which
