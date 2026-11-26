@@ -15,6 +15,9 @@
 # and the UART speed (MALI_UART_BAUD); each may be set in the environment. The
 # binary runs with YAKOGL_MALI_DEV set to the render node.
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp (e.g. a known_hosts file).
+# The cross compiler is aarch64-linux-gnu-gcc from PATH; with none there, the
+# MALI_DEQP_TOOLCHAIN of tools/cts/deps-env.sh is used (cross-cc.sh), else the
+# script exits 2 before the board lock and before any ssh.
 # The board runs one GL client at a time: the script refuses to start while a
 # process opens the render node, and names it. A dmesg -w capture of the run
 # is copied back (DMESG_LOG names the local file) and the kernel messages
@@ -46,6 +49,9 @@ cd "$(dirname "$0")/../../.."
 # shellcheck source=board-profile.sh
 . tools/mali/panthor/board-profile.sh
 board_profile_load || exit 2
+# shellcheck source=cross-cc.sh
+. tools/mali/panthor/cross-cc.sh
+panthor_cross_cc "$PWD" || exit 2
 node=$MALI_RENDER_NODE
 LOCK_WAIT=${LOCK_WAIT:-0}
 HOLD_MAX=${HOLD_MAX:-1800}
