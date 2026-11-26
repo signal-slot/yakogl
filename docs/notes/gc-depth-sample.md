@@ -491,6 +491,78 @@ unblocks on codes 1 to 4 and stays blocked on 0 and 5. Not in the page: how
 far P1 is from P0 at the first index (the console's `first at` line has it);
 a run that wants the distances needs a second page.
 
+### The Verdin iMX8MP session of case 222 [2026-11-26]: how to run and read it
+
+**Why the Verdin, not the X2.** Every attempt so far targeted the
+Armadillo-X2, and the X2 is blocked: its podman container `slint-launcher`
+autostarts and the X2 runner refuses a jump while it runs
+(`docs/notes/x2-glmark2-slow-scenes.md`, last section). The Verdin iMX8MP
+has the same GC7000UL and the same `gl_test` image path, and nothing on it
+blocks the run. Whether its verdict also holds for the X2 is a separate
+question and not settled here; the record names the board it came from.
+The board is shared (GLES3 runs, the pictures by eye, the board stage), so
+it is taken only through connected's leases (`resource:verdin-imx8mp` and
+`resource:serial-imx8mp`), never by hand.
+
+**Image.** One image from one `origin/main` commit (the commit is written
+down below). The Verdin build is the default: no `IMX8MP_BOARD=x2`.
+
+    tools/cts/imx8mp-gltest-build.sh <name> 222
+    # <name>: a plain directory name, e.g. dtpu-<sha8 of the commit>
+    # output: $IMX8MP_IMG_OUT/<name>/zephyr/zephyr.bin
+
+The script adds `-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y` itself (header of
+`tools/cts/imx8mp-gltest-build.sh`), which the runner needs. Case 222 sits
+at first case 222, so it is the case alone at **`SEL=0`** (CASE record) and
+the page is **`SEL=4272`** (`0x10b0`, see "Selector" above); `SEL=4272`
+runs case 222 alone too and ends with the page, so use it.
+
+**Run.** Through the runner, on the leased board, dry run first:
+
+    tools/board.sh --dry-run imx8mp run <image> <logdir> <name>
+    SEL=4272 tools/board.sh imx8mp run <image> <logdir> <name>
+
+`--dry-run` is the flag `tools/board.sh` strips at lines 298 to 302 and
+prints every command that would touch the board, so read it before the real
+run. `SEL` is written into the cleared record (`tools/board.sh` lines 1418
+to 1429). The i.MX8MP row sets `MARKER='gc_wdog_arm: armed'`
+(`tools/board.sh` line 454): the log must show that line, and an image
+without it is refused before the jump. Check, in this order, that (1) the
+dry run read right, (2) `gc_wdog_arm: armed` is in the console log before the
+case starts, (3) only then the case's output. A run with no `armed` line is
+not a run of case 222; stop and look at the image.
+
+**Record.** `run` writes `<logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>/`
+(`tools/board.sh` lines 161 to 168); with `<logdir>` = `records/imx8mp` that
+is `records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/` (gitignored, addresses
+redacted, `INDEX.txt` lists every file with its sha256). Board addresses,
+UART paths and credentials come from the environment only and go into no
+file or message.
+
+**Read the page.** `yakogl-tools record --words 3` on the record, then the
+table of "Reading the dtpu page" above. Write down, with the values from
+the record only:
+
+| item | value |
+|---|---|
+| origin/main commit the image was built from | `<sha>` |
+| image sha256 | `<sha256 of zephyr.bin, as in meta.txt / INDEX.txt>` |
+| record directory | `records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/` |
+| w1 | `<0x........>` |
+| w2 | `<0x........>` |
+| w3 | `<0x........>` |
+| check 3 | `<passed | FAILED>` (w1 bit 3) |
+| verdict code | `<0..5>` (w1 bits 12..15) |
+| outcome | `<(a) | (a) plus flush | (b) | (c)>` per `gc-depth-sample-wire.md` |
+
+**A check-3 failure is not a verdict.** If w1 bit 3 is set (the code reads
+0), P0, today's path, is itself off the ramp, so checks 4 to 8 are not
+evidence either way. Record nothing as an outcome; repeat the run (same
+image, same selector) and read the new record. Only a page whose check 3
+passed gives a verdict code that selects an outcome. If the page is missing
+(the log says "no dtpu page"), check 1 or 2 stopped the case and the CASE
+record is the result.
+
 ## (b) What would change in the GC back end
 
 Mirror of the V3D: `v3d_depth_sampled`, `depth_buffer_state`/`depth_sample`
