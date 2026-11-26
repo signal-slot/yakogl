@@ -579,6 +579,8 @@ reset, and the next BL2 printed `Reset reason: System reset (SYSRST)
   - 182 `fsat`, check 2: `folded clamps, vertex (48,16) = 0x73fa7340 want 0x73bf7340`.
   - 189 `mulone`, checks 2 and 3: `0xff5a3050` (want `0xff303050`) and `0xff782040` (want `0xff402040`).
 
+A source study traces these to an f20 literal read wrong in lane z; it is not yet board-confirmed, and `docs/notes/stm32mp257f-dk-p9.md` section 6, "Cause of the DK-only failures", has the case-by-case match.
+
 Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools/pvrlab/gl_test.c`):
 
 | case | name | verdict |
