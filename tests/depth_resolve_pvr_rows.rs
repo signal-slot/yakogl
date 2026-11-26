@@ -31,8 +31,9 @@
 //!
 //! Not reachable from tests/ (left to src/pvr/backend_tests.rs):
 //! * a 2x buffer: the GL core stores 4 samples for every request of 1..=4
-//!   (`msaa::stored_samples` of the PowerVR's `max_samples` 4), so no draw
-//!   names a 2x depth/stencil buffer;
+//!   (`msaa::stored_samples` of the PowerVR's `max_samples` 4 with
+//!   `msaa-fbo`; 1 sample without it, `max_samples` 0), so no draw names a
+//!   2x depth/stencil buffer;
 //! * -EINVAL from `ds_sample0` (a buffer smaller than its layout): every
 //!   buffer the back end allocates is `ds_bytes` long;
 //! * a live plane whose buffer is not `valid` or has no CPU view (1): the
@@ -42,7 +43,9 @@
 //! By report: -ENOTSUP for a stencil buffer of its own needs separate depth
 //! and stencil images, which an ES 3.0 build makes GL_FRAMEBUFFER_UNSUPPORTED
 //! (ES 3.0 4.4.4.2), so that case runs with `report-es2` only; the 4x case
-//! needs multisampled renderbuffers, so it runs without it.
+//! needs multisampled renderbuffers, so it runs without it, and
+//! the PowerVR keeps them only with `msaa-fbo` (without it, the one-sample
+//! pin runs instead).
 //!
 //! By build: the back-end cases (`mod backend`) compile only in the
 //! PowerVR's host-test builds. The pattern's own test compiles in every
@@ -51,7 +54,8 @@
 //!
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-powervr,shaderc-online --test depth_resolve_pvr_rows` (and
-//! with `,report-es2` for the separate stencil); the timing of a 1600x1200
+//! with `,report-es2` for the separate stencil, and with `,msaa-fbo` for the
+//! 4x case); the timing of a 1600x1200
 //! resolve: the same with `--release` and
 //! `-- --nocapture resolve_1600x1200_timing`.
 
@@ -1048,7 +1052,9 @@ mod backend {
     }
 
     /// A 4x packed renderbuffer: each texel is sample 0, the word at (2x, 2y)
-    /// of rows twice the aligned width.
+    /// of rows twice the aligned width. The PowerVR keeps 4x framebuffer
+    /// objects only with `msaa-fbo`.
+    #[cfg(feature = "msaa-fbo")]
     #[test]
     fn a_4x_buffer_resolves_sample_0() {
         /* an ES 2.0 report has no multisampled renderbuffers */
@@ -1059,6 +1065,35 @@ mod backend {
         for (w, h) in [(40, 9), (1, 1), (64, 33)] {
             let (t, fence) = rendered(Kind::Packed, w, h, 4);
             assert_eq!(t.samples, 4, "the GL core stores 4 samples: {t:?}");
+            check_all(&t, &Want::Rule(fence), &Want::Rule(fence));
+            release(t);
+        }
+    }
+
+    /// Without `msaa-fbo` (the PowerVR's `max_samples` 0) there is no 4x
+    /// buffer: 4 samples are GL_INVALID_OPERATION, and a request of 1 is a
+    /// one-sample buffer that resolves texel for texel.
+    #[cfg(not(feature = "msaa-fbo"))]
+    #[test]
+    fn without_msaa_fbo_one_sample_resolves_texel_for_texel() {
+        /* an ES 2.0 report has no multisampled renderbuffers */
+        if cfg!(feature = "report-es2") {
+            return;
+        }
+        let _g = rig();
+        let mut rb = 0;
+        // SAFETY: room for one name; plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, 40, 9);
+            assert_eq!(glGetError(), GL_INVALID_OPERATION, "4 samples without msaa-fbo");
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glDeleteRenderbuffers(1, &rb);
+        }
+        for (w, h) in [(40, 9), (1, 1), (64, 33)] {
+            let (t, fence) = rendered(Kind::Packed, w, h, 1);
+            assert_eq!(t.samples, 1, "the GL core stores 1 sample: {t:?}");
             check_all(&t, &Want::Rule(fence), &Want::Rule(fence));
             release(t);
         }

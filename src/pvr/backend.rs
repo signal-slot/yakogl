@@ -10870,8 +10870,14 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
      * the PBE's `downscale` resolving into the renderbuffer at every tile
      * store, the sample store across kicks: [`MsStore`]); one colour
      * attachment at 4x (several are refused by name in the draw), depth and
-     * stencil read back at one sample a pixel (`ds_sample0`) */
+     * stencil read back at one sample a pixel (`ds_sample0`). Opt-in: the
+     * `msaa-fbo` feature turns it on (host-tested, BOARD-UNVERIFIED); without
+     * it the GL core reports GL_MAX_SAMPLES 1 and stores every FBO
+     * single-sampled (docs/notes/es3-msaa-renderbuffers.md (c1), (f5)) */
+    #[cfg(feature = "msaa-fbo")]
     max_samples: 4,
+    #[cfg(not(feature = "msaa-fbo"))]
+    max_samples: 0,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
     #[cfg(not(feature = "pvr-instance-divisor"))]
     max_instance_divisor: 1,

@@ -133,11 +133,12 @@ vivante-depth-guard = ["gpu-vivante"]
 # pvr_backend_set_option refuses without the feature.
 test-knobs = []
 # ES 3.0 multisample renderbuffers (docs/notes/es3-msaa-renderbuffers.md).
-# No code reads it: no `cfg(feature = "msaa-fbo")` is in src/. The capability
-# is the back end table's `max_samples` (src/backend.rs), which the GL core
-# reads whatever this feature says (src/gl/msaa.rs): the PowerVR back end
-# reports 4 (src/pvr/backend.rs), the others 0. Off by default; CMake's
-# YAKOGL_MSAA_FBO names it (capi/yakogl_capi.cmake), and it changes nothing.
+# The capability is the back end table's `max_samples` (src/backend.rs),
+# which the GL core reads whatever this feature says (src/gl/msaa.rs). The
+# feature sets it: the PowerVR back end reports 4 with it and 0 without
+# (src/pvr/backend.rs, host-tested, BOARD-UNVERIFIED); the others report 0
+# either way. Off by default; CMake's YAKOGL_MSAA_FBO names it
+# (capi/yakogl_capi.cmake).
 msaa-fbo = []
 # ES 3.0 float colour targets (plan #360, docs/notes/es3-float-targets.md):
 # a build that claims `GL_EXT_color_buffer_float`, for a GPU whose back end
