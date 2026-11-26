@@ -8,7 +8,7 @@
 //!
 //! An R or RG integer texture is held in and drawn as the four-channel store
 //! of the same type and width; the GL core narrows a clear so the store's
-//! absent channels stay G/B = 0 and A = 1 (`draw.rs` `int_clear_channels`).
+//! absent channels stay G/B = 0 and A = 1 (`draw.rs` `clear_channel_groups`).
 //! Here the attachment is one face of a cube map (POSITIVE_X, NEGATIVE_Z) or
 //! slice 2 of a 4-deep 3D texture, for all twelve formats (8, 16 and 32 bit,
 //! signed and unsigned, R and RG):
@@ -21,7 +21,16 @@
 //!   B and A still must not reach the absent channels): the clear words are
 //!   narrowed, the read-back shows 0, 0, 1 in the absent channels;
 //! - the other faces and slices of the same texture are not written: each is
-//!   attached in turn and reads back as it did before (all zero).
+//!   attached in turn and reads back as it did before (all zero);
+//! - glClear of the face at attachment 1 beside an RGBA8 renderbuffer at
+//!   attachment 0, and of the slice at attachment 0 beside one at
+//!   attachment 1: the GL core splits the clear into one pass per channel
+//!   group (`draw.rs` `clear_channel_groups`), the renderbuffer's pass
+//!   naming it alone with the application's four values, the texture's
+//!   naming it alone with the format's channels and 0, 0, 1; no GL error.
+//!   (A 3D slice past attachment 0 is GL_FRAMEBUFFER_UNSUPPORTED on this
+//!   build, `framebuffer.rs` `slot_pitch_ok`: its rows are at the grid's
+//!   pitch, so the slice takes attachment 0 there.)
 //!
 //! What the stand-in sees, and what it cannot: as in tests/es3_v3d_int_rg_clear.rs,
 //! it records each clear as the `GlesDraw` the back end is handed and writes
@@ -389,13 +398,16 @@ fn layers(r: &Row, shape: Shape) -> Layers {
 impl Layers {
     /// Attach layer `i` at GL_COLOR_ATTACHMENT0 of the bound framebuffer.
     fn attach(&self, r: &Row, i: usize) {
+        self.attach_at(r, i, GL_COLOR_ATTACHMENT0);
+    }
+
+    /// Attach layer `i` at colour attachment `at` of the bound framebuffer.
+    fn attach_at(&self, r: &Row, i: usize, at: GLenum) {
         // SAFETY: the face and slice named are there.
         unsafe {
             match self.shape {
-                Shape::Cube => glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, FACES[i], self.tex, 0),
-                Shape::Volume3d => {
-                    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, self.tex, 0, i as GLint)
-                }
+                Shape::Cube => glFramebufferTexture2D(GL_FRAMEBUFFER, at, FACES[i], self.tex, 0),
+                Shape::Volume3d => glFramebufferTextureLayer(GL_FRAMEBUFFER, at, self.tex, 0, i as GLint),
             }
         }
         assert_eq!(err(), GL_NO_ERROR, "{} {:?} layer {i}: attach", r.name, self.shape);
@@ -531,6 +543,71 @@ fn cube_face_clearbuffer_keeps_0_0_1_in_the_absent_channels_and_other_faces_unto
 #[test]
 fn texture_3d_slice_clearbuffer_keeps_0_0_1_in_the_absent_channels_and_other_slices_untouched() {
     clear_buffer_case(Shape::Volume3d);
+}
+
+/// glClear of layer `i` of `shape` at attachment `at` (0 or 1) beside an
+/// RGBA8 renderbuffer at the other: one pass per channel group.
+fn split_case(shape: Shape, at: u32) {
+    const COLOUR: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
+    let _g = context();
+    for r in ROWS {
+        for i in targets(shape) {
+            let what = format!("{} {shape:?} layer {i} at attachment {at}", r.name);
+            let l = layers(&r, shape);
+            let mut rb = 0;
+            // SAFETY: room for one name; two draw buffers listed.
+            unsafe {
+                glGenRenderbuffers(1, &mut rb);
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, 8, 8);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + (1 - at), GL_RENDERBUFFER, rb);
+            }
+            l.attach_at(&r, i, GL_COLOR_ATTACHMENT0 + at);
+            let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT0 + 1];
+            // SAFETY: two draw buffers listed.
+            unsafe { glDrawBuffers(2, bufs.as_ptr()) };
+            assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{what}");
+            SEEN.lock().unwrap().clear();
+            // SAFETY: plain GL calls.
+            unsafe {
+                glClearColor(COLOUR[0], COLOUR[1], COLOUR[2], COLOUR[3]);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+            assert_eq!(err(), GL_NO_ERROR, "{what}: glClear");
+            let c = clears();
+            assert_eq!(err(), GL_NO_ERROR, "{what}: no clear refused");
+            assert_eq!(c.len(), 2, "{what}: one clear per channel group: {c:?}");
+            let want = COLOUR.map(f32::to_bits);
+            for s in &c {
+                assert_eq!(s.refused, None, "{what}: {s:?}");
+                assert_eq!(s.targets.len(), 2, "{what}: both targets in every pass");
+            }
+            let (tex_bit, rb_bit) = (1u8 << at, 1u8 << (1 - at));
+            let tex =
+                c.iter().find(|s| s.clear_target_mask == tex_bit).unwrap_or_else(|| panic!("{what}: texture alone"));
+            let rbp = c.iter().find(|s| s.clear_target_mask == rb_bit).unwrap_or_else(|| panic!("{what}: rb alone"));
+            assert_eq!(rbp.clear_bits, want, "{what}: the RGBA8 target takes the application's four values");
+            assert_eq!(tex.clear_bits, narrowed_bits(&r, want), "{what}: the texture keeps its channels, 0, 0, 1");
+            let t = tex.targets[at as usize].3;
+            assert!(hidden_channels_clean(&r, tex, t), "{what}: the texture's hidden channels: {tex:?}");
+            // SAFETY: the name this test made.
+            unsafe {
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glDeleteRenderbuffers(1, &rb);
+            }
+            drop(l);
+        }
+    }
+}
+
+#[test]
+fn cube_face_at_attachment_1_beside_rgba8_glclear_is_split_per_channel_group() {
+    split_case(Shape::Cube, 1);
+}
+
+#[test]
+fn texture_3d_slice_at_attachment_0_beside_rgba8_glclear_is_split_per_channel_group() {
+    split_case(Shape::Volume3d, 0);
 }
 
 #[test]
