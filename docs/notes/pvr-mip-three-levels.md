@@ -449,6 +449,118 @@ A level-by-level read-back on the board, like E1's step 3
 "differing bytes N, max |d| M" per ALU level. It is a new gl_test case, not
 part of this change.
 
+## Implemented
+
+Plan #329 item pvr-mip-three-levels, on main `558ac8db`: the commit
+`pvr: three mip levels a render for the mipmap chain, behind a knob that is
+off by default`. Host only: no board was used.
+
+**The knob.** `pvr_backend_set_mip_three_levels(on: bool)`
+(`src/pvr/backend.rs`), a switch beside `pvr_backend_set_pds_once`, not a
+`PVR_BACKEND_OPT_*` (that would move `src/pvr/pvr_backend.h` and
+`ffi_layout_check.c`). It is read at each chain and survives
+`pvr_backend_init` and `pvr_backend_shutdown`. Its start value is the
+constant `MIP_THREE_LEVELS_DEFAULT`, `false`.
+
+With it off, nothing changes:
+
+- `mip_chain_gpu` calls `record_mip_level` for every level, as before;
+  that draw is now `record_mip_levels` with one level, which fills the same
+  `GlesDraw` fields with the same values.
+- `mipgen3_fs` is uploaded only at the first chain drawn with the knob on,
+  so no allocation moves.
+- `mip_pitch` and `frame_pitch` stay zero, so `flush` derives a secondary
+  target's pitch as before.
+- `tests/pvr_terrain_kicks.rs` and `tests/pvr_mip_chain_pin.rs` pass
+  unchanged.
+
+With it on, the four parts of the design are built:
+
+1. **Pitch.** `Backend::mip_pitch` is set by the mip draw, moved into
+   `frame_pitch` by `frame_begin_with`, and reset as `mip_clip` is. `flush`
+   uses it for slots 1 and 2 (way 2 of part (a)).
+2. **Program.** `tools/shaders/internal/es/mipgen3.frag`, the list line
+   `internal powervr mipgen3`, and row 37 `PVR_INTERNAL_MIPGEN3` of the
+   regenerated `src/pvr/internal.rs`. The row has 2114 dwords, 95
+   temporaries, 3 outputs, a 12-dword block (`u_l1` 0, `u_l2` 4, `u_l3` 8),
+   and gl_FragCoord.y's pair at 32..33. The generator is our compiler alone
+   (`yakogl-precompile --internal`): it needs no PCO_SHC. Its `--verify`
+   reads "47 lines". `tests/reference/pvr_internal.rs` did not move.
+3. **Draw.** `record_mip_levels`: `num_targets` 2 or 3, `targets[1..]` at
+   each level's address and GL extent, and the levels' pitches in
+   `mip_pitch`.
+4. **Grouping.** `mip_chain_gpu` draws level 1 alone, then groups of up to
+   three levels. A group of one is a `record_mip_level` kick. The grouping
+   applies only on the all-GPU arm, so path B's prefix keeps a kick a level.
+
+`Q` is `floor(v * 255 + 0.5)`, E1's choice. The tie question of "Open"
+below is still open.
+
+**Host results** (`tests/pvr_mip_three_levels.rs`, features
+`host-test,gpu-powervr,shaderc-online`):
+
+The kick and store-word tests also run in the `report-es2` build. The
+level-content test compiles `mipgen3.frag`, which is GLSL ES 3.00, in the
+IR evaluator. A `report-es2` build refuses that source, so the test is left
+out of that build (`mod levels`). The precompiled row it checks is the same
+in both builds. The first try of this change (pull request #13922) did not
+leave it out, and the test failed in that build.
+
+- **Kicks.** Terrain's steady frame has **28** kicks: 20 mip renders and 8
+  passes. Each chain takes 4 renders, which store 1, 3, 3 and 2 levels on
+  800x600 and 1, 3, 3 and 1 on 256x256. Part (d)'s 52 -> 29 counted the
+  window's dead clear kick, which `pvr-dead-clear-kick` removed. So the
+  pairs are 51 -> 28 now: 51 - 43 + 20 = 28.
+- **Store words.** Each level stored by a knob-on render has the PBE
+  register words of the knob-off kick for that level, at 800x600 and
+  256x256. This pins the pitch fix: level 2 of 800x600 has a row pitch of
+  256, not 200.
+- **Level contents.** The program runs in the reference IR evaluator. Its
+  look-ups go to the ES 3.0.6 four-weight bilinear model (appendix B of
+  `pvr-mip-tail-e1.md`), with smooth and random level 0 content.
+  - Levels 1 and 2 are byte-identical to the knob-off chain at both sizes.
+  - The 256x256 chain is identical at every level.
+  - On 800x600, levels 3..9 differ by at most 1, in 125 of 7500 texels
+    (level 3, smooth) or fewer. Even steps differ too there, because
+    1/100 and 1/50 are not exact in f32, so the weights are near 1/2 but
+    not exactly 1/2.
+  - Levels 5 and 8 are **not** identical to the knob-off chain, unlike
+    pin (i) of part (e) claims. Each is the TPU's sample of an ALU level (4
+    or 7), so it inherits that level's 1-LSB moves.
+  - The test pins every level from 3 on by its FNV-1a 64 hash. These are
+    the model's bytes, not the board's.
+
+**The board A/B** (`am62p-board-runbook.md`, arm 7, image E):
+
+- **Arm A (off).** An image built from the origin/main commit that
+  carries this change, as it is. The runbook's image A serves if it is the
+  same commit.
+- **Arm E (on).** The same commit plus a one-line commit that sets
+  `MIP_THREE_LEVELS_DEFAULT` to `true`. That is the single changed
+  variable, as image B's one-line re-ring commit is. Build both arms the
+  same way (`tools/cts/pr-session.sh <name> --knob off --cases '216'
+  --glmark2` from a tree at that commit, or `tools/board.sh am62p gm`). An
+  app may instead call `pvr_backend_set_mip_three_levels(true)` before its
+  first GL call.
+- Run gl_test case 216 first and alone: a store fault would show there as
+  a hang or a wrong probe.
+
+**Record values that confirm it.** These are the lines
+`am62p-slow-terrain.md` names for candidate 2 (`:262-265`) and part (f)
+above.
+
+| record line | A (off) | E (on), predicted |
+|---|---|---|
+| gl_test 216 `per frame: N kicks` | 40.00 | **21.00** (4 + 4 + 4 + 4 + 5) |
+| gl_test 216 `mipchains: 20 frames, X ms a frame` | A's, about 46.15 | at least 19c - 2 ms lower, with c from case 219 |
+| gl_test 216 quadrant probes, `case 216 mipchains: PASS` | PASS | **PASS** |
+| `glmark2-counters: ... [terrain] ... kicks K` | 51 a frame | **28** a frame (the host figure above) |
+| terrain `FPS:` / `FrameTime` | A's | at least 23c - 3 ms below A's: about 57 ms at c = 1.15 |
+| pictures (`verdict=`, column `am62p`, tolerance 8) | A's split | the same split |
+
+If the kicks fall and the milliseconds do not, the frame is not
+kick-bound (part (f)).
+
 ## Open
 
 - How ties round in the pack, and whether the TPU's bilinear equals the

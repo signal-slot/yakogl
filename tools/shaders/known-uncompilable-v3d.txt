@@ -95,3 +95,4 @@ es100/ret_nested.vert+es100/ret_nested.frag: rc -22: online shaderc: fragment va
 @report-es2 internal/es/fbload.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 @report-es2 internal/es/fbload_int.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
 @report-es2 internal/es/mipgen.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
+@report-es2 internal/es/mipgen3.frag: 0:1: '#version' : GLSL ES 3.00 source; this build reports OpenGL ES 2.0
