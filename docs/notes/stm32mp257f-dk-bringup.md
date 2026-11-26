@@ -811,7 +811,15 @@ After both runs the environment partition was written back from the
 session's pristine image and read back with sha256 `4150e472…` (the
 session's baseline, no `preboot`, no `yako_*`), `/boot/yakogl` was removed,
 and the 25 files of `/boot` read back with the same sha256 as before the
-session.
+session. That runner fix is since committed in `tools/board-stm32mp2.sh` as
+`3d9808f9` ("board-stm32mp2.sh: resolve the card again after each reboot and
+write the environment only onto its block device"): once the board answers
+from a new boot the card is resolved again (`reresolve`; meta.txt
+`card_before=`, `card_after=`), and every read or write of the u-boot-env
+partition passes a live check of the card (`card_check`) first. The
+2026-11-21 runs above stand as recorded (the committed runner of the time
+for `gc_fence`, the local copy for `gc_clear`); the 2026-11-26 reruns in the
+table above ran on the fixed runner.
 
 `dk_verdict.py` on the saved text prints `gc-irq connected=FAIL
 route=absent` for both runs. That is the parser, not the board: the Zephyr
@@ -820,7 +828,14 @@ full log prefix. With `I: ` stripped it prints `gc-irq route=PASS:ours
 igroupr=mismatch` and still counts the run failed, because it treats
 `mismatch` as bad, while the board layer's own comment (`gc_irq_mp2.c:11-13`)
 expects `GICD_IGROUPRn` to read RAZ from non-secure EL1. The verdict lines
-below are the parser's output on `console.mcp.txt` as saved.
+below are the parser's output on `console.mcp.txt` as saved. That parser
+defect is since fixed, in `c7c06858` ("dk_verdict: gc-irq reads minimal-log
+level prefixes and accepts igroupr=mismatch with route=ours"): the matcher
+strips the minimal log's `I: ` prefix (`dk_verdict.py:40`), and
+`igroupr=mismatch` with `route=ours` is the expected pair, not a failure
+(`dk_verdict.py:409-413`). A re-run of `dk_verdict.py` on `console.mcp.txt`
+is expected to give `gc-irq route=PASS:ours igroupr=mismatch` as a pass, per
+`dk_verdict.py:409-413` (the records are gitignored and not at hand here).
 
 ### gc_fence: PASS, the fence retires through SPI 183
 
@@ -863,10 +878,10 @@ below are the parser's output on `console.mcp.txt` as saved.
   at 874 ms`; the next BL2 printed `Reset reason: System reset (SYSRST)
   (0x2074). Warm boot.`
   - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 pc=0xa000539c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-  - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
+  - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above, fixed in `c7c06858`; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
   - `verdict gc-fence model=PASS retired=PASS irq=PASS:1 final=PASS record=PASS:kind=2`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
-  - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above)
+  - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above, fixed in `3d9808f9`)
 
 ### gc_clear: PASS, both clears read back through the resolve engine
 
@@ -882,7 +897,7 @@ below are the parser's output on `console.mcp.txt` as saved.
   `PSCI SYSTEM_RESET at 894 ms`, then `Reset reason: System reset (SYSRST)
   (0x2074). Warm boot.`
   - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa000599c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
-  - `verdict gc-irq connected=FAIL route=absent` (as for `gc_fence`)
+  - `verdict gc-irq connected=FAIL route=absent` (as for `gc_fence`, fixed in `c7c06858`)
   - `verdict gc-clear model=PASS readback=PASS:0 final=PASS record=PASS:kind=2`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
   - `board-stm32mp2.sh stm32mp257f-dk gc_clear rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=45s`
