@@ -5,7 +5,8 @@
 //!
 //! Rule (Mesa st first_level): an immutable texture (glTexStorage*) gives
 //! min(base, levels - 1); a mutable one gives `base` when it has an image at
-//! that level and base <= 15, otherwise 0. The bind is seen through the V3D
+//! that level and base <= 15, otherwise 0 (and that texture is incomplete,
+//! so the back end sees the stand-in: 1, 1, 1, 1). The bind is seen through the V3D
 //! back end, which takes the size words 44-47 of the unit from the bind's
 //! `base_level` (`texture::size_words`): a 16-texel texture answers
 //! 16 >> base_level, a 3D texture's depth (8) the same way.
@@ -658,25 +659,31 @@ fn a_mutable_texture_uses_its_base_level_when_it_has_that_image() {
     }
 }
 
-/// Mutable with no image at the base level: 0.
+/// Mutable with no image at the base level: the bind's `base_level` is 0 and
+/// the texture is incomplete (ES 3.0 3.8.13; src/gl/draw.rs `incomplete_reason`
+/// starts at the base level since item basecompl), so the V3D hands the
+/// incomplete stand-in's words (1, 1, 1, 1). Pinned at level 0's words until
+/// then.
 #[test]
-fn a_mutable_texture_with_no_image_at_the_base_level_gives_0() {
+fn a_mutable_texture_with_no_image_at_the_base_level_is_incomplete() {
     let _g = rig();
     for kind in KINDS {
         /* only levels 0 and 1 specified: base 3 has no image */
         let t = texture(kind, 2, false, 3);
-        assert_eq!(sizes(kind, t), at(kind, 0), "{kind:?} base 3 over 2 levels");
+        assert_eq!(sizes(kind, t), (1, 1, 1, 1), "{kind:?} base 3 over 2 levels");
     }
 }
 
-/// Mutable with a base level past 15: 0.
+/// Mutable with a base level past 15: no image there either, so `base_level`
+/// 0, incomplete, and the stand-in's words (1, 1, 1, 1) (level 0's words
+/// until item basecompl).
 #[test]
-fn a_mutable_texture_with_an_out_of_range_base_level_gives_0() {
+fn a_mutable_texture_with_an_out_of_range_base_level_is_incomplete() {
     let _g = rig();
     for kind in KINDS {
         for base in [16, 1000] {
             let t = texture(kind, 5, false, base);
-            assert_eq!(sizes(kind, t), at(kind, 0), "{kind:?} mutable base {base}");
+            assert_eq!(sizes(kind, t), (1, 1, 1, 1), "{kind:?} mutable base {base}");
         }
     }
 }

@@ -21,10 +21,11 @@
 //!   the effective max is clamped to levels-1.
 //!
 //! Cases (a) and (d)'s complete views hand the base level's words (pinned at
-//! level 0's until item basefield flipped them). Where the spec says a case
-//! is incomplete but the V3D draws it today (MAX < BASE), the doc comment
-//! says so and pins today's draw with the suffix
-//! `_flip_when_completeness_follows_the_base_level`.
+//! level 0's until item basefield flipped them). MAX < BASE (item basecompl,
+//! src/gl/draw.rs `mip_levels_needed`): a mutable texture is incomplete only
+//! under a mipmap min filter (NEAREST and LINEAR sample the base level
+//! alone); an immutable one clamps its maximum level to the base level and
+//! stays complete under any filter.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_texsize_base_max_v3d
@@ -710,17 +711,12 @@ fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_words() {
     assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 1)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 1, 1) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (b): a 16x16 `GL_TEXTURE_2D` (its full chain), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) with NEAREST filters is complete: without a mipmap min filter only the
+/// base level is sampled and MAX_LEVEL plays no part (ES 3.0 3.8.13; item basecompl, as Mesa's
+/// _mesa_test_texobj_completeness). The draw hands the base level's words **(8, 8, 1, 1)**.
 #[test]
-fn a_mutable_2d_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn a_mutable_2d_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(0)), Some((8, 8, 1, 1)));
 }
@@ -736,17 +732,12 @@ fn an_immutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_words(
     assert_eq!(immutable_words(Kind::Tex2d, 1, 1), Some((8, 8, 1, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 1, 1) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (d): a 16x16 `GL_TEXTURE_2D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) is complete: an immutable texture clamps its maximum level to
+/// [base, levels - 1] (ES 3.0 3.8.4/3.8.13; item basecompl), whatever the filter. The draw hands the
+/// base level's words **(8, 8, 1, 1)**.
 #[test]
-fn an_immutable_2d_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn an_immutable_2d_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(immutable_words(Kind::Tex2d, 1, 0), Some((8, 8, 1, 1)));
 }
@@ -789,17 +780,12 @@ fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_words() {
     assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((8, 8, 4, 1)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 4, 1) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (b): a 16x16x8 `GL_TEXTURE_3D` (its full chain), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) with NEAREST filters is complete: without a mipmap min filter only the
+/// base level is sampled and MAX_LEVEL plays no part (ES 3.0 3.8.13; item basecompl, as Mesa's
+/// _mesa_test_texobj_completeness). The draw hands the base level's words **(8, 8, 4, 1)**.
 #[test]
-fn a_mutable_3d_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn a_mutable_3d_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(0)), Some((8, 8, 4, 1)));
 }
@@ -815,17 +801,12 @@ fn an_immutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_words(
     assert_eq!(immutable_words(Kind::Tex3d, 1, 1), Some((8, 8, 4, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 4, 1) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (d): a 16x16x8 `GL_TEXTURE_3D` (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) is complete: an immutable texture clamps its maximum level to
+/// [base, levels - 1] (ES 3.0 3.8.4/3.8.13; item basecompl), whatever the filter. The draw hands the
+/// base level's words **(8, 8, 4, 1)**.
 #[test]
-fn an_immutable_3d_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn an_immutable_3d_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(immutable_words(Kind::Tex3d, 1, 0), Some((8, 8, 4, 1)));
 }
@@ -868,17 +849,12 @@ fn a_mutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_words(
     assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 5)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (its full chain), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 1, 5) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (b): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (its full chain), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) with NEAREST filters is complete: without a mipmap min filter only the
+/// base level is sampled and MAX_LEVEL plays no part (ES 3.0 3.8.13; item basecompl, as Mesa's
+/// _mesa_test_texobj_completeness). The draw hands the base level's words **(8, 8, 1, 5)**.
 #[test]
-fn a_mutable_array_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn a_mutable_array_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(0)), Some((8, 8, 1, 5)));
 }
@@ -894,17 +870,12 @@ fn an_immutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_wor
     assert_eq!(immutable_words(Kind::Array, 1, 1), Some((8, 8, 1, 5)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
-/// MAX_LEVEL 0 (MAX < BASE) is texture-INCOMPLETE per ES 3.0 3.8.13 (q = min(last level, MAX_LEVEL) = 0 is
-/// below the base level), yet the V3D draws it today and hands the base level's words (8, 8, 1, 5) (the bind's
-/// `base_level`, since item basefield). Post-fix the
-/// incomplete texture samples as the stand-in and the words are **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture; the GL core's completeness check
-/// must take MAX_LEVEL < BASE_LEVEL into account, which basecomp designs). Flip the assert to (1, 1, 1, 1);
-/// if basefix instead keeps the draw refused, flip it to `None`.
+/// Case (d): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers (a `glTexStorage*` texture of 3 levels), BASE_LEVEL 1 and
+/// MAX_LEVEL 0 (MAX < BASE) is complete: an immutable texture clamps its maximum level to
+/// [base, levels - 1] (ES 3.0 3.8.4/3.8.13; item basecompl), whatever the filter. The draw hands the
+/// base level's words **(8, 8, 1, 5)**.
 #[test]
-fn an_immutable_array_with_max_level_below_base_level_is_drawn_with_the_base_level_words_flip_when_completeness_follows_the_base_level(
-) {
+fn an_immutable_array_with_max_level_below_base_level_and_a_nearest_filter_is_complete() {
     let _g = rig();
     assert_eq!(immutable_words(Kind::Array, 1, 0), Some((8, 8, 1, 5)));
 }
@@ -926,4 +897,92 @@ fn an_immutable_array_with_base_level_0_and_max_level_past_its_levels_hands_leve
 fn an_immutable_array_with_base_level_2_and_max_level_past_its_levels_hands_the_base_level_words() {
     let _g = rig();
     assert_eq!(immutable_words(Kind::Array, 2, 9), Some((4, 4, 1, 5)));
+}
+
+/* ---- MAX < BASE under each min filter (item basecompl) ---- */
+
+/// Unit 0's words for a `kind` texture with BASE_LEVEL 1 and MAX_LEVEL 0
+/// (MAX < BASE) under the min filter `min`: a mutable texture with its full
+/// chain, or an immutable one of 3 levels.
+fn max_below_base_words(kind: Kind, immutable: bool, min: GLenum) -> Option<(u32, u32, u32, u32)> {
+    LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    DRAWS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let target = kind.target();
+    let mut t = 0;
+    if immutable {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glGenTextures(1, &mut t);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(target, t);
+            match kind {
+                Kind::Tex2d => glTexStorage2D(target, 3, GL_RGBA8, 16, 16),
+                Kind::Tex3d => glTexStorage3D(target, 3, GL_RGBA8, 16, 16, 8),
+                Kind::Array => glTexStorage3D(target, 3, GL_RGBA8, 16, 16, 5),
+            }
+            glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
+            glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 1);
+            glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, 0);
+        }
+    } else {
+        let levels = if kind == Kind::Tex3d { lv(0..4) } else { lv(0..5) };
+        let (name, up) = mutable(kind, &levels, 1, Some(0));
+        assert_eq!(up, GL_NO_ERROR, "the upload of {kind:?}: {:?}", log_lines());
+        t = name;
+    }
+    // SAFETY: plain GL call.
+    unsafe { glTexParameteri(target, GL_TEXTURE_MIN_FILTER, min as GLint) };
+    assert_eq!(err(), GL_NO_ERROR, "the texture: {:?}", log_lines());
+    unit0_sizes(kind, Stage::Fragment, t)
+}
+
+/// The base level's words of `kind` at BASE_LEVEL 1.
+fn level_1_words(kind: Kind) -> (u32, u32, u32, u32) {
+    match kind {
+        Kind::Tex2d => (8, 8, 1, 1),
+        Kind::Tex3d => (8, 8, 4, 1),
+        Kind::Array => (8, 8, 1, 5),
+    }
+}
+
+/// A mutable texture with MAX_LEVEL below BASE_LEVEL and a LINEAR min
+/// filter is complete: no mipmap filter, so the base level alone is sampled
+/// and MAX_LEVEL plays no part (ES 3.0 3.8.13; Mesa's
+/// _mesa_test_texobj_completeness looks at the maximum level in its mipmap
+/// branch only). The draw hands the base level's words.
+#[test]
+fn a_mutable_texture_with_max_level_below_base_level_and_a_linear_filter_is_complete() {
+    let _g = rig();
+    for kind in [Kind::Tex2d, Kind::Tex3d, Kind::Array] {
+        assert_eq!(max_below_base_words(kind, false, GL_LINEAR), Some(level_1_words(kind)), "{kind:?}");
+    }
+}
+
+/// A mutable texture with MAX_LEVEL below BASE_LEVEL and a mipmap min
+/// filter is incomplete: q = min(p, MAX_LEVEL) is below the base level, so
+/// the mipmap filter has no level (ES 3.0 3.8.13). The draw hands the
+/// incomplete stand-in (1, 1, 1, 1) (as tests/es3_tex_words46_47_edge_v3d.rs
+/// pins for an incomplete texture).
+#[test]
+fn a_mutable_texture_with_max_level_below_base_level_and_a_mipmap_filter_is_incomplete() {
+    let _g = rig();
+    for kind in [Kind::Tex2d, Kind::Tex3d, Kind::Array] {
+        for min in [GL_NEAREST_MIPMAP_NEAREST, GL_LINEAR_MIPMAP_LINEAR] {
+            assert_eq!(max_below_base_words(kind, false, min), Some((1, 1, 1, 1)), "{kind:?} 0x{min:x}");
+        }
+    }
+}
+
+/// An immutable texture with MAX_LEVEL below BASE_LEVEL stays complete under
+/// a mipmap min filter as under LINEAR: its maximum level is clamped to
+/// [base, levels - 1] (ES 3.0 3.8.4), so the chain is the base level alone.
+/// The draw hands the base level's words.
+#[test]
+fn an_immutable_texture_with_max_level_below_base_level_is_complete_under_any_filter() {
+    let _g = rig();
+    for kind in [Kind::Tex2d, Kind::Tex3d, Kind::Array] {
+        for min in [GL_LINEAR, GL_NEAREST_MIPMAP_NEAREST, GL_LINEAR_MIPMAP_LINEAR] {
+            assert_eq!(max_below_base_words(kind, true, min), Some(level_1_words(kind)), "{kind:?} 0x{min:x}");
+        }
+    }
 }

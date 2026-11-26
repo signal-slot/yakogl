@@ -15,9 +15,10 @@
 //! words at it. The immutable tests were pinned at level 0 until item
 //! basefield flipped them. The control with a mutable
 //! texture (`glTexImage3D`, BASE_LEVEL past its levels: incomplete by the
-//! spec, no clamp) pins the level-0 words the rig shows today (a mutable
-//! base level without an image gives `base_level` 0), not the 1/1 stand-in of
-//! tests/es3_tex_words46_47_edge_v3d.rs.
+//! spec, no clamp) hands the 1/1 stand-in of
+//! tests/es3_tex_words46_47_edge_v3d.rs (pinned at the level-0 words until
+//! item basecompl made the GL core's completeness check start at the base
+//! level).
 //!
 //! Fragment stage cases plus one vertex stage case (`vs_tmu`).
 //!
@@ -692,20 +693,16 @@ fn a_vertex_stage_immutable_3d_with_base_level_past_its_levels_hands_the_clamped
 
 /* ---- the control: a mutable texture is incomplete past its levels ---- */
 
-/// Control, pins what the rig shows today: a MUTABLE (`glTexImage3D`) 3D
-/// texture with levels 0 and 1 and BASE_LEVEL 5 draws and hands the LEVEL-0
-/// record, (16, 16, 8, 1): the GL core's completeness check does not look at
-/// the base level for it, so the texture is not the incomplete 1x1x1x1
-/// stand-in of tests/es3_tex_words46_47_edge_v3d.rs. By ES 3.0 3.8.13 it IS
-/// incomplete (level 5 is not defined, and a mutable texture is not clamped),
-/// so the correct words are **(1, 1, 1, 1)**. No clamp may be applied to it
-/// by `basefix`. Flip the assert to (1, 1, 1, 1) when the incomplete mutable
-/// texture follows the base level (the fix that makes the GL core's
-/// completeness check use the base level); if `basefix` does not touch the
-/// completeness check this assert stays.
+/// Control: a MUTABLE (`glTexImage3D`) 3D texture with levels 0 and 1 and
+/// BASE_LEVEL 5 is incomplete by ES 3.0 3.8.13 (level 5 is not defined, and
+/// a mutable texture is not clamped), so the draw hands the incomplete
+/// stand-in of tests/es3_tex_words46_47_edge_v3d.rs, **(1, 1, 1, 1)**. No
+/// clamp is applied to it. Pinned at the level-0 record (16, 16, 8, 1)
+/// until item basecompl made the GL core's completeness check start at the
+/// base level.
 #[test]
-fn a_mutable_3d_with_base_level_past_its_levels_still_hands_level_0_flip_when_it_gives_the_incomplete_stand_in() {
+fn a_mutable_3d_with_base_level_past_its_levels_gives_the_incomplete_stand_in() {
     let _g = rig();
     let t = mutable_3d(5);
-    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Fragment, t), Some((16, 16, 8, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Fragment, t), Some((1, 1, 1, 1)));
 }

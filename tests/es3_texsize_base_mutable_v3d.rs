@@ -9,8 +9,8 @@
 //! `GlesTextureBind::base_level`: the draw fills it with the base level when
 //! the texture has an image there (and it is at most 15), else 0
 //! (src/gl/draw.rs `bind_base_level`, item basefield). The GL core's
-//! completeness check in src/gl/draw.rs does not look at the base level yet
-//! (item basecompl). ES 3.0 3.8.13: a mutable texture is complete when
+//! completeness check in src/gl/draw.rs starts at the base level (item
+//! basecompl). ES 3.0 3.8.13: a mutable texture is complete when
 //! levels base..=q are defined consistently (levels below the base level are
 //! not looked at, and nothing is clamped), where q = min(last level of the
 //! full chain, `GL_TEXTURE_MAX_LEVEL`); with a base level that is not
@@ -29,9 +29,9 @@
 //! - (d) BASE_LEVEL 1 with MAX_LEVEL 1.
 //!
 //! Cases (a) and (d) hand the base level's words (pinned at level 0's until
-//! item basefield flipped them). Tests whose value changes with the
-//! completeness fix carry the suffix `_flip_when_the_base_level_is_applied`;
-//! the others hold after it. Fragment stage.
+//! item basefield flipped them). Cases (b) and (c) were pinned at the
+//! level-0 completeness rule's values until item basecompl made the check
+//! start at the base level. Fragment stage.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_texsize_base_mutable_v3d
@@ -734,30 +734,26 @@ fn a_mutable_array_with_a_full_chain_and_base_level_1_hands_the_base_level_words
 
 /* ---- (b) only levels 1.. defined, BASE_LEVEL 1 ---- */
 
-/// Case (b), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with ONLY levels 1.. defined and
+/// Case (b): a 16x16 `GL_TEXTURE_2D` with ONLY levels 1.. defined and
 /// BASE_LEVEL 1 is complete by ES 3.0 3.8.13 (levels below the base are not
-/// looked at), but the GL core's completeness check demands level 0 ("level 0
-/// has no image") and the draw hands the incomplete stand-in (1, 1, 1, 1). The
-/// correct words are **(8, 8, 1, 1)**. Flip the assert to (8, 8, 1, 1) when the base level
-/// is applied by the GL core's completeness check too (basefix must change
-/// src/gl/draw.rs completeness, not only the bind fill).
+/// looked at) and hands the base level's words **(8, 8, 1, 1)**. Pinned at
+/// the incomplete stand-in (1, 1, 1, 1) ("level 0 has no image") until item
+/// basecompl made the GL core's completeness check start at the base level.
 #[test]
-fn a_mutable_2d_with_only_levels_1_up_and_base_level_1_is_taken_as_incomplete_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_only_levels_1_up_and_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(1..5), 1, None), Some((1, 1, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(1..5), 1, None), Some((8, 8, 1, 1)));
 }
 
-/// Case (b), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with ONLY levels 1.. defined and
+/// Case (b): a 16x16x8 `GL_TEXTURE_3D` with ONLY levels 1.. defined and
 /// BASE_LEVEL 1 is complete by ES 3.0 3.8.13 (levels below the base are not
-/// looked at), but the GL core's completeness check demands level 0 ("level 0
-/// has no image") and the draw hands the incomplete stand-in (1, 1, 1, 1). The
-/// correct words are **(8, 8, 4, 1)**. Flip the assert to (8, 8, 4, 1) when the base level
-/// is applied by the GL core's completeness check too (basefix must change
-/// src/gl/draw.rs completeness, not only the bind fill).
+/// looked at) and hands the base level's words **(8, 8, 4, 1)**. Pinned at
+/// the incomplete stand-in (1, 1, 1, 1) ("level 0 has no image") until item
+/// basecompl made the GL core's completeness check start at the base level.
 #[test]
-fn a_mutable_3d_with_only_levels_1_up_and_base_level_1_is_taken_as_incomplete_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_only_levels_1_up_and_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(1..4), 1, None), Some((1, 1, 1, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(1..4), 1, None), Some((8, 8, 4, 1)));
 }
 
 /// Case (b), a defect for a reason other than the base level, pinned as is: a
@@ -779,43 +775,43 @@ fn a_mutable_array_with_only_levels_1_up_cannot_be_specified_without_level_0() {
 
 /* ---- (c) BASE_LEVEL past the last defined level ---- */
 
-/// Case (c), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 1, 1). A mutable texture is
-/// not clamped (unlike an immutable one) and level 5 is not defined, so it is
-/// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// Case (c): a 16x16 `GL_TEXTURE_2D` with levels 0 and 1 defined and
+/// BASE_LEVEL 5 is incomplete: a mutable texture is not clamped (unlike an
+/// immutable one) and level 5 is not defined (ES 3.0 3.8.13), so the draw
+/// hands the stand-in **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs
+/// pins for an incomplete texture); not a clamp to level 1. Pinned at the
+/// level-0 words (16, 16, 1, 1) until item basecompl made the GL core's
+/// completeness check start at the base level.
 #[test]
-fn a_mutable_2d_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_base_level_past_its_defined_levels_is_incomplete() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..2), 5, None), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
-/// Case (c), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 8, 1). A mutable texture is
-/// not clamped (unlike an immutable one) and level 5 is not defined, so it is
-/// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// Case (c): a 16x16x8 `GL_TEXTURE_3D` with levels 0 and 1 defined and
+/// BASE_LEVEL 5 is incomplete: a mutable texture is not clamped (unlike an
+/// immutable one) and level 5 is not defined (ES 3.0 3.8.13), so the draw
+/// hands the stand-in **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs
+/// pins for an incomplete texture); not a clamp to level 1. Pinned at the
+/// level-0 words (16, 16, 8, 1) until item basecompl made the GL core's
+/// completeness check start at the base level.
 #[test]
-fn a_mutable_3d_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_base_level_past_its_defined_levels_is_incomplete() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..2), 5, None), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
-/// Case (c), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0 and 1 defined and
-/// BASE_LEVEL 5 draws and hands the LEVEL-0 words (16, 16, 1, 5). A mutable texture is
-/// not clamped (unlike an immutable one) and level 5 is not defined, so it is
-/// incomplete and the correct words are the stand-in **(1, 1, 1, 1)** (as
-/// tests/es3_tex_words46_47_edge_v3d.rs pins for an incomplete texture). Flip
-/// the assert to (1, 1, 1, 1) when the GL core's completeness check uses the
-/// base level; not a clamp to level 1.
+/// Case (c): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0 and 1 defined and
+/// BASE_LEVEL 5 is incomplete: a mutable texture is not clamped (unlike an
+/// immutable one) and level 5 is not defined (ES 3.0 3.8.13), so the draw
+/// hands the stand-in **(1, 1, 1, 1)** (as tests/es3_tex_words46_47_edge_v3d.rs
+/// pins for an incomplete texture); not a clamp to level 1. Pinned at the
+/// level-0 words (16, 16, 1, 5) until item basecompl made the GL core's
+/// completeness check start at the base level.
 #[test]
-fn a_mutable_array_with_base_level_past_its_defined_levels_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_base_level_past_its_defined_levels_is_incomplete() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..2), 5, None), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..2), 5, None), Some((1, 1, 1, 1)));
 }
 
 /* ---- (d) BASE_LEVEL 1 with MAX_LEVEL 1 ---- */
