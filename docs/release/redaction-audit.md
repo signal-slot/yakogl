@@ -7,7 +7,7 @@ Audit for checklist line 8 (`docs/release/checklist.md`), in four
 passes:
 
 - **Part 4** (first section): the public run of `tools/release/redaction-scan.py`
-  on `029d83a27d0b` (2026-11-26), the current state of the tree; the private
+  on `9046978f8b23` (2026-11-26), the current state of the tree; the private
   classes are the owner's run.
 - **Part 3**: the re-run on the tree after the scope cut of #1606 step 5
   (2026-10-26).
@@ -25,14 +25,14 @@ Where parts 1 and 2 disagree on the tree, the status after the merge is
 noted at the finding (H2, H3, M1). Their `file:line` references are at
 their own bases; many of those files have left the tree since.
 
-# Part 4: public scan of the origin/main tip (2026-11-26, `029d83a27d0b`)
+# Part 4: public scan of the origin/main tip (2026-11-26, `9046978f8b23`)
 
 | Item | Value |
 |---|---|
 | Date | 2026-11-26, public classes only |
-| Base | `029d83a27d0b239646d97c03f7ac12fa90ccf1d2` ("tests: the flushes and stalls in front of a draw that samples a depth view, pinned"), the tip of `origin/main` as the clone holds it. 18236 files scanned; the tool skips binaries, `third_party/` and this file |
+| Base | `9046978f8b23caa625efdb3f3e6d065d6370c98b` ("vivante: depth_copy keeps (b).1's super-tiled depth-copy buffers by id and generation until their last kick completed"), the tip of `origin/main` as the clone holds it. 18241 files scanned; the tool skips binaries, `third_party/` and this file |
 | History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
-| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `029d83a27d0b`. Self-test: `python3 -I tools/release/redaction-scan.py --self-test`. Regression test: `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header). Look-alikes are in `tools/release/redaction-scan.allow` |
+| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `9046978f8b23`. Self-test: `python3 -I tools/release/redaction-scan.py --self-test`. Regression test: `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header). Look-alikes are in `tools/release/redaction-scan.allow` |
 | Private classes | **not run, the owner's run**: no private value was set or written for this round (`YAKOGL_REDACTION_PRIVATE` and `YAKOGL_REDACTION_PRIVATE_FILE` unset). `owner-login` and `lab-host` read "not run", `login-at-host` runs for `root` only |
 | Exit status | scan: **3** (`0 H/M finding(s), 3 class(es) not run, 115 informational, 158 look-alike(s) dropped: NOT COMPLETE (private classes not run)`); self-test: exit 0, "self-test passed"; cargo test: exit 0, 4 passed |
 
@@ -141,7 +141,7 @@ allow file with their own comments.
 |---|---|---|---|
 | e-mail | `tools/board_selftest.sh` | `t***[6]@p***[16]` (a `.example` host) | RFC 2606 reserved fake `BOARD_HOST` of the pi5 dry-run self-test |
 | IPv4 | `tools/board_selftest.sh` | `1***[10]`, `1***[11]` | private-range inputs of a redaction test: a fake ssh error and a console line the redaction must rewrite |
-| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`); drops nothing at `029d83a27d0b` (see open items) |
+| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`); drops nothing at `9046978f8b23` (see open items) |
 | IPv4, login at host | `tools/cts/mali-slice-readme-selftest.sh` | `1***[8]`, `r***[4]@b***[5]` | inputs of a refusal test: the slice check must refuse them |
 | e-mail | `tools/cts/x2-glmark2-scenes-selftest.sh` | `t@example.com` | RFC 2606 git identity of the self-test's repository |
 | home path | `tools/cts/mali-glmark2-selftest.sh`, `tools/cts/mali-glmark2-session-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test |
@@ -150,7 +150,7 @@ allow file with their own comments.
 | login at host, tailnet DNS | `tools/cts/testdata/mali-slice-redact/dirty/` (`kmsg/a.txt`, `meta.txt`) | `r***[4]@b***[5]`, a `board-1.example.ts.net` name | inputs of a redaction test; the tailnet name is under the reserved `example` |
 | lab-host | `driver/rust/src/soc/imx8mp/regs.rs` | `U***[4]` followed by `_PHY` (the value itself is never quoted) | generated i.MX8MP register identifiers (NXP's PHY power-domain names) collide with the four characters of a lab host; one class, one path, the uppercase prefix with its `_PHY` suffix (`caa4bd6b`). Only the owner's run exercises it |
 | IPv4, IPv6, login, tailnet DNS, e-mail | `tools/cts/mali-slice-redact.py` | `1***[10]`, `1***[10]`, `f***[4]::1`, `r***[4]@b***[5]`, `r***[4]@192.0.2.7`, the `example.ts.net` name, `s***[11]@t***[11].service` | inputs of the redaction test that the tool's help and checks use; the last is a systemd unit instance, not an address |
-| lab-host | `docs/release/snapshot.md` | a lowercase word in three phrasings of the rehearsal's question 13 (the value itself is never quoted) | rule of `3a0ef3d1`; its pattern matches no line of the file at `029d83a27d0b` (see open items) |
+| lab-host | `docs/release/snapshot.md` | a lowercase word in three phrasings of the rehearsal's question 13 (the value itself is never quoted) | rule of `3a0ef3d1`; its pattern matches no line of the file at `9046978f8b23` (see open items) |
 
 ### Information (not findings)
 
@@ -163,7 +163,7 @@ allow file with their own comments.
 
 `tests/redaction_scan.rs` is a cargo integration test in the scanned tree; it
 builds every fixture value at run time and holds none literally. At
-`029d83a27d0b` it passes, 4 of 4 (the tree scan about 80 s):
+`9046978f8b23` it passes, 4 of 4 (the tree scan about 80 s):
 
 - `redaction_scan_self_test` runs `redaction-scan.py --self-test`.
 - `redaction_scan_reports_a_committed_home_path`: a throwaway repository with
@@ -211,7 +211,7 @@ user-network address under `driver/tools/uboot-mp2/qemu/`.
   snapshot are #1606 step 8, owner decisions D7 and D8; this part keeps the
   tree ready and the scan re-runnable. The scan on a one-commit snapshot
   rehearsal is in `docs/release/snapshot.md` ("Procedure and rehearsal").
-- **Two exact-path rules match nothing** at `029d83a27d0b`: the
+- **Two exact-path rules match nothing** at `9046978f8b23`: the
   login-at-host rule of `fd11f275` for `tools/board_selftest.sh` (the fixture
   no longer carries that login) and the lab-host rule of `3a0ef3d1` for
   `docs/release/snapshot.md` (its pattern matches no line of the file). Each
@@ -224,7 +224,7 @@ user-network address under `driver/tools/uboot-mp2/qemu/`.
 
 ## Verdict of part 4
 
-The tree at `029d83a27d0b` is clean in every public class: 0 H/M findings
+The tree at `9046978f8b23` is clean in every public class: 0 H/M findings
 (exit 3, private classes not run), the self-test passes, and
 `cargo test --features gpu-vivante,shaderc-online --test redaction_scan`
 passes, so a test fails the build if the tree slips back. This is not yet a
