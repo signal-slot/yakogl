@@ -5,6 +5,7 @@
 NanoPC-T6's (Mali-G610).
 
   python3 -I tools/cts/imx95-t6-diff.py [--markdown] [--absent] [--limit N]
+                                        [--rows LABEL[,LABEL|LABEL-LABEL]...]
                                         --imx95 SLICE [--imx95 SLICE]...
                                         [--t6 SLICE]...
 
@@ -14,6 +15,22 @@ mali-deqp-run.sh does. Without --t6 the T6 side is the baseline,
 tools/cts/log/2026-11-24-t6-gles2-S*-8ff01055 (the whole tree at 8ff01055).
 The readers and the rerun/replaces rule are the tally's, imported from it:
 a case superseded within one side is not counted.
+
+Rows. A session covers some rows of the tree only (labels T6S<session>R<NN>,
+the Nth '# image' row of that session in tools/cts/mali-gles2-tree.txt). The
+T6 slices' chunks.tsv name their rows (label, cases) and their results.tsv
+lists the cases row by row, which gives the row of each T6 case. The compared
+rows are those the iMX95 slices ran (the labels of their rows.tsv, else of
+their chunks.tsv), or --rows LABEL[,LABEL|LABEL-LABEL]... (a range is two
+labels of one session, the second also as R<NN>). Only cases of those rows are
+compared. A T6 case of such a row that the iMX95 results lack is Lost: a
+difference, state "Lost" (cause "missing"), counted apart in the summary. The
+rows outside the set are listed in the summary as not run (--absent makes
+their cases differences, state "absent"). A case the iMX95 side has that the
+T6 map has not for any row (the six extra cases of T6S1R05 and R09, or a
+case of the slice's extra.tsv) is "extra": counted, listed, no difference.
+An iMX95 case of a T6 row outside the set (--rows narrower than the slice)
+is left out and counted.
 
 Each case has on each side a state and a cause. The state is the dEQP status,
 except Lost, which reads as its reason: hang (chunk-hang), crash
@@ -36,8 +53,8 @@ The report: how many cases both sides hold and how many only one; the
 differences per transition (<T6 state>-><iMX95 state>: Pass->Fail, Fail->Pass,
 Pass->hang, ...), per transition and the two causes, and per case (T6 state
 and cause, iMX95 state and cause), in mustpass order of the T6 side.
---limit N lists at most N cases (the counts stay whole). A case on one side
-only is not a difference; --absent counts it as one (state "absent"). Text
+--limit N lists at most N cases (the counts stay whole). A case of a row outside
+the set is not a difference; --absent counts it as one (state "absent"). Text
 by default, --markdown for tables. A slice against itself reports 0
 differences. Exit 0 (differences are the report, not an error), 2 for a
 slice that cannot be read or a usage error.
@@ -53,6 +70,7 @@ BASELINE = os.path.join(HERE, "log", "2026-11-24-t6-gles2-S*-8ff01055")
 LOST_STATE = {"chunk-hang": "hang", "chunk-crash": "crash"}
 MIN_PREFIX = 20
 USAGE = ("usage: imx95-t6-diff.py [--markdown] [--absent] [--limit N] "
+         "[--rows LABEL[,LABEL|LABEL-LABEL]...] "
          "--imx95 SLICE [--imx95 SLICE]... [--t6 SLICE]...")
 
 
@@ -108,22 +126,137 @@ def same_refusal(a, b):
     return len(short) >= MIN_PREFIX and long_.startswith(short)
 
 
-def diff(t6, imx, absent=False):
-    """(both, only_t6, only_imx, [(case, t6 (state, cause), imx (state, cause))])."""
+LABEL = re.compile(r"^T6S(\d+)R(\d+)$")
+
+
+def label_key(lab):
+    m = LABEL.match(lab)
+    return (int(m.group(1)), int(m.group(2))) if m else (1 << 30, 0)
+
+
+def t6_rows(paths):
+    """({label: [cases]}, {case: label}) of T6 slices: chunks.tsv's rows in
+    order take their cases from results.tsv's lines in order."""
+    rows, of = {}, {}
+    for p in paths:
+        s = tally.load_slice(p)
+        cases = [f[0] for _ln, f, _w in s["results"]]
+        chunks = [f for _ln, f, _w in s["chunks"]]
+        want = sum(int(c[2]) for c in chunks if c[2].isdigit())
+        if want != len(cases):
+            raise tally.Fatal("%s: chunks.tsv names %d cases, results.tsv has %d lines"
+                              % (s["name"], want, len(cases)))
+        at = 0
+        for c in chunks:
+            lab = c[1]
+            n = int(c[2]) if c[2].isdigit() else 0
+            if lab in rows:
+                continue
+            rows[lab] = cases[at:at + n]
+            for x in rows[lab]:
+                of.setdefault(x, lab)
+            at += n
+    return rows, of
+
+
+def tsv_col(path, col):
+    """Column col of a header-led tsv, or None when the file is absent."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    if not lines:
+        return []
+    head = lines[0].split("\t")
+    if col not in head:
+        return []
+    i = head.index(col)
+    return [ln.split("\t")[i] for ln in lines[1:] if ln.strip() and len(ln.split("\t")) > i]
+
+
+def imx_rows(paths):
+    """(labels run, [(label, extra case)]) of the iMX95 slices."""
+    labs, extra = [], []
+    for p in paths:
+        p = p.rstrip("/")
+        got = tsv_col(os.path.join(p, "rows.tsv"), "label")
+        if not got:
+            got = tsv_col(os.path.join(p, "chunks.tsv"), "label") or []
+        labs += [x for x in got if x not in labs]
+        ex = tsv_col(os.path.join(p, "extra.tsv"), "case") or []
+        lb = tsv_col(os.path.join(p, "extra.tsv"), "label") or []
+        extra += list(zip(lb, ex))
+    return labs, extra
+
+
+def parse_rows(spec, known):
+    """The labels of --rows SPEC; tally.Fatal for one the T6 map lacks."""
+    out = []
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part in known:
+            got = [part]
+        elif "-" in part:
+            lo, hi = part.split("-", 1)
+            m1 = LABEL.match(lo)
+            if re.match(r"^R?\d+$", hi) and m1:
+                hi = "T6S%sR%02d" % (m1.group(1), int(hi.lstrip("R")))
+            m2 = LABEL.match(hi)
+            if not (m1 and m2 and m1.group(1) == m2.group(1)):
+                raise tally.Fatal("--rows %r: not two labels of one session" % part)
+            a, b = label_key(lo), label_key(hi)
+            got = sorted((k for k in known if a <= label_key(k) <= b), key=label_key)
+            if not got or lo not in known or hi not in known:
+                raise tally.Fatal("--rows %r: a label of the range is not a T6 row" % part)
+        else:
+            raise tally.Fatal("--rows %r: not a T6 row label" % part)
+        out += [x for x in got if x not in out]
+    if not out:
+        raise tally.Fatal("--rows is empty")
+    return out
+
+
+def restrict(t6, imx, rows, of, rowset, extra_cases, absent=False):
+    """Cut both sides to the rows of rowset. Returns (t6, imx, info): the
+    restricted (dict, order, warnings) triples and the summary's facts."""
+    a, a_order, aw = t6
+    b, b_order, bw = imx
+    ta = {c: v for c, v in a.items() if of.get(c) in rowset}
+    ta_order = [c for c in a_order if c in ta]
+    tb = {c: v for c, v in b.items() if of.get(c) in rowset}
+    tb_order = [c for c in b_order if c in tb]
+    extra = [c for c in b_order if c not in of]
+    extra += [c for c in extra_cases if c not in of and c not in extra]
+    outside = [c for c in b_order if c in of and of[c] not in rowset]
+    norun = {}
+    for lab in sorted(rows, key=label_key):
+        if lab not in rowset:
+            norun[lab] = len(rows[lab])
+    info = {"extra": extra, "outside": outside, "norun": norun,
+            "norun_cases": [c for lab in norun for c in rows[lab] if c in a],
+            "t6all": a, "run": sorted(rowset, key=label_key)}
+    return (ta, ta_order, aw), (tb, tb_order, bw), info
+
+
+def diff(t6, imx, info=None, absent=False):
+    """(both, lost, extra, [(case, t6 (state, cause), imx (state, cause))])."""
     a, a_order, _ = t6
     b, b_order, _ = imx
     both = [c for c in a_order if c in b]
-    only_a = [c for c in a_order if c not in b]
-    only_b = [c for c in b_order if c not in a]
+    lost = [c for c in a_order if c not in b]
     out = []
     for c in both:
         (sa, ca, ra), (sb, cb, rb) = a[c], b[c]
         if sa != sb or (sa != "Pass" and not same_refusal(ra, rb)):
             out.append((c, (sa, ca), (sb, cb)))
-    if absent:
-        out += [(c, a[c][:2], ("absent", "-")) for c in only_a]
-        out += [(c, ("absent", "-"), b[c][:2]) for c in only_b]
-    return len(both), len(only_a), len(only_b), out
+    out += [(c, a[c][:2], ("Lost", "missing")) for c in lost]
+    if absent and info:
+        t6all = info["t6all"]
+        out += [(c, t6all[c][:2], ("absent", "-")) for c in info["norun_cases"]]
+    return len(both), len(lost), len(info["extra"]) if info else 0, out
 
 
 def counts(rows):
@@ -141,13 +274,35 @@ def names(paths):
     return ", ".join(os.path.basename(p.rstrip("/")) for p in paths)
 
 
-def render_text(t6p, imxp, res, limit):
-    both, oa, ob, rows = res
-    by_t, by_c = counts(rows)
-    out = ["T6 slices: " + names(t6p), "iMX95 slices: " + names(imxp),
-           "cases on both sides: %d; only on the T6 side: %d; only on the iMX95 side: %d"
-           % (both, oa, ob),
-           "differences: %d" % len(rows)]
+def labels(labs):
+    return ", ".join(labs) if labs else "none"
+
+
+def summary(info, res):
+    """The row lines of both renderings: [(text)]."""
+    both, lost, extra, _rows = res
+    nr = info["norun"]
+    return [
+        "rows compared (%d): %s" % (len(info["run"]), labels(info["run"])),
+        "rows not run (%d, %d T6 cases): %s"
+        % (len(nr), sum(nr.values()), labels(list(nr))),
+        "cases on both sides: %d; Lost (T6 case of a run row, missing from the iMX95 "
+        "results): %d; extra (iMX95 case not in the T6 map, no difference): %d"
+        % (both, lost, extra),
+        "iMX95 cases of rows outside the set, left out: %d" % len(info["outside"]),
+    ]
+
+
+def render_text(t6p, imxp, res, limit, info):
+    by_t, by_c = counts(res[3])
+    rows = res[3]
+    out = ["T6 slices: " + names(t6p), "iMX95 slices: " + names(imxp)]
+    out += summary(info, res)
+    if info["extra"]:
+        out.append("extra cases: " + ", ".join(info["extra"][:20])
+                   + (" ... and %d more" % (len(info["extra"]) - 20)
+                      if len(info["extra"]) > 20 else ""))
+    out.append("differences: %d" % len(rows))
     if rows:
         out.append("per transition (T6->iMX95):")
         out += ["  %-24s %6d" % (t, n) for t, n in by_t]
@@ -165,14 +320,18 @@ def cell(s):
     return s.replace("|", "\\|")
 
 
-def render_markdown(t6p, imxp, res, limit):
+def render_markdown(t6p, imxp, res, limit, info):
     both, oa, ob, rows = res
     by_t, by_c = counts(rows)
     out = ["T6 slices: " + ", ".join("`%s`" % n for n in names(t6p).split(", ")) + ".",
            "iMX95 slices: " + ", ".join("`%s`" % n for n in names(imxp).split(", ")) + ".",
-           "",
-           "Cases on both sides: %d; only on the T6 side: %d; only on the iMX95 side: %d. "
-           "Differences: %d." % (both, oa, ob, len(rows))]
+           ""]
+    out += ["- " + x for x in summary(info, res)]
+    if info["extra"]:
+        out.append("- extra cases: " + ", ".join("`%s`" % c for c in info["extra"][:20])
+                   + (" ... and %d more" % (len(info["extra"]) - 20)
+                      if len(info["extra"]) > 20 else ""))
+    out += ["", "Differences: %d." % len(rows)]
     if rows:
         out += ["", "| T6 -> iMX95 | Cases |", "| --- | ---: |"]
         out += ["| %s | %d |" % (t, n) for t, n in by_t]
@@ -192,6 +351,7 @@ def render_markdown(t6p, imxp, res, limit):
 def main(argv):
     md = absent = False
     limit = None
+    rows_spec = None
     t6p, imxp = [], []
     i = 0
     while i < len(argv):
@@ -200,7 +360,7 @@ def main(argv):
             md = True
         elif a == "--absent":
             absent = True
-        elif a in ("--imx95", "--t6", "--limit"):
+        elif a in ("--imx95", "--t6", "--limit", "--rows"):
             if i + 1 >= len(argv):
                 print(USAGE, file=sys.stderr)
                 return 2
@@ -211,6 +371,8 @@ def main(argv):
                     print(USAGE, file=sys.stderr)
                     return 2
                 limit = int(v)
+            elif a == "--rows":
+                rows_spec = v if rows_spec is None else rows_spec + "," + v
             else:
                 (imxp if a == "--imx95" else t6p).append(v)
         else:
@@ -226,6 +388,16 @@ def main(argv):
     try:
         t6 = side(t6p)
         imx = side(imxp)
+        rows, of = t6_rows(t6p)
+        run, extra_rows = imx_rows(imxp)
+        if rows_spec is not None:
+            run = parse_rows(rows_spec, rows)
+        else:
+            miss = [x for x in run if x not in rows]
+            if miss:
+                raise tally.Fatal("iMX95 row(s) not in the T6 slices: " + ", ".join(miss))
+        if not run:
+            raise tally.Fatal("the iMX95 slices name no row; give --rows")
     except tally.Fatal as e:
         print("imx95-t6-diff: %s" % e, file=sys.stderr)
         return 2
@@ -233,9 +405,11 @@ def main(argv):
         print("imx95-t6-diff: warning: T6 side: " + w, file=sys.stderr)
     for w in imx[2]:
         print("imx95-t6-diff: warning: iMX95 side: " + w, file=sys.stderr)
-    res = diff(t6, imx, absent)
+    t6r, imxr, info = restrict(t6, imx, rows, of, set(run),
+                               [c for _l, c in extra_rows], absent)
+    res = diff(t6r, imxr, info, absent)
     lim = len(res[3]) if limit is None else limit
-    sys.stdout.write((render_markdown if md else render_text)(t6p, imxp, res, lim))
+    sys.stdout.write((render_markdown if md else render_text)(t6p, imxp, res, lim, info))
     return 0
 
 
