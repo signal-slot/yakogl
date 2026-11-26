@@ -205,6 +205,28 @@ def group_of(case):
     return ".".join(parts[:3])
 
 
+ROWS_COLS = ("row", "label", "cases", "status", "seconds", "lifetime_s", "bbm",
+             "exit_line")
+
+
+def read_rows_tsv(path):
+    """rows.tsv in the chunks.tsv column layout. Two headers are taken: the
+    chunks.tsv one, and imx95-rows-tsv.py's (lifetime_s and bbm in place of
+    kmsg, resets, ssh_after and boot_same, which a Zephyr row does not have:
+    they read as 0, 0, '-', '-')."""
+    try:
+        with open(path, encoding="utf-8", newline="") as f:
+            first = f.readline().rstrip("\n").split("\t")
+    except OSError as e:
+        raise Fatal("%s: %s" % (path, e.strerror))
+    if tuple(first) != ROWS_COLS:
+        return tally.read_tsv(path, tally.CHUNK_COLS)
+    rows = []
+    for n, f, whole in tally.read_tsv(path, ROWS_COLS):
+        rows.append((n, f[:5] + ["0", "0", "-", "-", f[7]], whole))
+    return rows
+
+
 def load_slice(path):
     """tally.load_slice, with rows.tsv read as chunks.tsv when only it exists."""
     d = path.rstrip("/")
@@ -220,7 +242,7 @@ def load_slice(path):
                     meta[k.strip()] = v.strip()
     except OSError as e:
         raise Fatal("%s/meta.txt: %s" % (d, e.strerror))
-    chunks = tally.read_tsv(os.path.join(d, "rows.tsv"), tally.CHUNK_COLS)
+    chunks = read_rows_tsv(os.path.join(d, "rows.tsv"))
     results = tally.read_tsv(os.path.join(d, "results.tsv"), ("case", "status", "detail"))
     refusals = None
     if os.path.exists(os.path.join(d, "refusals.tsv")):
