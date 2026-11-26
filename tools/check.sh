@@ -3650,6 +3650,7 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # alone reaches this row too (scope gmverdicts, scope_of_path). Host only.
   scope tools gmverdicts
   step "tools   imx8mp-glmark2-verdicts-selftest.sh (the i.MX8MP glmark2 by-eye verdict table lint)" no_board_env bash tools/cts/imx8mp-glmark2-verdicts-selftest.sh
+  step "tools   imx95-redact-check-selftest.sh (Verdin iMX95 U-Boot console identifier scan, made-up values)" no_board_env bash tools/cts/imx95-redact-check-selftest.sh
   scope tools
   # The NanoPC-T6's dEQP-GLES2 runner, tools/cts/mali-deqp-run.sh, against a
   # fake board (ssh, scp and deqp-gles2 stubs: a clean run, a crash with
