@@ -137,12 +137,13 @@ build_args() {
 
 cmd_build() {
     [ $# -ge 1 ] || die "usage: $0 [--dry-run] build <img-dir> [SCENE...]"
-    local out=$1 sel rc=0 l arg
+    local out=$1 sel rc=0 l arg commit
     shift
     sel=$(selected "$@") || exit 2
     if [ "$DRY" = 1 ]; then
         while IFS=$'\t' read -r l arg; do
             [ -e "$out/$l" ] && echo "$l: $out/$l exists, a real run refuses it"
+            echo "echo <git -C $REPO rev-parse HEAD> > $out/$l.commit"
             echo "west $(build_args "$l" "$arg" "$out" | paste -sd' ' -)"
         done <<< "$sel"
         return 0
@@ -158,12 +159,14 @@ cmd_build() {
     MODS=$("$HERE/zephyr-modules.sh" "$ZEPHYR_WS") || die "zephyr-modules.sh failed"
     mkdir -p "$out" || die "cannot create $out"
     out=$(cd "$out" && pwd)
-    echo "imx8mp-glmark2-dumps: build $(git -C "$REPO" rev-parse HEAD) ($(git -C "$REPO" status --porcelain | wc -l) changed paths)"
+    commit=$(git -C "$REPO" rev-parse HEAD) || die "git rev-parse HEAD failed in $REPO"
+    echo "imx8mp-glmark2-dumps: build $commit ($(git -C "$REPO" status --porcelain | wc -l) changed paths)"
     while IFS=$'\t' read -r l arg; do
         if [ -e "$out/$l" ]; then echo "$l: $out/$l exists, not reused" >&2; rc=1; continue; fi
         mapfile -t words < <(build_args "$l" "$arg" "$out")
         if (cd "$ZEPHYR_WS" && west "${words[@]}") > "$out/$l.log" 2>&1 < /dev/null &&
             [ -s "$out/$l/zephyr/zephyr.bin" ]; then
+            echo "$commit" > "$out/$l.commit"
             echo "$l rc=0 sha256=$(sha256sum "$out/$l/zephyr/zephyr.bin" | cut -d' ' -f1) args=$arg"
         else
             echo "$l rc=failed (see $out/$l.log)"; rc=1
@@ -197,15 +200,33 @@ decode_live() {
     return $rc
 }
 
+# stored_commit IMG-DIR LABEL: the full commit IMG-DIR/LABEL.commit holds (written
+# by build); an error and status 1 when it is missing or not 40 hex digits
+stored_commit() {
+    local c
+    c=$(head -n1 "$1/$2.commit" 2> /dev/null)
+    if ! [[ $c =~ ^[0-9a-f]{40}$ ]]; then
+        echo "$2: no stored commit ($1/$2.commit), rebuild the image with build; nothing run" >&2
+        return 1
+    fi
+    echo "$c"
+}
+
 cmd_run() {
     [ $# -ge 2 ] || die "usage: $0 [--dry-run] run <img-dir> <records-dir> [SCENE...]"
-    local img=$1 rec=$2 sel rc=0 l arg r
+    local img=$1 rec=$2 sel rc=0 l arg r c
     shift 2
     sel=$(selected "$@") || exit 2
     [ "$DRY" = 1 ] || : "${BOARD_UART:?set BOARD_UART to the bridge of target:imx8mp-console (host:port)}"
+    # every image needs its stored 40-hex build commit before anything runs
     while IFS=$'\t' read -r l arg; do
+        stored_commit "$img" "$l" > /dev/null || exit 2
+    done <<< "$sel"
+    while IFS=$'\t' read -r l arg; do
+        c=$(stored_commit "$img" "$l")
         if [ "$DRY" = 1 ]; then
             echo "BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh imx8mp run $img/$l/zephyr/zephyr.bin $rec $l   # BOARD_UART from the environment"
+            echo "echo commit=$c >> $rec/<record of $l>/meta.txt"
             echo "awk '/board: record/ { exit } { print }' $rec/<record of $l>/console.txt > $rec/<record of $l>/console-live.txt"
             echo "tools/cts/glmark2-fb.py $rec/<record of $l>/console-live.txt $rec/<record of $l>/$l.png --scene $(scene_name "$arg")"
             continue
@@ -214,6 +235,8 @@ cmd_run() {
         BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND \
             "$REPO/tools/board.sh" imx8mp run "$img/$l/zephyr/zephyr.bin" "$rec" "$l" || { echo "$l: board run failed" >&2; rc=1; continue; }
         r=$(ls -d "$rec"/*-"$l"-* 2> /dev/null | tail -1)
+        [ -s "$r/meta.txt" ] || { echo "$l: no meta.txt in the record" >&2; rc=1; continue; }
+        echo "commit=$c" >> "$r/meta.txt"
         [ -s "$r/console.txt" ] || { echo "$l: no console.txt in the record" >&2; rc=1; continue; }
         decode_live "$r" "$l" "$arg" || { echo "$l: damaged or missing dump, rerun it ($r)" >&2; rc=1; }
     done <<< "$sel"
@@ -295,7 +318,18 @@ self_test() {
     case $out in *EXTRA_CONF_FILE*) echo "self-test: panel mode adds the uart console: $out" >&2; return 1 ;; esac
     out=$(DRY=1 cmd_build /nonexistent-dir "$(grep -m1 'effect2d' <<< "$all" | cut -d' ' -f1)")
     case $out in *'kernel=0,1,0\;1,-4,1\;0,1,0\;'*) ;; *) echo "self-test: effect2d kernel not escaped: $out" >&2; return 1 ;; esac
-    out=$(DRY=1 cmd_run /img /rec 5)
+    local ci=${TMPDIR:-/tmp}/imx8mp-dumps-img.$$ cm=0123456789abcdef0123456789abcdef01234567
+    mkdir -p "$ci"
+    echo "$cm" > "$ci/gm05-texture.commit"
+    out=$(DRY=1 cmd_run "$ci" /rec 5)
+    case $out in *"echo commit=$cm >> /rec/<record of gm05-texture>/meta.txt"*) ;; *) rm -rf "$ci"; echo "self-test: run line has no commit line: $out" >&2; return 1 ;; esac
+    (DRY=1 cmd_run "$ci" /rec gm33-loop > /dev/null 2>&1); [ $? -eq 2 ] || { rm -rf "$ci"; echo "self-test: image without commit not refused with 2" >&2; return 1; }
+    echo "not-a-commit" > "$ci/gm33-loop.commit"
+    (DRY=1 cmd_run "$ci" /rec gm33-loop > /dev/null 2>&1); [ $? -eq 2 ] || { rm -rf "$ci"; echo "self-test: malformed commit not refused with 2" >&2; return 1; }
+    (DRY=1 cmd_run "$ci" /rec 5 gm33-loop > /dev/null 2>&1); [ $? -eq 2 ] || { rm -rf "$ci"; echo "self-test: one missing commit does not stop the whole run" >&2; return 1; }
+    out=$(DRY=1 cmd_run "$ci" /rec 5)
+    out=${out//"$ci"//img}
+    rm -rf "$ci"
     case $out in
     "BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh imx8mp run /img/gm05-texture/zephyr/zephyr.bin /rec gm05-texture"*) ;;
     *) echo "self-test: run line: $out" >&2; return 1 ;;
