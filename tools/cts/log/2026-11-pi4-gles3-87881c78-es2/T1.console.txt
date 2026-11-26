@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES2 row T1 (tools/cts/pi4-full-tree.txt row 19) at 87881c78: the end of the console (README.md)
+DONE!
+
+Test run totals:
+  Passed:        224/224 (100.0%)
+  Failed:        0/224 (0.0%)
+  Not supported: 0/224 (0.0%)
+  Warnings:      0/224 (0.0%)
+  Waived:        0/224 (0.0%)
+deqp: done: 224 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 224 cases begun, 224 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES2.functional.texture.completeness.*,dEQP-GLES2.functional.texture.format.*,dEQP-GLES2.functional...
+  224 cases in 27102 ms, record at 27 s after boot, reset at ~250 s
+  totals: P 224  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 224 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 224 cases begun, 224 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 16; slowest #125 372 ms
+  carve-out (KiB, of 48636): after #0 20141, last 22107, high-water 22664
+  jobs: slow in 0 cases; no job hung or timed out
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+carve-out: 21321984 bytes used now, 23208448 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 1/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1152 jobs ended; emitted 28647, skipped 5940; groups compared 4860, mismatches 1080
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+v3d_deqp: build 87881c78 DONE, all passed: 224 cases, P 224 F 0 R 0 N 0 other 0
