@@ -41,7 +41,10 @@
 #
 # Environment:
 #   CTS       VK-GL-CTS checkout with the yakogl target applied (cts-build.sh
-#             applies it)                (default ~/com/github/KhronosGroup/VK-GL-CTS)
+#             applies it). Default: $HOST_DEQP_CTS when set (the deps.toml entry,
+#             `tools/cts/deps-env.sh --build HOST_DEQP_CTS`; exported by
+#             `set -a; eval "$(tools/cts/deps-env.sh am62p)"; set +a`), else
+#             ~/com/github/KhronosGroup/VK-GL-CTS
 #   GPU       vivante | powervr | v3d: whose online back end compiles (default vivante,
 #             the GC7000's); each GPU gets its own library directory.
 #             v3d's tiled-copy budget is the library's runtime setting
@@ -187,7 +190,7 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-CTS=${CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}
+CTS=${CTS:-${HOST_DEQP_CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}}
 BASE=$REPO/build/host-deqp
 COMMIT=$(git -C "$REPO" describe --always --dirty 2>/dev/null || echo unknown)
 GPU=${GPU:-vivante}
