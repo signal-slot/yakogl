@@ -19,8 +19,10 @@
 # Its ipv4 part also matches version strings, so an ipv4 match is dropped
 # only when it is a known-benign form (the explicit list):
 #   - 0.0.0.0, 127.0.0.0/8 and 255.x.x.x (masks). The RFC 5737 documentation
-#     ranges (192.0.2.0/24, ...) are NOT benign here: a committed log has no
-#     reason to hold one, and the selftest's fixtures use them as its hits;
+#     range 192.0.2.0/24 (TEST-NET-1) is benign: tools/board-stm32mp2.sh
+#     writes it, mapping each real address of a console copy to 192.0.2.n.
+#     Exactly that /24 and nothing else: 192.0.20.x, 192.0.3.x, 10.x,
+#     100.64.x and 192.168.x stay hits (the other RFC 5737 ranges too);
 #   - a quad with a one-digit first octet (2.12.0.1, 4.6.2.14): no address
 #     in use starts below 10, so it is a version or section number (the same
 #     rule as tools/redact-diff-scan.py);
@@ -44,6 +46,7 @@ benign_ip() { # $1 = quad
   case $ip in
     0.0.0.0|127.*|255.*) return 0 ;;
   esac
+  case $ip in 192.0.2.*) return 0 ;; esac # runner's placeholders (RFC 5737)
   o1=${ip%%.*}
   [ "${#o1}" -eq 1 ] && return 0
   case " $BENIGN " in *" $ip "*) return 0 ;; esac
@@ -54,8 +57,11 @@ benign_ip() { # $1 = quad
 }
 
 hits=0
+hitfiles=0
+lastfile=
 report() { # file line class match
   local m=$4
+  [ "$1" = "$lastfile" ] || { lastfile=$1; hitfiles=$((hitfiles + 1)); }
   printf '%s:%s: %s: %s***\n' "$1" "$2" "$3" "${m:0:1}"
   hits=$((hits + 1))
 }
@@ -103,7 +109,7 @@ for p in "$@"; do
   fi
 done
 if [ "$hits" -gt 0 ]; then
-  echo "mp2-log-redact-check: $hits hit(s) in $n file(s)" >&2
+  echo "mp2-log-redact-check: $hits hit(s) in $hitfiles of $n scanned file(s)" >&2
   exit 1
 fi
 echo "mp2-log-redact-check: clean ($n file(s))"
