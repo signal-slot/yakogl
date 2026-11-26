@@ -22,14 +22,23 @@
  *      the chain brought up (display_blanking_off: LTDC, DSI, ADV7535) and the
  *      layer flipped to bo.phys (stm32_ltdc_set_fb, which waits for the
  *      reload);
- *   5. MP2_GPU_SCANOUT_FRAMES frames must come with no transfer or underrun
- *      error (stm32_ltdc_wait_frame);
- *   6. the LTDC's frame CRC checks the picture (stm32_ltdc_crc_enable,
- *      stm32_ltdc_frame_crc), logged as "mp2_gpu_scanout: crc:" lines: constant
- *      while the buffer is unchanged, different with the corner pixel (0,0)
- *      inverted (cleaned to memory), back to the first value once restored;
- *      verdict "crc: stable+changing ok", "crc: FAIL <why>" (the result
- *      becomes FAIL) or "crc: unavailable" (-ENODEV, no failure).
+ *   5. the scan-out check (stm32_ltdc_scanout_check) over
+ *      MP2_GPU_SCANOUT_FRAMES frames: that many frame events (ISR.LIF or the
+ *      CPSR wrap), the layer's address (the GPU buffer's bo.phys) and enable
+ *      read back after the reload and after the last frame, and no FUWIF,
+ *      FUIF, TERRIF or FURIF in any event's ISR. Its record is always
+ *      printed ("mp2_gpu_scanout: scanout: ..."; "errors: unobservable" when
+ *      no RRIF came after the control reload: not a failure) and a failed
+ *      check prints "scanout: check frames|layer|errors|control failed" and
+ *      FAIL step scanout-frames|-layer|-errors|-control;
+ *   6. the LTDC's frame CRC, a logged diagnostic only
+ *      (stm32_ltdc_crc_enable, stm32_ltdc_frame_crc_event): "mp2_gpu_scanout:
+ *      crc: <what> 0x<crc> line <cypos> via <wrap|lif>" for four reads of the
+ *      unchanged buffer, one with the corner pixel (0,0) inverted (cleaned to
+ *      memory), one restored, then "crc: diagnostic: stable <y|n> changed
+ *      <y|n> restored <y|n>" or "crc: unavailable" (-ENODEV). It gates
+ *      nothing: the CRC did not follow the picture on this path (the note's
+ *      "CRC and frame wait").
  *
  * Why the format and the address need no conversion: the PE's X8R8G8B8 is
  * the word 0x00RRGGBB, the LTDC's format 0 (ARGB8888, constant alpha) reads
@@ -40,7 +49,8 @@
  * The verdict, in tools/board-stm32mp2.sh's "<prog>: PASS|FAIL: " shape:
  *   mp2_gpu_scanout: PASS: <w>x<h> pitch <p> phys 0x... <n> frames
  *   mp2_gpu_scanout: FAIL: <reason> [<err>]
- * PASS only when the read-back and the scan-out both succeeded. Then the
+ * PASS only when the read-back succeeded, the flip read back the scanned
+ * address and the scan-out check returned 0 with no failed bit. Then the
  * scan-out is kept CONFIG_MP2_GPU_SCANOUT_HOLD_S seconds (one frame checked a
  * second) for the runner's MP2_HOLD_S and the KVM. The board layer
  * (stm32mp2.c) resets the board through PSCI at its lifetime.
@@ -75,7 +85,7 @@ BUILD_ASSERT(DT_NODE_HAS_STATUS_OKAY(LTDC_NODE), "the overlay enables the ltdc n
 BUILD_ASSERT(CONFIG_MP2_GPU_SCANOUT_HOLD_S + 30 < CONFIG_YAKOGL_STM32MP2_LIFETIME_S,
 	     "the board layer's lifetime covers the draw and the hold");
 
-/* Frames that must come clean before PASS: one second at 60 Hz. */
+/* Frame events the scan-out check must count before PASS: one second at 60 Hz. */
 #define MP2_GPU_SCANOUT_FRAMES 60
 
 /* gc_triangle's picture and checks (driver/samples/zephyr/gc_triangle/src/main.c). */
@@ -396,14 +406,70 @@ static void print_record(const struct stm32_ltdc_status *st)
 	}
 }
 
+/* The scan-out check's record, always printed (whatever it said), then each
+ * failed check by name. Returns 0 only when the FFI said 0 and no check bit
+ * is set: the one place PASS comes from. *name is the first failed check, for
+ * the FAIL line; *seen the frames counted. */
+static int scanout_verdict(const struct device *dev, uint32_t frames, const char **name,
+			   uint32_t *seen)
+{
+	struct yd_mp25_ltdc_scanout o = {0};
+	int rc = stm32_ltdc_scanout_check(dev, frames, &o);
+
+	printk(NAME ": scanout: frames %u/%u (lif %u wrap %u) max wait %u us, layer fb 0x%08x "
+	       "want 0x%08x lxcr 0x%08x gcr 0x%08x ok %u/%u, lipcr 0x%x want 0x%x ier 0x%08x\n",
+	       o.frames, o.frames_wanted, o.frames_lif, o.frames_wrap, o.max_wait_us, o.cfbar,
+	       o.cfbar_want, o.lxcr, o.gcr, o.layer_ok_before, o.layer_ok_after, o.lipcr,
+	       o.lipcr_want, o.ier);
+	printk(NAME ": scanout: isr_or 0x%08x fuwif %u fuif %u terrif %u furif %u crcif %u, "
+	       "failed 0x%x rrif_seen %u rc %d\n",
+	       o.isr_or, o.fuwif, o.fuif, o.terrif, o.furif, o.crcif, o.failed, o.rrif_seen, rc);
+	if (!o.rrif_seen) {
+		printk(NAME ": scanout: errors: unobservable (no RRIF after the control reload)\n");
+	}
+	*seen = o.frames;
+	*name = NULL;
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_FRAMES) != 0u) {
+		printk(NAME ": scanout: check frames failed (%u of %u)\n", o.frames,
+		       o.frames_wanted);
+		*name = "scanout-frames";
+	}
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_LAYER) != 0u) {
+		printk(NAME ": scanout: check layer failed (address or enable read back wrong)\n");
+		if (*name == NULL) {
+			*name = "scanout-layer";
+		}
+	}
+	if ((o.failed & YD_MP25_SCANOUT_FAIL_ERRORS) != 0u) {
+		printk(NAME ": scanout: check errors failed (FIFO underrun or transfer error)\n");
+		if (*name == NULL) {
+			*name = "scanout-errors";
+		}
+	}
+	if (rc != 0 && *name == NULL) {
+		printk(NAME ": scanout: check control failed (the RRIF control reload)\n");
+		*name = "scanout-control";
+	}
+	if (rc == 0 && *name != NULL) {
+		rc = -EIO; /* a failed bit decides as well as the return value */
+	}
+	return rc;
+}
+
 #define CRC_READS 4
 
+/* A diagnostic only: it prints and decides nothing. */
 static int crc_read(const struct device *dev, const char *what, uint32_t *crc)
 {
-	int err = stm32_ltdc_frame_crc(dev, crc);
+	struct yd_mp25_ltdc_frame ev;
+	int err = stm32_ltdc_frame_crc_event(dev, &ev);
 
 	if (err == 0) {
-		printk(NAME ": crc: %s 0x%08x\n", what, *crc);
+		*crc = ev.crc;
+		printk(NAME ": crc: %s 0x%08x line %u via %s\n", what, ev.crc, ev.line,
+		       ev.via == YD_MP25_LTDC_VIA_LIF ? "lif" : "wrap");
+	} else {
+		printk(NAME ": crc: %s read %d\n", what, err);
 	}
 	return err;
 }
@@ -413,12 +479,14 @@ static bool crc_unavailable(int err)
 	return err == -ENODEV || err == -ENOTSUP || err == -ENOSYS;
 }
 
-/* Corner pixel (0,0) of the scanned buffer inverted and restored, cleaned
- * to memory each time like the render's flush. 0 on ok or unavailable. */
-static int crc_check(const struct device *dev, struct gc_target *buf)
+/* The CRC as a diagnostic: corner pixel (0,0) of the scanned buffer inverted
+ * and restored, cleaned to memory each time like the render's flush. Prints;
+ * nothing is returned. */
+static void crc_diag(const struct device *dev, struct gc_target *buf)
 {
 	volatile uint32_t *px = (volatile uint32_t *)buf->cpu;
-	uint32_t base, c, orig = *px, isr = 0;
+	uint32_t base = 0, c = 0, changed = 0, restored = 0, orig = *px, isr = 0;
+	bool stable = true, ch_ok, rs_ok;
 	int err;
 
 	err = stm32_ltdc_crc_enable(dev, true);
@@ -427,51 +495,29 @@ static int crc_check(const struct device *dev, struct gc_target *buf)
 	}
 	if (crc_unavailable(err)) {
 		printk(NAME ": crc: unavailable\n");
-		return 0;
+		return;
 	}
 	if (err) {
-		printk(NAME ": crc: FAIL read %d\n", err);
-		return err;
+		printk(NAME ": crc: diagnostic: no value (%d)\n", err);
+		return;
 	}
 	for (int i = 1; i < CRC_READS; i++) {
-		err = crc_read(dev, "again", &c);
-		if (err) {
-			printk(NAME ": crc: FAIL read %d\n", err);
-			return err;
-		}
-		if (c != base) {
-			printk(NAME ": crc: FAIL unstable 0x%08x vs 0x%08x\n", c, base);
-			return -EIO;
+		if (crc_read(dev, "again", &c) == 0 && c != base) {
+			stable = false;
 		}
 	}
 
 	*px = orig ^ 0x00ffffffu;
 	gc_render_cache_flush(buf->cpu, 64);
 	(void)stm32_ltdc_wait_frame(dev, &isr);
-	err = crc_read(dev, "changed", &c);
+	ch_ok = crc_read(dev, "changed", &changed) == 0 && changed != base;
 	*px = orig;
 	gc_render_cache_flush(buf->cpu, 64);
-	if (err) {
-		printk(NAME ": crc: FAIL changed-read %d\n", err);
-		return err;
-	}
-	if (c == base) {
-		printk(NAME ": crc: FAIL unchanged with a changed pixel 0x%08x\n", c);
-		return -EIO;
-	}
-
 	(void)stm32_ltdc_wait_frame(dev, &isr);
-	err = crc_read(dev, "restored", &c);
-	if (err) {
-		printk(NAME ": crc: FAIL restore %d\n", err);
-		return err;
-	}
-	if (c != base) {
-		printk(NAME ": crc: FAIL restored 0x%08x, was 0x%08x\n", c, base);
-		return -EIO;
-	}
-	printk(NAME ": crc: stable+changing ok\n");
-	return 0;
+	rs_ok = crc_read(dev, "restored", &restored) == 0 && restored == base;
+	printk(NAME ": crc: diagnostic: stable %c changed %c restored %c\n", stable ? 'y' : 'n',
+	       ch_ok ? 'y' : 'n', rs_ok ? 'y' : 'n');
+	(void)stm32_ltdc_crc_enable(dev, false);
 }
 
 /* The whole run; 0 on PASS (the line printed), else the FAIL line's errno. */
@@ -485,7 +531,8 @@ static int run(const struct device *dev)
 	struct display_capabilities caps;
 	struct gc_target out;
 	struct gc_bo out_bo;
-	uint32_t pitch, isr = 0;
+	const char *check = NULL;
+	uint32_t pitch, seen = 0;
 	size_t bytes;
 	int frames, rc;
 
@@ -554,17 +601,13 @@ static int run(const struct device *dev)
 	printk(NAME ": layer at phys 0x%llx (GPU 0x%08x)\n", (unsigned long long)out_bo.phys,
 	       out.gpu);
 
-	/* 5. The frames. */
-	for (frames = 0; frames < MP2_GPU_SCANOUT_FRAMES; frames++) {
-		rc = stm32_ltdc_wait_frame(dev, &isr);
-		if (rc) {
-			printk(NAME ": frame %d: isr 0x%x\n", frames, isr);
-			return fail("frame", rc);
-		}
-	}
-	rc = crc_check(dev, &out);
+	/* 5. The scan-out check: PASS rests on it and on nothing else. */
+	rc = scanout_verdict(dev, MP2_GPU_SCANOUT_FRAMES, &check, &seen);
+	frames = (int)seen;
+	/* 6. The CRC, logged. */
+	crc_diag(dev, &out);
 	if (rc) {
-		return fail("crc", rc);
+		return fail(check != NULL ? check : "scanout", rc);
 	}
 	printk(NAME ": PASS: %ux%u pitch %u phys 0x%llx %d frames\n", s_w, s_h, pitch,
 	       (unsigned long long)out_bo.phys, frames);

@@ -33,32 +33,39 @@ ADV7535 and choose the mode (1920x1080@60 when the EDID prefers it, else
 `display_write()` into the driver's frame buffer, calls
 `display_blanking_off()` (LTDC, DSI host, ADV7535 up in that order), prints
 the chain's record (`mp2_display: chain ...`, `mode ...`, `ltdc ...`,
-`dsi ...`, `adv7535 ...`) and checks 60 frames with `stm32_ltdc_wait_frame()`
-(the LTDC's line interrupt, no transfer or underrun error). One line:
+`dsi ...`, `adv7535 ...`) and runs the scan-out check over 60 frames
+(`stm32_ltdc_scanout_check()`: frame events by `ISR.LIF` or the CPSR wrap, the
+layer's address and enable read back after the reload and after the last
+frame, no FUWIF/FUIF/TERRIF/FURIF in any event's ISR). One line:
 
 - `mp2_display: PASS: <w>x<h> <fmt> <n> frames`
 - `mp2_display: FAIL: <step> <err>` (steps: `ltdc-ready`, the chain's
   `board`, `fb`, `adv-init`, `mode`, `clock`, `ltdc-probe`,
   `ltdc-configure`, `ltdc-enable`, `dsi-mode`, `dsi`, `adv-start`, `frame`,
-  `i2c`, and the probe's `format`, `size`, `pattern`, `write`, `chain`)
+  `i2c`, and the probe's `format`, `size`, `pattern`, `write`, `chain`,
+  `scanout-frames`, `scanout-layer`, `scanout-errors`, `scanout-control`: the
+  failed check, named)
+
+The scan-out record is always printed (`mp2_display: scanout: frames ...`,
+`... isr_or ... failed ... rrif_seen ...`; `scanout: errors: unobservable`
+when no RRIF followed the control reload, which is not a failure) and each
+failed check prints `scanout: check frames|layer|errors|control failed`.
 
 It also compares its bar line with the crate's `yd_mp25_fill_color_bars`
 (`mp2_display: bars: ...`, a note only).
 
-Before the result line it checks the picture with the LTDC's frame CRC
-(`stm32_ltdc_crc_enable`, `stm32_ltdc_frame_crc`), one `mp2_display: crc: <what>
-0x<crc>` line per read: four reads of the unchanged buffer must be equal
-(`base`, `again`), two bytes of line 0 inverted through `display_write()` must
-change the CRC (`changed`), and the restored line must give the first value
-back (`restored`). Verdict, one line:
+After the check the LTDC's frame CRC is logged as a diagnostic only
+(`stm32_ltdc_crc_enable`, `stm32_ltdc_frame_crc_event`), one `mp2_display: crc:
+<what> 0x<crc> line <cypos> via <wrap|lif>` line per read: four of the
+unchanged buffer (`base`, `again`), two bytes of line 0 inverted through
+`display_write()` (`changed`), the restored line (`restored`), then
+`mp2_display: crc: diagnostic: stable <y|n> changed <y|n> restored <y|n>`, or
+`mp2_display: crc: unavailable` (no CRC unit). The CRC gates nothing: it did
+not follow the picture on this path (the bring-up note's "CRC and frame
+wait").
 
-- `mp2_display: crc: stable+changing ok`
-- `mp2_display: crc: FAIL <why>` (the result is then `mp2_display: FAIL: crc
-  <err>`)
-- `mp2_display: crc: unavailable` (-ENODEV/-ENOTSUP: no CRC unit; not a failure)
-
-The chain keeps scanning out during the check, so the hold shows the restored
-picture. PASS rests on the frame flags and the CRC; the colours on the KVM.
+The chain keeps scanning out during the diagnostic, so the hold shows the
+restored picture. PASS rests on the scan-out check; the colours on the KVM.
 
 It then keeps scanning out for `CONFIG_MP2_DISPLAY_HOLD_S` seconds (default
 60), one frame checked a second (`mp2_display: hold: <n> frames ok, <m>
