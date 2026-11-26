@@ -462,14 +462,20 @@ fn sorted(mut d: Decoded) -> Decoded {
     d
 }
 
+/// Packets with a spec that `translate` does not send (compose5 pins them).
+const SPEC_ONLY: [&str; 3] = ["LINE_WIDTH", "POINT_SIZE", "BLEND_CCOLOR"];
+
 fn module_values<P: Packet>(p: &P) -> Decoded {
     sorted(p.pairs().iter().map(|(f, v)| (f.name.to_string(), v.clif_text())).collect())
 }
 
 /// kind (CLIF name) -> distinct decoded values of the module's packets.
 fn module_sets(draws: &[StatePackets71]) -> Vec<(&'static str, BTreeSet<Decoded>)> {
-    let mut sets: Vec<(&'static str, BTreeSet<Decoded>)> =
-        ALL_SPECS.iter().map(|s| (s.clif_name, BTreeSet::new())).collect();
+    let mut sets: Vec<(&'static str, BTreeSet<Decoded>)> = ALL_SPECS
+        .iter()
+        .filter(|s| !SPEC_ONLY.contains(&s.clif_name))
+        .map(|s| (s.clif_name, BTreeSet::new()))
+        .collect();
     let mut add = |name: &str, v: Decoded| {
         sets.iter_mut().find(|(n, _)| *n == name).unwrap().1.insert(v);
     };
@@ -499,6 +505,7 @@ fn clif_sets(rel: &str) -> Vec<(&'static str, BTreeSet<Decoded>)> {
     let clif = parse_clif(rel);
     ALL_SPECS
         .iter()
+        .filter(|s| !SPEC_ONLY.contains(&s.clif_name))
         .map(|s| {
             let set =
                 clif.iter().filter(|(n, _)| n == s.clif_name).map(|(_, v)| sorted(v.clone())).collect::<BTreeSet<_>>();
