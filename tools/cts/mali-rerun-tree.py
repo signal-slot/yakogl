@@ -18,15 +18,20 @@ in mustpass order, in the form tools/cts/mali-deqp-run.sh reads with --tree
 
 Board and label prefix: the board of a slice is the board= key of its
 meta.txt (mali-deqp-tally.py); no meta.txt or no key means the NanoPC-T6
-(nanopc-t6). The table takes its prefix from it: T6RR for the T6, I95RR for
-board=verdin-imx95 (tools/cts/imx95-deqp-images.sh builds one Zephyr image per
-row from such a table: its labels are [A-Za-z0-9]+ too, and neither T6S<s>R<r>
-of the first-run tree nor T6RR collide with I95RR<nnn>). Slices of different
-boards are refused (exit 2), and so is a board without a prefix of its own
-unless --prefix P is given; --prefix P ([A-Za-z0-9]+, not T6S<s>R<r>) sets
-the prefix whatever the board. On Zephyr a hang ends the whole image, so on
-the iMX95 the hang and crash rows stay one case each, as everywhere. --max
-on the iMX95 is at most 400 (the default): a row's cases run inside one
+(nanopc-t6). '_' in the key is read as '-': verdin_imx95, the Zephyr
+board name the tally and the triage slices of the iMX95 carry
+(testdata/mali-fail-triage/imx95), is the same board as verdin-imx95, so
+slices mixing the two spellings are one board, not a mix of boards. The
+table takes its prefix from it: T6RR for the T6, I95RR for
+board=verdin-imx95 (tools/cts/imx95-deqp-images.sh builds one Zephyr
+image per row from such a table: its labels are [A-Za-z0-9]+ too, and
+neither T6S<s>R<r> of the first-run tree nor T6RR collide with
+I95RR<nnn>). Slices of different boards are refused (exit 2), and so is
+a board without a prefix of its own unless --prefix P is given; --prefix
+P ([A-Za-z0-9]+, not T6S<s>R<r>) sets the prefix whatever the board. On
+Zephyr a hang ends the whole image, so on the iMX95 the hang and crash
+rows stay one case each, as everywhere. --max on the iMX95 is at most
+400 (the default): a row's cases run inside one
 image's lifetime (verdin_imx95.conf: 600 s, WDOG3), and the 64 MiB GL
 carve-out and the 256 MiB window do not grow with the case count, so the
 tree's own row size, which mali-gles2-tree.txt and its check already hold,
@@ -92,13 +97,14 @@ MAX_ROW = {"verdin-imx95": 400}
 
 
 def slice_board(slice_dir):
-    """The board= of a slice's meta.txt; nanopc-t6 when there is none."""
+    """The board= of a slice's meta.txt, read with '_' as '-'
+    (verdin_imx95 is verdin-imx95); nanopc-t6 when there is none."""
     path = os.path.join(slice_dir.rstrip("/"), "meta.txt")
     try:
         with open(path, encoding="utf-8") as f:
             for ln in f.read().split("\n"):
                 if ln.startswith("board="):
-                    return ln[6:].strip() or "nanopc-t6"
+                    return ln[6:].strip().replace("_", "-") or "nanopc-t6"
     except FileNotFoundError:
         pass
     except OSError as e:
