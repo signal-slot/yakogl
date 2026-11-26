@@ -50,6 +50,9 @@
 # WEBSITE_GLMARK2_DIR mode of tools/website-check.sh on
 # testdata/website-glmark2/: match exits 0, mismatch exits 1 naming the figure,
 # absent exits 0 with a "skipped" note; each fixture must give its own status.
+# Check 67 runs common-row.py --self-test (the tool that prints the RESULTS.md
+# 'Common set' row, the README table cell and the website/data.js fields from
+# one board's common record), by exit status.
 set -u
 
 HERE=$(dirname "$0")
@@ -1146,6 +1149,20 @@ wg_case() {  # name want-status want-text
 wg_case match 0 "glmark2 fixture ok"
 wg_case mismatch 1 "glmark2.pi4: value is"
 wg_case absent 0 "glmark2 comparison skipped"
+
+# 67: common-row.py --self-test judges its own cases and ends on
+# "common-row.py self-test: ok"; this row is its exit status. common-row.py
+# prints the RESULTS.md 'Common set' row, the README table cell and the
+# website/data.js fields from one board's common record, so a broken verdict
+# would move docs the gate otherwise would not notice.
+echo
+echo "== 67. common-row.py --self-test"
+if cr_out=$(python3 "$HERE/common-row.py" --self-test 2>&1); then
+    ok "common-row.py --self-test: verdict, row, cell and data.js fields"
+else
+    bad "common-row.py --self-test failed"
+    printf '%s\n' "$cr_out" | tail -8 | sed 's/^/        | /'
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
