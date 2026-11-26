@@ -540,8 +540,17 @@ UART paths and credentials come from the environment only and go into no
 file or message.
 
 **Read the page.** `yakogl-tools record --words 3` on the record, then the
-table of "Reading the dtpu page" above. Write down, with the values from
-the record only:
+table of "Reading the dtpu page" above. `tools/cts/imx8mp-dtpu-page.py`
+does that reading: given the words (`imx8mp-dtpu-page.py W1 W2 W3`) or the
+record directory (`imx8mp-dtpu-page.py --log <record dir>`, the last
+`yk-record: 594b0cb0 ...` line of its `console.txt`) it prints each check's
+pass/fail with its first index, the verdict code and the outcome of
+`gc-depth-sample-wire.md`. Exit 0 is a verdict; 1 is none (check 3 failed,
+or the words disagree with each other); 3 is a log without the page.
+Its selftest builds `dtpu_encode()` of `gl_test_dtpu.inc` and decodes all
+64 pass/fail sets. Code 3 (fewer bits) with check 7 failed reads as
+(a) plus flush, as the wire note's table says. Write down, with the values
+from the record only:
 
 | item | value |
 |---|---|
