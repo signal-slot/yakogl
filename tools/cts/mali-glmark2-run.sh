@@ -114,12 +114,13 @@
 #
 # The run directory (<outdir>, absent or empty beforehand), everything
 # redacted (no host names, addresses, user names or MACs):
-#   scenes.tsv     scene commit verdict ms_frame picture kmsg exit_line, one
+#   scenes.tsv     scene commit verdict ms_frame picture kmsg exit_line rc, one
 #                  row a scene in run order (row n is scene n): ms_frame is
 #                  glmark2's FrameTime, or 1000 / FPS when the line has none;
 #                  picture the text after "glmark2-picture: <info>: "; kmsg
 #                  the panthor lines mali-kmsg.py counts; exit_line the last
-#                  "yakogl-mali-exit:" line; "-" where there is none
+#                  "yakogl-mali-exit:" line; rc the glmark2 process's exit
+#                  status (124 at the time bound, 134 an abort); "-" where there is none
 #   pictures.txt   "mali | <scene info string> | <picture>", one line a scene
 #                  with a picture line: the line form of glmark2-pictures.txt
 #   kmsg/<n>.log   the kernel lines of scene n; kmsg/<n>.class mali-kmsg.py's
@@ -692,9 +693,9 @@ write_tables() {
     echo "ended=$(date -u +%FT%TZ)"
   } > "$raw/meta.full"
   py redact "$raw/meta.full" "$out/meta.txt"
-  for ((j = ${#rows[@]}; j < nscenes; j++)); do rows+=("${SCENES[j]}	$commit	not-run	-	-	-	-"); done
+  for ((j = ${#rows[@]}; j < nscenes; j++)); do rows+=("${SCENES[j]}	$commit	not-run	-	-	-	-	-"); done
   {
-    printf 'scene\tcommit\tverdict\tms_frame\tpicture\tkmsg\texit_line\n'
+    printf 'scene\tcommit\tverdict\tms_frame\tpicture\tkmsg\texit_line\trc\n'
     printf '%s\n' "${rows[@]}"
   } > "$out/scenes.tsv"
   {
@@ -859,7 +860,7 @@ final_reach() {
 for ((i = 0; i < nscenes; i++)); do
   n=$((i + 1)) scene=${SCENES[i]}
   if [ -n "$stop" ]; then
-    rows+=("$scene	$commit	not-run	-	-	-	-")
+    rows+=("$scene	$commit	not-run	-	-	-	-	-")
     printf '# not run: the run stopped (%s)\n' "$stop" > "$out/kmsg/$n.log"
     continue
   fi
@@ -875,7 +876,7 @@ for ((i = 0; i < nscenes; i++)); do
     echo "$me: scene $n: refused: stderr has $why: the board's own libGLESv2.so.2 ran, not the staged pair; stopping" >&2
   fi
   [ -z "$wedged" ] || stop=wedged exit_rc=5
-  rows+=("$scene	$commit	$verdict	$ms	$pic	$kcount	$exit_line")
+  rows+=("$scene	$commit	$verdict	$ms	$pic	$kcount	$exit_line	${rrc:--}")
   [ "$pic" = - ] || [ "$info" = - ] || printf 'mali | %s | %s\n' "$info" "$pic" >> "$raw/pictures.txt"
   save_one "$n"
   echo "$me: scene $n: $verdict, ms/frame $ms, kmsg $kcount, rc ${rrc:--}"
