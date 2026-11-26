@@ -144,6 +144,7 @@ mkimg() { # mkimg FILE FOOTPRINT MARKER
 mkdir -p "$S/img"
 mkimg "$S/img/pi4.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
 mkimg "$S/img/pi5.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
+mkimg "$S/img/pi5-glmark2.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot glmark2: upstream'
 mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
@@ -663,6 +664,11 @@ check "pi5 run: get_throttled read before staging and after the board is back" \
           [ "$(grep -n "vcgencmd get_throttled" <<<"$out" | head -1 | cut -d: -f1)" -lt "$(grep -n "install -m 0755" <<<"$out" | cut -d: -f1)" ]'
 check "pi5 run: waits <= 420 s for the end, then 420 s more for Linux (a reboot is ~150 s to ssh)" \
     eval 'grep -q "<= 420 s; then 5 s more" <<<"$out" && grep -q "(<= 420 s more)" <<<"$out"'
+out=$(dry pi5 run "$S/img/pi5-glmark2.bin" "$S/logs" 2>&1)
+check "pi5 run of a glmark2 image: waits <= 720 s for the end, then 480 s more" \
+    eval 'grep -q "<= 720 s; then 5 s more" <<<"$out" && grep -q "(<= 480 s more)" <<<"$out"'
+check "pi5 run of a glmark2 image: the end regex has the score line and the gl_test end; an ordinary image's has no glmark2" \
+    eval 'grep -q "glmark2: score \[0-9\]+: )" <<<"$out" && grep -q "v3d_gl_test RECORD end" <<<"$out" && ! dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1 | grep -q "glmark2: score"'
 out=$(RUN_BOUND=500 RETURN_BOUND=600 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
 check "pi5 run: RUN_BOUND and RETURN_BOUND override the defaults" eval 'grep -q "<= 500 s; then" <<<"$out" && grep -q "(<= 600 s more)" <<<"$out"'
 out=$(BOARD_HDMI_TIMINGS=1920x720 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)

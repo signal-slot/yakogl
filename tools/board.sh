@@ -1784,6 +1784,13 @@ throttled_record() {
 
 run_tryboot() {
     local t0 ended=0 back=0 bid
+    # pi5: a glmark2 image (its 'glmark2: upstream' line is in the image) runs
+    # its scenes for minutes: 720 s to the end, 480 s back, and its score line
+    # (glmark2: score N: ...) is an end; every other pi5 image keeps 420/420
+    if [ "$BOARD" = pi5 ] && [ -n "${IMG:-}" ] && grep -aqF 'glmark2: upstream' "$IMG" 2>/dev/null; then
+        RUN_BOUND_DEFAULT=720; RETURN_BOUND_DEFAULT=480
+        [ -n "${BOARD_END_RE:-}" ] || END_RE="${END_RE%)}|glmark2: score [0-9]+: )"
+    fi
     local bound=${RUN_BOUND:-$RUN_BOUND_DEFAULT} backs=${RETURN_BOUND:-$RETURN_BOUND_DEFAULT}
     HOLD_MAX=${HOLD_MAX:-$((bound + backs + 300))}
     STAGED="yakogl-$NAME.bin"
