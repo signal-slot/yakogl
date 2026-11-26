@@ -11,6 +11,11 @@
 # swap_restore_pass and swap_clear_ok; and the vblank landing (swap-lact-probe):
 # swap_vblank_judge and swap_vblank_first_miss (in vblank, a missed frame, a
 # pickup timeout, no vblank found, a write outside it).
+# And the placement after the END (selftests-s32b): swap_place_after_end on
+# rpi5_dlmap's layout (END at word 928, 0xb0b0b0b0 fill, word 0 a bare END):
+# placed at 929 over fill words, zeros below HEADE or after the END not
+# preferred, overlaps with another channel's HEADE/LACT/list stepped past, no
+# room, a channel not walked to an END, no END (the old 256-word walk) refused.
 cd "$(dirname "$0")/../../../.." || exit 1
 cc=${CC:-cc}
 out=build/rpi5_scanout32

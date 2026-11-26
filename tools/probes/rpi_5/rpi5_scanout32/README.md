@@ -3,17 +3,22 @@
 # rpi5_scanout32
 
 Stage 2 of `docs/notes/rpi5-display.md` (section 3; it answers Q4 of section 4): our own
-32 bpp XRGB8888 plane placed in list words at or after word 32 that read
-zero, clear of the firmware's display list (wherever channel 0's
-`LPTRS.HEADE` names it, word 672 on the board, walked to its END by
-`hvs6_dlist_swap.h`), channel 0's list pointer swapped at vblank between two
+32 bpp XRGB8888 plane placed right after the END of the firmware's display
+list (wherever channel 0's `LPTRS.HEADE` names it, word 672 on the board,
+walked over the whole list memory to its END by `hvs6_dlist_swap.h`; END at
+word 928 in `rpi5_dlmap`'s map), at or after word 32, channel 0's list
+pointer swapped at vblank between two
 buffers, then the firmware's list restored byte-equal. Part of ROADMAP stage 5 (issue #7), step
 P11 of `docs/notes/pre-study-rpi5.md`.
 
 The image programs no pixel valve, HDMI or PHY register: it reads the pixel
 valve's `PV_CONTROL` and `PV_V_CONTROL`, and writes only channel 0's `LPTRS` and
-HVS display-list words it has read as zero and found outside every list it
-can see; when that check refuses, it writes nothing at all.
+the 20 HVS display-list words after the END of the firmware's list, outside
+every list it can see (each channel's list walked to its END). No word value
+counts as free: the board's unused list memory holds a `0xb0b0b0b0` fill, not
+zeros, so the probe saves those 20 words before its first write and writes
+them back after the restore. When the placement refuses, it writes nothing at
+all.
 
 ## What the image does
 
@@ -25,18 +30,19 @@ Every step prints a line, also when it fails or cannot run.
 | S2 | channel 0's `CTRL0`, `LPTRS`, `STATUS` (`FRCNT`), `DL`, decoded; `STATUS` read 6 times 20 ms apart, `FRCNT` shown advancing | `rpi5_scanout32: S2 ...` |
 | S3 | the firmware's list from `LPTRS.HEADE`, word by word to its END (or its first 64 words when no END is in view), its first plane decoded | `rpi5_scanout32: S3 ...` |
 | S4 | pixel valve 0 (HDMI0) `PV_CONTROL`, `PV_V_CONTROL`, read only | `rpi5_scanout32: S4 ...` |
-| S5 | the plan's `hvs6s_snapshot`, read only: `LPTRS` and the firmware's list from `HEADE`, walked entry by entry (`CTL0.NEXT`) to its END word, at most 256 words; refused (`FW_NOEND`, `FW_WALK`) when the walk reaches no END, and then nothing is written. FNV-1a hash of the words `[HEADE, HEADE + fw_len)`, leaving out the declared hardware-written words | `S5 dlswap snapshot ok\|FAIL ... entries .., walk stopped at word ..`, `S5 hw words '<knob>': <set>`, `u3 snapshot: list-ptr=0x.. heade=<n> words=<fw_len> hash=0x.. hwskip=<set>` (`words=0 ... FAIL` when refused) |
-| S6 | the plan's `hvs6s_place_io`, read only: one span of 20 words, slot A (10 words) and slot B (the next 10), the first at or after word 32 whose words all read zero, clear of words 0..31 and of the firmware's span `[HEADE, HEADE + fw_len)`, within `mem_words` and the 12-bit `HEADE`; then refused if any channel's `LPTRS.HEADE` or `DL.LACT` is inside it. A refusal writes nothing | `rpi5_scanout32: S6 ch<n> ...`, `S6 placement check ok\|FAIL\|skip ...`, `u3 dlist: placed word <n> len 20 ...` or `u3 dlist: refused <reason>` |
+| S5 | the plan's `hvs6s_snapshot`, read only: `LPTRS` and the firmware's list from `HEADE`, walked entry by entry (`CTL0.NEXT`, entries with VALID clear included) to its END word over the whole list memory past `HEADE` (`cfg.walk_words` 0; on the board 672..928, 257 words). The snapshot is that whole walked list, END included, and every restore compares all of it. With no END in the walk the library keeps a window (`window=noend`) and the placement refuses; a walk that meets NEXT 0 or runs past the memory is refused (`FW_WALK`), and then nothing is written. FNV-1a hash of the words `[HEADE, HEADE + fw_len)`, leaving out the declared hardware-written words | `S5 dlswap snapshot ok\|FAIL ... entries .., walk stopped at word ..`, `S5 hw words '<knob>': <set>`, `u3 snapshot: list-ptr=0x.. heade=<n> words=<fw_len> hash=0x.. hwskip=<set>` (`words=0 ... FAIL` when refused) |
+| S6 | the plan's placement, read only (`swap_check.h`'s `swap_place_after_end`; the library's `hvs6s_place_io` wants all-zero words and is not used): one span of 20 words, slot A (10 words) and slot B (the next 10), starting at the word after the END the walk found, never below word 32 (word 0 is a bare END that channel 1 runs), stepping past the other channels' lists (each walked to its END by `hvs6s_snapshot`; one not walked to an END refuses) and their `LPTRS.HEADE` and `DL.LACT`, within `mem_words` and the 12-bit `HEADE`, and checked once more by `hvs6s_check_span`; then refused if any channel's `LPTRS.HEADE` or `DL.LACT` is inside it. No END: refused. No word value decides it (neither zeros, below `HEADE` or anywhere, nor the fill). The 20 words are then read and saved. A refusal writes nothing | `rpi5_scanout32: S6 ch<n> LPTRS ...`, `S6 ch<n> heade .. lact .. list END-walked A..B ...` per other channel, `u3 walk: heade=<n> end=<n>\|none words=<n> entries=<n> invalid=<n> mem=<n> len=20 place=<n>\|refused (<reason>)`, `S6 placement check ok\|FAIL\|skip ...`, `S6 saved words A..B: 0x.. ...`, `u3 dlist: placed word <n> len 20 ...` or `u3 dlist: refused <reason>` |
 | S7 | buffers A and B (`.bss`, 1920x1080 or the firmware plane's size if smaller, pitch `w*4`): A the `pattern.h` bars as XRGB8888, B the same bars with red and blue exchanged; cleaned with `sys_cache_data_flush_range` | `u3 plane: addr=0x.. fmt=XRGB8888 pitch=.. w=.. h=.. addr_b=0x..` |
-| S8 | 8 swaps, A, B, A, B ... Swap 1 is `hvs6s_run` with `cfg.start` = slot A: its own snapshot (compared with the plan's), slot A read and checked again, the swap to A and that run's restore, with its `dlswap` record. Slot B is then read and checked by `hvs6s_place_io`, and swaps 2..8 go through `hvs6s_swap` (only when swap 1 wrote `LPTRS`, its `DL.LACT` picked our list up, its restore brought `DL.LACT` back to the firmware's head and was byte-equal; and only up to the first failed swap). `hvs6s_swap` writes the slot's list (`hvs6_dlist_write.h`, NEXT=9, inner and list END, CTL2 0xfff0, alpha-mask FIXED), reads it back, waits by reads only for an `FRCNT` step of channel 0's `STATUS` (`cfg.write_at` `HVS6S_AT_VBLANK`; no step within the read bound: `LPTRS` is not written and the swaps stop), then writes `LPTRS` once and times the `DL.LACT` pickup with a tight loop (see "Vblank landing"); waits for the read-back, an `FRCNT` advance and the `DL.LACT` pickup (within `MAX_POLLS` polls and `LACT_FRAMES` = 4 frames past the write), then two frames past the write before the other slot is touched. Each swap is judged by `swap_check.h`'s `swap_judge`, its sample filled with the firmware's span (`fw_start` = `HEADE`, `fw_words` = the walked length) and ours (`our_words` = 10); the sequence by `swap_seq_judge_lact` (every swap picked up, the plane entry read back from the slot must name the step's buffer). `u3 named: yes` needs `LPTRS` on slot A and swap 1's pickup (`swap_named`). Each buffer stays up 1 s | `dlswap at-write/after ...`, `dlswap swap<k> ...`, `dlswap vblank ...` and `dlswap lact-timing ...` (swap 1's in the record, the others after their `dlswap after` line), `dlswap lact-pickup ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the k-th is swap k's: swap 1's in the record, the others after their `dlswap swap<k>` line), `u3 swap <k>: buf A\|B list-ptr=0x.. frcnt <before> -> <after> judge=... fw=<heade>+<words> ours=10`, `u3 vblank <k>: landed=yes\|no why=<reason> frcnt <w> -> <p> steps=<n> ...` after each `u3 swap <k>`, `rpi5_scanout32: S8 vblank ok\|FAIL ...` after the sequence, `u3 named: yes\|no ... DL.LACT pickup ok\|FAIL (want W lact L)` after swap 1; `dlswap readback-diff ...` for a slot word that did not read back as written |
+| S8 | 8 swaps, A, B, A, B ... Swap 1 is `run_swap1` (`hvs6s_run`'s sequence with the probe's placement): its own snapshot (compared with the plan's), the placement computed again and still the plan's, the pair's words still as S6 saved them, the swap to A (`hvs6s_swap`) and its restore (`hvs6s_restore`), with its `dlswap` record. Slot B is then checked the same way (placement unchanged, slot B's words as saved), and swaps 2..8 go through `hvs6s_swap` (only when swap 1 wrote `LPTRS`, its `DL.LACT` picked our list up, its restore brought `DL.LACT` back to the firmware's head and was byte-equal; and only up to the first failed swap). `hvs6s_swap` writes the slot's list (`hvs6_dlist_write.h`, NEXT=9, inner and list END, CTL2 0xfff0, alpha-mask FIXED), reads it back, waits by reads only for an `FRCNT` step of channel 0's `STATUS` (`cfg.write_at` `HVS6S_AT_VBLANK`; no step within the read bound: `LPTRS` is not written and the swaps stop), then writes `LPTRS` once and times the `DL.LACT` pickup with a tight loop (see "Vblank landing"); waits for the read-back, an `FRCNT` advance and the `DL.LACT` pickup (within `MAX_POLLS` polls and `LACT_FRAMES` = 4 frames past the write), then two frames past the write before the other slot is touched. Each swap is judged by `swap_check.h`'s `swap_judge`, its sample filled with the firmware's span (`fw_start` = `HEADE`, `fw_words` = the walked length) and ours (`our_words` = 10); the sequence by `swap_seq_judge_lact` (every swap picked up, the plane entry read back from the slot must name the step's buffer). `u3 named: yes` needs `LPTRS` on slot A and swap 1's pickup (`swap_named`). Each buffer stays up 1 s | `dlswap at-write/after ...`, `dlswap swap<k> ...`, `dlswap vblank ...` and `dlswap lact-timing ...` (swap 1's in the record, the others after their `dlswap after` line), `dlswap lact-pickup ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the k-th is swap k's: swap 1's in the record, the others after their `dlswap swap<k>` line), `u3 swap <k>: buf A\|B list-ptr=0x.. frcnt <before> -> <after> judge=... fw=<heade>+<words> ours=10`, `u3 vblank <k>: landed=yes\|no why=<reason> frcnt <w> -> <p> steps=<n> ...` after each `u3 swap <k>`, `rpi5_scanout32: S8 vblank ok\|FAIL ...` after the sequence, `u3 named: yes\|no ... DL.LACT pickup ok\|FAIL (want W lact L)` after swap 1; `dlswap readback-diff ...` for a slot word that did not read back as written |
 | S9 | a 16-pixel grid of each buffer read back after a clean+invalidate (`pattern_check`) | `rpi5_scanout32: S9 readback ...` |
-| S10 | `hvs6s_restore` after swaps 2..8: the firmware's `LPTRS` written back, two frames and `DL.LACT` back on the firmware's `HEADE`; then `LPTRS` and the firmware's words `[HEADE, HEADE + fw_len)` compared with the snapshot through `swap_check.h`'s `swap_restore_judge`; our 20 words written back to zero only once the restore's `DL.LACT` is back, the frames passed and channel 0's `LPTRS` and `DL.LACT` are off them (`swap_clear_ok`). When nothing more was written, only the compare runs, and the restore's `DL.LACT` is swap 1's own (`runrep.restore_lact_ok`, `swap_restore_lact`). `u3 restore: PASS` needs that `DL.LACT` back and every swap made picked up (`swap_restore_pass`); a restore after a swap the HVS never took is `FAIL DL.LACT did not reach the new head` | `dlswap restore-lact ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the final restore's, after `dlswap restore-frcnt`), `dlswap restore-diff ...` per differing word and `dlswap restore-diffs total=..`, `rpi5_scanout32: S10 ...`, `u3 restore: PASS byte-equal [except hw words off <offs> (..)] list-ptr=0x.. heade=<n> words=<n> hash=0x.. hwskip=<set>` or `u3 restore: FAIL ... hwskip=<set> undeclared=<n>` |
-| | the `hvs6_dlist_swap.h` record (`hvs6s_lines`): after `hvs6s_run` in S8, or of the plan when nothing ran | `dlswap snapshot ok\|FAIL ... entries=N end=W\|stop=W word=0x..`, `dlswap place ok ... skipped=N\|FAIL ...`, swap 1's `dlswap lact-pickup ...` and its restore's `dlswap restore-lact ...`, `dlswap restore-diffs ...`, `dlswap restore-words ok fw A..B equal` (`... byte-equal except hw words off <offs> (<n> differed) hwskip=<set>` with a set), `dlswap result ok\|FAIL ...` |
+| S10 | `hvs6s_restore` after swaps 2..8: the firmware's `LPTRS` written back, two frames and `DL.LACT` back on the firmware's `HEADE`; then `LPTRS` and the firmware's words `[HEADE, HEADE + fw_len)` compared with the snapshot through `swap_check.h`'s `swap_restore_judge`; our 20 words written back to the words S6 saved (and read back equal) only once the restore's `DL.LACT` is back, the frames passed and channel 0's `LPTRS` and `DL.LACT` are off them (`swap_clear_ok`). When nothing more was written, only the compare runs, and the restore's `DL.LACT` is swap 1's own (`runrep.restore_lact_ok`, `swap_restore_lact`). `u3 restore: PASS` needs that `DL.LACT` back and every swap made picked up (`swap_restore_pass`); a restore after a swap the HVS never took is `FAIL DL.LACT did not reach the new head` | `dlswap restore-lact ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the final restore's, after `dlswap restore-frcnt`), `dlswap restore-diff ...` per differing word and `dlswap restore-diffs total=..`, `rpi5_scanout32: S10 ...`, `u3 restore: PASS byte-equal [except hw words off <offs> (..)] list-ptr=0x.. heade=<n> words=<n> hash=0x.. hwskip=<set>` or `u3 restore: FAIL ... hwskip=<set> undeclared=<n>` |
+| | the `hvs6_dlist_swap.h` record (`hvs6s_lines`): after `run_swap1` in S8, or of the plan when nothing ran | `dlswap snapshot ok\|FAIL ... entries=N end=W\|stop=W word=0x..`, `dlswap place ok ... skipped=N\|FAIL ...`, swap 1's `dlswap lact-pickup ...` and its restore's `dlswap restore-lact ...`, `dlswap restore-diffs ...`, `dlswap restore-words ok fw A..B equal` (`... byte-equal except hw words off <offs> (<n> differed) hwskip=<set>` with a set), `dlswap result ok\|FAIL ...` |
 | | the end line, then the watchdog is no longer fed | `rpi5_scanout32: PASS (...)` or `rpi5_scanout32: FAIL (reason)`, then `rpi5_scanout32: feeding stopped, reset expected ...` |
 
 The restore runs whenever anything was written, whatever failed after it.
-When nothing could be placed (the snapshot found no END, or no zero span
-was clear) the probe prints `u3 dlist: refused <reason>` and the swap lines
+When nothing could be placed (the walk found no END, no room after it, or
+another channel's list was not walked to an END) the probe prints `u3 walk:
+... place=refused (<reason>)` and `u3 dlist: refused <reason>`, and the swap lines
 read `u3 swap <k>: skipped (...)`; `verdicts.sh` then gives `FAIL (placement
 refused: ...)` and Q4 `unanswered`. Swaps skipped after swap 1 (slot B
 refused, or swap 1's restore not byte-equal) are not counted by
@@ -173,20 +179,23 @@ The rules of `tools/probes/rpi_5/README.md` apply. A run that does not come
 back is reported as needing a person.
 
 Host checks: `sh tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh`
-(the verdict script, 186 checks), `sh tools/probes/rpi_5/rpi5_scanout32/swap_check_selftest.sh`
-(the decision header `src/swap_check.h`, 180 checks),
+(the verdict script, 229 checks), `sh tools/probes/rpi_5/rpi5_scanout32/swap_check_selftest.sh`
+(the decision header `src/swap_check.h`, the placement after the END on
+`rpi5_dlmap`'s layout included, 207 checks),
 `sh tools/probes/rpi_5/rpi5_scanout32/io_filter_selftest.sh` (the write
-filter, 51 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
-(`hvs6_dlist_swap.h` against its channel model, 269 checks).
+filter, 56 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
+(`hvs6_dlist_swap.h` against its channel model, 328 checks).
 
 ## What it proves
 
 `verdicts.sh` PASS means, from the board's registers and the bytes read back
 (no camera):
 
-- our list was placed at or after word 32, in words that read zero, clear of
-  the firmware's list `[HEADE, HEADE + fw_len)` walked to its END, and of
-  every channel's list pointer;
+- the firmware's list was walked to its END (`u3 walk: end=<n>`), the
+  snapshot is that whole list (`words` = END - `HEADE` + 1), and our list was
+  placed after the END (never in `[0, END]`), at or after word 32, inside the
+  list memory, where the walk line says, clear of every channel's list
+  pointer;
 - channel 0's `LPTRS` read back as our list after the first swap and its
   `DL.LACT` reached our list's head, and every swap, alternating A and B at
   least 4 times, saw `FRCNT` advance (the channel kept scanning across the
@@ -199,8 +208,9 @@ filter, 51 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
   byte-equal to the snapshot (hash equal) after the restore, except the
   declared hardware-written words when a set is given (`hwskip=`, every
   differing word named), every `dlswap restore-lact` line is `ok` (`DL.LACT`
-  back on the firmware's head), and our words were back to zero. Words 0..31 are never written (placement refuses them)
-  and no longer compared.
+  back on the firmware's head), and our words were back to the words saved
+  before the first write. Words 0..31 are never written (placement refuses
+  them, and the io filter refuses any write there) and no longer compared.
 
 `q4: yes` needs every swap's pickup; a swap without a `lact-pickup` line (an
 older probe, which printed `lact-follows ... (record only)`) or with a `FAIL`

@@ -588,6 +588,165 @@ static void test_vblank(void)
 	CHECK(!strcmp(swap_vb_reason_name((enum swap_vb_reason)99), "?"));
 }
 
+/* (p) rpi5_dlmap's map (its README): 4096 words, a 0xb0b0b0b0 fill wherever
+ * no list is, word 0 a bare END (channels 1 and 2 have HEADE 0, channel 1 is
+ * enabled on it), channel 0's list at 672: one VALID entry of NEXT 32, seven
+ * VALID-clear 0x20000000 entries of NEXT 32 (704..896), its END at 928. */
+#define DLM_WORDS 4096u
+#define DLM_FILL 0xb0b0b0b0u
+#define DLM_HEAD 672u
+#define DLM_END 928u
+static uint32_t dlm[DLM_WORDS];
+
+static void dlmap_fixture(void)
+{
+	for (unsigned int i = 0; i < DLM_WORDS; i++)
+		dlm[i] = DLM_FILL;
+	dlm[0] = 0x80000000u;
+	dlm[DLM_HEAD] = 0x600cc004u; /* VALID, NEXT 32 */
+	for (unsigned int w = DLM_HEAD + 32u; w < DLM_END; w += 32u)
+		dlm[w] = 0x20000000u; /* VALID clear, NEXT 32 */
+	dlm[DLM_END] = 0x80000000u;
+}
+
+/* The walk as hvs6_dlist_swap.h's hvs6s_snapshot makes it (by NEXT, VALID
+ * clear or not, only an END stops), over at most bound words from head:
+ * 1 and the span with an END, 0 without one. */
+static int dlm_walk(uint32_t head, uint32_t bound, uint32_t *words)
+{
+	uint32_t pos = 0;
+
+	while (pos < bound && head + pos < DLM_WORDS) {
+		uint32_t w = dlm[head + pos], n = (w >> SWAP_CTL0_NEXT_SHIFT) & SWAP_CTL0_NEXT_MASK;
+
+		if (w & SWAP_CTL0_END) {
+			*words = pos + 1u;
+			return 1;
+		}
+		if (n == 0)
+			return 0;
+		pos += n;
+	}
+	return 0;
+}
+
+/* The probe's input on the board: channel 0's walk, and channels 1 and 2 on
+ * word 0 (their list [0, 1), their HEADE 0 and DL.LACT 0). */
+static struct swap_place_in dlm_in(uint32_t bound)
+{
+	struct swap_place_in in = { 0 };
+	uint32_t ow = 0;
+
+	in.mem_words = DLM_WORDS;
+	in.fw_head = DLM_HEAD;
+	in.end_found = dlm_walk(DLM_HEAD, bound, &in.fw_words) != 0;
+	in.unknown_chan = -1;
+	in.len = 20; /* slots A and B, 10 words each */
+	for (unsigned int ch = 1; ch < 3; ch++) {
+		if (dlm_walk(0 /* HEADE 0 */, DLM_WORDS, &ow))
+			in.busy[in.nbusy++] = (struct swap_span){ 0, ow };
+		in.busy[in.nbusy++] = (struct swap_span){ 0, 1 }; /* LPTRS.HEADE */
+		in.busy[in.nbusy++] = (struct swap_span){ 0, 1 }; /* DL.LACT */
+	}
+	return in;
+}
+
+static void test_place(void)
+{
+	struct swap_place_in in;
+	struct swap_sample s;
+	uint32_t st = 0, w = 0;
+	bool fill = true;
+
+	dlmap_fixture();
+	/* the whole-memory walk finds the END at 928: 257 words */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	CHECK(in.end_found && in.fw_words == 257u && swap_place_end(&in) == DLM_END);
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == DLM_END + 1u);
+	/* the words placed over hold the fill, not zeros: no value made them free */
+	for (unsigned int i = 0; i < in.len; i++)
+		fill = fill && dlm[st + i] == DLM_FILL;
+	CHECK(fill);
+	CHECK(st > swap_place_end(&in) && st >= SWAP_KEPT && st + in.len <= DLM_WORDS);
+	/* the judge's geometry agrees: clear of [672, 929) */
+	s = good(); s.expected_word = st; s.ptr_after = st; s.fw_start = DLM_HEAD; s.fw_words = 257;
+	s.our_words = 20;
+	CHECK(swap_judge(&s) == SWAP_OURS);
+	/* inside the firmware's list (word 900, a VALID-clear entry's span) or on
+	 * its END word: a bad placement */
+	s.expected_word = 900; s.ptr_after = 900;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	s.expected_word = DLM_END; s.ptr_after = DLM_END;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+
+	/* zeros below HEADE (words 32..51) are never taken: still after the END */
+	for (unsigned int i = 32; i < 52; i++)
+		dlm[i] = 0;
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == DLM_END + 1u);
+	/* nor does a zero span after the END change the answer */
+	for (unsigned int i = 1000; i < 1100; i++)
+		dlm[i] = 0;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == DLM_END + 1u);
+	dlmap_fixture();
+
+	/* the old 256-word walk stops one entry short: no END, refused */
+	in = dlm_in(256u);
+	CHECK(!in.end_found);
+	st = 12345u;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_NO_END && st == 12345u);
+	/* an END-less list (the END word turned into one more entry) walked over
+	 * a bound that ends before the fill's first bit-31 word: no END */
+	dlm[DLM_END] = 0x20000000u;
+	CHECK(!dlm_walk(DLM_HEAD, 257u, &w));
+	/* (over the whole memory the next word, 960, is fill: 0xb0b0b0b0 has bit
+	 * 31 set and reads as an END to the walk as to the HVS) */
+	CHECK(dlm_walk(DLM_HEAD, DLM_WORDS - DLM_HEAD, &w) && w == 960u - DLM_HEAD + 1u);
+	dlmap_fixture();
+	CHECK(swap_place_reason_name(SWAP_PLACE_NO_END)[0] == 'n');
+
+	/* overlap: another channel's HEADE, DL.LACT or list right after the END
+	 * moves our start past it, never onto it */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	in.busy[in.nbusy++] = (struct swap_span){ 935, 1 };
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == 936u);
+	in.busy[in.nbusy++] = (struct swap_span){ 940, 30 };
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == 970u);
+	/* no room before the memory's end: refused */
+	in.mem_words = 989;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_NO_ROOM);
+	in.mem_words = 990;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == 970u);
+	/* the 12-bit LPTRS field caps a larger memory */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	in.fw_words = 4096u - DLM_HEAD - 10u; /* END at 4085 */
+	in.mem_words = 22528u;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_NO_ROOM);
+	/* a channel not walked to an END refuses */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	in.unknown_chan = 2;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OTHER_UNKNOWN);
+
+	/* word 0: a firmware list that is word 0's bare END alone places at 32,
+	 * never at word 1..31 */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	in.fw_head = 0;
+	in.fw_words = 1;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_OK && st == SWAP_KEPT);
+
+	/* arguments */
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	CHECK(swap_place_after_end(NULL, &st) == SWAP_PLACE_BAD_ARG);
+	CHECK(swap_place_after_end(&in, NULL) == SWAP_PLACE_BAD_ARG);
+	in.len = 0;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_BAD_ARG);
+	in = dlm_in(DLM_WORDS - DLM_HEAD);
+	in.nbusy = SWAP_PLACE_BUSY_MAX + 1u;
+	CHECK(swap_place_after_end(&in, &st) == SWAP_PLACE_BAD_ARG);
+	CHECK(!strcmp(swap_place_reason_name(SWAP_PLACE_OK), "after-end"));
+	CHECK(!strcmp(swap_place_reason_name((enum swap_place_reason)99), "?"));
+}
+
 int main(void)
 {
 	test_judge();
@@ -602,6 +761,7 @@ int main(void)
 	test_lact_seq();
 	test_lact_restore();
 	test_vblank();
+	test_place();
 	printf("swap_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;
 }

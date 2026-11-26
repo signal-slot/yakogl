@@ -752,4 +752,109 @@ static inline int swap_vblank_first_miss(const struct swap_vblank *v, unsigned i
 	return -1;
 }
 
+/* (p) Placement after the firmware list's END (selftests-s32b).
+ *
+ * rpi5_dlmap's map of the board (its README): channel 0's list runs from
+ * LPTRS.HEADE 672 to its END at word 928 (257 words, seven entries with VALID
+ * clear inside), word 0 is a bare END that channel 1 runs while enabled, and
+ * the memory no list uses holds a 0xb0b0b0b0 fill, not zeros. So no word
+ * value tells that a word is free: not zero, not the fill. The HVS stops
+ * reading a list at its END, so the words after the END of the firmware's
+ * list are outside it whatever they hold. Our list goes there only:
+ *   - only with an END found by the walk (no END: refused, NO_END);
+ *   - from the word after the END, never below SWAP_KEPT (words 0..31, word
+ *     0 included, are never ours), never before the END (words below HEADE
+ *     are not used even when they read zero);
+ *   - stepping past each busy span (the other channels' lists as walked to
+ *     their END, their LPTRS.HEADE and DL.LACT words); a channel whose list
+ *     was not walked to an END refuses the placement (OTHER_UNKNOWN);
+ *   - [start, start + len) inside the list memory (mem_words) and the 12-bit
+ *     LPTRS field (NO_ROOM otherwise).
+ * The caller saves the words it is about to overwrite and writes them back
+ * after the restore; this function reads no word at all. */
+#define SWAP_KEPT 32u
+#define SWAP_PLACE_BUSY_MAX 8u
+
+struct swap_span {
+	uint32_t start, words; /* words 0: no span */
+};
+
+struct swap_place_in {
+	uint32_t mem_words;         /* list memory in words (CXM_SIZE) */
+	uint32_t fw_head, fw_words; /* the firmware's walked list, END included */
+	bool end_found;             /* the walk stopped at an END (not a window) */
+	struct swap_span busy[SWAP_PLACE_BUSY_MAX];
+	unsigned int nbusy;
+	int unknown_chan;           /* >= 0: a channel not walked to an END */
+	uint32_t len;               /* our words */
+};
+
+enum swap_place_reason {
+	SWAP_PLACE_OK = 0,
+	SWAP_PLACE_BAD_ARG,       /* null, len 0, fw_words 0, nbusy too big */
+	SWAP_PLACE_NO_END,        /* the walk found no END: nothing is known free */
+	SWAP_PLACE_OTHER_UNKNOWN, /* another channel's list was not walked to an END */
+	SWAP_PLACE_NO_ROOM,       /* no room after the END inside the memory */
+};
+
+static inline const char *swap_place_reason_name(enum swap_place_reason r)
+{
+	switch (r) {
+	case SWAP_PLACE_OK: return "after-end";
+	case SWAP_PLACE_BAD_ARG: return "bad argument";
+	case SWAP_PLACE_NO_END: return "no END within the walk";
+	case SWAP_PLACE_OTHER_UNKNOWN: return "another channel's list not walked to an END";
+	case SWAP_PLACE_NO_ROOM: return "no room after the END inside the list memory";
+	}
+	return "?";
+}
+
+/* The firmware list's END word (meaningful with end_found and fw_words). */
+static inline uint32_t swap_place_end(const struct swap_place_in *in)
+{
+	return in->fw_head + in->fw_words - 1u;
+}
+
+static inline bool swap_span_hit(uint64_t a, uint64_t al, const struct swap_span *b)
+{
+	return al && b->words && a < (uint64_t)b->start + b->words && (uint64_t)b->start < a + al;
+}
+
+/* Our list's start after the firmware list's END, or the refusal. */
+static inline enum swap_place_reason swap_place_after_end(const struct swap_place_in *in,
+							  uint32_t *start)
+{
+	uint64_t st, lim;
+	bool moved = true;
+
+	if (!in || !start || !in->len || (in->end_found && !in->fw_words) ||
+	    in->nbusy > SWAP_PLACE_BUSY_MAX)
+		return SWAP_PLACE_BAD_ARG;
+	if (!in->end_found)
+		return SWAP_PLACE_NO_END;
+	if (in->unknown_chan >= 0)
+		return SWAP_PLACE_OTHER_UNKNOWN;
+	lim = in->mem_words < SWAP_LPTRS_MASK + 1u ? in->mem_words : SWAP_LPTRS_MASK + 1u;
+	st = (uint64_t)in->fw_head + in->fw_words; /* the word after the END */
+	if (st < SWAP_KEPT)
+		st = SWAP_KEPT;
+	/* each step moves st strictly up: at most nbusy + 1 passes */
+	for (unsigned int pass = 0; moved && pass <= in->nbusy; pass++) {
+		moved = false;
+		for (unsigned int i = 0; i < in->nbusy; i++) {
+			if (swap_span_hit(st, in->len, &in->busy[i])) {
+				st = (uint64_t)in->busy[i].start + in->busy[i].words;
+				moved = true;
+			}
+		}
+	}
+	for (unsigned int i = 0; i < in->nbusy; i++)
+		if (swap_span_hit(st, in->len, &in->busy[i]))
+			return SWAP_PLACE_NO_ROOM;
+	if (st + in->len > lim)
+		return SWAP_PLACE_NO_ROOM;
+	*start = (uint32_t)st;
+	return SWAP_PLACE_OK;
+}
+
 #endif /* RPI5_SCANOUT32_SWAP_CHECK_H */

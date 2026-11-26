@@ -3,8 +3,9 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # io_filter_selftest: host test of src/io_filter.h (scanout32_write_ok): channel
-# 0's LPTRS and list words >= 32 are accepted; list words 0..31, the other
-# channels' LPTRS and the other HVS registers are refused. Prints
+# 0's LPTRS and list words >= 32 are accepted (rpi5_dlmap's 929..948 and
+# 4095 named); list words 0..31 (word 0, channel 1's bare END, named), the
+# other channels' LPTRS and the other HVS registers are refused. Prints
 # "io_filter_selftest: N ok, 0 failed"; exit 0, nonzero on any failure.
 # No cc: a gap, exit 77. Scratch goes to a mktemp dir under $TMPDIR.
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
@@ -56,6 +57,13 @@ int main(void)
 	for (w = 0; w < HVS6S_KEPT; w++) {
 		want("list word < KEPT", hvs6s_word_off(w), 0);
 	}
+	/* rpi5_dlmap's layout (selftests-s32b): word 0 is a bare END channel 1
+	 * runs, the firmware's END at word 928; our pair goes at 929..948 */
+	want("dlmap word 0 (channel 1's bare END)", hvs6s_word_off(0), 0);
+	want("dlmap word 31", hvs6s_word_off(31), 0);
+	want("dlmap word 929 (after the END)", hvs6s_word_off(929), 1);
+	want("dlmap word 948 (end of our pair)", hvs6s_word_off(948), 1);
+	want("dlmap word 4095 (last of CXM_SIZE)", hvs6s_word_off(4095), 1);
 	want("list word KEPT", hvs6s_word_off(HVS6S_KEPT), 1);
 	want("list word KEPT+1", hvs6s_word_off(HVS6S_KEPT + 1u), 1);
 	want("last word", HVS_SIZE - 4u, 1);
