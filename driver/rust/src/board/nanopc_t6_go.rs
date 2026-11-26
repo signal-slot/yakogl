@@ -697,7 +697,12 @@ mod tests {
             assert!(WIN.1 <= lo || WIN.0 >= hi, "window overlaps U-Boot's reserved {lo:#x}-{hi:#x}");
         }
         assert!(WIN.1 <= UBOOT_RELOCADDR, "end below relocaddr");
-        assert!(WIN.1 <= UBOOT_SP_START && WIN.1 <= UBOOT_FDT_BLOB, "end below the stack and the FDT");
+        // Two asserts, not `&&`: the stack top sits below the FDT blob
+        // (sp start < fdt_blob), so an `&&` of the two would leave the FDT
+        // check with no effect (clippy::redundant_comparisons); each bound
+        // is checked on its own instead.
+        assert!(WIN.1 <= UBOOT_SP_START, "end below the stack");
+        assert!(WIN.1 <= UBOOT_FDT_BLOB, "end below the FDT");
     }
 
     #[test]
