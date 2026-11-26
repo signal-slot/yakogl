@@ -135,12 +135,21 @@ build_args() {
         -DCONFIG_GLMARK2_FRAME_DUMP=y "-DCONFIG_GLMARK2_ARGS=\"$a\""
 }
 
+# The west venv: WEST_VENV, else ZEPHYR_VENV (imx8mp-env.sh's name).
+# Prints the path on stdout and the variable used on stderr.
+venv_pick() {
+    if [ -n "${WEST_VENV:-}" ]; then echo "using WEST_VENV" >&2; echo "$WEST_VENV"
+    elif [ -n "${ZEPHYR_VENV:-}" ]; then echo "using ZEPHYR_VENV" >&2; echo "$ZEPHYR_VENV"
+    else echo "no venv variable set" >&2; fi
+}
+
 cmd_build() {
     [ $# -ge 1 ] || die "usage: $0 [--dry-run] build <img-dir> [SCENE...]"
-    local out=$1 sel rc=0 l arg commit
+    local out=$1 sel rc=0 l arg commit venv
     shift
     sel=$(selected "$@") || exit 2
     if [ "$DRY" = 1 ]; then
+        echo "venv: $(venv_pick 2>&1 >/dev/null)"
         while IFS=$'\t' read -r l arg; do
             [ -e "$out/$l" ] && echo "$l: $out/$l exists, a real run refuses it"
             echo "echo <git -C $REPO rev-parse HEAD> > $out/$l.commit"
@@ -151,8 +160,8 @@ cmd_build() {
     ZEPHYR_WS=${ZEPHYR_WS:-${ZEPHYR_WORKSPACE:-}}
     : "${ZEPHYR_WS:?set ZEPHYR_WS to the west workspace (it holds zephyr/)}"
     [ -d "$ZEPHYR_WS/zephyr" ] || die "$ZEPHYR_WS/zephyr does not exist"
-    [ -n "${WEST_VENV:-}" ] || WEST_VENV=${ZEPHYR_VENV:-}
-    [ -n "$WEST_VENV" ] && PATH=$WEST_VENV/bin:$PATH
+    venv=$(venv_pick)
+    [ -n "$venv" ] && PATH=$venv/bin:$PATH
     command -v west > /dev/null || die "west not on PATH (set WEST_VENV or ZEPHYR_VENV)"
     [ -f "${GLMARK2_SRC:-}/src/default-benchmarks.h" ] || die "set GLMARK2_SRC to the glmark2 checkout"
     export ZEPHYR_BASE=$ZEPHYR_WS/zephyr
@@ -311,6 +320,14 @@ self_test() {
     *"verdin_imx8mp/mimx8ml8/a53"*"-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y -DCONFIG_GC_BOARD_WDOG_SECONDS=$WDOG_S"*"-DCONFIG_GLMARK2_FRAME_DUMP=y"*'-DCONFIG_GLMARK2_ARGS="-b texture:texture-filter=mipmap"'*) ;;
     *) echo "self-test: build line: $out" >&2; return 1 ;;
     esac
+    out=$(unset WEST_VENV; ZEPHYR_VENV=/z DRY=1 cmd_build /nonexistent-dir 5)
+    case $out in *"venv: using ZEPHYR_VENV"*) ;; *) echo "self-test: ZEPHYR_VENV not used: $out" >&2; return 1 ;; esac
+    out=$(WEST_VENV= ZEPHYR_VENV=/z DRY=1 cmd_build /nonexistent-dir 5)
+    case $out in *"venv: using ZEPHYR_VENV"*) ;; *) echo "self-test: empty WEST_VENV does not fall back: $out" >&2; return 1 ;; esac
+    out=$(WEST_VENV=/w ZEPHYR_VENV=/z DRY=1 cmd_build /nonexistent-dir 5)
+    case $out in *"venv: using WEST_VENV"*) ;; *) echo "self-test: WEST_VENV does not win: $out" >&2; return 1 ;; esac
+    [ "$(WEST_VENV=/w ZEPHYR_VENV=/z venv_pick 2> /dev/null)" = /w ] || { echo "self-test: venv_pick path (WEST_VENV)" >&2; return 1; }
+    [ "$(unset WEST_VENV; ZEPHYR_VENV=/z venv_pick 2> /dev/null)" = /z ] || { echo "self-test: venv_pick path (ZEPHYR_VENV)" >&2; return 1; }
     out=$(DRY=1 cmd_build /nonexistent-dir terrain)
     case $out in *'-DCONFIG_GLMARK2_ARGS="-b terrain"'*) ;; *) echo "self-test: terrain build line: $out" >&2; return 1 ;; esac
     case $out in *"-DEXTRA_CONF_FILE=$HERE/imx8mp-console.conf"*"-DCONFIG_GC_COMMON_PANEL_CONSOLE=n"*) ;; *) echo "self-test: uart console flags: $out" >&2; return 1 ;; esac
