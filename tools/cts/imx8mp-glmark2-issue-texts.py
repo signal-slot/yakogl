@@ -19,7 +19,7 @@ import sys
 
 TOTAL = 33
 VERDICTS = ("right", "wrong", "seen without a value")
-ROUTES = ("dump", "photograph", "both")
+ROUTES = ("dump", "photograph", "photograph+probes", "both")
 RECORD = re.compile(r"records/imx8mp/([0-9]{8})-([0-9]{4})-[^ |/]+-[0-9a-f]{8}/?")
 SHA = re.compile(r"[0-9a-f]{7,40}")
 NOTE = "docs/notes/imx8mp-glmark2-pictures-by-eye.md"
