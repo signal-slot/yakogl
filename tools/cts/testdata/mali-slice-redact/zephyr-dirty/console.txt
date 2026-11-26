@@ -1,4 +1,4 @@
-ethaddr=00:00:5e:00:53:01
+ethaddr=00:00:5e:00:53:01 # redact-scan: ok
 Serial#: 12345678
 eth1addr=garbled
 serverip=192.0.2.7
