@@ -40,6 +40,8 @@ check_one() { # label scene route verdict
 check_one "label dump right" gm01 dump right
 check_one "cell both right" "[build] use-vbo=true" both right
 check_one "photograph" gm03 photograph "seen without a value"
+check_one "photograph+probes right" gm04 photograph+probes right
+check_one "photograph+probes wrong" gm06 photograph+probes wrong
 check_one "wrong" gm13 dump wrong
 check_one "effect2d cell" "[effect2d] kernel=0,1,0;1,-4,1;0,1,0;" dump right
 if grep -q "^| \[build\] use-vbo=false | 01234567 | $R | dump | right |$" "$T/n.md"; then
@@ -82,13 +84,21 @@ refuse "bad verdict" --verdict fine
 refuse "verdict todo" --verdict "not yet looked at"
 refuse "dump with seen" --verdict "seen without a value"
 refuse "photograph with right" --route photograph
-# --check-main: a commit that is not on origin/main
-if git -C "$ROOT" rev-parse -q --verify origin/main >/dev/null; then
-  if python3 "$FILL" --note "$T/n.md" "${G[@]}" --check-main >/dev/null 2>&1; then
-    bad "refusal check-main: accepted"; else ok "refusal check-main"; fi
-else
-  echo "  note  no origin/main here: --check-main not exercised"
-fi
+if python3 "$FILL" --note "$T/n.md" --scene gm02 --commit "$C" --record "$R" \
+    --route photograph+probes --verdict "seen without a value" >/dev/null 2>"$T/err"
+then bad "refusal photograph+probes with seen: accepted"
+elif [ -s "$T/err" ]; then ok "refusal photograph+probes with seen"
+else bad "refusal photograph+probes with seen: no message"; fi
+# --check-main --main REF: a local sha, no origin/main needed
+HEADSHA=$(git -C "$ROOT" rev-parse HEAD)
+if python3 "$FILL" --note "$T/n.md" --scene gm02 --commit "$HEADSHA" --record "$R" \
+    --route dump --verdict right --check-main --main "$HEADSHA" >/dev/null 2>&1
+then ok "check-main --main <sha> passes"; else bad "check-main --main <sha>"; fi
+cp "$T/before.md" "$T/n.md"
+# a commit that is not an ancestor of REF
+if python3 "$FILL" --note "$T/n.md" --scene gm02 --commit "$HEADSHA" --record "$R" \
+    --route dump --verdict right --check-main --main "$(git -C "$ROOT" rev-parse HEAD~1)" >/dev/null 2>&1
+then bad "refusal check-main: accepted"; else ok "refusal check-main (non-ancestor)"; fi
 if cmp -s "$T/n.md" "$T/before.md"; then ok "refusals left the file alone"
 else bad "refusals changed the file"; fi
 

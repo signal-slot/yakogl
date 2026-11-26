@@ -5,8 +5,8 @@
 
     tools/cts/imx8mp-glmark2-note-fill.py --note PATH --scene SCENE|gmNN
         --commit SHA --record records/imx8mp/YYYYMMDD-HHMM-<name>-<sha8>/
-        --route dump|photograph|both
-        --verdict right|wrong|'seen without a value' [--check-main]
+        --route dump|photograph|both|photograph+probes
+        --verdict right|wrong|'seen without a value' [--check-main [--main REF]]
 
 Replaces exactly the row of SCENE under '## Verdicts' in place; every other
 byte of the file stays. The commit cell is the first 8 hex digits (lowercase).
@@ -15,9 +15,10 @@ to 40 hex digits, a record path outside the full pattern (its sha8 is 8
 lowercase hex digits; it is the image's sha256 prefix from tools/board.sh, as
 on the Pi 4 note, and is not compared with the commit), a route or verdict
 outside the allowed values,
-photograph with anything but `seen without a value` and dump/both with it
-(the rules of imx8mp-glmark2-verdicts.py). --check-main also requires
-`git merge-base --is-ancestor <commit> origin/main`.
+photograph with anything but `seen without a value` and dump/both/
+photograph+probes with it (the rules of imx8mp-glmark2-verdicts.py).
+--check-main also requires `git merge-base --is-ancestor <commit> REF`, REF
+being --main (default origin/main).
 """
 import argparse
 import os
@@ -28,7 +29,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 DUMPS = os.path.join(HERE, "imx8mp-glmark2-dumps.sh")
-ROUTES = ("dump", "photograph", "both")
+ROUTES = ("dump", "photograph", "both", "photograph+probes")
 VERDICTS = ("right", "wrong", "seen without a value")
 HEX = re.compile(r"[0-9a-fA-F]{7,40}")
 RECORD = re.compile(r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |/]+-([0-9a-f]{8})/?")
@@ -70,14 +71,16 @@ def validate(a):
         raise Refuse(f"route {a.route!r} not one of {', '.join(ROUTES)}")
     if a.verdict not in VERDICTS:
         raise Refuse(f"verdict {a.verdict!r} not one of {', '.join(VERDICTS)}")
-    if (a.route == "photograph") != (a.verdict == "seen without a value"):
+    if (a.route == "photograph") != (a.verdict == "seen without a value") \
+            and not (a.route == "photograph+probes"
+                     and a.verdict != "seen without a value"):
         raise Refuse("photograph goes only with `seen without a value`, "
-                     "dump and both never do")
+                     "dump, both and photograph+probes never do")
     if a.check_main:
         r = subprocess.run(["git", "-C", ROOT, "merge-base", "--is-ancestor",
-                            commit, "origin/main"], capture_output=True)
+                            commit, a.main], capture_output=True)
         if r.returncode != 0:
-            raise Refuse(f"commit {commit} is not an ancestor of origin/main")
+            raise Refuse(f"commit {commit} is not an ancestor of {a.main}")
     return commit
 
 
@@ -109,6 +112,7 @@ def main(argv):
     for k in ("note", "scene", "commit", "record", "route", "verdict"):
         p.add_argument("--" + k, required=True)
     p.add_argument("--check-main", action="store_true")
+    p.add_argument("--main", default="origin/main")
     try:
         a = p.parse_args(argv)
         fill(a)
