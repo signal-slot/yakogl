@@ -381,6 +381,43 @@ the 100 s lifetime with 85 s to spare, so the lifetime and `RUN_BOUND` stay as
 they are. The per-case table and the failing checks are in the bring-up
 note, "Board verdicts".
 
+#### The set at `dd6cfa02` (2026-11-26, gltest-board)
+
+main had no set log under `tools/cts/log/`, so plan #405 ran the shard
+again, built from origin/main `dd6cfa02`. The log is in
+`tools/cts/log/2026-11-mp2-gltest-p9/set/`. The plan is still 1 shard of 50
+cases. It ran three times: the shard image (`GL_TEST_MP2_CASES` from
+`shard-0000.conf`) twice, and the default-walk image once. The time
+against `CONFIG_YAKOGL_STM32MP2_LIFETIME_S=100`:
+
+| run | record | suite | PSCI reset at | of the lifetime | back on Linux | failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| shard 0 of 1 | `20261126-0119-gltest_set-46b5cec3` | 11,415 ms | 14,404 ms | 14 % (no `mp2: lifetime` line) | 57 s | 3: 47, 182, 189 |
+| shard 0 of 1, rerun | `20261126-0123-gltest_set_rerun-46b5cec3` | 11,419 ms | 14,408 ms | 14 % | 70 s | 5: 6, 11, 47, 182, 189 |
+| default walk | `20261126-0124-gltest_set_default-f0b0e969` | 11,414 ms | 14,387 ms | 14 % | 57 s | 3: 47, 182, 189 |
+
+`mp2-gltest-diff: new 3, flaky 0, expected 0, missing 0` (built from `dd6cfa02`, shard 0 of 1: 14.4 s of 100 s; new 47, 182, 189; stale 0)
+
+The rerun's line was `mp2-gltest-diff: new 5, flaky 0, expected 0, missing 0`
+(14.4 s of 100 s). Cases 6 and 11 were not fixed: the same `zephyr.bin`
+failed them in the rerun. Each run lands in one of two states, and the wrong
+pixels repeat exactly within each state. In state A, 6 and 11 pass and the
+errors of 47, 182 and 189 are smaller. State B is the five failures of every
+earlier run. The bring-up note, "Board verdicts", has the pixel values. The
+cause is open, and it is not fixed here. There was no hang or refusal
+(`draws refused 0`, fences 173 of 173).
+`tools/cts/mp2-gltest-expected.txt` is unchanged: Q11 is decided (option
+A), and the list has no stale entry.
+
+The one-case image now prints its tally (bring-up note, step 8). Case 1
+alone, built from origin/main `dd6cfa02` with
+`-DCONFIG_GL_TEST_MP2_SET_HEAD=y`, record
+`20261126-0118-gl_test_case1_tally-d3a5c59e`, log
+`tools/cts/log/2026-11-mp2-gltest-p9/tally/`, gave `gl_test: all: 0 of 1
+cases failed (1 passed; ...)` and `dk_verdict.py` `tally=PASS:0/1`. The PSCI
+reset came at 3,312 ms of the 100 s lifetime (3.3 s of 100 s), and the board
+was back on Linux after 60 s.
+
 ### dEQP-GLES2 sweep
 
 Record `20261124-1857-deqp-gles2-a5f1dc8e`, built from `a5f1dc8e` with

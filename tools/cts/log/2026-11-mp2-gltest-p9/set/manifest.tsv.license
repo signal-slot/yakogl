@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Shard plan of tools/cts/mp2-gltest-shards.py --skip "" --budget-ms 90000 (P9).
