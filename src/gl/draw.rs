@@ -635,6 +635,23 @@ fn restamp_draw(kicks: Option<&mut StagingKicks<'_>>) {
     }
 }
 
+/// Is texture slot `ti` attached (any point, level or face) to the
+/// framebuffer a draw of `c` renders into? The default surface holds no
+/// texture. Attachments name a texture by its slot, as the render-into
+/// stamp does (`framebuffer::texture_target_use`).
+#[cfg(feature = "gpu-powervr")]
+fn draw_target_holds(c: &GlContext, ti: usize) -> bool {
+    if c.bound_framebuffer == 0 {
+        return false;
+    }
+    c.framebuffer_ref(c.bound_framebuffer).is_some_and(|fb| {
+        [&fb.color, &fb.depth, &fb.stencil]
+            .into_iter()
+            .chain(fb.color_n.iter())
+            .any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti)
+    })
+}
+
 /// Does draw `d` clear its whole depth plane before it draws (the
 /// background clear, not a scissored or masked quad: `ds_retention`'s
 /// `draw_clears`)? The plane then holds the clear value whatever it held.
@@ -4931,6 +4948,11 @@ fn build_common(
             let sampler = super::es3::sampler_state(c.index, unit);
             /* the render-into stamp is kept by texture NAME (its slot) */
             let target_kick = slot.map_or(0, |s| framebuffer::texture_target_use(c, s));
+            /* the texture is an attachment of the framebuffer this draw
+             * renders into (a feedback loop, undefined in GL): asked only
+             * for a texture some kick rendered into */
+            #[cfg(feature = "gpu-powervr")]
+            let draws_into = target_kick != 0 && slot.is_some_and(|s| draw_target_holds(c, s));
             let Some((ti, t)) =
                 slot.and_then(|s| live_texture(&mut context::objects(c.group).textures, s).map(|t| (s, t)))
             else {
@@ -5010,9 +5032,16 @@ fn build_common(
              * asked HERE, at every draw, not at bind: the texels' stamp moves
              * at every CPU write, and a kick that rendered into the cube
              * (framebuffer::texture_target_use) makes it stale too -- that
-             * kick is waited for before the copy reads the texels. A render
-             * into the cube in the frame being recorded (a feedback loop,
-             * undefined in GL) keeps the stacked image. */
+             * kick is waited for before the copy reads the texels. A face
+             * rendered into by the frame still being recorded, for another
+             * framebuffer than this draw's (dEQP renders a face, binds
+             * another framebuffer and samples the cube with no glFlush in
+             * between), has that frame submitted and waited for here, so
+             * the copy is made from the image that was drawn: the stacked
+             * image it would otherwise keep is not what a native-cube
+             * program reads. Only a render into the cube by this draw's own
+             * framebuffer (a feedback loop, undefined in GL) keeps the
+             * stacked image. */
             /* The program decides, and only the program: one the online
              * compiler built with the native cube, or a table row
              * pco compiled from a real samplerCube (glsl2usc since step C;
@@ -5028,7 +5057,7 @@ fn build_common(
                  * target_kick, filled above, which the GC7000's tiled copy
                  * reads too (one staleness source for both copies) */
                 let rendered = tb.target_kick;
-                let open = rendered != 0 && rendered == backend::kick_id();
+                let open = rendered != 0 && rendered == backend::kick_id() && (draws_into || backend::flush() != 0);
                 if !open && (rendered == 0 || !backend::kick_pending(rendered) || backend::finish() == 0) {
                     /* one level sampled (no mipmap filter, or a one-level
                      * chain): a one-level copy, which the backend describes
