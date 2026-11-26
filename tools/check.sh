@@ -3291,6 +3291,7 @@ if command -v cc >/dev/null 2>&1; then
   step "run     mali route_cells self-test" route_cells_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
   step "run     mali valhall_src_info self-test" valhall_src_info_selftest
+  step "run     mali run-on-board-cc-selftest.sh (cross compiler selection of the board run)" no_board_env bash tools/mali/panthor/run-on-board-cc-selftest.sh
   if [ -n "${MESA_PAN_TREE:-}" ]; then
     step "run     mali pan_shc == Mesa 26.2.1 GL driver on the tri pair, the blend references, blend_nir_rules.rs (MESA_PAN_TREE)" pan_shc_check
   else
