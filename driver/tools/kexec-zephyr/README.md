@@ -238,6 +238,90 @@ it and a `nanopc-t6.sh --go` through it on its fake board. Through
 `tools/board.sh nanopc-t6`, `BOARD_UART=rfc2217://<host>:<port>` is handed on
 as `T6_UART` the same way.
 
+### The U-Boot route: `T6_ROUTE=uboot t6-verdict.sh`
+
+`t6-verdict.sh <probe> <uart.log>` judges a T6 record from either start. The
+route is the environment variable `T6_ROUTE`: `kexec` (the default,
+`nanopc-t6.sh`) or `uboot` (U-Boot's `go`, `../uboot-t6/prompt-go.sh`; the
+session itself is in `../uboot-t6/README.md`); another value is a usage error
+(exit 2). The script does not detect the route from the log: whoever starts it
+sets it, and a record read as the wrong route FAILs (never passes). Its
+header comment and `t6-verdict-test.sh` are the source of every rule below;
+the fixtures are in `testdata/`.
+
+How the routes differ, for every probe:
+
+| Line | kexec | uboot | Fixture |
+|---|---|---|---|
+| `T6:G go: SCTLR_EL2 0x.. -> 0x..` (after `T6:A`) | none allowed | required: the first value has M, C or I set, the second has all three clear and equals `T6:A`'s SCTLR_EL2; window `0x10000000-0x20000000` | `t6_hello-uboot-pass.uart` (a kexec record read as uboot misses it: `t6_hello-pass.uart`) |
+| GICv3 CPU interface line | required | not judged (U-Boot does not touch the CPU interface) | same pair |
+| `T6:A` SCTLR_EL2 | M, C, I clear | M, C, I clear | same pair |
+
+`T6:A` is judged with or without the trailing ` CNTFRQ_EL0 <decimal>`
+(images built before `banner_a_el2` printed it have none): the template is
+the form the record's own `T6:A` line has, and a non-decimal value differs on
+either form. The fixtures all carry the field; the no-field form is the test's
+own copy with the field cut (`t6_hello-pass.uart` on kexec,
+`t6_submit-uboot-wdt0-pass.uart` on uboot).
+
+What each probe needs on the U-Boot route (the rest of a probe's lines are
+the kexec ones):
+
+- `t6_hello`: the `T6:G` line above (`t6_hello-uboot-pass.uart`).
+- `t6_gpu`: the `RK806 at hand-over` line says whether U-Boot left the GPU
+  supply (DCDC1, `vdd_gpu_s0`) on or off, because nothing there enabled it.
+  Off needs `clock set: kept ..`, then `vdd_gpu_s0 enable: frame sent`;
+  on needs the same clock line and `enable: not sent`. A `kept 1` clock set
+  is the keep outcome, `kept 0` the move (`wrote CLKSEL_CON(158) 0x40ff0024`
+  read back `0x1f24` in the move fixture). A refused clock set stops the run
+  with a stop line before `t6_gpu: PASS`, so the verdict is FAIL. A word
+  other than `on`/`off`, or the enable line that does not match the supply,
+  is FAIL. Fixtures: `t6_gpu-uboot-supply-on-pass.uart`,
+  `t6_gpu-uboot-supply-off-pass.uart`, `t6_gpu-uboot-move-pass.uart`,
+  `t6_gpu-uboot-clock-refused-stop9.uart` (FAIL). The kexec table predicts
+  the supply on and no enable line, so a supply-off record read as kexec
+  FAILs on the supply line.
+- `t6_fw`, `t6_submit`: a pass prints none of `gpu_up`'s hand-over lines, so
+  the supply on and off read alike. A run that stopped in Z1 (Z3 step 3)
+  prints Z1's record, and then the supply, clock-set and enable lines are
+  judged for form only (`table_z1_stop`); the stop line is a differing line,
+  and a `PASS` line edited over a stopped run still FAILs. The test builds
+  these records from `t6_fw-pass.uart`, `t6_fw-z1fail.uart`,
+  `t6_submit-pass.uart` and `t6_submit-z3-stop.uart` behind U-Boot's header;
+  there is no stored fixture for them.
+- `t6_cold`: the `VIDEO` line of the chain may read HPD 0 or 1 (a display
+  fed from the board's 5 V that the image switches on has not raised
+  hot-plug when the chain ends); on kexec it must be 1. The `HPD 1` line
+  after the hold stays required, and is the proof of a connected display.
+  Fixture: `t6_cold-uboot-hold90-pass.uart`; the same record read as kexec
+  FAILs, an HPD of 2 or an HPD 0 after the hold FAILs on either.
+- `triangle`: the kexec Zephyr part behind U-Boot's header, cold path and
+  adopt path. Fixtures: `triangle-uboot-cold-pass.uart`,
+  `triangle-uboot-adopt-pass.uart` (the kexec forms are
+  `triangle-cold-pass.uart` and `triangle-adopt-pass.uart`). Read as kexec
+  they FAIL.
+
+A WDT0 return. An image that WDT0 resets instead of PSCI `SYSTEM_RESET`
+prints no reset line, so the record's end differs. The script treats a record
+as a WDT0 return only when all of these hold:
+
+1. the route is `uboot`;
+2. no line of the record contains `PSCI SYSTEM_RESET at`;
+3. a line of the form `<probe>: PASS` (`PASS` at the end, or followed by
+   `:` or a space) is followed by a line that starts a boot banner, `DDR V<digit>`
+   or `U-Boot <digit>`.
+
+The script then puts the reset line the probe's table expects in front of
+that banner (`t6: <probe> done: PSCI SYSTEM_RESET at 0 ms (0 feeds)`; for the
+triangle `t6: board: run over: ...`) and judges the record as usual. A
+hung image has no `PASS` line, so nothing is inserted: the lines after where
+it stopped are missing and the verdict is FAIL naming them, never PASS. On the
+kexec route there is no such allowance. Fixtures:
+`t6_submit-uboot-wdt0-pass.uart` (PASS),
+`t6_submit-uboot-wdt0-hung.uart` (FAIL, 13 lines missing, from Z4a on) and
+`t6_submit-uboot-wdt0-hung-z4.uart` (FAIL, 10 missing, from Z4d on); the pass
+record read as kexec FAILs.
+
 ## The Armadillo-X2: `tools/board.sh x2`
 
 The Armadillo-X2 has the Verdin i.MX8MP's SoC and GPU under Armadillo Base OS.
