@@ -38,11 +38,15 @@ def fill(m):
             f" | dump | {v} |")
 f = pat.sub(fill, s)
 # a filled note as verdicts.py --complete wants it: one 'What was looked at'
-# bullet per scene and none of the skeleton's placeholder texts
+# bullet per scene and none of the skeleton's placeholder texts. The real
+# note may already hold a bullet for a scene (its draft entries, d535563e):
+# only the scenes without one get a bullet here, so none appears twice.
 scenes = [m.group(1).strip("| ") for m in pat.finditer(s)]
+have = set(re.findall(r"^- \*\*(\[[^*]+)\*\*", s, re.M))
 f = f.replace("## What was looked at\n",
               "## What was looked at\n\n"
-              + "".join(f"- **{c}**: looked at it.\n" for c in scenes), 1)
+              + "".join(f"- **{c}**: looked at it.\n" for c in scenes
+                        if c not in have), 1)
 for p in ("Not yet established", "To fill in", "Skeleton: no scene"):
     f = f.replace(p, "Filled")
 open(filled, "w", encoding="utf-8").write(f)
