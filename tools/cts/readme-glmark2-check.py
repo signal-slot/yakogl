@@ -50,6 +50,22 @@ ignored) for each of these; a number must not be part of a longer number:
     glmark2-pictures.txt (the table it was checked against); "not looked at
     by eye" counts on its own.
 
+Opt-in checks of the other documents, with the README's commit (each failure
+prints "FAIL: STATUS: ...", "FAIL: CHECKLIST: ..." or "FAIL: ROADMAP: ...");
+the default run does not read these files:
+
+  --status     STATUS.md (--status-file) has a line that mentions glmark2, names
+               the commit's first 8 characters and gives each board's score as
+               "<AM62P|Pi 4|i.MX8MP> <score>" (a few non-digits between, as in
+               "AM62P は 468") with the score of that board's RESULTS.md row
+               (the first number of the row after the board name);
+  --checklist  the row of docs/release/checklist.md (--checklist-file) that
+               starts with '| 9 ' does not contain 'left to #1196';
+  --roadmap    the stage-2 section of ROADMAP.md (--roadmap-file; from the
+               '## 2.' heading to the next '## ') names the commit and #17, and
+               no sentence in it says the Pi 4 pictures are checked "by value
+               only" (a sentence with 'Pi 4' and 'by value only').
+
 Each item missing gives "FAIL: RESULTS: the <Board> glmark2 row does not state
 <what>" and exit status 1.
 
@@ -59,7 +75,8 @@ commit, so the gate runs the check on fixtures only (cts-selftest.sh).
 Usage:
   python3 tools/cts/readme-glmark2-check.py [--readme F] [--results F] [--ref R]
                                                 [--scenes terrain,shadow,refract]
-                                                [--verdicts]
+                                                [--verdicts] [--status] [--checklist]
+                                                [--roadmap]
 Exit status: 0 passes, 1 fails, 2 a file or table could not be parsed.
 """
 import argparse
@@ -230,6 +247,73 @@ def verdict_fails(board, text):
     return ["RESULTS: the %s glmark2 row does not state %s" % (board, w) for w in fails]
 
 
+STATUS_LABEL = [("AM62P", r"AM62P"), ("Raspberry Pi 4", r"Pi 4"), ("i.MX8MP", r"i\.MX8MP")]
+
+
+def read_lines(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().splitlines()
+    except OSError as e:
+        print("error: %s: %s" % (path, e.strerror))
+        sys.exit(2)
+
+
+def status_fails(path, commit, rtext):
+    scores = {}
+    for b, _ in STATUS_LABEL:
+        m = re.match(r"\s*(\d+)\b", rtext.get(b, ""))
+        if m:
+            scores[b] = m.group(1)
+    sha8 = commit[:8]
+    best = None
+    for ln in read_lines(path):
+        if "glmark2" not in ln.lower() or sha8 not in ln:
+            continue
+        miss = [b for b, lab in STATUS_LABEL if b not in scores or not re.search(
+            r"%s[^\d\n]{0,6}%s(?!\d)" % (lab, scores[b]), ln)]
+        if not miss:
+            return []
+        best = miss
+    if best is None:
+        return ["STATUS: no line mentions glmark2 and names `%s`" % sha8]
+    return ["STATUS: the glmark2 line naming `%s` lacks the RESULTS score of %s" % (
+        sha8, ", ".join(best))]
+
+
+def checklist_fails(path):
+    rows = [ln for ln in read_lines(path) if ln.startswith("| 9 ")]
+    if not rows:
+        return ["CHECKLIST: no row starting with '| 9 '"]
+    if "left to #1196" in rows[0]:
+        return ["CHECKLIST: row 9 still says 'left to #1196'"]
+    return []
+
+
+def roadmap_fails(path, commit):
+    sec, inside = [], False
+    for ln in read_lines(path):
+        if re.match(r"##\s+2\.", ln):
+            inside = True
+        elif inside and ln.startswith("## "):
+            break
+        if inside:
+            sec.append(ln)
+    if not sec:
+        return ["ROADMAP: no '## 2.' stage-2 section"]
+    text = " ".join(" ".join(sec).split())
+    fails = []
+    if commit[:8] not in text:
+        fails.append("ROADMAP: the stage-2 section does not name `%s`" % commit[:8])
+    if not re.search(r"#17(?!\d)", text):
+        fails.append("ROADMAP: the stage-2 section does not name #17")
+    for sent in re.split(r"[.!?](?=\s)", text):
+        if "Pi 4" in sent and "by value only" in sent:
+            fails.append("ROADMAP: the stage-2 section says the Pi 4 pictures are checked by value only")
+            break
+    return fails
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--readme", default=os.path.join(ROOT, "README.md"))
@@ -242,6 +326,15 @@ def main():
     ap.add_argument("--verdicts", action="store_true",
                     help="each board's RESULTS row also states 33 scenes, 0 failed, "
                     "0 GL errors, 0 out-of-memory and terrain/refract picture verdicts")
+    ap.add_argument("--status", action="store_true",
+                    help="STATUS.md has a glmark2 line with the commit's sha8 and the RESULTS scores")
+    ap.add_argument("--status-file", default=os.path.join(HERE, "STATUS.md"))
+    ap.add_argument("--checklist", action="store_true",
+                    help="checklist row 9 no longer says 'left to #1196'")
+    ap.add_argument("--checklist-file", default=os.path.join(ROOT, "docs", "release", "checklist.md"))
+    ap.add_argument("--roadmap", action="store_true",
+                    help="ROADMAP.md's stage-2 section names the commit and #17, no Pi 4 'by value only'")
+    ap.add_argument("--roadmap-file", default=os.path.join(ROOT, "ROADMAP.md"))
     a = ap.parse_args()
     scenes = [x.strip() for x in a.scenes.split(",") if x.strip()]
 
@@ -294,6 +387,13 @@ def main():
                     fails += scene_fails(b, rtext[b], scenes, commit)
                 if a.verdicts:
                     fails += verdict_fails(b, rtext[b])
+
+    if commits and a.status:
+        fails += status_fails(a.status_file, commits[0], rtext)
+    if a.checklist:
+        fails += checklist_fails(a.checklist_file)
+    if commits and a.roadmap:
+        fails += roadmap_fails(a.roadmap_file, commits[0])
 
     for f in fails:
         print("FAIL: " + f)

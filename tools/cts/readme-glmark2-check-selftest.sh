@@ -33,4 +33,16 @@ case_ "row lacks 'shadow <n> ms'" pass-README.md noshadow-RESULTS.md 1 "Raspberr
 case_ "'about 34.5 ms a frame' is no terrain figure" pass-README.md about-RESULTS.md 1 "Raspberry Pi 4 glmark2 row has no .terrain <n> ms" --ref none --scenes $SC
 case_ "record dir carries another sha8" pass-README.md othersha-RESULTS.md 1 'record directories (87881c78) are not at' --ref none --scenes $SC
 case_ "record dir has no date" pass-README.md nodate-RESULTS.md 1 'Raspberry Pi 4 glmark2 row cites no record directory' --ref none --scenes $SC
+
+# opt-in --status, --checklist, --roadmap (README at dfabc888, scores 468/195/42)
+P=pass-README.md R=pass-RESULTS.md
+case_ "--status: sha8 and the three scores" $P $R 0 '^ok:' --ref none --status --status-file "$D/status-pass.md"
+case_ "--status: line names another commit" $P $R 1 'no line mentions glmark2 and names .dfabc888' --ref none --status --status-file "$D/status-nosha.md"
+case_ "--status: Pi 4 score differs from RESULTS" $P $R 1 'lacks the RESULTS score of Raspberry Pi 4' --ref none --status --status-file "$D/status-score.md"
+case_ "--checklist: row 9 closed" $P $R 0 '^ok:' --ref none --checklist --checklist-file "$D/checklist-pass.md"
+case_ "--checklist: row 9 left to #1196" $P $R 1 "row 9 still says" --ref none --checklist --checklist-file "$D/checklist-fail.md"
+case_ "--roadmap: commit, #17, no Pi 4 by value only" $P $R 0 '^ok:' --ref none --roadmap --roadmap-file "$D/roadmap-pass.md"
+case_ "--roadmap: commit not named" $P $R 1 'does not name .dfabc888' --ref none --roadmap --roadmap-file "$D/roadmap-nosha.md"
+case_ "--roadmap: #17 not named" $P $R 1 'does not name #17' --ref none --roadmap --roadmap-file "$D/roadmap-no17.md"
+case_ "--roadmap: Pi 4 pictures by value only" $P $R 1 'Pi 4 pictures are checked by value only' --ref none --roadmap --roadmap-file "$D/roadmap-pi4value.md"
 echo "all cases passed"
