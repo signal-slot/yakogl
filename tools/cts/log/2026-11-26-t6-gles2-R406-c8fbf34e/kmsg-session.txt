@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Session R406: the board's kernel log before and after the run, and each chunk's, classified by tools/cts/mali-kmsg.py.
+before time=2026-11-26T07:36:41Z boot_id=ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d dmesg_lines=1224 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=19 first=panthor fb000000.gpu: [drm] Features: L2:0x7120306 Tiler:0x809 Mem:0x301 MMU:0x2830 AS:0xff
+after time=2026-11-26T07:39:42Z boot_id=ad1ec39d-d5a1-4be3-a289-3cf5fcb59d6d dmesg_lines=1260 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=19 first=panthor fb000000.gpu: [drm] Features: L2:0x7120306 Tiler:0x809 Mem:0x301 MMU:0x2830 AS:0xff
+new lines between the two captures: 36, of which 36 are the runner's yakogl-run-start/end markers
+chunk T6S1R01 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R06 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R09 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R10 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R17 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R20 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S1R21 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R15 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R16 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R17 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R19 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R20 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S3R23 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S4R02 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S4R03 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S4R04 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S4R06 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
+chunk T6S4R08 kmsg: resets=0 timeouts=0 mmu_faults=0 fw_faults=0 gpu_faults=0 cs_faults=0 other_panthor=0 first=-
