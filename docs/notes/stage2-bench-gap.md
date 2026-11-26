@@ -18,8 +18,10 @@ one score per board from this one commit: AM62P 461, Pi 4 193, i.MX8MP 42
 (`tools/cts/RESULTS.md`, "Common set"). `tools/cts/glmark2-pictures.txt`
 has an `am62p`, a `pi4` and an `imx8mp` column of 33 scenes each, all from
 this commit's runs, with no scene black. Items 1, 2, 3, 5 and 10 are done;
-item 7 is done by value on all three boards and by eye only on the AM62P
-(at `bc43ea09`). What is left is in "Left" at the end.
+item 7 is done by value on all three boards and by eye on the AM62P
+(at `bc43ea09`) and the Pi 4 (`d1e77916`,
+`docs/notes/pi4-glmark2-pictures-by-eye.md`); only the i.MX8MP's by-eye
+part is open (#17). What is left is in "Left" at the end.
 
 **2026-10-19, the user's decision:** the demos are not tests or benchmarks.
 The Slint sample stays and is kept working, but no stage 2 criterion is
@@ -158,7 +160,7 @@ for Slint on none.
 |---|---|---|---|
 | 33 scenes run, none failed | yes | yes | yes (counts) |
 | no GL error, no scene out of GPU memory | **no** at 64 MiB (terrain, shadow, refract; 2573 errors); 504d4fae unmeasured | yes (0 errors) | yes (0 errors, `a8fdc9f0`) |
-| every scene's picture checked | **no** | **no** | by value, 33 of 33 (column `imx8mp`); not by eye |
+| every scene's picture checked | **no** | by eye, 33 of 33 right (`d1e77916`, `pi4-glmark2-pictures-by-eye.md`) | by value, 33 of 33 (column `imx8mp`); not by eye (#17) |
 | same picture on every board | **no** | **no** | **no** |
 | frame rate, glmark2 | per scene | score and 3 scenes | per scene (`a8fdc9f0`) |
 | frame rate, Slint | none | none | none |
@@ -194,8 +196,10 @@ for Slint on none.
    33 scenes each, all from the runs of main `445c5653` (2026-10-20,
    `tools/cts/RESULTS.md`). None is black or absent. The `am62p` column
    matches the earlier one, which was looked at on the panel at `bc43ea09`,
-   in 29 of 33 scenes. The `pi4` and `imx8mp` columns are regression
-   baselines: nobody looked at them by eye.
+   in 29 of 33 scenes. At this commit the `pi4` and `imx8mp` columns were
+   regression baselines. The `pi4` column has since been looked at by eye, 33
+   of 33 right (`d1e77916`, `docs/notes/pi4-glmark2-pictures-by-eye.md`); the
+   `imx8mp` column is still a regression baseline (#17).
 3. **Make the i.MX8MP's glmark2 evidence per scene.** It has no console: carry
    the per-scene picture values and fps in the SNVS record (`record.rs`,
    decoded by `tools/board.sh`) or give the board a console path. Without
@@ -246,12 +250,15 @@ for Slint on none.
 7. **Check terrain and refract on a board.** Both are "fixed on the host" and
    no picture has been checked; item 1 supplies the check; run both on all
    three boards and put the result in `README.md`.
-   Status: done by value on the three boards, by eye on the AM62P only. At
+   Status: done by value on the three boards, by eye on the AM62P and, since
+   `d1e77916`, the Pi 4 (terrain and refract included,
+   `pi4-glmark2-pictures-by-eye.md`); the i.MX8MP's is open (#17). At
    main `445c5653` all three boards drew terrain and refract, and neither is
    black on any of them (`tools/cts/glmark2-pictures.txt`). Terrain's mean
    is 120 129 44 on the AM62P and the Pi 4. The AM62P's terrain and refract
    were looked at on the panel at `bc43ea09` (green hills, the bunny). The
-   Pi 4 and i.MX8MP have no camera on their panels. Frame times at
+   Pi 4 and i.MX8MP have no camera on their panels (the Pi 4 was checked from
+   its frame dump). Frame times at
    `445c5653`: terrain 94.0 ms on the AM62P and 179.3 ms on the Pi 4;
    refract 375.5 ms and 18.7 ms. The i.MX8MP runs both at 1 FPS.
 8. **Settle the Slint picture across boards.** Decide whether the Pi 4's
@@ -301,8 +308,9 @@ What is left is tracked in GitHub issues, not here:
 
 Items 1, 2, 3, 5 and 10 are done at main `445c5653`. Item 7 is done by value.
 
-- Pictures by eye: the `pi4` and `imx8mp` columns are regression baselines.
-  Nobody has looked at those two panels (no camera). The i.MX8MP's
+- Pictures by eye: the Pi 4's 33 pictures are checked, all right (`d1e77916`,
+  `docs/notes/pi4-glmark2-pictures-by-eye.md`). The `imx8mp` column is still a
+  regression baseline: nobody has looked at that panel (no camera, #17). Its
   `[texture] texture-filter=mipmap` picture changed at `0d21ab47`, and which
   picture is right is not known (`tools/cts/RESULTS.md`, i.MX8MP notes).
 - Speed: terrain, shadow and refract on the AM62P (94, 353 and 376 ms a
