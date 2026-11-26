@@ -18,7 +18,7 @@
 //!
 //! Not reachable from tests/, left to src/pvr/backend_tests.rs:
 //! * the 2x layout (pixel (x, y) reads word (x, 2y); row = ceil(w / ZLS_TILE)
-//!   * ZLS_TILE words): the GL core stores 4 samples for every request of
+//!   times ZLS_TILE words): the GL core stores 4 samples for every request of
 //!   1..=4 on this back end (`max_samples` 4), so no draw names a 2x buffer;
 //!   build a `DsBuf` with `samples` 2 in the unit test;
 //! * -EINVAL from `ds_sample0` (`ds_bytes(w, h, samples)` > `mem.size`): every
