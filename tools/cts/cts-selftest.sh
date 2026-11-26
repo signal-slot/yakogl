@@ -44,6 +44,12 @@
 # list, not-pass list and rule file.
 # Check 63 runs glmark2-log-check-selftest.sh (the layout and redaction checker
 # of a glmark2 board-session log directory), its count pinned.
+# Check 65 runs readme-glmark2-check-selftest.sh (readme-glmark2-check.py's
+# --scenes, --verdicts, --status, --checklist and --roadmap on
+# testdata/readme-glmark2-scenes/), by exit status. Check 66 runs the
+# WEBSITE_GLMARK2_DIR mode of tools/website-check.sh on
+# testdata/website-glmark2/: match exits 0, mismatch exits 1 naming the figure,
+# absent exits 0 with a "skipped" note; each fixture must give its own status.
 set -u
 
 HERE=$(dirname "$0")
@@ -1110,6 +1116,36 @@ else
     bad "readme-glmark2-strict-selftest.sh failed"
     printf '%s\n' "$rgs_out" | tail -8 | sed 's/^/        | /'
 fi
+
+# 65: readme-glmark2-check-selftest.sh judges its own cases and ends on
+# "readme-glmark2-check-selftest: all cases passed"; this row is its exit status.
+echo
+echo "== 65. readme-glmark2-check-selftest.sh"
+if rgc_out=$(bash "$HERE/readme-glmark2-check-selftest.sh" 2>&1); then
+    ok "readme-glmark2-check.py: scenes, verdicts, STATUS, checklist and ROADMAP cases"
+else
+    bad "readme-glmark2-check-selftest.sh failed"
+    printf '%s\n' "$rgc_out" | tail -8 | sed 's/^/        | /'
+fi
+
+# 66: the glmark2 fixture mode of website-check.sh, one fixture per expected
+# exit status (match 0, mismatch 1 with the figure named, absent 0 and skipped).
+echo
+echo "== 66. website-check.sh glmark2 fixtures (testdata/website-glmark2)"
+wg_dir="$HERE/testdata/website-glmark2"
+wg_case() {  # name want-status want-text
+    local out rc
+    out=$(WEBSITE_GLMARK2_DIR="$wg_dir/$1" bash "$HERE/../website-check.sh" 2>&1); rc=$?
+    if [ "$rc" -eq "$2" ] && case "$out" in *"$3"*) true ;; *) false ;; esac; then
+        ok "website-check glmark2 $1: exit $2, \"$3\""
+    else
+        bad "website-check glmark2 $1: exit $rc, wanted $2 with \"$3\""
+        printf '%s\n' "$out" | tail -8 | sed 's/^/        | /'
+    fi
+}
+wg_case match 0 "glmark2 fixture ok"
+wg_case mismatch 1 "glmark2.pi4: value is"
+wg_case absent 0 "glmark2 comparison skipped"
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
