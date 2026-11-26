@@ -50,6 +50,8 @@
 # WEBSITE_GLMARK2_DIR mode of tools/website-check.sh on
 # testdata/website-glmark2/: match exits 0, mismatch exits 1 naming the figure,
 # absent exits 0 with a "skipped" note; each fixture must give its own status.
+# Check 67 runs one-commit-rehearsal-selftest.sh (one-commit-docs.py on three
+# synthetic records and a copy of the six doc files, then both checkers).
 set -u
 
 HERE=$(dirname "$0")
@@ -1146,6 +1148,17 @@ wg_case() {  # name want-status want-text
 wg_case match 0 "glmark2 fixture ok"
 wg_case mismatch 1 "glmark2.pi4: value is"
 wg_case absent 0 "glmark2 comparison skipped"
+
+# 67: one-commit-rehearsal-selftest.sh rehearses one-commit-docs.py and both
+# checkers on synthetic records; this row is its exit status.
+echo
+echo "== 67. one-commit-rehearsal-selftest.sh"
+if ocr_out=$(bash "$HERE/one-commit-rehearsal-selftest.sh" 2>&1); then
+    ok "one-commit-docs.py edit passes readme-glmark2-check.py and website-check.sh; a one-point data.js change fails"
+else
+    bad "one-commit-rehearsal-selftest.sh failed"
+    printf '%s\n' "$ocr_out" | tail -8 | sed 's/^/        | /'
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
