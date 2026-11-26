@@ -109,5 +109,60 @@ if [ $rc = 0 ] && [ "$(grep -c '^[A-Za-z0-9]* dEQP-GLES2' <<<"$out")" = "$(print
 	ok "--dry-run still names every row with its filter, no environment, nothing built"
 else bad "--dry-run: rc $rc: $(cat "$W/err")"; fi
 
+# SHA256SUMS and COMMIT for preflight.sh: a fake builder (T6_DEQP_BUILDER)
+# makes the row directories, the real script writes the two files
+cat > "$W/fake-builder.sh" <<'EOF'
+#!/bin/bash
+# fake deqp-tree-images.sh: nanopc_t6 [--dry-run] <table> <img-dir> [LABEL...]
+shift
+dry=; [ "${1:-}" = --dry-run ] && { dry=1; shift; }
+tab=$1 out=$2; shift 2
+sel=$(awk '/^# image [A-Za-z0-9]+:/ { l = $3; sub(/:$/, "", l); print l }' "$tab")
+[ $# -gt 0 ] && sel=$(printf '%s\n' "$@")
+for l in $sel; do
+	if [ -n "$dry" ]; then echo "$l dEQP-GLES2.x.*"; continue; fi
+	mkdir -p "$out/$l/zephyr"
+	if [ "$l" = FAILROW ]; then echo "$l rc=1 sha256=none build=none" > "$out/$l.built"; continue; fi
+	echo "image of $l" > "$out/$l/zephyr/zephyr.bin"
+	echo "$l rc=0 sha256=x build=y" > "$out/$l.built"
+done
+EOF
+chmod +x "$W/fake-builder.sh"
+printf '# image A1: x\ndEQP-GLES2.a.*\n# image B2: y\ndEQP-GLES2.b.*\n# image FAILROW: z\ndEQP-GLES2.c.*\n' > "$W/fake.txt"
+export T6_DEQP_BUILDER=$W/fake-builder.sh
+HEAD_SHA=$(git -C "$HERE/../.." rev-parse HEAD)
+out=$("$S" --dry-run "$W/fake.txt" "$W/img3" A1 B2 2>"$W/err"); rc=$?
+if [ $rc = 0 ] && grep -q "would write $W/img3/SHA256SUMS: .*A1/zephyr/zephyr.bin" <<<"$out" &&
+	grep -q "would write $W/img3/COMMIT: $HEAD_SHA" <<<"$out" && [ ! -e "$W/img3" ]; then
+	ok "--dry-run prints the SHA256SUMS and COMMIT it would write, writes nothing"
+else bad "dry-run sums: rc $rc: $out $(cat "$W/err")"; fi
+
+out=$("$S" "$W/fake.txt" "$W/img3" A1 B2 2>"$W/err"); rc=$?
+want=$(cd "$W/img3" && sha256sum A1/zephyr/zephyr.bin B2/zephyr/zephyr.bin)
+if [ $rc = 0 ] && [ "$(cat "$W/img3/SHA256SUMS")" = "$want" ] && [ "$(cat "$W/img3/COMMIT")" = "$HEAD_SHA" ]; then
+	ok "a build writes SHA256SUMS (sha256sum format, every label) and COMMIT (full HEAD)"
+else bad "sums: rc $rc: $(cat "$W/img3/SHA256SUMS" 2>&1) $(cat "$W/err")"; fi
+
+# preflight.sh's row-dir check on that directory: a throw-away repository
+# whose origin/main is the build commit stands in for the real one
+mkdir "$W/prepo"
+git -C "$W/prepo" init -q && git -C "$W/prepo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
+git -C "$W/prepo" rev-parse HEAD > "$W/img3/COMMIT"
+git -C "$W/prepo" update-ref refs/remotes/origin/main HEAD
+pf=$(PREFLIGHT_REPO=$W/prepo T6_UART=x T6_HAND=x bash "$HERE/../../driver/tools/uboot-t6/preflight.sh" "$W/img3" 2>&1)
+if grep -q "^ok   c: A1/zephyr/zephyr.bin exists, sha256 matches" <<<"$pf" &&
+	grep -q "^ok   c: B2/zephyr/zephyr.bin exists, sha256 matches" <<<"$pf" &&
+	grep -q "^ok   c: build commit" <<<"$pf" && ! grep -q '^FAIL c:' <<<"$pf"; then
+	ok "preflight.sh accepts the SHA256SUMS and (a reachable) COMMIT"
+else bad "preflight: $pf"; fi
+
+# a row that failed is named and left out
+out=$("$S" "$W/fake.txt" "$W/img4" A1 FAILROW 2>"$W/err"); rc=$?
+if [ $rc = 0 ] && [ "$(wc -l < "$W/img4/SHA256SUMS")" = 1 ] && ! grep -q FAILROW "$W/img4/SHA256SUMS" &&
+	grep -q "FAILROW is not listed" "$W/err"; then
+	ok "a failed row is left out of SHA256SUMS and named"
+else bad "failed row: rc $rc: $(cat "$W/err")"; fi
+unset T6_DEQP_BUILDER
+
 [ $fail = 0 ] && echo "t6-deqp-images-selftest: all ok"
 exit $fail

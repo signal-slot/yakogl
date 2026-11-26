@@ -28,8 +28,46 @@
 # checked against (a real stage 1 in DEQP_WORK, the west workspace in
 # ZEPHYR_WS, driver/src/fw/mali_csffw_blob.h) is refused at build time, as
 # before. Self-test without toolchain or board: tools/cts/t6-deqp-images-selftest.sh.
+#
+# After a build that exits 0 the script writes, for driver/tools/uboot-t6/
+# preflight.sh and tools/cts/t6-uboot-rows.sh, <img-dir>/SHA256SUMS (sha256sum
+# format, "<sum>  <LABEL>/zephyr/zephyr.bin") for every selected label whose
+# <LABEL>.built says rc=0 and whose image is not empty, and <img-dir>/COMMIT
+# (the full hash of the repository HEAD the builder built from). Both files
+# are rewritten, not merged: a later selective build into the same directory
+# lists only its own labels. --dry-run prints what would be written and writes
+# nothing. T6_DEQP_BUILDER names another builder script (the self-test's
+# seam: a fake build that makes no image of its own).
+BUILDER=${T6_DEQP_BUILDER:-$(dirname "$0")/deqp-tree-images.sh}
 if [ "${1:-}" != --plan ]; then
-	exec "$(dirname "$0")/deqp-tree-images.sh" nanopc_t6 "$@"
+	DRY=
+	[ "${1:-}" = --dry-run ] && DRY=1
+	"$BUILDER" nanopc_t6 "$@" || exit $?
+	[ -n "$DRY" ] && shift
+	[ $# -ge 2 ] || exit 0
+	TABLE=$1 OUT=$2
+	shift 2
+	REPO=$(cd "$(dirname "$0")/../.." && pwd)
+	COMMIT=$(git -C "$REPO" rev-parse HEAD) || { echo "t6-deqp-images: no repository HEAD for COMMIT" >&2; exit 2; }
+	SEL=$("$BUILDER" nanopc_t6 --dry-run "$TABLE" "$OUT" "$@" | cut -d' ' -f1) || exit 2
+	if [ -n "$DRY" ]; then
+		for l in $SEL; do echo "t6-deqp-images: would write $OUT/SHA256SUMS: <sha256>  $l/zephyr/zephyr.bin"; done
+		echo "t6-deqp-images: would write $OUT/COMMIT: $COMMIT"
+		exit 0
+	fi
+	: > "$OUT/SHA256SUMS.new"
+	for l in $SEL; do
+		img=$OUT/$l/zephyr/zephyr.bin
+		if ! grep -q "^$l rc=0 " "$OUT/$l.built" 2>/dev/null || [ ! -s "$img" ]; then
+			echo "t6-deqp-images: $l is not listed in SHA256SUMS (no rc=0 build with an image)" >&2
+			continue
+		fi
+		(cd "$OUT" && sha256sum "$l/zephyr/zephyr.bin") >> "$OUT/SHA256SUMS.new"
+	done
+	mv "$OUT/SHA256SUMS.new" "$OUT/SHA256SUMS"
+	echo "$COMMIT" > "$OUT/COMMIT"
+	echo "t6-deqp-images: wrote $OUT/SHA256SUMS ($(grep -c . "$OUT/SHA256SUMS") images) and $OUT/COMMIT (${COMMIT:0:8})"
+	exit 0
 fi
 shift
 HERE=$(cd "$(dirname "$0")" && pwd)
