@@ -408,6 +408,21 @@ check "undo: exit 0, /boot/yakogl gone, 'stock /boot restored' (rc $rc)" \
 	"$([ "$rc" = 0 ] && [ ! -e "$root/boot/yakogl" ] && grep -q 'stock /boot restored' <<<"$out"; echo $?)"
 check "undo: the stock files keep their bytes" "$([ "$(stock)" = "$stock_before" ]; echo $?)"
 
+# A whole stage-and-undo cycle leaves /boot identical: every entry (path,
+# type, mode, link target) and every file's checksum, not only the files the
+# fingerprint names.
+tree() { (cd "$root/boot" && find . -printf '%p %y %m %l\n' | sort && find . -type f -print0 | sort -z | xargs -0 sha256sum); }
+tree_before=$(tree)
+out=$(fake bash "$here/stage.sh" stage "$tmp/t6_hello.bin" "$fp")
+rc=$?
+added=$(diff <(printf '%s\n' "$tree_before") <(tree) || true)
+check "cycle: stage only added /boot/yakogl entries, removed or changed nothing (rc $rc)" \
+	"$([ "$rc" = 0 ] && ! grep -q '^<' <<<"$added" && [ "$(grep '^>' <<<"$added" | grep -vc '\./yakogl')" = 0 ]; echo $?)"
+out=$(fake bash "$here/stage.sh" undo "$fp")
+rc=$?
+check "cycle: after undo /boot is byte-identical to before stage, modes and links too (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(tree)" = "$tree_before" ]; echo $?)"
+
 # undo after a stock file changed (a kernel update): /boot/yakogl is removed
 # all the same, the change is named, exit 1.
 out=$(fake bash "$here/stage.sh" stage "$tmp/t6_hello.bin" "$fp")
@@ -456,6 +471,24 @@ bad=$(grep -vE "$allowed" <<<"$writes" || true)
 check "every write sent is in the list, no device, dd, module or reboot (other: '${bad:0:200}')" "$([ -z "$bad" ]; echo $?)"
 check "the writes were sent: the stage and the undo" \
 	"$(grep -q '^rm -rf -- /boot/yakogl && sync$' <<<"$writes" && grep -q 'install -d -m 0755 /boot/yakogl' <<<"$writes"; echo $?)"
+# The rules about the board, as strings: nothing sent over ssh by stage.sh or
+# by the dry runs, and nothing typed at U-Boot's prompt, saves or changes the
+# environment (so no undo is owed), writes the eMMC, loads or unloads a
+# module, or touches systemd, sshd or Tailscale. (The dry runs' ssh reads
+# `systemctl is-system-running` and kexec_loaded: read only, taken out first.)
+banned='saveenv|setenv|env (set|save|default)|fw_setenv|mmc (write|erase|dev|part)|ext4write|fatwrite|mtd |sf (write|erase)|modprobe|rmmod|insmod|systemctl|(^|[ ;|&])service |tailscale|sshd|kexec'
+check "stage.sh sent no saveenv, setenv, mmc write, module, systemctl, tailscale or sshd command" \
+	"$(! sed '/^---$/d' "$tmp/ssh.log" | grep -Eq "$banned"; echo $?)"
+readonly_log() { sed '/^---$/d; /^[[:space:]]*#/d; s/systemctl is-[a-z-]*//g; s/kexec_loaded//g; s/(pts|sshd)//' "$tmp/go.log"; }
+check "prompt-go.sh and prompt-reads.sh dry runs sent no banned command over ssh ('$(readonly_log | grep -Eo ".{0,20}($banned).{0,20}" | head -n 1)')" \
+	"$(! readonly_log | grep -Eq "$banned"; echo $?)"
+plan=$(python3 -I "$here/prompt-go.py" plan t6_hello.bin 4096 deadbeef)
+check "prompt-go.py's plan types only ext4size, printenv filesize, ext4load, md.l, crc32 and go: no setenv, saveenv, mmc write (no undo owed)" \
+	"$(! grep -Eq "$banned" <<<"$plan" &&
+		[ "$(sed 's/ *#.*//; /^$/d' <<<"$plan" | grep -Evc '^(ext4size mmc 0:1 /boot/yakogl/t6_hello.bin|printenv filesize|ext4load mmc 0:1 0x10000000 /boot/yakogl/t6_hello.bin|md.l 0x[0-9a-f]+ 1|crc32 0x10000000 1000|go 0x10000000)$')" = 0 ]; echo $?)"
+# Addresses, UART paths and credentials come from the environment only.
+check "stage.sh, prompt-go.*, prompt-lib.sh hold no IPv4 address, UART device path or credential" \
+	"$(! grep -nE '\b[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b|/dev/tty|sshpass|pass(wor)?d|IdentityFile' "$here/stage.sh" "$here/prompt-go.sh" "$here/prompt-go.py" "$here/prompt-lib.sh" | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' | grep -q .; echo $?)"
 check "no command of stage.sh or of prompt-go.sh's dry runs asks for a reboot" \
 	"$(! cat "$tmp/ssh.log" "$tmp/go.log" | grep -q 'reboot'; echo $?)"
 
