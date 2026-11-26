@@ -136,7 +136,7 @@ order the board.sh steps run (`tools/board.sh:92-120`):
 | 5 console capture | `BOARD_UART` read only (the typed route also writes it) | the runner's |
 | 6 boot | `BOARD_BOOT=standalone`: the armed one-shot; no board.sh code arms it | wired as an exec; install is a direct call |
 | 7 wait for the end | `END_RE` above, bound `RUN_BOUND` + `RETURN_BOUND` | the runner's |
-| 8 read the records | the DK's image prints `yk-record:` lines (`driver/zephyr/lib/board/stm32mp2/board_stm32mp2.c:29`) | not read by either DK runner; their `result=` is the image's final PASS/FAIL line |
+| 8 read the records | the DK's image prints `yk-record:` lines (`driver/zephyr/lib/board/stm32mp2/board_stm32mp2.c:29`) | read by the typed runner (`result=record:<KIND>`, `resets=`, `record=`), not by the env-armed one; the fallback `result=` is the image's final PASS/FAIL line |
 | 9 the verdict line | board.sh's format, section below | the DK runners print a shorter variant |
 | 10 clean up | one-shot gone, staged image removed | the runner's |
 
@@ -146,8 +146,10 @@ boot_verdict=<bv> result=<record:KIND|legacy:end line|none> resets=<n|absent>
 record=<w0,w1,w2,w3|absent> back_after=<s>s`. The env-armed runner prints
 `... boot=uboot-sd <row|blind> boot_verdict= result=<pass|fail:<prog>|none>
 back_after=` (`tools/board-stm32mp2.sh:269-276`), the typed runner
-`... boot=<uboot-mmc|uboot-tftp> row boot_verdict= result= env_diff= boot_diff=
-back_after=` (`tools/board-stm32mp2-uboot.sh:123-130`). A sign-off row needs one
+`... boot=<uboot-mmc|uboot-tftp> row boot_verdict= result= resets= record=
+env_diff= boot_diff= back_after=` (`tools/board-stm32mp2-uboot.sh`; it decodes the
+image's last `yk-record:` line with `yakogl-tools record`, the fallbacks are
+`pass:<prog>`/`fail:<prog>`/`none`, no board has yet printed one through it). A sign-off row needs one
 shape. The verdict words that count as a pass are `done` (rc 0) and, for the
 hang trial only, `watchdog_reset` (rc 0). `returned` (a blind run) and
 `done` with `row_eligible=no` are never a row.
@@ -181,7 +183,7 @@ Each gap is a change to a file; none of them is made by this note.
 |---|---|---|---|
 | G1 | `BOARD_BOOT=standalone` forwards only `run` and `status`: `install`, `uninstall`, `disarm`, `env-edit`, `probe` and `--expect-watchdog` are refused with a pointer to a direct runner call (`tools/board.sh:319-321`; pinned by `tools/board_selftest.sh:448-451`). A row's pre-conditions (hook installed) are therefore not reachable through board.sh | `tools/board.sh` | #396/#397 |
 | G2 | The DK's default `run` (`BOARD_BOOT` unset) is the typed route, which writes the console; a P10 row must name `BOARD_BOOT=standalone` every time, and the verdict line names `boot=uboot-sd`, which is not in board.sh's `BOOTS` for the DK (`uboot-mmc uboot-tftp`, `:535-536`) | `tools/board.sh`, `tools/board-stm32mp2.sh` | #396/#397 |
-| G3 | Three verdict-line shapes (section 4); `resets=` and `record=` are absent on the DK lines. The DK layer prints `yk-record:` lines but neither DK runner decodes them (`yakogl-tools record --line`), so `result=record:<KIND>` cannot be produced | `tools/board-stm32mp2.sh`, `tools/board-stm32mp2-uboot.sh`, `tools/board.sh` | #396/#397 for board.sh; the DK runners are P10's |
+| G3 | Three verdict-line shapes (section 4); `resets=` and `record=` are absent on the DK lines. The DK layer prints `yk-record:` lines the typed runner now decodes them (`yakogl-tools record`); the env-armed runner `tools/board-stm32mp2.sh` does not yet | `tools/board-stm32mp2.sh`, `tools/board-stm32mp2-uboot.sh`, `tools/board.sh` | #396/#397 for board.sh; the DK runners are P10's |
 | G4 | `tally` and `diff` are not DK verbs in board.sh (`:336-345`); the DK's tally is `tools/board-stm32mp2.sh tally <rundir>`. `tree` is refused for the DK (`:2988`): the DK's dEQP and gl_test sweeps are driven by `tools/cts/mp2-deqp-sweep.sh` and `tools/cts/mp2-gltest-shards.py` | `tools/board.sh` | #396/#397 |
 | G5 | The counted default has no `run`-like verb: `default <image> N` reboots nothing and reads nothing; the reboot, the N-boot console scan and the come-back check are `tools/mp2s_session.sh`, `tools/mp2s_console_watch.py`, `tools/mp2s_record_check.py` and `tools/mp2s_comeback.sh`, none called from board.sh. Its proof is one session, not a row | `tools/board.sh`, `tools/board-stm32mp2-standalone.sh` | P10 session; board.sh part #396/#397 |
 | G6 | No reset hook: a `not_back` leaves the board to a person (section 4). The session needs the reset resource written into its procedure, and the runner's NEEDS A PERSON line needs to say what the next step is | the session procedure (this note, section 6); `tools/board-stm32mp2.sh` message | P10 |

@@ -123,8 +123,19 @@
 # The verdict line (board.sh's shape; a run from U-Boot is a row, never DEV),
 # printed and written to the record as verdict.txt:
 #   board-stm32mp2-uboot.sh stm32mp257f-dk <name> rc=<rc> verdict=<v>
-#       boot=<uboot-mmc|uboot-tftp> row boot_verdict=<scan> result=<pass:<prog>|fail:<prog>|none>
+#       boot=<uboot-mmc|uboot-tftp> row boot_verdict=<scan>
+#       result=<record:<KIND>|pass:<prog>|fail:<prog>|none> resets=<n|absent> record=<w0,w1,w2,w3|absent>
 #       env_diff=<empty|changed|absent> boot_diff=<empty|changed|absent> back_after=<s>s|absent
+# result=, resets= and record= follow tools/board.sh's verdict line. The image's
+# last result "yk-record: w0 w1 w2 w3" line of the console (driver/zephyr/lib/
+# board/stm32mp2) is decoded with `yakogl-tools record` (YAKOGL_TOOLS, else
+# built here with cargo): result=record:<KIND>, record= its four words, resets=
+# its GPU reset count. A record whose status is fail makes verdict=failed, one
+# with another status than pass or n/a (invalid) verdict=bad_record (rc 4). A
+# console without a record line, or with a garbled one (not exactly four
+# 8-digit hex words), a breadcrumb or a checksum, keeps the earlier result=
+# (the image's last "<prog>: PASS: " or "FAIL: " line, else none) with
+# resets=absent record=absent: a garbled line is never a pass.
 # boot_verdict is mp2_uboot_console.py scan's (done, refused, watchdog_reset,
 # not_stopped, no_go, not_started, hang). verdict=done: the scan is done, no
 # FAIL line, both diffs empty; failed: a "<prog>: FAIL: " line; env_changed /
@@ -790,6 +801,45 @@ cmd_disarm() {
 }
 
 # ---- run ------------------------------------------------------------------------------------
+# ytools ARGS...: yakogl-tools (the repository's record decoder), built once
+# from this checkout unless YAKOGL_TOOLS names the binary (as tools/board.sh).
+ytools_resolve() { # called outside $(...), so the variable stays set
+    local td
+    [ -z "${YAKOGL_TOOLS:-}" ] || return 0
+    (cd "$REPO" && cargo build -q -p yakogl-tools) >&2 || return 2
+    td=$(cd "$REPO" && cargo metadata --no-deps --format-version 1 2>/dev/null |
+        sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+    YAKOGL_TOOLS=$td/debug/yakogl-tools
+    [ -x "$YAKOGL_TOOLS" ] || { YAKOGL_TOOLS=; return 2; }
+    export YAKOGL_TOOLS
+}
+ytools() { "$YAKOGL_TOOLS" "$@"; }
+# decode_record FILE: the last result yk-record line of the console, decoded
+# by yakogl-tools. A line that is not "yk-record: " and four 8-digit hex words
+# is no record (a garbled one is absent, never a pass), nor is a breadcrumb or
+# a checksum. Sets REC_RES (record:<KIND>, else empty), REC_WORDS (w0,w1,w2,w3,
+# else absent), REC_RESETS (n, else absent) and REC_STATUS (the record's own
+# status: pass, fail, n/a, invalid; else empty).
+REC_RES= REC_WORDS=absent REC_RESETS=absent REC_STATUS=
+decode_record() {
+    local f=$1 w line cls kname
+    REC_RES= REC_WORDS=absent REC_RESETS=absent REC_STATUS=
+    [ -s "$f" ] && grep -aq 'yk-record: ' "$f" || return 0
+    ytools_resolve || { echo "$TAG: WARNING: yakogl-tools is not available: the image's yk-record lines are not decoded" >&2; return 0; }
+    w=$(ytools record --log "$f" 2>/dev/null | sed -n 's/^verdict record: //p')
+    [[ $w =~ ^[0-9a-f]{8}( [0-9a-f]{8}){3}$ ]] || return 0
+    # shellcheck disable=SC2086  # four words
+    line=$(ytools record --line $w 2>/dev/null) || return 0
+    cls=$(sed -n 's/^class=\([^ ]*\).*/\1/p' <<<"$line")
+    [ "$cls" = verdict ] || return 0
+    kname=$(sed -n 's/.* name=\([^ ]*\).*/\1/p' <<<"$line")
+    { [ -n "$kname" ] && [ "$kname" != '?' ]; } || return 0
+    REC_RES="record:$kname"
+    REC_WORDS=${w// /,}
+    REC_RESETS=$(sed -n 's/.* resets=\([^ ]*\).*/\1/p' <<<"$line")
+    REC_RESETS=${REC_RESETS:-absent}
+    REC_STATUS=$(sed -n 's/.* status=\([^ ]*\).*/\1/p' <<<"$line")
+}
 verdict_line() { # verdict_line DIR: V_LINE, V_RC
     local dir=$1 bv res v rc ed bd after l t0 t1 expect sl p hung ended
     bv=$(mget scan "$dir"); bv=${bv:-absent}
@@ -803,6 +853,9 @@ verdict_line() { # verdict_line DIR: V_LINE, V_RC
     t0=$(mget t_reboot "$dir"); t1=$(mget t_back "$dir")
     if [ "$(mget back "$dir")" = 1 ] && [ -n "$t0" ] && [ -n "$t1" ]; then after="$((t1 - t0))s"; else after=absent; fi
     expect=$(mget expect_wdog "$dir")
+    # the image's own record, when it printed one: result=record:<KIND>, record=, resets=
+    decode_record "$dir/console.ts"
+    [ -z "$REC_RES" ] || res=$REC_RES
     sl=" $(mget scan_line "$dir") "
     hung=0 ended=0
     if [ -s "$dir/console.ts" ]; then
@@ -815,7 +868,8 @@ verdict_line() { # verdict_line DIR: V_LINE, V_RC
     elif [ "$ed" != empty ]; then v=env_changed; rc=6
     elif [ "$bd" != empty ]; then v=boot_changed; rc=6
     elif [ "$(mget cleanup "$dir")" != removed ]; then v=not_cleaned; rc=5
-    elif [ "${res%%:*}" = fail ]; then v=failed; rc=4
+    elif [ "${res%%:*}" = fail ] || [ "$REC_STATUS" = fail ]; then v=failed; rc=4
+    elif [ -n "$REC_RES" ] && [ "$REC_STATUS" != pass ] && [ "$REC_STATUS" != n/a ]; then v=bad_record; rc=4
     elif [ "$(mget boot "$dir")" = uboot-tftp ] && [ "$bv" = no_go ] && ! grep -qE ' cycles=[01] ' <<<"$sl" &&
         grep -qE ' stopped=(yes|[+])' <<<"$sl" && grep -qF ' go=absent ' <<<"$sl" && grep -qF ' refused=absent ' <<<"$sl"; then
         v=fetch_reset; rc=4    # reset at the prompt, before go: the route refused, not the image
@@ -826,7 +880,7 @@ verdict_line() { # verdict_line DIR: V_LINE, V_RC
         else v=$bv; rc=4; fi
     elif [ "$bv" = done ]; then v=done; rc=0
     else v=$bv; rc=4; fi
-    V_LINE="$TAG $(mget name "$dir") rc=$rc verdict=$v boot=$BOOT row boot_verdict=$bv result=$res env_diff=$ed boot_diff=$bd back_after=$after"
+    V_LINE="$TAG $(mget name "$dir") rc=$rc verdict=$v boot=$BOOT row boot_verdict=$bv result=$res resets=$REC_RESETS record=$REC_WORDS env_diff=$ed boot_diff=$bd back_after=$after"
     V_RC=$rc
 }
 # make_rundir LOGDIR BASE: RD, a directory no other run has: BASE, else
@@ -924,7 +978,7 @@ cmd_run() {
         echo "DRY host\$ diff <rundir>/env-before.txt <rundir>/env-after.txt   # must be empty"
         echo "DRY host\$ diff <rundir>/boot-sha256.txt <rundir>/boot-sha256.after.txt   # must be empty"
         [ "$EXPECT_WDOG" = 0 ] || echo "DRY host\$ --expect-watchdog: verdict=watchdog_reset (rc 0) needs the scan's watchdog_reset, the hang line and no PSCI SYSTEM_RESET line; else psci_reset_before_wdog or no_hang (rc 4)"
-        echo "DRY host\$ the verdict line (also <rundir>/verdict.txt): $TAG $name rc=<rc> verdict=<v> boot=$BOOT row boot_verdict=<scan> result=<r> env_diff=<empty|changed> boot_diff=<empty|changed> back_after=<s>s"
+        echo "DRY host\$ the verdict line (also <rundir>/verdict.txt): $TAG $name rc=<rc> verdict=<v> boot=$BOOT row boot_verdict=<scan> result=<r> resets=<n|absent> record=<w0,w1,w2,w3|absent> env_diff=<empty|changed> boot_diff=<empty|changed> back_after=<s>s"
         BOARD_FILES=(); TFTP_FILES=()
         exit 0
     fi
