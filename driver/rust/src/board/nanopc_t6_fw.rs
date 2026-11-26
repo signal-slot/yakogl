@@ -1256,6 +1256,89 @@ pub(crate) mod tests {
         assert_eq!(pmu_writes(&t6), 0);
     }
 
+    /// The T6 as read at the U-Boot prompt on 2026-11-12 (hand-over note
+    /// section 4; nanopc_t6_gpu's `handed_over_at_the_u_boot_prompt`): the
+    /// GPU clock on SPLL (CLKSEL_CON(158) 0x1f80), PD_GPU off and in bus idle,
+    /// CPLL at 1500 MHz, BUCK1_ON_VSEL 0x1c, DCDC1 on or off.
+    fn at_the_u_boot_prompt(blob: &[u8], dcdc1_on: bool) -> T6 {
+        let t6 = T6::handed_over(blob.to_vec()).with_clock(0x1f80);
+        t6.rk806.borrow_mut().insert(0, if dcdc1_on { 0x0f } else { 0x0e });
+        for (a, v) in [
+            (CRU_BASE + clkgate_con(66), 0x4),
+            (PMU_BASE + pd_gpu::PWR_GATE, 0xfff9),
+            (PMU_BASE + pd_gpu::BUS_IDLE_REQ, 0),
+            (PMU_BASE + pd_gpu::BUS_IDLE_ACK, 0x0002_1fff),
+            (PMU_BASE + pd_gpu::BUS_IDLE_ST, 0x0002_1fff),
+            (PMU_BASE + pd_gpu::REPAIR_STATUS, 0xfff7_0001),
+        ] {
+            t6.soc.borrow_mut().insert(a, v);
+        }
+        t6
+    }
+
+    #[test]
+    fn the_state_read_at_the_u_boot_prompt_boots_to_the_ping_like_the_kexec_state() {
+        let blob = synth::small();
+        let kexec = run(&T6::handed_over(blob.clone()), &blob);
+        assert_booted(&kexec);
+        for dcdc1_on in [true, false] {
+            let t6 = at_the_u_boot_prompt(&blob, dcdc1_on);
+            let mut z1 = GpuUp::default();
+            let o = fw_up(
+                &t6,
+                B,
+                &blob,
+                &backings(&blob),
+                &mut vec![[0u64; ENTRIES]; 16],
+                TABLES_PA,
+                RK3588_TIMER_HZ,
+                &|a, n| t6.clean(a, n),
+                &mut |_| {},
+                &mut |_| {},
+                &mut z1,
+            );
+            assert_booted(&o);
+            assert_eq!((o.version, o.image_version, o.ping_acked), (0x0105_0000, 0x0105_0000, 1));
+            // the clock: the one masked write, read back 0x1f24 = 300 MHz, no
+            // CLKSEL_CON(159) write
+            assert_eq!(sel158_writes(&t6), vec![0x40ff_0024]);
+            assert_eq!(sel158(&t6), 0x1f24);
+            assert!(t6.writes().iter().all(|w| w.0 != CRU_BASE + clksel_con(159)));
+            assert_eq!(z1.clock.sel158, 0x1f80);
+            assert!(!z1.clock_set.kept);
+            assert_eq!((z1.clock_set.wrote, z1.clock_set.sel), ([0x40ff_0024, 0], [0x1f24, 0]));
+            assert_eq!(z1.clock_set.src_hz, 300_000_000);
+            // the supply: one enable frame with DCDC1 off, none with it on
+            assert_eq!(t6.rk806_writes.borrow().len(), usize::from(!dcdc1_on));
+            assert_eq!(o.supply_enabled, u32::from(!dcdc1_on));
+            // the PD_GPU power-on ran
+            assert!(pmu_writes(&t6) > 0 && t6.gpu_powered());
+            // every field but the hand-over's (the supply enable) is the kexec run's
+            let mut same = o;
+            (same.supply_enabled, same.supply_after, same.supply_waited_us) =
+                (kexec.supply_enabled, kexec.supply_after, kexec.supply_waited_us);
+            assert_eq!(same, kexec, "supply off: {}", !dcdc1_on);
+        }
+    }
+
+    #[test]
+    fn a_z1_refusal_from_the_u_boot_state_ends_at_the_gpu_step_before_any_gpu_or_mcu_write() {
+        let blob = synth::small();
+        // supply off with PD_GPU on, and a CPLL not in normal mode: the clock
+        // cannot be moved onto the table
+        let t6 = at_the_u_boot_prompt(&blob, false).pd_gpu_powered();
+        t6.soc.borrow_mut().insert(CRU_BASE + MODE_CON0, 0);
+        let o = run(&t6, &blob);
+        assert_gpu_stop(&o, nanopc_t6_gpu::Stop::ClockSetRefused, 0, 0);
+        assert_eq!((o.step, o.stop), (STEP_GPU, nanopc_t6_gpu::Stop::ClockSetRefused as u32));
+        assert!(!t6.writes().iter().any(|w| T6::is_gpu(w.0) || T6::is_mcu(w.0)), "{:x?}", t6.writes());
+        assert!(t6.log.borrow().iter().all(|e| matches!(e, Ev::W(..))), "no clean before the stop");
+        assert!(sel158_writes(&t6).is_empty());
+        assert!(t6.rk806_writes.borrow().is_empty());
+        assert_eq!(pmu_writes(&t6), 0);
+        assert!(!t6.dcdc1_on());
+    }
+
     /// The board's file (`MALI_CSFFW`, `tools/cts/deps-env.sh --build
     /// MALI_CSFFW` fetches it) through the whole run. Skipped, with a line on
     /// stderr, when `MALI_CSFFW` is not set or names no file.
