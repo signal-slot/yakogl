@@ -1,0 +1,3 @@
+row	label	cases	status	seconds	lifetime_s	bbm	exit_line
+1	T6S1R01	3	done	13	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 12530 ms
+2	T6S1R02	2	hang	360	600	not-read	verdin_imx95: WDOG3 feeding stopped
