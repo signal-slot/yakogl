@@ -2,8 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the mediump fragment-shader uniform refusal at 8ff01055, its shapes and Mesa 26.2.1 references
 
-**Status: study** (plan #402, item `ref-fsunif`; issue #20). Nothing under
-`src/` changed. The references are `tools/mali/testdata/deqp_fsunif_*`, and
+**Status: study, one shape lowered** (plan #402, items `ref-fsunif` and
+`lower-fsunif`; issue #20). `lower-fsunif` made `struct_basic` byte-equal
+(section 6); the other references stay refused. The references are `tools/mali/testdata/deqp_fsunif_*`, and
 `tests/mali_deqp_fsunif.rs` pins them. Measured HOST-ONLY at the integration
 tip **`7462e3d5c5a5`** (2026-11-25). Nothing in this note was checked on the
 NanoPC-T6. Mesa paths are relative to `src/` of the 26.2.1 tree.
@@ -131,3 +132,37 @@ bi_opt_push_ubo.c`) moves two words that one instruction reads into one
 - The three `arr_*` references cannot check the upload order of the array's
   words (all 0): gl_ref.py would have to set a plain array through
   `u_var[0]`.
+
+## 6. Lowered (`lower-fsunif`, HOST-ONLY)
+
+Measured HOST-ONLY on the tip `0491f842` and nothing more; not checked on
+the NanoPC-T6.
+
+- **`struct_basic` is byte-equal** and in `MATCHED` (compared through
+  `assert_matches_members`). The colour's second word, an fp32 uniform word
+  beside an int uniform's float (`s.b.y`, `s.c`), is the new pair leaf
+  `Leaf::WideInt` of `nir_fs.rs` (`vectorise`'s fp32-word arm, which refused
+  it): the int is converted and narrowed alone (`S32_TO_F32`, `FADD.f32
+  .h0`), the word narrowed alone (`FADD.f32 r1.h0, u3.w0, -0`), the two
+  halves paired by `MKVEC.v2i16` before ATEST, which reads the int's half.
+  The scheduler (`sched.rs`, `bi_pressure_schedule`) sinks the first word's
+  `V2F32_TO_V2F16` past ATEST as Mesa does. The first word was already
+  `Leaf::Wide`.
+- **`deqp_uniarray_struct_member_fs` is byte-equal too** (the same shape,
+  `shaders.struct.uniform.array_member_fragment`): `tests/mali_deqp_uniarray.rs`
+  un-ignores `struct_member_fs` and drops its `FsUniform` pin.
+- The site that raised it in this tree was the `_ =>` of that arm (the
+  section 2 row `nir_fs.rs:9683`; the lines moved since `7462e3d5`).
+- **Still refused**, with their sites in this tree: `arr_bvec4`,
+  `arr_ivec4`, `arr_mat4` and `struct_int_ivec4` at `select.rs:628` (the
+  type); `mat4_add_float` and `mat2_mul_mat2` at the two-uniform-halves
+  arm of `lane_tree` (the section 2 row `nir_fs.rs:10089`). The matrix
+  shapes need Mesa's pairing predicate over fp16 uniform lanes (one half
+  alone as `.h00`/`.h11`, sums of single lanes, `MKVEC.v2i16` of computed
+  halves) and, for `mat2_mul_mat2`, `bi_opt_reorder_push`'s slots; the type
+  shapes need `UboLayout::fs16` rows for arrays and int-member structs.
+- The `FsUniform` pins of `tests/mali_deqp_boolpix.rs` and
+  `tests/mali_deqp_audit.rs` (two struct-member words narrowed as a pair on
+  the `bool_colour`/`int_colour16` routes) did not move: `Leaf::WideInt`
+  covers a word beside an int's float, not that pair.
+- No glmark2 verdict moved (`mali_glmark2_corpus` passes unchanged).

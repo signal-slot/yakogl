@@ -25,7 +25,7 @@
 //! | `struct_int`: a struct of `int`, `ivec4` and arrays of them (`array_in_struct` 11, `nested_structs_arrays` 7) | 18 | 18 / 0 | `select.rs:628` | `struct_int_ivec4` (here) |
 //! | `mat16`: `shaders.matrix.*_{lowp,mediump}_*_fragment`, a mat2/mat3/mat4 whose halves are read across the fp16 pairs | 32 | 32 / 0 | `nir_fs.rs:10089` (two uniform halves that are no aligned pair) | `mat4_add_float`, `mat2_mul_mat2` (here) |
 //! | `mat32`: `shaders.matrix.*_highp_*_fragment`, a highp matrix into the mediump colour | 11 | 11 / 0 | `nir_fs.rs:9678` (two fp32 words that are no aligned pair) | `highp_mat4_add_float` (here) |
-//! | `struct32`: `shaders.struct.uniform.*_fragment`, mediump float members Mesa keeps fp32 | 8 | 7 / 1 | `nir_fs.rs:9683` 4 (a word alone), `nir_fs.rs:9678` 4 | `struct_basic` (here); covered: `deqp_uniarray_struct_member_fs` |
+//! | `struct32`: `shaders.struct.uniform.*_fragment`, mediump float members Mesa keeps fp32 | 8 | 7 / 1 | `nir_fs.rs:9683` 4 (a word alone), `nir_fs.rs:9678` 4 | `struct_basic` (here, matched by lower-fsunif); covered: `deqp_uniarray_struct_member_fs` |
 //! | `arr_bool`: `uniform bool u_var[3]` | 16 | 16 / 0 | `select.rs:628` | covered: `deqp_unif2_fs_bool_uniform` |
 //! | `arr_int`: `uniform mediump int u_var[3]` | 11 | 11 / 0 | `select.rs:628` | covered: `deqp_unif2_fs_int_uniform` |
 //! | `struct_bool`: a struct of `bool`, `bvec4` and arrays of them (`array_in_struct` 11, nested 7) | 18 | 18 / 0 | `select.rs:628` | covered: `deqp_unif2_fs_struct_uniform` |
@@ -50,8 +50,10 @@ const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, 
 
 /// The references the compiler makes byte-equal: `highp_mat4_add_float`,
 /// a shader whose floats are all highp, since a matrix local is not
-/// grafted (plan #387 item fclane-lower-1, nir_fs.rs `grafted_locals`).
-const MATCHED: &[&str] = &["highp_mat4_add_float"];
+/// grafted (plan #387 item fclane-lower-1, nir_fs.rs `grafted_locals`);
+/// `struct_basic`, an fp32 struct word beside an int member's float as one
+/// colour word (plan #402 item lower-fsunif, nir_fs.rs `Leaf::WideInt`).
+const MATCHED: &[&str] = &["highp_mat4_add_float", "struct_basic"];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
@@ -61,7 +63,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("struct_int_ivec4", FS_UNIFORM),
     ("mat4_add_float", FS_UNIFORM),
     ("mat2_mul_mat2", FS_UNIFORM),
-    ("struct_basic", FS_UNIFORM),
 ];
 
 /// [`mali_ref::assert_matches`] of a reference whose struct members
@@ -167,9 +168,9 @@ fn highp_mat4_add_float() {
 
 /// Four fp32 words in FAU u2..u3: `s.a` and `s.b.x` narrowed together
 /// (`V2F32_TO_V2F16 r0, u2.w0, u2.w1`), `s.b.y` alone (`FADD.f32 r1.h0,
-/// u3.w0, -0`), the int `s.c` through `S32_TO_F32` and narrowed alone.
+/// u3.w0, -0`), the int `s.c` through `S32_TO_F32` and narrowed alone,
+/// the two halves paired by `MKVEC.v2i16` before ATEST.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (a struct's fp32 member word alone, nir_fs.rs:9683)"]
 fn struct_basic() {
     assert_matches_members("deqp_fsunif_struct_basic");
 }
