@@ -18,7 +18,8 @@ and the per-design `*-sites` items; the loop, fmaloc and intval-rest designs mer
 item `posvary-lower` was repurposed (it now draws the vs16 section-7 references). Case counts
 are unchanged from what `lower-schedule` wrote (the designs' own numbers; section 4c's text
 counts from `mali-deqp-families.md` 18.2 at `9ac31f30`); a remeasure is `remeasure-tip`'s
-item, not this note's refresh.
+item, not this note's refresh. **Section 5 (schedule-refresh-2) adds the post-train families
+unifmp, vsunif, vsuarr, opform, mixprec2 and nonfin, with the proposed Train 3.**
 
 ## 0. Sources, and what the numbers are
 
@@ -386,3 +387,272 @@ provided inflow does not push another text over (`ControlFlow` 73, `ColourPair` 
 (`board-rerun-1`) should come after Q12 (intval and all of fclane: C 94, IV 0, IR 0, UT 116): by
 then IR, IV and C are under the line (UP and the UT gate too) and the table is re-ranked from
 measured counts; a second rerun after Q36 (A) and one after Q45 close c2.
+
+## 5. Post-train families: unifmp, vsunif, vsuarr, opform, mixprec2, nonfin (plan #387, item schedule-refresh-2)
+
+**Status: planning note, no code.** Six design items merged after section 3 was written, each with
+its own note and references. This section adds their steps to the schedule. It follows the same
+rules as sections 2-4 (forecast = the design's own upper bound of cases that leave the text, not
+passes; every step edits `src/shaderc/online/mali/**`, so every step waits for the running train 2,
+`arith-lower-2`) and does not change sections 1-4: where section 5 corrects them, 5.7 says so.
+
+### 5.1 Sources, tips and the measure
+
+| Family | Note | Note's tip sha (last commit that changed it) | Measured at | G310 lines of its text (Verdin iMX95 run of 2026-11-25, build `e63ab28e`; the plan calls it main `a3d8d2de`) |
+|---|---|---|---|---|
+| unifmp (`FsUniform`) | `mali-unifmp-lowering.md` | `4a1d2cb5611999e8769eb2116d2fbfd3dd887d04` | `8133663c` | 472 (452 cases by host site; 284 first refusals) |
+| vsunif (`UniformType`, vertex) | `mali-vsunif-lowering.md` | `7c30276cc531c2d1ec34beaa22e6b35b067b0847` | `8133663c`, `224cc3f7` | 389 (298 Fail, 91 NS) |
+| vsuarr (`UniformArray`, vertex) | `mali-vsuarr-lowering.md` | `6e2c43205f7f2227013cf2b6572a4f762a241c01` | `8133663c` | 193 |
+| opform (`FsOperandForm`) | `mali-opform-lowering.md` | `417cea2eae2aff492cb1ff8c842604792c764b55` | `8133663ca5da` | 190 (181 first refusals) |
+| mixprec2 (`MixedPrecision` residue) | `mali-mixprec2-lowering.md` | `61eb01b4633b795b6ccf496ed474b5d6cf0b1600` | `8133663c` | 175 (65 left by earlier pins) |
+| nonfin (`ConstantFold`, vertex) | `mali-nonfin-lowering.md` | `74bc5874b9fba8ff0e296087bf63495a9a33e0f6` | `8133663ca5da`, `224cc3f77f4a` | 196 (199 programs) |
+
+The iMX95 run is the owner's measure for the ranking; every forecast below is HOST-ONLY (compile and
+link outcomes with `tools/mali/deqp-host-measure.sh`, tips as listed), never a board result. G310 = G610
+words (`mali-g310-vs-g610.md`), so every byte-compare is against the G610 drm-shim reference and
+serves both boards. Two texts were already emptied by the train and need only a board rerun to
+disappear from the table: **vsunif's 389 lines** (`5e1feec9`, vs16-2) and **nonfin's 196 lines**
+(`e24a0d1d`, cfold step A; 0 first-refusal cases at `224cc3f7`). Their residues are 56 + 23 (vsunif)
+and 22 (nonfin NF3).
+
+Step ids avoid the ones above: the unifmp note's `U1..U8` are **FM1..FM8** here (unif2's `U1..U9` stay
+unif2's), the vsunif note's `V1..V5` are **VT1..VT5** (intval-vs16's `V1..V4` stay), the vsuarr note's
+`VA1..VA3` keep their ids, opform's `O1..O8`, mixprec2's `M2-1..M2-4c` and nonfin's `NF0..NF3` too.
+Owners are **placeholders** (`NEW: <name>`): the planner turns them into plan items. A step edits
+`nir_fs.rs` (fragment walk), `nir.rs` (vertex walk) or both; the column "Files" says which.
+
+### 5.2 Every step
+
+"Byte-compare" is the pinned reference(s) the step must turn byte-equal with Mesa 26.2.1: in the
+family's test (`tests/mali_deqp_<family>.rs`) move it from `REFUSED` to `LOWERED` (vsuarr: `MATCHED`)
+and drop its `#[ignore]` in the same commit as the lowering. Regenerate any pinned file the change
+moves in the same commit.
+
+#### unifmp (feature set of `tests/mali_deqp_unifmp.rs`: `--no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table`)
+
+| Id | Step (note's id, site) | Forecast first-refusal cases (+ behind a vertex refusal) | dEQP groups | Needs | Files | Owner | Byte-compare (test: `mali_deqp_unifmp`, `mali_deqp_fsunif*`, `mali_deqp_unif2*`) |
+|---|---|--:|---|---|---|---|---|
+| FM1 | U1, `select.rs:628`: `UboLayout::fs16` rows for int/bool arrays, matrix arrays and struct members. **The same change as unif2 U3's fragment half and U5's `fs_struct_uniform` leaf rows (5.5)** | 141 (+137: 96 vertex uniform array = VA family, 41 vertex arithmetic = `arith-lower-2`) | `uniform_api.value` 224 (in all), `info_query` 32, `random` 22 | unif2 U2 (done as `unif2-lower-1`), intval-rest compares (train 1, landed) | `select.rs`, `nir_fs.rs` reads | NEW: `unifmp-lower-1` (with unif2 U3) | `deqp_fsunif_{arr_bvec4,arr_ivec4,arr_mat4,struct_int_ivec4}`, `deqp_fsunif2_*`, `deqp_fsunif3_*`, `deqp_unif2_fs_{bool,int,struct}_uniform` |
+| FM2 | U2, `nir_fs.rs:10805`: one fp16 uniform half beside another lane (`MKVEC.v2i16 lane.h0, uN.wM.hX`, ATEST on a uniform half) | 72 (+31) | `shaders.random` 60, `shaders.invariance` 36, `fragment_ops.interaction` 7 | - (independent of FM1) | `nir_fs.rs` (`lane_tree`) | NEW: `unifmp-lower-2` | `deqp_unifmp_{interaction_16,inv_mediump_cse2,rsg_expr10}`, `deqp_intval3_rsg_swizzle12_fs`, `deqp_misc2_invariant_cse` |
+| FM3 | U3, `nir_fs.rs:10792`: two fp16 halves that are not an aligned pair; `.h00`/`.h11` operands; `bi_opt_reorder_push` slot order. **Absorbs unif2 U7 (`fs_other`, 7)** | 53 (+0) | `shaders.matrix` 28, `uniform_api.value` 16, `shaders.random` 7, `info_query` 2 | FM2 (same `lane_tree` leaf) | `nir_fs.rs` | NEW: `unifmp-lower-2` | `deqp_unifmp_{mat4_sub_mat4,vec4_mat4_mul,rsg_sconv12}`, `deqp_fsunif_{mat4_add_float,mat2_mul_mat2}`, `deqp_uniarray_api_float`, `deqp_unif2_fs_other` |
+| FM4 | U4, `nir_fs.rs:10318`: two non-consecutive fp32 uniform words; highp `mat3` fp32 FMA chain | 8 | `shaders.matrix` 4, `shaders.struct` 4 | FM3 | `nir_fs.rs` | NEW: `unifmp-lower-3` | `deqp_unifmp_{highp_mat3_mul,highp_vec3_mat3,struct_array,struct_nested}` |
+| FM5 | U5, `mod.rs:1687`: `bool_colour` route with struct-member words read apart | 6 | `shaders.linkage.uniform_struct_*` | FM4 (the narrowing), unif2 U5 for the struct leaf rows | `mod.rs`, `nir_fs.rs` | NEW: `unifmp-lower-3` | `deqp_boolpix_lk_uniform_struct_{vec4,fragment_only_vec4}`, `deqp_audit_o_linkage_uniform_struct_vec4` |
+| FM6 | U6, `nir_fs.rs:10335`: fp32 word beside a non-fp32 lane inside an fp16 operand | 2 | `shaders.struct.uniform.sampler{,_array}_fragment` | FM4 | `nir_fs.rs` | NEW: `unifmp-lower-3` | `deqp_unifmp_struct_sampler` |
+| FM7 | U7, `nir_fs.rs:10360`: one int uniform's float in both lanes | 1 | `fragment_ops.interaction.basic_shader.88` | FM4 | `nir_fs.rs` | NEW: `unifmp-lower-3` | `deqp_unifmp_interaction_88` |
+| FM8 | U8, `mod.rs:1606`: more than 64 uniforms | (1, **not lowered**: Mesa cannot draw `uniform_api.random.23`) | `uniform_api.random` | - | - | none | none; stays refused |
+
+FM1-FM3 take 266 of the 284 first-refusal cases. The note says lowering FM2-FM5 also moves earlier pins
+(`deqp_fsunif*`, `deqp_unif2_fs_*`, `deqp_uniarray_api_float`, `deqp_misc2_invariant_cse`,
+`deqp_intval3_rsg_swizzle12_fs`, `deqp_boolpix_lk_*`, `deqp_audit_o_linkage_*`): the step's commit moves
+them in their own test files too. About 10 cases (highp matrices, `shaders.struct.uniform.{basic,array_member}`,
+`state_query.shader.program_active_uniform_types`) should already have left the text after train 1; **re-probe the
+sites after train 2 lands** (the note's recipe: tag every `Err(MaliError::FsUniform)` with `file!():line!()`).
+
+#### opform (`tests/mali_deqp_opform.rs`, same feature set; 12 references)
+
+O1-O3 are arith step 4 (A4a/A4b of 2.3) in the opform note's terms. **A4b has no owner** (the id
+`arith-lower-4b` was reused for another prototype): O1-O3 take over A4a's unlanded part and A4b together.
+Whatever train 2 lands of A4a is the base. O4-O8 are new.
+
+| Id | Step (forms) | Forecast first-refusal cases | dEQP groups | Needs | Files | Owner | Byte-compare |
+|---|---|--:|---|---|---|---|---|
+| O1 | MA, MB, SA, NS, AB, NF, X2: Mesa's per-read narrowing of lanes, pair graph from it, neg/abs as modifiers (the productions gate `nir_fs.rs:12009`) | 93 (+4 not first) | `operator.binary_operator` 28, `unary_operator` 14, `common_functions.mix` 4 + `abs` 2, `exp2` 4, `geometric` 3, `random.basic_expression` 21 and 14 more | train 2 (A4a) | `nir_fs.rs` | NEW: `opform-lower-1` (= A4a continuation + A4b) | arith `op_binary_*`, `op_unary_*`, `op_common_abs/mix`, `op_geometric_*`, `op_exponential_exp2_fs_*` in `tests/mali_deqp_arith.rs` |
+| O2 | OB: an operation second in a sum | 33 (+3) | `matrix.add` 6, `sub` 6, `mul` 3, `random` 17, `interaction` 1 | O1 (same mechanism: land together or in this order) | `nir_fs.rs` | NEW: `opform-lower-1` | `matadd_uniform`, `matsub_uniform`, arith `matrix_storeout_fs_mediump` |
+| O3 | HO, HS: swapped pairs in the conversion's operand order or `.h10` | 8 (+1) | `return.*_never` 3, `binary_operator.mul` 2, `linkage` 1, `interaction` 1, `random` 1 | O1 | `nir_fs.rs` | NEW: `opform-lower-1` | `ret_never`, `mul_float_vec4`, arith `other_storeoutput_fs_none` |
+| O4 | MM: `Fmax \| Fmin` with lane bounds (`:10649`, vec3 `min/max/clamp` of non-constant bounds) | 12 | `common_functions.min` 4, `max` 4, `clamp` 4 | - (an arm of its own; after A4a's scalar forms) | `nir_fs.rs` | NEW: `opform-lower-2` | `min_vec3`, `clamp_vec3_float` |
+| O5 | BM: `b2f` of an `iand`/`Icmp` mask in `lane_tree` (`:11494`) | 8 | `conversions.vector_combine` 5, `matrix_combine` 3 | - | `nir_fs.rs` | NEW: `opform-lower-2` | `conv_vec3`, arith `other_storeoutput_fs_mediump` |
+| O6 | NM: `Neg@AddA` | 4 | `matrix.negation` 4 | O1 | `nir_fs.rs` | NEW: `opform-lower-2` | `matneg_mat3` |
+| O7 | IF: `cmp_node` with a computed operand, `CSEL` on fp32 words (`:11124`) | 4 | `return.*_dynamic` 3, `interaction` 1 | - | `nir_fs.rs` | NEW: `opform-lower-2` | `ret_dynamic` |
+| O8 | SO, CN, SC: a uniform half splat as output, a constant/lane pair under a negation, a splat as an FMA addend | 7 (+1) | `random` 5, `matrix.mul` 2 | O1 | `nir_fs.rs` | NEW: `opform-lower-2` | `rnd_splat18`, `rnd_constneg85`, `matmul_const` |
+
+Total 169 first-refusal cases (97 of the gate's 141 then compile, words uncompared). O1-O3 move 134;
+after them the next text is `FsVaryingLoad` for 22 cases (`mali-deqp-varyload.md`'s family; a MISC row
+of 4b with no item, now worth an item: 5.5). When a step lifts a reference, also add it to
+`the_fragment_productions_are_the_references` in `src/shaderc/online/mali/tests.rs`. Risks (the arith
+step 4 list): `tests/mali_fs_arith.rs`, `mali_fragment_random.rs`, `mali_glmark2_corpus.rs`,
+`mali_deqp_mixprec.rs`, `mali_fs_operand.rs`. `tests/mali_deqp_opform.rs` is **not yet in a
+`tools/check.sh` row** (`irindex-fix`, in review, owns that).
+
+#### vsuarr (`tests/mali_deqp_vsuarr.rs`, plus `mali_deqp_vsuniarr.rs`, `mali_deqp_vsuniarr2.rs`)
+
+| Id | Step | Forecast cases leaving the text (pass = `_vertex` cases) | dEQP groups | Needs | Files | Owner | Byte-compare |
+|---|---|--:|---|---|---|---|---|
+| (U3) | unif2's int/bool/ivec/bvec array element rule, assigned compares (vertex half of FM1) | 106 (51) | `uniform_api.value.assigned.*` / `info_query.*` `basic_array`, `multiple_basic_array` (bool, bvec4, int, ivec4), `random.66,67,76,77` | unif2 U2 (done) | `nir.rs`, `select.rs` | NEW: `unifmp-lower-1` (same commit as FM1, 5.5) | `deqp_unif2_arr_{bool,int}_array`, `deqp_vsuniarr_{bvec4,ivec4,multi}`, `deqp_vsuniarr2_{ivec3,bvec3}_part` |
+| VA1 | zero-compare reduction in `nir::vs_reduce` (`nir.rs:4417`): an `iand` chain of `ieq(x,0)`/`inot(b)`/`flt(fabs(x),c)` built as Mesa's one `umax`/`ior`/`fmax` tree in Mesa's reassociated order (check `init_bvec4`, `init_ivec4` first) | 24 (12) (+12 through VA2/VA3) | `uniform_api.value.initial.*.{basic_array.*,multiple_basic_array}` | (U3) | `nir.rs` | NEW: `vsuarr-lower-1` | `init_bool`, `init_int`, `init_bvec4`, `init_ivec4`, `init_multi` |
+| VA2 | plain mediump matrix arrays: `array_element` takes `MAT2/3/4` with Mesa's fp16 stride (mat2 2 words, mat3 6, mat4 8). **Generalises unif2 U8: do it in U8's place** | 22 (8) (+4 with VA1) | `uniform_api.*.basic_array.mat4*`, `random.10,17,53,71,75,99` | (U3) | `nir.rs` | NEW: `vsuarr-lower-1` | `deqp_vsuniarr_mat4`, `deqp_unif2_arr_mat_array`, `deqp_vsuniarr2_{mat3_part,mat4_mixed}`, then `init_mat4` with VA1 |
+| (U5) | unif2's struct member arrays of bool/bvec4 | 4 (2) | `unused_uniforms.bool_bvec4_*` | (U3) | `nir.rs` | unif2 U5 owner (4a row of this section) | `deqp_vsuniarr_unused_bvec4` |
+| VA3 | struct-member matrix arrays: fp32 words in declaration order, columns narrowed (`MOV.i32` + `V2F32_TO_V2F16`), only the words read pushed | 21 (8) (+8 with VA1) | `uniform_api.*.{array_in_struct,nested_structs_arrays}.mat4_mat2_*`, `unused_uniforms.mat4_mat2_*`, `random.15,57,74,83,94` | U5 (leaf rows), VA2 | `nir.rs` | NEW: `vsuarr-lower-2` | `deqp_vsuniarr_{struct_mat,nested_mat,unused_mat2}`, `deqp_vsuniarr2_{struct_mat4_arr,mat2_struct,struct_vec3_mat2,struct_nested}`, then `init_struct_mat`, `init_nested_mat` |
+| (not here) | `random.{6,24,37,61}` with a vertex texture look-up | 4 | | texmisc (`TexVertex`) | | texmisc owner | none |
+
+Total 193 text-leavings (87 `_vertex` pass candidates); the new steps VA1-VA3 are 67 of them (+12). Every
+index in the 193 is a constant: no `LD_PKA` or UBO load occurs in this text. Not done in the note: a host
+dEQP measure of the forecast, and references for `random.71,75,76,77,83,94,99`.
+
+#### vsunif (`tests/mali_deqp_vsunif.rs`, `DESIGN` entries `Ok(true)`/`Ok(false)`/`Err(text)`; references `deqp_vsunif_*`)
+
+After the train the text itself is gone; the residue is 56 refused and 23 compiled-but-not-Mesa's cases.
+The note's ids `V1..V5` are **VT1..VT5**.
+
+| Id | Step | Forecast cases (kind) | dEQP groups | Needs | Files | Owner | Byte-compare (`deqp_vsunif_<ref>`) |
+|---|---|--:|---|---|---|---|---|
+| VT2 | stores at a run-time index into a local vector, matrix or array, or a varying array | 50 (refused; NS on the board) | `indexing.{vector_subscript,tmp_array,matrix_subscript}.*_dynamic_write_*_vertex` 33, `indexing.varying_array.*_dynamic_write_*` 16, `struct.local.loop_struct_array_vertex` 1 | VT3 (Mesa's words); its next refusal is **not measured** | `nir.rs` | NEW: `vsunif-lower-1` | `vec2_dynwrite`, `tmp_dynwrite`, `mat2_dynwrite`, `varying_array` |
+| VT3 | mediump vertex values at fp16: `V2F32_TO_V2F16`, `MUX.v2i16` select tree of a run-time read, `FCMP_OR.v2f16` of an fp16 uniform (extends intval-vs16 M1) | 20 (compiled, words differ) | `indexing.*_dynamic_read_vertex` 18, `struct.local.*conditional_assignment_vertex` 2 | with or just before VT2 | `nir.rs` | NEW: `vsunif-lower-1` | `vec2_subscript`, `mat2_subscript`, `local_cond_assign`, `vec_subscript`, `tmp_array` |
+| VT1 | vertex vector and struct `==`/`!=` (the `vs_reduce` arm the 74 unif2/vs16 `uniform_api` struct compares share) | 6 (+74 shared) | `struct.local.{basic,nested}_{equal,not_equal}_vertex`, `struct.uniform.{equal,not_equal}_vertex` | shares the arm with VA1: whichever lands first writes it. If VA1 or unif2 U5 or intval-vs16 V3 lands first, VT1 is the struct member AND only | `nir.rs` | NEW: `vsunif-lower-2` | `local_equal`, `local_nested_equal`, `struct_cmp` |
+| VT5 | struct uniform array at a run-time index (`LD_PKA` at `LSHIFT_OR`/`IADD_IMM`) | 1 compiled (+1 after unif2) | `struct.uniform.struct_array_dynamic_index_vertex` | the vsuarr `LD_PKA` path (none today: the 193 constant-index cases do not draw it) | `nir.rs` | NEW: `vsunif-lower-2` | `struct_dynidx` |
+| VT4 | a large local array in thread-local storage | 2 compiled | `tmp_array.float_{const,static}_write_dynamic_read_vertex` | Mesa's scratch-versus-select threshold (not read), **thread-local storage in the driver** | `nir.rs` and `driver/` | NEW: `vsunif-lower-3` | `tmp_float_const` |
+
+Three local-struct-array `*_dynamic_index_vertex` cases (NS, compiled) have **no reference**: the item that
+takes VT3 draws one first.
+
+#### mixprec2 (`tests/mali_deqp_mixprec2.rs`, like `mali_deqp_intval5.rs`)
+
+M2-4 is **mixcol's MX3 (2.6; the table had "no item")**: this note supersedes MX3's list of where the flag
+is set and its 64 cases (35 here).
+
+| Id | Step | Forecast cases off the text | dEQP groups | Needs | Files | Owner | Byte-compare |
+|---|---|--:|---|---|---|---|---|
+| M2-1 | drop overwritten `gl_FragColor` stores before the walk (`ir_live`, `nir_fs.rs:4874`); a zero `MKVEC` half is inline `0x0` | 19 (6 compile) | `random.{texture,scalar_conversion,trigonometric,swizzle,comparison_ops,exponential}.fragment` | - | `nir_fs.rs` | NEW: `mixprec2-lower-1` | `rnd_sconv36`; `rnd_swz4`, `rnd_tex140` then refuse with "operand form" / "`gl_FragColor` lane": update their `REFUSED` text, leave them ignored |
+| M2-4a | stop setting the flag at `mod.rs:1232` and `nir_fs.rs:4981` (declaration-only) | 5 | `functions.qualifiers.*_highp_float_fragment`, `operator.sequence.no_side_effects.highp_*` | with M2-1 (one session) | `mod.rs`, `nir_fs.rs` | NEW: `mixprec2-lower-1` | `hp_out_param` (+ mixcol `hp_param`, `hp_seq`) |
+| M2-4b | fold `const highp` at fp32, round once (`mod.rs:1207`, helper `mesa_fold.rs`) | 7 | `matrix.{add,sub,mul}.const_highp_*` | M2-4a | `mod.rs`, `mesa_fold.rs` | NEW: `mixprec2-lower-2` | `hp_mat2_add` |
+| M2-4c | highp varying island at fp32 (`nir_fs.rs:4576`, `:4581`; `op32`, `fp32_lane`, fp32 kernels) | 23 | `operator.binary_operator.*.highp_*`, `float_compare.*.highp_vec{2,4}`, `exponential.sqrt.highp_*`, `fract.highp_float`, `geometric.length.highp_*` | M2-4a; **after train 2** (shares `op32` and the fp32 paths with arith step 1) | `nir_fs.rs` | NEW: `mixprec2-lower-2` | `hp_fract`, `hp_sqrt_vec3`, `hp_length_vec2` (+ mixprec3/4, mixcol `hp_bool`, `hp_scale`, `hp_mat`); must still refuse: `mali_fragcoord16.rs`, `mixprec_tests.rs`, `tests.rs:1218-1230` |
+| M2-2 | a mediump float uniform as an operand of an fp32 sum/product (`nir_fs.rs:7074`): `F16_TO_F32 r, u.wN.hK` | 9 | `random.{conditionals,texture,trigonometric}.fragment` (8), `struct.local.nested_struct_array_fragment` | M2-1 | `nir_fs.rs` | NEW: `mixprec2-lower-3` (one session with M2-3) | `struct_nested` (+ mixcol `int_uniform_struct`) |
+| M2-3 | raw highp lane read by an fp32 sum (`seq_side`); a 32-bit `Fneg` operand as `.neg` | 2 | `random.texture.fragment.145` | M2-2 | `nir_fs.rs` | NEW: `mixprec2-lower-3` | `seq_side`; **`random.texture.fragment.145` has no reference yet: draw it when the step starts** |
+
+Total 65. MX3's 64 cases in 2.6 and Q30 are replaced by M2-4a/4b/4c (35); M2-1/2/3 are the non-highp residue.
+
+#### nonfin (`tests/mali_deqp_nonfin.rs`)
+
+| Id | Step | Forecast | Needs | Files | Owner | Byte-compare |
+|---|---|--:|---|---|---|---|
+| NF0 | ConstantFold step A in the train (`e24a0d1d`) | 199 G310 lines leave the text; 0 first refusals at `224cc3f7` | landed in train 1 | - | done | (cfold2's) |
+| NF1 | the unrolled `coords * 0.5` chain: constant times a product with a constant | 107 reach their next text (not NaN work) | = constprod K2 (Q20; in train 2) | - | K2's owner | `deqp_cfold2_zero_operand_inot`, `deqp_cfold2_const_other_inot` |
+| NF2 | `partial_unroll` of a dynamic loop over a constant-size array | 58 reach the guard and select | = loops S2 (LS2: S2-fs `loops-lower-1`, S2-vs `loops-lower-2`) | - | the loops owners | `deqp_vsconst_mixloop_tmp_array` |
+| NF3 | an undef mediump float lane read by a select becomes fp16 `0x7e00`, FAU word `7e007e00` (`u6.w1`/`u6.w0` in the VS, `u2.w1` in the FS); keep refusing a NaN that arithmetic reads and an fp32 undef NaN by name | 22 (VS 14, FS 8; all NS today) | NF1 and NF2 landed | `nir.rs`, `nir_fs.rs` | NEW: `nonfin-lower-1` (rides the end of `loops-lower-2`, the note's advice) | `deqp_nonfin_tmp_float_static_dynread` first (un-ignore), then `deqp_nonfin_varying_float_static_dynread`. `refusals_pinned` accepts the tip's `ConstantFold` text or the train's `ArithConstant`; when NF1 lands, replace that text with the next one |
+
+NF3 is 22 cases, under the 100-case line: it has no item of its own beyond a last commit of the loops
+vertex item. Issue #20 needs a comment with the nonfinite-design commit and the residue figures.
+
+### 5.3 Order, by forecast must-pass cases, with dependencies
+
+The order counts the first-refusal (and "leaves the text") cases of the iMX95 measure; a step whose
+prerequisite is not met moves behind it; two steps that share one mechanism are put side by side; the
+families' text counts overlap (FM1's 137 behind-a-vertex-refusal cases are VA's and arith's), so the
+sum is **not** a pass forecast. The R column is this section's own order, all of it behind train 2;
+section 3's Q slots keep their items. Where the two meet (U3, U5, LS2, K2, A4a), the earlier slot's item
+keeps the step and this table lists it as a dependency.
+
+| R | Step(s) | Cases | Needs | Why here |
+|--:|---|--:|---|---|
+| R1 | **U3 + FM1** (one `fs16`/`array_element` rule, both stages) | 141 + 106 | train 2 | the largest single count of the six notes (284 fs first refusals; 193 vertex ones) |
+| R2 | **O1, O2, O3** | 93 + 33 + 8 = 134 | train 2's A4a | one mechanism; the bulk of `FsOperandForm` |
+| R3 | FM2 | 72 | - | `lane_tree` leaf; FM3 needs it |
+| R4 | FM3 (+ unif2 U7) | 53 | FM2 | |
+| R5 | VT3 + VT2 | 50 (+20 compiled) | train 2 | the largest vertex count nobody else owns; VT3 with or just before VT2 |
+| R6 | M2-1 + M2-4a | 19 + 5 = 24 | - | cheapest of mixprec2; the only step with a measured compile count |
+| R7 | VA1, then VT1 | 24 (+12); 6 (+74 shared) | U3 (R1) | one `vs_reduce` arm; if either lands first the other shrinks |
+| R8 | M2-4b, M2-4c | 7 + 23 = 30 | M2-4a (R6); train 2 for M2-4c | the largest mixprec2 piece; start only after train 2 |
+| R9 | VA2 (in U8's place) | 22 (+4) | U3 | |
+| R10 | VA3 (+ U5's bool/bvec arrays) | 21 (+8) + 4 | U5, VA2 | |
+| R11 | O4 | 12 | A4a | |
+| R12 | M2-2 + M2-3 | 9 + 2 = 11 | M2-1 | one session |
+| R13 | O5, O8, O6, O7 | 8, 7, 4, 4 | O1 for O6/O8 | |
+| R14 | FM4, FM5, FM6, FM7 | 8, 6, 2, 1 | FM3; FM5 after unif2 U5 | tail of unifmp |
+| R15 | NF3 | 22 | NF1 (K2) and NF2 (LS2) landed | below 100: after the loops vertex step |
+| R16 | VT5, VT4 | 1, 2 | the vsuarr `LD_PKA` path; the driver's thread-local storage | last: no first-refusal yield |
+
+Sorted by count alone, R3 (72) and R4 (53) sit before R5 (50); VT1's 6 moves up beside VA1 for the
+shared arm; M2-1/4a and M2-4b/4c are in the order the note asks (4b after 4a; 4c after train 2).
+
+### 5.4 Proposed train pull requests
+
+The owner's rule of 2026-11-25 (it is not in the tree: taken from the item text): steps that touch
+`nir.rs` or `nir_fs.rs` go into as few train pull requests as the dependencies allow. Train 1
+(`intval-rest`) has landed. Train 2 (`arith-lower-2`) is running and waits for `blend565`'s touches.
+Every step of 5.2 edits `src/shaderc/online/mali/**` and most edit `nir.rs`/`nir_fs.rs`, so they start
+after train 2 merges (its file set holds that directory). Nothing in the six notes forces a split
+between the fragment walk and the vertex walk: U3 is the one step both walks need, and it goes first.
+**One train, Train 3** (one PR, one commit per step in this order; a commit lifts its references in
+its own test file and regenerates what it moves); the gate (`gate.yml`) runs the rows each commit reaches.
+
+**Train 3** (`NEW: mali-train-3`), after train 2:
+
+| Commit | Step | Byte-compare (test file: references) |
+|--:|---|---|
+| 1 | U3 + FM1 | `mali_deqp_unifmp`/`mali_deqp_fsunif*`/`mali_deqp_unif2`: `deqp_fsunif_{arr_bvec4,arr_ivec4,arr_mat4,struct_int_ivec4}`, `deqp_unif2_fs_{bool,int,struct}_uniform`, `deqp_unif2_arr_{bool,int}_array`, `deqp_vsuniarr_{bvec4,ivec4,multi}`, `deqp_vsuniarr2_{ivec3,bvec3}_part` |
+| 2 | O1 | `mali_deqp_arith`: `op_binary_*`, `op_unary_*`, `op_common_abs/mix`, `op_geometric_*`, `op_exponential_exp2_fs_*` |
+| 3 | O2 | `mali_deqp_opform`: `matadd_uniform`, `matsub_uniform`; arith `matrix_storeout_fs_mediump` |
+| 4 | O3 | `mali_deqp_opform`: `ret_never`, `mul_float_vec4`; arith `other_storeoutput_fs_none` |
+| 5 | FM2 | `mali_deqp_unifmp`: `deqp_unifmp_{interaction_16,inv_mediump_cse2,rsg_expr10}`; `deqp_intval3_rsg_swizzle12_fs`, `deqp_misc2_invariant_cse` |
+| 6 | FM3 | `mali_deqp_unifmp`: `deqp_unifmp_{mat4_sub_mat4,vec4_mat4_mul,rsg_sconv12}`; `deqp_fsunif_{mat4_add_float,mat2_mul_mat2}`, `deqp_uniarray_api_float`, `deqp_unif2_fs_other` |
+| 7 | VT3 + VT2 | `mali_deqp_vsunif`: `vec2_subscript`, `mat2_subscript`, `local_cond_assign`, `vec_subscript`, `tmp_array`, `vec2_dynwrite`, `tmp_dynwrite`, `mat2_dynwrite`, `varying_array` |
+| 8 | M2-1 + M2-4a | `mali_deqp_mixprec2`: `rnd_sconv36`; `mali_deqp_mixprec2`/mixcol: `hp_out_param`, `hp_param`, `hp_seq` |
+| 9 | VA1, VT1 | `mali_deqp_vsuarr`: `init_bool`, `init_int`, `init_bvec4`, `init_ivec4`, `init_multi`; `mali_deqp_vsunif`: `local_equal`, `local_nested_equal`, `struct_cmp` |
+| 10 | M2-4b | `mali_deqp_mixprec2`: `hp_mat2_add` |
+| 11 | M2-4c | `mali_deqp_mixprec2`: `hp_fract`, `hp_sqrt_vec3`, `hp_length_vec2` (+ mixprec3/4 and mixcol `hp_*`) |
+| 12 | VA2 (with U8) | `mali_deqp_vsuarr`/`vsuniarr*`: `deqp_vsuniarr_mat4`, `deqp_unif2_arr_mat_array`, `deqp_vsuniarr2_{mat3_part,mat4_mixed}`, then `init_mat4` |
+| 13 | U5 (unif2 owner) + VA3 | `mali_deqp_unif2`: `deqp_unif2_{vs,fs}_struct_uniform`; `mali_deqp_vsuarr`: `deqp_vsuniarr_{struct_mat,nested_mat,unused_mat2}`, `deqp_vsuniarr2_{struct_mat4_arr,mat2_struct,struct_vec3_mat2,struct_nested}`, `init_struct_mat`, `init_nested_mat` |
+| 14 | O4 | `mali_deqp_opform`: `min_vec3`, `clamp_vec3_float` |
+| 15 | M2-2 + M2-3 | `mali_deqp_mixprec2`: `struct_nested`, `seq_side` (draw `random.texture.fragment.145` first) |
+| 16 | O5, O8, O6, O7 | `mali_deqp_opform`: `conv_vec3`, `rnd_splat18`, `rnd_constneg85`, `matmul_const`, `matneg_mat3`, `ret_dynamic` |
+| 17 | FM4, FM5, FM6, FM7 | `mali_deqp_unifmp`: `deqp_unifmp_{highp_mat3_mul,highp_vec3_mat3,struct_array,struct_nested,struct_sampler,interaction_88}`, `deqp_boolpix_lk_uniform_struct_{vec4,fragment_only_vec4}`, `deqp_audit_o_linkage_uniform_struct_vec4` |
+
+**Left out of Train 3 because a dependency is not in it** (the minimum remainder; a later pull request,
+**Train 4**, only if they are still wanted):
+
+- NF3: needs K2 and loops S2-vs, both train 2's (if train 2 lands both, NF3 is Train 3's commit 18; else
+  it follows `loops-lower-2`).
+- VT5: needs the vsuarr `LD_PKA` path, which no step of the six notes writes (the 193 cases are constant
+  index) - a separate item.
+- VT4: needs thread-local storage in the driver (not `nir*`: `driver/`), and Mesa's scratch threshold.
+- FM8: not lowered.
+
+If the 17 commits are too long to review as one pull request, the cut is **after commit 9** (the families'
+first and largest steps), because commits 10-17 depend on nothing after it except train 2. That is a cost
+choice, not a dependency, so the default stays one train. The board rerun
+(`constprod-lower-1` for the iMX95, `board-rerun-1` for the NanoPC-T6) should follow Train 3 and
+replace the RESULTS.md row and STATUS.md summary; re-probe the sites first (5.2 unifmp, opform 8).
+
+### 5.5 Claims the new notes add (extends 4a/4b)
+
+| Step | Claimed by | Keep | Reason |
+|---|---|---|---|
+| unifmp U1 (`select.rs:628`), unif2 U3 (fragment half) and the vertex `array_element` rule (vsuarr's U3 106) | unifmp, unif2, vsuarr | **one commit, `unifmp-lower-1`** (R1) | the same row layout in `UboLayout::fs16`/`vs`; three notes name it as their first step. unif2's own item `unif2-lower-1` ended after U2 (the driver `~0` push); U3 has no open item |
+| unifmp U7 / `deqp_unif2_fs_other` | unifmp (FM3) and unif2 U7 | **FM3** | the same references |
+| unifmp U5/U6/U4 struct words and unif2 U5 `fs_struct_uniform` | unifmp (FM4-FM6), unif2 U5 | unif2 U5 first (leaf rows), FM4-FM6 after | whichever lands second rebases |
+| unif2 U8 (mat3 array element, 1) | unif2 U8 and vsuarr VA2 | **VA2** | the note: "generalises U8, do it in its place" |
+| opform O1-O3 | arith step 4 (A4a/A4b) and opform | **opform-lower-1** | A4a's unlanded part and A4b (ownerless) are the same pair-graph mechanism |
+| vs `vs_reduce` arm | vsuarr VA1, vsunif VT1, intval-vs16 V3, unif2 U6 (the existing 4a row) | VA1 writes it when first | the 74 `uniform_api` struct compares of vsunif section 3 reach the same arm |
+| mixcol MX3 | mixcol (2.6, "no item"), mixprec2 M2-4 | **mixprec2 M2-4a/4b/4c** | the note supersedes MX3's setter list (35 cases, all compile with the flag skipped) |
+| nonfin NF1, NF2 | constprod K2, loops S2 | those items | NF3 only adds the NaN word at the end |
+| `FsVaryingLoad` (22 cases after O1-O3; 43 in MISC) | no item | **raise an item** (`varyload-lower-1`) | the text the opform note names next; section 2.10's MISC row had it under "no item" |
+
+### 5.6 Forecast against the 100-case line (extends 4c)
+
+Counts are the notes' host numbers at `8133663c`, upper bounds, no inflow (4c's method).
+
+| Text | Now | Trajectory (R of 5.3) | First under 100 |
+|---|--:|---|---|
+| FU (`FsUniform`) | 284 first refusals | R1 143; R3 71 | **R3** (R4 18) |
+| FO (`FsOperandForm`) | 169 first refusals | R2 35 | **R2** |
+| UA (`UniformArray`, vertex) | 193 | R1 87 (U3); R7 63; R9 37; R10 12 | **R1** (the schedule's "Q17 56" for U3 alone was too optimistic: U3 takes 106; the other 87 need VA1-VA3) |
+| MP (`MixedPrecision`) | 65 after the earlier pins | already under; R6 41; R8 11; R12 0 | already under |
+| UT (vertex) | 389 lines gone after the train; 56 refused residue | R5 6; R7 0 | already under |
+| `ConstantFold` (vertex) | 196 lines gone; residue 22 | R15 0 | already under |
+
+Of the six, only FU and FO were at or above 100; both are under it by R3. Counting the six notes'
+text-leavings once, about 660 cases leave their text if every step lands (283 + 169 + 87 + 65 + 56 + 22;
+VA's 106 are U3's), less the overlap of FM1's 137 vertex-behind cases with VA and arith. That is an upper
+bound, not a pass count: a case then meets its next refusal (`FsVaryingLoad` 22 after O1-O3, and the
+vertex `ArithConstant` and `Arithmetic` families behind the vertex ones).
+
+### 5.7 Corrections to sections 2-4 (no row above was rewritten)
+
+- Item ids reused: section 2/3's `arith-lower-3`, `-4a`, `-4b`, `-5`, `-6`, `constprod-lower-2`,
+  `-3`, `unif2-lower-2`, `mixcol-lower-1`, `-2` now name **prototypes (done, read-only)**; the plan lists
+  the real landings as train 2 (`arith-lower-2`) and the held items. Where this section says "no open
+  item" it means the lowering, not the id.
+- 2.6 MX3 and Q30 (64 cases, "no item"): replaced by M2-4a/4b/4c (35) of 5.2.
+- 2.5 U3's "UA 137" and 4c's "UA Q17 56": see 5.6. U7 and U8: absorbed (5.5).
+- 2.1 V2 (UT 346/UP 99 "gate, not a pass count"): the gate landed (`5e1feec9`); the 389 iMX95 lines
+  go to 0 at the next rerun, and 56 cases are VT1/VT2.
+- 3's "board rerun after Q12/Q36/Q45": add one after Train 3.
