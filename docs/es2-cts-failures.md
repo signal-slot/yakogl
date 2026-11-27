@@ -82,7 +82,7 @@ on the three boards at `e9901869a`.
 |---|---|---|
 | V3D (Pi 4) | whole chain; level i is max(w >> i, 1) x max(h >> i, 1), packed at its own pitch; the tiled copy follows Mesa's `v3d_setup_slices` (levels 0 and 1 at their size, the rest padded from the power-of-two level 1); `tools/v3d/tex_check.c` compares it with Mesa | `v3d::backend::backend_tests::a_generated_npot_chain_is_sampled_whole` |
 | GC7000 (i.MX8MP) | whole chain at one 800-texel pitch, each level on 64 bytes; the descriptor names each level's address | `vivante::backend::backend_tests::a_generated_npot_chain_is_named_level_by_level` |
-| PowerVR (AM62P) | a 2D texture is laid out as the chain of its power-of-two extent (`chain_layout_npot`, `pot_chain`); the TPU finds each level with its own arithmetic. A cube keeps its base level and samples level 0 under a mip filter | `gl::draw::tests::a_generated_npot_chain_is_complete_with_repeat`, `a_powervr_npot_cube_keeps_its_base_level`, `tests/pvr_npot_levels.rs` |
+| PowerVR (AM62P) | a 2D texture is laid out as the chain of its power-of-two extent (`chain_layout_npot`, `pot_chain`); the TPU finds each level with its own arithmetic. A NPOT cube holds its chain packed (`packed_npot_cube`), which the native cube's copy re-lays; a stacked-cube program samples level 0 under a mip filter | `gl::draw::tests::a_generated_npot_chain_is_complete_with_repeat`, `a_powervr_npot_cube_keeps_its_base_level`, `tests/pvr_npot_levels.rs`, `tests/pvr_npot_cube.rs` |
 
 The GC7000 samples an NPOT texture with any wrap mode only when
 `chipMinorFeatures1_NON_POWER_OF_TWO` is set (etnaviv's rule). The part's own

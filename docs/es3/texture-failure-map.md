@@ -169,7 +169,7 @@ measurement of each).
 | K1 | 200 | Compile failed | The 25 integer `*_cube` formats (incl. `rgb10_a2ui`) of `basic_teximage2d`, `basic_texsubimage2d`, `teximage2d_pbo`, `texsubimage2d_pbo`, plus the integer `*_2d_array` and `*_3d` of `teximage3d_pbo` and `texsubimage3d_pbo`. The compiler refused integer cube, 3D and 2D-array samplers. | Pass |
 | K1b | 4 | Compile failed | `random_teximage2d.cube_0/1/3/7`, same cause (power-of-two sides). | Pass |
 | K2 | 14 | Image comparison failed | Single-level or power-of-two `rgba32f` cases (2D, cube, 3D, 2D array, PBO paths, three `*_unpack_params.rgba32f_complex`, `texstorage2d.format.rgba32f_2d`). RGBA32F was stored as halves: values above 65504 became infinity, while dEQP fills up to +-1e5. Five more `rgba32f` cases sit under K3-K5 and need both fixes. | Pass at the tip |
-| K3 | 56 | Image comparison failed | All 54 `texstorage2d.format.*_cube` (57x57, full chain) plus `texstorage2d.size.cube_57x57_2_levels` and `_6_levels`. A NPOT cube keeps only its base level. | Pass with the src/gl fix |
+| K3 | 56 | Image comparison failed | All 54 `texstorage2d.format.*_cube` (57x57, full chain) plus `texstorage2d.size.cube_57x57_2_levels` and `_6_levels`. A NPOT cube kept only its base level. | Pass on the host with `packed_npot_cube` (board rerun to do) |
 | K4 | 76 | Image comparison failed | `basic_teximage3d.*_2d_array` (49, 57x44x5), `texstorage3d.format.*_2d_array` (21), `texstorage3d.size.2d_array_57x63x5_2_levels`, `texsubimage3d_depth.*` (5). Same rule for NPOT 2D arrays. | Pass with a src/gl change |
 | K5 | 116 | Image comparison failed | `basic_teximage3d.*_3d` (20), `basic_texsubimage3d.*_3d` (49), `texstorage3d.format.*_3d` (42), `texstorage3d.size.3d_*` (5). A mipmapped 3D texture samples level 0 of its slice grid. | Pass with native 3D on |
 | K6 | 1 | Image comparison failed | `texstorage3d.size.2d_array_64x32x3_7_levels`. On the stacked arm the smallest levels are under one row per layer and cannot be addressed. | Pass with native array on |
@@ -198,11 +198,13 @@ build (`ecd9743e` is not an ancestor of `31cdaefc`; checked).
 (`src/gl/texture.rs:1308-1310`), so an upload to level >= 1 of a NPOT cube
 records the level as present and drops its texels (`:3065`, the
 `npot_level && t.chain_levels == 1` return), and `src/gl/native_cube.rs`
-copies only the held levels (`chain_levels`, `:245-255`). The src/gl fix is
-`2d215408` "pvr: a NPOT cube map holds its mip chain, packed, for the native
-cube's copy", on an unmerged branch (third attempt; not an ancestor of the
-tip), with host test `tests/pvr_npot_cube.rs` (on that branch; not in this
-tree). Its message notes that the online compile cache key
+copies only the held levels (`chain_levels`, `:245-255`). Fixed in the GL
+core: such a cube now holds its chain packed (`packed_npot_cube`,
+`src/gl/texture.rs`), which the native cube's copy re-lays for the TPU, and
+a stacked-cube program samples level 0 alone (`src/gl/draw.rs`
+`build_common`); host test `tests/pvr_npot_cube.rs`. The earlier attempts
+(`2d215408` and its rebases) carried the same change. Their message noted
+that the online compile cache key
 (`switches_now`, `src/shaderc/online/backend.rs:289`) left out
 `pvr_native_cube`; it holds it as bit 2 since the 2D-array default flip
 (`tests/pvr_native_switch_cache.rs` checks the cube too).
@@ -257,8 +259,7 @@ The catch-all of `select.rs` is now the `Tex` arm at `:1985` (cited
 `PVR_NATIVE_3D_DEFAULT` at `:339`. `native_array_bound` does not exist in
 the tree (the switch is `native_array_enabled`, `src/shaderc/mod.rs:321`; the
 proposed widening names a predicate to be written). `src/gl/draw.rs` has no
-stacked-array rule yet. `tests/pvr_npot_cube.rs` and
-`tests/pvr_npot_array_chain.rs` are not in this tree. All the commits
+stacked-array rule yet. `tests/pvr_npot_array_chain.rs` is not in this tree. All the commits
 (`eef6e35c`, `ecd9743e`, `e179ad48`, `e90122b8`, `31cdaefc`, `2d215408`)
 exist; `2d215408` is not an ancestor of the tip.
 
