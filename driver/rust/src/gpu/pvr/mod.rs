@@ -22,6 +22,7 @@ pub mod ccb;
 pub mod freelist;
 pub mod fwif;
 pub mod fwinit;
+pub mod hwperf;
 pub mod kick_times;
 pub mod km;
 pub mod mem;
