@@ -289,3 +289,10 @@ gm2_tc425_1  gm2_tc425_1.vert gm2_tc425_1.frag triangles vs.position=differs:una
 gm2_tc425_2  gm2_tc425_2.vert gm2_tc425_2.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:18:b088ce173981
 gm2_tc425_3  gm2_tc425_3.vert gm2_tc425_3.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:23:97cc5c7f495d fs.fragment=differs:mediump:14:0b3fdebeca1a
 gm2_tc425_4  gm2_tc425_4.vert gm2_tc425_4.frag triangles vs.position=differs:unanalysed:38:5e3aae929c53 vs.varying=differs:unanalysed:20:89b037b482b8 fs.fragment=differs:mediump:16:b5d7d3546284
+# #367 lower-nonfinite-const step 5 (mploop): function fs 849c's `sqrt` in the fp16 arithmetic after gl_FragCoord's highp
+# head, and loop fs 3678's mediump loop to a uniform bound (docs/notes/mali-fragcoord-fp16-ops.md, mali-int-loops.md),
+# drawn with --uniform-values. Our compiler is byte-equal to gm2_mploop_2 and _3 (tests/mali_mploop.rs); _1 (the loop)
+# stays refused. pan_shc's SPIR-V path has no lower_precision: its arithmetic after the head is fp32 (`mediump`).
+gm2_mploop_1  gm2_mploop_1.vert gm2_mploop_1.frag triangles vs.position=equal fs.fragment=differs:mediump:18:07966aa742a7
+gm2_mploop_2  gm2_mploop_2.vert gm2_mploop_2.frag triangles vs.position=equal fs.fragment=differs:mediump:41:0b7dea079e45
+gm2_mploop_3  gm2_mploop_3.vert gm2_mploop_3.frag triangles vs.position=equal fs.fragment=differs:mediump:9:97345a1c9945
