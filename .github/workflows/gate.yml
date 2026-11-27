@@ -134,6 +134,17 @@ jobs:
       # The full run of docs/release/checklist.md line 12 at 4f34ffb8 ran
       # under LC_ALL=C. Python's C locale still reads files as UTF-8 (PEP 538).
       LC_ALL: C
+      # No incremental compilation. A job's machine is single-use and its
+      # checkout is new, so the incremental files a build writes are read by
+      # nobody, and writing them costs. Measured on one whole-suite test row
+      # (host-test,gpu-vivante,shaderc-online, 943 test binaries, main
+      # 2f763281, 4 cores, 3 compilers at once, empty target directory): the
+      # build took 711 s with them and 454 s without (2,072 s and 1,340 s of
+      # compiler CPU, 20 GB and 16 GB written); with debug info off, 508 s
+      # and 365 s (3.5 GB and 1.6 GB); every test passed in each (docs/ci.md,
+      # section 6). They were also 47.5 GiB of the image's cache on
+      # 2026-11-19 (section 3.6) and 80 GB of a full run's disk (section 3.7).
+      CARGO_INCREMENTAL: "0"
       # Rows at once (tools/check.sh --jobs). Measured on 8 cores (runner A's
       # count) on fc1bb2a6, every row, empty cache: 1174 s with 1, 877 s
       # with 2, 547-593 s with 4 (docs/ci.md, section 1). A test row already
@@ -382,8 +393,15 @@ jobs:
       # reads the record, so it reuses only passes of what is on main.
       - name: tools/check.sh (every row, main, nightly or by hand)
         if: steps.seen.outputs.run == 'true' && github.event_name != 'pull_request'
+        # A pull request's whole-suite test rows build only the test targets
+        # that hold code in the row's feature set (tools/check.sh,
+        # live_test_targets). This run builds and runs every target and
+        # requires each one tools/check_live_tests.py calls empty to run no
+        # test: the proof of that reading on the real tree (docs/ci.md,
+        # section 6).
         env:
           YAKOGL_CHECK_RECORD: ${{ github.ref == 'refs/heads/main' && github.sha || '' }}
+          YAKOGL_CHECK_EMPTY_TARGETS: prove
         run: |
           mkdir -p build
           "$RUNNER_TEMP/gate-run.sh" "$RUNNER_TEMP/gate.pgid" tools/check.sh 2>&1 | tee build/gate-ci.log

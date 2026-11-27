@@ -258,10 +258,23 @@ path_scopes() {
   driver/tools/uboot-mp2/*) echo tools ;;
   tools/yakogl-tools/*) echo toolscrate ;;
   tools/release/redaction-scan.allow) echo tests ;;
+  # it decides which test targets the whole-suite rows build (cargo_test)
+  tools/check_live_tests.py) echo all ;;
   tools/mali/*) echo mali ;;
   tools/osal/*) echo osal ;;
   driver/samples/* | examples/* | tools/slint/* | tools/probes/* | tools/host-replay/*) echo samples ;;
   driver/rust/* | driver/*) echo drivers ;;
+  # A self-test no line claims by name (tools/<tool>_selftest.sh, the usual
+  # second file of a new tool): a change of it can break the row that runs it
+  # and no other, and that row is a tools row. The gate gives every self-test
+  # no row names a row under its own path's scope, the tools scope for this
+  # one (the loop over tools/check_selftests.py), and
+  # tools/check_scope_selftest.sh requires of every row that does name a
+  # self-test that a change of the self-test reaches it. Until 2026-11-27
+  # such a file selected every row: 52 of the 362 pull requests merged since
+  # 2026-11-13 whose diff reached every row did so for this alone
+  # (docs/ci.md, section 6).
+  tools/*selftest.sh) echo tools ;;
   # a path confined to tests/ (the GPU-named files above keep their GPU's
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
@@ -1214,6 +1227,73 @@ test_tree_key() {
   cat "$f"
 }
 
+# The targets of tests/ a whole-suite row builds: those that hold code in
+# the row's feature set (docs/ci.md, section 6).
+#
+# A file of tests/ is a crate of its own, and most open with a crate-level
+# `#![cfg(all(feature = "gpu-v3d", ...))]`. Where that is false the crate is
+# empty: no item is compiled, the binary holds no test, and running it proves
+# nothing. A row that names no target (`cargo test --features F`, or
+# `--tests`) still built, linked, hashed and ran one such binary per file:
+# on 2026-11-27, 6,361 of the 8,703 test binaries of the nine CONFIGS rows
+# and 518 of the 967 of the V3D row. tools/check_live_tests.py reads each
+# file's head and names the targets whose cfg is false whatever the host
+# (it can only err towards building one); the row then names the others
+# (`--lib --test a --test b ...`, or the `--test`s in place of `--tests`).
+# A row that names a package, a target or `--all-features` is left as it is,
+# and so is every row when the tool cannot tell.
+#
+# YAKOGL_CHECK_EMPTY_TARGETS=prove (the gate's run on main, gate.yml) builds
+# and runs every target as before and requires of each one the tool calls
+# empty that it ran no test (cargo_test, below): the proof of the tool on
+# the real tree, once a day, so a wrong reading leaves a test unrun on pull
+# requests for a day at most and never silently.
+#
+# Reads and rewrites cargo_test's cargo_args; sets its empty_targets.
+EMPTY_TARGETS_MODE=${YAKOGL_CHECK_EMPTY_TARGETS:-skip}
+live_test_targets() {
+  local a prev="" features="" whole=all split t n=0
+  local -a kept=() default=()
+  empty_targets=
+  for a in "${cargo_args[@]}"; do
+    if [ "$prev" = features ]; then
+      features="$features,$a"
+      prev=
+      kept+=("$a")
+      continue
+    fi
+    case "$a" in
+    --features | -F) prev=features ;;
+    --no-default-features) default=(--no-default-features) ;;
+    --tests)
+      whole=tests
+      continue
+      ;;
+    -p | --package | --workspace | --all | --exclude | --manifest-path | --all-features | --features=* | -F?* | \
+      --lib | --bins | --bin | --bin=* | --test | --test=* | --examples | --example | --example=* | \
+      --benches | --bench | --bench=* | --all-targets | --doc) return 0 ;;
+    esac
+    kept+=("$a")
+  done
+  split=$(python3 -I tools/check_live_tests.py --split "${default[@]+"${default[@]}"}" "${features#,}" 2>/dev/null) || return 0
+  empty_targets=$(printf '%s\n' "$split" | sed -n 's/^empty //p' | tr '\n' ' ')
+  [ -n "$empty_targets" ] || return 0
+  if [ "$EMPTY_TARGETS_MODE" = prove ]; then
+    echo "       every target is built; $(wc -w <<< "$empty_targets") must run no test (tools/check_live_tests.py, YAKOGL_CHECK_EMPTY_TARGETS=prove)" >&3
+    return 0
+  fi
+  [ "$whole" = all ] && kept+=(--lib)
+  for t in $(printf '%s\n' "$split" | sed -n 's/^live //p'); do
+    kept+=(--test "$t")
+    n=$((n + 1))
+  done
+  # `--tests` with no target left has no spelling: the row stays as it was
+  if [ "$whole" = tests ] && [ "$n" -eq 0 ]; then return 0; fi
+  echo "       $n target(s) of tests/ built; $(wc -w <<< "$empty_targets") hold no code in ${features#,} (tools/check_live_tests.py)" >&3
+  empty_targets=
+  cargo_args=("${kept[@]}")
+}
+
 cargo_test() {
   local cargo_args=() filter=() harness=() a after_dd=0 value=0 libtest_only=0
   if [ "${1-}" = --libtest ]; then libtest_only=1; shift; fi
@@ -1237,6 +1317,8 @@ cargo_test() {
     *) filter+=("$a") ;;
     esac
   done
+  local empty_targets=
+  live_test_targets
   local runner=libtest
   [ "$libtest_only" -eq 0 ] && [ "${#harness[@]}" -eq 0 ] && [ -n "$NEXTEST_VERSION" ] && runner=nextest
   # The logs are under the row's number (ROW_SEQ, set by run_row), so rows
@@ -1340,6 +1422,10 @@ for line in sys.stdin:
     rc_i=$(cat "$logs/$i.rc" 2>/dev/null || echo none)
     if [ "$rc_i" != 0 ]; then
       failed+=("${labels[i - 1]}: exit $rc_i, log $logs/$i.log")
+    elif [[ ${labels[i - 1]} == *" (test)" && " $empty_targets" == *" ${labels[i - 1]% (test)} "* ]] &&
+      ! grep -qE '^running 0 tests$|^no tests selected in ' "$logs/$i.log"; then
+      # YAKOGL_CHECK_EMPTY_TARGETS=prove: the target was called empty
+      failed+=("${labels[i - 1]}: tools/check_live_tests.py calls it empty in this feature set and it ran tests, log $logs/$i.log")
     elif [ "${states[i - 1]}" = run ] && [ -n "${YAKOGL_CHECK_RECORD-}" ] && [ ! -e "$logs/norecord" ]; then
       mkdir -p "$TEST_OK_DIR" &&
         cp "$logs/$i.log" "$TEST_OK_DIR/${hashes[i - 1]}.log.tmp" &&
@@ -1607,6 +1693,16 @@ if [ "${1-}" = "--tests-as-declared" ]; then
   shift 2
   tests_as_declared "$@" < "$tad_log"
   exit $?
+fi
+# --live-test-args <cargo test arguments>: print the arguments cargo_test
+# builds with, one per line, and exit (tools/check_live_tests_selftest.py).
+if [ "${1-}" = "--live-test-args" ]; then
+  shift
+  cargo_args=("$@")
+  live_test_targets 3>&2
+  printf '%s\n' "${cargo_args[@]}"
+  [ -z "$empty_targets" ] || echo "prove: $empty_targets"
+  exit 0
 fi
 if [ "${1-}" = "--cargo-test" ]; then
   shift
