@@ -1335,6 +1335,25 @@ fn fold_const16(a: AluOp, p: u32, q: u32) -> Result<u32, MaliError> {
     Ok(super::select::f16_bits(r))
 }
 
+/// `nir_opt_constant_folding` of a 16-bit `frcp` of a constant (fp32 bits;
+/// CONST_RCP16, docs/notes/mali-const-rcp16.md): the GLSL front end folds
+/// no quotient (`1.0 / c` is `frcp(c)` in NIR, nir_opt_algebraic.py
+/// `fdiv(1.0, a)`), lower_precision rounds `c` to fp16
+/// (`_mesa_float_to_half`), the fold is `1.0f / c` in `float` on the half
+/// and the result is rounded to nearest even (nir_constant_expressions.py
+/// :551-556). gm2_nbshrf_7's `1.0 / 1.2`: 1.2 is 0x3ccd (1.2001953), its
+/// reciprocal 0.8331976 is 0x3aaa, where the fp32 quotient rounded once
+/// would be 0x3aab. Returned as the fp32 bits of the half. An operand or a
+/// result that is not zero or a normal half (a reciprocal of 0.0, an
+/// overflow, a subnormal) has no reference: refused.
+fn fold_rcp16(c: u32) -> Result<u32, MaliError> {
+    let h = f16_rtne(c).ok_or(MaliError::ConstantFold)?;
+    if h & 0x7fff == 0 {
+        return Err(MaliError::ConstantFold);
+    }
+    round16((1.0 / f32::from_bits(super::select::f16_bits(h))).to_bits())
+}
+
 /// Lane `i` of IR source `s` as Mesa's GLSL front end folds a built-in call
 /// on constant expressions, at fp32 before lower_precision narrows it
 /// (ast_function.cpp:657-664, `constant_expression_value`;
@@ -7763,11 +7782,12 @@ fn walk_nodes(
                     *o = f.node(Alu::Ffma, x, at)?;
                 }
             }
-            /* `1.0 / c` of a constant: the GLSL front end folds a quotient
-             * of constants (gm2_fsmisc_4's `smoothstep(0.25, 0.75, x)`, whose
-             * `(x - e0) / (e1 - e0)` is `(x - 0.25) * 2.0` in Mesa's
-             * program), exact in fp16 or refused; of anything else no
-             * reference */
+            /* `1.0 / c` of a constant: NIR's 16-bit fold of `frcp` on the
+             * constant rounded to fp16, the result rounded to nearest even
+             * ([`fold_rcp16`]; gm2_fsmisc_4's `smoothstep(0.25, 0.75, x)`,
+             * whose `(x - e0) / (e1 - e0)` is `(x - 0.25) * 2.0` in Mesa's
+             * program, and gm2_nbshrf_7's `1.0 / 1.2`, the FAU word
+             * 0x3aaa3aaa) */
             ir::Op::Alu(AluOp::Frcp, s) => {
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
@@ -7812,11 +7832,7 @@ fn walk_nodes(
                         *o = f.node(Alu::Frcp, [x, Val::Undef, Val::Undef], at)?;
                         continue;
                     };
-                    let r = (1.0 / f32::from_bits(c)).to_bits();
-                    if f16_exact(c).is_none() || f16_exact(r).is_none() {
-                        return Err(MaliError::ConstantFold);
-                    }
-                    *o = Val::Const(r);
+                    *o = Val::Const(fold_rcp16(c)?);
                 }
             }
             /* `max` and `min` of a mediump lane and a constant (`clamp(x, lo,

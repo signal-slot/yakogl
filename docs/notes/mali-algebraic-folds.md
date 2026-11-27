@@ -369,3 +369,10 @@ a back-end defect (`IrIndex`, at 74308a71 too), a new cause.
 before lower_precision rounds it once. That fold is now the mediump walk's
 own (plan #367 lower-nonfinite-const, docs/notes/mali-nonfinite-const.md:
 gm2_nonfin_2 and _4 byte-equal, scenes 6 and 9 compile).
+
+`CONST_RCP16`: a mediump `1.0 / c` of a constant that fp16 does not hold
+exactly (refract `3fae`'s `1.0 / RefractiveIndex`). It is NIR's 16-bit fold
+of `frcp`: `c` rounded to fp16, the reciprocal taken in f32, then rounded to
+nearest even (plan #367 lower-train-2, docs/notes/mali-const-rcp16.md:
+`gm2_nbshrf_7`'s `3aaa3aaa` is byte-equal, and so are
+`deqp_cfold2_zero_operand_rcp16` and `_const_other_rcp16`).

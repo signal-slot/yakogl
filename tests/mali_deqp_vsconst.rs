@@ -19,7 +19,7 @@
 //! |---|--:|---|---|---|
 //! | `dynloop`: `shaders.indexing` loop to a uniform bound (`i < ui_four`), write and read | 33 | 0 / 33 | VS, `nir.rs:2412`, `inot(0)` | `dynloop_tmp_array`, `dynloop_varying_array`, `dynloop_matrix_subscript` (here) |
 //! | `mixloop`: one loop to a uniform bound, the other static | 25 | 0 / 25 | VS, `nir.rs:2412`, `inot(0)` | `mixloop_tmp_array`, `mixloop_varying_array`, `mixloop_vector_subscript` (here) |
-//! | `fsdiv_highp`: `matrix.div.const_highp_matN_matN_fragment` | 3 | 3 / 0 | FS, `nir_fs.rs:6999`, `rcp(0.7)`, `rcp(1.2)` | `fsdiv_highp_mat2`, `fsdiv_highp_mat3` (here) |
+//! | `fsdiv_highp`: `matrix.div.const_highp_matN_matN_fragment` | 3 | 3 / 0 | FS, `nir_fs.rs:6999`, `rcp(0.7)`, `rcp(1.2)`; since CONST_RCP16 the mixed precisions | `fsdiv_highp_mat2`, `fsdiv_highp_mat3` (here) |
 //! | `staticloop`: `shaders.indexing` static loops, unrolled | 68 | 54 / 14 | VS, `nir.rs:2412` `inot(0)` 52, `nir.rs:2325` `ieq` 16 | covered: `deqp_cfold2_zero_operand_icmp`, `_zero_operand_inot`, `_const_other_inot` |
 //! | `random_int`: int and bool constants in `shaders.random`, `interaction.basic_shader` | 35 | 35 / 0 | VS, `nir.rs:2325` `ieq` 26, `inot(~0)` 2; `nir.rs:2412` `inot(0)` 7 | covered: `deqp_cfold2_random_mixed_icmp`, `_random_mixed_inot`, `deqp_constrnd_int_bits_vs` |
 //! | `light_amount`: the unrolled light loop | 16 | 16 / 0 | VS, `nir.rs:2325` `ieq` 14, `nir.rs:2412` `inot(0)` 2 | covered: `deqp_intval5_light_amount_2_2`, `_0_16` |
@@ -35,13 +35,14 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The refusal, without the `Valhall: ` prefix and the ` is not lowered yet`
-/// suffix.
-const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
-
-/// The loop references' next refusal: their unrolled counters' integer
+/// The refusals, without the `Valhall: ` prefix and the ` is not lowered
+/// yet` suffix. The loop references' next refusal: their unrolled counters' integer
 /// constants fold now (ConstantFold step A, `docs/notes/mali-deqp-cfold2.md`).
 const CONSTANT_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold";
+
+/// The refusal of `fsdiv_highp_*` since plan #367's CONST_RCP16 folds a
+/// mediump `rcp` of a constant: the highp `res` in the mediump shader.
+const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values";
 
 /// The references the compiler makes byte-equal. None yet.
 const MATCHED: &[&str] = &[];
@@ -54,8 +55,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("mixloop_tmp_array", CONSTANT_PRODUCT),
     ("mixloop_varying_array", CONSTANT_PRODUCT),
     ("mixloop_vector_subscript", CONSTANT_PRODUCT),
-    ("fsdiv_highp_mat2", CONSTANT_FOLD),
-    ("fsdiv_highp_mat3", CONSTANT_FOLD),
+    ("fsdiv_highp_mat2", MIXED),
+    ("fsdiv_highp_mat3", MIXED),
 ];
 
 #[test]
@@ -134,7 +135,7 @@ fn mixloop_vector_subscript() {
 /// (0.5), where the mediump case's fp16 fold gives `0x37fe`
 /// (`deqp_cfold2_const_other_rcp16`).
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (rcp(0.7) not exact in fp16, nir_fs.rs:6999)"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (the highp res; its rcp(0.7) folded at fp16 since CONST_RCP16)"]
 fn fsdiv_highp_mat2() {
     mali_ref::assert_matches("deqp_vsconst_fsdiv_highp_mat2");
 }
@@ -142,7 +143,7 @@ fn fsdiv_highp_mat2() {
 /// FAU u2 = `b639bcab 3c003db7` (the mediump case's are `b638bcab
 /// 3c003db6`).
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (rcp(1.2) not exact in fp16, nir_fs.rs:6999)"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (the highp res; its rcp(1.2) folded at fp16 since CONST_RCP16)"]
 fn fsdiv_highp_mat3() {
     mali_ref::assert_matches("deqp_vsconst_fsdiv_highp_mat3");
 }

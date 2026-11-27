@@ -336,3 +336,8 @@ gm2_nbshrf_5  gm2_nbshrf_5.vert gm2_nbshrf_5.frag triangles vs.position=equal vs
 # gm2_nbshrf_6 (tests/mali_fs_refract.rs). pan_shc's SPIR-V path has no lower_precision (`mediump`), and it lays the
 # varyings out in another order, `vn` stored before `vp` (`unanalysed`).
 gm2_nbshrf_6  gm2_nbshrf_6.vert gm2_nbshrf_6.frag triangles vs.position=equal vs.varying=differs:unanalysed:32:7f2517ba7f5f fs.fragment=differs:mediump:46:a2dce3abd435
+# #367 lower-train-2 step CONST_RCP16: refract fs 3fae's `1.0 / RefractiveIndex` of a `const float` 1.2, the mediump
+# reciprocal folded at fp16 on the rounded half, FAU 0x3aaa3aaa (docs/notes/mali-const-rcp16.md). Our compiler is
+# byte-equal to gm2_nbshrf_7 (tests/mali_const_rcp16.rs). pan_shc's SPIR-V path has no lower_precision: its reciprocal
+# is the fp32 word 0x3f555555 and its arithmetic fp32 (`mediump`).
+gm2_nbshrf_7  gm2_nbshrf_7.vert gm2_nbshrf_7.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:12:a369dfe99bcd
