@@ -162,8 +162,8 @@ retired Linux pair ran, has no user now.
 tools/cts/cts-build.sh
 ```
 
-Needs a VK-GL-CTS checkout (default `~/com/github/KhronosGroup/VK-GL-CTS`, set
-`CTS=` for another). The script
+Needs a VK-GL-CTS checkout (`CTS=<VK-GL-CTS checkout>`; the script's own
+default is a personal layout path, so set `CTS=`). The script
 
 1. unpacks the Bootlin `aarch64--glibc--stable-2024.05-1` SDK under
    `build/cts/toolchain/` and relocates it. A pruned copy of that SDK without
