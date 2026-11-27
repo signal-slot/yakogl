@@ -1,9 +1,9 @@
 row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
-69	T6S4R01	395	done	19	0	0	yes	no	-
-70	T6S4R02	365	done	17	0	0	yes	no	-
-71	T6S4R03	378	done	18	0	0	yes	no	-
-72	T6S4R04	292	done	14	0	0	yes	no	-
-73	T6S4R05	387	done	17	0	0	yes	no	-
-74	T6S4R06	383	done	15	0	0	yes	no	-
-75	T6S4R07	356	done	15	0	0	yes	no	-
-76	T6S4R08	119	done	8	0	0	yes	no	-
+69	T6S4R01	395	done	19	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 18816 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+70	T6S4R02	365	done	16	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 16378 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+71	T6S4R03	378	done	18	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 17598 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+72	T6S4R04	292	done	13	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 13290 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else
+73	T6S4R05	387	done	17	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 16785 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 arra
+74	T6S4R06	383	done	15	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14551 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 arra
+75	T6S4R07	356	done	15	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14737 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+76	T6S4R08	119	done	7	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 7349 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:

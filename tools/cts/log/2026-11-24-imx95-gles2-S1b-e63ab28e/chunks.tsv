@@ -1,0 +1,13 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+13	T6S1R13	36	done	3	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 3044 ms first_refused=-
+14	T6S1R14	112	done	16	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 16497 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a
+15	T6S1R15	74	done	15	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14924 ms first_refused=-
+16	T6S1R16	192	done	10	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9786 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowere
+17	T6S1R17	90	done	28	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 28220 ms first_refused=-
+18	T6S1R18	15	done	4	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 4320 ms first_refused=-
+19	T6S1R19	343	done	18	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 17539 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+20	T6S1R20	336	done	19	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 18769 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+21	T6S1R21	294	done	16	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 15793 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+22	T6S1R22	294	done	15	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14881 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+23	T6S1R23	203	done	30	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 30131 ms first_refused=-
+24	T6S1R24	374	done	33	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 32710 ms first_refused=-

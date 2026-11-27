@@ -1,0 +1,3 @@
+label	case	status
+T6S3R14	dEQP-GLES2.functional.shaders.random.all_features.fragment.16	Fail
+T6S3R14	dEQP-GLES2.functional.shaders.random.all_features.fragment.56	Fail
