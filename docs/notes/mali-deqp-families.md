@@ -995,3 +995,204 @@ available to read them.
   per shape is in `summary.md` of a run.
 - 20 of the cases of section 13 can move their first refusal between
   runs; the counts here are those of one run at `9ac31f30`.
+
+## 19. Ranked refusal texts after train 2 at `e9033663` (HOST-ONLY)
+
+Plan #387 item `host-measure-3` (criterion c2). Section 18's method rerun at
+the integration tip `e90336635cfab7ab5839d5e3ea2d5231e5afce6d`, which contains
+train 2 (`arith-lower-2`: `52d9d5fe` arith step 2, `521a1624` arith step 1b,
+`85ef7ea6` the IrIndex `b2f16_pair` fix, `e9033663` the mediump varying
+`smoothstep`). HOST-ONLY: compile and link outcomes of `deqp-gles2` against
+the Mali C pair on the Linux OSAL; the board status quoted is the NanoPC-T6's
+at `37305608`, never the host's. No compiler change.
+
+- Cases: the same 10,597 of the slices `2026-11-15-t6-gles2-S{1..4}-37305608`
+  as sections 2 and 18; all are in `tools/cts/gles2-mustpass.txt`.
+- CTS: `93bca01861b0e3ef3c387027a9791e6d065f900c` (the commit of section 18 and
+  `tools/cts/deps.toml`), fetched at that commit alone, `external/fetch_sources.py`
+  run, then `tools/cts/cts-yakogl-target.patch` applied with `git apply` (the
+  script does not apply it).
+- Command (4 cores):
+
+```sh
+tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS" \
+    --out "$PWD/build/measure" --jobs 3 --chunk 100
+```
+
+- All 10,597 cases began; 106 chunk processes exited 1 (dEQP's "not every
+  case passed") and **none crashed** (section 18.4's two library SIGSEGVs are
+  gone). **4,716 cases still meet a compile or link refusal** (1,628 vertex,
+  3,088 fragment/link; 4,170 Fail, 546 NotSupported by the board's status,
+  0 board Pass), against 6,196 in section 18: 1,480 fewer. The other 5,881
+  compile and link on the host (not passes: the host reads black).
+- Ranking: `tools/mali/refusal-rank.py` reads the board's `refusals.tsv`
+  (`case<TAB>refusal` with "refused this <stage> shader: Mali(<why>)"), which
+  this run does not produce, so it was not used. The ranking is the same rule
+  (one text per case, the **first** refusal, each case once) applied to
+  `measure.tsv`'s `host_refusal` column, with each text mapped to its
+  `MaliError` variant by the message's opening words
+  (`src/shaderc/online/mali/mod.rs`). Every one of the 4,716 mapped; none is
+  unnamed.
+
+### 19.1 Every refusal text produced, ranked
+
+`Section 18` is the count of the same variant in 18.2; `Change` is this
+count minus it. `Owner` is the step or item of
+`docs/notes/mali-lowering-schedule.md` (sections 2 and 4b for the older
+families, section 5 and 5.4 for the post-train ones); "no item" is the
+schedule's own word. `At 100 line` is the plan's criterion: **at or above**
+means the text still blocks 100 or more must-pass cases. 43 texts; counts sum
+to 4,716.
+
+| # | Refusal text (`MaliError`) | vs / fs | Cases | Fail | NS | dEQP groups (top 3) | Section 18 | Change | At 100 line | Owner (schedule) |
+|--:|---|---|--:|--:|--:|---|--:|--:|---|---|
+| 1 | `Arithmetic` | 743 / 667 | 1410 | 1321 | 89 | shaders.random 446, uniform_api.value 266, shaders.operator 259 | 1463 | -53 | **at or above** | #367 ARITH, schedule 2.3: A5, A6, A7 (no item), A4b (3a, O1-O3); A8 split out as `Rebalance` |
+| 2 | `ColourForm` | 0 / 926 | 926 | 921 | 5 | uniform_api.value 343, shaders.operator 283, shaders.random 103 | 821 | +105 | **at or above** | fclane 2.2: F2D/F2B (fclane-lower-2, todo), F2C, F2E (fclane-lower-3, todo); no train 3 step |
+| 3 | `ArithConstant` | 246 / 104 | 350 | 278 | 72 | shaders.random 174, shaders.indexing 106, shaders.constant_expressions 16 | 386 | -36 | **at or above** | constprod 2.7: K3 (no item), K4/K5 (constprod-lower-3), K2 (constprod-lower-2); not in train 3 |
+| 4 | `TexCoord` | 0 / 200 | 200 | 200 | 0 | texture.specification 96, uniform_api.value 52, shaders.random 33 | 182 | +18 | **at or above** | fmaloc 2.10: T1 (cube sequence); not in train 3 |
+| 5 | `FsOperandForm` | 0 / 197 | 197 | 197 | 0 | shaders.operator 83, shaders.random 62, shaders.matrix 29 | 152 | +45 | **at or above** | opform: O1-O3 train 3a (R2), O4-O8 train 3c |
+| 6 | `LoopVertex` | 194 / 0 | 194 | 25 | 169 | shaders.loops 139, shaders.indexing 28, shaders.functions 7 | 241 | -47 | **at or above** | loops 2.9: LS1, LS8-LS11 (loops-lower-2); not in train 3 (NF3 waits for LS2) |
+| 7 | `FsUniform` | 0 / 154 | 154 | 153 | 1 | shaders.random 61, shaders.matrix 36, uniform_api.value 18 | 280 | -126 | **at or above** | unifmp: FM1 (U3) train 3a, FM2-FM3 3a, FM4-FM7 3c |
+| 8 | `IntValue` | 0 / 154 | 154 | 132 | 22 | shaders.operator 71, shaders.random 24, shaders.indexing 20 | 271 | -117 | **at or above** | intval-rest 2.1 R1: steps 2-4 (intval-rest-2..4, no item); the fragment `int_uniform` shapes lift with FM1 |
+| 9 | `FsVaryingLoad` | 0 / 123 | 123 | 123 | 0 | shaders.operator 90, shaders.random 25, shaders.indexing 4 | 43 | +80 | **at or above** | MISC 2.10 / 5.5: `varyload-lower-1` (train 3c); opform names it as the text behind O1-O3 |
+| 10 | `FusedMultiplyAdd` | 116 / 0 | 116 | 116 | 0 | shaders.operator 42, shaders.random 34, shaders.matrix 24 | 139 | -23 | **at or above** | constprod 2.7: K4, K6, K7; fmaloc 2.10; not in train 3 |
+| 11 | `ControlFlow` | 33 / 69 | 102 | 81 | 21 | shaders.random 52, shaders.loops 20, fragment_ops.interaction 11 | 73 | +29 | **at or above** | ctrlflow 2.10 CT1: ctrlflow-lower-2..5 (no item) |
+| 12 | `MixedPrecision` | 0 / 89 | 89 | 83 | 6 | shaders.operator 41, shaders.random 29, shaders.matrix 7 | 166 | -77 | under | mixprec2 / mixcol 2.6: M2-1..M2-4c (train 3c); MX3, MX5 (no item) |
+| 13 | `TexVertex` | 61 / 0 | 61 | 61 | 0 | uniform_api.value 44, uniform_api.random 11, uniform_api.info_query 6 | 60 | +1 | under | texmisc 4b item 10: texmisc-lower-1..6 (no item yet) |
+| 14 | `TexKind` | 0 / 59 | 59 | 59 | 0 | shaders.random 49, shaders.texture_functions 6, texture.mipmap 4 | 42 | +17 | under | texmisc 4b item 10: texmisc-lower-3..5 |
+| 15 | `LoopMediump` | 0 / 53 | 53 | 0 | 53 | shaders.indexing 25, shaders.loops 24, shaders.struct 4 | 281 | -228 | under | loops 2.9: LS3-LS7 (loops-lower-1) |
+| 16 | `UniformArray` | 53 / 0 | 53 | 53 | 0 | uniform_api.value 36, uniform_api.random 9, uniform_api.info_query 8 | 193 | -140 | under | vsuarr: VA1-VA3, U8 (train 3b) |
+| 17 | `VaryingForm` | 52 / 0 | 52 | 2 | 50 | shaders.indexing 49, shaders.struct 3 | 4 | +48 | under | posvary 2.4 P-steps (posvary-lower-1..5, no item); 49 of the 52 are `shaders.indexing` NotSupported |
+| 18 | `VaryingDuplicate` | 10 / 40 | 50 | 41 | 9 | shaders.swizzles 33, shaders.indexing 9, shaders.conversions 6 | 49 | +1 | under | MISC 2.10 / 4b item 12 (varylink2 references); no item |
+| 19 | `Defect(IrIndex)` | 0 / 46 | 46 | 46 | 0 | shaders.matrix 24, shaders.conversions 16, shaders.operator 2 | 187 | -141 | under | IR1 (irindex-fix, review; train 2 landed part) |
+| 20 | `FragCoordMediump` | 0 / 39 | 39 | 39 | 0 | shaders.conversions 32, shaders.random 6, shaders.functions 1 | 42 | -3 | under | texmisc 4b item 10 (fp16 int round trip) |
+| 21 | `VaryingNotFromAttribute` | 35 / 0 | 35 | 34 | 1 | shaders.random 27, fragment_ops.interaction 7, shaders.indexing 1 | 32 | +3 | under | posvary 2.4; no item |
+| 22 | `ConstantFold` | 0 / 34 | 34 | 34 | 0 | shaders.constant_expressions 16, shaders.matrix 9, shaders.random 9 | 204 | -170 | under | nonfin NF3 / CF1 (cf-dead landed in train 2); CF-C/D/B (cfold-lower-2..4, no item); NF3 in 3b |
+| 23 | `NegZeroShared` | 18 / 12 | 30 | 30 | 0 | shaders.random 30 | 137 | -107 | under | negzero 2.8: N2 (negzero-lower), N3 (no item) |
+| 24 | `AlgebraicForm` | 1 / 27 | 28 | 28 | 0 | shaders.matrix 25, shaders.random 3 | 8 | +20 | under | constprod K8 (no item) |
+| 25 | `LoopForm` | 0 / 21 | 21 | 0 | 21 | shaders.indexing 18, shaders.return 3 | 3 | +18 | under | loops 2.9: LS2/LS9-LS11 |
+| 26 | `DiscardForm` | 0 / 20 | 20 | 16 | 4 | shaders.discard 20 | 16 | +4 | under | ctrlflow CT1 `disc-forms` (no item) |
+| 27 | `UniformPrecision` | 17 / 0 | 17 | 16 | 1 | uniform_api.value 12, shaders.struct 3, uniform_api.info_query 2 | 99 | -82 | under | vs16 V2 landed in train 1; residue 17 no step |
+| 28 | `link: varying offsets` | 0 / 14 | 14 | 14 | 0 | shaders.random 13, shaders.operator 1 | 0 | +14 | under | NEW text, no owner (the library's link refusal: stages place a varying at different offsets) |
+| 29 | `AttributeNumbering` | 12 / 0 | 12 | 12 | 0 | shaders.random 12 | 8 | +4 | under | misc2 step, no item (4b item 12) |
+| 30 | `Defect(LaneCycle)` | 0 / 11 | 11 | 11 | 0 | shaders.random 11 | 0 | +11 | under | NEW at this tip as a first refusal, no owner (`mali-deqp-defects.md` cause `lanecycle`, reference drawn) |
+| 31 | `GuardMediump` | 0 / 10 | 10 | 0 | 10 | shaders.loops 10 | 12 | -2 | under | loops 2.9: LS5 (loops-lower-1) |
+| 32 | `Rebalance` | 8 / 2 | 10 | 10 | 0 | shaders.random 5, shaders.invariance 3, shaders.functions 2 | 12 | -2 | under | arith A8 (no item) |
+| 33 | `UniformIndexed` | 5 / 4 | 9 | 0 | 9 | shaders.indexing 9 | 10 | -1 | under | vsuarr/vsunif: VT5-like run-time index; no step |
+| 34 | `LinkedVertexNotLowered` | 8 / 0 | 8 | 8 | 0 | attribute_location.bind_aliasing 8 | 8 | +0 | under | misc2 / board-baseline-rows (no item) |
+| 35 | `FragmentTooLarge` | 0 / 7 | 7 | 7 | 0 | uniform_api.value 4, uniform_api.info_query 2, uniform_api.random 1 | 4 | +3 | under | misc2 (4b item 12), last |
+| 36 | `Defect(Encode)` | 6 / 0 | 6 | 6 | 0 | attribute_location.bind_aliasing 6 | 6 | +0 | under | DF1 (defects-ref; no item) |
+| 37 | `UboFallback` | 5 / 0 | 5 | 5 | 0 | light_amount.10omni 1, light_amount.12omni 1, light_amount.14omni 1 | 0 | +5 | under | NEW text (`light_amount.*`: uniform past the FAU's 128 words), no owner |
+| 38 | `PositionLane` | 3 / 0 | 3 | 0 | 3 | shaders.indexing 3 | 6 | -3 | under | posvary P-steps (no item) |
+| 39 | `TexLanes` | 0 / 3 | 3 | 3 | 0 | shaders.random 2, shaders.struct 1 | 1 | +2 | under | misc2 (4b item 12), last |
+| 40 | `TooManyValues` | 2 / 0 | 2 | 2 | 0 | uniform_api.random 2 | 2 | +0 | under | misc2 (table size), no item |
+| 41 | `Fp16Inexact` | 0 / 1 | 1 | 1 | 0 | shaders.matrix 1 | 0 | +1 | under | constop (no item) |
+| 42 | `PrecisionUnknown` | 0 / 1 | 1 | 1 | 0 | shaders.random 1 | 0 | +1 | under | NEW text, no owner |
+| 43 | `TexHighp` | 0 / 1 | 1 | 1 | 0 | state_query.shader 1 | 0 | +1 | under | NEW text, no owner (`state_query.shader`) |
+| | **Total** | 1628 / 3088 | 4716 | 4170 | 546 | | 6196 | -1480 | | |
+
+
+Texts of section 18 that no longer appear as a first refusal: `UniformType`
+(462), `ColourPair` (61), `ColourZeroHalf` (16), `Invariant` (9), `Spill`
+(2). New first refusals (0 in section 18): the link refusal "varying at
+different offsets" (14), `Defect(LaneCycle)` (11), `UboFallback` (5),
+`Fp16Inexact`, `PrecisionUnknown`, `TexHighp` (1 each).
+
+**Eleven texts are at or above the line**: `Arithmetic` 1,410, `ColourForm`
+926, `ArithConstant` 350, `TexCoord` 200, `FsOperandForm` 197, `LoopVertex`
+194, `FsUniform` 154, `IntValue` 154, `FsVaryingLoad` 123, `FusedMultiplyAdd`
+116 and `ControlFlow` 102. Section 18 had sixteen. Gone below the line since:
+`LoopMediump` (281 to 53), `UniformArray`, `Defect(IrIndex)` (187 to 46),
+`ConstantFold`, `NegZeroShared`, `MixedPrecision`, `UniformPrecision`; gone
+entirely: `UniformType`.
+
+Counts that **rose** are inflow, not new breakage: a case leaves a text only to
+meet the next one. `ColourForm` +105, `FsVaryingLoad` +80 (43 to 123),
+`VaryingForm` +48 (4 to 52; 49 of them `shaders.indexing` NotSupported, behind
+the vertex loops and `ConstantFold` that train 2 lifted), `FsOperandForm` +45,
+`ControlFlow` +29.
+
+### 19.2 Does section 5.4's order of train 3 change for 3b and 3c
+
+Train 3's steps against this table (the text each step's cases sit in now):
+
+| Item | Steps | Text it works on | Cases now | At the line |
+|---|---|---|--:|---|
+| 3a | U3+FM1, FM2, FM3 / O1, O2, O3 | `FsUniform` / `FsOperandForm` (+ `Arithmetic` fs through 4b) | 154 / 197 | both at or above |
+| 3b | VT3+VT2, VT1 / VA1, VA2, VA3 / NF3 | `UniformType` gone (0), `UniformArray` 53, `ConstantFold` 34, residue of `UniformPrecision` 17 | 104 in all | **none at or above** |
+| 3c | M2-1..M2-4c / O4-O8 / `varyload-lower-1` | `MixedPrecision` 89, `FsOperandForm` remainder, `FsVaryingLoad` 123 | 89 / 197 / 123 | `FsVaryingLoad` and the O4-O8 part of `FsOperandForm` |
+
+**Recommendation: yes, 3c should go before 3b.** Criterion c2 is the number
+of texts at or above 100, and 3b's three texts are already below it (their
+residue totals 104 cases across `UniformArray`, `ConstantFold` and the
+vertex `UniformPrecision`; `UniformType` is gone). 3b's value is the cases
+it moves to the next text, not a text leaving the line. 3c holds the only
+other at-the-line text a train 3 step names, `FsVaryingLoad` (123, up from 43:
+this is the text 5.5 says follows O1-O3), and O4-O8 finish `FsOperandForm`
+after 3a's O1-O3 (134 of 197). `MixedPrecision` (89) is under the line;
+M2-1..M2-4c inside 3c can go last, or with 3b. Order: **3a, then 3c with
+`varyload-lower-1` and O4-O8 first, then 3b.** Within 3b, if it still
+runs, VA1-VA3 (53) before NF3 (34).
+
+The larger finding: after all of train 3, seven of the eleven texts stay at
+or above the line, because no train 3 step names them: `Arithmetic` 1,410
+(only O1-O3's share), `ColourForm` 926, `ArithConstant` 350, `TexCoord` 200,
+`LoopVertex` 194, `FusedMultiplyAdd` 116 and `ControlFlow` 102. Their steps
+(A5-A7, fclane F2B-F2E, K2-K7, T1, LS1/LS8-LS11, K4/K6/K7, CT1 2-5) are the
+section 2 items still `todo` or "no item". The plan is done only when those
+fall below the line, so a train 4 (or a re-ordered 3b) that takes the
+`Arithmetic`, `ColourForm` and `ArithConstant` steps is what moves c2; the
+first two hold 2,336 of the 4,716 first refusals. This is a recommendation
+for the planner; section 5.4 itself is unchanged.
+
+### 19.3 Appendix: the per-case measure by case group
+
+Case group (the two name parts after `functional`) to first refusal text and
+cases. This replaces the lost `measure.tsv` of the earlier measures: a
+rerun of the command above gives the per-case rows, in
+`build/measure/measure.tsv` of that run.
+
+| Case group | Cases | First refusal text: cases |
+|---|--:|---|
+| shaders.random | 1214 | Arithmetic 446, ArithConstant 174, ColourForm 103, FsOperandForm 62, FsUniform 61, ControlFlow 52, TexKind 49, FusedMultiplyAdd 34, TexCoord 33, NegZeroShared 30, MixedPrecision 29, VaryingNotFromAttribute 27, FsVaryingLoad 25, IntValue 24, link: varying offsets 13, AttributeNumbering 12, Defect(LaneCycle) 11, ConstantFold 9, FragCoordMediump 6, Rebalance 5, AlgebraicForm 3, Defect(IrIndex) 2, TexLanes 2, VaryingDuplicate 1, PrecisionUnknown 1 |
+| shaders.operator | 890 | ColourForm 283, Arithmetic 259, FsVaryingLoad 90, FsOperandForm 83, IntValue 71, FusedMultiplyAdd 42, MixedPrecision 41, ArithConstant 16, Defect(IrIndex) 2, ControlFlow 2, link: varying offsets 1 |
+| uniform_api.value | 775 | ColourForm 343, Arithmetic 266, TexCoord 52, TexVertex 44, UniformArray 36, FsUniform 18, UniformPrecision 12, FragmentTooLarge 4 |
+| shaders.indexing | 381 | ArithConstant 106, Arithmetic 83, VaryingForm 49, LoopVertex 28, ColourForm 26, LoopMediump 25, IntValue 20, LoopForm 18, UniformIndexed 9, VaryingDuplicate 9, FsVaryingLoad 4, PositionLane 3, VaryingNotFromAttribute 1 |
+| shaders.matrix | 246 | ColourForm 82, FsUniform 36, FsOperandForm 29, AlgebraicForm 25, Defect(IrIndex) 24, FusedMultiplyAdd 24, ConstantFold 9, MixedPrecision 7, ArithConstant 4, Arithmetic 4, FsVaryingLoad 1, Fp16Inexact 1 |
+| shaders.loops | 202 | LoopVertex 139, LoopMediump 24, ControlFlow 20, GuardMediump 10, MixedPrecision 6, Arithmetic 3 |
+| shaders.swizzles | 126 | Arithmetic 93, VaryingDuplicate 33 |
+| shaders.conversions | 123 | Arithmetic 53, FragCoordMediump 32, Defect(IrIndex) 16, FsOperandForm 8, IntValue 8, VaryingDuplicate 6 |
+| uniform_api.info_query | 120 | ColourForm 46, Arithmetic 41, TexCoord 11, UniformArray 8, TexVertex 6, FsUniform 4, UniformPrecision 2, FragmentTooLarge 2 |
+| shaders.constant_expressions | 110 | Arithmetic 66, ConstantFold 16, ArithConstant 16, FusedMultiplyAdd 7, IntValue 3, ColourForm 2 |
+| texture.specification | 96 | TexCoord 96 |
+| uniform_api.random | 84 | Arithmetic 29, ColourForm 21, TexVertex 11, UniformArray 9, FsUniform 7, TexCoord 4, TooManyValues 2, FragmentTooLarge 1 |
+| fragment_ops.interaction | 64 | Arithmetic 23, ControlFlow 11, FsUniform 7, VaryingNotFromAttribute 7, FsOperandForm 6, ColourForm 4, MixedPrecision 2, IntValue 2, FsVaryingLoad 1, ArithConstant 1 |
+| shaders.struct | 57 | Arithmetic 15, ColourForm 12, LoopVertex 7, FsUniform 6, LoopMediump 4, ControlFlow 3, VaryingForm 3, UniformPrecision 3, IntValue 2, MixedPrecision 1, TexLanes 1 |
+| shaders.functions | 49 | IntValue 15, Arithmetic 11, ArithConstant 8, LoopVertex 7, MixedPrecision 3, Rebalance 2, Defect(IrIndex) 1, FragCoordMediump 1, ColourForm 1 |
+| shaders.invariance | 36 | FsUniform 9, ArithConstant 9, FusedMultiplyAdd 9, LoopVertex 6, Rebalance 3 |
+| shaders.discard | 24 | DiscardForm 20, TexCoord 4 |
+| shaders.return | 19 | LoopVertex 7, FsOperandForm 6, LoopForm 3, FsVaryingLoad 2, ControlFlow 1 |
+| shaders.linkage | 16 | FsUniform 6, ControlFlow 4, ColourForm 3, VaryingDuplicate 1, Defect(IrIndex) 1, FsOperandForm 1 |
+| attribute_location.bind_aliasing | 14 | LinkedVertexNotLowered 8, Defect(Encode) 6 |
+| shaders.conditionals | 11 | ControlFlow 7, IntValue 4 |
+| shaders.builtin_variable | 10 | Arithmetic 9, ControlFlow 1 |
+| default_vertex_attrib.mat4 | 8 | ArithConstant 8 |
+| default_vertex_attrib.vec4 | 8 | ArithConstant 8 |
+| shaders.texture_functions | 6 | TexKind 6 |
+| shaders.constants | 5 | IntValue 5 |
+| shaders.algorithm | 4 | Arithmetic 3, ControlFlow 1 |
+| texture.mipmap | 4 | TexKind 4 |
+| attribute_location.bind | 1 | FsOperandForm 1 |
+| attribute_location.bind_time | 1 | FsOperandForm 1 |
+| flush_finish.finish | 1 | Arithmetic 1 |
+| flush_finish.finish_wait | 1 | Arithmetic 1 |
+| flush_finish.flush | 1 | Arithmetic 1 |
+| flush_finish.flush_wait | 1 | Arithmetic 1 |
+| flush_finish.wait | 1 | Arithmetic 1 |
+| light_amount.10omni | 1 | UboFallback 1 |
+| light_amount.12omni | 1 | UboFallback 1 |
+| light_amount.14omni | 1 | UboFallback 1 |
+| light_amount.16dir | 1 | UboFallback 1 |
+| light_amount.16omni | 1 | UboFallback 1 |
+| shaders.misc | 1 | Arithmetic 1 |
+| state_query.shader | 1 | TexHighp 1 |
