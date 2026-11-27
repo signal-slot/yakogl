@@ -589,7 +589,9 @@ fn a_fragment_lookup_with_a_constant_direction_magnifies() {
 /// fragment and coordinate programs) taken from the tree BEFORE the
 /// non-seamless change (commit 0252e9d): the unkeyed compile is
 /// byte-identical, in this build and in the other (the hash does not depend
-/// on `report-es2`).
+/// on `report-es2`). Re-pinned 2026-11-27 with the packing change of chain.rs
+/// `PAIRING` (plan #419 sched-pair), which is no cube change: the keyed and
+/// the unkeyed compile of each case still give one hash.
 #[test]
 fn an_unkeyed_program_is_unchanged() {
     fn fnv(h: &mut u64, x: u64) {
@@ -600,13 +602,13 @@ fn an_unkeyed_program_is_unchanged() {
     }
     let pass = "attribute vec4 a_dir;\nvarying vec4 v_d;\nvoid main() { v_d = a_dir; gl_Position = a_dir; }\n";
     let cases: [(&str, String, &str, u64); 4] = [
-        ("vs-cube", VS.to_string(), FS, 0xcb9920d97e8dbde9),
+        ("vs-cube", VS.to_string(), FS, 0xb0c67ee9e50965ce),
         (
             "fs-cube-bias",
             pass.to_string(),
             "precision mediump float;\nvarying vec4 v_d;\nuniform samplerCube u_cube;\nuniform float u_b;\n\
              void main() { gl_FragColor = textureCube(u_cube, v_d.xyz, u_b); }\n",
-            0x11f9c323ba17211f,
+            0x699d736a4cf6931a,
         ),
         (
             "vs-cube-lod",
@@ -614,14 +616,14 @@ fn an_unkeyed_program_is_unchanged() {
              void main() { v_color = textureCubeLod(u_cube, a_dir.xyz, u_l); gl_Position = a_dir; }\n"
                 .to_string(),
             FS,
-            0x137016607c7fd7b8,
+            0x563eb2fea8b46177,
         ),
         (
             "fs-cube-2d",
             pass.to_string(),
             "precision mediump float;\nvarying vec4 v_d;\nuniform samplerCube u_cube;\nuniform sampler2D u_2d;\n\
              void main() { gl_FragColor = textureCube(u_cube, v_d.xyz) + texture2D(u_2d, v_d.xy); }\n",
-            0x9d127fcf6ec38ed0,
+            0x38a4eed07f1ca3a9,
         ),
     ];
     for (name, vs, fs, want) in cases {

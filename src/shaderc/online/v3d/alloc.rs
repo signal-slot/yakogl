@@ -35,6 +35,19 @@
 //! * a value live across a thread switch is physical, because a switch
 //!   invalidates the accumulators (:1340-1347).
 //!
+//! # Accumulator or register file ([`Rule`])
+//!
+//! A word has two register-file read ports for its add and its mul half
+//! together, and reads the accumulators through neither. Under
+//! [`Rule::PLAIN`] a value takes an accumulator whenever one is free, so in
+//! a long program the five go to whatever is defined first and lives long,
+//! and the short values between them read each other through the two ports,
+//! one operation a word. `chain.rs` (`PAIRING`) also allocates with the
+//! accumulators kept for short values (Mesa's v3d_ra_favor_accum,
+//! vir_register_allocate.c:876-917) and with r5 for a vertex shader's short
+//! uniform loads, and keeps whichever packs shorter. Whether a program fits
+//! a thread count is [`Rule::PLAIN`]'s answer alone.
+//!
 //! There is no spilling to memory: a program that does not fit 2 threads is
 //! [`AllocError::DoesNotFit`], by name, and `chain.rs` retries with the
 //! selection levels that shorten live ranges (select.rs `Pressure`).
@@ -71,6 +84,10 @@ pub const fn rf_end(threads: u32) -> Option<u8> {
 }
 /// Accumulators handed out: r0..r4.
 pub const ACCS: u8 = 5;
+/// With fewer free register-file registers than this every value takes an
+/// accumulator first (Mesa's `available_rf_threshold`, v3d_ra_favor_accum,
+/// vir_register_allocate.c:876-917).
+const ACC_FAVOR_RF: usize = 5;
 
 /// Why allocation stopped.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -104,8 +121,37 @@ pub struct Allocation<'a> {
 
 const NONE: u32 = u32::MAX;
 
-/// Allocate `sel`'s virtual registers.
+/// How [`allocate_by`] chooses between the accumulators and the register
+/// file.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Rule {
+    /// A value read for the last time more than this many operations after
+    /// its definition goes to the register file when 5 or more of its
+    /// registers are free; `u32::MAX`: every value takes an accumulator
+    /// when one is free.
+    pub acc_span: u32,
+    /// A vertex or coordinate shader's short uniform load may take r5, as a
+    /// fragment shader's does, unless a VPM operation reads it.
+    pub vertex_r5: bool,
+}
+
+impl Rule {
+    /// An accumulator whenever one is free; r5 in a fragment shader only.
+    pub const PLAIN: Rule = Rule { acc_span: u32::MAX, vertex_r5: false };
+}
+
+/// Allocate `sel`'s virtual registers by [`Rule::PLAIN`].
 pub fn allocate<'a>(sel: &Selected<'_>, threads: u32, a: &Arena<'a>) -> Result<Allocation<'a>, AllocError> {
+    allocate_by(sel, threads, Rule::PLAIN, a)
+}
+
+/// Allocate `sel`'s virtual registers.
+pub fn allocate_by<'a>(
+    sel: &Selected<'_>,
+    threads: u32,
+    rule: Rule,
+    a: &Arena<'a>,
+) -> Result<Allocation<'a>, AllocError> {
     let end = rf_end(threads).ok_or(AllocError::Threads)?;
     let n = sel.vregs as usize;
     let def = a.alloc_filled(n, NONE)?;
@@ -340,8 +386,22 @@ pub fn allocate<'a>(sel: &Selected<'_>, threads: u32, a: &Arena<'a>) -> Result<A
                 continue;
             }
         }
+        /* Under `rule.vertex_r5` a vertex or coordinate shader's load takes
+         * r5 too, unless a VPM operation reads it: those are the short loads
+         * the paragraph above measured (the row numbers before each STVPMV),
+         * and every other one is a matrix element or a constant an fmul
+         * reads, whose `ldunifrf` into a named register waited for that
+         * register's last read (glmark2 terrain's vertex shader: six words
+         * holding a load and nothing else; 172 -> 159 words, its coordinate
+         * shader 97 -> 87, with this alone). */
+        let vpm_reader = || {
+            sel.ops[i + 1..=(last[v] as usize).max(i)].iter().any(|o| {
+                matches!(o, VOp::Add { op: AddOp::Stvpmv | AddOp::LdvpmvIn, .. })
+                    && o.uses().iter().any(|u| u.vreg().is_some_and(|x| x.0 as usize == v))
+            })
+        };
         if matches!(op, VOp::Ldunif { .. })
-            && sel.fragment
+            && (sel.fragment || (rule.vertex_r5 && !vpm_reader()))
             && !phys[v]
             && free(r5_busy)
             && (last[v] as usize) <= i + R5_SPAN
@@ -453,8 +513,16 @@ pub fn allocate<'a>(sel: &Selected<'_>, threads: u32, a: &Arena<'a>) -> Result<A
             _ => None,
         };
         /* (register, lent) */
+        /* The register file before the accumulators for a value that lives
+         * longer than `rule.acc_span` operations, while the register file
+         * has room (see the module's "Accumulator or register file"). The
+         * move-source rule stays first, and a value that must be in the
+         * register file is not affected. */
+        let favor_acc = last[v] - i as u32 <= rule.acc_span
+            || (RF_FIRST..end).filter(|&r| free(rf_busy[r as usize])).count() < ACC_FAVOR_RF;
         let pick = match (same, acc_pick(false), rf_pick(false)) {
             (Some(r), _, _) => (r, false),
+            (None, _, Some(r)) if !favor_acc && !phys[v] => (Reg::Rf(r), false),
             (None, Some(r), _) => (Reg::Acc(r), false),
             (None, None, Some(r)) => (Reg::Rf(r), false),
             (None, None, None) => match (acc_pick(true), rf_pick(true)) {

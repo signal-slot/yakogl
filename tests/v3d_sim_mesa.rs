@@ -1910,7 +1910,10 @@ const TMU_EQUIVALENT: &[(&str, &str, &str)] = &[
 /// a vertex-shader look-up's mutant depends on the vertex shader. Step (l)
 /// (alloc.rs, the hoist-aware register choice, 2026-09-29): es100/cubelod's
 /// TMUT <-> TMUS mutant left the list (now caught: the S value is written
-/// before TMUT), and the two vtex_struct_sampler pairs came in.
+/// before TMUT), and the two vtex_struct_sampler pairs came in; they left
+/// again on 2026-11-27 (chain.rs `PAIRING`: the bias's uniform load goes to
+/// r5 and no longer shares the TMUT write's register, so the traded TMUT
+/// reads the bias and both mutants are caught).
 const TMU_UNMEASURED: &[(&str, &str, &str)] = &[
     (
         "es300/cubelodf.vert + es300/cubelodf.frag",
@@ -1924,19 +1927,6 @@ const TMU_UNMEASURED: &[(&str, &str, &str)] = &[
         "our list scheduler's order (order.rs) writes TMUT before the S value's last write, so the traded \
          TMUT reads the unscaled x: every draw's direction lies within 1e-3 of a face edge, which the \
          interpreter refuses (measured 2026-09-26)",
-    ),
-    (
-        "es100/vtex_struct_sampler.vert + es100/va.frag",
-        "TMUT <-> TMUB sources",
-        "the bias's uniform load shares the TMUT write's word (sched.rs hoist), so the traded TMUT reads \
-         that register's old value, the VPM row number 2: the coordinate 2.8e-45 lies on a texel edge on \
-         every draw, which the interpreter refuses (measured 2026-09-29)",
-    ),
-    (
-        "es100/vtex_struct_sampler_array.vert + es100/va.frag",
-        "TMUT <-> TMUB sources",
-        "as es100/vtex_struct_sampler: the traded TMUT reads the old VPM row number, a coordinate on a \
-         texel edge on every draw (measured 2026-09-29)",
     ),
     (
         "es300/cube.vert + es300/texfetch.frag",
@@ -2919,9 +2909,11 @@ fn the_pin_pairs_are_mesas_forms_and_ours_compiles_them() {
 const PIN_POPULATION: (usize, usize, usize) = (4, 0, 12);
 
 /// Words per pin, ours then Mesa's, (fs, vs, cs), measured 2026-11-11 with
-/// the keys of pairs.txt. The vertex and coordinate shaders of the quad
-/// pairs are the same program (20 / 21 and 21 / 18: ours loads the
-/// attributes at the top, Mesa's layout). The fragment shaders: a shadow
+/// the keys of pairs.txt; ours again 2026-11-27 (chain.rs `PAIRING`: every
+/// coordinate shader 21 -> 20, the 32-bit vertex shaders 1 to 6 fewer,
+/// shadow2d_proj 18 -> 16; none longer). The vertex and coordinate shaders
+/// of the quad pairs are the same program (20 / 21 and 20 / 18: ours loads
+/// the attributes at the top, Mesa's layout). The fragment shaders: a shadow
 /// look-up is Mesa's sequence plus our f16 pack of the one result and the
 /// `v_xy * 0.5 + 0.5` kept as two ops (+4); the gradient forms compute the
 /// level from the size words with one LOG where Mesa uses a LOG and the
@@ -2931,22 +2923,22 @@ const PIN_POPULATION: (usize, usize, usize) = (4, 0, 12);
 /// output FIFO rule where Mesa queues them (29 / 21).
 #[cfg(not(feature = "report-es2"))]
 const PIN_WORDS: [(&str, [usize; 3], [usize; 3]); 16] = [
-    ("quad.vert + shadow2d.frag", [14, 20, 21], [10, 21, 18]),
-    ("quad.vert + shadow2d_lod_offset.frag", [23, 20, 21], [15, 21, 18]),
-    ("quad.vert + shadow2d_proj.frag", [18, 20, 21], [15, 21, 18]),
-    ("quad.vert + shadowcube.frag", [21, 20, 21], [17, 22, 18]),
-    ("quad.vert + shadowcube_grad.frag", [83, 20, 21], [71, 22, 18]),
-    ("quad.vert + shadowarr.frag", [15, 20, 21], [11, 21, 18]),
-    ("quad.vert + shadowarr_grad.frag", [31, 20, 21], [31, 21, 18]),
-    ("quad.vert + grad2d.frag", [32, 20, 21], [31, 21, 18]),
-    ("quad.vert + gradcube.frag", [84, 20, 21], [71, 22, 18]),
-    ("quad.vert + grad3d_offset.frag", [38, 20, 21], [39, 21, 18]),
-    ("quad.vert + vol_offset.frag", [29, 20, 21], [21, 21, 18]),
-    ("vsret32.vert + passcol.frag", [9, 29, 21], [8, 23, 18]),
-    ("vsret32v4.vert + passcol.frag", [9, 35, 21], [9, 27, 18]),
-    ("vsret32i.vert + passcol.frag", [9, 36, 21], [9, 31, 18]),
-    ("vsmixed.vert + passcol.frag", [9, 46, 21], [9, 36, 18]),
-    ("vsshadow.vert + passcol.frag", [9, 30, 21], [6, 25, 18]),
+    ("quad.vert + shadow2d.frag", [14, 20, 20], [10, 21, 18]),
+    ("quad.vert + shadow2d_lod_offset.frag", [23, 20, 20], [15, 21, 18]),
+    ("quad.vert + shadow2d_proj.frag", [16, 20, 20], [15, 21, 18]),
+    ("quad.vert + shadowcube.frag", [21, 20, 20], [17, 22, 18]),
+    ("quad.vert + shadowcube_grad.frag", [83, 20, 20], [71, 22, 18]),
+    ("quad.vert + shadowarr.frag", [15, 20, 20], [11, 21, 18]),
+    ("quad.vert + shadowarr_grad.frag", [31, 20, 20], [31, 21, 18]),
+    ("quad.vert + grad2d.frag", [32, 20, 20], [31, 21, 18]),
+    ("quad.vert + gradcube.frag", [84, 20, 20], [71, 22, 18]),
+    ("quad.vert + grad3d_offset.frag", [38, 20, 20], [39, 21, 18]),
+    ("quad.vert + vol_offset.frag", [29, 20, 20], [21, 21, 18]),
+    ("vsret32.vert + passcol.frag", [9, 28, 20], [8, 23, 18]),
+    ("vsret32v4.vert + passcol.frag", [9, 29, 20], [9, 27, 18]),
+    ("vsret32i.vert + passcol.frag", [9, 32, 20], [9, 31, 18]),
+    ("vsmixed.vert + passcol.frag", [9, 40, 20], [9, 36, 18]),
+    ("vsshadow.vert + passcol.frag", [9, 30, 20], [6, 25, 18]),
 ];
 
 /// Why our compiler did not produce a program.
@@ -3598,24 +3590,31 @@ fn our_programs_agree_with_the_ir_and_with_mesa() {
      * array.frag, vol.frag, texfetch.frag and texoffset.frag sample (+4 on
      * P0 and P1, +3 LDTMU trades with vol.frag's TMU_EQUIVALENT; vol.frag's
      * TMUR trade, a 3D look-up's r, is caught, +1; texfetch's TMUB and
-     * texoffset's TMUS trades are TMU_UNMEASURED). */
+     * texoffset's TMUS trades are TMU_UNMEASURED). 2026-11-27 (chain.rs
+     * `PAIRING`, plan #419 sched-pair; ES 3 build): the two
+     * vtex_struct_sampler TMUB trades are caught (+2, they left
+     * TMU_UNMEASURED), and three LDTMU trades are not applicable where the
+     * new register choice gives them nothing to trade (femtovg's
+     * fill_color.glyph: a destination is written between the two LDTMUs;
+     * fill_image_gradient.glyph and its nodiscard form: the second
+     * destination's old value is read before the second LDTMU). */
     assert_eq!(
         ours_counts,
         if es2 {
             [
-                ("LDTMU destinations", 49, 1),
+                ("LDTMU destinations", 46, 4),
                 ("P0 texture index", 50, 0),
                 ("P1 output type", 50, 0),
-                ("TMUT <-> TMUB sources", 3, 45),
+                ("TMUT <-> TMUB sources", 5, 45),
                 ("TMUT <-> TMUR sources", 5, 45),
                 ("TMUT <-> TMUS sources", 28, 21),
             ]
         } else {
             [
-                ("LDTMU destinations", 55, 2),
+                ("LDTMU destinations", 52, 5),
                 ("P0 texture index", 58, 0),
                 ("P1 output type", 58, 0),
-                ("TMUT <-> TMUB sources", 5, 50),
+                ("TMUT <-> TMUB sources", 7, 50),
                 ("TMUT <-> TMUR sources", 8, 50),
                 ("TMUT <-> TMUS sources", 32, 22),
             ]
@@ -3738,7 +3737,12 @@ fn back_to_back_loop_exits_are_counted() {
 /// 2026-11-07, 2D-array and 3D look-ups, ES 3 build: es300/array.frag,
 /// texsize.frag and vol.frag add theirs (fs 7, vs 2, cs 18, no cut), and
 /// the fixture's two EXTRA_REAL pairs (texfetch.frag, texoffset.frag) vs 4
-/// and cs 12 (their fragment shaders hoist nothing).
+/// and cs 12 (their fragment shaders hoist nothing). 2026-11-27 (chain.rs
+/// `PAIRING`, plan #419 sched-pair): where the packing of the list order
+/// allocated again is kept, the order already has the operations where
+/// hoist would move them, so fewer moves and fewer cuts are counted
+/// ([1153, 2412, 260] with 59 cuts -> [880, 2365, 226] with 12; ES 2 build
+/// [1074, 2227, 166] with 48 -> [817, 2192, 222] with 1).
 /// Pinned: a change to hoist or to what reaches it moves these.
 #[test]
 fn the_hoist_windows_cuts_are_counted() {
@@ -3769,7 +3773,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1153, 2412, 260], [59, 0, 0]) },
+        if es2 { ([817, 2192, 222], [1, 0, 0]) } else { ([880, 2365, 226], [9, 3, 0]) },
         "the hoist counts moved"
     );
 }
@@ -3876,7 +3880,12 @@ fn executed_instruction_counts_are_pinned() {
 /// 68 -> 62 (its prologue), fill_color 45 -> 44, none longer
 /// (5271; 62); since the loop's test and a break take one branch
 /// (select.rs merge_exits, step (p)): filter_image 62 -> 58 and nodiscard
-/// 53 -> 49 (its path out at once), none longer (5255; 58). Mesa's
+/// 53 -> 49 (its path out at once), none longer (5255; 58); since the
+/// chain keeps the shorter of that packing and the one with the
+/// accumulators kept for short-lived values, allocated again on the list
+/// order (chain.rs `PAIRING`, plan #419 sched-pair, 2026-11-27): 58 of the
+/// 70 runs 1 to 11 fewer, none longer (the 70 pinned here 5997 -> 5674;
+/// filter_image 58, its nodiscard form 49 -> 47). Mesa's
 /// for the same runs, printed by the test:
 /// cluster fill_image.nodiscard 68, rounded 78; filter_image 65 (ours 2574
 /// on a0b4b403, when the counted loop always ran its 25 passes: the
@@ -3884,73 +3893,73 @@ fn executed_instruction_counts_are_pinned() {
 /// early exit it leaves at the break, as Mesa does). Totals ours 16962 on
 /// a0b4b403, Mesa 5216 over the 58 runs.
 const EXECUTED_FS_COUNTS: &[(&str, usize)] = &[
-    ("cluster fill_color.frag", 44),
-    ("cluster fill_color.glyph.frag", 68),
-    ("cluster fill_color.glyph.nodiscard.frag", 59),
-    ("cluster fill_color.nodiscard.frag", 41),
+    ("cluster fill_color.frag", 42),
+    ("cluster fill_color.glyph.frag", 66),
+    ("cluster fill_color.glyph.nodiscard.frag", 58),
+    ("cluster fill_color.nodiscard.frag", 39),
     ("cluster fill_color.nodiscard.noscissor.frag", 16),
-    ("cluster fill_gradient.frag", 93),
-    ("cluster fill_gradient.glyph.frag", 118),
-    ("cluster fill_gradient.glyph.nodiscard.frag", 110),
-    ("cluster fill_gradient.nodiscard.frag", 92),
-    ("cluster fill_gradient.nodiscard.noscissor.frag", 65),
-    ("cluster fill_gradient_conic.frag", 118),
-    ("cluster fill_gradient_conic.glyph.frag", 144),
-    ("cluster fill_gradient_conic.glyph.nodiscard.frag", 136),
-    ("cluster fill_gradient_conic.nodiscard.frag", 117),
-    ("cluster fill_gradient_conic.nodiscard.noscissor.frag", 93),
-    ("cluster fill_image.frag", 71),
-    ("cluster fill_image.glyph.frag", 97),
-    ("cluster fill_image.glyph.nodiscard.frag", 89),
-    ("cluster fill_image.nodiscard.frag", 70),
+    ("cluster fill_gradient.frag", 85),
+    ("cluster fill_gradient.glyph.frag", 108),
+    ("cluster fill_gradient.glyph.nodiscard.frag", 99),
+    ("cluster fill_gradient.nodiscard.frag", 83),
+    ("cluster fill_gradient.nodiscard.noscissor.frag", 63),
+    ("cluster fill_gradient_conic.frag", 113),
+    ("cluster fill_gradient_conic.glyph.frag", 137),
+    ("cluster fill_gradient_conic.glyph.nodiscard.frag", 127),
+    ("cluster fill_gradient_conic.nodiscard.frag", 111),
+    ("cluster fill_gradient_conic.nodiscard.noscissor.frag", 90),
+    ("cluster fill_image.frag", 68),
+    ("cluster fill_image.glyph.frag", 93),
+    ("cluster fill_image.glyph.nodiscard.frag", 86),
+    ("cluster fill_image.nodiscard.frag", 67),
     ("cluster fill_image.nodiscard.noscissor.frag", 48),
-    ("cluster fill_image_gradient.frag", 86),
-    ("cluster fill_image_gradient.glyph.frag", 111),
-    ("cluster fill_image_gradient.glyph.nodiscard.frag", 104),
-    ("cluster fill_image_gradient.nodiscard.frag", 85),
-    ("cluster fill_image_gradient.nodiscard.noscissor.frag", 62),
-    ("cluster fill_image_gradient_conic.frag", 110),
-    ("cluster fill_image_gradient_conic.glyph.frag", 135),
-    ("cluster fill_image_gradient_conic.glyph.nodiscard.frag", 128),
-    ("cluster fill_image_gradient_conic.nodiscard.frag", 109),
-    ("cluster fill_image_gradient_conic.nodiscard.noscissor.frag", 87),
+    ("cluster fill_image_gradient.frag", 82),
+    ("cluster fill_image_gradient.glyph.frag", 107),
+    ("cluster fill_image_gradient.glyph.nodiscard.frag", 99),
+    ("cluster fill_image_gradient.nodiscard.frag", 81),
+    ("cluster fill_image_gradient.nodiscard.noscissor.frag", 60),
+    ("cluster fill_image_gradient_conic.frag", 105),
+    ("cluster fill_image_gradient_conic.glyph.frag", 130),
+    ("cluster fill_image_gradient_conic.glyph.nodiscard.frag", 123),
+    ("cluster fill_image_gradient_conic.nodiscard.frag", 104),
+    ("cluster fill_image_gradient_conic.nodiscard.noscissor.frag", 83),
     ("cluster filter_image.frag", 58),
-    ("cluster filter_image.nodiscard.frag", 49),
+    ("cluster filter_image.nodiscard.frag", 47),
     ("cluster stencil.frag", 17),
     ("cluster stencil.nodiscard.frag", 8),
     ("cluster texture_copy_unclipped.frag", 26),
-    ("rounded fill_color.frag", 56),
-    ("rounded fill_color.glyph.frag", 80),
-    ("rounded fill_color.glyph.nodiscard.frag", 70),
-    ("rounded fill_color.nodiscard.frag", 53),
+    ("rounded fill_color.frag", 51),
+    ("rounded fill_color.glyph.frag", 75),
+    ("rounded fill_color.glyph.nodiscard.frag", 67),
+    ("rounded fill_color.nodiscard.frag", 48),
     ("rounded fill_color.nodiscard.noscissor.frag", 16),
-    ("rounded fill_gradient.frag", 105),
-    ("rounded fill_gradient.glyph.frag", 130),
-    ("rounded fill_gradient.glyph.nodiscard.frag", 122),
-    ("rounded fill_gradient.nodiscard.frag", 104),
-    ("rounded fill_gradient.nodiscard.noscissor.frag", 65),
-    ("rounded fill_gradient_conic.frag", 130),
-    ("rounded fill_gradient_conic.glyph.frag", 156),
-    ("rounded fill_gradient_conic.glyph.nodiscard.frag", 148),
-    ("rounded fill_gradient_conic.nodiscard.frag", 129),
-    ("rounded fill_gradient_conic.nodiscard.noscissor.frag", 93),
-    ("rounded fill_image.frag", 82),
-    ("rounded fill_image.glyph.frag", 107),
-    ("rounded fill_image.glyph.nodiscard.frag", 99),
-    ("rounded fill_image.nodiscard.frag", 81),
+    ("rounded fill_gradient.frag", 94),
+    ("rounded fill_gradient.glyph.frag", 117),
+    ("rounded fill_gradient.glyph.nodiscard.frag", 108),
+    ("rounded fill_gradient.nodiscard.frag", 92),
+    ("rounded fill_gradient.nodiscard.noscissor.frag", 63),
+    ("rounded fill_gradient_conic.frag", 122),
+    ("rounded fill_gradient_conic.glyph.frag", 146),
+    ("rounded fill_gradient_conic.glyph.nodiscard.frag", 136),
+    ("rounded fill_gradient_conic.nodiscard.frag", 120),
+    ("rounded fill_gradient_conic.nodiscard.noscissor.frag", 90),
+    ("rounded fill_image.frag", 77),
+    ("rounded fill_image.glyph.frag", 102),
+    ("rounded fill_image.glyph.nodiscard.frag", 95),
+    ("rounded fill_image.nodiscard.frag", 76),
     ("rounded fill_image.nodiscard.noscissor.frag", 48),
-    ("rounded fill_image_gradient.frag", 97),
-    ("rounded fill_image_gradient.glyph.frag", 121),
-    ("rounded fill_image_gradient.glyph.nodiscard.frag", 114),
-    ("rounded fill_image_gradient.nodiscard.frag", 96),
-    ("rounded fill_image_gradient.nodiscard.noscissor.frag", 62),
-    ("rounded fill_image_gradient_conic.frag", 121),
-    ("rounded fill_image_gradient_conic.glyph.frag", 145),
-    ("rounded fill_image_gradient_conic.glyph.nodiscard.frag", 138),
-    ("rounded fill_image_gradient_conic.nodiscard.frag", 120),
-    ("rounded fill_image_gradient_conic.nodiscard.noscissor.frag", 87),
+    ("rounded fill_image_gradient.frag", 91),
+    ("rounded fill_image_gradient.glyph.frag", 116),
+    ("rounded fill_image_gradient.glyph.nodiscard.frag", 108),
+    ("rounded fill_image_gradient.nodiscard.frag", 90),
+    ("rounded fill_image_gradient.nodiscard.noscissor.frag", 60),
+    ("rounded fill_image_gradient_conic.frag", 114),
+    ("rounded fill_image_gradient_conic.glyph.frag", 139),
+    ("rounded fill_image_gradient_conic.glyph.nodiscard.frag", 132),
+    ("rounded fill_image_gradient_conic.nodiscard.frag", 113),
+    ("rounded fill_image_gradient_conic.nodiscard.noscissor.frag", 83),
     ("rounded filter_image.frag", 58),
-    ("rounded filter_image.nodiscard.frag", 49),
+    ("rounded filter_image.nodiscard.frag", 47),
     ("rounded stencil.frag", 17),
     ("rounded stencil.nodiscard.frag", 8),
     ("rounded texture_copy_unclipped.frag", 26),
@@ -4025,42 +4034,48 @@ const EXECUTED_FS_COUNTS: &[(&str, usize)] = &[
 /// glyph programs 1 fewer, fill_color 1 fewer, none longer, then step (p)
 /// (select.rs merge_exits: the loop's test and the break in one branch):
 /// filter_image 91 -> 87 and nodiscard 82 -> 78 (executed with a blur:
-/// 49 + 36 a pass), none longer, as below.
+/// 49 + 36 a pass), none longer, then the shorter of that packing and
+/// the one with the accumulators kept for short-lived values, allocated
+/// again on the list order (chain.rs `PAIRING`, plan #419 sched-pair,
+/// 2026-11-27): 30 of the 35 programs 1 to 14 fewer (3455 -> 3263 words:
+/// fill_color 67 -> 62, fill_image 93 -> 88, fill_image_gradient 108 ->
+/// 102, filter_image 87 -> 85 and nodiscard 78 -> 74; executed with a
+/// blur, chain.rs: 47 + 34 a pass), none longer, as below.
 /// Mesa's
 /// for the same programs: fill_image 94, fill_color 67.
 const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
-    ("fill_color.frag", 67),
-    ("fill_color.glyph.frag", 91),
-    ("fill_color.glyph.nodiscard.frag", 81),
-    ("fill_color.nodiscard.frag", 64),
+    ("fill_color.frag", 62),
+    ("fill_color.glyph.frag", 86),
+    ("fill_color.glyph.nodiscard.frag", 78),
+    ("fill_color.nodiscard.frag", 59),
     ("fill_color.nodiscard.noscissor.frag", 16),
-    ("fill_gradient.frag", 116),
-    ("fill_gradient.glyph.frag", 141),
-    ("fill_gradient.glyph.nodiscard.frag", 133),
-    ("fill_gradient.nodiscard.frag", 115),
-    ("fill_gradient.nodiscard.noscissor.frag", 65),
-    ("fill_gradient_conic.frag", 141),
-    ("fill_gradient_conic.glyph.frag", 167),
-    ("fill_gradient_conic.glyph.nodiscard.frag", 159),
-    ("fill_gradient_conic.nodiscard.frag", 140),
-    ("fill_gradient_conic.nodiscard.noscissor.frag", 93),
-    ("fill_image.frag", 93),
-    ("fill_image.glyph.frag", 118),
-    ("fill_image.glyph.nodiscard.frag", 110),
-    ("fill_image.nodiscard.frag", 92),
+    ("fill_gradient.frag", 105),
+    ("fill_gradient.glyph.frag", 128),
+    ("fill_gradient.glyph.nodiscard.frag", 119),
+    ("fill_gradient.nodiscard.frag", 103),
+    ("fill_gradient.nodiscard.noscissor.frag", 63),
+    ("fill_gradient_conic.frag", 133),
+    ("fill_gradient_conic.glyph.frag", 157),
+    ("fill_gradient_conic.glyph.nodiscard.frag", 147),
+    ("fill_gradient_conic.nodiscard.frag", 131),
+    ("fill_gradient_conic.nodiscard.noscissor.frag", 90),
+    ("fill_image.frag", 88),
+    ("fill_image.glyph.frag", 113),
+    ("fill_image.glyph.nodiscard.frag", 106),
+    ("fill_image.nodiscard.frag", 87),
     ("fill_image.nodiscard.noscissor.frag", 48),
-    ("fill_image_gradient.frag", 108),
-    ("fill_image_gradient.glyph.frag", 132),
-    ("fill_image_gradient.glyph.nodiscard.frag", 125),
-    ("fill_image_gradient.nodiscard.frag", 107),
-    ("fill_image_gradient.nodiscard.noscissor.frag", 62),
-    ("fill_image_gradient_conic.frag", 132),
-    ("fill_image_gradient_conic.glyph.frag", 156),
-    ("fill_image_gradient_conic.glyph.nodiscard.frag", 149),
-    ("fill_image_gradient_conic.nodiscard.frag", 131),
-    ("fill_image_gradient_conic.nodiscard.noscissor.frag", 87),
-    ("filter_image.frag", 87),
-    ("filter_image.nodiscard.frag", 78),
+    ("fill_image_gradient.frag", 102),
+    ("fill_image_gradient.glyph.frag", 127),
+    ("fill_image_gradient.glyph.nodiscard.frag", 119),
+    ("fill_image_gradient.nodiscard.frag", 101),
+    ("fill_image_gradient.nodiscard.noscissor.frag", 60),
+    ("fill_image_gradient_conic.frag", 125),
+    ("fill_image_gradient_conic.glyph.frag", 150),
+    ("fill_image_gradient_conic.glyph.nodiscard.frag", 143),
+    ("fill_image_gradient_conic.nodiscard.frag", 124),
+    ("fill_image_gradient_conic.nodiscard.noscissor.frag", 83),
+    ("filter_image.frag", 85),
+    ("filter_image.nodiscard.frag", 74),
     ("stencil.frag", 17),
     ("stencil.nodiscard.frag", 8),
     ("texture_copy_unclipped.frag", 26),
@@ -4157,8 +4172,15 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// (sim_fixture.py): 198 programs [11063, 5631, 4635], the five pairs' own
 /// words (fs 29 + 16 + 29 + 21 + 45, vs 94, cs 105; ES 3 build only); no
 /// other program moves (chain.rs compiled_corpus_words_are_pinned).
-const OURS_TOTALS: (usize, [usize; 3]) = (198, [11063, 5631, 4635]);
-const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9807, 4840, 4039]);
+/// 2026-11-27, the add and mul halves paired through the register choice
+/// (plan #419 sched-pair; chain.rs `PAIRING`: the shorter of the packing
+/// before and the one with the accumulators kept for short-lived values,
+/// a vertex shader's short uniform loads in r5, allocated again on the
+/// list order): [10577, 5394, 4369] / ES2 [9384, 4654, 3801], no stage of any
+/// program longer (the choice keeps the packing before when it is as
+/// short); all agree with the IR.
+const OURS_TOTALS: (usize, [usize; 3]) = (198, [10577, 5394, 4369]);
+const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9384, 4654, 3801]);
 
 // ---------------------------------------------------------------------------
 // Four colour targets (RC14).

@@ -1208,9 +1208,12 @@ fn warm_up() {
 /// padded UIF size). The deferral lowered each high-water below by exactly
 /// `STORAGE` (15,390,016 and 23,518,364 before it): a change that moves
 /// them by anything else has made a reader allocate, or missed one.
+/// 2026-11-27: both 24 bytes lower, three 64-bit words of shader code (the
+/// V3D compiler's programs here pack three words shorter, chain.rs
+/// `PAIRING`); the storage is as it was.
 const STORAGE: usize = 7_680_000;
-const SHADOW_PEAK: usize = 15_390_016 - STORAGE;
-const REFRACT_PEAK: usize = 23_518_364 - STORAGE;
+const SHADOW_PEAK: usize = 15_390_016 - 24 - STORAGE;
+const REFRACT_PEAK: usize = 23_518_364 - 24 - STORAGE;
 
 /// glmark2 shadow's sequence (depth pass into a 1600x1200 depth texture, the
 /// ground samples it, three frames): the bytes allocated since the start, at

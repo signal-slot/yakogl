@@ -30,6 +30,26 @@
 //! sequences moves; the uniform stream follows, as it is built from the
 //! words' order afterwards.
 //!
+//! # Pairing the add and the mul half (2026-11-27)
+//!
+//! Which operations can share a word is decided before this file runs, by
+//! where their operands live: a word's two register-file read ports serve
+//! both halves, so two operations that each read two register-file
+//! registers never share one, whatever order they come in, and [`hoist`]
+//! finds no earlier word for them either. glmark2 terrain's noise fragment
+//! shader had 623 of its 1495 words with an empty add half, 483 of them
+//! for the read ports and the small immediate that takes port B, and a
+//! [`HOIST_WINDOW`] without bound packed it in 1488 (plan #419's study of
+//! that shader, 2026-11-27). So the packer's rules
+//! are as they were, and the chain (`chain.rs` `build`, `PAIRING`) hands it
+//! a second allocation and order to pack: the accumulators kept for
+//! short-lived values (`alloc.rs` [`super::alloc::Rule`]), and the program
+//! allocated again on the list order (`order.rs`), so that the "last read"
+//! the allocator works from is exact for the order packed here. The
+//! shorter packing is kept. The three ordered sequences are still the
+//! order of whichever sequence is packed; the uniform stream is built from
+//! the words as before.
+//!
 //! Whether a word can hold an operation is decided by the encoder: the
 //! candidate word is encoded ([`super::encode::encode`]), and a combination
 //! it refuses (two signals with no joint encoding, an operand pair its opcode
