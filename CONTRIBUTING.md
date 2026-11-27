@@ -82,9 +82,11 @@ pull request (step 1 above).
   entries this host's dependency layout has, and
   `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
   On a new host, build the entries the layout lacks, first, as one command:
-  `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR LZ4 MP2_QEMU`
+  `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR DEQP_GLES2_TEST_DIR DEQP_ES2_PROGRAMS PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR LZ4 MP2_QEMU`
   (the Mali firmware, "The PowerVR firmware" below; the dEQP GLES3 shader
-  corpus, which the `shaderc-online` tests and the corpus test read; and
+  corpus, which the `shaderc-online` tests and the corpus test read; the
+  dEQP GLES2 shader library and the harvest of a host dEQP-GLES2 run, which
+  the V3D 7.1 corpus rows read, a gap without them; and
   `capture_spm_load` beside `pco_shc`, which the `spm_load` regenerate row
   compares against, a gap without it; only the full plan reads that row; the
   `hal_nxp` checkout, which the imx8mp `regs.rs` regenerate row reads, a

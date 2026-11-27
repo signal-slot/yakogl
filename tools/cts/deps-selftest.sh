@@ -147,6 +147,35 @@ print("; ".join(bad) or "same")
 PY
 )
 check "HOST_DEQP_CTS pins 93bca01 in its own directory, applies the yakogl target and is host-deqp-run.sh's default CTS" "same" "$out"
+# The two dEQP-GLES2 corpora of check.sh's V3D 7.1 corpus rows: in the gate's
+# set (gate.yml builds both), DEQP_GLES2_TEST_DIR at the CTS commit the other
+# entries pin in a directory of its own, DEQP_ES2_PROGRAMS harvested on
+# HOST_DEQP_CTS.
+out=$("$ENV_SH" --check 2>&1)
+check "--check has the DEQP_GLES2_TEST_DIR entry" "missing  DEQP_GLES2_TEST_DIR  $L/VK-GL-CTS-gles2-data/data/gles2/shaders/conditionals.test" "$out"
+check "--check has the DEQP_ES2_PROGRAMS entry" "missing  DEQP_ES2_PROGRAMS  $L/deqp-es2-programs-da11eb6b/index.tsv" "$out"
+out=$(python3 -I - "$HERE/deps.toml" "$HERE/../../.github/workflows/gate.yml" <<'PY' 2>&1
+import re, sys, tomllib
+deps = {e["name"]: e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"]}
+gate = open(sys.argv[2]).read()
+pin = lambda e: set(re.findall(r"\b[0-9a-f]{40}\b", e["build"]))
+bad = []
+g2 = deps["DEQP_GLES2_TEST_DIR"]
+if pin(g2) != pin(deps["DEQP_GLES3_TEST_DIR"]):
+    bad.append(f"DEQP_GLES2_TEST_DIR pins {pin(g2)}")
+top = g2["path"].split("/", 1)[0]
+if any(n != g2["name"] and e.get("path", "").split("/", 1)[0] == top for n, e in deps.items()):
+    bad.append(f"DEQP_GLES2_TEST_DIR's directory {top} is shared")
+pr = deps["DEQP_ES2_PROGRAMS"]
+if pr.get("requires") != ["HOST_DEQP_CTS"] or "board" in pr:
+    bad.append("DEQP_ES2_PROGRAMS: not a gate entry requiring HOST_DEQP_CTS")
+for n in ("DEQP_GLES2_TEST_DIR", "DEQP_ES2_PROGRAMS"):
+    if not re.search(r"deps-env\.sh --build [^\n]*\b" + n + r"\b", gate):
+        bad.append(f"gate.yml does not build {n}")
+print("; ".join(bad) or "same")
+PY
+)
+check "the dEQP-GLES2 corpora: pinned like DEQP_GLES3_TEST_DIR, in the gate's set, built by gate.yml" "same" "$out"
 out=$("$ENV_SH" nosuchboard 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "an unknown board exits 2" || bad "an unknown board: rc $rc"
 
