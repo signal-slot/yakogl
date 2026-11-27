@@ -122,9 +122,10 @@ static int map_carveout(struct gc_dev *g)
 #include "gc_render_pool.h"
 #include "gc_render_defer.h"
 
-/* The pool itself. It was inline here; it lives in the header so that
- * tools/gclab/pooltest can exercise this code rather than a transcription of
- * it, which is what makes a pool test worth having. */
+/* The pool itself. It was inline here; it lives in the header so that a host
+ * test can exercise this code rather than a transcription of it -- the pool
+ * test the retired `gclab` built was one -- which is what makes a pool test
+ * worth having. */
 static struct gc_pool g_pool;
 
 /* Freed blocks waiting for the kick that referenced them to retire. GL lets an

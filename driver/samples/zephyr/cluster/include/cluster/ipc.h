@@ -5,8 +5,9 @@
  * Message protocol between the R5F Platform Firmware and the A53 Supervisor.
  *
  * Transport is out of scope of this header: on the SoM it is a mailbox
- * interrupt plus a shared-memory ring (see platform/fw and supervisor
- * link_ipm.c); on QEMU both ends live in one image and messages are
+ * interrupt plus a shared-memory ring (the Platform Firmware tree's `fw` and
+ * its supervisor's `link_ipm.c`, another repository than this one); on QEMU
+ * both ends live in one image and messages are
  * delivered through function calls (link_sim.c).  Messages are fixed-layout,
  * little-endian and self-describing so either side can be replaced.
  */
@@ -36,7 +37,8 @@ enum cluster_ipc_type {
 	CLUSTER_IPC_VSYNC = 19,     /* DSS vertical sync: the A53 compositor paces on it */
 };
 
-/* Application frame hand-over (method 2 of docs/display-sharing.md): the A53
+/* Application frame hand-over (method 2 of the display-sharing design, a note
+ * kept outside this repository): the A53
  * renders into DDR and tells the R5F where the finished frame is; the R5F
  * points the DSS application plane at it.  Format codes are DSS codes.
  */

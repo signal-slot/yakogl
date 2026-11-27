@@ -9,7 +9,8 @@
  * physical address through a mailbox doorbell plus a shared-memory ring
  * (include/cluster/ipc.h, struct cluster_frame). The i.MX8M Plus has one LCDIF
  * plane and no blender, so the M7 composites in software and flips the
- * scan-out buffer itself (platform/fw_imx8mp/docs/integration.md). The message
+ * scan-out buffer itself (the Platform Firmware tree's `integration.md`,
+ * another repository than this one). The message
  * is unchanged -- this file embeds `struct cluster_frame` verbatim -- but the
  * transport is not: both cores run Zephyr, both see the same non-cacheable
  * page of DDR, and the M7 polls every tick anyway, so there is no doorbell,
@@ -24,7 +25,8 @@
  * else from here.
  *
  * Cacheability: the ring itself sits in memory both cores map non-cacheable
- * (on the M7, the window platform/fw_imx8mp/src/m7_mpu.c carves out), so the
+ * (on the M7, the window its `m7_mpu.c` carves out in the Platform Firmware
+ * tree), so the
  * counters need no maintenance. The frame buffers the ring points at are
  * cacheable on both sides, and the rule is: the producer flushes what it
  * wrote before it publishes, the consumer invalidates before it reads.
@@ -63,9 +65,9 @@ extern "C" {
 #define CLUSTER_FRAME_RING_SLOTS 3u
 
 /*
- * How long the M7 waits before it decides the A53 is gone. The same value
- * lib/platform_core uses for the mailbox heartbeat on the AM62P, so the two
- * ports behave alike.
+ * How long the M7 waits before it decides the A53 is gone. The same value the
+ * Platform Firmware tree's platform_core uses for the mailbox heartbeat on the
+ * AM62P, so the two ports behave alike.
  */
 #define CLUSTER_FRAME_RING_TIMEOUT_MS 1500u
 
@@ -317,10 +319,11 @@ static inline void cluster_frame_ring_set_shown(volatile struct cluster_frame_ri
  *
  * Two things, both decided with the user on 2026-10-03:
  *
- *   - The vehicle state. The safety core computes it (lib/platform_core's
- *     model today; a bus later) and draws the speed, gear and telltales from
- *     it itself. The rich UI reads the SAME values here instead of running a
- *     model of its own, so the A53's needle and the M7's digits cannot
+ *   - The vehicle state. The safety core computes it (the Platform Firmware
+ *     tree's platform_core model today; a bus later) and draws the speed,
+ *     gear and telltales from it itself. The rich UI reads the SAME values
+ *     here instead of running a model of its own, so the A53's needle and the
+ *     M7's digits cannot
  *     disagree about how fast the car is going.
  *
  *   - The background. The M7 renders the cluster's background picture ONCE,

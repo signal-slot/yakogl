@@ -3,14 +3,14 @@
 # dEQP-GLES2 on Zephyr: the conformance suite as a Zephyr image, EGL/GLES from
 # YakoGL, shaders from the in-process compiler. See README.md. One sample for
 # every board: the Zephyr board (-b) picks the GPU and its board side, the
-# board's files are in boards/. The STM32MP257F-DK's A35 adds the board
-# layer's stm32mp2/app.conf (below). The Raspberry Pi 4 (V3D) adds src/v3d_board.c
-# (the V3D's EGL default display and the result record, one screen the lead
-# photographs), the mailbox framebuffer, the HDMI console and the
-# bounded-lifetime watchdog of the rpi4 board layer. The NanoPC-T6 (Mali) adds
-# src/mali_board.c (the build line and the end of the run) over the board glue
-# of every nanopc_t6 image (driver/zephyr/lib/board/nanopc_t6: WDT0, the CSF
-# firmware, the PSCI reset back into Armbian). The Verdin iMX95 (Mali-G310)
+# board's files are in boards/. The STM32MP257F-DK's A35 adds the board layer's
+# driver/zephyr/lib/board/stm32mp2/app.conf (below). The Raspberry Pi 4 (V3D)
+# adds src/v3d_board.c (the V3D's EGL default display and the result record,
+# one screen the lead photographs), the mailbox framebuffer, the HDMI console,
+# the bounded-lifetime watchdog of the rpi4 board layer. The NanoPC-T6 (Mali)
+# adds src/mali_board.c (the build line and the end of the run) over the board
+# glue of every nanopc_t6 image (driver/zephyr/lib/board/nanopc_t6: WDT0, the
+# CSF firmware, the PSCI reset back into Armbian). The Verdin iMX95 (Mali-G310)
 # adds the same file over its board glue and board layer
 # (driver/zephyr/lib/board/verdin_imx95: WDOG3, the CSF firmware, the GPU's
 # SCMI power-on, board_finish), with the board layer's app.conf and
@@ -119,8 +119,9 @@ target_compile_definitions(app PRIVATE DE_OS=DE_OS_UNIX DE_CPU=DE_CPU_ARM_64
 # lines over the UART, no screen; the board layer's PM watchdog and mailbox,
 # YAKOGL_RPI5_WDOG and YAKOGL_RPI5_MBOX, which YAKOGL_GPU_V3D71 selects).
 # CONFIG_YAKOGL_GPU_V3D stays on for the library; the Pi 4 branch below is
-# for the Pi 4 alone (it links rpi4/rpi_mbox.c and rpi_wdog.c, which the board
-# layer already carries here), so this branch hides the symbol from it.
+# for the Pi 4 alone (it links driver/zephyr/lib/board/rpi4/rpi_mbox.c and
+# rpi_wdog.c, which the board layer already carries here), so this branch
+# hides the symbol from it.
 if(CONFIG_YAKOGL_GPU_V3D71)
   if(NOT CONFIG_YAKOGL_RPI5_WDOG OR NOT CONFIG_YAKOGL_RPI5_MBOX)
     message(FATAL_ERROR "deqp: CONFIG_YAKOGL_GPU_V3D71 needs the board layer's watchdog and mailbox (YAKOGL_RPI5_WDOG, YAKOGL_RPI5_MBOX)")
@@ -136,7 +137,8 @@ if(CONFIG_YAKOGL_GPU_V3D71)
   endif()
   target_sources(app PRIVATE src/v3d71_board.c)
   # The Pi 4's wraps but for the EGL default display, which passes through:
-  # the 7.1 OSAL gets its clock switch from the board layer (rpi5/rpi5_v3d.c).
+  # the 7.1 OSAL gets its clock switch from the board layer
+  # (driver/zephyr/lib/board/rpi5/rpi5_v3d.c).
   zephyr_link_libraries(-Wl,--wrap=glGetShaderInfoLog -Wl,--wrap=glGetProgramInfoLog
     -Wl,--wrap=glGetShaderiv -Wl,--wrap=glGetProgramiv)
   if(CONFIG_V3D_DEQP_QPA_UART)
@@ -229,7 +231,7 @@ if(YAKOGL_WERROR)
     PROPERTIES COMPILE_OPTIONS -Werror)
 endif()
 
-# PowerVR: the backend's option numbers (pvr/pvr_backend.h) for the A/B switches
+# PowerVR: the backend's option numbers (src/pvr/pvr_backend.h) for A/B switches
 if(CONFIG_YAKOGL_GPU_POWERVR)
   target_include_directories(app PRIVATE "${YAKOGL_DIR}/src")
 endif()

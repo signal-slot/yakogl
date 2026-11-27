@@ -3,7 +3,7 @@
  * The vertex and pixel shader the bring-up triangle uses, and the reflection
  * the driver needs to program the pipeline around them.
  *
- * Generated on the host with etna_shc (yakogl/tools/vivante/README.md) for
+ * Generated on the host with etna_shc (tools/vivante/README.md) for
  * model 0x7000 revision 0x6204, from:
  *
  *   VS: layout(location=0) in vec4 aPos; layout(location=1) in vec4 aColor;

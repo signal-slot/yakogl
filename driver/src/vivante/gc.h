@@ -61,7 +61,8 @@ bool gc_alive(const struct device *dev);
  * SoC. Under Linux those same GPC and CCM registers belong to the kernel's
  * genpd and clk drivers, and a second writer of them is the kind of bug that
  * shows up as an unrelated peripheral misbehaving. So the Linux module
- * (tools/gclab) powers and clocks the GPU the kernel's way and then calls this,
+ * (the retired `gclab` one, `gcgpu.ko`: driver/docs/vivante-kernel-rust.md)
+ * powers and clocks the GPU the kernel's way and then calls this,
  * which is the rest of gc_init() and nothing else: the same gc_identify() and
  * gc_reset() the Zephyr path runs.
  *

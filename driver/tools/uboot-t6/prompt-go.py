@@ -186,7 +186,8 @@ GL_ALL_RE = re.compile(r"gl_test: all: (-?\d+) of (\d+) cases failed \((\d+) pas
 # The size of the regression set: gl_test's list mali_regress, 50 cases ("the list
 # mali_regress (50 cases)"; tools/cts/RESULTS.md's T6 row: 50 of 50 at 9ad07f55f).
 GL_TOTAL = 50
-# deqp/src/main.cpp's "deqp: done: ...", then deqp_log.c's "deqp: summary: ..."
+# driver/samples/zephyr/deqp/src/main.cpp's "deqp: done: ...", then
+# deqp_log.c's "deqp: summary: ..."
 DEQP_DONE_RE = re.compile(r"deqp: done: -?\d+ passed, -?\d+ failed, -?\d+ not supported, -?\d+ warnings, "
                           r"complete=-?\d+")
 DEQP_SUMMARY_RE = re.compile(r"deqp: summary: \d+ cases begun, \d+ with a result, \d+ without")

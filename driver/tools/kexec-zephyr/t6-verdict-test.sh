@@ -14,7 +14,8 @@
 # t6_fw-z1-takeover-mask and -hard) and the crash route's success record
 # (t6_gpu-crash-pass) carry Z1's record as
 # tools/probes/nanopc_t6/common/t6_z1.c prints it: the host cc builds that file
-# with common/test/t6_z1_test.c, and its lines must be the fixture's.
+# with tools/probes/nanopc_t6/common/test/t6_z1_test.c, and its lines must be
+# the fixture's.
 # triangle-cold-pass is the Zephyr part of a board record: the triangle image
 # after a normal kexec, its first show the cold chain at 1920x1080
 # (2026-11-24, a development run; the tree name in its build line is the

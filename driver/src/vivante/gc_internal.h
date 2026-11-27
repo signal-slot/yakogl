@@ -72,7 +72,7 @@
 /* All of them free. Spelled out rather than BIT_MASK(GC_EVENT_COUNT): Zephyr's
  * BIT_MASK(n) is (BIT(n) - 1), the Linux kernel's is (1 << (n % BITS_PER_LONG))
  * -- the same name for two different numbers -- and this driver is built as
- * both. See the note in tools/gclab/shim/gc_compat.h; that one cost a day. */
+ * both. The retired `gclab` shim carried the same note; that one cost a day. */
 #define GC_EVENT_ALL        ((1u << GC_EVENT_COUNT) - 1u)
 
 /* ------------------------------------------------------------------ *
@@ -83,7 +83,7 @@ struct gc_dev {
 	const struct device *dev;    /* the Zephyr device, or NULL off Zephyr */
 	/* The identity the bring-up read, published with the register block.
 	 * Carried here rather than fetched through `dev` so that a host with no
-	 * Zephyr device (the Linux module in tools/gclab) can supply it too. */
+	 * Zephyr device (the retired Linux module `gclab`) can supply it too. */
 	const struct gc_identity *id;
 	mm_reg_t  regs;          /* the GPU register block (device memory) */
 	uint8_t  *carveout;      /* CPU view, Normal non-cacheable */

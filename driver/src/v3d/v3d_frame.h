@@ -167,7 +167,7 @@ void v3d_wpos_gl(bool y0_top, uint32_t fb_height, struct v3d_wpos *w);
 bool v3d_wpos_uniform(const struct v3d_wpos *w, uint32_t fb_height, uint32_t contents,
 		      uint32_t data, uint32_t *out);
 
-/* The fragment shader's prog_data, as tools/v3d/v3d_shc prints it. */
+/* The fragment shader's prog_data, as tools/v3d/v3d_shc.c prints it. */
 struct v3d_fs_prog {
 	uint32_t code;       /* GPU address of the QPU code, 8-byte aligned */
 	uint32_t threads;

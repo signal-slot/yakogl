@@ -4,11 +4,12 @@
  * Zephyr's rpi_4b takes zephyr,sram from dram0 (boards/raspberrypi/rpi_4b/
  * rpi_4b.dts: 8 MiB at 0x200000), where it used to take it from the SoC's
  * sram0 (dts/arm64/broadcom/bcm2711.dtsi: 512 KiB at 0x200000, the same
- * address). Each Pi 4 sample's boards/rpi_4b.overlay sizes sram0 for what the
- * image carries (the V3D's 48 MiB carve-out, the compiler's scratch, ...), so
- * the image's RAM has to be sram0 again: include this file from the overlay,
- * before the `&sram0 { reg = ...; };` that sizes it. Without it the link stops
- * with "region `RAM' overflowed" at the 8 MiB of dram0.
+ * address). Each Pi 4 sample's own rpi_4b.overlay under its boards/ directory
+ * sizes sram0 for what the image carries (the V3D's 48 MiB carve-out, the
+ * compiler's scratch, ...), so the image's RAM has to be sram0 again: include
+ * this file from the overlay, before the `&sram0 { reg = ...; };` that sizes
+ * it. Without it the link stops with "region `RAM' overflowed" at the 8 MiB
+ * of dram0.
  */
 / {
 	chosen {

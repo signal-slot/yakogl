@@ -23,10 +23,10 @@
  *                         recorded with the reason.
  *
  * Until the switch to the vendored headers (docs/source-form.md step 2) the
- * driver carried its own copies of these numbers (driver/src/pvr_ddk_abi.h,
- * the PVR_DDK_FW parts of driver/src/pvr_fwif.h); commit "offsetof: prove the
- * driver's FWIF numbers against the vendored DDK headers" checked every copy
- * against this list before they were deleted.
+ * driver carried its own copies of these numbers (`pvr_ddk_abi.h`, the
+ * PVR_DDK_FW parts of `pvr_fwif.h`); commit "offsetof: prove the driver's
+ * FWIF numbers against the vendored DDK headers" checked every copy against
+ * this list before they were deleted.
  */
 
 /* ---- structure sizes the driver allocates or strides by -------------- */

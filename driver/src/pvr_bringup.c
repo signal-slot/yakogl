@@ -12,7 +12,6 @@
  * See NOTICE.
  *
  * PowerVR BXS-4-64 (Rogue Volcanic) GPU bring-up for Zephyr on TI AM62P.
- * See docs/gpu-port-plan.md for the milestone plan.
  *
  * Milestone 1 (this file): power + clock the GPU through TISCI, map its
  * register block, and read back the core BVNC to prove the GPU is alive.
