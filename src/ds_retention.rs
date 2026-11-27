@@ -228,18 +228,25 @@ pub fn fill_stencil_rows(dst: &mut [u8], w: u32, h: u32, pitch: u32, v: u8) {
     }
 }
 
-/// The source words of destination row `y` (`sy` source rows of `stride`
-/// words a row), read every `sx`-th word: pixel (x, y) is the word at
-/// `y * sy * stride + x * sx`, as the PowerVR's `ds_sample0` has it.
-fn d24s8_src_row(
-    words: &[u32],
-    stride: usize,
-    sx: usize,
-    sy: usize,
-    y: usize,
-    n: usize,
-) -> impl Iterator<Item = u32> + '_ {
-    words[y * sy * stride..].iter().copied().step_by(sx.max(1)).take(n)
+/// Convert destination row `y` of `n` texels from its source words (`sy`
+/// source rows of `stride` words a row, every `sx`-th word): pixel (x, y)
+/// is the word at `y * sy * stride + x * sx`, as the PowerVR's `ds_sample0`
+/// has it. A source shorter than `n` words converts what it has. One word
+/// a pixel (`sx` 1) walks plain slices, which the compiler vectorises; a
+/// `step_by` there costs more than the conversion.
+#[inline(always)]
+fn d24s8_row<T>(words: &[u32], stride: usize, sx: usize, sy: usize, y: usize, row: &mut [T], f: impl Fn(u32) -> T) {
+    let src = &words[y * sy * stride..];
+    if sx <= 1 {
+        let n = row.len().min(src.len());
+        for (d, &word) in row[..n].iter_mut().zip(&src[..n]) {
+            *d = f(word);
+        }
+    } else {
+        for (d, word) in row.iter_mut().zip(src.iter().copied().step_by(sx)) {
+            *d = f(word);
+        }
+    }
 }
 
 /// Convert a packed D24S8 buffer's depth into `dst`'s texels by rows, the
@@ -266,9 +273,7 @@ pub fn d24s8_depth_rows(
         return;
     }
     for (y, row) in dst.chunks_mut((pitch as usize).max(1)).take(rows).enumerate() {
-        for (d, word) in row[..n].iter_mut().zip(d24s8_src_row(words, stride, sx, sy, y, n)) {
-            *d = unorm24_depth(word);
-        }
+        d24s8_row(words, stride, sx, sy, y, &mut row[..n], unorm24_depth);
     }
 }
 
@@ -291,9 +296,7 @@ pub fn d24s8_stencil_rows(
         return;
     }
     for (y, row) in dst.chunks_mut((pitch as usize).max(1)).take(rows).enumerate() {
-        for (d, word) in row[..n].iter_mut().zip(d24s8_src_row(words, stride, sx, sy, y, n)) {
-            *d = (word >> 24) as u8;
-        }
+        d24s8_row(words, stride, sx, sy, y, &mut row[..n], |word| (word >> 24) as u8);
     }
 }
 
