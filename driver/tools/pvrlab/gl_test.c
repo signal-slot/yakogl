@@ -410,6 +410,15 @@
  *               (PowerVR) the GPU's busy time a frame. Not in the
  *               regression set (a measurement); SKIP on ES 2.0 without
  *               GL_OES_texture_npot
+ * 250 miplevels case 216's 800x600 and 256x256 chains, level 0 noise drawn
+ *               by a pass, then glGenerateMipmap: every level read back
+ *               (NEAREST_MIPMAP_NEAREST over a level-sized viewport) and
+ *               compared with the bilinear step from the read-back level
+ *               below, computed in the case under both tie rules (floor(v
+ *               * 255 + 0.5) and round-half-even). One line a level,
+ *               "gl_test: miplevel <size> L<n>: differ N, max |d| M,
+ *               ties-even E, ties-up U"; FAIL when a level has max |d| > 1.
+ *               Every GPU; SKIP as case 216. Not in the set; by number
  * 217 forcedpr  a forced partial render read back whole (PowerVR, #3):
  *               overlapping 512x512 rectangles of known colour and scrambled
  *               depth in a 1024x1024 target, one kick in flight, the free
@@ -8687,7 +8696,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout", [248] = "tearbars", [249] = "linewidth",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout", [248] = "tearbars", [249] = "linewidth", [250] = "miplevels",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20654,6 +20663,327 @@ out:
 	return ok ? 0 : -1;
 }
 
+/* ---- case 250: every mip level read back against a CPU reference (miplevels)
+ *
+ * Case 216's chain sizes, 800x600 (NPOT, 9 levels above 0) and 256x256 (8),
+ * each made as terrain makes its targets (an RGBA8 texture alone in an FBO,
+ * LINEAR_MIPMAP_LINEAR, CLAMP_TO_EDGE) and filled the way case 216 fills
+ * them: level 0 drawn by a pass, then glGenerateMipmap. The pass copies a
+ * one-level NEAREST source of the same size texel for texel, and the
+ * source is noise (xorshift32, every byte of RGBA independent), so the
+ * filter sees every byte sum and the pack's rounding tie is hit on about a
+ * quarter of the bytes of every even step (a + b + c + d = 2 mod 4). On the
+ * PowerVR glGenerateMipmap of this texture is mip_chain_gpu: one level a
+ * kick by default, three levels a render with MIP_THREE_LEVELS_DEFAULT
+ * (docs/notes/pvr-mip-three-levels.md, part (f) and "Open"; the board
+ * procedure is E1's step 3, docs/notes/pvr-mip-tail-e1.md).
+ *
+ * Read-back: the texture's min filter set to NEAREST_MIPMAP_NEAREST (mag
+ * NEAREST), level n is drawn over a W_n x H_n viewport of a second 800x600
+ * RGBA8 FBO and read by glReadPixels. The quad's uv are 0..1, so a pixel
+ * centre samples level n's texel centre, and the LOD of the whole quad is
+ * log2(W_0 / W_n) or log2(H_0 / H_n), within 0.24 of n on every level of
+ * both chains (n itself on the even sizes, the top level the clamp), so
+ * nearest selection reads level n and no texel is filtered on the way out:
+ * no textureLod, no level attachment (ES 2.0 attaches level 0 only).
+ *
+ * The reference of level n (n >= 1) is computed from the read-back of level
+ * n - 1, so a line is the error of that one step: the GL's bilinear sample
+ * of level n - 1 at level n's texel centre, as mipgen.frag samples it
+ * (u = (x + 0.5) * W_{n-1} / W_n - 0.5, the floor, the fraction, the far
+ * neighbour clamped to the edge; the 2x box on an even step), in exact
+ * integers: v * 255 = S / D with D = 4 W_n H_n. Both tie rules from it:
+ * "up" floor(v * 255 + 0.5) and "even" round-half-even; they give different
+ * bytes only on a tie S mod D = D / 2 with an even floor. Level 0 is
+ * checked against the source's noise (both rules are the source byte).
+ *
+ * Output, per chain, one line a level, L0 first:
+ *
+ *   gl_test: miplevel <W0>x<H0> L<n>: differ N, max |d| M, ties-even E, ties-up U
+ *
+ * counted per byte of RGBA over level n's W_n x H_n texels: N the bytes
+ * that equal neither rule's byte, M the largest distance of a byte to the
+ * nearer of the two, E (U) the tie bytes where the rules differ and the
+ * GPU wrote the round-half-even (the floor(v * 255 + 0.5)) byte. E + U +
+ * the differing tie bytes are the level's tie bytes where the rules
+ * differ. The tie rule reads from the even steps (levels 1..3 and 8 of
+ * 800x600, all of 256x256): there the weights are 1/4 exactly and every
+ * tie is one. On an odd step the GPU's weights are not the exact ones, so
+ * E, U and N there carry the weights' error, not the rounding. (A host
+ * model of the GPU in doubles read, for 800x600: even steps N 0 under
+ * either rule, all tie bytes in E or all in U; levels 4 and 5 N 2..4 at
+ * max |d| 1.) A level with M > 1 adds
+ *
+ *   gl_test:   miplevel <W0>x<H0> L<n>: first at (x, y) got 0x... up 0x... even 0x...
+ *
+ * (x, y) from the level's bottom left, the texel's RGBA bytes as
+ * 0xAABBGGRR. After the levels, one line a chain sums them:
+ *
+ *   gl_test: miplevels <W0>x<H0>: levels L, differ N, max |d| M, ties-even E, ties-up U
+ *
+ * The verdict is the runner's line "gl_test: case 250 miplevels: PASS",
+ * unless a level of either chain has max |d| > 1 (FAIL; one LSB is
+ * tolerated, the TPU's bilinear weights on the odd NPOT steps, levels 4..7
+ * and 9 of 800x600). Checks: 1 the program linked, 2 the four framebuffers
+ * complete, 3 no GL error after the read-backs. Every GPU; SKIP on an ES
+ * 2.0 library without GL_OES_texture_npot (as case 216). A measurement and a
+ * check, not in the regression set: run it by number.
+ * ------------------------------------------------------------------------- */
+#define MIPLEVELS_W 800u
+#define MIPLEVELS_H 600u
+static uint32_t miplevels_prev[MIPLEVELS_W * MIPLEVELS_H]; /* level n - 1, rows bottom-up */
+static uint32_t miplevels_cur[(MIPLEVELS_W / 2u) * (MIPLEVELS_H / 2u)]; /* level n */
+
+static uint32_t miplevels_noise(uint32_t *s)
+{
+	uint32_t x = *s;
+
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*s = x;
+	return x;
+}
+
+/* One axis of the bilinear step from n0 texels to n1: output texel i reads
+ * texels lo[i], hi[i] with weights (den - fr[i], fr[i]) / den, den = 2 n1. */
+static void miplevels_axis(uint32_t n0, uint32_t n1, uint16_t *lo, uint16_t *hi, uint16_t *fr)
+{
+	for (uint32_t i = 0; i < n1; i++) {
+		/* u * 2 n1 = (2 i + 1) n0 - n1 >= 0, since n0 >= n1 */
+		const uint32_t num = (2u * i + 1u) * n0 - n1, den = 2u * n1;
+
+		lo[i] = (uint16_t)(num / den);
+		hi[i] = (uint16_t)(lo[i] + 1u < n0 ? lo[i] + 1u : n0 - 1u);
+		fr[i] = (uint16_t)(num % den);
+	}
+}
+
+struct miplevels_tally {
+	uint32_t differ, maxd, even, up;
+};
+
+/* Level n (w1 x h1, in miplevels_cur) against the step from level n - 1
+ * (w0 x h0, in miplevels_prev). */
+static void miplevels_compare(uint32_t w0, uint32_t h0, uint32_t w1, uint32_t h1, struct miplevels_tally *t,
+			      int32_t *fx, int32_t *fy, uint32_t *fup, uint32_t *feven)
+{
+	static uint16_t xlo[MIPLEVELS_W / 2u], xhi[MIPLEVELS_W / 2u], xfr[MIPLEVELS_W / 2u];
+	static uint16_t ylo[MIPLEVELS_H / 2u], yhi[MIPLEVELS_H / 2u], yfr[MIPLEVELS_H / 2u];
+	const uint64_t dx = 2u * w1, dy = 2u * h1, d = dx * dy;
+
+	miplevels_axis(w0, w1, xlo, xhi, xfr);
+	miplevels_axis(h0, h1, ylo, yhi, yfr);
+	for (uint32_t y = 0; y < h1; y++) {
+		for (uint32_t x = 0; x < w1; x++) {
+			const uint32_t a = miplevels_prev[ylo[y] * w0 + xlo[x]], b = miplevels_prev[ylo[y] * w0 + xhi[x]];
+			const uint32_t c = miplevels_prev[yhi[y] * w0 + xlo[x]], e = miplevels_prev[yhi[y] * w0 + xhi[x]];
+			const uint64_t wa = (dx - xfr[x]) * (dy - yfr[y]), wb = (uint64_t)xfr[x] * (dy - yfr[y]);
+			const uint64_t wc = (dx - xfr[x]) * yfr[y], we = (uint64_t)xfr[x] * yfr[y];
+			const uint32_t got = miplevels_cur[y * w1 + x];
+			uint32_t up = 0, even = 0, worst = 0;
+
+			for (int sh = 0; sh < 32; sh += 8) {
+				const uint64_t s = wa * ((a >> sh) & 0xffu) + wb * ((b >> sh) & 0xffu) +
+						   wc * ((c >> sh) & 0xffu) + we * ((e >> sh) & 0xffu);
+				const uint32_t k = (uint32_t)(s / d), qu = (uint32_t)((2u * s + d) / (2u * d));
+				const bool tie = 2u * (s % d) == d;
+				const uint32_t qe = tie ? k + (k & 1u) : qu;
+				const int g = (int)((got >> sh) & 0xffu);
+				int du = g - (int)qu, de = g - (int)qe, m;
+
+				if (du < 0) du = -du;
+				if (de < 0) de = -de;
+				m = du < de ? du : de;
+				up |= qu << sh;
+				even |= qe << sh;
+				if (m)
+					t->differ++;
+				if ((uint32_t)m > worst)
+					worst = (uint32_t)m;
+				if (qu != qe) {
+					if (de == 0)
+						t->even++;
+					else if (du == 0)
+						t->up++;
+				}
+			}
+			if (worst > t->maxd)
+				t->maxd = worst;
+			if (worst > 1u && *fx < 0) {
+				*fx = (int32_t)x;
+				*fy = (int32_t)y;
+				*fup = up;
+				*feven = even;
+			}
+		}
+	}
+}
+
+static int case_miplevels(void)
+{
+	static const uint32_t size[2][2] = { { 800, 600 }, { 256, 256 } };
+	const char *ver = (const char *)glGetString(GL_VERSION);
+	const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+	const bool es2 = !ver || strncmp(ver, "OpenGL ES 2.", 12) == 0;
+	GLuint prog, src[2] = { 0, 0 }, tex[2] = { 0, 0 }, rb = 0, fbo[3] = { 0, 0, 0 };
+	uint32_t complete = 0;
+	bool ok = true;
+
+	if (es2 && (!ext || !strstr(ext, "GL_OES_texture_npot"))) {
+		pr_info("gl_test: case 250 miplevels: SKIP (an ES 2.0 library without GL_OES_texture_npot)\n");
+		return -3;
+	}
+	free_all_objects();
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_uv_vs_src, gl_test_texture_fs_src);
+	/* check 1 */
+	if (!expect_u32("miplevels: program linked", prog ? 1u : 0u, 1u))
+		return -1;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+	glDisable(GL_DITHER);
+	glClearColor(0, 0, 0, 1);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+	/* the read-back target: 800x600 RGBA8, one level */
+	glGenTextures(1, &rb);
+	glBindTexture(GL_TEXTURE_2D, rb);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, MIPLEVELS_W, MIPLEVELS_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glGenFramebuffers(3, fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo[2]);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rb, 0);
+	complete |= (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE ? 1u : 0u) << 2;
+
+	/* the sources (noise, one level, NEAREST) and the chains' textures */
+	for (int i = 0; i < 2; i++) {
+		const uint32_t w = size[i][0], h = size[i][1];
+		uint32_t seed = 0x9e3779b9u ^ (w * 4099u + h);
+
+		for (uint32_t k = 0; k < w * h; k++)
+			miplevels_prev[k] = miplevels_noise(&seed);
+		glGenTextures(1, &src[i]);
+		glBindTexture(GL_TEXTURE_2D, src[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)w, (GLsizei)h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+			     miplevels_prev);
+
+		/* as case 216 makes A, B, C */
+		glGenTextures(1, &tex[i]);
+		glBindTexture(GL_TEXTURE_2D, tex[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)w, (GLsizei)h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[i], 0);
+		complete |= (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE ? 1u : 0u) << i;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	/* check 2: got = which framebuffers are complete (bit 0: 800x600,
+	 * bit 1: 256x256, bit 2: the read-back) */
+	if (!expect_u32("miplevels: framebuffers complete", complete, 7u)) {
+		ok = false;
+		goto out;
+	}
+
+	for (int i = 0; i < 2; i++) {
+		const uint32_t w0 = size[i][0], h0 = size[i][1];
+		struct miplevels_tally sum = { 0, 0, 0, 0 };
+		uint32_t w = w0, h = h0, pw = w0, ph = h0, levels = 0;
+
+		/* level 0 drawn by the pass, then the chain */
+		mipchains_pass(prog, fbo[i], (GLsizei)w0, (GLsizei)h0, src[i], tex[i]);
+		glBindTexture(GL_TEXTURE_2D, tex[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		for (uint32_t n = 0;; n++) {
+			struct miplevels_tally t = { 0, 0, 0, 0 };
+			int32_t fx = -1, fy = -1;
+			uint32_t fup = 0, feven = 0;
+
+			glBindFramebuffer(GL_FRAMEBUFFER, fbo[2]);
+			glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+			glClear(GL_COLOR_BUFFER_BIT);
+			dst_sample(prog, tex[i]);
+			glReadPixels(0, 0, (GLsizei)w, (GLsizei)h, GL_RGBA, GL_UNSIGNED_BYTE,
+				     n ? miplevels_cur : miplevels_prev);
+			if (n == 0) {
+				/* level 0 against the source's noise */
+				uint32_t seed = 0x9e3779b9u ^ (w0 * 4099u + h0);
+
+				for (uint32_t k = 0; k < w * h; k++) {
+					const uint32_t want = miplevels_noise(&seed), got = miplevels_prev[k];
+					const int m = chan_diff(got, want);
+
+					for (int sh = 0; sh < 32; sh += 8)
+						t.differ += ((got >> sh) & 0xffu) != ((want >> sh) & 0xffu);
+					if ((uint32_t)m > t.maxd)
+						t.maxd = (uint32_t)m;
+					if (m > 1 && fx < 0) {
+						fx = (int32_t)(k % w);
+						fy = (int32_t)(k / w);
+						fup = feven = want;
+					}
+				}
+			} else {
+				miplevels_compare(pw, ph, w, h, &t, &fx, &fy, &fup, &feven);
+			}
+			pr_info("gl_test: miplevel %ux%u L%u: differ %u, max |d| %u, ties-even %u, ties-up %u\n",
+				(unsigned)w0, (unsigned)h0, (unsigned)n, (unsigned)t.differ, (unsigned)t.maxd,
+				(unsigned)t.even, (unsigned)t.up);
+			if (fx >= 0)
+				pr_info("gl_test:   miplevel %ux%u L%u: first at (%d, %d) got 0x%08x up 0x%08x even 0x%08x\n",
+					(unsigned)w0, (unsigned)h0, (unsigned)n, (int)fx, (int)fy,
+					(unsigned)(n ? miplevels_cur : miplevels_prev)[fy * (int32_t)w + fx],
+					(unsigned)fup, (unsigned)feven);
+			ok &= t.maxd <= 1u;
+			sum.differ += t.differ;
+			sum.even += t.even;
+			sum.up += t.up;
+			if (t.maxd > sum.maxd)
+				sum.maxd = t.maxd;
+			levels++;
+			if (w == 1 && h == 1)
+				break;
+			/* level n is the next step's level n - 1 */
+			if (n)
+				memcpy(miplevels_prev, miplevels_cur, (size_t)w * h * 4u);
+			pw = w;
+			ph = h;
+			w = w > 1 ? w / 2 : 1;
+			h = h > 1 ? h / 2 : 1;
+		}
+		pr_info("gl_test: miplevels %ux%u: levels %u, differ %u, max |d| %u, ties-even %u, ties-up %u\n",
+			(unsigned)w0, (unsigned)h0, (unsigned)levels, (unsigned)sum.differ, (unsigned)sum.maxd,
+			(unsigned)sum.even, (unsigned)sum.up);
+	}
+	/* check 3 */
+	ok &= expect_u32("miplevels: error after the read-backs", glGetError(), GL_NO_ERROR);
+out:
+	glViewport(0, 0, TW, TH);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteFramebuffers(3, fbo);
+	glDeleteTextures(2, tex);
+	glDeleteTextures(2, src);
+	glDeleteTextures(1, &rb);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	return ok ? 0 : -1;
+}
+
 #ifdef GL_TEST_PVR
 /* ---- case 219: two small renders back to back, and one alone (kickpair) ----
  *
@@ -24507,6 +24837,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		break;
 	case 216:
 		rc = case_mipchains();
+		if (rc == -3)
+			return -3; /* skipped by name: an ES 2.0 library without NPOT chains */
+		break;
+	case 250:
+		rc = case_miplevels();
 		if (rc == -3)
 			return -3; /* skipped by name: an ES 2.0 library without NPOT chains */
 		break;
