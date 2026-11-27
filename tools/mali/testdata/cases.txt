@@ -347,3 +347,14 @@ gm2_nbshrf_7  gm2_nbshrf_7.vert gm2_nbshrf_7.frag triangles vs.position=equal vs
 # its own order (`unanalysed`).
 gm2_nbshrf_8  gm2_nbshrf_8.vert gm2_nbshrf_8.frag triangles vs.position=equal vs.varying=differs:unanalysed:32:7f2517ba7f5f fs.fragment=differs:mediump:25:5a40ce7da803
 gm2_nbshrf_9  gm2_nbshrf_9.vert gm2_nbshrf_9.frag triangles vs.position=equal vs.varying=differs:unanalysed:32:7f2517ba7f5f fs.fragment=differs:mediump:33:11a4c4e866e6
+# #367 lower-train-2 step VARYING_LOAD: mediump vec3 varyings the link packs into one slot, read by fp16 trees (bump fs
+# 77c5, terrain fs 4d26, ideas fs c565/1aca; docs/notes/mali-varying-load.md), drawn with --uniform-values. Our compiler
+# is byte-equal to gm2_vload_1 and _3.._6 (tests/mali_varying_load.rs); _2 stops at FS_OPERAND. pan_shc's SPIR-V path
+# has no lower_precision (`mediump`); _3's varying program stores the vec4 after the vec3s, where Mesa's link lays it
+# out first (`unanalysed`).
+gm2_vload_1  gm2_vload_1.vert gm2_vload_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:12:e193c6cca6c5
+gm2_vload_2  gm2_vload_2.vert gm2_vload_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:14:0b5cb12c0c69
+gm2_vload_3  gm2_vload_3.vert gm2_vload_3.frag triangles vs.position=equal vs.varying=differs:unanalysed:10:35acf753bd48 fs.fragment=differs:mediump:19:ad6d4b304051
+gm2_vload_4  gm2_vload_4.vert gm2_vload_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:14:3395bb2afea1
+gm2_vload_5  gm2_vload_5.vert gm2_vload_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:14:506a285c0155
+gm2_vload_6  gm2_vload_6.vert gm2_vload_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:21:6f1e97fe89df

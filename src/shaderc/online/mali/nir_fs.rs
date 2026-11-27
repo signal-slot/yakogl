@@ -1590,6 +1590,9 @@ pub struct Fs<'s> {
     pub nmoved: usize,
     /// Each varying location's first read (`u32::MAX`: not read).
     var_key: [u32; MAX_VARYINGS],
+    /// Each read float varying location's declared components (0: not
+    /// read, or not a float), for [`conversion_order`].
+    var_comps: [u8; MAX_VARYINGS],
     /// Each varying location's lanes an fp16 `fmul` or `fadd` read and the
     /// walk folded away (`x * 1.0`, `x + 0.0` of a lane pair) where the
     /// identity holds on some lanes of the operation only: at the link
@@ -5190,6 +5193,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         moved: [Moved::NONE; MAX_MOVED],
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
+        var_comps: [0; MAX_VARYINGS],
         folded: [0; MAX_VARYINGS],
         split: [Val::Undef; 8],
         nsplit: 0,
@@ -10173,6 +10177,9 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         by.copy_within(at..nd, at + 1);
         by[at] = (rank, d.location, d.components, d.gl_type);
         nd += 1;
+        if let Some(c) = f.var_comps.get_mut(d.location as usize) {
+            *c = if is_float_varying(d.gl_type) { d.components } else { 0 };
+        }
     }
     let mut lay = [VaryingAt { location: 0, comps: 0, offset: 0 }; MAX_VARYINGS];
     let n = generic_layout(by[..nd].iter().map(|&(_, l, c, t)| (l, c, t)), &mut lay)?;
@@ -11268,6 +11275,21 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                      * matrix); a swizzle of a compacted load has no
                      * reference */
                     P::Leaf(Leaf::Lanes { k, c: i, e: k, d: j })
+                } else if i % 2 == 1
+                    && j == i + 1
+                    && v == w
+                    && !f.prec.highp
+                    && f.var_comps.get(v as usize).is_some_and(|&n| n >= 3)
+                    && f.prec.other >> (f.mat_base(v) & 31) & 1 == 0
+                    && packed_whole(f, v)
+                {
+                    /* a mediump vec3's two lanes the link packed from an
+                     * odd lane of one load: the high half of one pair
+                     * conversion and the low half of the next
+                     * (gm2_vload_6's v_v.xy in slot 2's lanes 1 and 2:
+                     * `MKVEC.v2i16 r3, r3^.h1, r2.h0`;
+                     * docs/notes/mali-varying-load.md) */
+                    P::Leaf(Leaf::Lanes { k, c: i, e: k, d: j })
                 } else if i / 2 != j / 2
                     && v == w
                     && f.colour.is_some_and(|c| {
@@ -11402,6 +11424,30 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
     pr.push(p, place)
 }
 
+/// Varying location `v` keeps every declared component, in consecutive
+/// scalar slots from the middle of a slot that another varying's lanes
+/// start: a vector the link packed behind another whole (gm2_vload_6's
+/// v_v), not one whose lanes the link dropped or merged.
+fn packed_whole(f: &Fs<'_>, v: u8) -> bool {
+    let Some((lanes, &n)) = f.lane_of.get(v as usize).zip(f.var_comps.get(v as usize)) else {
+        return false;
+    };
+    let at = |c: usize| lanes.get(c).copied().flatten().map(|(s, l)| 4 * u32::from(s) + u32::from(l));
+    let Some(first) = at(0) else { return false };
+    let consecutive = (0..n as usize).all(|c| at(c) == Some(first + c as u32));
+    let slot = (first / 4) as u8;
+    let in_slot = |l: usize| l != v as usize && f.lane_of[l].iter().flatten().any(|&(s, _)| s == slot);
+    /* each varying beside it in the slot whole too: every declared lane
+     * kept and read (gm2_faupage_2's vec4s, a lane of which the link
+     * drops, have no reference here) */
+    let whole = |l: usize| {
+        let n = f.var_comps[l].min(4) as usize;
+        n > 0 && f.lane_of[l][..n].iter().all(Option::is_some)
+    };
+    let beside = (0..MAX_VARYINGS).any(in_slot) && (0..MAX_VARYINGS).filter(|&l| in_slot(l)).all(whole);
+    consecutive && first % 4 != 0 && beside
+}
+
 /// Where the loads' fp16 conversions stand, in Mesa's order
 /// ([`Conversions`]): an aligned pair that [`Leaf::Half`] reads is one
 /// conversion (`V2F32_TO_V2F16`, the even lane low), and so is an aligned
@@ -11431,7 +11477,13 @@ fn conversion_order(
     roots: [u8; 2],
     conv_form: &mut [[Option<bool>; 4]; MAX_VARYINGS],
 ) -> Result<Conversions, MaliError> {
-    let mut out = Conversions { at_load: [[NO_LANE; 4]; MAX_VARYINGS], at_store: [(0, NO_LANE); 8], n: 0 };
+    let mut out = Conversions {
+        at_load: [[NO_LANE; 4]; MAX_VARYINGS],
+        at_store: [(0, NO_LANE); 8],
+        n: 0,
+        later: [(0, 0, NO_LANE); 8],
+        n_later: 0,
+    };
     let lanes_of = |x: &P| -> [Option<(u8, u8)>; 2] {
         match *x {
             P::Leaf(Leaf::Half { k, h, swz: Swz::H10 }) => [Some((k, 2 * h + 1)), Some((k, 2 * h))],
@@ -11466,17 +11518,34 @@ fn conversion_order(
     }
     for k in 0..f.nvar {
         let slot = f.varyings[k].location;
-        /* the varyings whose lanes the trees convert here */
-        /* (a matrix's columns are one variable, one `f2fmp` of the packed
-         * slots: deqp_constop_matrix_preinc_mediump_mat3_fs's `f2f16
-         * %2.zw` of column 0's z and column 1's x) */
+        /* the varyings whose lanes the trees convert here (a matrix's
+         * columns are one variable, one `f2fmp` of the packed slots:
+         * deqp_constop_matrix_preinc_mediump_mat3_fs's `f2f16 %2.zw` of
+         * column 0's z and column 1's x) */
         let mut bases = 0u32;
+        let mut vectors = true;
         for l in (0..MAX_VARYINGS)
             .filter(|&l| f.lane_of[l].iter().flatten().any(|&(s, lane)| s == slot && tree[k] & 1 << lane != 0))
         {
-            bases |= 1u32.checked_shl(u32::from(f.mat_base(l as u8))).unwrap_or(0);
+            let base = f.mat_base(l as u8);
+            bases |= 1u32.checked_shl(u32::from(base)).unwrap_or(0);
+            /* a mediump float vec3 or vec4 of its own, not a matrix
+             * column */
+            vectors &= f.var_comps[l] >= 3
+                && f.mat_col & (1 << (l & 31)) == 0
+                && f.mat_col & (1 << ((l + 1) & 31)) == 0
+                && f.prec.other >> (base & 31) & 1 == 0;
         }
-        if bases.count_ones() > 1 {
+        /* two or more such vectors the link packed into one slot are each
+         * its own `f2fmp`, whose lanes `nir_opt_vectorize` pairs on the
+         * load they share, in lane order whatever variable each lane is
+         * (gm2_vload_1: `V2F32_TO_V2F16 r1, r2^, r3^` of (v_n.z, v_e.x),
+         * then `MKVEC.v2i16 r3, r1.h1, r2.h0` for v_e.xy;
+         * docs/notes/mali-varying-load.md). Scalars of two varyings in one
+         * load (deqp_varyload_rnd57, basic33: Mesa's link folds and merges
+         * them further) and a highp one beside (op_common_mod_fs_highp)
+         * have no reference */
+        if bases.count_ones() > 1 && (f.prec.highp || f.mixed || !vectors) {
             return Err(MaliError::FsVaryingLoad);
         }
         /* Mesa's order of the conversions */
@@ -11553,9 +11622,33 @@ fn conversion_order(
         if !same {
             return Err(MaliError::FsVaryingLoad);
         }
-        let at_tree = mesa[..nm].iter().filter(|g| tree[k] & 1 << g.0 != 0);
-        for (o, g) in out.at_load[k].iter_mut().zip(at_tree) {
-            *o = g.0;
+        /* the first read of the variable a lane of this load is (a
+         * matrix's columns are one variable: its first column's) */
+        let owner_key = |c: u8| -> u32 {
+            let Some(l) =
+                (0..MAX_VARYINGS).find(|&l| f.lane_of[l].iter().flatten().any(|&(s, lane)| s == slot && lane == c))
+            else {
+                return 0;
+            };
+            let base = f.mat_base(l as u8);
+            (0..MAX_VARYINGS).filter(|&x| f.mat_base(x as u8) == base).map(|x| f.var_key[x]).min().unwrap_or(0)
+        };
+        let mut n_at = 0;
+        for g in mesa[..nm].iter().filter(|g| tree[k] & 1 << g.0 != 0) {
+            /* a conversion whose lanes are all of a variable read first
+             * after this load's place stands where that variable's
+             * `f2fmp` stands, its first read (gm2_vload_5: slot 1's (z, w),
+             * v_b.xy, converted after `v_n + v_t`, before slot 2's load);
+             * one with a lane of the variable the load stands for, at the
+             * load */
+            let at = g.1.map_or(owner_key(g.0), |d| owner_key(g.0).min(owner_key(d)));
+            if at > f.varyings[k].key() {
+                *out.later.get_mut(out.n_later).ok_or(MaliError::Defect(Defect::IrIndex))? = (at, k as u8, g.0);
+                out.n_later += 1;
+            } else {
+                out.at_load[k][n_at] = g.0;
+                n_at += 1;
+            }
         }
     }
     /* the colour's own conversions, at the store, in the colour's order
@@ -11580,12 +11673,16 @@ fn conversion_order(
 
 /// Where the fp16 conversions of the loads stand ([`conversion_order`]):
 /// those of the fp16 trees at their load (each load's first lanes, in
-/// order, padded with [`NO_LANE`]), the colour's own at its store, in the
-/// colour's order ((load, first lane), `n` of them).
+/// order, padded with [`NO_LANE`]) or, for a variable read first after its
+/// load's place, at that read ((key, load, first lane), `n_later` of
+/// them), the colour's own at its store, in the colour's order ((load,
+/// first lane), `n` of them).
 struct Conversions {
     at_load: [[u8; 4]; MAX_VARYINGS],
     at_store: [(u8, u8); 8],
     n: usize,
+    later: [(u32, u8, u8); 8],
+    n_later: usize,
 }
 
 /// `op` is `sin`, `cos`, `log2`, `exp2` or `pow` ([`transc_rows`]).
@@ -12946,9 +13043,16 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     const DISCARD: u8 = 5;
     const FRAG: u8 = 6;
     const FRAG_WORD: u8 = 7;
+    /* a load's conversion at a later variable's first read, before
+     * anything else there ([`Conversions::later`]) */
+    const CONV: u8 = 8;
     let mut events =
-        [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + MAX_LOOK_UPS + 3 + 2 * MAX_UBO_READS + MAX_DISCARDS];
+        [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + MAX_LOOK_UPS + 3 + 2 * MAX_UBO_READS + MAX_DISCARDS + 8];
     let mut ne = 0;
+    for (i, l) in conv_order.later[..conv_order.n_later].iter().enumerate() {
+        events[ne] = (l.0, 0, CONV, i as u8);
+        ne += 1;
+    }
     for (k, d) in discards[..nd].iter().enumerate() {
         events[ne] = (d.0, 0, DISCARD, k as u8);
         ne += 1;
@@ -13077,9 +13181,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * `MKVEC.v2i16` of x and y) */
     let frag_event = events.iter().any(|e| e.2 == FRAG);
     let rank = |e: &(u32, u8, u8, u8)| match e.2 {
-        LOAD if frag_event && f.varyings[e.3 as usize].location == FRAG_Z => FRAG + 1,
-        FRAG_WORD => FRAG + 2,
-        w => w,
+        CONV => 0,
+        LOAD if frag_event && f.varyings[e.3 as usize].location == FRAG_Z => FRAG + 2,
+        FRAG_WORD => FRAG + 3,
+        w => w + 1,
     };
     events.sort_unstable_by_key(|e| (e.0, e.1, rank(e), e.3));
     let mut lv = Leaves {
@@ -13101,6 +13206,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let mut texel = None;
     for &(_, _, what, x) in events.iter() {
         match what {
+            CONV => {
+                let (_, k, c) = conv_order.later[x as usize];
+                conversion(p, f, k as usize, c, &conv_form, &mut lv, &mut rows)?;
+            }
             LOAD => {
                 load(p, f, x as usize, &mut lv)?;
                 /* a load whose lanes 1 and 2 are a look-up's coordinate
@@ -13369,6 +13478,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             /* a texel's own half of the look-up's word (gm2_texswz_1's
              * `ATEST .. r0.h0`) */
             P::Leaf(Leaf::TexLane(..)) => operand(&pr, y, &lv, &val)?,
+            /* the high half of a pair conversion of the load (VARYING_LOAD:
+             * gm2_varylink_pack_v3v4v3's `vertex_position.w` beside the
+             * packed vec3s' sum, `V2F32_TO_V2F16 r3, r4^, r5^` of (z, w),
+             * then `ATEST .. r3.h1` and `MKVEC.v2i16 r1, r1^.h0, r3^.h1`) */
+            P::Leaf(Leaf::Half { h: 1, swz: Swz::H11, .. }) => operand(&pr, y, &lv, &val)?,
             _ => operand(&pr, y, &lv, &val)?.swz(Swz::H00),
         },
         /* a swapped word's high lane is the look-up word's low half */
