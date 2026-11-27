@@ -3629,7 +3629,7 @@ fn live_texture(textures: &mut [GlTexture; TEXTURE_SLOTS], h: usize) -> Option<&
  * every build that reports ES 2.0 claims since 2026-10-07 -- so it applies
  * only where texture::NPOT_RESTRICTED holds, which no build does any more.
  * Where the backend keeps one level of a NPOT image (the PowerVR's stacked
- * NPOT cube maps, texture.rs npot_mip_chains) such a texture samples its
+ * NPOT 2D arrays, texture.rs npot_mip_chains) such a texture samples its
  * base level under a mipmap filter.
  *
  * This replaces demoting the filter and sampling level 0, which showed an
@@ -3743,7 +3743,7 @@ fn incomplete_reason(t: &GlTexture) -> Option<&'static str> {
      * can. Levels below the base level are not looked at. */
     if mips {
         /* GL's chain, not the store's: where the backend keeps one level of
-         * a NPOT image (a PowerVR NPOT cube), GL still wants its whole chain, which
+         * a NPOT image (a PowerVR NPOT array), GL still wants its whole chain, which
          * glGenerateMipmap, glTexStorage2D or the application's own levels
          * record as present without holding them */
         let chain = (((1u32 << end) - 1) & !((1u32 << base) - 1)) as u16;
@@ -5083,6 +5083,18 @@ fn build_common(
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
             }
             (tb.linear_filter, tb.min_linear, tb.mip_filter, tb.mip_levels) = sampling_fields(t);
+            /* A PowerVR NPOT cube's chain is laid out packed
+             * (texture.rs packed_npot_cube), which only the native cube's
+             * copy re-lays for the TPU. Sampled as the stacked image (a
+             * stacked-cube program, or no copy could be made) the TPU would
+             * find level l at its power-of-two step of (6h) >> l rows, which
+             * is not where it is: level 0 alone, as before the chain was
+             * held. Not gated on the feature: packed_npot_cube is the back
+             * end's flags (no layers walked, packed levels), which only the
+             * PowerVR sets, as the layout in texture.rs is. */
+            if tb.type_ == GLES_TEXTYPE_CUBE && super::texture::packed_npot_cube_of(t) {
+                (tb.mip_filter, tb.mip_levels) = (0, 1);
+            }
             /* The Mali's 3D texture: its back end copies every level of the
              * grid the GL core holds after level 0 (`volume_of`,
              * `grid_level_at`; docs/notes/mali-3d-levels.md section 4), so it

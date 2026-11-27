@@ -1300,11 +1300,11 @@ pub(crate) const NPOT_RESTRICTED: bool = crate::REPORT_ES2 && !super::state::NPO
 /// layered texture themselves. The PowerVR's TPU is handed level 0 alone and
 /// finds level i+1 by its own power-of-two arithmetic: a 2D NPOT chain is
 /// laid out as the chain of its power-of-two extent, as Mesa's pvr driver
-/// lays a multi-level image out ([`chain_layout_npot`]). A stacked NPOT cube
-/// there keeps its base level: the emulated cube samples level l as one tall
-/// image of (6h) >> l rows, which is not six faces of h >> l rows once h is
-/// not a power of two. GL's chain is then recorded as present and the draw
-/// samples level 0.
+/// lays a multi-level image out ([`chain_layout_npot`]). Its six stacked
+/// faces of a NPOT cube are not walked by that arithmetic: the emulated cube
+/// samples level l as one tall image of (6h) >> l rows, which is not six
+/// faces of h >> l rows once h is not a power of two. Such a cube holds its
+/// chain packed for the native cube's copy instead ([`packed_npot_cube`]).
 fn npot_mip_chains(layers: u32) -> bool {
     backend::native_layered_textures() || (backend::mip_level_align() == 0 && layers <= 1)
 }
@@ -1321,6 +1321,41 @@ fn stacked_decoded_array(t: &GlTexture) -> bool {
         && t.layers > 1
         && !backend::native_layered_textures()
         && backend::mip_level_align() == 0
+}
+
+/// A non-power-of-two cube map of `w x h` faces on a back end that does not
+/// walk layers itself and packs its levels ([`npot_mip_chains`] false for
+/// its six stacked faces: the PowerVR). Its chain is laid out packed, level
+/// i the six faces of max(w >> i, 1) x max(h >> i, 1) stacked, as for a
+/// [`stacked_decoded_array`]: the TPU never walks this storage's chain
+/// itself. The native cube's copy (`gl::native_cube::copy`) re-lays every
+/// level from `level_off` into the face-major twiddled chain of the
+/// power-of-two side the TPU's own cube walks (Mesa 26.2.1
+/// pvr_image_plane_setup_mip_levels), and a stacked-cube program samples
+/// level 0 alone (`gl::draw`, [`packed_npot_cube_of`]). Until this held the
+/// chain, such a cube kept one level, its levels >= 1 recorded and dropped,
+/// and every LOD read level 0 (dEQP-GLES3 texture.specification
+/// *cube_57x57*, AM62P; tests/pvr_npot_cube.rs).
+fn packed_npot_cube(target: GLenum, w: u32, h: u32, layers: u32) -> bool {
+    target == GL_TEXTURE_CUBE_MAP
+        && layers == 6
+        && !(is_pot(w) && is_pot(h))
+        && (w > 1 || h > 1)
+        && !backend::native_layered_textures()
+        && backend::mip_level_align() == 0
+}
+
+/// [`packed_npot_cube`] of texture `t`, uncompressed, as it is laid out now
+/// (a chain of more than one level).
+pub(crate) fn packed_npot_cube_of(t: &GlTexture) -> bool {
+    t.block_bytes == 0 && t.chain_levels > 1 && packed_npot_cube(t.target, t.width, t.height, u32::from(t.layers))
+}
+
+/// A NPOT texture whose chain is laid out packed though its back end does
+/// not walk layers: a [`stacked_decoded_array`] or a [`packed_npot_cube`].
+fn packed_stack(t: &GlTexture) -> bool {
+    stacked_decoded_array(t)
+        || (t.block_bytes == 0 && packed_npot_cube(t.target, t.width, t.height, u32::from(t.layers)))
 }
 
 /// Whether a layout asks for the whole chain of a non-power-of-two size
@@ -1359,7 +1394,7 @@ fn texture_alloc_storage(t: &mut GlTexture, w: u32, h: u32, layers: u32, texfmt:
 fn grow_npot_chain(t: &mut GlTexture, oom: &mut bool) -> bool {
     *oom = false;
     let (w, h) = (t.width, t.height);
-    let stacked = stacked_decoded_array(t);
+    let stacked = packed_stack(t);
     if !(npot_mip_chains(t.layers as u32) || stacked)
         || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY)
         || t.chain_levels != 1
@@ -1955,7 +1990,9 @@ fn texture_alloc_storage_ex(
     one_level: bool,
     npot_chain: bool,
 ) -> i32 {
-    let Some(layout) = storage_layout(w, h, layers, texfmt, one_level, NpotChain::from(npot_chain, false)) else {
+    /* glTexStorage2D of a NPOT cube with levels: packed (packed_npot_cube) */
+    let stacked = npot_chain && packed_npot_cube(t.target, w, h, layers);
+    let Some(layout) = storage_layout(w, h, layers, texfmt, one_level, NpotChain::from(npot_chain, stacked)) else {
         return -1;
     };
     texture_alloc_laid_out(t, w, h, layers, texfmt, layout)
@@ -3044,7 +3081,7 @@ unsafe fn tex_image_2d(
             && (level as u32) < u32::from(context::gl_mip_levels(t.width, t.height))
             && (width as u32, height as u32) == level_size(t, level as u32)
             && t.format == format;
-        if npot_level && npot_mip_chains(t.layers as u32) {
+        if npot_level && (npot_mip_chains(t.layers as u32) || packed_stack(t)) {
             if !settle_texture(c, ti) {
                 c.set_error(GL_OUT_OF_MEMORY, FUNC);
                 return false;
@@ -3059,7 +3096,7 @@ unsafe fn tex_image_2d(
         let t = &mut c.objs().textures[ti];
         let (lw, lh) = level_size(t, level as u32);
         /* GL's level, which a backend that keeps one level of a NPOT image
-         * (a PowerVR NPOT cube, npot_mip_chains) cannot hold: recorded as there, its
+         * (a compressed or external one, or storage that could not grow) cannot hold: recorded as there, its
          * texels dropped, so the chain is complete and samples its base, as
          * after glGenerateMipmap. */
         if npot_level && t.chain_levels == 1 {
@@ -4803,7 +4840,7 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
      * the texture, whose texels are copied across. Elsewhere nothing is
      * waited for: glmark2's terrain asks again every frame for a texture it
      * has just rendered into. */
-    if npot && filtered && t.chain_levels < 2 && npot_mip_chains(t.layers as u32) {
+    if npot && filtered && t.chain_levels < 2 && (npot_mip_chains(t.layers as u32) || packed_stack(t)) {
         if !settle_texture(c, ti) {
             c.set_error(GL_OUT_OF_MEMORY, FUNC);
             return;
@@ -4818,7 +4855,7 @@ pub unsafe extern "C" fn glGenerateMipmap(target: GLenum) {
     let t = &mut c.objs().textures[ti];
     if t.chain_levels < 2 {
         /* No chain in the store: a NPOT image where the backend keeps one
-         * level (a PowerVR NPOT cube, npot_mip_chains), or a 1x1. GL's chain exists
+         * level (a PowerVR NPOT array, npot_mip_chains), or a 1x1. GL's chain exists
          * all the same (ES 2.0 3.7.11), so the texture is complete under a
          * mipmap filter and samples its base level. It was left incomplete,
          * and an ES 3.0 build sampled such a texture black. */
@@ -10741,10 +10778,13 @@ mod tests {
         assert!(t.mem.size >= size as usize);
     }
 
-    /// A NPOT cube map keeps its base level on the PowerVR's shape: the
-    /// emulated cube samples level l as one tall image (6h) >> l rows high,
-    /// which is not six faces of h >> l rows once h is not a power of two
-    /// (`npot_mip_chains`). GL's chain is recorded, the texture complete.
+    /// A NPOT cube map keeps its base level on the PowerVR's shape and,
+    /// since the texture.specification cube_57x57 cases
+    /// (tests/pvr_npot_cube.rs), the levels after it: the chain is laid out
+    /// packed ([`packed_npot_cube`]), level l the six faces of max(6 >> l,
+    /// 1) rows stacked right after level l - 1 (not at the power-of-two step
+    /// of the stacked height, 64 rows for 36), which the native cube's copy
+    /// re-lays for the TPU. Until then it kept its base level alone.
     #[test]
     fn a_powervr_npot_cube_keeps_its_base_level() {
         let gl = TestGl::new(4, 4);
@@ -10771,8 +10811,25 @@ mod tests {
         }
         assert_eq!(gl.error(), GL_NO_ERROR);
         let t = &gl.ctx().objs().textures[name as usize];
-        assert_eq!((t.chain_levels, t.pot_chain), (1, false));
+        assert_eq!((t.chain_levels, t.levels, t.pot_chain), (3, 3, false));
         assert_eq!((t.level_defined, t.level_bad), (0b111, 0), "GL's chain recorded");
+        assert!(packed_npot_cube_of(t));
+        for l in 1..3u32 {
+            let (_, ph) = level_size(t, l - 1);
+            let prev = t.level_off[l as usize - 1] + t.level_pitch_at(l - 1) * ph * 6 * 4;
+            assert_eq!(t.level_off[l as usize], prev, "level {l} right after level {}", l - 1);
+        }
+        /* level 1 face 2 (3x3) is face 2's 2x2 boxes, as for a 2D chain */
+        // SAFETY: the storage's CPU view, which the generation wrote.
+        let s = unsafe { core::slice::from_raw_parts(t.mem.cpu as *const u8, t.mem.size) };
+        let at = |l: u32, f: u32, x: u32, y: u32| {
+            (t.level_off[l as usize] + ((f * level_size(t, l).1 + y) * t.level_pitch_at(l) + x) * 4) as usize
+        };
+        for c in 0..4 {
+            let sum: u32 =
+                [(0, 0), (1, 0), (0, 1), (1, 1)].iter().map(|&(x, y)| u32::from(s[at(0, 2, x, y) + c])).sum();
+            assert_eq!(u32::from(s[at(1, 2, 0, 0) + c]), (sum + 2) / 4, "level 1 face 2 (0, 0) channel {c}");
+        }
     }
 
     /// The level sizes of glmark2 terrain's 800x600 chain (GL_OES_texture_npot:
