@@ -107,13 +107,15 @@ gpu-v3d = []
 # are (docs/notes/v3d71-gl-table.md section 4; zephyr/Kconfig's
 # YAKOGL_GPU_V3D71 names this feature).
 gpu-v3d71 = ["gpu-v3d"]
-# The NanoPC-T6's Arm Mali-G610 (RK3588, Valhall arch 10; `mali/`): a
-# skeleton. The descriptor packers are generated from Mesa's v10.xml
-# (src/mali/genxml/v10.rs, tools/mali/gen_pack_rs.py); the backend refuses
-# every draw and the shader back end every compile, each by name, until
-# their milestones land (driver/docs/nanopc-t6-mali.md). As on the V3D, the
-# only shader back end is the in-process compiler: it needs `shaderc-online`
-# and takes no table (`no-shader-table` in the host tests).
+# The NanoPC-T6's Arm Mali-G610 (RK3588, Valhall arch 10; `src/mali/`): the
+# frame builder, the backend and the Valhall code generator
+# (src/shaderc/online/mali/). The descriptor packers are generated from Mesa's
+# v10.xml (src/mali/genxml/v10.rs, tools/mali/gen_pack_rs.py). A draw through
+# the panthor development OSAL ran on the board (milestone L2,
+# driver/docs/nanopc-t6-mali.md); what the frame builder or the compiler does
+# not build yet is refused by name. As on the V3D, the only shader back end
+# is the in-process compiler: it needs `shaderc-online` and takes no table
+# (`no-shader-table` in the host tests); src/lib.rs refuses the rest.
 gpu-mali = []
 # The Vivante depth canary (the C's CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD): a
 # guard either side of the depth surface, filled with a pattern, so what the
@@ -133,11 +135,14 @@ vivante-depth-guard = ["gpu-vivante"]
 # pvr_backend_set_option refuses without the feature.
 test-knobs = []
 # ES 3.0 multisample renderbuffers (docs/notes/es3-msaa-renderbuffers.md).
-# No code reads it: no `cfg(feature = "msaa-fbo")` is in src/. The capability
-# is the back end table's `max_samples` (src/backend.rs), which the GL core
-# reads whatever this feature says (src/gl/msaa.rs): the PowerVR back end
-# reports 4 (src/pvr/backend.rs), the others 0. Off by default; CMake's
-# YAKOGL_MSAA_FBO names it (capi/yakogl_capi.cmake), and it changes nothing.
+# The capability is the back end table's `max_samples` (src/backend.rs), which
+# the GL core reads (src/gl/msaa.rs). With the feature the PowerVR, Vivante
+# and Mali back ends report 4 (src/pvr/backend.rs, src/vivante/backend.rs,
+# src/mali/backend.rs) and keep a 4x framebuffer object's samples across
+# jobs (src/vivante/msaa_fbo.rs; the Mali's sample store); without it they
+# report 0 and every framebuffer object is single-sampled. The V3D back end
+# reports 0 either way. Off by default; CMake's YAKOGL_MSAA_FBO turns it on
+# (capi/yakogl_capi.cmake).
 msaa-fbo = []
 # ES 3.0 float colour targets (plan #360, docs/notes/es3-float-targets.md):
 # a build that claims `GL_EXT_color_buffer_float`, for a GPU whose back end

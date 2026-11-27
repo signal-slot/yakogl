@@ -46,9 +46,9 @@ gpu-v3d = ["yakogl/gpu-v3d"]
 # `gpu-v3d`): the 7.1 table as `g_backend`. It goes with the same
 # `shaderc-online` and `no-shader-table` as `gpu-v3d`.
 gpu-v3d71 = ["yakogl/gpu-v3d71"]
-# The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`, a skeleton that
-# refuses every draw): like the V3D it goes with `shaderc-online` and
-# `no-shader-table`.
+# The NanoPC-T6's Mali-G610 (the yakogl crate's `gpu-mali`: the frame builder,
+# backend and Valhall compiler; what they do not build is refused by name):
+# like the V3D it goes with `shaderc-online` and `no-shader-table`.
 gpu-mali = ["yakogl/gpu-mali"]
 # The in-process compiler: no_std, it needs no table, and it is the only back
 # end a Zephyr image can take.
@@ -75,7 +75,8 @@ test-knobs = ["yakogl/test-knobs"]
 # PowerVR hardware instance divisors (the yakogl crate's own feature, P3;
 # CMake YAKOGL_PVR_INSTANCE_DIVISOR, Kconfig YAKOGL_PVR_INSTANCE_DIVISOR).
 pvr-instance-divisor = ["yakogl/pvr-instance-divisor"]
-# ES 3.0 4x multisample framebuffers (the crate's feature; CMake YAKOGL_MSAA_FBO).
+# ES 3.0 4x multisample framebuffer objects on the PowerVR, Vivante and Mali
+# back ends (the crate's feature; CMake YAKOGL_MSAA_FBO).
 msaa-fbo = ["yakogl/msaa-fbo"]
 # GL_EXT_color_buffer_float (the crate's feature; CMake YAKOGL_COLOR_BUFFER_FLOAT).
 color-buffer-float = ["yakogl/color-buffer-float"]
