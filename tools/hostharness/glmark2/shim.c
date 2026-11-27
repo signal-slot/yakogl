@@ -1194,7 +1194,7 @@ __attribute__((constructor)) static void tiled_rt_init(void)
 	fprintf(stderr, "gm2: gc_tiled_rt on\n");
 }
 
-/* YAKOGL_GC_DEPTH_TPU=0|1 (run.sh builds with test-knobs): the Vivante knob
+/* YAKOGL_GC_DEPTH_TPU=0|1|3|4 (run.sh builds with test-knobs): the Vivante knob
  * gc_debug_set_depth_tpu is set in a constructor, before the first GL call.
  * Weak, and refused when absent, as the tiled_rt knob above. */
 extern int gc_debug_set_depth_tpu(int mode) __attribute__((weak));
@@ -1205,8 +1205,9 @@ __attribute__((constructor)) static void depth_tpu_init(void)
 
 	if (!e || !*e)
 		return;
-	if (strcmp(e, "0") != 0 && strcmp(e, "1") != 0) {
-		fprintf(stderr, "gm2: YAKOGL_GC_DEPTH_TPU must be 0 or 1, not '%s'\n", e);
+	if (strcmp(e, "0") != 0 && strcmp(e, "1") != 0 &&
+	    strcmp(e, "3") != 0 && strcmp(e, "4") != 0) {
+		fprintf(stderr, "gm2: YAKOGL_GC_DEPTH_TPU must be 0, 1, 3 or 4, not '%s'\n", e);
 		exit(3);
 	}
 	if (!gc_debug_set_depth_tpu) {

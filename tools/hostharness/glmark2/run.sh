@@ -45,11 +45,12 @@
 #                    ("gm2: gc_tiled_rt on" in each log). vivante only; use
 #                    a work directory of its own (the feature set differs).
 #                    Unset: build and run are as without this line.
-#   YAKOGL_GC_DEPTH_TPU=0|1  sets the Vivante knob gc_debug_set_depth_tpu
+#   YAKOGL_GC_DEPTH_TPU=0|1|3|4  sets the Vivante knob gc_debug_set_depth_tpu
 #                    (src/vivante/depth_sample.rs) before the first GL call:
 #                    0 the CPU depth resolve, 1 the texture unit samples the
-#                    D24S8 surface as D24X8 ("gm2: gc_depth_tpu N" in each
-#                    log). Built with test-knobs like YAKOGL_GC_TILED_RT;
+#                    D24S8 surface as D24X8, 3 the (b).1 RS copy, 4 the depth view
+#                    with a texture-cache flush ("gm2: gc_depth_tpu N" in
+#                    each log). Built with test-knobs like YAKOGL_GC_TILED_RT;
 #                    vivante only; use a work directory of its own. Host
 #                    figures, not the board's. Unset: as without this line.
 #   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
@@ -104,8 +105,8 @@ else
 fi
 TEST_KNOBS=OFF
 case "${YAKOGL_GC_DEPTH_TPU-}" in
-  "" | 0 | 1) ;;
-  *) die "YAKOGL_GC_DEPTH_TPU must be 0 or 1 (or unset), not '${YAKOGL_GC_DEPTH_TPU}'" ;;
+  "" | 0 | 1 | 3 | 4) ;;
+  *) die "YAKOGL_GC_DEPTH_TPU must be 0, 1, 3 or 4 (or unset), not '${YAKOGL_GC_DEPTH_TPU}'" ;;
 esac
 if [ "${YAKOGL_GC_TILED_RT:-0}" = 1 ] || [ -n "${YAKOGL_GC_DEPTH_TPU-}" ]; then
   TEST_KNOBS=ON
