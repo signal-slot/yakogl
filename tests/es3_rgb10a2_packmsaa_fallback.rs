@@ -732,9 +732,11 @@ mod es2 {
         release(&[fb], &[rb], &[]);
     }
 
-    /// GL_RGB10_A2 is no ES 2.0 renderbuffer format, so no multisampled
-    /// storage of it exists either: GL_INVALID_ENUM, as for the plain
-    /// storage call (es3_rgb10a2_fallback).
+    /// No multisampled storage of GL_RGB10_A2 exists in an ES 2.0 report:
+    /// glRenderbufferStorageMultisample is no ES 2.0 command, so it is
+    /// GL_INVALID_OPERATION before its format is looked at (the plain
+    /// storage call's GL_INVALID_ENUM is es3_rgb10a2_fallback's), and the
+    /// renderbuffer has no storage.
     #[test]
     fn rgb10a2_packmsaa_fallback_es2_multisample_is_not_allocated() {
         let _g = context();
@@ -745,7 +747,11 @@ mod es2 {
             glBindRenderbuffer(GL_RENDERBUFFER, rb);
             glRenderbufferStorageMultisample(GL_RENDERBUFFER, 1, GL_RGB10_A2, 4, 2);
         }
-        assert_eq!(err(), GL_INVALID_ENUM, "glRenderbufferStorageMultisample(GL_RGB10_A2)");
+        assert_eq!(err(), GL_INVALID_OPERATION, "glRenderbufferStorageMultisample(GL_RGB10_A2)");
+        let mut w = -1;
+        // SAFETY: room for one value; the renderbuffer is bound.
+        unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &mut w) };
+        assert_eq!(w, 0, "nothing stored");
         release(&[], &[rb], &[]);
     }
 }

@@ -308,7 +308,7 @@ _Static_assert(offsetof(struct gles_draw_target, w) == 8, "struct gles_draw_targ
 _Static_assert(offsetof(struct gles_draw_target, h) == 12, "struct gles_draw_target.h");
 _Static_assert(offsetof(struct gles_draw_target, format) == 16, "struct gles_draw_target.format");
 _Static_assert(offsetof(struct gles_draw_target, out_shift) == 17, "struct gles_draw_target.out_shift");
-_Static_assert(sizeof(struct gles_draw) == 3608, "struct gles_draw");
+_Static_assert(sizeof(struct gles_draw) == 3648, "struct gles_draw");
 _Static_assert(offsetof(struct gles_draw, target_gpu) == 0, "struct gles_draw.target_gpu");
 _Static_assert(offsetof(struct gles_draw, target_w) == 8, "struct gles_draw.target_w");
 _Static_assert(offsetof(struct gles_draw, target_h) == 12, "struct gles_draw.target_h");
@@ -410,6 +410,10 @@ _Static_assert(offsetof(struct gles_draw, occlusion_query) == 3576, "struct gles
 _Static_assert(offsetof(struct gles_draw, target_cpu) == 3584, "struct gles_draw.target_cpu");
 _Static_assert(offsetof(struct gles_draw, depth_texels) == 3592, "struct gles_draw.depth_texels");
 _Static_assert(offsetof(struct gles_draw, depth_texels_pitch) == 3600, "struct gles_draw.depth_texels_pitch");
+_Static_assert(offsetof(struct gles_draw, target_id) == 3604, "struct gles_draw.target_id");
+_Static_assert(offsetof(struct gles_draw, target_gen) == 3608, "struct gles_draw.target_gen");
+_Static_assert(offsetof(struct gles_draw, target_ids) == 3612, "struct gles_draw.target_ids");
+_Static_assert(offsetof(struct gles_draw, target_gens) == 3628, "struct gles_draw.target_gens");
 _Static_assert(sizeof(struct yakogl_backend) == 240, "struct yakogl_backend");
 _Static_assert(offsetof(struct yakogl_backend, name) == 0, "struct yakogl_backend.name");
 _Static_assert(offsetof(struct yakogl_backend, native_attrib_formats) == 8, "struct yakogl_backend.native_attrib_formats");

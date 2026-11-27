@@ -451,6 +451,19 @@ struct gles_draw {
 	const float *depth_texels;
 	/* Floats a row of depth_texels (at least ds_w). */
 	uint32_t depth_texels_pitch;
+	/* The GL object of the frame's own colour target (targets[0]): the
+	 * renderbuffer's serial (the depth_id form, neither bit 30 nor bit 31),
+	 * 0 for the window, a texture, an EGLImage and no colour target (the
+	 * back end's own surface rule). target_gen: its storage generation,
+	 * moved by every glRenderbufferStorage*. A back end keys the samples of
+	 * a 4x renderbuffer by (target_id, target_gen), never by the address;
+	 * attachment_gone names the id when the contents go. target_ids /
+	 * target_gens: the same for each targets[k] ([0] is target_id/gen).
+	 * target_id sits in what was tail padding. */
+	uint32_t target_id;
+	uint32_t target_gen;
+	uint32_t target_ids[GLES_MAX_TARGETS];
+	uint32_t target_gens[GLES_MAX_TARGETS];
 };
 
 /* One-time backend init (after OSAL init: allocates persistent GPU objects,

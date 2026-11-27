@@ -212,18 +212,20 @@ fn blit_framebuffer_is_invalid_operation() {
     assert_eq!(err(), GL_INVALID_OPERATION);
 }
 
-/// Today: the ES 2.0 report has glRenderbufferStorageMultisample, and with a
-/// 4x back end it succeeds for 0..=4 samples (GL_INVALID_OPERATION past 4), but
-/// the stored count is not observable (GL_RENDERBUFFER_SAMPLES is no ES 2.0
-/// name: GL_INVALID_ENUM). Pins today's behaviour; see the ignored test.
+/// The ES 2.0 report has no glRenderbufferStorageMultisample: every count,
+/// 0..=4 and past 4, is GL_INVALID_OPERATION, and nothing is stored (the
+/// renderbuffer keeps its size of 0). GL_RENDERBUFFER_SAMPLES stays no ES 2.0
+/// name (GL_INVALID_ENUM). Refused before the arguments, as glBlitFramebuffer
+/// is (`framebuffer::tests::blit_framebuffer_is_es3_only`).
 #[test]
-fn multisample_storage_today_is_accepted() {
+fn multisample_storage_is_refused_at_every_count() {
     let _g = context();
-    for s in [0, 1, 4] {
+    for s in [0, 1, 4, 5] {
         let rb = new_rb();
         // SAFETY: plain GL calls.
         unsafe { glRenderbufferStorageMultisample(GL_RENDERBUFFER, s, GL_RGBA4, 8, 8) };
-        assert_eq!(err(), GL_NO_ERROR, "samples {s}");
+        assert_eq!(err(), GL_INVALID_OPERATION, "samples {s}");
+        assert_eq!((rb_param(GL_RENDERBUFFER_WIDTH), rb_param(GL_RENDERBUFFER_HEIGHT)), (0, 0), "samples {s}");
         let mut v = -777;
         // SAFETY: one GLint out.
         unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &mut v) };
@@ -231,19 +233,15 @@ fn multisample_storage_today_is_accepted() {
         // SAFETY: a name this test made.
         unsafe { glDeleteRenderbuffers(1, &rb) };
     }
-    let rb = new_rb();
+    /* the arguments are not looked at: a bad target is the same error */
     // SAFETY: plain GL call.
-    unsafe { glRenderbufferStorageMultisample(GL_RENDERBUFFER, 5, GL_RGBA4, 8, 8) };
+    unsafe { glRenderbufferStorageMultisample(GL_FRAMEBUFFER, 4, GL_RGBA4, 8, 8) };
     assert_eq!(err(), GL_INVALID_OPERATION);
-    // SAFETY: a name this test made.
-    unsafe { glDeleteRenderbuffers(1, &rb) };
 }
 
 /// Expected by ES 2.0 (no such command, as glBlitFramebuffer): a 4-sample
-/// request must not hand out multisampled storage. A defect today, see the
-/// report: the entry is not refused under `report-es2`.
+/// request must not hand out multisampled storage.
 #[test]
-#[ignore = "defect: glRenderbufferStorageMultisample is not refused in an ES 2.0 context (glBlitFramebuffer is)"]
 fn multisample_storage_is_refused_in_es2() {
     let _g = context();
     let rb = new_rb();

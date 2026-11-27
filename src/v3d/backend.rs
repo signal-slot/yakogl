@@ -27,6 +27,8 @@ use super::state;
 use super::texture;
 use crate::backend::*;
 use crate::ds_retention::{self, Parked};
+use crate::msaa_hw::v3d as msaa_v3d;
+use crate::msaa_store::MsaaStore;
 use crate::osal::{
     self, OsalGpuMem, OsalV3dBinPool, OsalV3dCpuOf, OsalV3dTfu, OsalV3dTfuQueue, OSAL_MEM_DATA,
     OSAL_QUERY_V3D_BIN_POOL, OSAL_QUERY_V3D_CPU_OF_GPU, OSAL_QUERY_V3D_DRAWS_PER_JOB, OSAL_QUERY_V3D_JOB_OPEN,
@@ -793,9 +795,18 @@ struct Target {
     /// RT 1..3's surface formats (`GLES_SURF_*`; RGBA8888 for a GL_NONE
     /// slot and past `rts`).
     rt_format: [u8; 3],
-    /// 4x multisampled (the draw's `samples` 4: a 4x EGL surface): part of
-    /// the job's identity, one job is either 4x or not.
+    /// 4x multisampled (the draw's `samples` 4: a 4x EGL surface, or a 4x
+    /// framebuffer object): part of the job's identity, one job is either 4x
+    /// or not.
     msaa: bool,
+    /// The GL object of RT 0..3 and its storage generation
+    /// (`GlesDraw::target_ids` / `target_gens`; 0: the window, a texture, no
+    /// renderbuffer). At 4x an RT with an id keeps its samples in
+    /// `V3dState::fbo_ms` under it ([`fbo_ms_slot`]); a target with none
+    /// keeps the window's rule (`ms_buf`, by address). Part of the job's
+    /// identity: new storage at the same address is another job.
+    ms_ids: [u32; 4],
+    ms_gens: [u32; 4],
 }
 
 impl Target {
@@ -816,6 +827,8 @@ impl Target {
         rt_w: [0; 3],
         rt_format: [GLES_SURF_RGBA8888; 3],
         msaa: false,
+        ms_ids: [0; 4],
+        ms_gens: [0; 4],
     };
 
     /// Bytes a pixel of RT 0 (`state::rt_format`: 2 for RGB565, 4 for
@@ -833,6 +846,13 @@ impl Target {
     /// colour format?
     fn typed(&self) -> bool {
         self.formats().iter().any(|&f| state::typed(f))
+    }
+
+    /// A 4x framebuffer object: some RT names a renderbuffer
+    /// ([`Target::ms_ids`]), so its samples are kept by object, not by the
+    /// window's address rule.
+    fn fbo_ms(&self) -> bool {
+        self.msaa && self.ms_ids.iter().any(|&id| id != 0)
     }
 
     /// The largest internal bpp of the configured RTs (`V3D_INTERNAL_BPP_*`).
@@ -974,6 +994,9 @@ struct Job {
     /// A 4x job: its colour samples' slot in `V3dState::msbufs` (None: not
     /// kept, no memory for them).
     ms: Option<usize>,
+    /// A 4x framebuffer object's job: the id each RT's samples are kept
+    /// under in `V3dState::fbo_ms` (0: none kept for that RT).
+    fbo_ms: [u32; 4],
     /// The render image this job stores RT 0 into (`V3dState::rt_images`;
     /// None: the target has none): `stored` once the job is submitted.
     rt: Option<usize>,
@@ -1041,6 +1064,7 @@ impl Job {
         s_stored: false,
         zs_discard: false,
         ms: None,
+        fbo_ms: [0; 4],
         rt: None,
         max_bpp: 0,
         clear: V3dJobClear {
@@ -1254,6 +1278,9 @@ struct V3dState {
     zs_parked: Parked<u32, ZsKnown, ZS_BUFS>,
     /// The colour samples of 4x targets, kept between jobs (`ms_buf`).
     msbufs: [MsBuf; MS_BUFS],
+    /// The colour samples of 4x renderbuffers (framebuffer objects), kept
+    /// between jobs by GL object and storage generation ([`fbo_ms_slot`]).
+    fbo_ms: MsaaStore<FboMs, FBO_MS_SLOTS>,
     /// The render images of the textures sampled after a render into them
     /// (`RtImage`), and their counters since init (`v3d_rt_images`): draw
     /// bindings sampled from an image (no copy), registrations, samples
@@ -1479,6 +1506,7 @@ impl V3dState {
         zsbufs: [ZsBuf::NONE; ZS_BUFS],
         zs_parked: Parked::new(0, ZsKnown::Untouched),
         msbufs: [MsBuf::NONE; MS_BUFS],
+        fbo_ms: MsaaStore::new(),
         rt_images: [RtImage::NONE; RT_IMAGES],
         rt_direct: 0,
         rt_registered: 0,
@@ -1886,6 +1914,90 @@ fn ms_buf(g: &mut V3dState, target: u64, w: u32, h: u32) -> Option<usize> {
     let (memory_format, height_in_ub) = zs_layout(&l.slices[0], 4);
     g.msbufs[i] = MsBuf { target, w, h, mem, address, memory_format, height_in_ub, valid: false, used: now };
     Some(i)
+}
+
+/// 4x renderbuffers whose samples are kept at once: four RTs of one job and
+/// as many again of the framebuffers drawn before it. A job's own RTs are
+/// the most recently asked for, so the least recently used slot a fifth
+/// attachment evicts is never one of them (docs/notes/es3-msaa-renderbuffers.md
+/// (c2): at least 6).
+pub const FBO_MS_SLOTS: usize = 8;
+
+/// One 4x renderbuffer's samples between jobs: the layout Mesa gives a
+/// multisampled resource in the RT's own cpp (`msaa_hw::v3d::ms_layout`:
+/// single-level UIF at twice the width and height, the XOR dropped), which
+/// the job builder stores with ALL_SAMPLES and loads back (v3d_job.h
+/// `rt[n].ms_*`).
+#[derive(Debug)]
+struct FboMs {
+    mem: OsalGpuMem,
+    /// 4 KiB aligned inside `mem`.
+    address: u32,
+    memory_format: u32,
+    height_in_ub: u32,
+}
+
+/// Bytes of one sample of RT `format` in its sample buffer: the RT's own
+/// output format with `typed` (`msaa_hw::v3d::output_cpp`), RGBA8 in an
+/// untyped (ES 2.0 format) job, RT 0 of an RGB565 target included
+/// (v3d_job.h `msaa`).
+fn ms_cpp(typed: bool, format: u8) -> u32 {
+    if typed {
+        msaa_v3d::output_cpp(state::rt_row(format).output).unwrap_or(4)
+    } else {
+        4
+    }
+}
+
+/// The sample buffer of RT `n` of the 4x framebuffer object `target`, found
+/// or allocated in `V3dState::fbo_ms` under the RT's (id, generation) and
+/// the frame's size, and whether it holds samples an earlier job stored
+/// (`Slot::needs_load`). `None`: the RT names no renderbuffer, has no
+/// memory, or there is no memory for the samples (the job then keeps none,
+/// and the RT starts from the clear colour, as a window's without a buffer).
+fn fbo_ms_slot(g: &mut V3dState, target: &Target, n: usize) -> Option<(V3dJobRt, bool)> {
+    let id = target.ms_ids[n];
+    let address = if n == 0 { target.gpu } else { u64::from(target.rt[n - 1]) };
+    if id == 0 || address == 0 {
+        return None;
+    }
+    let formats = target.formats();
+    let cpp = ms_cpp(target.typed(), formats[n]);
+    let layout = msaa_v3d::ms_layout(target.w, target.h, cpp)?;
+    let size = msaa_v3d::sample_size(target.w, target.h, cpp);
+    let alloc = |_: usize| {
+        let mut mem = OsalGpuMem::ZERO;
+        if osal::gpu_alloc(V3D_HEAP_DATA, layout.size as usize + 4096, OSAL_MEM_DATA, &mut mem) != 0 {
+            return None;
+        }
+        match gpu32(mem.gpu.next_multiple_of(4096)) {
+            Some(address) => {
+                Some(FboMs { mem, address, memory_format: layout.memory_format, height_in_ub: layout.height_in_ub })
+            }
+            None => {
+                osal::gpu_free(&mut mem);
+                None
+            }
+        }
+    };
+    let free = |mut h: FboMs| {
+        osal::gpu_free(&mut h.mem);
+    };
+    let Some(slot) = g.fbo_ms.get_or_alloc(u64::from(id), target.ms_gens[n], size, alloc, free) else {
+        glog_once!(
+            "yakogl/v3d: no 4x colour buffer for the {}x{} renderbuffer: its samples are not kept between jobs",
+            target.w,
+            target.h
+        );
+        return None;
+    };
+    let rt = V3dJobRt {
+        ms_address: slot.handle.address,
+        ms_memory_format: slot.handle.memory_format,
+        ms_height_in_ub: slot.handle.height_in_ub,
+        ..V3dJobRt::default()
+    };
+    Some((rt, slot.needs_load()))
 }
 
 /* ---- render images ----------------------------------------------------------- */
@@ -2691,7 +2803,15 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     /* a 4x target's colour samples, and its depth/stencil at 4x: Mesa's
      * multisampled layout (v3d_tex_layout_msaa), never lent to a
      * single-sampled target (zs_buf matches and lends by kind too) */
-    let ms = if msaa { ms_buf(g, gpu, w, h) } else { None };
+    let ms = if msaa && !target.fbo_ms() { ms_buf(g, gpu, w, h) } else { None };
+    /* a 4x framebuffer object: each RT's samples by its renderbuffer (the
+     * sample buffer, and whether an earlier job stored samples there) */
+    let mut fbo_ms: [Option<(V3dJobRt, bool)>; 4] = [None; 4];
+    if target.fbo_ms() {
+        for (n, slot) in fbo_ms.iter_mut().enumerate().take(usize::from(target.rts.max(1)).min(4)) {
+            *slot = fbo_ms_slot(g, &target, n);
+        }
+    }
     /* this job renders into [gpu, + pitch * h): a copy tiled from that
      * memory is out of date (the stamp only moves on the CPU's writes), and
      * a later job that samples it tiles it again, after this one has run */
@@ -2760,12 +2880,13 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
             let a = target.rt[i];
             let bytes = state::rt_row(target.rt_format[i]).bytes;
             let stride = if a != 0 { target_pitch(target.rt_w[i]) * bytes } else { 0 };
-            V3dJobRt { address: a, stride, ..V3dJobRt::default() }
+            let kept = fbo_ms[i + 1].map(|(r, _)| r).unwrap_or_default();
+            V3dJobRt { address: a, stride, ..kept }
         }),
         msaa,
-        ms_address: ms.map_or(0, |i| g.msbufs[i].address),
-        ms_memory_format: ms.map_or(0, |i| g.msbufs[i].memory_format),
-        ms_height_in_ub: ms.map_or(0, |i| g.msbufs[i].height_in_ub),
+        ms_address: ms.map_or(fbo_ms[0].map_or(0, |(r, _)| r.ms_address), |i| g.msbufs[i].address),
+        ms_memory_format: ms.map_or(fbo_ms[0].map_or(0, |(r, _)| r.ms_memory_format), |i| g.msbufs[i].memory_format),
+        ms_height_in_ub: ms.map_or(fbo_ms[0].map_or(0, |(r, _)| r.ms_height_in_ub), |i| g.msbufs[i].height_in_ub),
         uif_address: rt.map_or(0, |i| g.rt_images[i].address),
         uif_memory_format: rt.map_or(0, |i| g.rt_images[i].memory_format),
         uif_height_in_ub: rt.map_or(0, |i| g.rt_images[i].height_in_ub),
@@ -2790,13 +2911,27 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
     j.open = true;
     j.target = target;
     j.ms = ms;
+    j.fbo_ms = core::array::from_fn(|n| if fbo_ms[n].is_some() { target.ms_ids[n] } else { 0 });
     j.rt = rt;
     j.max_bpp = max_bpp;
     /* a 4x target whose samples no job has kept (a new surface, or one
      * swapped since, EGL 1.5 3.10.1): its content is undefined, so the job
      * starts from the clear colour rather than load what the buffer holds */
-    if msaa && !ms.is_some_and(|i| g.msbufs[i].valid) {
+    if msaa && !target.fbo_ms() && !ms.is_some_and(|i| g.msbufs[i].valid) {
         g.j.clear.load_rt0 = false;
+    }
+    /* the same per RT of a 4x framebuffer object: an RT whose renderbuffer
+     * has no stored samples (new storage, a whole invalidate, no memory for
+     * them) starts from the clear colour; its content is undefined */
+    if target.fbo_ms() {
+        for (n, slot) in fbo_ms.iter().enumerate() {
+            if !slot.is_some_and(|(_, stored)| stored) {
+                match n {
+                    0 => g.j.clear.load_rt0 = false,
+                    n => g.j.clear.load_rt[n - 1] = false,
+                }
+            }
+        }
     }
     let j = &mut g.j;
     job_open_to_osal(true);
@@ -3058,6 +3193,18 @@ fn flush_job(g: &mut V3dState) -> i32 {
      * while the job was open (they are undefined after it) */
     if let Some(i) = g.j.ms {
         g.msbufs[i].valid = rc == 0 && !g.j.zs_discard;
+    }
+    /* and each RT of a 4x framebuffer object into its renderbuffer's slot;
+     * a dropped job stored nothing, so what is there is no longer what the
+     * renderbuffer holds */
+    for id in g.j.fbo_ms.into_iter().filter(|&id| id != 0) {
+        if let Some(slot) = g.fbo_ms.get(u64::from(id)) {
+            if rc == 0 {
+                slot.mark_stored();
+            } else {
+                slot.mark_cleared();
+            }
+        }
     }
     /* the job stored RT 0 into the target's render image: a submitted job
      * writes the image and the storage alike, so the image holds what the
@@ -5141,13 +5288,20 @@ pub extern "C" fn v3d_attachment_gone(id: u32) {
         return;
     }
     g.zs_parked.forget(id);
-    let open_uses = g.j.open && [g.j.zs, g.j.ss].into_iter().flatten().any(|i| g.zsbufs[i].owners.contains(&id));
+    let open_uses = g.j.open
+        && ([g.j.zs, g.j.ss].into_iter().flatten().any(|i| g.zsbufs[i].owners.contains(&id))
+            || g.j.fbo_ms.contains(&id));
     if open_uses {
         let rc = flush_job(g);
         if rc < 0 {
             glog_once!("yakogl/v3d: the job drawing into object 0x{:x} failed ({}) before it went", id, rc);
         }
     }
+    /* a 4x colour renderbuffer's samples go with its contents (deletion,
+     * respecification, a whole glInvalidateFramebuffer) */
+    g.fbo_ms.gone(u64::from(id), |mut h| {
+        osal::gpu_free(&mut h.mem);
+    });
     for b in g.zsbufs.iter_mut().filter(|b| b.live() && b.owners.contains(&id)) {
         if b.owners[0] == id {
             (b.owners[0], b.z) = (0, ZsKnown::Untouched);
@@ -6611,6 +6765,9 @@ pub extern "C" fn v3d_shutdown() {
         }
         *b = MsBuf::NONE;
     }
+    g.fbo_ms.clear(|mut h| {
+        osal::gpu_free(&mut h.mem);
+    });
     for mem in [
         &mut g.arenas.bcl,
         &mut g.arenas.rcl,
@@ -6882,17 +7039,35 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
         rt_w,
         rt_format,
         msaa: d.samples == 4,
+        /* at 4x only: a single-sampled job keeps its identity by address,
+         * as before (the GL core's own draws carry no ids) */
+        ms_ids: if d.samples == 4 { d.target_ids } else { [0; 4] },
+        ms_gens: if d.samples == 4 { d.target_gens } else { [0; 4] },
     };
-    /* 4x of several colour attachments: the job builder keeps one RT's
-     * samples (v3d_job.h); an FBO is single-sampled, so this needs a 4x
-     * surface with attachments, which the GL core does not make */
-    if target.msaa && rts > 1 {
-        return refuse_unsupported(g, "4x multisampling of several colour attachments");
-    }
-    /* 4x of an ES 3.0 colour format: the kept samples and the resolve are
-     * RGBA8 (v3d_job.h); nothing in the GL core makes such a surface */
-    if target.msaa && target.typed() {
-        return refuse_unsupported(g, "4x multisampling of an ES 3.0 colour format");
+    /* A 4x framebuffer object (its RTs name renderbuffers,
+     * `GlesDraw::target_ids`): every RT keeps its own samples by object
+     * (`fbo_ms_slot`) and is stored resolved into its renderbuffer at the end
+     * of every job (v3d_job.h `msaa`), in its own format when the job is
+     * typed. What the TLB cannot resolve (an internal type other than 8 or
+     * 16F: v3d_job_begin would break the job) is refused by name. The GL
+     * core makes no 4x integer or 32F renderbuffer, so only a hand-made draw
+     * reaches it. */
+    if target.fbo_ms() {
+        let n = usize::from(rts.max(1)).min(4);
+        let outputs = target.formats().map(|f| state::rt_row(f).output);
+        if target.typed() && !msaa_v3d::accepts_4x(&outputs[..n]) {
+            return refuse_unsupported(g, "4x multisampling of a colour format the TLB cannot resolve");
+        }
+    } else {
+        /* the 4x window's rule (`ms_buf`, keyed by the address): one RT's
+         * samples, RGBA8. A 4x draw of several colour attachments or of an
+         * ES 3.0 format with no renderbuffer behind it is no window. */
+        if target.msaa && rts > 1 {
+            return refuse_unsupported(g, "4x multisampling of several colour attachments");
+        }
+        if target.msaa && target.typed() {
+            return refuse_unsupported(g, "4x multisampling of an ES 3.0 colour format");
+        }
     }
     /* The draw's own state, checked before anything is recorded, so a
      * refused draw leaves its fused clear unrecorded too. A clear-only draw
@@ -7344,6 +7519,18 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
      * glBlitFramebuffer's depth and stencil between renderbuffers */
     ds_write: Some(v3d_ds_write),
     stencil_resolve: Some(v3d_stencil_resolve),
+    /* a 4x framebuffer object is drawn as the 4x window is (the tile
+     * buffer's Multisample Mode (4x), every RT stored resolved into its
+     * renderbuffer at the end of every job), each RT's samples kept by
+     * renderbuffer and storage generation (`fbo_ms_slot`, `GlesDraw::
+     * target_ids`), several colour attachments and the ES 3.0 formats the
+     * TLB resolves included. Opt-in: the `msaa-fbo` feature turns it on
+     * (host-tested, BOARD-UNVERIFIED, tests/es3_msaa_v3d.rs); without it the
+     * GL core reports GL_MAX_SAMPLES 1 and stores every FBO single-sampled
+     * (docs/notes/es3-msaa-renderbuffers.md (c2), (f5)) */
+    #[cfg(feature = "msaa-fbo")]
+    max_samples: 4,
+    #[cfg(not(feature = "msaa-fbo"))]
     max_samples: 0,
 };
 
