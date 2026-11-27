@@ -1,0 +1,1560 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/212497 in 30603 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.random.basic_expression.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.0'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+mali shaderc table 'IR values': high-water 109 of 2048
+mali shaderc table 'locals': high-water 14 of 256
+mali shaderc table 'fragment pair nodes': high-water 10 of 255
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 669
+mali arena 'desc': high-water 288 of 1048576 bytes
+mali arena 'cs': high-water 104 of 393216 bytes
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.0
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.1'..
+mali shaderc table 'NIR instructions': high-water 39 of 1536
+mali shaderc table 'FAU words': high-water 12 of 128
+mali shaderc table 'IR values': high-water 143 of 2048
+mali shaderc table 'locals': high-water 21 of 256
+mali shaderc table 'NIR instructions': high-water 43 of 1536
+mali shaderc table 'fragment pair nodes': high-water 14 of 255
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 108
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.10'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.10
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.11'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 874
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.11
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.12'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 707 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.12
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.13'..
+mali shaderc table 'BIR instructions': high-water 60 of 1536
+mali shaderc table 'FAU words': high-water 13 of 128
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.13
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.14'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.14
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.15'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 910
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.15
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.16'..
+mali shaderc table 'FAU words': high-water 14 of 128
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 135 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.16
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.17'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 269 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.17
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.18'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+mali shaderc table 'IR values': high-water 156 of 2048
+mali shaderc table 'locals': high-water 23 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 101
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.18
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.19'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 597
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.19
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.2'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.2
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.20'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.20
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.21'..
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'data': high-water 92 of 262144 bytes
+mali arena 'code': high-water 512 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.22'..
+mali shaderc table 'NIR instructions': high-water 71 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.23'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 673
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.23
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.24'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+mali shaderc table 'IR values': high-water 195 of 2048
+mali shaderc table 'locals': high-water 27 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.24
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.25'..
+mali shaderc table 'BIR values': high-water 35 of 1536
+mali arena 'desc': high-water 1264 of 1048576 bytes
+mali arena 'data': high-water 220 of 262144 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.26'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.26
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.27'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 664 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.27
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.28'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.28
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.29'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.29
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.3'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 104
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.3
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.30'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 710 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 842
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.30
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.31'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.31
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.32'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 769 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.32
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.33'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.33
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.34'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.34
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.36'..
+mali shaderc table 'BIR instructions': high-water 89 of 1536
+mali shaderc table 'BIR values': high-water 49 of 1536
+mali shaderc table 'FAU words': high-water 15 of 128
+mali shaderc table 'immediates': high-water 7 of 64
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.36
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.37'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.37
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.38'..
+mali arena 'desc': high-water 1328 of 1048576 bytes
+mali arena 'data': high-water 236 of 262144 bytes
+mali arena 'code': high-water 896 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.39'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 305 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.39
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.4'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 1020 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.40'..
+mali shaderc table 'fragment pair nodes': high-water 15 of 255
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 912
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.40
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.41'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 803 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.41
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.42'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.42
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.43'..
+mali shaderc table 'fragment pair nodes': high-water 18 of 255
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.43
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.44'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.44
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.45'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.45
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.46'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.46
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.47'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 760 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1047 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.47
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.48'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 411 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.48
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.49'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 657 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 444 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.49
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.5'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1015 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.5
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.51'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 974
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.51
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.52'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 888 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.52
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.53'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 564 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.53
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.55'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.55
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.56'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.56
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.57'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.57
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.58'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 701 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.58
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.59'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.59
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.6'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.60'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.60
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.61'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 694 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 343 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.61
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.62'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 511 bytes]
+mali shaderc table 'IR values': high-water 198 of 2048
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.62
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.63'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 605
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.63
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.64'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 651
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.64
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.65'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+mali shaderc table 'locals': high-water 29 of 256
+mali shaderc table 'fragment pair nodes': high-water 19 of 255
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.65
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.66'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 808 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.66
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.68'..
+mali shaderc table 'BIR instructions': high-water 138 of 1536
+mali shaderc table 'BIR values': high-water 75 of 1536
+mali shaderc table 'FAU words': high-water 20 of 128
+mali shaderc table 'immediates': high-water 11 of 64
+mali shaderc table 'uniform rows': high-water 3 of 256
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.70'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.70
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.71'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 277 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.71
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.72'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.72
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.73'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.73
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.74'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 776 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.74
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.75'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.75
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.76'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 482 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.76
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.77'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 861 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 117
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.77
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.78'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.78
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.79'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.79
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.8'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.8
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.80'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.80
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.81'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 694 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.81
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.83'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.83
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.84'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.84
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.85'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.85
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.86'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 476 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 216 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.86
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.87'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 805 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.87
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.89'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 615 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 245
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.89
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.9'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.90'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.90
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.91'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.91
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.92'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.93'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 430 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.93
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.95'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 592 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.95
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.96'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 368 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.96
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.97'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 664 bytes]
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.97
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.98'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 811
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.combined.98
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.combined.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.combined.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.0'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 669
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.0
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.1'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 108
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.10'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.10
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.11'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 874
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.11
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.12'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.12
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.13'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.13
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.14'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.14
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.15'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 910
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.15
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.16'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 135 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.16
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.17'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 269 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.17
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.18'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 101
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.18
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.19'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 597
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.19
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.2'..
+mali arena 'desc': high-water 1392 of 1048576 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.20'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.20
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.23'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 673
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.23
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.24'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.24
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.26'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.26
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.27'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.27
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.28'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.28
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.29'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.29
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.3'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 104
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.3
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.30'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 842
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.30
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.31'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.31
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.32'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 769 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.32
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.33'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.33
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.34'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.34
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.36'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.36
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.37'..
+mali shaderc table 'BIR instructions': high-water 174 of 1536
+mali shaderc table 'BIR values': high-water 84 of 1536
+mali shaderc table 'FAU words': high-water 22 of 128
+mali shaderc table 'immediates': high-water 14 of 64
+mali arena 'desc': high-water 1520 of 1048576 bytes
+mali arena 'data': high-water 316 of 262144 bytes
+mali arena 'code': high-water 1024 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.39'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 305 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.39
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 1020 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.40'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 912
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.40
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.41'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 803 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.41
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.42'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.42
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.44'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.44
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.45'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.45
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.46'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.46
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.47'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1047 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.47
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.48'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 411 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.48
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.49'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 444 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.49
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.5'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1015 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.5
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.51'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 974
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.51
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.52'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.52
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.53'..
+glLinkProgram(2): online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('a')
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.53
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.55'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.55
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.57'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.57
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.58'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 701 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.58
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.59'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.59
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.6'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.61'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 343 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.61
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.63'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 605
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.63
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.64'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 651
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.64
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.66'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.66
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.70'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.70
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.71'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 277 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.71
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.73'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.73
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.74'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.74
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.75'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.75
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.76'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 482 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.76
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.77'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 117
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.77
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.78'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.78
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.8
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.80'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.80
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.81'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 694 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.81
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.83'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.85'..
+glLinkProgram(2): online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('e')
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.85
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.86'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 216 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.86
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.87'..
+mali shaderc table 'BIR instructions': high-water 195 of 1536
+mali shaderc table 'BIR values': high-water 93 of 1536
+mali shaderc table 'FAU words': high-water 24 of 128
+mali shaderc table 'immediates': high-water 16 of 64
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 805 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.87
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.89'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 245
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.89
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.9'..
+glLinkProgram(2): online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('f')
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.90'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.90
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.92'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.93'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 430 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.93
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.95'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 592 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.95
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.96'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 368 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.96
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.97'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.97
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.98'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 811
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.fragment.98
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.fragment.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.fragment.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.0'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.0
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.1'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.10'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.10
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.11'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.11
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.13'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 657 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.13
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.14'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 545 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.14
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.16'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.16
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.18'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.18
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.19'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.19
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.2'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.2
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.21'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 635 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.21
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.23'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 711 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.23
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.24'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.24
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.26'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.26
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.27'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 556 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.27
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.28'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.28
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.3'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.3
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.31'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 232 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.31
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.32'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 803 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.32
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.33'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.33
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.36'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1068 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.36
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.37'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.37
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.38'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 941 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.38
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.4'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.40'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.40
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.42'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.42
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.44'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 808 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.44
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.45'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.45
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.46'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 649 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.46
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.47'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.47
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.48'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.48
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.49'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.49
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.51'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.51
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.52'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.52
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.55'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.55
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.57'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.57
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.58'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.58
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.59'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.59
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.6'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.63'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.63
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.64'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 699 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.64
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.66'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.66
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.73'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.74'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.74
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.75'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.75
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.76'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.76
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.77'..
+mali shaderc table 'NIR instructions': high-water 75 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.77
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.78'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.78
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.80'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 599 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.80
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.81'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.81
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.83'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 376 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.83
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.85'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.86'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 253 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.86
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.89'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 293 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.89
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.9'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.91'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.91
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.92'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.92
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.95'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.96'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.96
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.98'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.basic_expression.vertex.98
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.basic_expression.vertex.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.basic_expression.vertex.99
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        92/300 (30.7%)
+  Failed:        208/300 (69.3%)
+  Not supported: 0/300 (0.0%)
+  Warnings:      0/300 (0.0%)
+  Waived:        0/300 (0.0%)
+deqp: done: 92 passed, 208 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 300 cases begun, 300 with a result, 0 without
+osal(mali): kicks 301, completed 301; pages 947 (high-water 1017) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 17408 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14685 ms
+�\x00

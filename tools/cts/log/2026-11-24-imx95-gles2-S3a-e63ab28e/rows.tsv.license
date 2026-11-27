@@ -1,0 +1,4 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Rows table of a Verdin iMX95 dEQP-GLES2 session, built by
+tools/cts/imx95-rows-tsv.py from one console capture per row.

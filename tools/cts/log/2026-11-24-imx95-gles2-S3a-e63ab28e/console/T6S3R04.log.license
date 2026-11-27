@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+Full serial console capture of one Verdin iMX95 dEQP-GLES2 row, from the U-Boot go line to the next boot (README.md).
