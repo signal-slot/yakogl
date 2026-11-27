@@ -104,7 +104,9 @@ if(CONFIG_YAKOGL)
     # structs (ffi71_layout_check.c, against src/v3d/ffi71.rs), all at
     # V3D_CL_VER 71 (below). The library is linked whole-archive, so every
     # symbol these objects reference must be defined in the image.
-    set(YAKOGL_GPU "v3d")
+    # The crate is built with `gpu-v3d71` (it implies `gpu-v3d`); the C
+    # define stays YAKOGL_GPU_V3D.
+    set(YAKOGL_GPU "v3d71")
     set(YAKOGL_GPU_DEF "YAKOGL_GPU_V3D")
     set(_yakogl_osal_c "${YAKOGL_SRC}/osal/zephyr_v3d71.c")
     set(_yakogl_gpu_c
