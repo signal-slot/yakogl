@@ -74,6 +74,12 @@
 #    <name>" line before that container's podman stop (the board sees it in
 #    the output already) and names the stopped ones on the verdict line; the
 #    dry run prints the UNDO line before the stop line and runs neither.
+#    The x2 lease is /tmp/yakogl-board.lease (the X2's /var/tmp is its eMMC;
+#    the imx8mp's stays /var/tmp); the loader's exit 1 or 3 is verdict=refused
+#    at once with its message (no wait, no not_back, the stopped containers
+#    started again); a board that never answers ping is back on a new boot_id
+#    over ssh ("ping n/a" in the timeline), one whose ping answers keeps the
+#    old timeline.
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and
 # every check written in this file ran: each "check" and "same" call notes the
 # line it was called from, and at the end every line of this file that starts
@@ -2222,16 +2228,25 @@ case $cmd in
     set -- $(cat "$st/lpgpr")
     printf '0x30370090: 0x%s\n0x30370094: 0x%s\n0x30370098: 0x%s\n0x3037009c: 0x%s\n' "$1" "$2" "$3" "$4" ;;
 *sha256sum*) if [ -e "$st/badsha" ]; then echo "0000  zephyr.bin"; else echo "$FAKE_X2_SHA  zephyr.bin"; fi ;;
-*kexec_zephyr*--crash*) echo "jump" >> "$st/log"; cp "$st/autostart" "$st/running" ;;
+*kexec_zephyr*--crash*)
+    # refuse1, refuse3: the loader refuses with that exit code, nothing jumps
+    for r in 1 3; do
+        [ -e "$st/refuse$r" ] || continue
+        echo "refuse $r" >> "$st/log"
+        echo "kexec_zephyr: the interrupt check refused: an unknown chip (fake)" >&2
+        exit $r
+    done
+    echo "jump" >> "$st/log"; cp "$st/autostart" "$st/running"; echo fake-boot-id-2 > "$st/bootid" ;;
 "uname -n") echo x2-fake.invalid ;;
-*boot_id*) echo fake-boot-id ;;
+*boot_id*) cat "$st/bootid" 2>/dev/null || echo fake-boot-id ;;
 */proc/uptime*) echo 30.0 ;;
 esac
 exit 0
 EOF
 printf '#!/bin/sh\necho "scp $*" >> "$FAKE_X2/log"\nexit 0\n' > "$S/x2stub/scp"
-# ping: lost once (the jump), then back
-printf '#!/bin/sh\n[ -e "$FAKE_X2/pinged" ] && exit 0\n: > "$FAKE_X2/pinged"\nexit 1\n' > "$S/x2stub/ping"
+# ping: lost once (the jump), then back; never answered with the flag noping
+# (a task machine that reaches the board through a forwarded ssh port)
+printf '#!/bin/sh\n[ -e "$FAKE_X2/noping" ] && exit 1\n[ -e "$FAKE_X2/pinged" ] && exit 0\n: > "$FAKE_X2/pinged"\nexit 1\n' > "$S/x2stub/ping"
 printf '#!/bin/sh\nexit 0\n' > "$S/x2tools/kexec_zephyr"
 cp "$S/x2tools/kexec_zephyr" "$S/x2tools/snvs_lpgpr"
 chmod +x "$S/x2stub/ssh" "$S/x2stub/scp" "$S/x2stub/ping" "$S/x2tools/kexec_zephyr" "$S/x2tools/snvs_lpgpr"
@@ -2398,6 +2413,51 @@ check "x2, X2_STOP_CONTAINERS=yes: rc 2, the value named, no board command" eval
 out=$(X2_STOP_CONTAINERS=1 X2_STOP_APPS=0 dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
 rc=$?
 check "x2, X2_STOP_CONTAINERS=1 with X2_STOP_APPS=0: rc 2, both named, no board command" eval '[ "$rc" = 2 ] && grep -q "differ: set one" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
+
+# the lease off the eMMC: /tmp on the x2 (its /var/tmp is the eMMC), /var/tmp elsewhere unchanged
+out=$(dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2 dry run: the lease is /tmp/yakogl-board.lease (the tmpfs), never /var/tmp (the X2's eMMC)" \
+    eval 'grep -q "take /tmp/yakogl-board.lease" <<<"$out" && ! grep -q "/var/tmp" <<<"$out"'
+out=$(dry imx8mp run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+check "imx8mp dry run: the lease stays /var/tmp/yakogl-board.lease" grep -q "take /var/tmp/yakogl-board.lease" <<<"$out"
+x2board "" ""
+x2run run leasetmp
+check "x2 run on the fake board: every lease command names /tmp/yakogl-board.lease, none /var/tmp" \
+    eval 'grep -q "^ssh .*/tmp/yakogl-board.lease" "$S/x2b/log" && ! grep -q "/var/tmp" "$S/x2b/log"'
+
+# the loader's refusal (exit 1 or 3): verdict=refused at once with its message, no wait, no not_back
+for r in 1 3; do
+    x2board "" "" "refuse$r"
+    s0=$(date +%s)
+    x2run run "refused$r"
+    s1=$(date +%s)
+    check "x2, the loader exits $r: rc 3 within seconds (no 1500 s wait), verdict=refused with the loader's message, no not_back" \
+        eval '[ "$X2_RC" = 3 ] && [ $((s1 - s0)) -lt 60 ] && grep -qx "refuse '"$r"'" "$S/x2b/log" && ! grep -qx jump "$S/x2b/log" &&
+              grep -q "rc=3 verdict=refused " <<<"$X2_OUT" && ! grep -q "not_back" <<<"$X2_OUT" &&
+              grep -q "kexec_zephyr refused (exit '"$r"'): kexec_zephyr: the interrupt check refused: an unknown chip (fake)" <<<"$X2_OUT"'
+    check "x2, the loader exits $r: meta.txt keeps refused_rc=3, the loader's message, jump=refused, no t_reboot and no back; tally says refused" \
+        eval 'grep -qx "refused_rc=3" "$X2_RD/meta.txt" && grep -qx "jump=refused (exit '"$r"')" "$X2_RD/meta.txt" &&
+              grep -q "^refused=kexec_zephyr refused (exit '"$r"'): kexec_zephyr: the interrupt check refused" "$X2_RD/meta.txt" &&
+              ! grep -q "^t_reboot=\|^back=\|^rc_cycle=" "$X2_RD/meta.txt" &&
+              { t=$("$B" x2 tally "$X2_RD" 2>&1); grep -q "rc=3 verdict=refused " <<<"$t"; }'
+done
+x2board slint-launcher "" refuse1
+x2run run refusedapps X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, the loader refuses: the stopped container is started again (the refusal's undo)" \
+    eval '[ "$X2_RC" = 3 ] && grep -q "^app_back=slint-launcher not running after the refusal: undo run once" "$X2_RD/meta.txt" &&
+          grep -qx slint-launcher "$S/x2b/running"'
+
+# no ping from this machine (a forwarded ssh port): the ssh reply with a new boot_id is the return
+x2board "" "" noping
+x2run run noping
+check "x2, the board never answers ping: back through ssh (a new boot_id), the timeline says ping n/a, verdict not not_back" \
+    eval 'grep -qx jump "$S/x2b/log" && grep -qx "back=1" "$X2_RD/meta.txt" && ! grep -q "^rc_cycle=" "$X2_RD/meta.txt" &&
+          grep -q "^timeline=jump 0s, ping n/a (no reply; a new boot_id over ssh is the return), ssh back [0-9]*s, route --crash$" "$X2_RD/meta.txt" &&
+          ! grep -q "not_back" <<<"$X2_OUT"'
+x2board "" ""
+x2run run pingok
+check "x2, ping lost once and answering again at the ssh return: the timeline as before (ping lost, ping back, ssh back), no ping n/a" \
+    grep -q "^timeline=jump 0s, ping lost [0-9]*s, ping back [0-9]*s, ssh back [0-9]*s, route --crash$" "$X2_RD/meta.txt"
 check "x2 dry runs here: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 
 # every check written above ran (the header says why): the call lines of this
