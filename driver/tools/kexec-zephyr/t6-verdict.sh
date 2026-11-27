@@ -83,6 +83,8 @@
 # (both forms on both routes). A return by WDT0 in place of PSCI
 # SYSTEM_RESET and the T6:A line with or without CNTFRQ_EL0 are judged by
 # their own comments, at that code below and in the paragraph above. A
+# record with a "t6: CNTFRQ_EL0 0" line (the glue refused a zero counter
+# frequency at entry) FAILs on either route, with a line naming that refusal; a
 # record judged as the other route FAILs, never PASS; the full rules and
 # the fixtures of both routes are README.md, "The U-Boot route".
 #
@@ -1138,6 +1140,17 @@ if [ "$PROBE" = t6_fw ] || [ "$PROBE" = t6_submit ]; then
 		fi
 	done
 fi
+
+# a CNTFRQ_EL0 0 stop: the glue (nanopc_t6_mali.c) found CNTFRQ_EL0 0 at entry
+# and the osal and firmware entries refused it ("t6: CNTFRQ_EL0 0: ..."). The
+# probe's lines after it are missing; this line names the cause. A FAIL on
+# either route, whatever the probe.
+for ((j = 0; j < ${#LINES[@]}; j++)); do
+	if [[ ${LINES[j]} == 't6: CNTFRQ_EL0 0'* ]]; then
+		printf 'differs  expected CNTFRQ_EL0 not 0 at entry; seen "%s" (line %d): refused the CNTFRQ_EL0 0 time base\n' "${LINES[j]}" $((j + 1))
+		bad=$((bad + 1))
+	fi
+done
 
 # the hold (table_picture_status): its "held K s" lines were looked for in
 # order, one per 10 s up to the hold; a held line after as many of them is
