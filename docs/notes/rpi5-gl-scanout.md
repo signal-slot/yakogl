@@ -9,8 +9,9 @@ probe table of `docs/notes/rpi5-display.md:153`, part of P11 Display (U3) of
 and P10 (`docs/notes/pre-study-rpi5.md:615-616`, not merged). The display
 side is stage 2 of `docs/notes/rpi5-display.md:73-90` and its session rules
 (`docs/notes/rpi5-display.md:136-139`); this note does not repeat them. The
-first `rpi5_scanout32` board run of 2026-11-25 is in and is part of this
-design: it refused its placement and left Q4 unanswered (section 2).
+`rpi5_scanout32` board runs are in and part of this design: the first
+(2026-11-25) refused its placement; the third (2026-11-27, image `c0b4f33b`)
+answered Q4 yes with 8 landed swaps (section 2).
 
 Citations are full repository paths; a bare `:N` names a line of the file
 named just before it. Figures marked *(tile2)* or *(facts)* are the plan #390
@@ -70,13 +71,14 @@ The stage-2 probe `rpi5_scanout32` ran once on the Pi 5 (tryboot, image from
   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:18-22,41-51,389,417`),
   where words 32..671 hold 619 non-zero words, so no 20-word zero span was
   found (`tools/probes/rpi_5/rpi5_scanout32/README.md:245-256`).
-- **Q4 is unanswered** (`q4: unanswered (placement refused)`,
-  `tools/probes/rpi_5/rpi5_scanout32/README.md:275-276`, judged by
-  `tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:121-122`).
-  `docs/notes/rpi5-display.md:224-227` expected the answer from this run;
-  the answer is instead that the probe first needs a change — the walk finds
-  the list's END, or a provably free span before `HEADE` is found — "not a
-  board retry" (`tools/probes/rpi_5/rpi5_scanout32/README.md:282-285`).
+- **Q4 is answered yes** by the third run (2026-11-27, image `c0b4f33b`,
+  `q4: yes`, 8 of 8 swaps `landed=yes why=landed`, `u3 restore: PASS`;
+  `tools/probes/rpi_5/rpi5_scanout32/README.md`, "2026-11-27";
+  `docs/notes/rpi5-display.md` section 4). The first run's
+  `q4: unanswered (placement refused)` (no END found by a 256-word walk) was
+  fixed by the whole-memory walk, which put our list at word 929 right
+  after the firmware's END at word 928. This is a register answer; nobody
+  looked at the picture.
 - The read-only compare of the firmware's 256 words passed with exactly one
   differing word, 676, entry offset 4, the declared `4:skip` word: the HVS
   writes that context word back while scanning
@@ -336,7 +338,7 @@ first; until then every swap line is **unverified** on this firmware.
     its failure (`README.md:229-243`).
 
 No step programs the pixel valve, HDMI or PHY. Whether the swap is
-glitch-free on screen (Q4, `docs/notes/rpi5-display.md:224-227`) stays what
+glitch-free on screen (Q4, answered yes by registers in `docs/notes/rpi5-display.md` section 4) stays what
 only a landed swap plus registers can say, with the limits spelled out at
 `docs/notes/rpi5-display.md:272-279`: `landed=yes` means "no register shows
 a problem" (the landing rules, `tools/probes/rpi_5/rpi5_scanout32/README.md:101-146`).
@@ -451,13 +453,12 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
   buffer A, the read-back lines — no swap yet. It also settles the GPU VA
   window of section 4 and rechecks the size figures of section 7 on the
   host. Needs P9 merged (`docs/notes/pre-study-rpi5.md:615`).
-- **G3 — frame loop.** Section 6 on top of a *fixed* placement: the walk
-  finds the firmware list's END, or a provably free span before `HEADE` is
-  found (`tools/probes/rpi_5/rpi5_scanout32/README.md:282-285`) — that
-  change lands first, in the library or in s32, with its host mock checks
-  (`tools/v3d/check71.d/hvs6_dlist_swap.sh`). The board answer to Q4 arrives
-  with s32's next run (`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:90-109`
-  already judges it); G3 takes it as it is. Needs G1, G2.
+- **G3 — frame loop.** Section 6 on the placement s32 now uses: the whole-memory
+  walk finds the firmware list's END (word 928) and puts our list right
+  after it (word 929; `tools/probes/rpi_5/rpi5_scanout32/README.md`,
+  "2026-11-27"), with host mock checks in
+  `tools/v3d/check71.d/hvs6_dlist_swap.sh`. The board answer to Q4 came
+  with s32's third run (2026-11-27: `q4: yes`); G3 takes it as it is. Needs G1, G2.
 - **G4 — board session.** The probe's `verdicts.sh` and selftest first (the
   s32 pattern, `tools/probes/rpi_5/rpi5_scanout32/README.md:175-179`), then
   one run on `target:rpi5` with the exclusive `target:rpi5-console`, through
@@ -475,13 +476,11 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
 
 ## 10. Open questions
 
-1. The placement fix that G3 needs (section 2): where is this firmware's
-   list END, and is there provably free room for our slots? Probe/library
-   work, not a board retry
-   (`tools/probes/rpi_5/rpi5_scanout32/README.md:282-285`).
-2. Q4 itself (`docs/notes/rpi5-display.md:224-227`): unanswered as of
-   2026-11-25; it lands with the fixed probe's swaps, with the proof limits
-   of `docs/notes/rpi5-display.md:272-279`.
+1. Placement (section 2): done for s32 (END at word 928, our slots at 929
+   and 939, 2026-11-27); G3 reuses it and must keep the walk.
+2. Q4 itself (`docs/notes/rpi5-display.md` section 4): answered yes by
+   registers on 2026-11-27 (8 landed swaps); the screen itself was not
+   looked at, and the proof limits in that section stand.
 3. The byte-order answer: does the 7.1 store write R,G,B,A, as glscan-facts
    read it? G2 (host: the store's words) and G4 (the `fmt=XBGR8888`
    read-back) prove it; G1 is dropped if reversed.

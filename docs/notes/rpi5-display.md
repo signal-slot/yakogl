@@ -223,9 +223,10 @@ side, under ssh before the Zephyr run, supplies the references
    names it. Not needed for stage 1 or 2, which program neither valve.
 4. **Can channel 0's list pointer be changed under a running scanout without
    a visible glitch, and is the vblank the safe point?** Not read anywhere
-   (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe now prints `heade=` in its snapshot line.
-   *Board runs on stage 2: Q4 is still unanswered.* `rpi5_scanout32` ran on
-   the Pi 5 twice (records in `tools/probes/rpi_5/rpi5_scanout32/README.md`,
+   (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe prints `heade=` in its snapshot line.
+   *Board runs on stage 2: the first two runs did not answer Q4 (history
+   here); the third run did ("Board answer" after the bullets below).*
+   `rpi5_scanout32` ran on the Pi 5 three times (records in `tools/probes/rpi_5/rpi5_scanout32/README.md`,
    "On the board"). The first run (2026-11-25, image of `458834ea`) refused
    to place its list and wrote nothing, because the 256-word walk found no
    END. The second run (2026-11-26, image built from `77ddb606`, default
@@ -277,13 +278,12 @@ side, under ssh before the Zephyr run, supplies the references
      edge, with the poll interval's resolution. `struct hvs6v_io` has no
      `write32` (`:59-65`), and `PV_INTSTAT` is not used because
      `pv_wait_vblank` clears it, a write (`hvs6_vblank.h:17-19`). YLINE is
-     not used either (`:31-35`). `hvs6_dlist_swap.h` still carries its own
-     copy of the loop, `hvs6s_find_step` (`:1158`, called from `:1196`
-     and `:1203`), with the same FRCNT-step rule.
+     not used either (`:31-35`). `hvs6_dlist_swap.h` reaches it through
+     `hvs6s_find_step` (`:1255`, calling `hvs6v_wait_frame` at `:1266`).
    - *When LPTRS is written, and the pickup.* `hvs6s_swap` finds the edge
-     first (`hvs6s_wait_vblank_reads`, `hvs6_dlist_swap.h:1187`), samples,
+     first (`hvs6s_wait_vblank_reads`, `hvs6_dlist_swap.h:1283`), samples,
      then writes `LPTRS.HEADE` once (`:1356`). A tight loop with no
-     `io->wait` (`hvs6s_tight_loop`, `:1239`; the call at `:1370`) reads DL
+     `io->wait` (`hvs6s_tight_loop`, `:1335`; the call at `:1466`) reads DL
      then STATUS per iteration until `DISP0_DL.LACT` (bits 11:0,
      `:263`) equals the new head, at most `tight_reads` iterations. This
      times the pickup: the iteration of the first FRCNT step, and the
@@ -303,7 +303,7 @@ side, under ssh before the Zephyr run, supplies the references
      a missed frame, `tight=miss` or a write outside the vblank gives
      `q4: no` naming the first. YLINE, `boundary=` and the times are printed
      and decide nothing.
-   - *Restore.* `hvs6s_restore` (`hvs6_dlist_swap.h:1472`) finds a frame edge
+   - *Restore.* `hvs6s_restore` (`hvs6_dlist_swap.h:1568`) finds a frame edge
      by reads again, then writes the firmware's `LPTRS` and runs the same
      tight loop until `DL.LACT` is back on the firmware's `HEADE`
      (`dlswap restore-lact ok|FAIL`, `dlswap restore-vblank ...`, `:161`,
@@ -320,6 +320,27 @@ side, under ssh before the Zephyr run, supplies the references
      line or frame (`facts:510-517`), and a camera or capture frame would be
      a confirmation, never the proof. `landed=yes` is "no register shows a
      problem", not "no glitch".
+   - *Board answer (2026-11-27, third run).* **Q4: yes, as far as registers
+     can say.** `rpi5_scanout32` (image built from `c0b4f33b`, the
+     integration tip with s32-nullfix's 16 KiB main stack, default
+     `4:skip`; record in `tools/probes/rpi_5/rpi5_scanout32/README.md`, "2026-11-27")
+     swapped channel 0's list pointer 8 times under the running scanout,
+     alternating buffer A (list at word 929) and B (word 939). Every one of
+     the 8 `u3 vblank <k>` lines says `landed=yes why=landed` with
+     `steps=1 invblank=yes tight=ok`, every `dlswap lact-pickup` is ok
+     (`polls=0`, `DL.LACT` equal to the new head), and FRCNT advanced by one
+     across each write (14 -> 15 ... 52 -> 53). `verdicts.sh` gave `q4: yes`
+     and the probe `u3 restore: PASS byte-equal except hw words off 4 (1
+     differed: 1 skip, 0 expect)`; `DL.LACT` came back to 672, and
+     `board.sh pi5` gave `rc=0 verdict=done` with the watchdog returning the
+     board to Linux by tryboot. This is a register answer: nobody looked at
+     the picture, and the limits in the previous bullet stand.
+     The Q2 list half agrees: the hardware wrote back only plane-entry
+     offset 4, word 676 in the firmware's list (`0x80000188` -> `0x8000037c`,
+     skipped) and, in our own list, word 933 or 943 (`0xc0c0c0c0` ->
+     `0x800003c2`), so `4:skip` is enough for both. The main stack used 4276
+     of 16384 bytes (`unused 12108`), more than the old 4 KiB, which fits the
+     overflow diagnosis of the second run's fault.
 5. **Do the disp (16) and HSM (13) clocks matter to HVS register reads?** The
    HSM rate was never answered, so HDMI registers were skipped
    (`dd:541-543`); the HVS ones were read with the disp clock unknown
