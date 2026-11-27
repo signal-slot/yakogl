@@ -43,7 +43,7 @@
 //! Indirect draws (codes 33, 37), single-instance draws (39) and transform
 //! feedback modes are refused by name ([`Refusal71`]).
 
-use std::fmt;
+use core::fmt;
 
 /// GL mode numbers.
 pub const GL_POINTS: u32 = 0;
@@ -182,7 +182,7 @@ impl fmt::Display for Refusal71 {
     }
 }
 
-impl std::error::Error for Refusal71 {}
+impl core::error::Error for Refusal71 {}
 
 /// The `Primitive` enum value of a GL mode.
 pub fn prim_mode(gl_mode: u32) -> Result<u8, Refusal71> {

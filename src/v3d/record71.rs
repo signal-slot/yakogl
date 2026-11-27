@@ -409,28 +409,37 @@ pub enum Refusal {
     DrawIndex(Stage),
 }
 
-impl Refusal {
-    pub fn message(&self) -> String {
+impl core::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
-            Refusal::NoDrawIndexRecord { ver, rev } => format!(
+            Refusal::NoDrawIndexRecord { ver, rev } => write!(
+                f,
                 "V3D {}.{}.{} has no GL Shader State Record Draw Index (7.1.10 or later 7.1 only)",
                 ver / 10,
                 ver % 10,
                 rev
             ),
             Refusal::CodeAddressUnaligned(s) => {
-                format!("the {} shader's code address is not 8-byte aligned", s.name())
+                write!(f, "the {} shader's code address is not 8-byte aligned", s.name())
             }
             Refusal::BadThreadCount(s, n) => {
-                format!("the {} shader runs {n} threads (1, 2 or 4 only)", s.name())
+                write!(f, "the {} shader runs {n} threads (1, 2 or 4 only)", s.name())
             }
             Refusal::VpmFieldRange(s, w) => {
-                format!("the {} shader's {w} is outside the record's 4-bit field", s.name())
+                write!(f, "the {} shader's {w} is outside the record's 4-bit field", s.name())
             }
-            Refusal::TooManyVaryings(n) => format!("{n} fragment varyings (the record holds at most 255)"),
-            Refusal::BaseVertex(s) => format!("the {} shader reads gl_BaseVertex: refused", s.name()),
-            Refusal::DrawIndex(s) => format!("the {} shader reads gl_DrawID: refused", s.name()),
+            Refusal::TooManyVaryings(n) => write!(f, "{n} fragment varyings (the record holds at most 255)"),
+            Refusal::BaseVertex(s) => write!(f, "the {} shader reads gl_BaseVertex: refused", s.name()),
+            Refusal::DrawIndex(s) => write!(f, "the {} shader reads gl_DrawID: refused", s.name()),
         }
+    }
+}
+
+#[cfg(feature = "host-test")]
+impl Refusal {
+    /// The text as a `String` (the host tests' form of the `Display`).
+    pub fn message(&self) -> String {
+        self.to_string()
     }
 }
 
