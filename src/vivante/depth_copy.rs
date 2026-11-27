@@ -6,14 +6,17 @@
 //! (docs/notes/gc-depth-sample-wire.md, "(b).1 Primary: an RS copy into a
 //! supertiled depth view", the bullet "The copy").
 //!
-//! **Nothing calls this module yet.** It is the bookkeeping that bullet
-//! needs, landed before the Verdin `dtpu` verdict (gl_test case 222) says
-//! whether (b) is the outcome at all; the copy's words are
+//! Only dtpu knob mode 3 (`depth_sample::DEPTH_TPU_RSCOPY`, a `test-knobs`
+//! build) uses it: `depth_sample` keeps the one pool, makes the buffer when
+//! `gc_depth_sampled` answers, records the copy into it before the draw
+//! (`depth_sample::emit_copies`), stamps it with the draw's kick
+//! (`depth_sample::binding`), retires it from `gc_attachment_gone` and reaps
+//! it at `finish` and `finish_previous`. The copy's words are
 //! [`super::depth_sample::copy_blit`], its size
 //! [`super::depth_sample::copy_bytes`] and the descriptor that samples it
-//! [`super::depth_sample::copy_sampler_words`]. The wiring (a
-//! `depth_sample::prepare` beside `tiled_copy::prepare`, the call from
-//! `attachment_gone`, the knob arm the board checks first) is the note's.
+//! [`super::depth_sample::copy_sampler_words`]. Whether the texture unit reads
+//! the copy right is the board's (gc-depth-sample-wire.md (b).1, "Board
+//! check").
 //!
 //! The rules, the same ones `ds_cache` (`used_by`, `gone`) and `tiled_copy`
 //! (`used_by`, `stale`) keep for their buffers:
@@ -171,6 +174,16 @@ impl CopyPool {
                 if let Some(e) = slot.take() {
                     h.free(e.mem);
                 }
+            }
+        }
+    }
+
+    /// Free every buffer, live, retired or read by a pending kick (backend
+    /// shutdown, after which no kick reads anything).
+    pub fn release_all(&mut self, h: &mut impl CopyHost) {
+        for slot in self.entries.iter_mut() {
+            if let Some(e) = slot.take() {
+                h.free(e.mem);
             }
         }
     }

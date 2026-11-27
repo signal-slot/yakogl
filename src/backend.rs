@@ -2062,7 +2062,10 @@ pub fn narrow_la_texels() -> bool {
 /// and the Mali keep the CPU resolve (their texture units are not known to
 /// read their depth layouts, `gl::texture::resolve_depth`); the GC7000's
 /// answer is yes only while gl_test's `dtpu` experiment sets its test knob
-/// (`vivante::depth_sample`, docs/notes/gc-depth-sample.md). Not an entry of
+/// (`vivante::depth_sample`, docs/notes/gc-depth-sample.md): modes 1 and 2
+/// sample the surface in place, mode 3 an RS copy of it the backend records
+/// before the draw (outcome (b).1; yes only when that copy can be made).
+/// Not an entry of
 /// the table: the backends with an answer are named here, as
 /// `DEPTH_ONLY_TARGETS` and `narrow_la_texels` name theirs, and the host
 /// tests' mock tables (`testutil`) keep the resolve. Each answers only
