@@ -564,6 +564,8 @@ out=$(plan tests/es3_msaa_gl_clear.rs)
 expect "msaa: es3_msaa_gl_clear reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_clear.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_complete.rs)
 expect "msaa: es3_msaa_gl_complete reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_complete.rs\)$' "$out"
+out=$(plan tests/es3_msaa_gl_copy.rs)
+expect "msaa: es3_msaa_gl_copy reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_copy.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_coverage.rs)
 expect "msaa: es3_msaa_gl_coverage reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_msaa_gl_coverage.rs\)$' "$out"
 out=$(plan tests/es3_msaa_gl_draws.rs)
