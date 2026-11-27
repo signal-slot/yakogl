@@ -29,6 +29,15 @@
 //!   `vcube.filtering.nearest_mipmap_nearest_linear_clamp`, which do not
 //!   depend on size or level count).
 //!
+//! A vertex state whose filters can read past a face's edge (mag `LINEAR`,
+//! or min `LINEAR` / `LINEAR_MIPMAP_*`: `cube_filters_see_seams` in
+//! src/gl/draw.rs) draws the `cube_noseam` variant (cube-noseam,
+//! docs/notes/mali-cube-noseam.md): the vertex program reads the cube as the
+//! 2D array of its six faces, and that view's sampler is Mesa's ES 2.0 words
+//! with `Seamless Cube Map` set, the bit every sampler of a texture that is
+//! not a cube carries (`SampledTexture::sampler_with`); the wrap modes stay
+//! GL's. The fragment look-ups of texture.mipmap.cube are not keyed.
+//!
 //! Each draw must not be refused (`GL_NO_ERROR`, nothing in `draws_refused`),
 //! the stage's sampler must equal the expected words, and every other
 //! sampler-shaped chunk the back end wrote must equal the expected words of
@@ -337,6 +346,18 @@ fn es2(mesa: Sampler, c: &Case) -> Sampler {
     }
 }
 
+/// The vertex states that draw the `cube_noseam` variant (the header): a
+/// filter that can read past the face's edge.
+fn noseam(c: &Case) -> bool {
+    c.mag == GL_LINEAR || matches!(c.min, GL_LINEAR | GL_LINEAR_MIPMAP_NEAREST | GL_LINEAR_MIPMAP_LINEAR)
+}
+
+/// The vertex stage's expected sampler: [`es2`], and for a `cube_noseam`
+/// state the six-layer array view's, `Seamless Cube Map` set.
+fn es2_vertex(mesa: Sampler, c: &Case) -> Sampler {
+    Sampler { seamless_cube_map: noseam(c), ..es2(mesa, c) }
+}
+
 fn wrap_mode(w: GLenum) -> WrapMode {
     match w {
         GL_REPEAT => WrapMode::REPEAT,
@@ -607,8 +628,8 @@ fn cube_sampler_words_are_mesas_es2_words() {
         assert_eq!((case.size, case.levels, case.rgba), (32, 6, false), "vcube {name}");
         let mesa = mesa_sampler(desc_sampler(desc, "Position"));
         assert_eq!(mesa, mesa_sampler(desc_sampler(desc, "Varying")), "vcube {name}: the two vertex tables");
-        let want = es2(mesa, &case);
-        assert!(!want.seamless_cube_map && want.wrap_mode_r == WrapMode::REPEAT);
+        let want = es2_vertex(mesa, &case);
+        assert!(want.seamless_cube_map == noseam(&case) && want.wrap_mode_r == WrapMode::REPEAT);
         cube_texture(&case);
         check(&format!("vcube {name}"), &want, &unused_stage(desc, "Fragment"), || {
             draw(VCUBE_VERT, VCUBE_FRAG, &POS2, 2, |p| unsafe {
@@ -642,7 +663,8 @@ fn cube_sampler_words_are_mesas_es2_words() {
         wrap_s: GL_CLAMP_TO_EDGE,
         wrap_t: GL_CLAMP_TO_EDGE,
     };
-    let want = es2(mesa_sampler(desc_sampler(LOD_REF, "Position")), &case);
+    let want = es2_vertex(mesa_sampler(desc_sampler(LOD_REF, "Position")), &case);
+    assert!(noseam(&case), "mag LINEAR: texturecubelod draws the cube_noseam variant");
     cube_texture(&case);
     check("texturecubelod", &want, &unused_stage(LOD_REF, "Fragment"), draw_lod);
     eprintln!(

@@ -2338,12 +2338,33 @@ fn stage_texture(
     let bind = sampled_bind(d, vertex, binding);
     let sh = if vertex { d.vs } else { d.fs };
     // SAFETY: as in `sampler_bindings`.
-    let cubes = unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or(0, |r| r.cube_samplers);
-    let cube = cubes.checked_shr(index as u32).is_some_and(|c| c & 1 != 0);
-    if cube && bind.is_none_or(|t| t.incomplete != 0) {
-        return black_texture(bind, true, data);
+    let (cubes, layered) =
+        unsafe { sh.as_ref() }.and_then(MaliShader::of).map_or((0, 0), |r| (r.cube_samplers, r.cube_layers));
+    let bit = |m: u64| m.checked_shr(index as u32).is_some_and(|c| c & 1 != 0);
+    let tex = if bit(cubes) && bind.is_none_or(|t| t.incomplete != 0) {
+        black_texture(bind, true, data)?
+    } else {
+        texture_of(bind, data)?
+    };
+    Ok(if bit(layered) { cube_as_layers(tex) } else { tex })
+}
+
+/// A cube map read by the `cube_noseam` variant's look-up
+/// ([`MaliShader::cube_layers`]: `TEX_SINGLE ... .2d.array_enable` at the
+/// face's layer, docs/notes/mali-cube-noseam.md) as the 2D array of its six
+/// faces: `Dimension = 2D`, `Array size` 6, the same planes, which are
+/// already layer-major as a 2D array's are (face-major, level-minor;
+/// [`frame::SampledTexture::array`]); its sampler then keeps GL's three
+/// wrap modes and sets `Seamless Cube Map` as for any texture that is not a
+/// cube ([`frame::SampledTexture::sampler_with`]), so the unit wraps and
+/// filters inside the face (ES 2.0 3.7.5). A texture that is not a cube's
+/// six faces is left as it is.
+fn cube_as_layers(t: frame::SampledTexture) -> frame::SampledTexture {
+    if t.is_cube() {
+        frame::SampledTexture { array: true, ..t }
+    } else {
+        t
     }
-    texture_of(bind, data)
 }
 
 /// The texture of a sampler with no texels: one opaque black texel, as a 2D

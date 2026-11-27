@@ -1008,6 +1008,52 @@ fn a_cube_map_s_planes_are_face_major() {
     assert_eq!(build(flat).layout.fs_plane.expect("the planes").len, GenericPlane::LENGTH);
 }
 
+/// The `cube_noseam` view of a cube map (docs/notes/mali-cube-noseam.md;
+/// src/mali/backend.rs `cube_as_layers`): the same cube with
+/// [`SampledTexture::array`] set is the 2D array of its six faces. Its
+/// texture descriptor is the cube's with `Dimension` 2D and `Array size` 6
+/// (the form the shim's texmore_206_array trace pins for a 2D array), its 30
+/// planes are the cube's, in the cube's face-major order, and its sampler in
+/// an ES 2.0 context is the cube's with `Seamless Cube Map` set: GL's three
+/// wrap modes stay, so the unit wraps and filters inside the face.
+#[test]
+fn a_cube_read_as_six_layers_keeps_its_planes() {
+    let mut level = [TextureLevel::default(); MAX_TEXTURE_LEVELS];
+    let offsets = [0u64, 6144, 9216, 10752, 11520];
+    for (l, lv) in level.iter_mut().enumerate().take(5) {
+        *lv = TextureLevel { gpu: TEXELS + offsets[l], row_stride: 64 };
+    }
+    let cube = SampledTexture {
+        width: 16,
+        height: 16,
+        faces: 6,
+        level,
+        levels: 5,
+        mipmap: MipmapMode::TRILINEAR,
+        wrap_r: WrapMode::REPEAT,
+        ..texture_of("linear_repeat")
+    };
+    let layers = SampledTexture { array: true, ..cube };
+    assert!(cube.is_cube() && !layers.is_cube());
+    assert_eq!(layers.plane_count(), 30);
+    assert_eq!(layers.texture(DESC), Texture { dimension: TextureDimension::_2D, array_size: 6, ..cube.texture(DESC) });
+    assert_eq!(cube.texture(DESC).dimension, TextureDimension::CUBE);
+    for f in 0..6 {
+        for l in 0..5 {
+            assert_eq!(layers.plane(f, l), cube.plane(f, l), "face {f} level {l}");
+        }
+    }
+    let es2 = cube.sampler_with(false);
+    assert_eq!(
+        (es2.seamless_cube_map, es2.wrap_mode_s, es2.wrap_mode_t, es2.wrap_mode_r),
+        (false, WrapMode::REPEAT, WrapMode::REPEAT, WrapMode::REPEAT)
+    );
+    assert_eq!(layers.sampler_with(false), Sampler { seamless_cube_map: true, ..es2 });
+    /* the frame takes it, and writes the cube's 30 planes */
+    let b = build_draw(None, Some(layers), false);
+    assert_eq!(b.layout.vs_plane.expect("the planes").len, 30 * GenericPlane::LENGTH);
+}
+
 /// A vertex shader that samples and a draw without a vertex texture (or
 /// the other way round) is refused, as for the fragment stage.
 #[test]
