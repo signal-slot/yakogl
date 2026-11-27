@@ -1151,7 +1151,10 @@ fn ring_put(k: &YdPvrKm, ring: *mut u8, wo: &mut u32, ty: u32, body: &[u8]) {
         core::ptr::copy_nonoverlapping(body.as_ptr(), h.add(CCB_CMD_HEADER_SIZE), body.len());
     }
     k.flush(h, CCB_CMD_HEADER_SIZE + padded as usize);
-    *wo += CCB_CMD_HEADER_SIZE as u32 + padded;
+    // A command that ends at the ring's end leaves the offset at 0, the
+    // firmware's masked write offset (a CCCB_SIZE here would make the next
+    // reserve a zero-length padding command).
+    *wo = (*wo + CCB_CMD_HEADER_SIZE as u32 + padded) & (CCCB_SIZE - 1);
 }
 
 fn ufo_bytes(addr: u32, value: u32) -> [u8; 8] {
@@ -4703,5 +4706,88 @@ mod submit_tests {
         // The HWRT data and common of the rebuilt member, the same bytes.
         let n = (RTA0V - HC0) as usize / 4;
         assert_eq!(t.words(HC0 as usize, n), z.words(HC0 as usize, n));
+    }
+
+    /// The commands of a client CCB between two offsets, as (offset, type,
+    /// size): the wrap tests read a ring that did wrap.
+    fn ring_walk(t: &Rig, ring: u32, from: u32, to: u32) -> Vec<(u32, u32, u32)> {
+        let mut out = Vec::new();
+        let mut o = from;
+        while o < to {
+            let b = (ring + o) as usize / 4;
+            out.push((o, t.mem[b], t.mem[b + 1]));
+            o += 16 + t.mem[b + 1];
+        }
+        out
+    }
+
+    /// The fragment kick's group at the end of the ring, knob on and off.
+    /// The firmware reads a command whole, so a group that does not fit is
+    /// preceded by a PADDING command that runs to the end of the ring (its
+    /// size field the bytes after its header: rgxfwif's PADDING, "skip
+    /// without action"), and the group starts at 0. Knob off the group is
+    /// today's 400 bytes, knob on 800.
+    #[test]
+    fn a_fragment_group_at_the_ring_end_follows_a_padding_command() {
+        let off_types = [CCB_CMD_TYPE_FENCE, CCB_CMD_TYPE_3D, CCB_CMD_TYPE_UPDATE];
+        let on_types = [CCB_CMD_TYPE_FENCE_PR, CCB_CMD_TYPE_3D_PR, CCB_CMD_TYPE_UPDATE]
+            .into_iter()
+            .chain(off_types)
+            .collect::<Vec<_>>();
+        for (knob, group, group_types) in [(0u32, FRAG_BYTES[0], &off_types[..]), (1, FRAG_BYTES[1], &on_types[..])] {
+            for room in [group - 16, group / 2, 16] {
+                let mut t = rig(knob);
+                t.r.fwo = CCCB_SIZE - room;
+                let mut f = 0u32;
+                assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f), 0, "log:\n{}", t.log());
+                assert_eq!(t.r.fwo, group, "knob {knob} room {room}: the group starts at 0");
+                let pad = ring_walk(&t, FCCCB, CCCB_SIZE - room, CCCB_SIZE);
+                assert_eq!(pad, [(CCCB_SIZE - room, CCB_CMD_TYPE_PADDING, room - 16)], "knob {knob} room {room}");
+                assert_eq!(t.types(FCCCB, t.r.fwo), group_types, "knob {knob} room {room}");
+                let body = FCCCB + CCCB_SIZE - room + 16;
+                assert!(t.words(body as usize, (room as usize - 16) / 4).iter().all(|&w| w == 0));
+                assert_eq!(t.words((FCCCB + CCCB_SIZE) as usize, 4), [0; 4], "knob {knob} room {room}");
+            }
+        }
+    }
+
+    /// A group that fits to the last byte is not padded: knob off with 400
+    /// bytes of room, knob on with 800. A following kick must start at 0
+    /// without writing a zero-length padding header past the ring.
+    #[test]
+    fn a_fragment_group_that_fits_exactly_is_not_padded_and_the_next_kick_wraps() {
+        for (knob, group) in [(0u32, FRAG_BYTES[0]), (1, FRAG_BYTES[1])] {
+            let mut t = rig(knob);
+            t.r.fwo = CCCB_SIZE - group;
+            let (mut f1, mut f2) = (0u32, 0u32);
+            assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f1), 0, "log:\n{}", t.log());
+            let walk = ring_walk(&t, FCCCB, CCCB_SIZE - group, CCCB_SIZE);
+            assert!(walk.iter().all(|c| c.1 != CCB_CMD_TYPE_PADDING), "knob {knob}: {walk:?}");
+            assert_eq!(walk.len(), if knob == 1 { 6 } else { 3 });
+            let end = t.r.fwo;
+            assert!(end == CCCB_SIZE || end == 0, "knob {knob}: write offset {end}");
+            assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f2), 0, "log:\n{}", t.log());
+            assert_eq!(t.r.fwo, group, "knob {knob}: the second kick's group starts at 0");
+            assert_eq!(t.words((FCCCB + CCCB_SIZE) as usize, 4), [0; 4], "knob {knob}: nothing past the ring");
+            assert_eq!(t.cmds(FCCCB, group).len(), if knob == 1 { 6 } else { 3 });
+        }
+    }
+
+    /// The geometry ring wraps the same way (knob on 144 bytes, off 112).
+    #[test]
+    fn a_geometry_group_at_the_ring_end_follows_a_padding_command() {
+        for (knob, group) in [(0u32, GEOM_BYTES[0]), (1, GEOM_BYTES[1])] {
+            let mut t = rig(knob);
+            let room = group - 16;
+            t.r.gwo = CCCB_SIZE - room;
+            let mut f = 0u32;
+            assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f), 0, "log:\n{}", t.log());
+            assert_eq!(t.r.gwo, group);
+            assert_eq!(
+                ring_walk(&t, GCCCB, CCCB_SIZE - room, CCCB_SIZE),
+                [(CCCB_SIZE - room, CCB_CMD_TYPE_PADDING, room - 16)]
+            );
+            assert_eq!(t.types(GCCCB, t.r.gwo).len(), if knob == 1 { 3 } else { 2 });
+        }
     }
 }
