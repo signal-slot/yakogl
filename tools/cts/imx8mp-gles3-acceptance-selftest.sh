@@ -198,6 +198,33 @@ fresh x2c
 sed -i 's/^board\.sh imx8mp /board.sh x2 /' "$R/tools/cts/log/2026-11-12-imx8mp-es2-0123abcd/README.md"
 run_case "c6 counts board.sh x2 lines of an es2 record" 0 ""
 
+# X2 slice directories named x2-<sha8> (the recorded shape) next to the Verdin form
+fresh xn
+mv "$R/tools/cts/log/2026-11-13-imx8mp-gles3-0123abcd-rows17-31" "$R/tools/cts/log/2026-11-13-imx8mp-gles3-x2-0123abcd-rows17-31"
+printf 'measured on the Armadillo-X2\n%s\n' "$X2L" >"$R/tools/cts/log/2026-11-13-imx8mp-gles3-x2-0123abcd-rows17-31/README.md"
+ARGS="--commit 0123abcd"
+run_case "x2-<sha8> slice found with --commit <sha8> beside the Verdin one" 0 ""
+out=$(sh "$ACC" --commit 0123abcd "$R" 2>/dev/null)
+if printf '%s\n' "$out" | grep -q '^c1 ok .*(2 slice dirs, 1 measured on the Armadillo-X2)$' &&
+	printf '%s\n' "$out" | grep -q '^slice 2026-11-13-imx8mp-gles3-x2-0123abcd-rows17-31: measured on the Armadillo-X2$' &&
+	printf '%s\n' "$out" | grep -q '^slice 2026-11-12-imx8mp-gles3-0123abcd-rows01-13: measured on the Verdin$'; then
+	echo "ok   x2-<sha8> and Verdin slices both found, each labelled with its board"
+else
+	echo "FAIL x2-<sha8> labelling"; printf '%s\n' "$out"; BAD=$((BAD + 1))
+fi
+ARGS="--commit x2-0123abcd"
+out=$(sh "$ACC" --commit x2-0123abcd "$R" 2>/dev/null)
+if printf '%s\n' "$out" | grep -q '^c1 ok .*(1 slice dirs, 1 measured on the Armadillo-X2)$' && ! printf '%s\n' "$out" | grep -q 'on the Verdin'; then
+	echo "ok   --commit x2-<sha8> reads only the X2 slices"
+else
+	echo "FAIL --commit x2-<sha8>"; printf '%s\n' "$out"; BAD=$((BAD + 1))
+fi
+ARGS=
+printf '%s\n' "$X2L" >"$R/tools/cts/log/2026-11-13-imx8mp-gles3-x2-0123abcd-rows17-31/README.md"
+ARGS="--commit 0123abcd"
+run_case "an x2-<sha8> slice without the measured-on line fails c1" 1 "c1"
+ARGS=
+
 # The real merge tool on a mixed tree: a Verdin slice (entries 0-66) and an X2 slice (entries 67-132, '-' in
 # begun and noresult, board.sh x2 lines) of one commit give c1 ok
 fresh real
