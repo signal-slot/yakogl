@@ -1,0 +1,26 @@
+11:20:16 *** Booting Zephyr OS build af17c0c8aa2a ***
+11:20:32 v3d_gl_test: build 85afd0cf (the record at the end or at 75 s)
+11:20:32 v3d_gl_test: the list 5,58,59,66,67,102 (6 cases) on one context
+11:20:32 gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+11:20:32 yakogl/v3d71: draw refused: V3D 7.1: the table records no draw or clear in this build (the 7.1 modules are host-test only)
+11:20:32 gl_test: case 5 scissor: FAIL
+11:20:32 gl_test: case 58 clearscis: FAIL
+11:20:32 gl_test: case 59 clearmask: FAIL
+11:20:32 gl_test: case 66 clearvp: FAIL
+11:20:32 gl_test: case 67 fbods: FAIL
+11:20:32 gl_test: case 102 maskclear: FAIL
+11:20:32 gl_test: all: 6 of 6 cases failed (0 passed; 0 timed out; first failure case 5 at index 0; second failure case 58; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 7
+11:20:32 gl_test: done
+11:20:32 v3d_gl_test RECORD (the UART), build 85afd0cf, 0 s after boot: DONE
+11:20:32 --- the OSAL ---
+11:20:32 osal(v3d71): jobs 0 submitted, 0 completed (last rc 0); slow 0 (the slowest 0 ms); failed 0; MMU faults 0; recoveries 0; binner out of memory 0 (2 overflow blocks of 256 KiB); hung: none
+11:20:32 --- the verdicts ---
+11:20:32 v3d_gl_test: case 5 FAIL
+11:20:32 v3d_gl_test: case 58 FAIL
+11:20:32 v3d_gl_test: case 59 FAIL
+11:20:32 v3d_gl_test: case 66 FAIL
+11:20:32 v3d_gl_test: case 67 FAIL
+11:20:32 v3d_gl_test: case 102 FAIL
+11:20:32 v3d_gl_test: 0 of 6 cases passed (205 ms)
+11:20:32 v3d_gl_test: build 85afd0cf
+11:20:32 v3d_gl_test RECORD end, build 85afd0cf
