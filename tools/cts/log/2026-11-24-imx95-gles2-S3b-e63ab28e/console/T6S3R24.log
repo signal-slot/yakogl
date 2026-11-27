@@ -1,0 +1,1123 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/203939 in 29360 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_vertex'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_fragment'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+mali shaderc table 'IR values': high-water 24 of 2048
+mali shaderc table 'locals': high-water 4 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+mali arena 'desc': high-water 288 of 1048576 bytes
+mali arena 'cs': high-water 104 of 393216 bytes
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_vertex'..
+mali shaderc table 'IR values': high-water 31 of 2048
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'data': high-water 140 of 262144 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_w_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_vertex'..
+mali shaderc table 'NIR instructions': high-water 35 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_www_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_vertex'..
+mali shaderc table 'NIR instructions': high-water 37 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwww_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_vertex'..
+mali shaderc table 'NIR instructions': high-water 38 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wwwy_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wx_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_fragment'..
+mali arena 'code': high-water 768 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wz_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzy_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_fragment'..
+mali arena 'desc': high-water 1200 of 1048576 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_vertex'..
+mali shaderc table 'NIR instructions': high-water 40 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzyx_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_wzzw_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_x_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xxxx_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyxx_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_xyzw_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyw_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_fragment
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_yyyy_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_vertex'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_zzwz_vertex
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_fragment'..
+mali shaderc table 'NIR instructions': high-water 42 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_vertex'..
+mali shaderc table 'NIR instructions': high-water 43 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gggg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_gr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_grg_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_r_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rgrr_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_rr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_s_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_st_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_stss_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_ts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tst_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_tttt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_x_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_xyxx_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yxy_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec2_yyyy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_b_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbbb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bbg_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_bgr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_grg_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_p_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pppp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_ppt_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_pts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_r_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rbr_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rgb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rggr_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_rrr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_s_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sps_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_sss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_stts_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_tst_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_x_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xxx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyyx_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xyz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_xzx_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_yxy_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_z_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zyx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzy_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec3_zzzz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_a_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaa_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaaa_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_fragment'..
+mali shaderc table 'BIR values': high-water 34 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_aaag_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ab_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abba_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_abgr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ar_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_bbab_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gga_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_gggg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ppqp_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_q_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qppq_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qpts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qqqt_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_qs_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_r_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgba_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rgrr_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_rrrr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_s_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ssss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stpq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_stss_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_ttq_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_tttt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_w_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_www_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwww_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wwwy_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzyx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_wzzw_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_x_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xxxx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyxx_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_xyzw_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyw_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_yyyy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_vertex'..
+glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+deqp: Fail dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_vec4_zzwz_vertex
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+DONE!
+
+Test run totals:
+  Passed:        191/248 (77.0%)
+  Failed:        57/248 (23.0%)
+  Not supported: 0/248 (0.0%)
+  Warnings:      0/248 (0.0%)
+  Waived:        0/248 (0.0%)
+deqp: done: 191 passed, 57 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 248 cases begun, 248 with a result, 0 without
+osal(mali): kicks 1013, completed 1013; pages 941 (high-water 1011) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 14720 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 13867 ms
+�\x00

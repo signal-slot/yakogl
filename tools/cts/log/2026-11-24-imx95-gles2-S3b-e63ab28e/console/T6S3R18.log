@@ -1,0 +1,1074 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/166126 in 23926 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.random.exponential.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.0'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 26 of 1536
+mali shaderc table 'IR values': high-water 53 of 2048
+mali shaderc table 'locals': high-water 8 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 388 bytes]
+mali arena 'desc': high-water 288 of 1048576 bytes
+mali arena 'cs': high-water 104 of 393216 bytes
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.0
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.1'..
+mali shaderc table 'NIR instructions': high-water 33 of 1536
+mali shaderc table 'IR values': high-water 149 of 2048
+mali shaderc table 'locals': high-water 23 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 928 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.10'..
+mali shaderc table 'NIR instructions': high-water 35 of 1536
+mali shaderc table 'BIR instructions': high-water 60 of 1536
+mali shaderc table 'FAU words': high-water 12 of 128
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 291 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.10
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.11'..
+mali shaderc table 'NIR instructions': high-water 56 of 1536
+mali shaderc table 'BIR instructions': high-water 153 of 1536
+mali shaderc table 'BIR values': high-water 75 of 1536
+mali shaderc table 'FAU words': high-water 20 of 128
+mali shaderc table 'immediates': high-water 12 of 64
+mali shaderc table 'IR values': high-water 157 of 2048
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 892 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.11
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.12'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 505 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.12
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.13'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 382 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.13
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.14'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 546 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.14
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.15'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 863 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.15
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.16'..
+mali shaderc table 'fragment pair nodes': high-water 6 of 255
+mali arena 'desc': high-water 1072 of 1048576 bytes
+mali arena 'data': high-water 76 of 262144 bytes
+mali arena 'code': high-water 384 of 131072 bytes
+mali arena 'spds': high-water 64 of 32768 bytes
+mali arena 'cs': high-water 424 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.17'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 191 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.17
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.18'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 784 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.18
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.19'..
+mali shaderc table 'NIR instructions': high-water 62 of 1536
+mali shaderc table 'BIR instructions': high-water 195 of 1536
+mali shaderc table 'BIR values': high-water 93 of 1536
+mali shaderc table 'FAU words': high-water 24 of 128
+mali shaderc table 'immediates': high-water 16 of 64
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 489 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.19
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.2'..
+mali shaderc table 'IR values': high-water 161 of 2048
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 898 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.2
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.20'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 141 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.20
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.22'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 210 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.22
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.23'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 647 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.23
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.24'..
+mali shaderc table 'locals': high-water 25 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 900 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.24
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.25'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 186 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.25
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.26'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 774 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.26
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.27'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 532 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.27
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.28'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 798 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.28
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.29'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 268 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.29
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.3'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 766 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.3
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.30'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 801 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.30
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.31'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 507 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.31
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.32'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 805 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.32
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.33'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 806 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.33
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.34'..
+mali shaderc table 'IR values': high-water 208 of 2048
+mali shaderc table 'locals': high-water 31 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 954 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.34
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.35'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 183 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.35
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.36'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 839 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.36
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.37'..
+mali shaderc table 'IR values': high-water 221 of 2048
+mali shaderc table 'locals': high-water 32 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1109 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.37
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.38'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 608 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.38
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.39'..
+mali shaderc table 'fragment pair nodes': high-water 14 of 255
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'data': high-water 140 of 262144 bytes
+mali arena 'code': high-water 768 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.4'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 575 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.40'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 566 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.40
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.41'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1110 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.41
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.42'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 635 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.42
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.43'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 876 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.43
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.44'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 852 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.44
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.45'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 956 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.45
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.46'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 416 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.46
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.47'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 849 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.47
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.48'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 246 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.48
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.49'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 598 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.49
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.5'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 589 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.5
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.51'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 596 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.51
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.52'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 390 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.52
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.53'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 378 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.53
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.54'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 187 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.54
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.55'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 484 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.55
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.56'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 369 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.56
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.57'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 199 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.57
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.58'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 714 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.58
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.59'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 537 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.59
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.6'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 596 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.60'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 312 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.60
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.61'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 162 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.61
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.62'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1044 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.62
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.63'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 470 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.63
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.64'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 573 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.64
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.65'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1090 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.65
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.66'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.66
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.67'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 494
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.67
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.68'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.68
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.69'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 147 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.69
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.7'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 206 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.7
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.70'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 831 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.70
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.71'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 368 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.71
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.73'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1099 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.73
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.74'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 606 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.74
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.75'..
+mali shaderc table 'NIR instructions': high-water 65 of 1536
+mali shaderc table 'BIR instructions': high-water 207 of 1536
+mali shaderc table 'BIR values': high-water 99 of 1536
+mali shaderc table 'FAU words': high-water 25 of 128
+mali shaderc table 'immediates': high-water 17 of 64
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 772 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.75
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.76'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 367 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.76
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.77'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 522 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.77
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.78'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 503 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.78
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.79'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 534 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.79
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.8'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 593 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.8
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.80'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 597 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.80
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.81'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 311 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.81
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.82'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 405 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.82
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.83'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.83
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.84'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 619 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.84
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.85'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 891 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.85
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.86'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 371 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.86
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.88'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 647 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.88
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.89'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 414 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.89
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.9'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 781
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.90'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.90
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.91'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 333 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.91
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.92'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 119 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.92
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.93'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 634 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.93
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.94'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 180 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.94
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.95'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 536 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.95
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.96'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 748 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.96
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.97'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 165 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.97
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.98'..
+mali shaderc table 'fragment pair nodes': high-water 22 of 255
+mali arena 'desc': high-water 1520 of 1048576 bytes
+mali arena 'data': high-water 268 of 262144 bytes
+mali arena 'code': high-water 1024 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.fragment.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.fragment.99'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 374 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.fragment.99
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.0'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 432 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.0
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.1'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 716 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.10'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 329 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.10
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.11'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.11
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.12'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 543 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.12
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.13'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 411 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.13
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.14'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 577 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.14
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.15'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.15
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.17'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 235 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.17
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.18'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 732 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.18
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.19'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 621 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.19
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.2'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.2
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.20'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 189 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.20
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.21'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 567 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.21
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.23'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 680 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.23
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.24'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 902 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.24
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.26'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 672 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.26
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.27'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 586 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.27
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.28'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 814 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.28
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.29'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 328 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.29
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.3'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 812 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.3
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.30'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.30
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.32'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 798 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.32
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.33'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 834 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.33
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.34'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.34
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.35'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 231 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.35
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.36'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 847 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.36
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.37'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 947 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.37
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.38'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 639 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.38
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.4'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 627 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.40'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 588 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.40
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.41'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1011 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.41
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.42'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 654 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.42
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.43'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 782 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.43
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.44'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 763 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.44
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.45'..
+mali shaderc table 'IR values': high-water 285 of 2048
+mali shaderc table 'locals': high-water 34 of 256
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1256 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.45
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.46'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 447 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.46
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.47'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 837 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.47
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.48'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 300 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.48
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.49'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 660 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.49
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.5'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 606 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.5
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.51'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 623 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.51
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.52'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 424 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.52
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.55'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 520 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.55
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.57'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.58'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 632 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.58
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.59'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 513 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.59
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.6'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 633 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.61'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 216 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.61
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.62'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1036 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.62
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.63'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 524 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.63
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.64'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.65'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 962 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.65
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.66'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.66
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.68'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 760 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.68
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.7'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 260 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.7
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.71'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 412 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.71
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.73'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1030 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.73
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.74'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 624 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.74
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.75'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 741 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.75
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.76'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 404 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.76
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.77'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 531 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.77
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.78'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.78
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.79'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 588 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.79
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.8'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 626 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.8
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.80'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 748 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.80
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.81'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 361 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.81
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.83'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.83
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.85'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.85
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.86'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 393 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.86
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.88'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 661 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.88
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.89'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 446 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.89
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.9'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.90'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1057 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.90
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.92'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 173 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.92
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.93'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 667 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.93
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.95'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 584 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.95
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.96'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.exponential.vertex.96
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.97'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 225 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.97
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.98'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 923 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.98
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.exponential.vertex.99'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 428 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.random.exponential.vertex.99
+  Fail (Failed to compile shader)
+
+DONE!
+
+Test run totals:
+  Passed:        31/200 (15.5%)
+  Failed:        169/200 (84.5%)
+  Not supported: 0/200 (0.0%)
+  Warnings:      0/200 (0.0%)
+  Waived:        0/200 (0.0%)
+deqp: done: 31 passed, 169 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 200 cases begun, 200 with a result, 0 without
+osal(mali): kicks 201, completed 201; pages 947 (high-water 1017) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 14720 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9211 ms
+�\x00
