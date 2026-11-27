@@ -113,6 +113,21 @@ finish_record() {
     [ ! -e "$dated" ] || die "$dated exists" 4
     mkdir -p "$(dirname "$dated")" && cp -a "$rec" "$dated" || die "cannot write $dated" 4
 }
+# ping_shim DIR: board.sh's return check after the jump (kexec_wait_back) pings
+# the host part of BOARD_HOST. A host that ssh reaches but ping does not (an
+# ssh config alias, a forwarded port) never reads as back, so every row ended
+# not_back after board.sh's 1500 s and the tree stopped before GT (run-x2-common,
+# 2026-11-27). When that host does not answer one ping, DIR/ping goes first on
+# PATH: it ignores its arguments and answers as one ssh login to BOARD_HOST does.
+ping_shim() {
+    local host=${BOARD_HOST#*@}
+    ping -c1 -W1 "$host" > /dev/null 2>&1 && return 0
+    mkdir -p "$1" || die "cannot create $1"
+    printf '#!/bin/bash\n# x2-common ping shim: ssh stands in for ping\nexec timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 "$X2C_PING_SSH" true < /dev/null > /dev/null 2>&1\n' > "$1/ping"
+    chmod +x "$1/ping"
+    export X2C_PING_SSH=$BOARD_HOST PATH=$1:$PATH
+    echo "x2-common: the board host answers no ping: the return check asks ssh instead ($1/ping)"
+}
 
 # ---- the self-test ---------------------------------------------------------------
 self_test() {
@@ -136,6 +151,7 @@ self_test() {
 #!/bin/bash
 # stub: x2 tree <table> <out>; writes what the real one does, with an address in it
 echo "board.sh $*" >> "$STUB_LOG"
+echo "ping-seen $(head -2 "$(command -v ping)" | tail -1) ssh-to=$X2C_PING_SSH" >> "$STUB_LOG"
 out=$4; mkdir -p "$out"; echo rows > "$out/tree.txt"
 for l in GM GT; do
     d=$out/20261128-1200-$l-abcd1234; mkdir -p "$d"
@@ -199,6 +215,7 @@ EOF
     grep -q '^\[build\]' "$rec/ms-per-scene.tsv" && grep -q 20.00 "$rec/ms-per-scene.tsv" && ok "ms-per-scene.tsv has the scene's ms/frame" || bad "ms table: $(cat "$rec/ms-per-scene.tsv" 2> /dev/null)"
     ! grep -rqE '192\.0\.2|ttyUSB' "$rec" && ok "console redacted" || bad "console not redacted"
     grep -q "x2 tree" "$T/log" && grep -q "armadillo_x2/mimx8ml8/a53" "$T/log" && ok "board.sh x2 tree, west for the X2 board" || bad "commands: $(cat "$T/log")"
+    grep -q "ping-seen # x2-common ping shim: ssh stands in for ping ssh-to=user@host.invalid" "$T/log" && ok "an unpingable board host: board.sh's return check pings through the ssh shim" || bad "ping shim: $(grep ping-seen "$T/log")"
     ! grep -qE '/boot|fsbla|fip-|metadata|mmcblk|modprobe|insmod|tailscale|sshd' "$T/log" && ok "no boot, eMMC, module, tailscale or sshd command" || bad "forbidden command in log"
     out=$("${E[@]}" bash "$HERE/x2-common.sh" --commit "$sha" 2>&1); rc=$?
     { [ $rc = 2 ] && [[ $out == *"exists"* ]]; } && ok "an existing record is never overwritten" || bad "overwrite: rc $rc: $out"
@@ -280,6 +297,7 @@ build GT gl_test
 # watchdog override leaks in from the caller
 TOOLS=${X2_TOOLS:-$WT/driver/tools/kexec-zephyr}
 mkdir -p "$RECS/imx8mp" || die "cannot create $RECS/imx8mp"
+ping_shim "$WORK/ping-shim"
 echo "x2-common: board.sh x2 tree common-tree.txt $REC"
 env -u TREE_PREV -u TREE_IMAGE -u SEL -u NETBOOT_NO_WATCHDOG TREE_IMAGE_DIR="$IMGS" X2_TOOLS="$TOOLS" \
     "$BOARD_SH" x2 tree "$WT/tools/cts/common-tree.txt" "$REC" < /dev/null 2>&1 | tee "$RECS/imx8mp/.x2-common-$S8.log"
