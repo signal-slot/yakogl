@@ -1,0 +1,5 @@
+gl_test: case 217 forcedpr: FAIL
+gl_test: forcedpr: FAIL depth: 40 layers (3 steps): requests 2 (served 1, refused 1), notices 1, stop 0, partial renders 1, GPU recoveries 0
+gl_test: forcedpr: 7 of 4096 depth samples differ; first at window pixel (3,4) from the top left: got 10 want 200 (of 255)
+[00:01:02.003,000] <inf> yakogl: render freelists: 4 grow requests, 3 served, 1 unserved, 100 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+[00:01:02.003,000] <inf> yakogl: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 1, out of memory 3, TA stores 0, 3D stores 1, CDM stores 0, TDM stores 0, other 0
