@@ -387,6 +387,22 @@ row_prune() {
   done
 }
 
+# prune_target <n>: with one row at a time (--jobs 1: no other row shares the
+# target), after row <n>, tools/env/gate_prune.sh drops the incremental files
+# and compiled test executables of the shared target when its disk has less
+# than YAKOGL_CHECK_PRUNE_FREE_BELOW GiB free (default 40). Later rows relink
+# what they need, so no row is skipped or changed; a failure of the script is
+# only noted. TEST_OK_DIR lies outside the target and is never touched.
+prune_target() {
+  local n=$1 t=${CARGO_TARGET_DIR:-} rc
+  [ -n "$t" ] && [ -d "$t" ] || return 0
+  tools/env/gate_prune.sh "$t" --incremental --artefacts \
+    --if-free-below "${YAKOGL_CHECK_PRUNE_FREE_BELOW:-40}" >> "$ROWS/$n.out" 2>&1
+  rc=$?
+  [ "$rc" -eq 0 ] || echo "check.sh: gate_prune.sh exit $rc, nothing pruned" >> "$ROWS/$n.out"
+  return 0
+}
+
 # The log is a list of entries in the script's order: rows, and the lines
 # about rows that did not run (`skip`, `gap`, `plan`). Each entry is a file
 # under $ROWS named by its number; `n.done` says it is complete, and
@@ -843,6 +859,7 @@ run_row() (
   fi
   [ -n "$key" ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_record "$n"
   [ "$PRUNE" -eq 1 ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_prune "$n"
+  [ "$PRUNE" -eq 1 ] && [ "$JOBS" -eq 1 ] && prune_target "$n"
   echo $((SECONDS - t0)) > "$ROWS/$n.time"
   : > "$ROWS/$n.done"
 )
