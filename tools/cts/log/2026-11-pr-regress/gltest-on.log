@@ -1,0 +1,2445 @@
+14:08:56 [  127.584466] reboot: Restarting system
+14:08:56 \x00�
+14:08:56 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:08:56 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+14:08:56 SPL initial stack usage: 17088 bytes
+14:08:56 Trying to boot from MMC1
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Loading Environment from nowhere... OK
+14:08:56 init_env from device 9 not supported!
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Starting ATF on ARM64 core...
+14:08:56 
+14:08:56 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+14:08:56 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+14:08:56 
+14:08:56 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:08:56 SPL initial stack usage: 1920 bytes
+14:08:56 HW CFG: 0x00
+14:08:56 Trying to boot from MMC1
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 
+14:08:56 
+14:08:56 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 
+14:08:56 SoC:   AM62PX SR1.0 HS-FS
+14:08:56 DRAM:  2 GiB
+14:08:56 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+14:08:56 Core:  161 devices, 34 uclasses, devicetree: separate
+14:08:56 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+14:08:56 Loading Environment from MMC... OK
+14:08:56 In:    serial@2800000
+14:08:56 Out:   serial@2800000
+14:08:56 Err:   serial@2800000
+14:08:56 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+14:08:56 Serial#: 08641335
+14:08:56 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+14:08:56 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+14:08:56 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+14:08:56 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+14:08:56 
+14:08:56 Hit any key to stop autoboot:  0 
+14:08:56 yakogl-netboot: once=pr-regress-GT-on-1e5c8c993a09a36b-1795788374
+14:08:56 Saving Environment to MMC... Writing to MMC(0)... OK
+14:08:56 yakogl-netboot: cleared
+14:08:56 3435936 bytes read in 41 ms (79.9 MiB/s)
+14:08:56 yakogl-netboot: go 0x82000000
+14:08:56 ## Starting application at 0x82000000 ...
+14:08:56 H0sample: build tree=c8be59f6 table=6c5b8a70
+14:08:56 I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 150 s
+14:08:56 board: watchdog armed
+14:08:56 I: Cadence DSI id 0xcadd5131, IP_CONF 0x948490d0
+14:08:56 I: D-PHY: WIZ at +0xf00 (MOD_VER 0x69924881)
+14:08:56 I: VP clock source 51200000 Hz (pixel clock 51200000 Hz)
+14:08:56 I: DSS rev 0x64040901
+14:08:56 I: DSS ready: VP2 1024x600 @ 51200000 Hz, safety layer ARGB8888 at 0x84e198c0
+14:08:56 I: TISCI: power domain 237 on
+14:08:56 I: TISCI: power domain 242 on
+14:08:56 I: TISCI: GPU clock 237/3 = 800000000 Hz
+14:08:56 I: TISCI: GPU clock 237/3 runs at 800000000 Hz
+14:08:56 I: GPU regs 0xfd80000 (512 KiB) mapped at 0xfd80000
+14:08:56 I: CORE_ID = 0x002400350068031c -> BVNC 192.0.2.0
+14:08:56 I: PowerVR BXS-4-64 MC1 alive (BVNC 192.0.2.0)
+14:08:56 I: GPU bring-up milestone 1 complete (power + BVNC readback)
+14:08:56 I: GPU core clock measured: 800 MHz (CR_TIMER 31252 ticks in 10 ms)
+14:08:56 I: GPU carveout phys 0x97800000 (64 MiB) mapped at 0x8e000000
+14:08:56 I: DDK FW: code@0x0 (196608 B), data@0x80000 (135168 B), objs from 0xc0000
+14:08:56 I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+14:08:56 I: runtime cfg: ActivePMLatency 5 ms
+14:08:56 I: FWIF structs built (KCCB/FWCCB/sysinit/osinit); heap used to 0xd8d28
+14:08:56 I: MMU: FW heap mapped (4096 KiB main + 192 KiB config of the 32 MiB window), PC root phys=0x97c30000
+14:08:56 I: M3 complete (MMU + FW load + FWIF structs). Booting FW core...
+14:08:56 I: FW boot: firmware_started=0x1 after ~1 ms
+14:08:56 I: GPU bring-up milestone 4 complete (firmware booted)
+14:08:56 I: DDK FW: skipping open-FW healthcheck; render KICK drives the FW
+14:08:56 I: render: scaffolding built; awaiting final cmd_transfer regs (pvr_render_regs.h) before first GPU draw
+14:08:56 I: D-PHY: 307812500 bit/s per lane, band 5
+14:08:56 I: DSI link up: 4 lanes, sync events, line 4047 B, 307812500 bit/s per lane
+14:08:56 I: sn65dsi8x: ID "58ISD" rev 0x01 (attempt 1)
+14:08:56 I: sn65dsi8x: up, DSI 153600 kHz (range 0x1e), LVDS 51200 kHz = /3 (range 1), fmt 0x68
+14:08:56 I: sn65dsi8x: link clean (IRQ_STAT 0x00)
+14:08:56 W: bridge up, video on, IRQ_STAT 0x00, at 275 ms
+14:08:56 W: backlight on at 280 ms
+14:08:56 I: SN65DSI8x up: lvds range 1, dsi range 30, div 2, fmt 0x68, IRQ_STAT 0x00
+14:08:56 *** Booting Zephyr OS build af17c0c8aa2a ***
+14:08:56 I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+14:08:56 Secondary CPU core 1 (MPID:0x1) is up
+14:08:56 Secondary CPU core 2 (MPID:0x2) is up
+14:08:56 Secondary CPU core 3 (MPID:0x3) is up
+14:08:56 gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=0
+14:08:56 gl_test: start (case=7 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+14:08:56 I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 4096 max, grow 256, pool 0 pages
+14:08:56 I: freelist id=1 np=512 max=4096 backing=1536 fpm=0 ebase=3584 arr.gpu=0xfa00000000 pages_phys=0x98054000 cur_dev=0xfa00003800 pfn[3584]=0x00098054 pfn[4095]=0x00098253
+14:08:56 I: freelist id=2 np=512 max=4096 backing=1536 fpm=0 ebase=3584 arr.gpu=0xfa00004000 pages_phys=0x98658000 cur_dev=0xfa00007800 pfn[3584]=0x00098658 pfn[4095]=0x00098857
+14:08:56 I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 arr.gpu=0xfa00008000 pages_phys=0x98c5c000 cur_dev=0xfa00008010 pfn[4]=0x00098c5c pfn[31]=0x00000000
+14:08:56 I: render: pds0: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 f4000002 | @0x80: f0080101 f0090201  usc0: 0580a044 ff000000 00000000 00000000
+14:08:56 I: render: init ok (PB@0x8000000000 border@0x8000200000 eot_usc_off=0x1000 gen_b=0xe34000 pds_b=0x1000 usc_b=0xa000)
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 I: pvr_backend: init ok (pds arena off 0x1000, gen arena 0x8043f00000, vdm 0x8000e34000, clear_fs off 0xc000)
+14:08:56 I: render: hc dwords: 00000000 003f003f 00000088 00000000 00000088 00000000 00000000 00000080 00003003 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 0000c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400e9d00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00e94000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400e9e80 400e9f00 00000003 00000000 00e90000 00000080 00ea6000 00000080
+14:08:56 I: render: hrt[40]: 00e96000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 64x64 x1 te_screen=0x00003003 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   orange centroid              (32,40) = 0xff0080ff  want 0xff0080ff  ok  [check 1]
+14:08:56 gl_test:   orange apex                  (31,12) = 0xff0080ff  want 0xff0080ff  ok  [check 2]
+14:08:56 gl_test:   background                   ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 I: render: hc dwords: 00000000 003f003f 00000088 00000000 00000088 00000000 00000000 00000080 00003003 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 00010000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400e9f80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00eab000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400ea100 400ea180 00000003 00000000 00ea7000 00000080 00ebd000 00000080
+14:08:56 I: render: hrt[40]: 00ead000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 64x64 x1 te_screen=0x00003003 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 gl_test:   cyan centroid                (32,40) = 0xffffff00  want 0xffffff00  ok  [check 4]
+14:08:56 gl_test:   active attributes 2; [1] = a_color size 1 type 0x8b52
+14:08:56 gl_test:   bound a_pos -> 3, a_color -> 1 (link 1)
+14:08:56 gl_test:   magenta via attribute 3      (32,40) = 0xffff00ff  want 0xffff00ff  ok  [check 5]
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   half: inside small tri       (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 6]
+14:08:56 gl_test:   half: outside small tri      (32,14) = 0xff000000  want 0xff000000  ok  [check 7]
+14:08:56 gl_test:   half: outside small tri      (12,52) = 0xff000000  want 0xff000000  ok  [check 8]
+14:08:56 gl_test:   shift: moved right           (56,40) = 0xff00ffff  want 0xff00ffff  ok  [check 9]
+14:08:56 gl_test:   shift: left now empty        (16,40) = 0xff000000  want 0xff000000  ok  [check 10]
+14:08:56 gl_test:   active uniforms 2; [0] = u_mvp size 1 type 0x8b5c
+14:08:56 gl_test: case 1 uniform: PASS
+14:08:56 gl_test: 2x2 texture @0x8000ec7000: ff0000ff ff00ff00 ffff0000 ffffffff | row1 ffff0000 ffffffff
+14:08:56 gl_test: 2x2 texture on the full-screen quad:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   top-left = blue              (16,16) = 0xffff0000  want 0xffff0000  ok  [check 1]
+14:08:56 gl_test:   top-right = white            (48,16) = 0xffffffff  want 0xffffffff  ok  [check 2]
+14:08:56 gl_test:   bottom-left = red            (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+14:08:56 gl_test:   bottom-right = green         (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+14:08:56 gl_test: 4x4 texture @0x8000ec7000: ff0000ff ff0000ff ff00ff00 ff00ff00 | row1 ff0000ff ff0000ff
+14:08:56 gl_test: 4x4 texture on the full-screen quad:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   top-left = blue              (16,16) = 0xffff0000  want 0xffff0000  ok  [check 5]
+14:08:56 gl_test:   top-right = white            (48,16) = 0xffffffff  want 0xffffffff  ok  [check 6]
+14:08:56 gl_test:   bottom-left = red            (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 7]
+14:08:56 gl_test:   bottom-right = green         (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+14:08:56 gl_test: 8x8 texture @0x8000ec7000: ff0000ff ff0000ff ff0000ff ff0000ff | row1 ff0000ff ff0000ff
+14:08:56 gl_test: 8x8 texture on the full-screen quad:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   top-left = blue              (16,16) = 0xffff0000  want 0xffff0000  ok  [check 9]
+14:08:56 gl_test:   top-right = white            (48,16) = 0xffffffff  want 0xffffffff  ok  [check 10]
+14:08:56 gl_test:   bottom-left = red            (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 11]
+14:08:56 gl_test:   bottom-right = green         (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 12]
+14:08:56 gl_test: 64x64 texture @0x8000ecc000: ff0000ff ff0000ff ff0000ff ff0000ff | row1 ff0000ff ff0000ff
+14:08:56 gl_test: 64x64 texture on the full-screen quad:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   top-left = blue              (16,16) = 0xffff0000  want 0xffff0000  ok  [check 13]
+14:08:56 gl_test:   top-right = white            (48,16) = 0xffffffff  want 0xffffffff  ok  [check 14]
+14:08:56 gl_test:   bottom-left = red            (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 15]
+14:08:56 gl_test:   bottom-right = green         (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 16]
+14:08:56 gl_test: gradient texture (R = 36 x, G = 36 y, B = 128), 8x8 grid (top-down rows):
+14:08:56 gl_test:  row  4: ff80fc00 ff80fc24 ff80fc48 ff80fc6c ff80fc90 ff80fcb4 ff80fcd8 ff80fcfc
+14:08:56 gl_test:  row 12: ff80d800 ff80d824 ff80d848 ff80d86c ff80d890 ff80d8b4 ff80d8d8 ff80d8fc
+14:08:56 gl_test:  row 20: ff80b400 ff80b424 ff80b448 ff80b46c ff80b490 ff80b4b4 ff80b4d8 ff80b4fc
+14:08:56 gl_test:  row 28: ff809000 ff809024 ff809048 ff80906c ff809090 ff8090b4 ff8090d8 ff8090fc
+14:08:56 gl_test:  row 36: ff806c00 ff806c24 ff806c48 ff806c6c ff806c90 ff806cb4 ff806cd8 ff806cfc
+14:08:56 gl_test:  row 44: ff804800 ff804824 ff804848 ff80486c ff804890 ff8048b4 ff8048d8 ff8048fc
+14:08:56 gl_test:  row 52: ff802400 ff802424 ff802448 ff80246c ff802490 ff8024b4 ff8024d8 ff8024fc
+14:08:56 gl_test:  row 60: ff800000 ff800024 ff800048 ff80006c ff800090 ff8000b4 ff8000d8 ff8000fc
+14:08:56 gl_test:   texel (0,7) at top-left      ( 4, 4) = 0xff80fc00  want 0xff80fc00  ok  [check 17]
+14:08:56 gl_test:   texel (7,0) at bottom-right  (60,60) = 0xff8000fc  want 0xff8000fc  ok  [check 18]
+14:08:56 gl_test:   texel (2,5)                  (20,20) = 0xff80b448  want 0xff80b448  ok  [check 19]
+14:08:56 gl_test:   texel (5,2)                  (44,44) = 0xff8048b4  want 0xff8048b4  ok  [check 20]
+14:08:56 gl_test:   mip: magnified -> level 0    (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 21]
+14:08:56 gl_test:   mip: 2x2 px quad -> level 1  (30,30) = 0xff00ff00  want 0xff00ff00  ok  [check 22]
+14:08:56 gl_test:   mip: 1x1 px quad -> level 2  (40,40) = 0xffff0000  want 0xffff0000  ok  [check 23]
+14:08:56 I: render: hc dwords: 00000000 00010001 00000088 00000000 00000088 00000000 00000000 00000080 00001001 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 00014000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400ea200 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00ed6000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400ea380 400ea400 00000003 00000000 00ed2000 00000080 00ee8000 00000080
+14:08:56 I: render: hrt[40]: 00ed8000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 2x2 x1 te_screen=0x00001001 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 I: render: hc dwords: 00000000 00010001 00000088 00000000 00000088 00000000 00000000 00000080 00001001 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 00018000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400ea480 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00eed000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400ea600 400ea680 00000003 00000000 00ee9000 00000080 00eff000 00000080
+14:08:56 I: render: hrt[40]: 00eef000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 2x2 x1 te_screen=0x00001001 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 I: pvr_backend: the GPU made levels 1..=2 of the 3-level chain of a 4x4 texture, the GL core the rest
+14:08:56 gl_test:   generated level 2 = average  (40,40) = 0xff800080  want 0xff800080  ok  [check 24]
+14:08:56 gl_test:   trilinear at level 2         (40,40) = 0xff800080  want 0xff800080  ok  [check 25]
+14:08:56 gl_test: 4x4 texture @0x8000ecf000: ff0000ff ff0000ff ff00ff00 ff00ff00 | row1 ff0000ff ff0000ff
+14:08:56 gl_test:   2 units: red*0.5 + yellow*0.25 (16,48) = 0xff0040bf  want 0xff0040bf  ok  [check 26]
+14:08:56 gl_test:   2 units: blue*0.5 + yellow*0.25 (16,16) = 0xff804040  want 0xff804040  ok  [check 27]
+14:08:56 gl_test:   swapped: yellow*0.5 + red*0.25 (16,48) = 0xff0080bf  want 0xff0080bf  ok  [check 28]
+14:08:56 gl_test:   swapped: yellow*0.5 + blue*0.25 (16,16) = 0xff408080  want 0xff408080  ok  [check 29]
+14:08:56 gl_test: case 2 texture: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRBRRRRR          
+14:08:56 gl_test: px           RRRRRBBRRRRRR         
+14:08:56 gl_test: px          RRRRRRBBBRRRRR         
+14:08:56 gl_test: px          RRRRRBBBBRRRRRR        
+14:08:56 gl_test: px         RRRRRRBBBBBRRRRR        
+14:08:56 gl_test: px         RRRRRBBBBBBRRRRRR       
+14:08:56 gl_test: px        RRRRRRBBBBBBBRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRRR   
+14:08:56 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRR   
+14:08:56 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRRR  
+14:08:56 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRR  
+14:08:56 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRRR 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   depth on: C in front         (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+14:08:56 gl_test:   depth on: B hidden           (32,44) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   depth on: A only             (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+14:08:56 gl_test:   depth off: C last            (32,32) = 0xffff0000  want 0xffff0000  ok  [check 4]
+14:08:56 gl_test:   depth off: B over A          (32,44) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+14:08:56 gl_test:   depth off: A only            (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+14:08:56 gl_test:   greater: B over A, C         (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   greater: B over A            (32,44) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+14:08:56 gl_test:   greater: A only              (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 9]
+14:08:56 gl_test:   offset -4: D in front of A   (32,54) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+14:08:56 gl_test:   offset +4: A stays           (32,54) = 0xff0000ff  want 0xff0000ff  ok  [check 11]
+14:08:56 gl_test: case 3 depth: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   ccw front, cull back         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+14:08:56 gl_test:   ccw front, cull front        (32,40) = 0xff000000  want 0xff000000  ok  [check 2]
+14:08:56 gl_test:   cw front, cull back          (32,40) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 gl_test:   cw front, cull front         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 4]
+14:08:56 gl_test:   fbo: ccw front, cull back    (32,32) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   fbo: ccw front, cull front   (32,32) = 0xff000000  want 0xff000000  ok  [check 6]
+14:08:56 gl_test: case 4 cull: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test: px RRRRRRRRRRRRRRRR                
+14:08:56 gl_test:   inside (bottom-left)         (16,48) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+14:08:56 gl_test:   inside edge                  (31,32) = 0xff00ffff  want 0xff00ffff  ok  [check 2]
+14:08:56 gl_test:   outside right                (32,32) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 gl_test:   outside above                (16,31) = 0xff000000  want 0xff000000  ok  [check 4]
+14:08:56 gl_test:   outside (top-right)          (48,16) = 0xff000000  want 0xff000000  ok  [check 5]
+14:08:56 gl_test: case 5 scissor: PASS
+14:08:56 gl_test: FBO texture contents (via glReadPixels on the FBO):
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           GRRRRRRRRRRR          
+14:08:56 gl_test: px           GGRRRRRRRRBBB         
+14:08:56 gl_test: px          GGGGGRRRRRBBBB         
+14:08:56 gl_test: px          GGGGGGRRBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBBB    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   v0 red apex                  (31,12) = 0xff090fe7  want 0xff090fe7  ok  [check 1]
+14:08:56 gl_test:   v1 green                     (12,52) = 0xff0fde13  want 0xff0fde13  ok  [check 2]
+14:08:56 gl_test:   v2 blue                      (52,52) = 0xffe30913  want 0xffe30913  ok  [check 3]
+14:08:56 gl_test:   centroid                     (32,40) = 0xff595452  want 0xff595452  ok  [check 4]
+14:08:56 gl_test:   background                   ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 5]
+14:08:56 gl_test: window contents (the texture sampled 1:1):
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           GRRRRRRRRRRR          
+14:08:56 gl_test: px           GGRRRRRRRRBBB         
+14:08:56 gl_test: px          GGGGGRRRRRBBBB         
+14:08:56 gl_test: px          GGGGGGRRBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBBB    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   v0 red apex                  (31,12) = 0xff090fe7  want 0xff090fe7  ok  [check 6]
+14:08:56 gl_test:   v1 green                     (12,52) = 0xff0fde13  want 0xff0fde13  ok  [check 7]
+14:08:56 gl_test:   v2 blue                      (52,52) = 0xffe30913  want 0xffe30913  ok  [check 8]
+14:08:56 gl_test:   centroid                     (32,40) = 0xff595452  want 0xff595452  ok  [check 9]
+14:08:56 gl_test:   background                   ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 10]
+14:08:56 gl_test:   sampled == rendered          0 pixel(s) differ
+14:08:56 gl_test: case 6 fbo: PASS
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   over: inside triangle        (32,40) = 0xbf008080  want 0xbf008080  ok  [check 1]
+14:08:56 gl_test:   over: outside (red quad)     ( 4, 4) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   additive: inside triangle    (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 3]
+14:08:56 gl_test:   premultiplied: inside        (32,40) = 0xff00ff80  want 0xff00ff80  ok  [check 4]
+14:08:56 gl_test:   replace: inside              (32,40) = 0x8000ff00  want 0x8000ff00  ok  [check 5]
+14:08:56 gl_test:   constant colour: inside      (32,40) = 0x800080bf  want 0x800080bf  ok  [check 6]
+14:08:56 gl_test:   mask ga: inside              (32,40) = 0x8000ffff  want 0x8000ffff  ok  [check 7]
+14:08:56 gl_test:   mask ga: outside untouched   ( 4, 4) = 0xff0000ff  want 0xff0000ff  ok  [check 8]
+14:08:56 gl_test:   over, alpha masked: inside   (32,40) = 0xff008080  want 0xff008080  ok  [check 9]
+14:08:56 gl_test: case 8 blend: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRR          
+14:08:56 gl_test: px           RRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRR         
+14:08:56 gl_test: px          RRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   equal 1: inside mask         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+14:08:56 gl_test:   equal 1: outside mask        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 2]
+14:08:56 gl_test:   mask pass wrote no colour    (32,50) = 0xff00ffff  want 0xff00ffff  ok  [check 3]
+14:08:56 gl_test:   notequal 1: inside mask      (32,40) = 0xff000000  want 0xff000000  ok  [check 4]
+14:08:56 gl_test:   notequal 1: outside mask     ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   incr x2: inside == 2         (32,40) = 0xff00ffff  want 0xff00ffff  ok  [check 6]
+14:08:56 gl_test:   incr x2: outside == 0        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 7]
+14:08:56 gl_test:   cleared to 1: quad everywhere ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 8]
+14:08:56 gl_test:   write mask 0xfe: nothing     (32,40) = 0xff000000  want 0xff000000  ok  [check 9]
+14:08:56 gl_test: case 9 stencil: PASS
+14:08:56 gl_test:   fan: centre                  (32,32) = 0xffff00ff  want 0xffff00ff  ok  [check 1]
+14:08:56 gl_test:   fan: corner                  ( 2,61) = 0xffff00ff  want 0xffff00ff  ok  [check 2]
+14:08:56 gl_test:   fan: corner                  (61, 2) = 0xffff00ff  want 0xffff00ff  ok  [check 3]
+14:08:56 gl_test:   u8 indices in a VBO          (32,32) = 0xffffff00  want 0xffffff00  ok  [check 4]
+14:08:56 gl_test:   u32 client indices           (32,32) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   ubyte colours in a VBO       (32,32) = 0xffff0000  want 0xffff0000  ok  [check 6]
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px         GGGGGGGGGGGGGGGGG       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         G               G       
+14:08:56 gl_test: px         GGGGGGGGGGGGGGGG        
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   loop: left edge              (16,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   loop: top edge               (32,16) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+14:08:56 gl_test:   loop: right edge             (48,32) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+14:08:56 gl_test:   loop: bottom edge (closing)  (32,48) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+14:08:56 gl_test:   loop: 3 px wide              (17,32) = 0xff00ff00  want 0xff00ff00  ok  [check 11]
+14:08:56 gl_test:   loop: inside empty           (32,32) = 0xff000000  want 0xff000000  ok  [check 12]
+14:08:56 gl_test:   loop: outside empty          ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 13]
+14:08:56 gl_test:   lines: on the horizontal     (32,40) = 0xffffffff  want 0xffffffff  ok  [check 14]
+14:08:56 gl_test:   lines: row above empty       (32,38) = 0xff000000  want 0xff000000  ok  [check 15]
+14:08:56 gl_test:   lines: row below empty       (32,42) = 0xff000000  want 0xff000000  ok  [check 16]
+14:08:56 gl_test:   lines: beyond the end        (60,40) = 0xff000000  want 0xff000000  ok  [check 17]
+14:08:56 gl_test:   lines: on the vertical       (20,16) = 0xffffffff  want 0xffffffff  ok  [check 18]
+14:08:56 gl_test:   lines: column beside empty   (22,16) = 0xff000000  want 0xff000000  ok  [check 19]
+14:08:56 gl_test:   strip: first segment         ( 8,32) = 0xff0000ff  want 0xff0000ff  ok  [check 20]
+14:08:56 gl_test:   strip: second segment        (32,56) = 0xff0000ff  want 0xff0000ff  ok  [check 21]
+14:08:56 gl_test:   strip: not closed            (32, 8) = 0xff000000  want 0xff000000  ok  [check 22]
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   3 px point at (40,24): ...###...
+14:08:56 gl_test:   3 px point at (40,24): ...###...
+14:08:56 gl_test:   3 px point at (40,24): ...###...
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   3 px point at (40,24): .........
+14:08:56 gl_test:   1 px point: centre           ( 8, 8) = 0xffff0000  want 0xffff0000  ok  [check 23]
+14:08:56 gl_test:   1 px point: neighbour empty  ( 9, 8) = 0xff000000  want 0xff000000  ok  [check 24]
+14:08:56 gl_test:   1 px point: neighbour empty  ( 8, 9) = 0xff000000  want 0xff000000  ok  [check 25]
+14:08:56 gl_test:   3 px point: centre           (40,24) = 0xffff0000  want 0xffff0000  ok  [check 26]
+14:08:56 gl_test:   3 px point: corner           (41,25) = 0xffff0000  want 0xffff0000  ok  [check 27]
+14:08:56 gl_test:   3 px point: corner           (39,23) = 0xffff0000  want 0xffff0000  ok  [check 28]
+14:08:56 gl_test:   3 px point: outside          (42,24) = 0xff000000  want 0xff000000  ok  [check 29]
+14:08:56 gl_test:   3 px point: outside          (40,22) = 0xff000000  want 0xff000000  ok  [check 30]
+14:08:56 gl_test:   5 px point: edge             (58,56) = 0xffff0000  want 0xffff0000  ok  [check 31]
+14:08:56 gl_test:   5 px point: outside          (59,56) = 0xff000000  want 0xff000000  ok  [check 32]
+14:08:56 gl_test: case 10 prims: PASS
+14:08:56 gl_test:   GL_OES_vertex_array_object advertised = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   glGenVertexArrays returns a nonzero name = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   generated name is not a VAO yet = 0  want 0  ok  [check 3]
+14:08:56 gl_test:   bound name is a VAO          = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   VERTEX_ARRAY_BINDING == vao  = 1  want 1  ok  [check 5]
+14:08:56 gl_test:   vao: centroid                (32,40) = 0xff595452  want 0xff595452  ok  [check 6]
+14:08:56 gl_test:   default VAO attr0 disabled   = 0  want 0  ok  [check 7]
+14:08:56 gl_test:   default VAO: centroid empty  (32,40) = 0xff000000  want 0xff000000  ok  [check 8]
+14:08:56 gl_test:   VAO restored attr0 enabled   = 1  want 1  ok  [check 9]
+14:08:56 gl_test:   vao rebound: centroid        (32,40) = 0xff595452  want 0xff595452  ok  [check 10]
+14:08:56 gl_test:   deleted name is not a VAO    = 0  want 0  ok  [check 11]
+14:08:56 gl_test: case 22 vao: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R                             
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           GRRRRRRRRRRR          
+14:08:56 gl_test: px           GGRRRRRRRRBBB         
+14:08:56 gl_test: px          GGGGGRRRRRBBBB         
+14:08:56 gl_test: px          GGGGGGRRBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBBB    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   earlier frame kept           (32,40) = 0xff595452  want 0xff595452  ok  [check 1]
+14:08:56 gl_test:   earlier frame kept           (31,12) = 0xff090fe7  want 0xff090fe7  ok  [check 2]
+14:08:56 gl_test:   new draw                     ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 3]
+14:08:56 gl_test:   still clear elsewhere        (60, 4) = 0xff000000  want 0xff000000  ok  [check 4]
+14:08:56 gl_test:   no-clear 113: draw 112       (40,24) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   no-clear 113: earlier kept   (32,40) = 0xff595452  want 0xff595452  ok  [check 6]
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px   R  R  R  R  R  R  R  R  R  R  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   draw 0                       ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 7]
+14:08:56 gl_test:   draw 255 (last of kick 1)    (49,52) = 0xff00ffff  want 0xff00ffff  ok  [check 8]
+14:08:56 gl_test:   draw 256 (first of kick 2)   (52,52) = 0xff00ffff  want 0xff00ffff  ok  [check 9]
+14:08:56 gl_test:   draw 299                     (61,60) = 0xff00ffff  want 0xff00ffff  ok  [check 10]
+14:08:56 gl_test:   triangle from frame 1 cleared (32,40) = 0xff000000  want 0xff000000  ok  [check 11]
+14:08:56 gl_test: case 11 persist: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px         R               G       
+14:08:56 gl_test: px        RR              GG       
+14:08:56 gl_test: px        RRR             GGG      
+14:08:56 gl_test: px        RRR             GGG      
+14:08:56 gl_test: px       RRRR            GGGG      
+14:08:56 gl_test: px       RRRRR           GGGGG     
+14:08:56 gl_test: px      RRRRRR          GGGGGG     
+14:08:56 gl_test: px      RRRRRRR         GGGGGGG    
+14:08:56 gl_test: px      RRRRRRR         GGGGGGG    
+14:08:56 gl_test: px     RRRRRRRR        GGGGGGGG    
+14:08:56 gl_test: px     RRRRRRRRR       GGGGGGGGG   
+14:08:56 gl_test: px    RRRRRRRRRR      GGGGGGGGGG   
+14:08:56 gl_test: px    RRRRRRRRRRR     GGGGGGGGGGG  
+14:08:56 gl_test: px    RRRRRRRRRRR     GGGGGGGGGGG  
+14:08:56 gl_test: px   RRRRRRRRRRRR    GGGGGGGGGGGG  
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   draw 1 keeps orange          (16,40) = 0xff0080ff  want 0xff0080ff  ok  [check 1]
+14:08:56 gl_test:   draw 2 is cyan               (48,40) = 0xffffff00  want 0xffffff00  ok  [check 2]
+14:08:56 gl_test: case 34 unishare: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px         R               B       
+14:08:56 gl_test: px         R               B       
+14:08:56 gl_test: px        RR              BB       
+14:08:56 gl_test: px        RR              BB       
+14:08:56 gl_test: px        RRR             BBB      
+14:08:56 gl_test: px        RRR             BBB      
+14:08:56 gl_test: px       RRRR            BBBB      
+14:08:56 gl_test: px       RRRR            BBBB      
+14:08:56 gl_test: px       RRRRR           BBBBB     
+14:08:56 gl_test: px       RRRRR           BBBBB     
+14:08:56 gl_test: px      RRRRRR          BBBBBB     
+14:08:56 gl_test: px      RRRRRR          BBBBBB     
+14:08:56 gl_test: px      RRRRRRR         BBBBBBB    
+14:08:56 gl_test: px      RRRRRRR         BBBBBBB    
+14:08:56 gl_test: px     RRRRRRRR        BBBBBBBB    
+14:08:56 gl_test: px     RRRRRRRR        BBBBBBBB    
+14:08:56 gl_test: px     RRRRRRRRR       BBBBBBBBB   
+14:08:56 gl_test: px     RRRRRRRRR       BBBBBBBBB   
+14:08:56 gl_test: px    RRRRRRRRRR      BBBBBBBBBB   
+14:08:56 gl_test: px    RRRRRRRRRR      BBBBBBBBBB   
+14:08:56 gl_test: px    RRRRRRRRRRR     BBBBBBBBBBB  
+14:08:56 gl_test: px    RRRRRRRRRRR     BBBBBBBBBBB  
+14:08:56 gl_test: px   RRRRRRRRRRRR    BBBBBBBBBBBB  
+14:08:56 gl_test: px   RRRRRRRRRRRR    BBBBBBBBBBBB  
+14:08:56 gl_test: px   RRRRRRRRRRRRR   BBBBBBBBBBBBB 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   ccw front: left (front) == 1 red (16,40) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   ccw front: right (back) == 2 blue (48,40) = 0xffff0000  want 0xffff0000  ok  [check 2]
+14:08:56 gl_test:   ccw front: outside untouched (32, 4) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 gl_test:   cw front: left (back) == 2 blue (16,40) = 0xffff0000  want 0xffff0000  ok  [check 4]
+14:08:56 gl_test:   cw front: right (front) == 1 red (48,40) = 0xff0000ff  want 0xff0000ff  ok  [check 5]
+14:08:56 gl_test:   fbo ccw front: left == 1 red (16,40) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+14:08:56 gl_test:   fbo ccw front: right == 2 blue (48,40) = 0xffff0000  want 0xffff0000  ok  [check 7]
+14:08:56 gl_test: case 12 stencil2: PASS
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRR RRRR           
+14:08:56 gl_test: px            RRRR  RRRR           
+14:08:56 gl_test: px            RRRR   RRRR          
+14:08:56 gl_test: px           RRRR    RRRR          
+14:08:56 gl_test: px           RRRR     RRRR         
+14:08:56 gl_test: px          RRRR       RRR         
+14:08:56 gl_test: px          RRR        RRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRR        
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRR       
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRR      
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRR     
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRR    
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRRR   
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   winding: outer filled        (19,42) = 0xff00ffff  want 0xff00ffff  ok  [check 1]
+14:08:56 gl_test:   winding: hole empty          (32,30) = 0xff000000  want 0xff000000  ok  [check 2]
+14:08:56 gl_test:   winding: outside empty       ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 gl_test: case 23 winding: PASS
+14:08:56 gl_test:   clear 0.5: mid quad passes   (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+14:08:56 gl_test:   clear 0.5: far quad fails    ( 4, 4) = 0xffff0000  want 0xffff0000  ok  [check 2]
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRGGRGRRGGRGGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGRRGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRGGRRRRGGRGGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGRRRRGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRGGRRRRRGRGGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGGGGRRRRRRGGGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRGRRRRRRRRGGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGGGRRRRRRRRGGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRRRRRRRRRRGGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGGRRRRRRRRRRGGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGGRRRRRRRRRRRGRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGGRRRRRRRRRRRRGGGGGGGGGG
+14:08:56 gl_test: px GGRGGRGGRGRRRRRRRRRRRRRRGGRGGRGG
+14:08:56 gl_test: px GGGGGGGGGRRRRRRRRRRRRRRGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRRGGGGGGG
+14:08:56 gl_test: px GGGGGGGRRRRRRRRRRRRRRRRRRGGGGGGG
+14:08:56 gl_test: px GGGGGGGRRRRRRRRRRRRRRRRRRRGGGGGG
+14:08:56 gl_test: px GGGGGGRRRRRRRRRRRRRRRRRRRRGGGGGG
+14:08:56 gl_test: px GGGGGGRRRRRRRRRRRRRRRRRRRRRGGGGG
+14:08:56 gl_test: px GGGGGRRRRRRRRRRRRRRRRRRRRRRGGGGG
+14:08:56 gl_test: px GGGGGRRRRRRRRRRRRRRRRRRRRRRRGGGG
+14:08:56 gl_test: px GGGGRRRRRRRRRRRRRRRRRRRRRRRRGGGG
+14:08:56 gl_test: px GGGGRRRRRRRRRRRRRRRRRRRRRRRRRGGG
+14:08:56 gl_test: px GGGRRRRRRRRRRRRRRRRRRRRRRRRRRGGG
+14:08:56 gl_test: px GGGRRRRRRRRRRRRRRRRRRRRRRRRRRRGG
+14:08:56 gl_test: px GGRRRRRRRRRRRRRRRRRRRRRRRRRRRRGG
+14:08:56 gl_test: px GGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   split: near triangle kept    (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+14:08:56 gl_test:   split: kick-1 small tri kept ( 4, 4) = 0xff00ffff  want 0xff00ffff  ok  [check 4]
+14:08:56 gl_test:   split: kick-2 small tri      (61,28) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   split: far quad elsewhere    (60,40) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+14:08:56 gl_test:   stencil kept: inside         (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   stencil kept: outside        ( 4, 4) = 0xff000000  want 0xff000000  ok  [check 8]
+14:08:56 gl_test:   depth cleared mid-frame: far quad wins (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+14:08:56 gl_test:   depth range 0..0.3: far quad wins (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+14:08:56 gl_test: case 13 zls: PASS
+14:08:56 gl_test:   client strip: quad 0         ( 6,32) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   client strip: quad 1         (16,32) = 0xff00ff00  want 0xff00ff00  ok  [check 2]
+14:08:56 gl_test:   client strip: quad 2         (26,32) = 0xffff0000  want 0xffff0000  ok  [check 3]
+14:08:56 gl_test:   client strip: quad 3         (36,32) = 0xff00ffff  want 0xff00ffff  ok  [check 4]
+14:08:56 gl_test:   client strip: quad 4         (46,32) = 0xffffff00  want 0xffffff00  ok  [check 5]
+14:08:56 gl_test:   client strip: quad 5         (56,32) = 0xffff00ff  want 0xffff00ff  ok  [check 6]
+14:08:56 gl_test:   client strip: gap stays clear (11,32) = 0xff000000  want 0xff000000  ok  [check 7]
+14:08:56 gl_test:   ibo strip: quad 0            ( 6,32) = 0xff0000ff  want 0xff0000ff  ok  [check 8]
+14:08:56 gl_test:   ibo strip: quad 1            (16,32) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+14:08:56 gl_test:   ibo strip: quad 2            (26,32) = 0xffff0000  want 0xffff0000  ok  [check 10]
+14:08:56 gl_test:   ibo strip: quad 3            (36,32) = 0xff00ffff  want 0xff00ffff  ok  [check 11]
+14:08:56 gl_test:   ibo strip: quad 4            (46,32) = 0xffffff00  want 0xffffff00  ok  [check 12]
+14:08:56 gl_test:   ibo strip: quad 5            (56,32) = 0xffff00ff  want 0xffff00ff  ok  [check 13]
+14:08:56 gl_test: case 40 qtstrip: PASS
+14:08:56 gl_test:   constant attribs: cyan       (32,32) = 0xffffff00  want 0xffffff00  ok  [check 1]
+14:08:56 gl_test:   current attrib 1.g           = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   current attrib 1.r           = 0  want 0  ok  [check 3]
+14:08:56 gl_test: 8x8 texture @0x8000f6f000: ff0000ff ff0000ff ff0000ff ff0000ff | row1 ff0000ff ff0000ff
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRWWWWWWWWWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWWWWWWRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   sub-image rgba: magenta      (16,16) = 0xffff00ff  want 0xffff00ff  ok  [check 4]
+14:08:56 gl_test:   sub-image rgb align 1: yellow (52,12) = 0xff00ffff  want 0xff00ffff  ok  [check 5]
+14:08:56 gl_test:   sub-image rgb align 4: white (12,52) = 0xffffffff  want 0xffffffff  ok  [check 6]
+14:08:56 gl_test:   untouched quadrant: green    (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   copied: magenta              (16,16) = 0xffff00ff  want 0xffff00ff  ok  [check 8]
+14:08:56 gl_test:   copied: yellow               (52,12) = 0xff00ffff  want 0xff00ffff  ok  [check 9]
+14:08:56 gl_test:   copied: green                (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+14:08:56 gl_test:   sub-copied: white patch      (48,16) = 0xffffffff  want 0xffffffff  ok  [check 11]
+14:08:56 gl_test:   sub-copied: red              (60, 4) = 0xff0000ff  want 0xff0000ff  ok  [check 12]
+14:08:56 gl_test:   depth range far              = 1  want 1  ok  [check 13]
+14:08:56 gl_test:   depth writemask              = 1  want 1  ok  [check 14]
+14:08:56 gl_test:   stencil writemask (all ones) = 4294967295  want 4294967295  ok  [check 15]
+14:08:56 gl_test:   glIsTexture(tex2)            = 1  want 1  ok  [check 16]
+14:08:56 gl_test:   glIsTexture(999)             = 0  want 0  ok  [check 17]
+14:08:56 gl_test:   glIsProgram(prog)            = 1  want 1  ok  [check 18]
+14:08:56 gl_test:   glIsShader(0)                = 0  want 0  ok  [check 19]
+14:08:56 gl_test:   buffer size                  = 144  want 144  ok  [check 20]
+14:08:56 gl_test:   attached shaders             = 2  want 2  ok  [check 21]
+14:08:56 gl_test:   attached vs is a shader      = 1  want 1  ok  [check 22]
+14:08:56 gl_test:   shader source prefix         = 35  want 35  ok  [check 23]
+14:08:56 gl_test:   shader source chunk          = 7  want 7  ok  [check 24]
+14:08:56 gl_test:   tex mag filter               = 9728  want 9728  ok  [check 25]
+14:08:56 gl_test:   highp float precision        = 23  want 23  ok  [check 26]
+14:08:56 gl_test: case 14 api: PASS
+14:08:56 I: yakogl: program 48 has no uniform 'u_tex0'
+14:08:56 gl_test:   unused sampler u_tex0 optimized out (loc -1) = -1  want -1  ok  [check 1]
+14:08:56 gl_test:   used sampler u_tex1 has a location = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   compacted sampler reads unit 1 (green) (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 3]
+14:08:56 gl_test: case 24 compact: PASS
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBRRRRRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test:   inside the box               (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   inside, at a corner          (17,17) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   left of the box              ( 8,32) = 0xffff0000  want 0xffff0000  ok  [check 3]
+14:08:56 gl_test:   right of the box             (56,32) = 0xffff0000  want 0xffff0000  ok  [check 4]
+14:08:56 gl_test:   one row above the box        (32,15) = 0xffff0000  want 0xffff0000  ok  [check 5]
+14:08:56 gl_test:   one row below the box        (32,48) = 0xffff0000  want 0xffff0000  ok  [check 6]
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   the clear is after the draw  (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 7]
+14:08:56 gl_test:   the draw is everywhere else  ( 8,32) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+14:08:56 gl_test:   an empty box clears nothing  (32,32) = 0xffff0000  want 0xffff0000  ok  [check 9]
+14:08:56 gl_test: case 58 clearscis: PASS
+14:08:56 gl_test:   a fully masked colour clear does nothing (32,32) = 0xffff0000  want 0xffff0000  ok  [check 1]
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   a masked depth clear does nothing (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   the masked bits were not cleared (32,32) = 0xffff0000  want 0xffff0000  ok  [check 3]
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   the allowed bits were cleared (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+14:08:56 gl_test: case 59 clearmask: PASS
+14:08:56 gl_test: wrap S = repeat:
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRGGGGGGGG
+14:08:56 gl_test:   S first period               ( 8,48) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   S second period, u 1.25      (40,48) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   S second period, u 1.75      (56,48) = 0xff00ff00  want 0xff00ff00  ok  [check 3]
+14:08:56 gl_test: wrap S = mirror:
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGRRRRRRRR
+14:08:56 gl_test:   S first period               ( 8,48) = 0xff0000ff  want 0xff0000ff  ok  [check 4]
+14:08:56 gl_test:   S second period, u 1.25      (40,48) = 0xff00ff00  want 0xff00ff00  ok  [check 5]
+14:08:56 gl_test:   S second period, u 1.75      (56,48) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+14:08:56 gl_test: wrap S = clamp:
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   S first period               ( 8,48) = 0xff0000ff  want 0xff0000ff  ok  [check 7]
+14:08:56 gl_test:   S second period, u 1.25      (40,48) = 0xff00ff00  want 0xff00ff00  ok  [check 8]
+14:08:56 gl_test:   S second period, u 1.75      (56,48) = 0xff00ff00  want 0xff00ff00  ok  [check 9]
+14:08:56 gl_test: wrap T = repeat:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   T first period               ( 8,55) = 0xff0000ff  want 0xff0000ff  ok  [check 10]
+14:08:56 gl_test:   T second period, v 1.25      ( 8,23) = 0xff0000ff  want 0xff0000ff  ok  [check 11]
+14:08:56 gl_test:   T second period, v 1.75      ( 8, 7) = 0xffff0000  want 0xffff0000  ok  [check 12]
+14:08:56 gl_test: wrap T = mirror:
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   T first period               ( 8,55) = 0xff0000ff  want 0xff0000ff  ok  [check 13]
+14:08:56 gl_test:   T second period, v 1.25      ( 8,23) = 0xffff0000  want 0xffff0000  ok  [check 14]
+14:08:56 gl_test:   T second period, v 1.75      ( 8, 7) = 0xff0000ff  want 0xff0000ff  ok  [check 15]
+14:08:56 gl_test: wrap T = clamp:
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   T first period               ( 8,55) = 0xff0000ff  want 0xff0000ff  ok  [check 16]
+14:08:56 gl_test:   T second period, v 1.25      ( 8,23) = 0xffff0000  want 0xffff0000  ok  [check 17]
+14:08:56 gl_test:   T second period, v 1.75      ( 8, 7) = 0xffff0000  want 0xffff0000  ok  [check 18]
+14:08:56 gl_test: case 60 wrapmode: PASS
+14:08:56 gl_test:   complete: the texel          (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 I: a texture on unit 0 is incomplete and samples (0,0,0,1): a mipmap min filter, but fewer levels uploaded than the chain needs (target 0xde1, 2x2, levels 1 of 2, min filter 0x2703, wrap 0x2901/0x2901)
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   incomplete: opaque black     (16,48) = 0xff000000  want 0xff000000  ok  [check 2]
+14:08:56 gl_test:   incomplete: opaque black     (48,16) = 0xff000000  want 0xff000000  ok  [check 3]
+14:08:56 gl_test:   complete again               (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 4]
+14:08:56 gl_test:   nothing bound: opaque black  (16,48) = 0xff000000  want 0xff000000  ok  [check 5]
+14:08:56 gl_test:   nothing bound: opaque black  (48,16) = 0xff000000  want 0xff000000  ok  [check 6]
+14:08:56 gl_test: case 61 texincomp: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   eglInitialize                = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   eglChooseConfig              = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   one config                   = 1  want 1  ok  [check 3]
+14:08:56 gl_test:   no 8x MSAA config            = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   config depth size            = 24  want 24  ok  [check 5]
+14:08:56 gl_test:   eglQueryString VENDOR        = 1  want 1  ok  [check 6]
+14:08:56 gl_test:   pbuffer created              = 1  want 1  ok  [check 7]
+14:08:56 gl_test:   context created              = 1  want 1  ok  [check 8]
+14:08:56 gl_test:   eglMakeCurrent               = 1  want 1  ok  [check 9]
+14:08:56 gl_test:   current context              = 1  want 1  ok  [check 10]
+14:08:56 gl_test:   pbuffer width                = 64  want 64  ok  [check 11]
+14:08:56 gl_test:   eglGetProcAddress            = 1  want 1  ok  [check 12]
+14:08:56 gl_test:   eglSwapBuffers               = 1  want 1  ok  [check 13]
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                 R               
+14:08:56 gl_test: px                RR               
+14:08:56 gl_test: px                RRR              
+14:08:56 gl_test: px               RRRR              
+14:08:56 gl_test: px               RRRRR             
+14:08:56 gl_test: px              RRRRRR             
+14:08:56 gl_test: px              RRRRRRR            
+14:08:56 gl_test: px             RRRRRRRR            
+14:08:56 gl_test: px             RRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRR           
+14:08:56 gl_test: px            RRRRRRRRRRR          
+14:08:56 gl_test: px           GRRRRRRRRRRR          
+14:08:56 gl_test: px           GGRRRRRRRRBBB         
+14:08:56 gl_test: px          GGGGGRRRRRBBBB         
+14:08:56 gl_test: px          GGGGGGRRBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBB        
+14:08:56 gl_test: px         GGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBB       
+14:08:56 gl_test: px        GGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBB      
+14:08:56 gl_test: px       GGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBB     
+14:08:56 gl_test: px      GGGGGGGGGGGBBBBBBBBBBBB    
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                 
+14:08:56 gl_test:   egl pbuffer: centroid        (32,40) = 0xff595452  want 0xff595452  ok  [check 14]
+14:08:56 gl_test:   egl pbuffer: background      ( 1, 1) = 0xff000000  want 0xff000000  ok  [check 15]
+14:08:56 gl_test:   release                      = 1  want 1  ok  [check 16]
+14:08:56 gl_test:   no current context           = 1  want 1  ok  [check 17]
+14:08:56 gl_test:   eglDestroySurface            = 1  want 1  ok  [check 18]
+14:08:56 gl_test:   eglDestroyContext            = 1  want 1  ok  [check 19]
+14:08:56 gl_test:   eglTerminate                 = 1  want 1  ok  [check 20]
+14:08:56 gl_test:   eglGetError clean            = 12288  want 12288  ok  [check 21]
+14:08:56 gl_test: case 15 egl: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   eglChooseConfig samples 4    = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   config EGL_SAMPLES           = 4  want 4  ok  [check 2]
+14:08:56 gl_test:   GL_SAMPLES x4                = 4  want 4  ok  [check 3]
+14:08:56 I: render: hc dwords: 00000000 003f003f eaa26e26 00000000 2a62aee6 00000000 00000000 00000200 00003003 00000004 00000009 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 0001c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400ea700 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00fc1000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400ea880 400ea900 00000003 00000000 00fbd000 00000080 00fd3000 00000080
+14:08:56 I: render: hrt[40]: 00fc3000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 64x64 x4 te_screen=0x00003003 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=64 tpc=512 teaa=9
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                R
+14:08:56 gl_test: px                               RR
+14:08:56 gl_test: px                              RRR
+14:08:56 gl_test: px                             RRRR
+14:08:56 gl_test: px                            RRRRR
+14:08:56 gl_test: px                           RRRRRR
+14:08:56 gl_test: px                          RRRRRRR
+14:08:56 gl_test: px                         RRRRRRRR
+14:08:56 gl_test: px                        RRRRRRRRR
+14:08:56 gl_test: px                       RRRRRRRRRR
+14:08:56 gl_test: px                      RRRRRRRRRRR
+14:08:56 gl_test: px                     RRRRRRRRRRRR
+14:08:56 gl_test: px                    RRRRRRRRRRRRR
+14:08:56 gl_test: px                   RRRRRRRRRRRRRR
+14:08:56 gl_test: px                  RRRRRRRRRRRRRRR
+14:08:56 gl_test: px                 RRRRRRRRRRRRRRRR
+14:08:56 gl_test: px                RRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px               RRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px              RRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px             RRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px            RRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px           RRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px          RRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px  RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   x4: inside 0xffff00ff outside 0xff000000 edge 0xff7f007f
+14:08:56 gl_test:   x4 inside                    (40,43) = 0xffff00ff  want 0xffff00ff  ok  [check 4]
+14:08:56 gl_test:   x4 outside                   (20,23) = 0xff000000  want 0xff000000  ok  [check 5]
+14:08:56 gl_test:   x4 edge: half covered        (32,31) = 0xff7f007f  want 0xff800080  ok  [check 6]
+14:08:56 gl_test:   eglChooseConfig default      = 1  want 1  ok  [check 7]
+14:08:56 gl_test:   default config is single-sampled = 0  want 0  ok  [check 8]
+14:08:56 gl_test:   GL_SAMPLES x1                = 0  want 0  ok  [check 9]
+14:08:56 gl_test: px                                 
+14:08:56 gl_test: px                                R
+14:08:56 gl_test: px                               RR
+14:08:56 gl_test: px                              RRR
+14:08:56 gl_test: px                             RRRR
+14:08:56 gl_test: px                            RRRRR
+14:08:56 gl_test: px                           RRRRRR
+14:08:56 gl_test: px                          RRRRRRR
+14:08:56 gl_test: px                         RRRRRRRR
+14:08:56 gl_test: px                        RRRRRRRRR
+14:08:56 gl_test: px                       RRRRRRRRRR
+14:08:56 gl_test: px                      RRRRRRRRRRR
+14:08:56 gl_test: px                     RRRRRRRRRRRR
+14:08:56 gl_test: px                    RRRRRRRRRRRRR
+14:08:56 gl_test: px                   RRRRRRRRRRRRRR
+14:08:56 gl_test: px                  RRRRRRRRRRRRRRR
+14:08:56 gl_test: px                 RRRRRRRRRRRRRRRR
+14:08:56 gl_test: px                RRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px               RRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px              RRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px             RRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px            RRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px           RRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px          RRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px         RRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px        RRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px       RRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px      RRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px     RRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px    RRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px   RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px  RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   x1: inside 0xffff00ff outside 0xff000000 edge 0xffff00ff
+14:08:56 gl_test:   x1 inside                    (40,43) = 0xffff00ff  want 0xffff00ff  ok  [check 10]
+14:08:56 gl_test:   x1 outside                   (20,23) = 0xff000000  want 0xff000000  ok  [check 11]
+14:08:56 gl_test:   x1 edge: full or empty       = 1  want 1  ok  [check 12]
+14:08:56 gl_test: case 16 msaa: PASS
+14:08:56 gl_test:   HelloAPI program links       = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   transformationMatrix found   = 1  want 1  ok  [check 2]
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGRGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGRRGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGRRRGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGRRRRGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGRRRRRGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGRRRRRRGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGRRRRRRRGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGRRRRRRRRGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGRRRRRRRRRGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGRRRRRRRRRRGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGRRRRRRRRRRRGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGRRRRRRRRRRRRGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGRRRRRRRRRRRRRGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   HelloAPI: triangle (1, 1, 0.66) (32,36) = 0xffa8ffff  want 0xffa8ffff  ok  [check 3]
+14:08:56 gl_test:   HelloAPI: clear (0, 0.7, 0.67) ( 4, 4) = 0xffabb300  want 0xffabb300  ok  [check 4]
+14:08:56 gl_test:   attribute locations by name  = 1  want 1  ok  [check 5]
+14:08:56 gl_test:   uniform locations by name    = 1  want 1  ok  [check 6]
+14:08:56 gl_test: 8x8 texture @0x8000f8c000: ff0000ff ff0000ff ff0000ff ff0000ff | row1 ff0000ff ff0000ff
+14:08:56 gl_test:   es100 textured: top-left blue (16,16) = 0xffff0000  want 0xffff0000  ok  [check 7]
+14:08:56 gl_test:   es100 textured: top-right white (48,16) = 0xffffffff  want 0xffffffff  ok  [check 8]
+14:08:56 gl_test:   es100 textured: bottom-left red (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 9]
+14:08:56 gl_test:   es100 tint+scale: top-right half green (48,16) = 0xff008000  want 0xff008000  ok  [check 10]
+14:08:56 gl_test:   es100 tint+scale: bottom-left black (16,48) = 0xff000000  want 0xff000000  ok  [check 11]
+14:08:56 gl_test: case 19 es100: PASS
+14:08:56 gl_test:   compressed format count fits the 16-entry buffer = 1  want 1  ok  [check 1]
+14:08:56 gl_test: case 20 etc: ES 3.0 report, 11 compressed formats, sRGB ETC2 x2, decoded x6
+14:08:56 gl_test:   compressed format count is 3 + sRGB pair + decoded = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   sRGB ETC2 pair is both or neither = 1  want 1  ok  [check 3]
+14:08:56 gl_test:   no sRGB pair or decoded format under an ES 2.0 report = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   ETC1 listed                  = 1  want 1  ok  [check 5]
+14:08:56 gl_test:   no other compressed format listed = 0  want 0  ok  [check 6]
+14:08:56 gl_test:   GL_OES_compressed_ETC1_RGB8_texture advertised = 1  want 1  ok  [check 7]
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBWWWWWWWW
+14:08:56 gl_test:   etc1 block (0,0)             ( 8,48) = 0xff0202ff  want 0xff0202ff  ok  [check 8]
+14:08:56 gl_test:   etc1 block (1,0)             (24,48) = 0xff02ff02  want 0xff02ff02  ok  [check 9]
+14:08:56 gl_test:   etc1 block (2,0)             (40,48) = 0xffff0202  want 0xffff0202  ok  [check 10]
+14:08:56 gl_test:   etc1 block (3,0)             (56,48) = 0xffffffff  want 0xffffffff  ok  [check 11]
+14:08:56 gl_test:   etc1 block (0,1)             ( 8,16) = 0xff02ffff  want 0xff02ffff  ok  [check 12]
+14:08:56 gl_test:   etc1 block (1,1)             (24,16) = 0xffffff02  want 0xffffff02  ok  [check 13]
+14:08:56 gl_test:   etc1 block (2,1)             (40,16) = 0xffff02ff  want 0xffff02ff  ok  [check 14]
+14:08:56 gl_test:   etc1 block (3,1)             (56,16) = 0xff8a8a8a  want 0xff8a8a8a  ok  [check 15]
+14:08:56 gl_test:   etc2 rgba block 0            (16,48) = 0xff0202ff  want 0xff0202ff  ok  [check 16]
+14:08:56 gl_test:   etc2 rgba block 1            (48,48) = 0x8002ff02  want 0x8002ff02  ok  [check 17]
+14:08:56 gl_test:   etc2 rgba block 2            (16,16) = 0x40ff0202  want 0x40ff0202  ok  [check 18]
+14:08:56 gl_test:   etc2 rgba block 3            (48,16) = 0x00ffffff  want 0x00ffffff  ok  [check 19]
+14:08:56 I: GL error 0x501 in glCompressedTexImage2D
+14:08:56 gl_test:   wrong imageSize -> INVALID_VALUE = 1281  want 1281  ok  [check 20]
+14:08:56 I: GL error 0x500 in glCompressedTexImage2D
+14:08:56 gl_test:   PVRTC -> INVALID_ENUM        = 1280  want 1280  ok  [check 21]
+14:08:56 gl_test: case 20 etc: PASS
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 106 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 0 centre                (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   face 0 off-centre            (16,16) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 107 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 1 centre                (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 3]
+14:08:56 gl_test:   face 1 off-centre            (16,16) = 0xff00ff00  want 0xff00ff00  ok  [check 4]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 108 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 2 centre                (32,32) = 0xffff0000  want 0xffff0000  ok  [check 5]
+14:08:56 gl_test:   face 2 off-centre            (16,16) = 0xffff0000  want 0xffff0000  ok  [check 6]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 109 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 3 centre                (32,32) = 0xff00ffff  want 0xff00ffff  ok  [check 7]
+14:08:56 gl_test:   face 3 off-centre            (16,16) = 0xff00ffff  want 0xff00ffff  ok  [check 8]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 110 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 4 centre                (32,32) = 0xffff00ff  want 0xffff00ff  ok  [check 9]
+14:08:56 gl_test:   face 4 off-centre            (16,16) = 0xffff00ff  want 0xffff00ff  ok  [check 10]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 111 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   face 5 centre                (32,32) = 0xffffff00  want 0xffffff00  ok  [check 11]
+14:08:56 gl_test:   face 5 off-centre            (16,16) = 0xffffff00  want 0xffffff00  ok  [check 12]
+14:08:56 I: render: hc dwords: 00000000 00070007 00000088 00000000 00000088 00000000 00000000 00000080 00001001 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 00020000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400ea980 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00fd8000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400eab00 400eab80 00000003 00000000 00fd4000 00000080 00fea000 00000080
+14:08:56 I: render: hrt[40]: 00fda000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 8x8 x1 te_screen=0x00001001 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 113 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: face 0            (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 13]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 114 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: face 2            (32,32) = 0xffffffff  want 0xffffffff  ok  [check 14]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 115 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x6: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: face 4            (32,32) = 0xffff00ff  want 0xffff00ff  ok  [check 15]
+14:08:56 gl_test: case 41 es3cube: PASS
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 116 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   layer 0 (rgb texture, a texelFetch) (32,32) = 0x6400ff00  want 0x6400ff00  ok  [check 1]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 117 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   layer 1 (rgb texture, a texelFetch) (32,32) = 0x9628af50  want 0x9628af50  ok  [check 2]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 118 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   layer 2 (rgb texture, a texelFetch) (32,32) = 0xc8505fa0  want 0xc8505fa0  ok  [check 3]
+14:08:56 I: render: hc dwords: 00000000 00070007 00000088 00000000 00000088 00000000 00000000 00000080 00001001 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:08:56 I: render: hrt[0]: 00024000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[16]: 00000000 400eac00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:08:56 I: render: hrt[24]: 00000000 00000000 00fef000 00000080 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[32]: 400ead80 400eae00 00000003 00000000 00feb000 00000080 01001000 00000080
+14:08:56 I: render: hrt[40]: 00ff1000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:08:56 I: render: HWRT 8x8 x1 te_screen=0x00001001 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 120 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: layer 0           (32,32) = 0x6400ff00  want 0x6400ff00  ok  [check 4]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 121 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: layer 1           (32,32) = 0xffff0000  want 0xffff0000  ok  [check 5]
+14:08:56 I:   cube-bind: 0x8000e87000 unit 0 kick 122 (draw)
+14:08:56 I:   cube(draw) @0x8000e87000 8x8 x3: fmt 0, cpu 0x8f7fd000 - not dumped
+14:08:56 gl_test:   after FBO: layer 2           (32,32) = 0xc8505fa0  want 0xc8505fa0  ok  [check 6]
+14:08:56 gl_test: case 42 es3array: PASS
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGRRRRRRRRRRRRRRRB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGRRRRRRRRRRRRRRRBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGRRRRRRRRRRRRRRBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGRRRRRRRRRRRRRRBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGRRRRRRRRRRRRRBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGRRRRRRRRRRRRRBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGRRRRRRRRRRRRBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGRRRRRRRRRRRRBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGRRRRRRRRRRRBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGRRRRRRRRRRRBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGRRRRRRRRRRBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGRRRRRRRRRRBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGRRRRRRRRRBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGRRRRRRRRRBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGRRRRRRRRBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGRRRRRRRRRRBBBBBBBBBBBBGG
+14:08:56 gl_test: px GGGGGGGRRRRRRRRRRRRBBBBBBBBBGGGG
+14:08:56 gl_test: px GGGGGGGRRRRRRRRRRRRRBBBBBBGGGGGG
+14:08:56 gl_test: px GGGGGGRRRRRRRRRRRRRRRBBBGGGGGGGG
+14:08:56 gl_test: px GGGGGGRRRRRRRRRRRRRRRRGGGGGGGGGG
+14:08:56 gl_test: px GGGGGRRRRRRRRRRRRRRRRGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGRRRRRRRRRRRRRRRRGGGGGGGGGGG
+14:08:56 gl_test: px GGGGRRRRRRRRRRRRRRRRGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWWRRRRRRRRRRRRRGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWWRRRRRRRRRRRRRGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWWRRRRRRRRRRRRRRGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWWRRRRRRRRRRRRRRGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWWRRRRRRRRRRRRRRRGGGGGGGGGGGGGG
+14:08:56 gl_test: px WWRRRRRRRRRRRRRRRGGGGGGGGGGGGGGG
+14:08:56 gl_test: px WRRRRRRRRRRRRRRRRGGGGGGGGGGGGGGG
+14:08:56 gl_test:   bottom-right ~ vertex 1 green (60,60) = 0xff0ee30e  want 0xff0ee30e  ok  [check 1]
+14:08:56 gl_test:   bottom-left ~ vertex 0 red   ( 4,60) = 0xff0e04ed  want 0xff1200ed  ok  [check 2]
+14:08:56 gl_test:   top-left ~ vertex 5 green    ( 4, 4) = 0xff12ed24  want 0xff12ed24  ok  [check 3]
+14:08:56 gl_test: case 43 es3vid: PASS
+14:08:56 I:   cube-bind: 0x8000ec8000 unit 1 kick 124 (draw)
+14:08:56 I:   cube(draw) @0x8000ec8000 8x8 x3: fmt 0, cpu 0x8f84c000 - not dumped
+14:08:56 gl_test:   textureSize 2D / array       (32,32) = 0x03081808  want 0x03081808  ok  [check 1]
+14:08:56 gl_test: case 46 es3size: PASS
+14:08:56 gl_test:   arrays: instance 0 red       (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 1]
+14:08:56 gl_test:   arrays: instance 1 green     (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 2]
+14:08:56 gl_test:   arrays: instance 2 blue      (16,16) = 0xffff0000  want 0xffff0000  ok  [check 3]
+14:08:56 gl_test:   arrays: instance 3 half white (48,16) = 0x80808080  want 0x80808080  ok  [check 4]
+14:08:56 gl_test:   arrays: between = clear      (32,32) = 0xff000000  want 0xff000000  ok  [check 5]
+14:08:56 gl_test:   elements: instance 0 red     (16,48) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+14:08:56 gl_test:   elements: instance 1 green   (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   elements: instance 2 blue    (16,16) = 0xffff0000  want 0xffff0000  ok  [check 8]
+14:08:56 gl_test:   elements: instance 3 half white (48,16) = 0x80808080  want 0x80808080  ok  [check 9]
+14:08:56 gl_test:   elements: between = clear    (32,32) = 0xff000000  want 0xff000000  ok  [check 10]
+14:08:56 gl_test: case 47 es3inst: PASS
+14:08:56 I:   cube-bind: 0x8000f03000 unit 0 kick 127 (draw)
+14:08:56 I:   cube(draw) @0x8000f03000 4x4 x5: fmt 0, cpu 0x8f892000 - not dumped
+14:08:56 gl_test:   slice 2: texture/lod/fetch/depth (32,32) = 0x05506464  want 0x05506464  ok  [check 1]
+14:08:56 I:   cube-bind: 0x8000f03000 unit 0 kick 128 (draw)
+14:08:56 I:   cube(draw) @0x8000f03000 4x4 x5: fmt 0, cpu 0x8f892000 - not dumped
+14:08:56 gl_test:   between 0 and 1: blended     (32,32) = 0x05281c1c  want 0x05281c1c  ok  [check 2]
+14:08:56 gl_test: case 48 es3vol: PASS
+14:08:56 gl_test:   window, front CCW: front (green) (32,32) = 0xff00ff00  want 0xff00ff00  ok  [check 1]
+14:08:56 gl_test:   window, front CW: back (red) (32,32) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   fbo, front CCW: front (green x0.25) (32,32) = 0x40004000  want 0x40004000  ok  [check 3]
+14:08:56 gl_test:   fbo, front CW: back (red x0.25) (32,32) = 0x40000040  want 0x40000040  ok  [check 4]
+14:08:56 gl_test: case 49 es3facing: PASS
+14:08:56 gl_test:   idx=2 n=3 -> cols[2..4]      (32,32) = 0xbf9900e5  want 0xbf9900e6  ok  [check 1]
+14:08:56 gl_test:   idx=5 n=2 -> cols[5..6]      (32,32) = 0x806600ff  want 0x806600ff  ok  [check 2]
+14:08:56 gl_test: case 45 es3dyn: PASS
+14:08:56 gl_test:   rgba8 clear-only x0.25       (32,32) = 0x40401020  want 0x40401020  ok  [check 1]
+14:08:56 gl_test:   cleared 2.0/0.5/0.25 x0.25   (32,32) = 0x40102080  want 0x40102080  ok  [check 2]
+14:08:56 gl_test:   drawn: bottom-right ~ green x0.25 (60,60) = 0x40043804  want 0x40043904  ok  [check 3]
+14:08:56 gl_test:   drawn: bottom-left ~ red x0.25 ( 4,60) = 0x4004003c  want 0x4005003b  ok  [check 4]
+14:08:56 gl_test:   clear+draw: right half = clear (56,32) = 0x40102080  want 0x40102080  ok  [check 5]
+14:08:56 gl_test:   clear+draw: left half drawn  ( 8,56) = 0x40040834  want 0x4005003b  ok  [check 6]
+14:08:56 gl_test: case 44 es3hdr: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   a window config with depth   = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   eglSwapBuffers               = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   frame 1: left red            (16,32) = 0xff0000ff  want 0xff0000ff  ok  [check 3]
+14:08:56 gl_test:   frame 1: right black         (48,32) = 0xff000000  want 0xff000000  ok  [check 4]
+14:08:56 gl_test:   eglSwapBuffers 2             = 1  want 1  ok  [check 5]
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   frame 2: left from the clear depth (16,32) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+14:08:56 gl_test:   frame 2: right green         (48,32) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test: case 172 swapzs: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   a window config with depth   = 1  want 1  ok  [check 1]
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   split: left kept its depth   (16,32) = 0xff0000ff  want 0xff0000ff  ok  [check 2]
+14:08:56 gl_test:   split: right green           (48,32) = 0xff00ff00  want 0xff00ff00  ok  [check 3]
+14:08:56 gl_test:   eglSwapBuffers               = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   after the swap: left red     (16,32) = 0xff0000ff  want 0xff0000ff  ok  [check 5]
+14:08:56 gl_test:   after the swap: right green  (48,32) = 0xff00ff00  want 0xff00ff00  ok  [check 6]
+14:08:56 gl_test: case 173 splitzs: PASS
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   fused shapes, fragment       (16,16) = 0xff809f80  want 0xff809f80  ok  [check 1]
+14:08:56 gl_test:   fused shapes, vertex         (48,16) = 0xff809f80  want 0xff809f80  ok  [check 2]
+14:08:56 gl_test:   controls, fragment           (16,48) = 0x409f409f  want 0x409f409f  ok  [check 3]
+14:08:56 gl_test:   controls, vertex             (48,48) = 0x409f409f  want 0x409f409f  ok  [check 4]
+14:08:56 gl_test: case 181 fusemad: PASS
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test:   folded clamps, fragment      (16,16) = 0x73bf7340  want 0x73bf7340  ok  [check 1]
+14:08:56 gl_test:   folded clamps, vertex        (48,16) = 0x73bf7340  want 0x73bf7340  ok  [check 2]
+14:08:56 gl_test:   controls, fragment           (16,48) = 0x59a63373  want 0x59a63373  ok  [check 3]
+14:08:56 gl_test:   controls, vertex             (48,48) = 0x59a63373  want 0x59a63373  ok  [check 4]
+14:08:56 gl_test: case 182 fsat: PASS
+14:08:56 gl_test: unipad: 500 draws in 66 ms (132 us a draw)
+14:08:56 gl_test:   the quad                     (32,32) = 0xff00bf40  want 0xff00bf40  ok  [check 1]
+14:08:56 gl_test:   outside the quad             ( 2, 2) = 0xff000000  want 0xff000000  ok  [check 2]
+14:08:56 gl_test:   500 draws under 250 ms       = 1  want 1  ok  [check 3]
+14:08:56 gl_test: case 183 unipad: PASS
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px GGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBB
+14:08:56 gl_test:   uniform, fragment, then      (16,10) = 0xff409f80  want 0xff409f80  ok  [check 1]
+14:08:56 gl_test:   uniform, fragment, else      (48,10) = 0xffbf2020  want 0xffbf2020  ok  [check 2]
+14:08:56 gl_test:   uniform, vertex, then        (16,32) = 0xff409f80  want 0xff409f80  ok  [check 3]
+14:08:56 gl_test:   uniform, vertex, else        (48,32) = 0xffbf2020  want 0xffbf2020  ok  [check 4]
+14:08:56 gl_test:   per pixel, then (x < 32)     (16,53) = 0xff409f80  want 0xff409f80  ok  [check 5]
+14:08:56 gl_test:   per pixel, else (x >= 32)    (48,53) = 0xffbf2020  want 0xffbf2020  ok  [check 6]
+14:08:56 gl_test:   per pixel, the last then column (31,53) = 0xff409f80  want 0xff409f80  ok  [check 7]
+14:08:56 gl_test:   per pixel, the first else column (32,53) = 0xffbf2020  want 0xffbf2020  ok  [check 8]
+14:08:56 gl_test: case 188 predif: PASS
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   M * vec3(0.5, 0.5, 1.0)      (32,10) = 0xff502070  want 0xff502070  ok  [check 1]
+14:08:56 gl_test:   M * vec3(0.5), no lane 1.0   (32,32) = 0xff303050  want 0xff303050  ok  [check 2]
+14:08:56 gl_test:   abs, negation, uniform, each * 1.0 (32,53) = 0xff402040  want 0xff402040  ok  [check 3]
+14:08:56 gl_test: case 189 mulone: PASS
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBGGGGGGGGBBBBBBBB
+14:08:56 gl_test:   1 - As in every channel      ( 8,32) = 0x709f8060  want 0x709f8060  ok  [check 1]
+14:08:56 gl_test:   red masked, green computes it (24,32) = 0x709f8040  want 0x709f8040  ok  [check 2]
+14:08:56 gl_test:   MIN on colour, alpha computes it (40,32) = 0x70408040  want 0x70408040  ok  [check 3]
+14:08:56 gl_test:   1 - Ad and 1 - As together   (56,32) = 0x40af9f8f  want 0x40af9f8f  ok  [check 4]
+14:08:56 gl_test: case 190 blendonce: PASS
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test:   v.x * 2 - 1, v.y * 0.5 + 0.25, 1 - v.x * v.y (32,32) = 0xff9f8080  want 0xff9f8080  ok  [check 1]
+14:08:56 gl_test:   the same at a corner         ( 1, 1) = 0xff9f8080  want 0xff9f8080  ok  [check 2]
+14:08:56 gl_test: case 191 varyfma: PASS
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGG
+14:08:56 gl_test:   uniform, then                (16,16) = 0x9f6040bf  want 0x9f6040bf  ok  [check 1]
+14:08:56 gl_test:   uniform, else                (48,16) = 0x9f60ff50  want 0x9f60ff50  ok  [check 2]
+14:08:56 gl_test:   per pixel, then (x < 32)     (16,48) = 0x9f6040bf  want 0x9f6040bf  ok  [check 3]
+14:08:56 gl_test:   per pixel, else (x >= 32)    (48,48) = 0x9f60ff50  want 0x9f60ff50  ok  [check 4]
+14:08:56 gl_test:   per pixel, the last then column (31,48) = 0x9f6040bf  want 0x9f6040bf  ok  [check 5]
+14:08:56 gl_test:   per pixel, the first else column (32,48) = 0x9f60ff50  want 0x9f60ff50  ok  [check 6]
+14:08:56 gl_test: case 192 predlive: PASS
+14:08:56 gl_test: vtxgrid lod 0 (level 0, 16x16): 0 of 1024 pixels wrong
+14:08:56 gl_test: vtxgrid lod 1 (level 1, 8x8): 0 of 1024 pixels wrong
+14:08:56 gl_test: vtxgrid lod 2 (level 2, 4x4): 0 of 1024 pixels wrong
+14:08:56 gl_test: vtxgrid lod 3 (level 3, 2x2): 0 of 1024 pixels wrong
+14:08:56 gl_test: case 197 vtxgrid: PASS
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test: px BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+14:08:56 gl_test:   trunc and shifts, fragment   (32,16) = 0xc7b34080  want 0xc7b34080  ok  [check 1]
+14:08:56 gl_test:   trunc and shifts, vertex     (32,48) = 0xc7b34080  want 0xc7b34080  ok  [check 2]
+14:08:56 gl_test: case 199 es3trunc: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   a 16-bit config is offered   = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   32-bit configs are offered too = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   green size 6                 = 6  want 6  ok  [check 3]
+14:08:56 gl_test:   32-bit config refuses the window = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   RGB565 window surface        = 1  want 1  ok  [check 5]
+14:08:56 gl_test:   eglSwapBuffers               = 1  want 1  ok  [check 6]
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRGRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRGGRRRRRRRRRBBRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRGGGGRRRRRRRBBBRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRGGGGGGRRRBBBBBBRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRGGGGGGGGBBBBBBBBBRRRRRRR
+14:08:56 gl_test: px RRRRRRRGGGGGGGGGBBBBBBBBBRRRRRRR
+14:08:56 gl_test: px RRRRRRRGGGGGGGGGBBBBBBBBBBRRRRRR
+14:08:56 gl_test: px RRRRRRGGGGGGGGGGBBBBBBBBBBRRRRRR
+14:08:56 gl_test: px RRRRRRGGGGGGGGGGBBBBBBBBBBBRRRRR
+14:08:56 gl_test: px RRRRRGGGGGGGGGGGBBBBBBBBBBBRRRRR
+14:08:56 gl_test: px RRRRRGGGGGGGGGGGBBBBBBBBBBBBRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test: px RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+14:08:56 gl_test:   565: centroid (5/6-bit steps) (32,40) = 0xff5a5552  want 0xff595452  ok  [check 7]
+14:08:56 gl_test:   565: red background          ( 1, 1) = 0xff0000ff  want 0xff0000ff  ok  [check 8]
+14:08:56 gl_test:   565: raw red pixel = 0xF800  = 63488  want 63488  ok  [check 9]
+14:08:56 gl_test:   eglSwapBuffers 2             = 1  want 1  ok  [check 10]
+14:08:56 gl_test:   565: earlier frame kept      (32,40) = 0xff5a5552  want 0xff595452  ok  [check 11]
+14:08:56 gl_test:   565: background kept         ( 1, 1) = 0xff0000ff  want 0xff0000ff  ok  [check 12]
+14:08:56 gl_test:   565: corner triangle blue    ( 6,60) = 0xffff0000  want 0xffff0000  ok  [check 13]
+14:08:56 gl_test:   release                      = 1  want 1  ok  [check 14]
+14:08:56 gl_test:   eglDestroySurface            = 1  want 1  ok  [check 15]
+14:08:56 gl_test:   eglDestroyContext            = 1  want 1  ok  [check 16]
+14:08:56 gl_test:   eglTerminate                 = 1  want 1  ok  [check 17]
+14:08:56 gl_test: case 21 rgb565: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   two contexts created         = 1  want 1  ok  [check 1]
+14:08:56 gl_test:   the context pool refuses past its limit = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   and refuses with EGL_BAD_ALLOC = 1  want 1  ok  [check 3]
+14:08:56 gl_test:   makeCurrent A                = 1  want 1  ok  [check 4]
+14:08:56 gl_test: 4x4 texture @0x8000f2d000: ff0000ff ff0000ff ff00ff00 ff00ff00 | row1 ff0000ff ff0000ff
+14:08:56 gl_test:   A: centroid                  (32,40) = 0xff5a5552  want 0xff595452  ok  [check 5]
+14:08:56 gl_test:   A: red background            ( 1, 1) = 0xff0000ff  want 0xff0000ff  ok  [check 6]
+14:08:56 gl_test:   makeCurrent B                = 1  want 1  ok  [check 7]
+14:08:56 gl_test:   B: A's program is unknown    = 0  want 0  ok  [check 8]
+14:08:56 gl_test:   B: A's texture is unknown    = 0  want 0  ok  [check 9]
+14:08:56 gl_test:   B: default clear colour      = 1  want 1  ok  [check 10]
+14:08:56 gl_test:   B: blue quad                 (32,32) = 0xffff0000  want 0xffff0000  ok  [check 11]
+14:08:56 gl_test:   makeCurrent A again          = 1  want 1  ok  [check 12]
+14:08:56 gl_test:   A: program still there       = 1  want 1  ok  [check 13]
+14:08:56 gl_test:   A: texture still there       = 1  want 1  ok  [check 14]
+14:08:56 gl_test:   A: clear colour kept         = 1  want 1  ok  [check 15]
+14:08:56 gl_test:   A: surface kept              (32,40) = 0xff5a5552  want 0xff595452  ok  [check 16]
+14:08:56 gl_test:   A: redraw with its program   (32,40) = 0xff5a5552  want 0xff595452  ok  [check 17]
+14:08:56 gl_test: case 17 ctx2: PASS
+14:08:56 I: osal(zephyr): ready (regs=0xfd80000)
+14:08:56 gl_test:   EGL_KHR_image_base advertised = 1  want 1  ok  [check 1]
+14:08:56 gl_test: 8x8 texture @0x8000f2d000: ff0000ff ff0000ff ff0000ff ff0000ff | row1 ff0000ff ff0000ff
+14:08:56 gl_test:   image from GL texture        = 1  want 1  ok  [check 2]
+14:08:56 gl_test:   image from a bad texture fails = 1  want 1  ok  [check 3]
+14:08:56 gl_test:   image from native buffer     = 1  want 1  ok  [check 4]
+14:08:56 gl_test:   GL_OES_EGL_image advertised  = 1  want 1  ok  [check 5]
+14:08:56 gl_test:   texture image: top-left blue (16,16) = 0xffff0000  want 0xffff0000  ok  [check 6]
+14:08:56 gl_test:   texture image: bottom-right green (48,48) = 0xff00ff00  want 0xff00ff00  ok  [check 7]
+14:08:56 gl_test:   native image: bottom row red (32,60) = 0xff0000ff  want 0xff0000ff  ok  [check 8]
+14:08:56 gl_test:   native image: top row white  (32, 4) = 0xffffffff  want 0xffffffff  ok  [check 9]
+14:08:56 gl_test:   native image: second row green (32,44) = 0xff00ff00  want 0xff00ff00  ok  [check 10]
+14:08:56 gl_test:   image kept after source delete (16,16) = 0xffff0000  want 0xffff0000  ok  [check 11]
+14:08:56 gl_test:   eglDestroyImage              = 1  want 1  ok  [check 12]
+14:08:56 gl_test: case 18 image: PASS
+14:08:56 gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; first failure case -1 at index -1; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 208
+14:08:56 gl_test: done
+14:08:56 osal(zephyr): pending frees: high-water 1/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+14:08:56 osal(zephyr): at close: pending frees now 0 (0 KiB), oldest fence none, last submitted 174; reclaim on: 0 refusals, 0 served without a wait, 0 after a wait, 0 refused
+14:08:56 I: render pool summary: 59200 KiB, bump 20340 KiB now, 20340 KiB high-water; top 5112 KiB now, 5112 KiB high-water
+14:08:56 I: render pool general: free 772 KiB in 30 ranges, largest 96 KiB; 153 reused, 87 bumped, 0 refused; 209 frees (2240 KiB)
+14:08:56 I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+14:08:56 I: render pool usc: free 300 KiB in 31 ranges, largest 36 KiB; 94 reused, 116 bumped, 0 refused; 169 frees (680 KiB)
+14:08:56 I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+14:08:56 I: render freelists: 0 grow requests, 0 served, 0 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+14:08:56 I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 0, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+14:08:56 osal(zephyr): ds slots peak 4/32, ds bytes peak 81920, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)
+14:08:56 osal(zephyr): log: 0 causes logged once, 0 repeats not printed
+14:08:56 gl_test: OK (rc=0)
+14:08:56 I: dss stats before hold t=14305 ms: vsyncs 826 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+14:08:56 I: dss stats after hold t=34316 ms: vsyncs 2003 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+14:08:56 I: sample done (0): resetting the SoC
+14:08:56 \x00�
+14:08:56 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:08:56 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+14:08:56 SPL initial stack usage: 17088 bytes
+14:08:56 Trying to boot from MMC1
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Loading Environment from nowhere... OK
+14:08:56 init_env from device 9 not supported!
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 Starting ATF on ARM64 core...
+14:08:56 
+14:08:56 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+14:08:56 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+14:08:56 
+14:08:56 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:08:56 SPL initial stack usage: 1920 bytes
+14:08:56 HW CFG: 0x00
+14:08:56 Trying to boot from MMC1
+14:08:56 Authentication passed
+14:08:56 Authentication passed
+14:08:56 
+14:08:56 
+14:08:56 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:08:56 
+14:08:56 SoC:   AM62PX SR1.0 HS-FS
+14:08:56 DRAM:  2 GiB
+14:08:56 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+14:08:56 Core:  161 devices, 34 uclasses, devicetree: separate
+14:08:56 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+14:08:56 Loading Environment from MMC... OK
+14:08:56 In:    serial@2800000
+14:08:56 Out:   serial@2800000
+14:08:56 Err:   serial@2800000
+14:08:56 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+14:08:56 Serial#: 08641335
+14:08:56 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+14:08:56 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+14:08:56 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+14:08:56 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+14:08:56 
+14:08:56 Hit any key to stop autoboot:  0 
+14:08:56 6188160 bytes read in 55 ms (107.3 MiB/s)
+14:08:56 288 bytes read in 20 ms (13.7 KiB/s)
+14:08:56 Failed to load '/safeui/zephyr_a53.bin'
+14:08:56 SafeUI images not found, booting Linux
+14:08:56 \x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8MMC: no card present
+14:08:56 No EFI system partition
+14:08:56 No EFI system partition
+14:08:56 Failed to persist EFI variables
+14:08:56 No EFI system partition
+14:08:56 Failed to persist EFI variables
+14:08:56 No EFI system partition
+14:08:56 Failed to persist EFI variables
+14:08:56 ** Booting bootflow '<NULL>' with efi_mgr
+14:08:56 Loading Boot0000 'mmc 0' failed
+14:08:56 EFI boot manager: Cannot load any image
+14:08:56 Boot failed (err=-14)
+14:08:56 MMC: no card present
+14:08:56 MMC: no card present
+14:08:56 MMC: no card present
+14:08:56 MMC: no card present
+14:08:56 ** Booting bootflow 'mmc@fa10000.bootdev.part_1' with script
+14:08:56 6956 bytes read in 21 ms (323.2 KiB/s)
+14:08:56 75135 bytes read in 22 ms (3.3 MiB/s)
+14:08:56 65 bytes read in 21 ms (2.9 KiB/s)
+14:08:56 Working FDT set to 90200000
+14:08:56 Applying Overlay: <board-host>_panel-cap-touch-7inch-dsi_overlay.dtbo
+14:08:56 4693 bytes read in 22 ms (208 KiB/s)
+14:08:56 11272338 bytes read in 83 ms (129.5 MiB/s)
+14:08:56 13381763 bytes read in 94 ms (135.8 MiB/s)
+14:08:56    Uncompressing Kernel Image to 0
+14:08:56 ## Flattened Device Tree blob at 90200000
+14:08:56    Booting using the fdt blob at 0x90200000
+14:08:56 Working FDT set to 90200000
+14:08:56    Loading Ramdisk to fc1d3000, end fce96083 ... OK
+14:08:56    Loading Device Tree to 00000000fc19d000, end 00000000fc1d2fff ... OK
+14:08:56 Working FDT set to fc19d000
+14:08:56 
+14:08:56 Starting kernel ...
