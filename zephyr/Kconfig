@@ -742,6 +742,20 @@ config YAKOGL_TEST_KNOBS
 	  no gc_debug_* or pvr_debug_* symbol). C that calls a knob tests
 	  CONFIG_YAKOGL_TEST_KNOBS.
 
+config YAKOGL_MSAA_FBO
+	bool "ES 3.0 multisample renderbuffers: 4x framebuffer objects (opt-in)"
+	default n
+	help
+	  The crate's `msaa-fbo` feature (docs/notes/es3-msaa-renderbuffers.md):
+	  the back ends that can draw and resolve a 4x framebuffer object
+	  report GL_MAX_SAMPLES 4 and keep four samples for it (the PowerVR,
+	  the GC7000UL and the Mali; the V3D once v3d-msaa-fbo lands). Without
+	  it every back end reports no multisample FBOs, as before. Hardware
+	  facing and not yet measured on the boards, so no image selects it:
+	  a board session adds it with the sample's opt-in file,
+	  -DEXTRA_CONF_FILE=msaa-fbo.conf (gl_test, deqp), or
+	  -DCONFIG_YAKOGL_MSAA_FBO=y.
+
 config YAKOGL_GL_TEST_RUNNER
 	bool
 	help

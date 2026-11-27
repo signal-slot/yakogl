@@ -176,6 +176,13 @@ if(CONFIG_YAKOGL)
   else()
     set(YAKOGL_TEST_KNOBS OFF)
   endif()
+  # ES 3.0 multisample renderbuffers (the crate's `msaa-fbo` feature), opt-in:
+  # yakogl_add_capi_archive() reads this variable too.
+  if(CONFIG_YAKOGL_MSAA_FBO)
+    set(YAKOGL_MSAA_FBO ON)
+  else()
+    set(YAKOGL_MSAA_FBO OFF)
+  endif()
   # The gl_test runner (the crate's `gl-test-runner` feature), which the
   # gl_test sample selects: the walker of tools/pvrlab/gl_test.c.
   if(CONFIG_YAKOGL_GL_TEST_RUNNER)
