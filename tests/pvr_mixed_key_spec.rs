@@ -109,6 +109,25 @@ fn model_layout(t: &[Class]) -> Option<(Vec<u8>, u8)> {
     Some((start, next))
 }
 
+/// The targets a list spills when it passes the four registers and an
+/// end-of-tile program emits that spill (src/pvr/mrt_layout.rs: the first
+/// target that does not fit and every one after it; captured for two
+/// targets with the second spilled, `eot2_tb1`, and three with the last
+/// one, `eot3_tb`, or the last two, `eot3_tb12`), else `None`.
+fn model_spill(t: &[Class]) -> Option<u8> {
+    let (mut next, mut spilled) = (0u8, 0u8);
+    for &c in t {
+        let d = dwords(c);
+        let s = if d >= 2 { (next + 1) & !1 } else { next };
+        if spilled == 0 && s + d <= 4 {
+            next = s + d;
+        } else {
+            spilled += 1;
+        }
+    }
+    matches!((t.len(), spilled), (2, 1) | (3, 1 | 2)).then_some(spilled)
+}
+
 /// Section 2.2's mixed key, or `None` when the list is not a mix
 /// (conditions 3-5 of the note).
 fn encode(t: &[Class]) -> Option<u32> {
@@ -118,7 +137,10 @@ fn encode(t: &[Class]) -> Option<u32> {
     if t.iter().all(|&c| c == t[0]) {
         return None; // one layout everywhere keeps today's key (2.4)
     }
-    model_layout(t)?;
+    /* in the registers, or an integer mix whose last target spills */
+    if model_layout(t).is_none() && !(model_spill(t).is_some() && t.iter().any(|&c| is_int(c))) {
+        return None;
+    }
     let mut key = 1u32 << 25;
     for (i, &c) in t.iter().enumerate() {
         key |= slot_code(c) << (10 + 5 * i);
@@ -151,7 +173,9 @@ fn worked_registers_of_section_3() {
     for (t, want) in cases {
         let got = model_layout(t);
         assert_eq!(got, want.map(|(s, n)| (s.to_vec(), n)), "{t:?}");
-        assert_eq!(encode(t).is_some(), want.is_some(), "{t:?}");
+        /* a key where the mix fits the registers, and where its last
+         * targets spill (the two lists with no register layout) */
+        assert_eq!(encode(t).is_some(), want.is_some() || model_spill(t).is_some(), "{t:?}");
     }
 }
 
@@ -162,7 +186,7 @@ fn none_where_the_note_says_none() {
     assert_eq!(encode(&[Rgba8, Rgba8]), None, "no integer target");
     assert_eq!(encode(&[R32UI, R32UI]), None, "one layout everywhere");
     assert_eq!(encode(&[RG32I, RG32I, RG32I]), None, "one layout everywhere");
-    assert_eq!(encode(&[Rgba8, RGBA32UI]), None, "five registers");
+    assert!(encode(&[Rgba8, RGBA32UI]).is_some(), "five registers: the second spills");
     assert_eq!(encode(&[]), None);
     assert_eq!(encode(&[R32UI, Rgba8, Rgba8, Rgba8]), None, "four targets");
 }
@@ -339,6 +363,14 @@ fn production_agrees_with_the_model_for_every_list() {
             }
             None => assert_eq!(shc_mixed_out_layout(&k), None, "{t:?}"),
         }
+        /* the places with the spill: the register layout where there is
+         * one, else the model's spill, else none */
+        let places = shc_mixed_out_places(&k);
+        match (shc_mixed_out_layout(&k), model_spill(&t)) {
+            (Some((s, n)), _) => assert_eq!(places, Some((s, n, 0)), "{t:?}"),
+            (None, Some(spilled)) => assert_eq!(places.map(|p| p.2), Some(spilled), "{t:?}"),
+            (None, None) => assert_eq!(places, None, "{t:?}"),
+        }
         let want = encode(&t);
         assert_eq!(shc_blend_key_mixed(&k), want, "{t:?}");
         if let Some(key) = want {
@@ -361,7 +393,8 @@ fn production_refuses_what_the_model_refuses() {
     assert_eq!(shc_blend_key_mixed(&keys(&[])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba16f, R32f])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, R32UI])), None);
-    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])), None);
+    assert!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])).is_some(), "the second spills");
+    assert_eq!(shc_blend_key_mixed(&keys(&[RGBA32UI, RGBA32UI])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, Rgba8, Rgba8, Rgba8])), None);
     assert_eq!(shc_mixed_out_layout(&[]), None);
     assert_eq!(shc_mixed_out_layout(&keys(&[Rgba8; 4])), None);
