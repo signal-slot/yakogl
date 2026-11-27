@@ -3799,6 +3799,12 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         if rc != 0 {
             rc
         } else {
+            /* dtpu mode 4: the depth and texture-cache flush in front of a
+             * draw that samples a depth view written since the last one
+             * (depth_sample.rs `emit_view_flush`; nothing in any other mode) */
+            let g = self::g();
+            super::depth_sample::emit_view_flush(gl, &mut g.frames[g.cur].w);
+            // SAFETY: as above.
             unsafe { record(gl, clock) }
         }
     };
@@ -3837,6 +3843,13 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
             restore.is_some(),
             ds_retention::draw_writes(gl),
             ds_retention::draw_clears(gl),
+        );
+        /* dtpu mode 4: a recorded flush empties the written set, and this
+         * draw's depth write or clear joins it (depth_sample.rs `view_drawn`) */
+        super::depth_sample::view_drawn(
+            gl,
+            key.depth_id,
+            restore.is_some() || ds_retention::draw_writes(gl)[0] || ds_retention::draw_clears(gl)[0].is_some(),
         );
     }
     clock.lap(Step::GcRest);
