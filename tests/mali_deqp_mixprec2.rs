@@ -29,7 +29,7 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal
 /// when drawn), without the `deqp_mixprec2_` prefix.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["hp_mat2_add"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -38,7 +38,6 @@ const DIFFERS: &[&str] = &[];
 const REFUSED: &[(&str, &str)] = &[
     ("hp_fract", MIX),
     ("hp_length_vec2", MIX),
-    ("hp_mat2_add", MIX),
     ("hp_out_param", MIX),
     ("hp_sqrt_vec3", MIX),
     ("rnd_sconv36", MIX),
@@ -83,9 +82,10 @@ fn hp_length_vec2() {
 }
 
 /// `in0 + in1` of two `const highp mat2` (`matrix.add.const_highp_mat2_mat2_fragment`):
-/// Mesa folds the whole colour to FAU words (no varying, no arithmetic).
+/// Mesa folds the whole colour to FAU words (no varying, no arithmetic):
+/// the highp tree at fp32, rounded once to the fp16 colour (nir_fs.rs
+/// `highp_const16`, plan #402 lower-vsconst step D).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn hp_mat2_add() {
     mali_ref::assert_matches("deqp_mixprec2_hp_mat2_add");
 }

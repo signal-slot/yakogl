@@ -2,8 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): the vertex-shader `ConstantFold` refusal at 8ff01055, its new shapes and Mesa 26.2.1 references
 
-**Status: study** (plan #402, item `ref-vsconst`; issue #20). Nothing under
-`src/` changed. The references are `tools/mali/testdata/deqp_vsconst_*`, and
+**Status: partly lowered** (plan #402, items `ref-vsconst` and
+`lower-vsconst`; issue #20). Step A of section 4 landed in `65a9ba11`;
+step 3 (`fsdiv_highp`) landed with `lower-vsconst` (section 4). The loop
+shapes are still refused. The references are `tools/mali/testdata/deqp_vsconst_*`, and
 `tests/mali_deqp_vsconst.rs` pins them. Measured HOST-ONLY at the integration
 tip **`e65567ea3dc6`** (2026-11-24). Nothing in this note was checked on the
 NanoPC-T6. Mesa paths are relative to `src/` of the 26.2.1 tree.
@@ -183,15 +185,53 @@ infinities. A folded value that a program still reads lands in the FAU
 4. `fs_log2` and `fs_atan` (16) are cfold2's step B (a front-end fold with
    correctly rounded `log2f`, `powf`, `atanf`).
 
+**State after `lower-vsconst`** (HOST-ONLY, measured by `proto-vsconst-tip`
+at `59422d42` over the 5,838 cases of the four slices; nothing was checked on
+the NanoPC-T6):
+
+- Step 1 is in `65a9ba11` ("the vertex walk's integer constant folds,
+  ConstantFold step A"). **No vertex-shader case refuses with this text
+  first at the host any more** (board 144). The cases that had it now stop
+  first at "a constant product in a shape Mesa's algebraic rules move or
+  fold" (240), at #367's arithmetic text (78), the -0.0 text (16), fused
+  multiply-add (8) and a few others.
+- Step 2 is not lowered. The six `dynloop_*` and `mixloop_*` references
+  now refuse in the vertex shader with the constant-product text, which
+  belongs to a loop lowering (plan #402 `lower-vsloop2`: Mesa's guarded
+  partial unroll, fp16 NaN `7e007e00` in FAU, and a kept loop for
+  `mixloop_vector_subscript`).
+- Step 3 is lowered. `nir_fs.rs` `highp_tree32` folds a tree of highp
+  constants (`frcp`, `fmul`, with `fmul(a, frcp(b))` as one true quotient,
+  `fadd`, `fneg`, and loads of a highp local that one store writes) at fp32,
+  and `highp_const16` rounds each lane once to fp16. The walk uses it only
+  when `FsPrecision::highp_consts` is set (`mod.rs`): the mediump ES 1.00
+  shader declares a global `const highp` float. Such a shader is marked
+  mixed only if a highp operation in it is not such a tree
+  (`highp_consts_fold`). The gate keeps the fold out of plain `const`
+  initializers, which the IR also marks highp. Without it, the front end's
+  `atan` expansion in `random.trigonometric.fragment.49` would be folded at
+  fp32, where Mesa folds it with libm. `fsdiv_highp_mat2` and
+  `fsdiv_highp_mat3` are byte-equal, and so is `deqp_mixprec2_hp_mat2_add`
+  (the same shape with a sum). On the host this moves 9
+  `matrix.{add,sub,div}.const_highp_*_fragment` cases: 3 leave this
+  fragment text and 6 leave mixed precision. No glmark2 verdict moves.
+- Still refused with this text in the fragment shader (37 host cases): the
+  mediump `rcp16` of `fs_rcp16`, which Mesa folds at fp16 (cfold2's step D),
+  `fs_log2` and `fs_atan` (step 4 above), 9 `random.trigonometric`, and
+  `invariance.*.common_subexpression_{0,3}` (6, not studied).
+
 ## 5. The test
 
 `tests/mali_deqp_vsconst.rs`:
 `cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_vsconst`.
-At `e65567ea`, 1 test passes (`refusals_pinned`) and 8 are ignored. Each
+At `e65567ea`, 1 test passed (`refusals_pinned`) and 8 were ignored.
+After `lower-vsconst`, 3 pass (`refusals_pinned`, `fsdiv_highp_mat2`,
+`fsdiv_highp_mat3`, which are in `MATCHED`) and the six loop references are
+ignored, pinned at the constant-product text. Each
 reference is `#[ignore]`d with the `ConstantFold` refusal quoted and pinned
 in `REFUSED`. `refusals_pinned` fails when a `deqp_vsconst_*` reference is in
 neither `REFUSED` nor `MATCHED`, or when a pinned refusal moves. With
-`--ignored`, each of the 8 fails only because the pair is refused.
+`--ignored`, each ignored one fails only because the pair is refused.
 
 ## 6. Issue comment text (for #20; agents do not post it)
 
