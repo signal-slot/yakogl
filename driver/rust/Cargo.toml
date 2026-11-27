@@ -82,7 +82,8 @@ vivante = ["imx8mp"]
 
 # The host tests only: the Zephyr Mali OSAL's test (board::nanopc_t6_osal)
 # draws the L2 triangle through the GL stack and its `gpu-mali` backend over
-# the OSAL's logic and the Z4 MCU model. The image configuration of the Mali
+# the OSAL's logic and the Z4 MCU model (the feature builds the Mali frame
+# builder, backend and Valhall compiler, src/mali/). The image configuration of the Mali
 # build, as tools/mali/panthor takes it: no OSAL feature (the test installs
 # its ops), the in-process compiler, no table.
 [dev-dependencies]
