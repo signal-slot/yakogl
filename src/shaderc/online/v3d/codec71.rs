@@ -874,4 +874,239 @@ mod tests {
         a.add = AddAlu71 { waddr: 28, magic: true, ..a.add };
         assert!(encode71(&Instr71::Alu(a)).is_err());
     }
+
+    /// A NOP carrying `sig`, with the small-immediate operands the signal
+    /// needs and a signal address when it writes one.
+    fn sig_instr(sig: Sig71, addr: u8, magic: bool) -> Instr71 {
+        let mut a = Alu71::nop();
+        a.sig = sig;
+        let imm = Operand { raddr: 5, ..Operand::default() };
+        if sig.small_imm_a {
+            a.add = AddAlu71 { op: AddOp71::Mov, a: imm, waddr: 2, magic: false, ..a.add };
+        }
+        if sig.small_imm_b {
+            a.add = AddAlu71 { op: AddOp71::Add, b: imm, waddr: 2, magic: false, ..a.add };
+        }
+        if sig.small_imm_c {
+            a.mul = MulAlu71 { op: MulOp71::Mov, a: imm, waddr: 3, magic: false, ..a.mul };
+        }
+        if sig.small_imm_d {
+            a.mul = MulAlu71 { op: MulOp71::Fmul, b: imm, waddr: 3, magic: false, ..a.mul };
+        }
+        if sig.writes_address() {
+            a.sig_addr = addr;
+            a.sig_magic = magic;
+        }
+        Instr71::Alu(a)
+    }
+
+    /// Every signal of the 7.1 map decodes back to the instruction that
+    /// encoded it, with its address as a register-file or a magic write.
+    #[test]
+    fn every_signal_round_trips_through_decode() {
+        let mut n = 0;
+        for idx in (0u32..32).filter(|i| ![23, 28, 29].contains(i)) {
+            let sig = qpu_ffi::sig71_unpack(idx).expect("mapped signal");
+            let addrs: &[(u8, bool)] = if sig.writes_address() {
+                &[(0, false), (7, false), (63, false), (WADDR_NOP, true), (9, true)]
+            } else {
+                &[(0, false)]
+            };
+            for &(addr, magic) in addrs {
+                let i = sig_instr(sig, addr, magic);
+                let w = encode71(&i).unwrap_or_else(|e| panic!("sig {idx} addr {addr} {magic}: {e:?}"));
+                let back = decode71(w).unwrap_or_else(|e| panic!("sig {idx}: {w:#018x}: {e:?}"));
+                assert!(same_instr71(&i, &back), "sig {idx}: {i:?} -> {back:?}");
+                assert_eq!(encode71(&back), Ok(w), "sig {idx}");
+                n += 1;
+            }
+        }
+        assert!(n >= 29, "{n}");
+    }
+
+    /// Every branch condition, MSFIGN and destination kind decodes back
+    /// (the encode side is pinned bit by bit in `branch_fields_are_mesas`);
+    /// the raddr and offset edges are kept.
+    #[test]
+    fn branch_classes_round_trip_at_their_edges() {
+        for cond in BranchCond::ALL {
+            for msfign in Msfign::ALL {
+                for bdi in BranchDest::ALL {
+                    for (raddr_a, offset) in [(0u8, 0u32), (63, 0xffff_fff8), (1, 8), (62, 0x8000_0000)] {
+                        let b = Branch {
+                            cond,
+                            msfign,
+                            bdi,
+                            ub: false,
+                            bdu: BranchDest::Abs,
+                            raddr_a: if bdi == BranchDest::Regfile { raddr_a } else { 0 },
+                            offset: if matches!(bdi, BranchDest::Abs | BranchDest::Rel) { offset } else { 0 },
+                        };
+                        let i = Instr71::Branch(b);
+                        let w = encode71(&i).unwrap_or_else(|e| panic!("{b:?}: {e:?}"));
+                        assert_eq!(decode71(w), Ok(i), "{b:?}");
+                    }
+                }
+            }
+        }
+        let b = Branch {
+            cond: BranchCond::Always,
+            msfign: Msfign::None,
+            bdi: BranchDest::Regfile,
+            ub: false,
+            bdu: BranchDest::Abs,
+            raddr_a: 64,
+            offset: 0,
+        };
+        assert_eq!(encode71(&Instr71::Branch(b)), Err(EncodeError::RaddrTooWide));
+    }
+
+    /// Operand addresses at 0 and 63 encode and decode back; 64 is refused
+    /// before it can spill into a neighbouring field. The same for the write
+    /// addresses and the signal address.
+    #[test]
+    fn address_fields_are_exact_at_their_edges() {
+        let mk = |ra: u8, rb: u8, rc: u8, rd: u8| {
+            let mut a = Alu71::nop();
+            a.add = AddAlu71 {
+                op: AddOp71::Add,
+                a: Operand { raddr: ra, ..Operand::default() },
+                b: Operand { raddr: rb, ..Operand::default() },
+                waddr: 2,
+                magic: false,
+                pack: OutPack::None,
+            };
+            a.mul = MulAlu71 {
+                op: MulOp71::Add,
+                a: Operand { raddr: rc, ..Operand::default() },
+                b: Operand { raddr: rd, ..Operand::default() },
+                waddr: 3,
+                magic: false,
+                pack: OutPack::None,
+            };
+            Instr71::Alu(a)
+        };
+        for edge in [0u8, 1, 62, 63] {
+            let i = mk(edge, 63 - edge, edge, 63 - edge);
+            let w = encode71(&i).unwrap_or_else(|e| panic!("{edge}: {e:?}"));
+            assert_eq!((w >> 6) & 63, edge as u64, "raddr_a");
+            assert_eq!(w & 63, 63 - edge as u64, "raddr_b");
+            assert_eq!((w >> 18) & 63, edge as u64, "raddr_c");
+            assert_eq!((w >> 12) & 63, 63 - edge as u64, "raddr_d");
+            assert_eq!(decode71(w), Ok(i), "{edge}");
+        }
+        for (i, what) in [
+            (mk(64, 0, 0, 0), "raddr_a"),
+            (mk(0, 64, 0, 0), "raddr_b"),
+            (mk(0, 0, 64, 0), "raddr_c"),
+            (mk(0, 0, 0, 64), "raddr_d"),
+            (mk(255, 0, 0, 0), "raddr_a 255"),
+        ] {
+            assert_eq!(encode71(&i), Err(EncodeError::RaddrTooWide), "{what}");
+        }
+        for waddr in [0u8, 63] {
+            let Instr71::Alu(mut a) = mk(1, 2, 3, 4) else { unreachable!() };
+            a.add.waddr = waddr;
+            a.mul.waddr = 63 - waddr;
+            let w = encode71(&Instr71::Alu(a)).expect("waddr edge");
+            assert_eq!(decode71(w), Ok(Instr71::Alu(a)), "waddr {waddr}");
+        }
+        let Instr71::Alu(mut a) = mk(1, 2, 3, 4) else { unreachable!() };
+        a.add.waddr = 64;
+        assert_eq!(encode71(&Instr71::Alu(a)), Err(EncodeError::WaddrTooWide));
+        a.add.waddr = 2;
+        a.mul.waddr = 64;
+        assert_eq!(encode71(&Instr71::Alu(a)), Err(EncodeError::WaddrTooWide));
+        let mut s = sig_instr(Sig71 { ldtlb: true, ..Sig71::default() }, 64, false);
+        assert_eq!(encode71(&s), Err(EncodeError::SigAddrTooWide));
+        if let Instr71::Alu(a) = &mut s {
+            a.sig_addr = 63;
+        }
+        let w = encode71(&s).expect("sig_addr 63");
+        assert_eq!(decode71(w), Ok(s));
+    }
+
+    /// Small-immediate indices 0 and 47 (the table's ends) round trip at
+    /// each of the four operand slots; 48..=63 are refused on both sides.
+    #[test]
+    fn small_immediate_edges_round_trip_and_the_rest_is_refused() {
+        let slot = |which: usize, idx: u8| {
+            let imm = Operand { raddr: idx, ..Operand::default() };
+            let two = Operand { raddr: 2, ..Operand::default() };
+            let mut a = Alu71::nop();
+            match which {
+                0 => {
+                    a.sig.small_imm_a = true;
+                    a.add = AddAlu71 { op: AddOp71::Mov, a: imm, waddr: 2, magic: false, ..a.add };
+                }
+                1 => {
+                    a.sig.small_imm_b = true;
+                    a.add = AddAlu71 { op: AddOp71::Add, a: two, b: imm, waddr: 2, magic: false, ..a.add };
+                }
+                2 => {
+                    a.sig.small_imm_c = true;
+                    a.mul = MulAlu71 { op: MulOp71::Mov, a: imm, waddr: 3, magic: false, ..a.mul };
+                }
+                _ => {
+                    a.sig.small_imm_d = true;
+                    a.mul = MulAlu71 { op: MulOp71::Fmul, a: two, b: imm, waddr: 3, magic: false, ..a.mul };
+                }
+            }
+            Instr71::Alu(a)
+        };
+        for which in 0..4 {
+            for idx in [0u8, 1, 15, 16, 31, 32, 47] {
+                let i = slot(which, idx);
+                let w = encode71(&i).unwrap_or_else(|e| panic!("slot {which} idx {idx}: {e:?}"));
+                assert_eq!(decode71(w), Ok(i), "slot {which} idx {idx}");
+            }
+            for idx in 48u8..64 {
+                assert_eq!(encode71(&slot(which, idx)), Err(EncodeError::SmallImmOutOfRange), "slot {which} idx {idx}");
+            }
+        }
+        // And the decode side: the word of index 47 with the field raised.
+        let w47 = encode71(&slot(0, 47)).unwrap();
+        for idx in 48u64..64 {
+            assert_eq!(decode71((w47 & !(63 << 6)) | (idx << 6)), Err(DecodeError::SmallImmOutOfRange), "idx {idx}");
+        }
+    }
+
+    /// Words outside the encoding are refused or decode to something that
+    /// encodes back to the same word; none panics. A deterministic
+    /// xorshift stream, every single-bit flip of a few instructions, and
+    /// the all-zero and all-one words.
+    #[test]
+    fn arbitrary_words_never_panic_and_accepted_ones_re_encode() {
+        let mut seeds: Vec<u64> = vec![0, u64::MAX, 1 << 63, 0x8000_0000_0000_0001];
+        let bases = [
+            Instr71::Alu(Alu71::nop()),
+            add_instr(AddOp71::Fadd),
+            mul_instr(MulOp71::Fmul),
+            sig_instr(Sig71 { ldtmu: true, ..Sig71::default() }, 7, false),
+        ];
+        for b in &bases {
+            let w = encode71(b).expect("base");
+            seeds.push(w);
+            seeds.extend((0..64).map(|bit| w ^ (1u64 << bit)));
+        }
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        for _ in 0..20_000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            seeds.push(x);
+        }
+        let (mut ok, mut refused) = (0usize, 0usize);
+        for w in seeds {
+            match decode71(w) {
+                Ok(i) => {
+                    assert_eq!(encode71(&i), Ok(w), "{w:#018x} -> {i:?}");
+                    ok += 1;
+                }
+                Err(_) => refused += 1,
+            }
+        }
+        assert!(ok > 0 && refused > ok, "{ok} accepted, {refused} refused");
+        assert!(decode71(u64::MAX).is_err());
+    }
 }
