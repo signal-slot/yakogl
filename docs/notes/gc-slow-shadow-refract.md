@@ -453,8 +453,8 @@ Empty until a session runs; one table per scene (shadow, refract).
 
 | row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
 |---|---|---|---:|---|---|
-| before | 72972ba4 | n/a (not built) | | | |
-| tip | ecd9743e (stop, not run) | off | | | |
+| before | 72972ba4 | n/a (not built) | - | verdict= stop: not run (the 72972ba4 command stopped after terrain's not_back: `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s`) | - |
+| tip | b947cc22 (stop 2026-11-27, not run) | off | - | verdict= stop: not run (same) | - |
 | tip | | on | | | |
 | D (on minus off) | | | | | |
 
@@ -471,6 +471,19 @@ board. The board answered from the leased worker and `tools/board.sh x2
 status` read `containers 1`: `slint-launcher` still runs, so `board.sh x2 run`
 would refuse the jump and none was made. Details: `x2-glmark2-slow-scenes.md`,
 "Session A: stop, 2026-11-25".
+
+Stop, 2026-11-27 (item x2-before-rerun; measured on the Armadillo-X2
+standing in for the Verdin iMX8MP, record
+`records/x2/20261127-0954-before-72972ba4/`): still empty for shadow and
+refract. The loader's X2 crash list held (`crash: i.MX 8M Plus
+(fsl,imx8mp): gpio-mxc and irqsteer rows are let through`, `jump=ok`), and
+the first scene of the 72972ba4 command, terrain, ran to `glmark2: PASS` on
+the console. After the reset the board refused the task machine's ssh key,
+which lives on the board's tmpfs only. The run therefore ended
+`verdict=not_back` (rc 5), the command stopped without a retry, and shadow,
+refract and the tip `b947cc22` were not run. Details:
+`x2-glmark2-slow-scenes.md`, "Stop, 2026-11-27 (plan #355, item
+x2-before-rerun)".
 
 ## glmark2 shadow, refract and terrain, before and after, measured on the Armadillo-X2 in place of the Verdin iMX8MP [plan #417]
 
