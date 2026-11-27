@@ -145,7 +145,12 @@ records at the tip.
   a Zephyr OSAL (`src/osal/zephyr_v3d71.c`, `cf568748`), and the probe
   images of `tools/probes/rpi_5/` that ran on the board (Results; plan in
   `docs/notes/pre-study-rpi5.md`, `driver/docs/rpi5-v3d71-facts.md`). The
-  display route is `docs/notes/rpi5-display.md`.
+  display route is `docs/notes/rpi5-display.md`. The `gpu-v3d71` feature's
+  table (`src/v3d/table71.rs`) records clears, scissored draws and the
+  clear quad into `v3d_job71.c` jobs in host tests, compared with Mesa's
+  lists for `gl_test` cases 5, 58, 66 and 102 (`dc6bca24`, `fa704233`;
+  `tests/v3d71_table_draw.rs`, `tests/v3d71_table_cases.rs`); a product
+  `gpu-v3d71` build still refuses every draw by name.
 - V3D: a `GLES_SURF_RGB10_A2` render surface with its TLB words, and the GL
   core's side of `GL_RGB10_A2` (own surface, bits, CPU mipmap chain). The
   V3D reports the format: `GLES_TEXFMT_RGB10A2` joined
@@ -426,6 +431,10 @@ records at the tip.
   target's TS words (`be0c1527`).
 - V3D: `src/v3d/texture.rs` pins the sampler compare state of all eight GL
   functions and the non-depth bypass (`753dedbf`).
+- GC7000: cube maps filter seamlessly across face edges (ES 3.0 3.8.11):
+  every cube descriptor sets the `SEAMLESS_CUBE_MAP` bit, so ES 2.0 cube
+  samplers are seamless too (`b7f131b8`); the board reading waits for the
+  next dEQP-GLES3 campaign.
 
 ### Fixed
 

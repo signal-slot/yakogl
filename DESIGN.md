@@ -18,8 +18,10 @@ exactly-one `gpu-*` feature but as the cargo feature `gpu-v3d71`, which implies
 (`src/v3d/table71.rs`) as `g_backend`. That table is in progress: a product
 build carries it alone and it refuses every draw by name, because the job
 builder's pure modules (`src/v3d/*71.rs`, declared in `src/v3d/mod.rs` only for a
-`gpu-v3d71` build with `host-test`, apart from `table71`) have no `no_std` form yet.
-Beside it are the compiler half (the `*71.rs` files of `src/shaderc/online/v3d/`) and
+`gpu-v3d71` build with `host-test`, apart from `table71`) have no `no_std` form yet;
+in a `host-test` build the table records clears and draws into the C job
+builder's jobs (`driver/src/v3d/v3d_job71.c`, `tests/v3d71_table_draw.rs`).
+Beside it are the compiler half (`src/shaderc/online/v3d/*71.rs`) and
 the Zephyr OSAL `src/osal/zephyr_v3d71.c` (`zephyr/Kconfig`, `YAKOGL_GPU_V3D71`;
 `docs/notes/v3d71-backend.md`, `docs/notes/v3d71-table71.md`). Some
 sections below describe the PowerVR first, as it was built.
@@ -112,7 +114,7 @@ only on the host (`pco_shc`), to make the Mesa reference table. Three back ends 
   shader an application writes at run time compiles on the board; dEQP-GLES2 writes
   thousands of them. The front end (lexer, parser, sema, IR, `lower.rs`) is shared; the
   code generators are one directory per GPU: `powervr/` (USC), `vivante/` (GC7000),
-  `v3d/` (QPU, with the V3D 7.1 half in its `*71.rs` files) and `mali/` (Valhall; it
+  `v3d/` (QPU, with the V3D 7.1 half in `src/shaderc/online/v3d/*71.rs`) and `mali/` (Valhall; it
   lowers through its own `src/shaderc/online/mali/{nir,bir,sched}.rs`). It is the only shader
   back end the V3D and Mali builds have (`src/lib.rs` refuses a `gpu-v3d` or `gpu-mali`
   build without `shaderc-online`, or with a Mesa reference table).
