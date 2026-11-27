@@ -6,7 +6,7 @@ What the code on this tip does with the four texture size uniform words —
 the TMU width, height, depth and layer count a `textureSize` or a 3D
 `textureGrad` asks the driver for — and with the return-size rule
 `RET16_OF_32`. Words 46/47 landed at `298fe11c` (#1261), the size-only
-split at `080240bc`. Read from our tree at `e42efea2`; Mesa is 26.2.1.
+split at `080240bc`. Read from our tree at `5fd5bf43`; Mesa is 26.2.1.
 Line numbers drift; the names are the address.
 
 Sources. `third_party/mesa-26.2.1/` holds the packet XML, the v3d format
@@ -20,7 +20,7 @@ marked "(tree)" (`docs/notes/v3d-shadow.md` "Sources" says where it is).
 enum values: `QUNIFORM_TEXTURE_WIDTH` 44, `_HEIGHT` 45, `_DEPTH` 46,
 `_ARRAY_SIZE` 47. `SOp::TexSizeWord { sampler, lane }` becomes contents
 `WIDTH + lane` with `data` the sampler binding (`deferred_loads`,
-`select.rs:2131`).
+`select.rs:2126-2132`).
 
 `prepare.rs:1678-1703` (`Op::TexSize`): every size lane loads its word and
 minifies it by the shader's level, `max(word >> lod, 1)` (Mesa's
@@ -28,7 +28,7 @@ minifies it by the shader's level, `max(word >> lod, 1)` (Mesa's
 minified like the other two; a `sampler2DArray`'s third lane asks for lane
 index 3 — word 47, the layer count — which is not minified ("Don't minify
 the array size"). The interpreter run `texture_size_of_a_volume_and_an_array`
-(`chain.rs:4431-4439`) pins it: the volume's depth goes 8, 4, 1 at levels
+(`chain.rs:4602`) pins it: the volume's depth goes 8, 4, 1 at levels
 0, 1 and 5, the array's count stays 8.
 
 `textureGrad` emits the same words for another reason (`grad_lod`,
@@ -41,10 +41,10 @@ comes only from `textureSize`.
 
 ## (b) How the back end fills the table
 
-`struct v3d_job_tmu` (`driver/src/v3d/v3d_job.h:263-271`) is one sampler
+`struct v3d_job_tmu` (`driver/src/v3d/v3d_job.h:291-299`) is one sampler
 binding: the two record addresses plus `width`, `height`, `depth`,
 `array_size` — the values the four words read, 0 meaning "not given", such
-a word refused (field doc `:255-262`). `texture_units`
+a word refused (field doc `:283-290`; the word numbers `:276-281`). `texture_units`
 (`src/v3d/backend.rs`) fills one entry per binding and per stand-in, for
 every stage: the fragment table (`tmu`) and the vertex table (`vs_tmu`),
 which a compute dispatch shares; the GL core fills both stages' bindings
@@ -58,21 +58,21 @@ b.base_level)` (src/v3d/texture.rs):
   `array_size` the layer count of a `GLES_TEXTYPE_2D_ARRAY`, never
   minified, each 1 for any other type;
 - an incomplete texture: 1 / 1 / 1 / 1 with the black stand-in record, GL
-  ES 2.0 3.7.10 (`:5944-5955`, `:5957-5958`);
+  ES 2.0 3.7.10 (`texture_units`' doc, `backend.rs:5955-5969`);
 - a stand-in (black) unit — one the stream names with a P0/P1 or size word
-  but no binding names — also 1 / 1 / 1 / 1 (`:5965-6014`): GL samples an
+  but no binding names — also 1 / 1 / 1 / 1 (the second loop of `texture_units`, `:6020-6070`): GL samples an
   unbound sampler as (0, 0, 0, 1).
 
 ## (c) How the job builder writes them
 
-`write_uniforms` (`driver/src/v3d/v3d_job.c:432-519`) switches over the
+`write_uniforms` (`driver/src/v3d/v3d_job.c:413-519`) switches over the
 stream; the width/height case (`:475-487`) and the depth/array case
 (`:488-500`) look the binding up through `find_tmu` by the word's `data`
 (the binding itself, not shifted like P0/P1's unit) and write the field.
 A binding the draw did not give, and a field of 0, set `bad_field`, as does
-the `default:` (`:512-514`) for every word the builder does not write.
+the `default:` (`:512-514`; the case for 46/47 is `:488-500`) for every word the builder does not write.
 `bad_field` rolls both lists back and answers `V3D_JOB_REFUSED`
-(`:1062-1077`), which `src/v3d/backend.rs:3956-3958` maps to
+(`:1090-1096`), which `src/v3d/backend.rs:4004-4006` maps to
 `Attempt::Unsupported`, "the job builder refused the draw (a uniform,
 program or primitive it does not write)" — GL_INVALID_OPERATION. The Rust
 side never fills 0, so that branch is the C check's:
@@ -84,20 +84,20 @@ nothing left. The size words have the same pair at `:864-896`.
 
 ## (d) RET16_OF_32, split by whether a look-up reads the unit
 
-`texture::refusal_for` (`src/v3d/texture.rs:375-403`) refuses a bound unit
-whose format return size (`return_32`, `:534-536`: R32F, RGBA32F, RGBA32UI,
+`texture::refusal_for` (`src/v3d/texture.rs:423-452`) refuses a bound unit
+whose format return size (`return_32`, `:582-584`: R32F, RGBA32F, RGBA32UI,
 RGBA32I and the depth textures) disagrees with the return size the program
 was compiled for (TMU Config P1 bit 0): the 32-bit format read at 16 is
-`RET16_OF_32` (`:354-356`, a backend gap, `GAPS` at `:363`), the other way
+`RET16_OF_32` (`:403-405`, a backend gap, `GAPS` at `:411`), the other way
 `RET32_OF_16`.
 
 The split is in `texture_units`. A unit a look-up reads is named by a P0/P1
 word, and the rule above stands for it. A unit that only the size words
 name (a `textureSize` lowers to no `Op::Tex`, so no P0/P1 word names it)
 has no TMU output to agree with, and `texture_units` checks it against its
-own format instead (`:5944-5950`), which always agrees: a size-only
+own format instead (`read`, `backend.rs:5999-6004`), which always agrees: a size-only
 sampler over a 32-bit texture draws; `black_typed_state` keeps the same
-test for an incomplete texture read by a 32-bit look-up (`:6034-6037`).
+test for an incomplete texture read by a 32-bit look-up (`black_typed_state`, `:6090-6093`).
 
 Tests, one point each: `tests/es3_tex_words_v3d.rs` (which shapes carry
 46/47, the C cases, the refusing `default:`; control
