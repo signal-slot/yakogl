@@ -933,6 +933,12 @@ else
 	fails=$((fails + 1))
 fi
 
+# Committed U-Boot-route t6_fw fixtures (the mk_uboot recipe applied to
+# t6_fw-pass.uart: PSCI SYSTEM_RESET return; and the same record stopping
+# after the firmware's WDT0 line, before its image line)
+check t6_fw-uboot-fixture-pass 0 'VERDICT t6_fw PASS' "$FW 0 0" t6_fw "$D/t6_fw-uboot-pass.uart" T6_ROUTE=uboot
+check t6_fw-uboot-fixture-hang-pre-fw 1 "VERDICT t6_fw FAIL (19 of $FW)" "$((FW - 19)) 19 0" t6_fw "$D/t6_fw-uboot-hang-pre-fw.uart" T6_ROUTE=uboot
+
 if [ "$fails" -eq 0 ]; then
 	echo "t6-verdict-test: $runs ok"
 	exit 0
