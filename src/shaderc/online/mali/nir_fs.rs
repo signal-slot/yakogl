@@ -2762,6 +2762,65 @@ impl<'s> Fs<'s> {
             && !(c == d && a == y && b == x)
     }
 
+    /// `v` is a mediump fp16 compare of two varyings' lanes (`sc.x <
+    /// sc.z`): Some(its condition and operands). Mesa's late rule
+    /// `flt(f2fmp(a), f2fmp(b))` -> `flt(a, b)` (nir_opt_algebraic.py:
+    /// 4185-4186) takes it back to the fp32 words, its mask 32-bit.
+    fn varying_cmp16(&self, v: Val) -> Option<(Cmpf, Val, Val)> {
+        let varying = |x: Val| self.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+        match (v, self.alu_of(v)) {
+            (Val::Lane(n, 0), Some((Alu::Fcmp(c), [a, b, _])))
+                if self.nir.nodes[n as usize].bits == 16 && varying(a) && varying(b) =>
+            {
+                Some((c, a, b))
+            }
+            _ => None,
+        }
+    }
+
+    /// `p && q` of two mediump compares (BOOL_AND: glmark2 shadow fs
+    /// cf4b's `ShadowCoord.w > 0.0 && dist < ShadowCoord.z`;
+    /// docs/notes/mali-bool-and.md). A compare of two varyings' lanes is
+    /// fp32 in Mesa ([`Fs::varying_cmp16`]), and
+    /// `pan_nir_lower_bool_to_bitsize` gives the `iand` its first
+    /// source's width: a 16-bit `iand` reading the 32-bit mask's low half
+    /// (gm2_nbshrf_1: `FCMP_OR.f32.lt.m1 r0, r0^, r2^, 0x0`, `FCMP_OR.v2f16
+    /// .lt.m1 r1, 0x0, r1^.h00, 0x0`, `LSHIFT_AND.v2i16 r0, r1^.h00,
+    /// 0x0.b00, r0^`), or of two 16-bit masks (gm2_nbshrf_2). The first
+    /// compare's being fp32 makes a 32-bit `iand`, and two compares that
+    /// share an operand in the same place are nir_opt_algebraic.py:1158-
+    /// 1165's `fmin` / `fmax` ([`Fs::and_masks`] folds the one with a
+    /// constant): forms no reference draws, refused.
+    fn and16(&mut self, p: Val, q: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        if self.varying_cmp16(p).is_some() {
+            return Err(MaliError::IntValue);
+        }
+        if let (Some((Alu::Fcmp(c), [a, b, _])), Some((Alu::Fcmp(d), [x, y, _]))) = (self.alu_of(p), self.alu_of(q)) {
+            if self.varying_cmp16(q).is_none() && (a == x || b == y) {
+                return match (c, d, b) {
+                    (Cmpf::Lt, Cmpf::Lt, Val::Const(_)) if b == y => self.and_masks(p, q, at),
+                    _ => Err(MaliError::IntValue),
+                };
+            }
+        }
+        /* the late rule rewrites the compare where it stands: the 16-bit
+         * node becomes the fp32 one when nothing reads it yet, so neither
+         * lane is narrowed for it ([`convert_inputs16`] pairs `w` alone,
+         * `FADD.f32.discard r1.h0, r3^, 0x0.neg`) */
+        if let (Some(_), Val::Lane(n, 0)) = (self.varying_cmp16(q), q) {
+            let read = self.nir.nodes[..self.nir.n].iter().any(|nd| nd.src.contains(&q));
+            if read {
+                return Err(MaliError::IntValue);
+            }
+            self.nir.nodes[n as usize].bits = 32;
+        }
+        if !matches!(self.alu_of(p), Some((Alu::Fcmp(_), _))) || !matches!(self.alu_of(q), Some((Alu::Fcmp(_), _))) {
+            return Err(MaliError::IntValue);
+        }
+        self.node(Alu::Iand, [p, q, u], at)
+    }
+
     /// `op` (`ior`, `iand`) of two booleans of `any` / `all`: two constants
     /// folded, two 32-bit masks a 32-bit node, two 16-bit masks a 16-bit
     /// one (`pan_nir_lower_bool_to_bitsize` gives a bool its compare's
@@ -2938,6 +2997,9 @@ impl<'s> Fs<'s> {
             /* `&&` of two fp32 compares' masks ([`Fs::and_fcmp32`]): a
              * 32-bit `iand`, `FCMP_AND.f32` once fused */
             AluOp::Iand if self.and_fcmp32(p, q) => self.mask_op(Alu::Iand, p, q, at),
+            /* `&&` of a mediump compare's 16-bit mask and another
+             * ([`Fs::and16`], BOOL_AND) */
+            AluOp::Iand if self.mask16(p) && self.mask16(q) => self.and16(p, q, at),
             /* `int(b)` of an fp16 compare's mask: `b2i32` keeps its 16-bit
              * source (no arm of `lower_alu_instr` resizes it), `MUX.i32 0,
              * 1, b` reading the mask replicated into a word
@@ -5443,7 +5505,7 @@ fn walk_if16(
      * the flattened `if`s below */
     let cmp16 = matches!(cond, Val::Lane(n, 0) if matches!(
         f.nir.nodes[n as usize],
-        NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: 16, width: 1, .. }
+        NirNode { kind: Kind::Alu(Alu::Fcmp(_) | Alu::Iand), bits: 16, width: 1, .. }
     ));
     if !f.mask_lane(cond) && !cmp16 {
         return Err(MaliError::ControlFlow);
@@ -11670,6 +11732,36 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let e = lane_tree(f, pr, e, pair, ubo)?;
             P::Op(Alu::Bcsel, [mask, t, e])
         }
+        /* a flattened `if`'s select of two constants on a 16-bit `&&` of two
+         * fp16 compares ([`Fs::and16`], BOOL_AND; gm2_nbshrf_2: `FCMP_OR.
+         * v2f16.lt.m1 r2, 0x0, r1.h11, 0x0`, `FCMP_OR.v2f16.lt.m1 r0, r0^.h00,
+         * r1^.h00, 0x0`, `LSHIFT_AND.v2i16 r0, r2^.h00, 0x0.b00, r0^`, then
+         * `MUX.v2i16 r0, 0x3C000000.h11, 0x38000000.h11, r0^.h00`). A 32-bit
+         * compare in the `&&` (gm2_nbshrf_1's two varyings' lanes) is
+         * [`bool_colour`]'s route, not the pair graph's: refused here */
+        (Some((Alu::Bcsel, [m, t, e])), ..)
+            if f.mask16(m)
+                && matches!(f.alu_of(m), Some((Alu::Iand, _)))
+                && matches!((t, e), (Val::Const(_), Val::Const(_))) =>
+        {
+            let Some((_, [p, q, _])) = f.alu_of(m) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let mut k = [0u8; 2];
+            for (n, c) in k.iter_mut().zip([p, q]) {
+                let (Val::Lane(cn, _), Some((op @ Alu::Fcmp(_), s))) = (c, f.alu_of(c)) else {
+                    return Err(MaliError::FsOperandForm);
+                };
+                if f.nir.nodes[cn as usize].bits != 16 {
+                    return Err(MaliError::FsOperandForm);
+                }
+                let x = lane_tree(f, pr, s[0], pair, ubo)?;
+                let y = lane_tree(f, pr, s[1], pair, ubo)?;
+                *n = lone_node(pr, P::Op(op, [x, y, 0]), place)?;
+            }
+            let mask = lone_node(pr, P::Op(Alu::Iand, [k[0], k[1], 0]), place)?;
+            let t = lane_tree(f, pr, t, pair, ubo)?;
+            let e = lane_tree(f, pr, e, pair, ubo)?;
+            P::Op(Alu::Bcsel, [mask, t, e])
+        }
         /* an fabs of a lane, a one-lane `FADD.v2f16 .abs` beside a constant
          * ([`vectorise`]; deqp_constop_op_abs: `FADD.v2f16 r0, r0^.abs.h00,
          * 0x0.neg`) */
@@ -13271,6 +13363,30 @@ pub fn mask_colour(f: &Fs<'_>) -> bool {
         })
 }
 
+/// The compile's run of `nir_move_comparisons` past a 16-bit `iand` of a
+/// 16-bit compare `a` and a 32-bit one `b` ([`Fs::and16`], BOOL_AND):
+/// `pan_nir_lower_bool_to_bitsize` has put `i2i16(b)` right before the
+/// `iand` by then, so `b`'s first user is that conversion and `b` stays
+/// where the link's run put it, before `a` ([`nir::move_compares`]: the
+/// link's run swaps the two, the compile's would swap them back). The two
+/// runs above model no conversion: their `a, b, iand` is made `b, a,
+/// iand` (gm2_nbshrf_1: `FCMP_OR.f32.lt.m1` before `FCMP_OR.v2f16.lt.m1`,
+/// then the `LSHIFT_AND.v2i16`).
+fn resized_and_order(f: &mut Fs<'_>) {
+    for k in 2..f.nir.len {
+        let n = f.nir.order[k] as usize;
+        let NirNode { kind: Kind::Alu(Alu::Iand), bits: 16, src: [Val::Lane(a, _), Val::Lane(b, _), _], .. } =
+            f.nir.nodes[n]
+        else {
+            continue;
+        };
+        let cmp = |x: u16, bits: u8| matches!(f.nir.nodes[x as usize], NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: w, .. } if w == bits);
+        if cmp(a, 16) && cmp(b, 32) && f.nir.order[k - 2] == a && f.nir.order[k - 1] == b {
+            f.nir.order.swap(k - 2, k - 1);
+        }
+    }
+}
+
 /// The mediump shader `f` reduces fp16 compares' masks with `any` or `all`
 /// ([`Fs::mask_op`]): 16-bit `ior` / `iand` nodes, which [`select_highp`]
 /// selects as `LSHIFT_OR.v2i16` / `LSHIFT_AND.v2i16` after the compares
@@ -14248,6 +14364,22 @@ pub fn bool_colour(f: &Fs<'_>) -> bool {
         Val::Lane(n, _) => matches!(f.nir.nodes[n as usize], NirNode { kind: Kind::Alu(Alu::B2f), width: 1, .. }),
         _ => false,
     };
+    /* or a flattened `if`'s select of two constants on a 16-bit `&&`
+     * ([`Fs::and16`], gm2_nbshrf_1's `s` of `vec4(s, s, s, 1.0)`:
+     * `MUX.v2i16 r0, 0x3C000000.h11, 0x38000000.h11, r0^.h00`). One such
+     * select in the colour: two (`vec4(o0, o1, ..)` of one `if`) are a
+     * pair of selects no reference draws on this route, refused */
+    let and_select = |v: Val| match (v, f.alu_of(v)) {
+        (Val::Lane(n, _), Some((Alu::Bcsel, [m, Val::Const(_), Val::Const(_)]))) => {
+            f.nir.nodes[n as usize].bits == 16 && matches!(f.alu_of(m), Some((Alu::Iand, _))) && f.mask16(m)
+        }
+        _ => false,
+    };
+    let first = c.iter().copied().find(|&v| and_select(v));
+    if c.iter().any(|&v| and_select(v) && Some(v) != first) {
+        return false;
+    }
+    let b2f = |v: Val| b2f(v) || and_select(v);
     if !c.iter().all(|&v| matches!(v, Val::Const(_)) || b2f(v)) || !c.iter().any(|&v| b2f(v)) {
         return false;
     }
@@ -14691,6 +14823,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     if (ladder && f.nir.live_ifs().next().is_none()) || masks || ints {
         nir::move_compares(&mut f.nir, scratch, ints)?;
         nir::move_compares(&mut f.nir, scratch, ints)?;
+        resized_and_order(f);
     }
     clamp_forms(&f.nir)?;
     shrink_uniforms(f);
