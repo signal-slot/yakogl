@@ -5,8 +5,9 @@
 //! shapes of dEQP-GLES3 (tests/es3_blit_ds_v3d.rs's shapes), item
 //! gc-blit-ds-test.
 //!
-//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) but
-//! `ds_write: None` and `stencil_resolve: None` (src/vivante/backend.rs:4013-4014).
+//! The Vivante table has `depth_resolve` (`gc_depth_resolve`) and, since
+//! gc-ds-read, `stencil_resolve` (`gc_stencil_resolve`), but `ds_write: None`
+//! (src/vivante/backend.rs).
 //! So src/gl/blit.rs refuses every blit that writes a depth plane
 //! (REFUSED_DEPTH_DST, src/gl/blit.rs:875) or touches stencil (REFUSED_STENCIL,
 //! src/gl/blit.rs:874): GL_INVALID_OPERATION, nothing copied, logged once.
@@ -14,8 +15,8 @@
 //! Per shape, in a module of its own: `<shape>::is_refused_today` pins that
 //! answer: exactly one GL_INVALID_OPERATION, the destination's depth plane
 //! (read through `depth_resolve`) still its clear, and the context usable
-//! (a clear afterwards lands). The stencil plane cannot be read on this back
-//! end (no `stencil_resolve`), so it is not checked in the refusal; the
+//! (a clear afterwards lands). The stencil plane is not checked in the
+//! refusal (the refusals predate `stencil_resolve`); the
 //! stencil half of the expected-result twin reads it through the table entry
 //! the lift adds. `<shape>::reads_back_the_source` is `#[ignore]`d: what a
 //! working blit leaves (tests/es3_blit_ds.rs's model): no error, each
@@ -436,8 +437,10 @@ shapes! {
 /// The two table entries the refusals name are absent today; this is the
 /// line the lift changes.
 #[test]
-fn the_table_lacks_ds_write_and_stencil_resolve_today() {
+fn the_table_lacks_ds_write_today() {
     assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs:4013)");
-    assert!(yakogl_backend_vivante.stencil_resolve.is_none(), "stencil_resolve (src/vivante/backend.rs:4014)");
+    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
+     * refusals rest on ds_write alone */
+    assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }

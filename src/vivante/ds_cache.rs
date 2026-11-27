@@ -710,7 +710,8 @@ fn seed_depth(
 }
 
 /// Write the depth plane of GL object `id` (a depth texture) into `w` x `h`
-/// floats at `dst`, `pitch` a row (`YakoglBackend::depth_resolve`).
+/// floats at `dst`, `pitch` a row (`YakoglBackend::depth_resolve`):
+/// [`resolve_plane`] with [`PlaneOut::Depth`].
 ///
 /// Live: the surface's D24S8 words (depth in bits 31..8), ROW-LINEAR at the
 /// surface's row stride, row 0 at GL's y 0. Measured on the i.MX8MP
@@ -720,8 +721,8 @@ fn seed_depth(
 /// (PE_DEPTH_CONFIG carries no SUPER_TILED here), and it put check 10 of
 /// case 169 at another pixel's depth. No tile status (TS mode 0), so memory
 /// holds every pixel. A plane that holds a whole clear only (here or
-/// parked) is that value everywhere. 1 when nothing holds it or it
-/// is multisampled.
+/// parked) is that value everywhere. 1 when nothing holds it. A 4x plane
+/// (scale 2) gives each pixel's sample 0 ([`resolve_plane`]).
 ///
 /// Before the words are read, `wait_kick` waits for the kick that last
 /// wrote the surface (`written_by`, [`drawn`]) and for nothing after it
@@ -753,27 +754,89 @@ pub unsafe fn resolve_depth(
     guard: usize,
     wait_kick: impl Fn(u32) -> i32,
 ) -> i32 {
-    if id == 0 || dst.is_null() || w > pitch {
+    // SAFETY: the caller's contract.
+    unsafe { resolve_plane(id, PlaneOut::Depth(dst), w, h, pitch, guard, wait_kick) }
+}
+
+/// Where [`resolve_plane`] writes, and which plane it reads: depth as `f32`
+/// in 0..=1, or stencil as bytes. `pitch` counts elements of that type.
+#[derive(Clone, Copy, Debug)]
+pub enum PlaneOut {
+    Depth(*mut f32),
+    Stencil(*mut u8),
+}
+
+/// Read plane `out` of GL object `id` into `w` x `h` elements, `pitch` a row
+/// (`YakoglBackend::depth_resolve` and `stencil_resolve`).
+///
+/// The plane is found by object id in the surface where it is not
+/// Undefined, at either scale: a plane lives in one surface at a time
+/// ([`select_in`] moves it). A whole clear's value (in that surface, or
+/// parked) fills every element. A live plane is read from the surface's
+/// D24S8 words, depth `unorm24_depth(word >> 8)` and stencil `word & 0xff`
+/// ([`PLANE_MASK`]):
+///
+/// - scale 1: pixel (x, y) is word (y, x), row-linear at the row stride, or
+///   at its `layout::offset` in a `SuperTiled` surface;
+/// - scale 2 (a 4x FBO, the surface twice as wide and high): pixel (x, y)'s
+///   four samples are the 2x2 block of words at row 2y, column 2x; the
+///   top-left one, word `2y * stride / 4 + 2x`, is taken as sample 0, which
+///   is what ES 3.0 lets a depth/stencil resolve give (docs/notes/
+///   es3-msaa-renderbuffers.md). Only a `Linear` 4x surface is read.
+///
+/// Elements past the surface are left as they were. 1 when no surface and
+/// no parked entry holds the plane, `id` is 0, `dst` is null, `w > pitch`,
+/// or the layout has no CPU reading. `wait_kick(written_by)` first, as
+/// [`resolve_depth`] says; a failed wait is its return code.
+///
+/// # Safety
+/// `out`'s pointer holds `h` rows of `pitch` elements, `w <= pitch`.
+pub unsafe fn resolve_plane(
+    id: u32,
+    out: PlaneOut,
+    w: u32,
+    h: u32,
+    pitch: u32,
+    guard: usize,
+    wait_kick: impl Fn(u32) -> i32,
+) -> i32 {
+    let (p, null) = match out {
+        PlaneOut::Depth(d) => (DEPTH, d.is_null()),
+        PlaneOut::Stencil(d) => (STENCIL, d.is_null()),
+    };
+    if id == 0 || null || w > pitch {
         return 1;
     }
     let c = cache();
-    let fill = |v: f32| {
-        // SAFETY: the caller's contract.
-        unsafe { ds_retention::write_depth_texels(dst, w, h, pitch, |_, _| Some(v)) };
+    let fill = |v: u32| {
+        match out {
+            // SAFETY: the caller's contract.
+            PlaneOut::Depth(d) => unsafe {
+                ds_retention::write_depth_texels(d, w, h, pitch, |_, _| Some(f32::from_bits(v)))
+            },
+            PlaneOut::Stencil(d) => {
+                for y in 0..h as usize {
+                    // SAFETY: the caller's contract: `h` rows of `pitch` bytes, `w <= pitch`.
+                    unsafe { core::ptr::write_bytes(d.add(y * pitch as usize), v as u8, w as usize) };
+                }
+            }
+        }
         0
     };
-    let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.scale == 1 && k.plane == DEPTH as u8);
-    let held = c.entries.iter().flatten().find(|e| mine(e.key.plane(DEPTH)) && e.planes[DEPTH] != Plane::UNDEFINED);
+    let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.plane == p as u8);
+    let held = c.entries.iter().flatten().find(|e| mine(e.key.plane(p)) && e.planes[p] != Plane::UNDEFINED);
     let Some(e) = held else {
         /* a clear value parked when its surface went to another pair */
-        let parked = c.parked.iter().find(|p| mine(Some(p.key))).and_then(|p| p.planes[0].cleared_value());
-        return parked.map_or(1, |v| fill(f32::from_bits(v)));
+        let parked = c.parked.iter().find(|q| mine(Some(q.key))).and_then(|q| q.planes[0].cleared_value());
+        return parked.map_or(1, fill);
     };
-    if let Some(v) = e.planes[DEPTH].cleared_value() {
-        return fill(f32::from_bits(v));
+    if let Some(v) = e.planes[p].cleared_value() {
+        return fill(v);
     }
-    if !matches!(e.layout, Layout::Linear | Layout::SuperTiled) {
-        return 1; /* no CPU reading of this layout */
+    let scale = e.key.scale;
+    match (scale, e.layout) {
+        (1, Layout::Linear | Layout::SuperTiled) | (2, Layout::Linear) => {}
+        _ => return 1, /* no CPU reading of this layout or scale */
     }
     /* the wait may submit the open frame: nothing in the cache moves */
     let rc = wait_kick(e.written_by);
@@ -787,24 +850,65 @@ pub unsafe fn resolve_depth(
     // SAFETY: the whole CPU mapping.
     unsafe { osal::cache_invd(e.mem.cpu, e.mem.size) };
     let Some(px) = all.get(guard..guard + bytes) else { return -crate::util::EINVAL };
+    let depth = |w: u32| ds_retention::unorm24_depth(w >> 8);
+    let stencil = |w: u32| (w & PLANE_MASK[STENCIL]) as u8;
     if e.layout == Layout::SuperTiled {
-        // SAFETY: the caller's contract: `h` rows of `pitch` floats.
-        let out = unsafe { core::slice::from_raw_parts_mut(dst, h as usize * pitch as usize) };
-        depth_format::read_super_tiled(PeDepthFormat::D24S8, px, e.stride, w, h, out, pitch);
+        match out {
+            PlaneOut::Depth(d) => {
+                // SAFETY: the caller's contract: `h` rows of `pitch` floats.
+                let out = unsafe { core::slice::from_raw_parts_mut(d, h as usize * pitch as usize) };
+                depth_format::read_super_tiled(PeDepthFormat::D24S8, px, e.stride, w, h, out, pitch);
+            }
+            PlaneOut::Stencil(d) => {
+                let (cols, rows) = (w.min(e.stride / 4), h.min(e.rows));
+                for y in 0..rows {
+                    for x in 0..cols {
+                        let at = layout::offset(Layout::SuperTiled, x, y, 4, e.stride);
+                        let Some(s) = px.get(at..at + 4) else { continue };
+                        // SAFETY: the caller's contract, `x < w <= pitch`, `y < h`.
+                        unsafe {
+                            *d.add(y as usize * pitch as usize + x as usize) =
+                                stencil(u32::from_ne_bytes([s[0], s[1], s[2], s[3]]))
+                        };
+                    }
+                }
+            }
+        }
         count_resolve_bytes(w as u64 * h as u64 * 4);
         return 0;
     }
-    /* a row at a time on plain slices: no closure, no checked index per
-     * texel (the per-texel form cost ~2 ms a 1024 x 1024 resolve on the
-     * i.MX8MP, docs/notes/gc-depth-resolve.md). A texel past the surface is
-     * left as it is. */
+    /* a row at a time on plain slices: no closure call left after inlining,
+     * no checked index per texel (the per-texel form cost ~2 ms a 1024 x
+     * 1024 resolve on the i.MX8MP, docs/notes/gc-depth-resolve.md). A texel
+     * past the surface is left as it is. A 4x surface's row y of pixels is
+     * its word row 2y, every other word of it. */
     let stride = e.stride as usize;
-    let (cols, rows) = ((w as usize).min(stride / 4), (h as usize).min(e.rows as usize));
+    let s = scale as usize;
+    let (cols, rows) = ((w as usize).min(stride / 4 / s), (h as usize).min(e.rows as usize / s));
     for y in 0..rows {
-        let src = &px[y * stride..y * stride + cols * 4];
-        // SAFETY: the caller's contract: `h` rows of `pitch` floats, `cols <= w <= pitch`.
-        let out = unsafe { core::slice::from_raw_parts_mut(dst.add(y * pitch as usize), cols) };
-        resolve_row(src, out);
+        let row = y * s * stride;
+        let src = &px[row..row + cols * 4 * s];
+        let at = y * pitch as usize;
+        match out {
+            PlaneOut::Depth(d) => {
+                // SAFETY: the caller's contract: `h` rows of `pitch` floats, `cols <= w <= pitch`.
+                let o = unsafe { core::slice::from_raw_parts_mut(d.add(at), cols) };
+                if s == 1 {
+                    resolve_row(src, o, depth)
+                } else {
+                    resolve_row_x2(src, o, depth)
+                }
+            }
+            PlaneOut::Stencil(d) => {
+                // SAFETY: as above, bytes.
+                let o = unsafe { core::slice::from_raw_parts_mut(d.add(at), cols) };
+                if s == 1 {
+                    resolve_row(src, o, stencil)
+                } else {
+                    resolve_row_x2(src, o, stencil)
+                }
+            }
+        }
     }
     count_resolve_bytes(rows as u64 * cols as u64 * 4);
     0
@@ -820,36 +924,36 @@ fn count_resolve_bytes(n: u64) {
     super::mipmap::fallback_counters().carveout_cpu_bytes.fetch_add(n, core::sync::atomic::Ordering::Relaxed);
 }
 
-/// One row of D24S8 words at `src` into `out`'s depth floats, `src` holding
-/// `4 * out.len()` bytes. The surface lives in the non-cacheable carve-out:
-/// every load is a bus read, and `as_chunks::<4>` with `u32::from_ne_bytes`
-/// came out as four `ldrb` a word on aarch64-unknown-none (about 5.76 M
-/// uncached loads a shadow or refract frame, docs/notes/gc-slow-shadow-refract.md).
-/// The 16-byte aligned middle of the row is read with one volatile `u128`
-/// load (`ldp`) per four words, volatile so that the compiler cannot split
-/// it back into narrow loads; the head and tail around it, three words at
-/// most each, take one volatile `u32` load a word. A row that is not 4-byte
-/// aligned (no surface of this cache is) takes the old byte-wise loop. The
-/// values are the old loop's, bit for bit (tests/gc_depth_resolve.rs).
-fn resolve_row(src: &[u8], out: &mut [f32]) {
+/// One row of D24S8 words at `src` into `out`, `f` turning a word into an
+/// element (depth or stencil), `src` holding `4 * out.len()` bytes. The
+/// surface lives in the non-cacheable carve-out: every load is a bus read,
+/// and `as_chunks::<4>` with `u32::from_ne_bytes` came out as four `ldrb` a
+/// word on aarch64-unknown-none (about 5.76 M uncached loads a shadow or
+/// refract frame, docs/notes/gc-slow-shadow-refract.md). The 16-byte aligned
+/// middle of the row is read with one volatile `u128` load (`ldp`) per four
+/// words, volatile so that the compiler cannot split it back into narrow
+/// loads; the head and tail around it, three words at most each, take one
+/// volatile `u32` load a word. A row that is not 4-byte aligned (no surface
+/// of this cache is) takes the old byte-wise loop. The depth values are the
+/// old loop's, bit for bit (tests/gc_depth_resolve.rs).
+fn resolve_row<T>(src: &[u8], out: &mut [T], f: impl Fn(u32) -> T) {
     let n = out.len().min(src.len() / 4);
     let (src, out) = (&src[..n * 4], &mut out[..n]);
-    let depth = |w: u32| ds_retention::unorm24_depth(w >> 8);
     // SAFETY: every bit pattern is a valid u32 and u128.
     let ((pre, words, post), (head, mid, tail)) = unsafe { (src.align_to::<u32>(), src.align_to::<u128>()) };
     if !pre.is_empty() || !post.is_empty() {
         for (o, s) in out.iter_mut().zip(src.as_chunks::<4>().0) {
-            *o = depth(u32::from_ne_bytes(*s));
+            *o = f(u32::from_ne_bytes(*s));
         }
         return;
     }
     let (head, tail) = (&words[..head.len() / 4], &words[words.len() - tail.len() / 4..]);
     let (out_head, rest) = out.split_at_mut(head.len());
     let (out_mid, out_tail) = rest.split_at_mut(mid.len() * 4);
-    let narrow = |out: &mut [f32], words: &[u32]| {
+    let narrow = |out: &mut [T], words: &[u32]| {
         for (o, w) in out.iter_mut().zip(words) {
             // SAFETY: `w` is an aligned, live word of the row.
-            *o = depth(unsafe { core::ptr::read_volatile(w) });
+            *o = f(unsafe { core::ptr::read_volatile(w) });
         }
     };
     narrow(out_head, head);
@@ -857,10 +961,53 @@ fn resolve_row(src: &[u8], out: &mut [f32]) {
         // SAFETY: `q` is an aligned, live u128 of the row.
         let v = unsafe { core::ptr::read_volatile(q) }.to_ne_bytes();
         for (o, s) in o.iter_mut().zip(v.as_chunks::<4>().0) {
-            *o = depth(u32::from_ne_bytes(*s));
+            *o = f(u32::from_ne_bytes(*s));
         }
     }
     narrow(out_tail, tail);
+}
+
+/// [`resolve_row`] for a 4x surface's word row: `out[x]` from word `2x` of
+/// `src` (each pixel's sample 0, the left word of its pair), `src` holding
+/// `8 * out.len()` bytes. The same loads: one volatile `u128` per two
+/// pixels in the 16-byte aligned middle, one volatile `u32` a pixel around
+/// it, the byte-wise loop for a row that is not 4-byte aligned. A head of an
+/// odd word count would put the pairs out of step with the `u128`s: that row
+/// takes one volatile `u32` a pixel (no surface here has one: rows start at
+/// a 256-byte multiple past a page-aligned guard).
+fn resolve_row_x2<T>(src: &[u8], out: &mut [T], f: impl Fn(u32) -> T) {
+    let n = out.len().min(src.len() / 8);
+    let (src, out) = (&src[..n * 8], &mut out[..n]);
+    // SAFETY: every bit pattern is a valid u32 and u128.
+    let ((pre, words, post), (head, mid, _)) = unsafe { (src.align_to::<u32>(), src.align_to::<u128>()) };
+    if !pre.is_empty() || !post.is_empty() {
+        for (o, s) in out.iter_mut().zip(src.as_chunks::<8>().0) {
+            *o = f(u32::from_ne_bytes([s[0], s[1], s[2], s[3]]));
+        }
+        return;
+    }
+    let narrow = |out: &mut [T], words: &[u32]| {
+        for (o, w) in out.iter_mut().zip(words.iter().step_by(2)) {
+            // SAFETY: `w` is an aligned, live word of the row.
+            *o = f(unsafe { core::ptr::read_volatile(w) });
+        }
+    };
+    let hw = head.len() / 4;
+    if hw % 2 != 0 {
+        narrow(out, words);
+        return;
+    }
+    let (out_head, rest) = out.split_at_mut(hw / 2);
+    let (out_mid, out_tail) = rest.split_at_mut(mid.len() * 2);
+    narrow(out_head, &words[..hw]);
+    for (o, q) in out_mid.as_chunks_mut::<2>().0.iter_mut().zip(mid) {
+        // SAFETY: `q` is an aligned, live u128 of the row.
+        let v = unsafe { core::ptr::read_volatile(q) }.to_ne_bytes();
+        let (a, b) = (&v[0..4], &v[8..12]);
+        o[0] = f(u32::from_ne_bytes([a[0], a[1], a[2], a[3]]));
+        o[1] = f(u32::from_ne_bytes([b[0], b[1], b[2], b[3]]));
+    }
+    narrow(out_tail, &words[hw + mid.len() * 4..]);
 }
 
 /// The surface of GL object `id`'s depth plane, for the depth-sampling
@@ -955,27 +1102,27 @@ pub fn release_all() {
     g.depth_h = 0;
 }
 
-/// The planes of `key`'s surface (tests).
-#[cfg(test)]
+/// The planes of `key`'s surface (unit and host tests).
+#[cfg(any(test, feature = "host-test"))]
 pub fn planes_of(key: DsKey) -> Option<[Plane; 2]> {
     cache().entries.iter().flatten().find(|e| e.key == key).map(|e| e.planes)
 }
 
 /// `key`'s surface: its memory and the bytes of its pixels past the guard
-/// (tests).
-#[cfg(test)]
+/// (unit and host tests).
+#[cfg(any(test, feature = "host-test"))]
 pub fn memory_of(key: DsKey) -> Option<(OsalGpuMem, usize)> {
     cache().entries.iter().flatten().find(|e| e.key == key).map(|e| (e.mem, (e.stride * e.rows) as usize))
 }
 
-/// `key`'s surface's row stride in bytes (tests).
-#[cfg(test)]
+/// `key`'s surface's row stride in bytes (unit and host tests).
+#[cfg(any(test, feature = "host-test"))]
 pub fn stride_of(key: DsKey) -> Option<u32> {
     cache().entries.iter().flatten().find(|e| e.key == key).map(|e| e.stride)
 }
 
-/// Planes parked now (tests).
-#[cfg(test)]
+/// Planes parked now (unit and host tests).
+#[cfg(any(test, feature = "host-test"))]
 pub fn parked_len() -> usize {
     cache().parked.len()
 }
