@@ -272,6 +272,38 @@ run "$R" "$RB"
 has "gic absent: not read" "GIC active state line: not read"
 has "first feed absent on a bare log" "first feed: absent"
 
+# 11. CNTFRQ_EL0 0 stop, the banner value, and the GIC wake timeout.
+# SYNTHETIC fixtures in the formats of nanopc_t6_early.rs, nanopc_t6_mali.c
+# and aarch64.rs gic_active_reset.
+RZ="$W/20261125-1130-t6_cold-cntfrq0-0123abcd"; go keep "$RZ"
+{
+	echo "# SYNTHETIC lines: not a measurement"
+	echo "t6: CNTFRQ_EL0 0: no time base, the osal and firmware entries refuse it"
+} >>"$RZ/image.log"
+run "$R" "$RZ"
+has "cntfrq 0 stop: reported" "cntfrq: 0 at entry (image refused)"
+RZB="$W/20261125-1131-t6_cold-cntfrqb-0123abcd"; go keep "$RZB"
+{
+	echo "T6:A EL2 HCR_EL2 0x0000000488000038 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c50838 VBAR_EL2 0x0000000000200800 -> 0x0000000010008000 CNTFRQ_EL0 1000000000"
+} >>"$RZB/image.log"
+run "$R" "$RZB"
+has "cntfrq banner value" "cntfrq: 1000000000 at entry"
+hasnt "cntfrq banner value: not refused" "image refused"
+RZC="$W/20261125-1132-t6_cold-cntfrqc-0123abcd"; go keep "$RZC"
+{
+	echo "T6:A EL2 HCR_EL2 0x0000000488000038 -> 0x0000000080000000 SCTLR_EL2 0x0000000030c50838 VBAR_EL2 0x0000000000200800 -> 0x0000000010008000 CNTFRQ_EL0 0"
+	echo "t6: CNTFRQ_EL0 0: no time base, the osal and firmware entries refuse it"
+} >>"$RZC/image.log"
+run "$R" "$RZC"
+has "cntfrq banner 0 and stop" "cntfrq: 0 at entry (image refused)"
+RGT="$W/20261125-1133-t6_cold-gictimeout-0123abcd"; go keep "$RGT"
+echo "t6: GIC active state: GICD_TYPER 0x0000000f, gic: redistributor at frame 2 did not wake (ChildrenAsleep still set): SGIs and PPIs not scanned, 1 INTID(s) active (INTIDs 71), 15 word(s) written ICACTIVER, 0 still active" >>"$RGT/image.log"
+run "$R" "$RGT"
+has "gic timeout: frame" "redistributor at frame 2 did not wake (ChildrenAsleep still set)"
+has "gic timeout: apart from no match" "not 'no redistributor matched'"
+hasnt "gic timeout: not reported as matched" "a redistributor matched"
+hasnt "gic timeout: not the no-match line" "the wake timed out or the affinity has no frame"
+
 # 9. usage and unreadable
 run; rc_is "no arguments: exit 2" 2
 run "$W/nowhere" "$RC1"; rc_is "no answers.txt: exit 4" 4
