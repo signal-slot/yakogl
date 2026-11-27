@@ -248,7 +248,8 @@ python3 "$REPORT" --date 2026-11-10 "${X2[@]}" > "$work/x2.out" 2>&1; rc=$?
 expect "extra NotSupported cases too: exit 0, no PARTIAL, the row sums to $MP" $?
 
 echo "== the three real 9bc82915 slices"
-mapfile -t REAL < <(ls -d "$ROOT"/tools/cts/log/*-imx8mp-gles3-9bc82915-rows*/ 2>/dev/null)
+# the three Verdin slices only (later X2 slices of the campaign sit beside them in tools/cts/log)
+mapfile -t REAL < <(ls -d "$ROOT"/tools/cts/log/*-imx8mp-gles3-9bc82915-rows01-13/ "$ROOT"/tools/cts/log/*-imx8mp-gles3-9bc82915-rows17-34/ "$ROOT"/tools/cts/log/*-imx8mp-gles3-9bc82915-rows35-51/ 2>/dev/null)
 if [ ${#REAL[@]} = 3 ]; then
 	python3 "$REPORT" --date 2026-11-10 "${REAL[@]}" > "$work/real.out" 2>&1; rc=$?
 	{ [ "$rc" = 1 ] && grep -q '^\*\*\* PARTIAL' "$work/real.out" && grep -q 'no record: 85 of 133 entries (13-15, 51-132)' "$work/real.out"; }
@@ -287,9 +288,54 @@ sys.exit(0 if first(rec) == first(issue) == first(status) == want else 1)
 PY
 	expect "records in the RESULTS, STATUS and issue drafts by first row: rows01, rows14, rows17, rows35, rows52, rows108" $?
 	REPORT_FMT=$work/real133.out
+	MIXED=1
 else
 	bad "real slices: expected 3 tools/cts/log/*-imx8mp-gles3-9bc82915-rows* directories, found ${#REAL[@]}"
 	REPORT_FMT=$work/full.out
+fi
+
+# The campaign measured on two boards: the three real slices on the Verdin, the missing entries (synthetic, fake
+# data) as X2 slices whose README says so. Which board measured which entries is read from the records.
+echo "== a mixed campaign: Verdin and Armadillo-X2 slices"
+blk() { sed -n '/^--- GitHub issue #24/,/^--- anchors/p' "$1"; }
+sec() { sed -n "/^--- $2/,/^--- /p" "$1" | sed '$d' | tr '\n' ' ' | tr -s ' '; }
+if [ -n "${MIXED:-}" ]; then
+	mkdir "$work/mixfill"
+	for d in "${FILL[@]}"; do
+		cp -r "$d" "$work/mixfill/$(basename "$d")"
+		r="$work/mixfill/$(basename "$d")/README.md"
+		sed -i 's/board\.sh imx8mp/board.sh x2/' "$r"
+		printf '\nMeasured on the Armadillo-X2.\n' >> "$r"
+	done
+	mapfile -t MFILL < <(ls -d "$work"/mixfill/*/)
+	python3 "$REPORT" --date 2026-11-10 "${MFILL[@]}" "${REAL[@]}" > "$work/mix.out" 2>&1; rc=$?
+	expect "mixed complete: exit 0" "$rc"
+	grep -q PARTIAL "$work/mix.out"; [ $? = 1 ]; expect "mixed complete: no PARTIAL (X2 slices are full records)" $?
+	grep -qi 'unknown' "$work/mix.out"; [ $? = 1 ]; expect "mixed complete: no unknown board" $?
+	sums_to "$work/mix.out"; expect "mixed complete: the row sums to the $MP mustpass cases" $?
+	XM='entries 0-12 and 16-50 on the Verdin iMX8M Plus, 13-15 and 51-132 on the Armadillo-X2'
+	sec "$work/mix.out" 'RESULTS.md' | grep -qF "measured on $XM, 2026-11-10:"; expect "mixed complete: RESULTS.md names both boards with their entries" $?
+	sec "$work/mix.out" 'ROADMAP.md' | grep -qF "measured on $XM at"; expect "mixed complete: the ROADMAP.md bullet names both boards with their entries" $?
+	sec "$work/mix.out" 'STATUS.md' | grep -qF 'i.MX8MP は Verdin iMX8M Plus（エントリ 0-12、16-50）と Armadillo-X2（エントリ 13-15、51-132）で全ツリー'
+	expect "mixed complete: the STATUS.md sentence names both boards with their entries" $?
+	blk "$work/mix.out" | grep -qF "measured on $XM"; [ $? = 0 ] || blk "$work/mix.out" | grep -q 'Boards:'; expect "mixed complete: the #24 block names the boards" $?
+	grep -qF "$work" "$work/mix.out"; [ $? = 1 ]; expect "mixed complete: no scratch path in the drafts" $?
+	# the ranges come from the records: take the X2 README line away from the slice of entries 107-132 and that slice is Verdin's
+	mkdir "$work/mixv"; cp -r "$work"/mixfill/* "$work/mixv/"
+	for d in "$work"/mixv/*-rows108-133; do sed 's/board\.sh x2/board.sh imx8mp/' "$d/README.md" | grep -v 'Armadillo-X2' > "$d/R"; mv "$d/R" "$d/README.md"; done
+	mapfile -t MV < <(ls -d "$work"/mixv/*/)
+	python3 "$REPORT" --date 2026-11-10 "${MV[@]}" "${REAL[@]}" > "$work/mixv.out" 2>&1; rc=$?
+	sec "$work/mixv.out" 'ROADMAP.md' | grep -qF 'entries 0-12, 16-50 and 107-132 on the Verdin iMX8M Plus, 13-15 and 51-106 on the Armadillo-X2 at'
+	expect "mixed: the ranges follow each slice's README (entries 107-132 moved to the Verdin)" $?
+	# a mixed campaign with a real gap: the X2 slice of entries 51-106 is missing
+	python3 "$REPORT" --date 2026-11-10 "$work"/mixfill/*-rows14-16 "$work"/mixfill/*-rows108-133 "${REAL[@]}" > "$work/mixp.out" 2>&1; rc=$?
+	expect "mixed partial: exit 1" "$([ "$rc" = 1 ] && echo 0 || echo 1)"
+	grep -q '^\*\*\* PARTIAL' "$work/mixp.out"; expect "mixed partial: marked PARTIAL" $?
+	grep -q 'no record: .*(51-106)' "$work/mixp.out"; expect "mixed partial: the missing entries 51-106 are named" $?
+	sec "$work/mixp.out" 'ROADMAP.md' | grep -qF 'measured on entries 0-12 and 16-50 on the Verdin iMX8M Plus, 13-15 and 107-132 on the Armadillo-X2 at'
+	expect "mixed partial: the boards still name the entries each measured" $?
+	else
+	bad "mixed campaign: needs the three real slices"
 fi
 
 echo "== drafts in the layout of their target files"
@@ -404,13 +450,13 @@ sec "$work/bx2.out" 'STATUS.md' | grep -qF 'i.MX8MP は Armadillo-X2（i.MX 8M P
 expect "all-X2: the STATUS.md sentence says Armadillo-X2（i.MX 8M Plus、GC7000UL）で" $?
 sec "$work/bx2.out" 'ROADMAP.md' | grep -qF "tools/cts/imx8mp-gles3-tree.txt\`), $XL at \`"
 expect "all-X2: the ROADMAP.md bullet says $XL" $?
-sec "$work/brd.out" 'RESULTS.md' | grep -qF 'measured on the Verdin iMX8M Plus and the Armadillo-X2, 2026-11-10'
+sec "$work/brd.out" 'RESULTS.md' | grep -qF 'measured on entries 0-44 on the Armadillo-X2, 45-132 on the Verdin iMX8M Plus, 2026-11-10'
 expect "mixed: the RESULTS.md paragraph names both boards" $?
 sec "$work/brd.out" 'RESULTS.md' | grep -q -- '- Boards: `[^`]*rows001-045/`: Armadillo-X2 (i.MX 8M Plus, GC7000UL); `[^`]*rows046-090/`: Verdin'
 expect "mixed: the RESULTS.md draft lists each slice's board" $?
-sec "$work/brd.out" 'STATUS.md' | grep -qF 'i.MX8MP は Verdin iMX8M Plus と Armadillo-X2 で'
+sec "$work/brd.out" 'STATUS.md' | grep -qF 'i.MX8MP は Armadillo-X2（エントリ 0-44）と Verdin iMX8M Plus（エントリ 45-132）で'
 expect "mixed: the STATUS.md sentence names both boards" $?
-sec "$work/brd.out" 'ROADMAP.md' | grep -qF 'measured on the Verdin iMX8M Plus and the Armadillo-X2 at'
+sec "$work/brd.out" 'ROADMAP.md' | grep -qF 'measured on entries 0-44 on the Armadillo-X2, 45-132 on the Verdin iMX8M Plus at'
 expect "mixed: the ROADMAP.md bullet names both boards" $?
 for f in RESULTS.md STATUS.md ROADMAP.md; do
 	sec "$work/full.out" "$f" | grep -qE 'Armadillo|Verdin|measured on'; [ $? = 1 ]; expect "all-Verdin: the $f draft names no board (as before)" $?
