@@ -99,6 +99,17 @@
 #      the recorded undo once for one that does not. A refusal after the stop
 #      and before the jump, and `stage` (no jump), run the undo the same way.
 #      Unset or 0: unchanged, a running container refuses the run.
+#   X2_STOP_CONTAINERS=1 tools/board.sh x2 run|stage <image> <logdir> [name]
+#      the same opt-in under the name the X2 picture sessions use (plan 396):
+#      it sets X2_STOP_APPS (both set and different: rc 2). Default off, the
+#      refusal above unchanged. Before the first podman stop, one plain line
+#      "UNDO: podman start <name>" per running container is printed (beside
+#      meta.txt's undo=); only podman stop is run (never rm), nothing on the
+#      board is written or persisted, and the reset that ends a kexec-dev run
+#      brings autostarted containers back. tailscale, sshd and kernel modules
+#      are never touched. The stopped names are meta.txt's apps_stopped= and
+#      the verdict line's containers_stopped=<a,b>. --dry-run prints the list,
+#      the UNDO line and the podman stop line, in that order, and runs none.
 #      Every x2 record says board_measured=Armadillo-X2 (i.MX 8M Plus,
 #      GC7000UL), stands in for the Verdin iMX8MP (the owner's rule of
 #      2026-11-27: X2 runs stand in for the Verdin's).
@@ -307,6 +318,7 @@
 #                      0x5345<SEL> in LPGPR2 (SEL=4272 is gl_test case 222's
 #                      dtpu page, SEL=0x1000 / 0x1004 glmark2's PERF pages 0 / 4)
 #   X2_STOP_APPS       x2: 1 stops the running containers for the run (above)
+#   X2_STOP_CONTAINERS x2: the same as X2_STOP_APPS (above)
 #   X2_TOOLS           x2: the directory of kexec_zephyr and snvs_lpgpr (default
 #                      driver/tools/kexec-zephyr; tools/board_selftest.sh puts
 #                      fakes there)
@@ -1040,7 +1052,7 @@ single_case() {
 # both call it). Sets V_LINE, V_RC, V_VERDICT, V_SCAN, and V_WHY (a refusal's
 # message, else empty).
 verdict_line() {
-    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p route
+    local dir=$1 name boot probe rcc bv="" verdict="" result=none resets=absent rec="" shown="" rec0 line cls kname unsup="" status t6p route cstop
     local console=$dir/console.txt scan="" lost=0 tftp=none tl up="" ba=? recf=absent sc
     # a capture whose console.txt was never derived (an imported bridge log)
     [ -f "$console" ] || [ ! -f "$dir/console.ts" ] || console=$dir/console.ts
@@ -1218,6 +1230,11 @@ verdict_line() {
     # what the run could not measure, its own outcome beside the verdict (kind GLMARK2)
     if [ -n "${unsup:-}" ] && [ "$unsup" != absent ]; then V_LINE+=" unsupported=$unsup"; fi
     if [ "${lost:-0}" -gt 0 ] 2>/dev/null; then V_LINE+=" lost=$lost"; fi
+    # X2_STOP_APPS / X2_STOP_CONTAINERS: the containers this run stopped
+    if [ "$BOARD" = x2 ]; then
+        cstop=$(mget apps_stopped "$dir")
+        if [ -n "$cstop" ]; then V_LINE+=" containers_stopped=${cstop// /,}"; fi
+    fi
     case "$BOARD:$boot" in
     imx8mp:uboot-tftp | imx95:uboot-tftp) V_LINE+=" tftp=$tftp uptime=${up:-?}s" ;;
     imx8mp:uboot-mmc | imx95:uboot-mmc) V_LINE+=" uptime=${up:-?}s" ;;
@@ -2351,6 +2368,15 @@ run_kexec() {
             [ "$DRY" = 1 ] || [ -x "$X2_TOOLS/$t" ] ||
                 die "no $X2_TOOLS/$t (build it: driver/tools/kexec-zephyr/README.md)"
         done
+        # X2_STOP_CONTAINERS: X2_STOP_APPS under the picture sessions' name
+        if [ -n "${X2_STOP_CONTAINERS:-}" ]; then
+            [ -z "${X2_STOP_APPS:-}" ] || [ "$X2_STOP_APPS" = "$X2_STOP_CONTAINERS" ] ||
+                die "X2_STOP_CONTAINERS='$X2_STOP_CONTAINERS' and X2_STOP_APPS='$X2_STOP_APPS' differ: set one" 2
+            case $X2_STOP_CONTAINERS in
+            0 | 1) X2_STOP_APPS=$X2_STOP_CONTAINERS ;;
+            *) die "X2_STOP_CONTAINERS='$X2_STOP_CONTAINERS': 1 (the running containers stopped for this run, each UNDO line printed first) or 0 (a running container refuses the run)" 2 ;;
+            esac
+        fi
         case ${X2_STOP_APPS:-0} in
         0 | 1) ;;
         *) die "X2_STOP_APPS='$X2_STOP_APPS': 1 (the running containers stopped for this run, each undo printed first) or 0 (a running container refuses the run)" 2 ;;
@@ -2650,6 +2676,8 @@ x2_apps_stop() {
     local names n
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ $X2_PS_NAMES   # X2_STOP_APPS=1, when containers is not 0: each name's undo 'podman start <name>' printed and recorded first, then podman stop -t 5 <name> for each"
+        echo "UNDO: podman start <name>   # one line per name listed, all before the first stop"
+        echo "DRY board\$ podman stop -t 5 <name>   # for each name listed"
         return 0
     fi
     bget names "$X2_PS_NAMES" || die "cannot list the running containers ($X2_PS_NAMES)"
@@ -2661,6 +2689,7 @@ x2_apps_stop() {
     done
     meta apps_stopped "$names"
     for n in $names; do
+        echo "UNDO: podman start $n"
         note "X2_STOP_APPS: undo: podman start $n"
         meta undo "podman start $n"
     done
