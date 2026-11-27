@@ -65,7 +65,8 @@ fn the_tables_answers_are_the_design_notes() {
     assert!(t.native_layered_textures);
     assert!(!t.front_facing_shader_variant);
     assert!(t.etc1_decoded_at_upload);
-    assert_eq!(t.max_instance_divisor, 1);
+    /* the 4.2 table's 0xffff since backend71 draws instanced arrays (inst71) */
+    assert_eq!(t.max_instance_divisor, 0xffff);
     assert!(!t.samples_texel_copies);
     assert_eq!(t.linear_row_align, 0);
     assert!(t.uniforms_host_only);

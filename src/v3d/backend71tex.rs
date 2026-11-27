@@ -553,7 +553,7 @@ impl TexBuilder71 for CTexBuilder71<'_> {
                 vs_tmu: ptr(bd.vs_tmu),
                 num_vs_tmu: bd.vs_tmu.len() as u32,
                 vs_writes_psiz: false,
-                instances: 0,
+                instances: d.instances,
             };
             let mut lo = ffi71::V3dJob71DrawLayout::ZERO;
             // SAFETY: as above; `draw` and what it points to live past the call.
@@ -622,7 +622,7 @@ pub fn assemble_filled(
     let admitted = backend71::admit_framebuffer(fb)?;
     let t = &job.target;
     if t.width != fb.width || t.height != fb.height || t.rts as usize != fb.colors.len() {
-        return Err(refuse("backend71", backend71::FILLED_REFUSALS[3]));
+        return Err(refuse("backend71", backend71::FILLED_REFUSALS[2]));
     }
     if tex.len() != job.draws.len() {
         return Err(own(REF_BINDINGS));
