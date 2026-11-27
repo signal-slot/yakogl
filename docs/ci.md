@@ -608,3 +608,71 @@ bare shell as unconfirmed until it is repeated after the exports.
 
 Every step is measured on the same commit on runner A before and after (the row
 times in the gate log) and the numbers go into this file's section 1.
+
+## 6. Where a full run's time goes (2026-11-27)
+
+The gate of a pull request whose diff reaches every row took 3.8 h on
+2026-11-26 (pull request #14791: 581 rows, 37,635 s of rows on 3 compiler
+slots; `test` rows 24,355 s). The owner, 2026-11-27: a gate of 4 to 5 hours
+is wrong. This section holds what was measured that day and what changed
+with it.
+
+### 6.1 One whole-suite test row, build apart from run
+
+`host-test,gpu-vivante,shaderc-online` (1,924 s in that run) on main
+`2f763281`, on a 4-core, 8 GB machine, 3 compilers at once (`-j3`, the CI's
+slot count), from an empty target directory, the 943 binaries run 4 at a
+time. Compiler seconds are each unit's own time from `cargo --timings`.
+
+| | |
+|---|---|
+| build (`cargo test --no-run`) | 711 s wall, 1,979 compiler seconds, 20 GB |
+| the library's unit-test binary (one rustc) | 523 s |
+| the library as an rlib | 132 s |
+| the 347 targets of `tests/` that hold code in this feature set | 1,191 s, 3.4 s each |
+| the 595 targets that hold none (crate-level `#![cfg]` false) | 131 s, 0.22 s each, 7.2 MB each |
+| run, 5,550 tests | 152 s wall, 254 s of CPU |
+| `redaction_scan` (4 tests; one scans the whole tree with a Python tool) | 146 s |
+| the library's 3,351 unit tests | 42 s |
+| the other 346 targets that hold code | 65 s |
+| the 595 empty binaries | 0.8 s |
+
+The row is 89% build. On 2026-10-11 it was the reverse (section 1: 39 s of
+warm build, 405 s of run), with 53 test files and a cache that still
+matched; `tests/` had 295 files on 2026-11-15 and 942 on 2026-11-27, and a
+pull request's machine starts from an image whose build cache no longer
+matches main.
+
+The same build with other settings (every test passed unless said):
+
+| | build wall | compiler CPU | written |
+|---|---|---|---|
+| as on main (`opt-level = 3`, debug info, incremental) | 711 s | 2,072 s | 20 GB |
+| `CARGO_INCREMENTAL=0` | 454 s | 1,340 s | 16 GB |
+| `debug = false` | 508 s | 1,454 s | 3.5 GB |
+| `debug = false`, `CARGO_INCREMENTAL=0` | 365 s | 1,069 s | 1.6 GB |
+| `debug = false`, `opt-level = 1` (`stack_survey` fails: it pins stack sizes) | 413 s | 1,201 s | 3.6 GB |
+
+The run did not move with any of them (249 to 263 s of CPU).
+
+### 6.2 Which pull requests run every row
+
+Each of the 3,051 commits main took from 2026-11-13 to 2026-11-27 (one per
+pull request), its paths through `tools/check.sh --scope-of` as the map
+stood on 2026-11-27: 362 (11.9%) reach every row; 714 are documents only,
+505 the tools scope, 406 the tests scope, the others one or two GPU or
+driver scopes. Of the 362, by the paths that select every row:
+`tools/check.sh` in 97 (alone in 60; 72 of the 97 add or remove a `step`
+line), a `tools/*_selftest.sh` the map did not know in 102 (alone in 52),
+`src/shaderc` in 70, `src/gl` in 69, another unknown file directly under
+`tools/` in 33.
+
+### 6.3 What changed on 2026-11-27
+
+- `gate.yml` sets `CARGO_INCREMENTAL=0` for every job: the second table.
+- A self-test the map does not know (`tools/<tool>_selftest.sh`) reaches
+  the tools rows, not every row (`path_scopes` in `tools/check.sh`). The
+  gate already gives such a file a row of its own under its path's scope
+  (section 3.1's self-test loop), and `tools/check_scope_selftest.sh`
+  requires of every row that names a self-test that the self-test's path
+  reaches it.
