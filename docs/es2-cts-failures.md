@@ -1148,11 +1148,11 @@ extra. 773 cases differ by status or by first refusal:
 | NotSupported to Fail | 1 |
 
 `imx95-g310-cause.py --summary` classified every one, with
-`--commit-cases` set to `tools/cts/imx95-g310-cause-commits.tsv` (the 392
-cases of S1a-S4) plus the S3b cases below: 247 `compiler-refusal`, 526
+`--commit-cases` set to `tools/cts/imx95-g310-cause-commits.tsv` (the 638
+cases of S1a-S4, S3b's among them): 247 `compiler-refusal`, 526
 `compiler-commit`, 0 `hang`, 0 G310 causes (`tib-budget`, `tiler-levels`,
-`shader-present`, `renderer-name`) and 0 `unexplained`. Without the S3b
-lines, 246 are `unexplained`: 243 of S3b and one each of S2
+`shader-present`, `renderer-name`) and 0 `unexplained`. Without the 246
+lines added for S3b, 246 are `unexplained`: 243 of S3b and one each of S2
 (`fragment_ops.interaction.basic_shader.32`), S3a
 (`random.all_features.fragment.57`) and S4
 (`qualification_order.parameters.valid.storage_precision_fragment`).
