@@ -501,17 +501,20 @@ same GC7000UL and takes the same `gl_test` image path. The verdict is
 therefore measured on the Armadillo-X2 in place of the Verdin iMX8MP, and
 the record says so.
 
-**This run depends on the runner.** The X2's podman container
-`slint-launcher` autostarts, and `tools/board.sh x2 run` refuses a jump while
-it runs (`docs/notes/x2-glmark2-slow-scenes.md`, last section; read only
-here). The session can start only once the runner stops that container for
-the run. Until then the X2 cannot run case 222, and nothing below is a
-result.
+**The runner can clear the container; the loader is the blocker today.**
+The X2's podman container `slint-launcher` autostarts, and `tools/board.sh
+x2 run` refuses a jump while it runs (`docs/notes/x2-glmark2-slow-scenes.md`,
+last section; read only here). `X2_STOP_CONTAINERS=1` (landed in `225c6956`)
+stops the board's running containers for one run and brings them back after
+it, autostart untouched. What stopped the session of 2026-11-27, below, was
+not a container: it was the kexec loader's interrupt-chip list, which no
+runner flag clears.
 
 **What the X2's earlier record predicts.** The X2's session of 2026-11-11
 (above: check 4 fails, at index 1) predicts **code 3** for the new page. It
-is a prediction, not a result: the table below stays empty until a record
-fills it, and a different code is a finding, not an error.
+is a prediction, not a result: the session of 2026-11-27 below never
+reached the page, and a rerun whose code differs is a finding, not an
+error.
 
 **Image.** One image from one `origin/main` commit (the commit is written
 down below). The X2 build sets `IMX8MP_BOARD=x2`:
@@ -537,6 +540,10 @@ is the way to look at the steps without running.) With `<board>` = `x2`:
 
     tools/board.sh --dry-run x2 run <image> <logdir> <name>
     SEL=4272 tools/board.sh x2 run <image> <logdir> <name>
+    X2_STOP_CONTAINERS=1 SEL=4272 tools/board.sh x2 run <image> <logdir> <name>
+
+(`X2_STOP_CONTAINERS=1` only when `status` reads `containers 1`: it stops
+the board's running containers for this run and brings them back after it.)
 
 `--dry-run` prints every command that would touch the board, so read it
 before the real run. `SEL` is written into the cleared record (the runner's
@@ -555,22 +562,16 @@ from the environment only and go into no file or message.
 (gitignored, addresses redacted, `INDEX.txt` lists every file with its
 sha256).
 
-**Read the page.** `yakogl-tools record --words 3` on the record, then the
-table of "Reading the dtpu page" above. Write down, with the values from
-the record only, in a table headed "measured on the Armadillo-X2 in place of
-the Verdin iMX8MP":
-
-| item (measured on the Armadillo-X2 in place of the Verdin iMX8MP) | value |
-|---|---|
-| origin/main commit the image was built from | `<sha>` |
-| image sha256 | `<sha256 of zephyr.bin, as in meta.txt / INDEX.txt>` |
-| record directory | `records/x2/<YYYYMMDD-HHMM>-<name>-<sha8>/` |
-| w1 | `<0x........>` |
-| w2 | `<0x........>` |
-| w3 | `<0x........>` |
-| check 3 passed | `<yes | no>` (w1 bit 3 clear = passed) |
-| verdict code | `<0..5>` (w1 bits 12..15) |
-| outcome | `<(a) | (a) plus flush | (b) | (c)>` per `gc-depth-sample-wire.md` |
+**Read the page (a rerun fills this).** `yakogl-tools record --words 3` on
+the record, then the table of "Reading the dtpu page" above. A session that
+ends with a verdict writes it down, with the values from the record only,
+in a table headed "measured on the Armadillo-X2 in place of the Verdin
+iMX8MP", naming: the origin/main commit the image was built from, the
+image sha256 (as in `meta.txt` / `INDEX.txt`), the record directory
+`records/x2/<YYYYMMDD-HHMM>-<name>-<sha8>/`, w1, w2, w3, whether check 3
+passed (w1 bit 3 clear), the verdict code (w1 bits 12..15) and the outcome
+it selects per `gc-depth-sample-wire.md`. The session of 2026-11-27 never
+reached that table; it is written up in the next section.
 
 **A check-3 failure is not a verdict.** If w1 bit 3 is set (the code reads
 0), P0, today's path, is itself off the ramp, so checks 4 to 8 are not
@@ -579,6 +580,52 @@ image, same selector) and read the new record. Only a page whose check 3
 passed gives a verdict code that selects an outcome. If the page is missing
 (the log says "no dtpu page"), check 1 or 2 stopped the case and the CASE
 record is the result.
+
+### The X2 session of 2026-11-27 (item dtpu-x2): the loader refused the jump, no verdict
+
+Measured on the Armadillo-X2 in place of the Verdin iMX8MP. No
+`records/imx8mp/` record exists, and none will until the Verdin is back: by
+the owner's rule of 2026-11-27 the X2 stands in for the Verdin iMX8MP. The
+verdict, once recorded, is read as the Verdin's: by the verdin-vs-x2
+analysis (`gc-depth-sample-wire.md`, "Where the verdict comes from") it
+carries over to the Verdin's GC7000UL — the same i.MX 8M Plus and the same
+GC7000UL (revision 0x6204), with the customer-id caveat of
+`gc-customer-id.md`, which this run does not depend on.
+
+| item (measured on the Armadillo-X2 in place of the Verdin iMX8MP) | value |
+|---|---|
+| origin/main commit the image was built from | `a25b6339` (this clone's copy of origin/main; `git fetch` failed there) |
+| image sha256 | `2dad4d0a94d4057d171d51fb8fff14b18bb6961807b6fd2720129fc4c5c4d3fe` — `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh dtpu-x2-a25b6339 222`, rc 0; 2799192 B, footprint 62705664; knobs, `SWEEP_FIRST=222` and the `gc_wdog_arm: armed` string checked in it |
+| record directory | `records/x2/20261127-0339-dtpu-x2-2dad4d0a/` (gitignored, redacted; its `NOTE.txt` says the X2 stands in for the Verdin and why there is no verdict) |
+| selector | `SEL=4272` (`0x10b0`); the cleared record read `00000000 534510b0 00000000` |
+| w1, w2, w3 | absent — the image never ran, so no dtpu page was written |
+| check 3 passed | never ran — with it, no check ran; this is not a verdict |
+| verdict code / outcome | none / none selected; every row of the verdict table above stays open |
+
+**What ran.** Readiness passed (`containers 0`, no kexec loaded — no
+container needed the opt-in), the dry run read right, and the image was
+staged and read back equal. Then `kexec_zephyr --crash` refused the jump:
+`crash_irq_chips` (`driver/tools/kexec-zephyr/crash_irq.h:176-178`, the
+list `4c0626d1` added on 2026-11-15 for the NanoPC-T6) accepts only GICv3,
+GICv3-23, ITS-PCI-MSI-\*, ITS-PCI-MSIX-\* and `rockchip_gpio_irq`, and the
+X2 keeps handlers on `gpio-mxc` (PWROFF, pca9450, REBOOT, rv8803, SW1, mmc
+cd) and `irqsteer` (dw-hdmi-cec, imx-lcdifv3-crtc.1). The loader printed
+"an interrupt is left on a chip the crash route was not measured with ...
+not triggering", brought the CPUs back and unloaded the crash image. Linux
+never went down, so the runner's `not_back` line (rc 5) reports a jump that
+never happened, and the console holds no `gc_wdog_arm: armed` and no `dtpu:`
+line: the case never started. The X2's jumps of 2026-11-06 and 2026-11-11
+went through with loaders from before `4c0626d1`.
+
+**What a rerun needs.** Until `crash_irq_chips` carries the X2's chips (or
+a per-board list) — a change to `driver/tools/kexec-zephyr/**`, named here,
+not made — every crash-route run of an image from main refuses the same
+way, `dtpu` and glmark2 alike. The 11-11 record's prediction of code 3
+stays a prediction, not a result. The rerun is the run of the section above
+unchanged (the image builds in about 3 minutes), and its page fills the
+fields listed there. The loader also tries to bring `cpu4`..`cpu7` back
+online on this 4-core SoC ("could not be brought back online"): harmless
+noise.
 
 ## (b) What would change in the GC back end
 
