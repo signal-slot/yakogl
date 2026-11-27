@@ -444,6 +444,17 @@ From images built from origin/main commits, with `target:am62p` and
 If the kicks fall and the milliseconds do not, the frame is not kick-bound:
 it is the waits, as path B showed (`am62p-pvr-mipmap-kicks.md:201-210`).
 
+**Measured 2026-11-27 on the Verdin AM62P** (A `02a2ed23`, E `074492c5`;
+the table under "The board A/B" below):
+
+- case 216 read 21.00 kicks and PASS, but 44.20 ms a frame on both arms;
+- terrain 80.011 -> 74.189 ms with 51.01 -> 28.01 kicks a frame;
+- refract 34.915 -> 36.426 ms;
+- c = 0.35 ms;
+- the same 27 / 6 picture split.
+
+**Missed** on the case 216 milliseconds: the frame is not kick-bound.
+
 A level-by-level read-back on the board, like E1's step 3
 (`pvr-mip-tail-e1.md:703-715`), would turn "the same dEQP answers" into
 "differing bytes N, max |d| M" per ALU level. It is a new gl_test case, not
@@ -561,14 +572,154 @@ above.
 If the kicks fall and the milliseconds do not, the frame is not
 kick-bound (part (f)).
 
+### Measured on the Verdin AM62P (2026-11-27): missed, the knob stays off
+
+Plan #420 item am62p-gm. Measured on the Verdin AM62P (PowerVR
+BXS-4-64), with one lease of `target:am62p` and `target:am62p-console`.
+
+- **Arm A**: origin/main `02a2ed23` as it is (it holds `f740f881`).
+- **Arm E**: `074492c5`, which is `02a2ed23` plus one commit,
+  `pvr: arm e sets three mip levels a render on by default`. That commit
+  changes only `const MIP_THREE_LEVELS_DEFAULT: bool = false;` to `true`.
+  It was built with `--allow-local` and never pushed.
+
+Both arms were built and run the same way:
+`tools/cts/pr-session.sh three-a --knob off --cases '216' --glmark2`, and
+`three-e ... --allow-local` for arm E. Case 216 ran alone first, then
+glmark2. A second gl_test image per arm with `--cases '216 219'`
+(`three-a-219`, `three-e-219`) measured c.
+
+The board.sh records were in the session's build tree (untracked):
+
+    build/pr/three-a-02a2ed23/run-gltest/20261127-1439-pr-three-a-gltest-b9766cf5
+    build/pr/three-a-02a2ed23/run-glmark2/20261127-1443-pr-three-a-glmark2-1acac1c8
+    build/pr/three-e-074492c5/run-gltest/20261127-1455-pr-three-e-gltest-c33d0b02
+    build/pr/three-e-074492c5/run-glmark2/20261127-1459-pr-three-e-glmark2-fac00eed
+    build/pr/three-a-219-02a2ed23/run-gltest/20261127-1511-pr-three-a-219-gltest-14b56292
+    build/pr/three-e-219-074492c5/run-gltest/20261127-1515-pr-three-e-219-gltest-d4d458bd
+
+Those directories went with the task's work tree and are **not kept**. No
+console log was committed. The lines below are quoted from them.
+
+`verdict=` lines (board.sh):
+
+    A gltest:  rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=78s
+    A glmark2: rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:GLMARK2 resets=0 record=594b1201,fc3f01e9,6184003f,00258320 back_after=418s unsupported=0
+    E gltest:  rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=84s
+    E glmark2: rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:GLMARK2 resets=0 record=594b1201,fc3f01e9,6184003f,00258320 back_after=416s unsupported=0
+    A 216+219: rc=0 verdict=done ... resets=0 back_after=78s
+    E 216+219: rc=0 verdict=done ... resets=0 back_after=81s
+
+Both glmark2 records read score 489, 33 scenes ran, 0 failed, 0
+unsupported, 0 GL errors and 0 draws that sampled an incomplete texture.
+
+| record line | A `02a2ed23` (off) | E `074492c5` (on) | predicted for E |
+|---|---|---|---|
+| gl_test 216 `per frame: N kicks` | 40.00 (800 over 20 frames) | **21.00** (420 over 20) | 21.00 |
+| gl_test 216 `mipchains: 20 frames, X ms a frame` | 44.20 (both runs) | **44.20** (both runs) | at least 19c - 2 = 4.65 ms lower |
+| gl_test 216 `TA busy, 3D busy, TA\|3D, wall` us | 659, 7341, 7799, 44214 | 522, 8847, 9009, 44207 | TA\|3D about the same |
+| gl_test 216 reposts over 20 frames | 0 | 0 | not more |
+| `case 216 mipchains: PASS` | PASS | **PASS** | PASS |
+| case 219 `kickpair` two / one ms a rep, c | 0.90 / 0.55, **c = 0.35** | 0.95 / 0.55, c = 0.40 | (1.15 was the prior) |
+| terrain `FPS:` / `FrameTime` | 13 / 80.011 ms | 14 / **74.189** ms | at least 23c - 3 = 5.05 ms lower; about 57 ms at c = 1.15 |
+| `glmark2-counters [terrain]` kicks / frames | 6427 / 126 = **51.01** | 3781 / 135 = **28.01** | 28 |
+| `glmark2-counters [terrain]` waits, reposts | 6159, 126 (1 a frame) | 3497, 135 (1 a frame) | not more |
+| `glmark2-frame [terrain]` gl, swap us | 78983, 906 | 73060, 1022 | gl falls with the kicks |
+| re-post lines over terrain | 8, `site=frame set` | 8, `site=frame set` | not more |
+| refract `FrameTime` | 34.915 ms | 36.426 ms (**+1.51**) | about 6c lower |
+| `glmark2-counters [refract]` kicks a frame | 3744 / 288 = 13.00 | 1932 / 276 = 7.00 | 7 |
+| `glmark2-frame [refract]` gl, swap us | 33976, 859 | 31284, 5046 | |
+| pictures, column `am62p`, tolerance 8 | match 27, mismatch 6 | match 27, mismatch 6 | the same split |
+
+`python3 -I tools/cts/mip3-ab-verdict.py <A> <E>`, with c from arm A's
+case 219, prints:
+
+    case216-kicks-pass: ok: E 21.00 kicks (want 21.00, off by +0.00), E case 216 PASS
+    case216-ms: miss: fell 0.00 ms, want >= 19c - 2 = 4.65 ms (missed by 4.65 ms)
+    terrain-ms: ok: terrain fell 5.82 ms (E 74.19), want >= 23c - 3 = 5.05 ms (met by 0.77 ms)
+    pictures: ok: same split: match 27, mismatch 6
+    kick-bound: no, ... case 216: kicks -19.00, ms -0.00 = 0.00 ms a kick (c 0.35); terrain: kicks -23.00, ms -5.82 = 0.25 ms a kick (c 0.35)
+    mip3-ab: missed (case216-ms)
+
+With the prior c = 1.15 (`--c 1.15`), terrain misses too: it fell 5.82 ms
+where 23.45 ms was wanted (missed by 17.63 ms).
+
+**Verdict: missed.** The kicks fell exactly as designed: 40 -> 21 in case
+216, 51 -> 28 in terrain, 13 -> 7 in refract. The case 216 renders with
+three targets of different pitches and maxclips stored without a hang, a
+reset or a wrong probe. The milliseconds did not follow:
+
+- Case 216's frame is 44.20 ms with 40 kicks and with 21. It is **not
+  kick-bound**, in the sense of `am62p-pvr-mipmap-kicks.md`. The GPU is
+  busy 7.8 ms (A) or 9.0 ms (E) of that frame, with no re-post. So about
+  35 ms a frame go neither to the GPU nor to the kick count. That cost is
+  new, and the 1.15 ms a queued kick of `61ad38a1` hid it.
+- Terrain gained 5.82 ms (-7 %), 0.25 ms a kick removed. That is under c
+  (0.35 ms, case 219 at this commit) and far from the 23 ms predicted at
+  the old c.
+- Refract lost 1.51 ms. Its GL time fell by 2.69 ms, but its swap wait
+  rose by 4.19 ms: the frame waits for the GPU at the swap instead.
+- The extra shading of the 3-target renders is visible: case 216's TA|3D
+  rose 1.21 ms a frame for 4 chains. Part (b) predicted under 0.3 ms a
+  chain.
+
+So the knob stays **off**: `MIP_THREE_LEVELS_DEFAULT` is still `false`, and
+the `mip3-flip` item has nothing to flip. The per-case dEQP-GLES2
+`functional.texture.mipmap.2d.*` verdicts of both arms are item
+am62p-deqp's (it needs the board's dEQP stage 1). They were not read in
+this session.
+
+**Pictures, read against `pvr-mip-three-levels-es2.md`.** The split is the
+same: 27 match, 6 mismatch. The set of mismatching scenes moved:
+
+- A's mismatches are desktop blur, the two buffer map scenes, jellyfish,
+  terrain and refract.
+- E's mismatches are the same, except that terrain now matches and
+  conditionals `fragment-steps=0:vertex-steps=5` now mismatches, with
+  probe tr `000000` against `fdfdfd`.
+
+None of these moves is a mip move:
+
+- Conditionals calls no `glGenerateMipmap`. In glmark2's source
+  (`GLMARK2_SRC`), only scene-refract.cpp, texture.cpp and the
+  scene-terrain directory do. It is a grid
+  rotating with time, and `tools/cts/glmark2-pictures.txt` already names
+  that probe "tr of conditionals vertex-steps=5 off 253 where an edge falls
+  on another pixel".
+- Terrain's and refract's probe c are animated-scene probes.
+- Every scene's mean is within 2 of the other arm's. Terrain's mean is
+  `119 129 44` on both. Refract's is `24 20 33` against `25 20 33`.
+
+That is what the es2 note expects: TPU levels 1 and 2 unchanged, and the
+ALU levels 1 to 3 LSB, inside tolerance 8.
+
 ## Open
 
 - How ties round in the pack, and whether the TPU's bilinear equals the
   ALU's on odd steps. E1's board session answers both, and part (b)'s `Q`
-  macro takes the answer.
+  macro takes the answer. **Still open after 2026-11-27.** The session's
+  evidence cannot tell `floor(v * 255 + 0.5)` from round-to-even. Case 216's
+  probes see only quadrant centres of one colour, and glmark2's means moved
+  by at most 2. The answer needs gl_test case 250's level read-back and
+  the dEQP mipmap cases, both item am62p-deqp's.
 - Whether a render whose emits have different pitches and maxclips stores
   correctly on the board. It is first run by E1's patch (two emits) or by
-  this change (three).
+  this change (three). **Answered in part on 2026-11-27, on the Verdin
+  AM62P at `074492c5`:**
+  - Case 216's 800x600 chains ran 20 frames of 3-target renders. Those
+    renders had pitches 256/128/64 and maxclips 200x150/100x75/50x37 on a
+    400x300 grid.
+  - They ran with no hang, 0 resets and 0 re-posts, and the four quadrant
+    probes PASSed.
+  - glmark2 terrain kept its picture mean (`119 129 44`).
+  - Refract's mean moved by 1, and both glmark2 runs had 0 GL errors.
+
+  A wrong pitch would shear a level and move those probes and means, so
+  the store is right to that resolution. A per-texel answer needs case
+  250's read-back.
+- Why case 216's frame is 44.20 ms with 40 kicks and with 21, while the
+  GPU is busy only 7.8 to 9.0 ms of it (above). Until that is known, fewer
+  kicks cannot pay.
 - The combination with E1's tail, {1}, {2-4} and a tail kick for 5..9,
   would be 3 kicks a chain (15 mip kicks a frame, 52 -> 24). It is not
   designed here.
