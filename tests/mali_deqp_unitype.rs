@@ -22,11 +22,6 @@ mod mali_ref;
 /// bvec2 compares in one product, the varying a constant the link
 /// propagates).
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
-/// An operand form the fragment walk has no reference for: `fsmat3_mediump`'s
-/// column sum, a lane alone first, since plan #377's constop lowering takes
-/// its colour lane beside 1.0. Mesa's program is `vec16.rs`'s chunks of the
-/// columns plus `v_coords`, a varying that route does not read.
-const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
 
 /// The references the lowering makes byte-equal (`vsstruct_partial` and
 /// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
@@ -64,6 +59,9 @@ const MATCHED: &[&str] = &[
     "vsbvec3",
     "fsivec4",
     "vsmat3_light",
+    /* the column sums of a matrix uniform plus a lane alone (plan #387
+     * mali-train-3a, opform O2: nir_fs.rs `uniform_lane_sum`) */
+    "fsmat3_mediump",
 ];
 
 /// The references that compile with other words than Mesa's.
@@ -76,7 +74,7 @@ const DIFFERS: &[&str] = &["vsapi_struct"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
-const REFUSED: &[(&str, &str)] = &[("fsmat3_mediump", FS_OPERAND), ("fsmulti", FRAGCOLOR_LANE)];
+const REFUSED: &[(&str, &str)] = &[("fsmulti", FRAGCOLOR_LANE)];
 
 #[test]
 fn refusals_pinned() {
@@ -196,8 +194,10 @@ fn fsmat2_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat2_mediump");
 }
 
+/// Byte-equal since plan #387 mali-train-3a (opform O2): the column sums
+/// of `u_in0 + v_coords`, an operation second in a sum (the shader is
+/// deqp_opform_matadd_uniform's).
 #[test]
-#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws (the column sum's lane alone first); Mesa's program is vec16.rs's column chunks with a varying, which that route does not read"]
 fn fsmat3_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat3_mediump");
 }
