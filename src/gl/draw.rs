@@ -2757,6 +2757,36 @@ fn refuse_undrawable_targets(d: &GlesDraw, mask: u8) -> Result<(), DrawError> {
 /// target and read neither field.
 const PER_TARGET_MASK: bool = cfg!(feature = "gpu-v3d");
 
+/// Does the back end take a blend enable per render target? The V3D 4.2
+/// does: its BLEND_ENABLES packet is a mask of the RTs that blend (Mesa's
+/// v3d_packet.xml "Blend Enables", field "Mask", 8 bits; v3dx_emit.c:525-568
+/// emits `v3d->blend->blend_enables`, which v3d_create_blend_state,
+/// v3dx_state.c:148-156, builds per RT over an independent blend state), and
+/// `state::job_state` (`rt_masks`) leaves the integer and 32F targets out
+/// of `V3dJobState::rt_blend_mask` (driver/src/v3d/v3d_job.c emit_blend).
+/// BLEND_CFG stays one blend state for the RTs that blend. The V3D 7.1
+/// build (`gpu-v3d71`, which implies `gpu-v3d`) gives every target the same
+/// enable (src/v3d/glue71.rs `draw_state`) and is not one. The other back
+/// ends blend through a shader variant or one pixel-engine state and read
+/// neither field.
+const PER_TARGET_BLEND_ENABLE: bool = cfg!(all(feature = "gpu-v3d", not(feature = "gpu-v3d71")));
+
+/// Does the draw blend any target while glEnable(GL_BLEND) is on? An
+/// integer target never blends (ES 3.0 4.1.8). With one blend enable for
+/// every target the frame target (target 0) answers for all, as before;
+/// with one per target ([`PER_TARGET_BLEND_ENABLE`]) any written non-integer
+/// target does, so an integer target 0 beside an RGBA8 target 1 leaves
+/// target 1 blended (the back end drops target 0's enable). Target 0 counts
+/// by its format alone, as before, so a one-target draw answers what it did.
+fn draw_blends_a_target(d: &GlesDraw) -> bool {
+    if !PER_TARGET_BLEND_ENABLE {
+        return !gles_surf_is_integer(d.target_format);
+    }
+    let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    !gles_surf_is_integer(d.target_format)
+        || d.targets[1..n].iter().any(|t| t.gpu != 0 && !gles_surf_is_integer(t.format))
+}
+
 /// [`per_target_masks`] has logged its refusal (one line, not one per
 /// draw).
 static REFUSED_UNEVEN_BLEND: Global<bool> = Global::new(false);
@@ -2772,13 +2802,15 @@ static REFUSED_UNEVEN_BLEND: Global<bool> = Global::new(false);
 /// (`per_target_mask`, `target_color_mask`); where all agree, nothing is set
 /// and every target takes `color_mask`, as before.
 ///
-/// Blending is one state for every RT on the V3D (BLEND_ENABLES 0xf, one
-/// BLEND_CFG for all, driver/src/v3d/v3d_job.c emit_blend), and ES 3.0
-/// 4.1.8 ignores it for an integer target only. A draw with uneven masks,
-/// glEnable(GL_BLEND) on and both integer and non-integer targets would
-/// blend the integer store, or not blend the other target: it is refused
-/// by name with GL_INVALID_OPERATION, as every uneven draw was before the
-/// V3D took a mask per RT.
+/// ES 3.0 4.1.8 ignores blending for an integer target only. The V3D 4.2
+/// has a blend enable per RT ([`PER_TARGET_BLEND_ENABLE`]): a draw with
+/// uneven masks, glEnable(GL_BLEND) on and both integer and non-integer
+/// targets is taken, the integer RTs left out of BLEND_ENABLES and the
+/// others blended with the one BLEND_CFG. A back end with one blend enable
+/// for every RT (the V3D 7.1 build) would blend the integer store, or not
+/// blend the other target: there the draw is refused by name with
+/// GL_INVALID_OPERATION, as every uneven draw was before the V3D took a
+/// mask per RT.
 fn per_target_masks(c: &GlContext, d: &mut GlesDraw, app: u8) -> Result<(), DrawError> {
     let lead = d.targets[0].out_shift;
     let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
@@ -2803,7 +2835,7 @@ fn per_target_masks(c: &GlContext, d: &mut GlesDraw, app: u8) -> Result<(), Draw
     if !uneven {
         return Ok(());
     }
-    if c.blend && int && other {
+    if c.blend && int && other && !PER_TARGET_BLEND_ENABLE {
         // SAFETY: single-threaded by contract; no other reference is live.
         let reported = unsafe { REFUSED_UNEVEN_BLEND.get() };
         if !*reported {
@@ -4397,8 +4429,10 @@ fn build_common(
 
     /* blending: swap in the FS variant compiled for this blend state, and
      * pass the state on as well for a backend that blends in hardware */
-    /* blending is ignored for an integer buffer (ES 3.0 4.1.8) */
-    d.blend = c.blend && !gles_surf_is_integer(d.target_format);
+    /* blending is ignored for an integer buffer (ES 3.0 4.1.8); on a back
+     * end with a blend enable per target ([`PER_TARGET_BLEND_ENABLE`]) an
+     * integer target 0 does not keep the others from blending */
+    d.blend = c.blend && draw_blends_a_target(d);
     d.blend_src_rgb = map_blend_factor(c.blend_src) as u8;
     d.blend_dst_rgb = map_blend_factor(c.blend_dst) as u8;
     d.blend_src_alpha = map_blend_factor(c.blend_src_a) as u8;

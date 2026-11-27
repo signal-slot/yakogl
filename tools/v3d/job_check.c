@@ -77,6 +77,10 @@
  *     written inputs as they were; each of the 55 inputs the groups are
  *     packed from, changed alone, is written again; a new job writes every
  *     group.
+ * 22. Per-RT blend enables (rt_blend_own, rt_blend_mask): BLEND_ENABLES
+ *     decoded is the mask of the RTs that blend (an integer RT 0 left out),
+ *     a new mask is written again, rt_blend_own off is every RT (0xf); one
+ *     BLEND_CFG (Render Target Mask 0xf) for the RTs that blend.
  *
  * Built against a Mesa 26.2.1 tree with build-v3d (tools/v3d/README.md):
  *
@@ -1670,6 +1674,73 @@ static void part_mrt(void)
 	check(!v3d_job_begin(&j5, &t5, &l.bcl, &l.rcl, &l.ind), "5 RTs: refused");
 }
 
+/* Part 22, per-RT blend enables (rt_blend_own / rt_blend_mask, v3d_job.h):
+ * BLEND_ENABLES "Mask" is a bit per RT that blends (v3d_packet.xml "Blend
+ * Enables", 8 bits; Mesa 26.2.1 v3dx_emit.c:525-568 emits blend_enables,
+ * which v3d_create_blend_state, v3dx_state.c:148-156, builds per RT over
+ * an independent blend state, leaving the integer RTs out), and one
+ * BLEND_CFG, "Render Target Mask" 0xf, holds the state of the RTs that
+ * blend. Three draws of one 3-RT job: an integer RT 0 beside blended RT 1
+ * and RT 2 (0b0110), then RT 0 alone (0b0001, a new mask is emitted even
+ * with the rest of the blend state unchanged), then rt_blend_own off (every
+ * RT, 0xf, as before). */
+static char *blend_rt_job(struct lists *l, const struct v3d_job_state st[3])
+{
+	struct v3d_fs_prog fs = fs_prog();
+	struct v3d_vs_prog vs = vs_prog(0x00201000u, vs_u, 5), cs = vs_prog(0x00202000u, cs_u, 3);
+	struct v3d_vertex_attr attrs[2] = { { 0x00300000u, 32, 4 }, { 0x00300010u, 32, 4 } };
+	struct v3d_uniform_storage vst = { vs_words, 4 }, fst = { fs_words, 2 };
+	struct v3d_job_target t = { W, H, TARGET, W * 4, TILE_ALLOC, false };
+	t.rts = 3;
+	t.rt[0] = (struct v3d_job_rt){ 0x00c00000u, W * 4 };
+	t.rt[1] = (struct v3d_job_rt){ 0x00d00000u, W * 4 };
+	struct v3d_job_clear c = { .rgba8 = 0, .z = 1.0f };
+	lists_init(l, RCL_OFF - BCL_OFF);
+	struct v3d_job j;
+	bool ok = v3d_job_begin(&j, &t, &l->bcl, &l->rcl, &l->ind);
+	for (int n = 0; n < 3; n++) {
+		struct v3d_job_draw d = {
+			.st = &st[n], .fs = &fs, .vs = &vs, .cs = &cs, .vs_storage = vst, .fs_storage = fst,
+			.attrs = attrs, .num_attrs = 2, .prim = V3D_PRIM_TRIANGLES, .count = 3,
+		};
+		ok = ok && v3d_job_draw(&j, &d, NULL) == V3D_JOB_OK;
+	}
+	check(ok && v3d_job_end(&j, &c, NULL, NULL), "the per-RT blend job builds");
+	return decode(l);
+}
+
+static void part_blend_rt(void)
+{
+	static struct lists l;
+	struct v3d_job_state st[3];
+	for (int n = 0; n < 3; n++) {
+		st[n] = m5_state();
+		st[n].blend_enabled = true;
+		st[n].rgb_func = V3D_BLEND_MODE_ADD;
+		st[n].rgb_src = V3D_BLEND_FACTOR_SRC_ALPHA;
+		st[n].rgb_dst = V3D_BLEND_FACTOR_INV_SRC_ALPHA;
+		st[n].alpha_func = V3D_BLEND_MODE_ADD;
+		st[n].alpha_src = V3D_BLEND_FACTOR_ONE;
+		st[n].alpha_dst = V3D_BLEND_FACTOR_ZERO;
+		st[n].rt_blend_own = true;
+	}
+	st[0].rt_blend_mask = 0x6; /* RT 0 integer */
+	st[1].rt_blend_mask = 0x1;
+	st[2].rt_blend_own = false;
+	st[2].rt_blend_mask = 0x6; /* ignored without rt_blend_own */
+	char *text = blend_rt_job(&l, st);
+	check(!strstr(text, "Failed") && !strstr(text, "nknown"), "per-RT blend job: the decoder reported no error");
+	check(census(text, "BLEND_ENABLES") == 3, "per-RT blend: a BLEND_ENABLES for each draw");
+	check(field(text, "BLEND_ENABLES", 0, "Mask") == 0x6, "draw 1: RT 1 and RT 2 blend, integer RT 0 not");
+	check(field(text, "BLEND_ENABLES", 1, "Mask") == 0x1, "draw 2: RT 0 alone blends");
+	check(field(text, "BLEND_ENABLES", 2, "Mask") == 0xf, "draw 3: without rt_blend_own every RT blends");
+	check(field(text, "BLEND_CFG", 0, "Render Target Mask") == 0xf &&
+		      field(text, "BLEND_CFG", 0, "Color blend src factor") == V3D_BLEND_FACTOR_SRC_ALPHA &&
+		      field(text, "BLEND_CFG", 0, "Color blend dst factor") == V3D_BLEND_FACTOR_INV_SRC_ALPHA,
+	      "per-RT blend: one BLEND_CFG for the RTs that blend");
+	check(field(text, "CFG_BITS", 0, "Blend enable") == 1, "per-RT blend: CFG_BITS blend enable set");
+}
+
 /* The record's Point size in shaded vertex data is the draw's
  * vs_writes_psiz (Mesa: set exactly when its VS writes the size, the points
  * variant, v3dx_draw.c:556-558). */
@@ -2852,9 +2923,10 @@ int main(void)
 	 * part 18 (no colour buffer): 2 builds + 4 + 3 + 1 refusal;
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals;
-	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal */
+	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal;
+	 * part 22 (per-RT blend enables): 1 build + 7 */
 	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 63 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
-			    28 + 8 + 6 + 10 + 6 + 9 + 9;
+			    28 + 8 + 6 + 10 + 6 + 9 + 9 + 8;
 	part_identity();
 	part_rollback();
 	part_decode();
@@ -2876,6 +2948,7 @@ int main(void)
 	part_pack_skip();
 	part_occlusion();
 	part_flag_words();
+	part_blend_rt();
 	printf("job_check: %d checks run (planned %d), %d failed\n", checks, planned, failures);
 	return (failures == 0 && checks == planned) ? 0 : 1;
 }
