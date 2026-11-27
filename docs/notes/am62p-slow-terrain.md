@@ -263,6 +263,32 @@ reported strings (`tests/es2_report_guard.rs`).
      four chains' 9 + 8 + 9 + 9 levels and 5 passes; 4 + 4 + 4 + 4 + 5 = 21
      after) and `mipchains: ... ms a frame` (46.15 now), its four quadrant
      probes; glmark2 terrain's `FPS:` and probes against the column.
+   - **Measured 2026-11-27 on the Verdin AM62P: missed**, and the knob
+     stays off. Arm A is origin/main `02a2ed23` (holds `f740f881`), arm E
+     `074492c5` (the same plus `MIP_THREE_LEVELS_DEFAULT = true`).
+     - Case 216: 40.00 -> 21.00 kicks and PASS, but **44.20 -> 44.20 ms**
+       a frame, with TA|3D 7.80 -> 9.01 ms.
+     - Case 219: c = 0.35 ms (0.90 - 0.55), not 1.1.
+     - Terrain with three levels: **80.011 -> 74.189 ms** (13 -> 14 FPS),
+       51.01 -> 28.01 kicks a frame, still 1 re-post a frame
+       (`site=frame set`). That is -5.82 ms for 23 kicks: 0.25 ms a kick.
+     - Refract: 34.915 -> 36.426 ms, with 13 -> 7 kicks; its swap wait
+       rose 0.86 -> 5.05 ms.
+     - Pictures: the same 27 / 6 split; terrain's mean `119 129 44` on
+       both arms.
+     - `verdict=done`, 0 resets and 0 GL errors on both arms.
+
+     The prediction missed by 4.65 ms on case 216 (19c - 2 at c = 0.35).
+     Terrain met 23c - 3 = 5.05 ms at the measured c, by 0.77 ms. It falls
+     17.6 ms short of the 23.45 ms the 1.15 ms prior asked for, and of
+     "about -25 ms" above.
+
+     The frame is **not kick-bound** (`am62p-pvr-mipmap-kicks.md`): the
+     kick count is no longer the price.
+     Case 216 spends about 35 ms a frame neither on the GPU nor in the
+     kicks. The table, the commands and the record paths are in
+     `pvr-mip-three-levels.md`, "Measured on the Verdin AM62P
+     (2026-11-27)".
 3. **Path B again, once a waited kick costs what a queued one does.** The
    code is there (`Backend::mip_cpu_tail`, off). After (1), a prefix's wait
    should cost its 4 kicks (about 4.4 ms), not 15.4. The tail must also stop

@@ -291,6 +291,18 @@ option, name from its commit). Command: `tools/cts/pr-session.sh three --knob of
 | pictures, `verdict=` | the same | **the same**, within tolerance 8 (`pvr-mip-three-levels-es2.md`: the knob is the one that may move bytes; read that note's table before calling a mismatch) |
 | kicks fall, ms do not | | not kick-bound (`am62p-pvr-mipmap-kicks.md`) |
 
+Ran 2026-11-27 on the Verdin AM62P:
+
+- Arm A `02a2ed23`: 216 at 40.00 kicks, 44.20 ms, PASS; terrain 80.011 ms
+  and 51.01 kicks; refract 34.915 ms.
+- Arm E `074492c5`: 216 at 21.00 kicks, 44.20 ms, PASS; terrain 74.189 ms
+  and 28.01 kicks; refract 36.426 ms.
+- Case 219: c = 0.35 ms.
+- Pictures: 27 / 6 on both arms.
+
+**Missed**, not kick-bound. The table and the records are in
+`pvr-mip-three-levels.md`, "Measured on the Verdin AM62P (2026-11-27)".
+
 ## After the session
 
 Per arm: `docs/notes/` record with `<main>` and each experiment commit, the
