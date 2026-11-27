@@ -16,10 +16,10 @@
 #
 #   --update   rewrite the expected files from the script's output (review the diff)
 #
-# The x2 case pins what the script does today: it does not join a header-only
-# line "[scene] opts:" with the bare " FPS: ..." line that follows (PREFIX_RE,
-# glmark2-ms.py:45), so the x2 expectation is exit 1; when that is fixed the
-# expectation moves to exit 0 (--update, and read the diff).
+# The x2 case checks that glmark2-ms.py reads an Armadillo-X2 console log: it
+# joins a header-only line "[scene] opts:" with the bare " FPS: ..." line that
+# follows, and exits 0 (st-x2.table.expected, st-x2.cells.expected: "rc 0"
+# and the per-scene table / cells of the i.MX8MP column).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 SCRIPT=$HERE/glmark2-ms.py
