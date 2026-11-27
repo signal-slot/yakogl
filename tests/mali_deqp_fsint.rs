@@ -24,11 +24,18 @@
 //! | `conv_vec2_ivec2_to_bvec4` | `conversions.vector_combine.vec2_ivec2_to_bvec4_fragment` | 5 (a float operand) | `intval3_reslib_ivec4_to_bvec4_fs` | `bool(vec2)` as `FCMP_OR.v2f16.ne.m1` of an fp16 pair, its lanes against the `uniform bvec4` at 16 bits (`ICMP_OR.v2u16.eq`, `S16_TO_S32`) | 26 |
 //! | `conv_bool_float_int_to_bvec3` | `conversions.vector_combine.bool_float_int_to_bvec3_fragment` | (same 5) | `intval_reslib_mixed_fs` | the bool and the float lane in one `FCMP_OR.v2f16.ne.m1` (`.h10`), the int lane `F16_TO_S32` + `ICMP_OR.u32.ne` | 23 |
 //!
-//! At the tip every reference is refused, so each byte-compare is
-//! `#[ignore]`d and `refusals_pinned` holds the refusal ([`REFUSED`]): the
-//! integer/boolean text, or for `sequence_bool_vec2_highp` the next one (its
-//! `in0 && in1` is dead, as in `intval3_opfs_sequence_bool_vec2_mediump`;
-//! the varying load's text, [`VARYING_LOAD`]).
+//! The references the compiler makes byte-equal run ([`MATCHED`]: the two
+//! `!=` forms since intval-rest M1, and since plan #402 item lower-fsint
+//! the decrements' `iadd(x, -1)`, the lowp `step`'s fp32 compare of two
+//! varyings' lanes and the `bvec4` of an fp16 pair beside int lanes, the
+//! 16-bit masks widened by `S16_TO_S32` into the 32-bit `LSHIFT_AND`
+//! chain). The others are `#[ignore]`d and `refusals_pinned` holds the
+//! refusal ([`REFUSED`]): the integer/boolean text for
+//! `conv_bool_float_int_to_bvec3` (Mesa pairs the compares of its two
+//! scalar varyings, lanes swapped, which the lowering does not draw), and
+//! for `sequence_bool_vec2_highp` the next one (its `in0 && in1` is dead, as
+//! in `intval3_opfs_sequence_bool_vec2_mediump`; the varying load's text,
+//! [`VARYING_LOAD`]).
 //! The lowering that lifts one moves it to [`MATCHED`] (byte-equal) or
 //! [`DIFFERS`] (compiles with other words than Mesa's) in the same commit and
 //! drops its `#[ignore]`. `fs_words_pinned` checks each reference's
@@ -44,7 +51,14 @@ const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet
 
 /// The references the lowering makes byte-equal, without the `deqp_fsint_`
 /// prefix: each has a running byte-compare test below.
-const MATCHED: &[&str] = &["ne_ivec4_highp", "notequal_ivec4_highp"];
+const MATCHED: &[&str] = &[
+    "conv_vec2_ivec2_to_bvec4",
+    "ne_ivec4_highp",
+    "notequal_ivec4_highp",
+    "postdec_result_ivec3_mediump",
+    "predec_effect_ivec4_lowp",
+    "step_float_lowp",
+];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -55,14 +69,8 @@ const DIFFERS: &[&str] = &[];
 const VARYING_LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
 /// Every refused reference with its whole `MaliError` message.
-const REFUSED: &[(&str, &str)] = &[
-    ("conv_bool_float_int_to_bvec3", INT_VALUE),
-    ("conv_vec2_ivec2_to_bvec4", INT_VALUE),
-    ("postdec_result_ivec3_mediump", INT_VALUE),
-    ("predec_effect_ivec4_lowp", INT_VALUE),
-    ("sequence_bool_vec2_highp", VARYING_LOAD),
-    ("step_float_lowp", INT_VALUE),
-];
+const REFUSED: &[(&str, &str)] =
+    &[("conv_bool_float_int_to_bvec3", INT_VALUE), ("sequence_bool_vec2_highp", VARYING_LOAD)];
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
 /// program, the tail and the blend branch included).
@@ -149,13 +157,11 @@ fn notequal_ivec4_highp() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (four lowp int decrements); pinned by refusals_pinned"]
 fn predec_effect_ivec4_lowp() {
     mali_ref::assert_matches("deqp_fsint_predec_effect_ivec4_lowp");
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (f2i then i2f, no integer op); pinned by refusals_pinned"]
 fn postdec_result_ivec3_mediump() {
     mali_ref::assert_matches("deqp_fsint_postdec_result_ivec3_mediump");
 }
@@ -167,7 +173,6 @@ fn sequence_bool_vec2_highp() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (a lowp scalar step at fp32); pinned by refusals_pinned"]
 fn step_float_lowp() {
     mali_ref::assert_matches("deqp_fsint_step_float_lowp");
 }
@@ -175,7 +180,6 @@ fn step_float_lowp() {
 /// Drawn with `--uniform-values`: the `uniform bvec4 ref_out0` is true,
 /// false, true, false.
 #[test]
-#[ignore = "refused: an integer or boolean value (bool of an fp16 pair beside int lanes); pinned by refusals_pinned"]
 fn conv_vec2_ivec2_to_bvec4() {
     mali_ref::assert_matches("deqp_fsint_conv_vec2_ivec2_to_bvec4");
 }
@@ -183,7 +187,7 @@ fn conv_vec2_ivec2_to_bvec4() {
 /// Drawn with `--uniform-values`: the `uniform bvec3 ref_out0` is true,
 /// false, true.
 #[test]
-#[ignore = "refused: an integer or boolean value (a bool and a float lane in one fp16 compare); pinned by refusals_pinned"]
+#[ignore = "refused: an integer or boolean value (a bool and a float lane of two scalar varyings in one fp16 compare); pinned by refusals_pinned"]
 fn conv_bool_float_int_to_bvec3() {
     mali_ref::assert_matches("deqp_fsint_conv_bool_float_int_to_bvec3");
 }

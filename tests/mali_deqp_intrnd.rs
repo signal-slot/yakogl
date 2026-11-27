@@ -49,18 +49,26 @@ const LANECYCLE: &str = "Valhall back end defect: an invariant of the pipeline d
 const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
 const FRAGCOLOR: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// `trunc_atan_fs` past its `int(a)` (plan #402 item lower-fsint): the
+/// `atan`.
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+/// `bool_varying_lane_fs` past its `b2f` by a constant (plan #402 item
+/// lower-fsint): the fragment program compiles, and the link refuses the
+/// two stages' offsets of `c`.
+const LINK_OFFSETS: &str =
+    "online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('c')";
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("bool_uniform_select_comb", INT_VALUE),
-    ("bool_varying_lane_fs", INT_VALUE),
+    ("bool_varying_lane_fs", LINK_OFFSETS),
     /* the pair of a computed lane then a constant asked for again
      * (mali-deqp-defects.md fix C) */
     ("dead_bool_cmp_fs", LANECYCLE),
     ("dead_cond_fs", FS_OPERAND),
     ("dead_ivec_uniform_fs", FRAGCOLOR),
     ("int_uniform_lanes_fs", INT_VALUE),
-    ("trunc_atan_fs", INT_VALUE),
+    ("trunc_atan_fs", ARITH),
     ("trunc_lane_fs", INT_VALUE),
 ];
 
@@ -93,7 +101,7 @@ fn bool_uniform_select_comb() {
 /// one `FMA.v2f16` with the constant pair; the int globals and the `if` on
 /// `bool(int(e))` fold.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a Mali link whose stages place a varying at different offsets; pinned by refusals_pinned"]
 fn bool_varying_lane_fs() {
     mali_ref::assert_matches("deqp_intrnd_bool_varying_lane_fs");
 }
@@ -142,7 +150,7 @@ fn int_uniform_lanes_fs() {
 /// `atan` of the lanes at fp32 (`FRCP`, the polynomial `FMA.f32` chain,
 /// `CSEL.u32.eq`, the sign put back with `LSHIFT_AND/OR.i32`).
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: arithmetic other than +, -, * and abs (the atan); pinned by refusals_pinned"]
 fn trunc_atan_fs() {
     mali_ref::assert_matches("deqp_intrnd_trunc_atan_fs");
 }

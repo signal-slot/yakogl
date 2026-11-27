@@ -22,9 +22,9 @@
 //!                                                                                     bool into color.yz
 //! ```
 //!
-//! No reference is byte-equal at the tip: `gt_vec2`, `eq_vec4`, `le_vec2`,
-//! `bin_ge_float` and `bin_eq_vec4` meet the MIX refusal, `ge_vec4` meets the
-//! IrIndex back-end defect. Each test is `#[ignore]`d and [`refusals_pinned`]
+//! No reference is byte-equal at the tip: every one meets the MIX refusal
+//! (`ge_vec4` met the IrIndex back-end defect until plan #402 item
+//! lower-fsint). Each test is `#[ignore]`d and [`refusals_pinned`]
 //! (running) holds its refusal and checks that every `deqp_mixprec4_*`
 //! reference on disk is listed. The lowering that lifts one (plan #402 item
 //! `lower-mixprec3`, `fix-irindex`) removes its `ignore` and moves it from
@@ -42,7 +42,6 @@
 mod mali_ref;
 
 const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
-const IRINDEX: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
 
 /// The references byte-equal now: none.
 const MATCHED: &[&str] = &[];
@@ -50,7 +49,7 @@ const MATCHED: &[&str] = &[];
 /// Every refused reference with its whole refusal text.
 const REFUSED: &[(&str, &str)] = &[
     ("gt_vec2", MIX),
-    ("ge_vec4", IRINDEX),
+    ("ge_vec4", MIX),
     ("eq_vec4", MIX),
     ("le_vec2", MIX),
     ("bin_ge_float", MIX),
@@ -86,7 +85,7 @@ fn gt_vec2() {
 }
 
 #[test]
-#[ignore = "refused: Valhall back end defect (IrIndex); pinned by refusals_pinned"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values; pinned by refusals_pinned"]
 fn ge_vec4() {
     mali_ref::assert_matches("deqp_mixprec4_ge_vec4");
 }
