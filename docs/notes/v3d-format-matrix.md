@@ -331,7 +331,7 @@ same samples through `XYZW`.
     builder, "v3d: a colour write mask per render target, so a wide r/rg
     integer texture draws beside other targets"; the same change is
     `48f6017c` on this branch). `per_target_masks`
-    (`src/gl/draw.rs:2782`, called at `:5150` where `PER_TARGET_MASK`
+    (`src/gl/draw.rs:2782`, called at `:5284` where `PER_TARGET_MASK`
     `:2723` holds for `gpu-v3d` only) gives each written target
     glColorMask limited to its own channels and, where they differ, sets
     `GlesDraw::per_target_mask` and `target_color_mask`; `job_state`
