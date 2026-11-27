@@ -59,6 +59,22 @@
 //! ([`STRUCT`]: `mali_ref::differences_members(.., true)`), as
 //! `mali_ref::STRUCT_VALUES` does for the references it lists.
 //!
+//! Plan #387 item `vsuniftype-design` (`docs/notes/mali-vsunif-lowering.md`)
+//! adds twelve references ([`DESIGN`]), taken from the 389 cases the Verdin
+//! iMX95 (Mali-G310) run at `e63ab28e` refused with the same text. At the
+//! tip `8133663c` none of the 389 meets it any more; the twelve are the
+//! shapes behind what they meet now, or compile into, that no other design
+//! owns: the vertex vector and struct `==` (`local_equal`,
+//! `local_nested_equal`), the dynamically indexed local writes
+//! (`vec2_dynwrite`, `tmp_dynwrite`, `mat2_dynwrite`), Mesa's fp16 trees
+//! for mediump vertex values (`vec2_subscript`, `mat2_subscript`,
+//! `local_cond_assign`), the scratch-memory array (`tmp_float_const`) and
+//! four struct shapes that compile byte-equal (`local_array_member`,
+//! `local_parameter`, `unif_struct_array`). All twelve are drawn on
+//! Mesa 26.2.1's G610 drm-shim and are identical on the G310v2
+//! (`tools/mali/g310_check.sh`). `references_load` checks that every
+//! reference on disk loads and has its regions' words.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_vsunif
 //! ```
@@ -83,7 +99,34 @@ const DIFFERS: &[&str] = &["struct_dynidx", "tmp_array", "vec_subscript"];
 const REFUSED: &[(&str, &str)] = &[("struct_cmp", ARITHMETIC), ("varying_array", VARYING_LANE)];
 
 /// The references with a struct uniform, drawn with its members set.
-const STRUCT: &[&str] = &["struct_cmp", "struct_dynidx", "struct_int"];
+const STRUCT: &[&str] = &["struct_cmp", "struct_dynidx", "struct_int", "unif_struct_array"];
+
+/// `local_equal`, `local_nested_equal`: a vertex `==` of mediump vec3s and
+/// of ints (`nir.rs` `vs_reduce`, its last arm).
+const ARITHMETIC_D: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+
+/// The dynamically indexed local writes (`tmp[ui_k] = ..`).
+const VARYING_LANE_D: &str = "Valhall: a varying lane left unwritten is not lowered yet";
+
+/// The references of plan #387 item `vsuniftype-design`, each with its
+/// state at `8133663c`: `Ok(true)` byte-equal, `Ok(false)` compiles with
+/// other words than Mesa's, `Err(text)` refused with the whole text. The
+/// step of `docs/notes/mali-vsunif-lowering.md` that changes a state moves
+/// it here and drops the test's `#[ignore]` in the same commit.
+const DESIGN: &[(&str, Result<bool, &str>)] = &[
+    ("local_array_member", Ok(true)),
+    ("local_cond_assign", Ok(false)),
+    ("local_equal", Err(ARITHMETIC_D)),
+    ("local_nested_equal", Err(ARITHMETIC_D)),
+    ("local_parameter", Ok(true)),
+    ("mat2_dynwrite", Err(VARYING_LANE_D)),
+    ("mat2_subscript", Ok(false)),
+    ("tmp_dynwrite", Err(VARYING_LANE_D)),
+    ("tmp_float_const", Ok(false)),
+    ("unif_struct_array", Ok(true)),
+    ("vec2_dynwrite", Err(VARYING_LANE_D)),
+    ("vec2_subscript", Ok(false)),
+];
 
 fn reference(name: &str) -> mali_ref::Reference {
     mali_ref::Reference::load(&format!("deqp_vsunif_{name}"))
@@ -116,6 +159,7 @@ fn refusals_pinned() {
         .map(|(n, _)| *n)
         .chain(MATCHED.iter().copied())
         .chain(DIFFERS.iter().copied())
+        .chain(DESIGN.iter().map(|(n, _)| *n))
         .map(str::to_string)
         .collect();
     listed.sort();
@@ -130,6 +174,73 @@ fn refusals_pinned() {
         }
     }
     assert!(changed.is_empty(), "{}", changed.join("\n"));
+}
+
+/// Each [`DESIGN`] reference is in its pinned state at the tip.
+#[test]
+fn design_pinned() {
+    let mut changed = Vec::new();
+    for (name, want) in DESIGN {
+        let now = match differences(name) {
+            Ok(d) => Ok(d.is_empty()),
+            Err(e) => Err(e),
+        };
+        let same = match (&now, want) {
+            (Ok(a), Ok(b)) => a == b,
+            (Err(a), Err(b)) => a == b,
+            _ => false,
+        };
+        if !same {
+            changed.push(format!("{name}: pinned {want:?}, now {now:?}"));
+        }
+    }
+    assert!(changed.is_empty(), "{}", changed.join("\n"));
+}
+
+/// The words of `region` in an expect.json, or None when the region is
+/// absent; a word that is not 16 hex digits is an error.
+fn region_words(json: &str, region: &str) -> Option<Result<usize, String>> {
+    let at = json.find(&format!("\"{region}\": {{"))?;
+    let rest = &json[at..];
+    let words = match rest.find("\"words\": [") {
+        Some(w) => &rest[w + "\"words\": [".len()..],
+        None => return Some(Err(format!("{region}: no words"))),
+    };
+    let list = &words[..words.find(']').unwrap_or(0)];
+    let mut n = 0;
+    for w in list.split(',').map(|w| w.trim().trim_matches('"')).filter(|w| !w.is_empty()) {
+        if w.len() != 16 || !w.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(Err(format!("{region}: {w:?} is not a 64-bit hex word")));
+        }
+        n += 1;
+    }
+    Some(Ok(n))
+}
+
+/// Every [`DESIGN`] reference loads: both shaders have a `main`, the trace
+/// is the reference's own, and `vs.position`, `vs.varying` and
+/// `fs.fragment` have 64-bit hex words.
+#[test]
+fn references_load() {
+    let mut bad = Vec::new();
+    for (name, _) in DESIGN {
+        let r = reference(name);
+        if !r.vs.contains("void main") || !r.fs.contains("void main") {
+            bad.push(format!("{name}: a shader has no main"));
+        }
+        if !r.json.contains(&format!("\"trace\": \"deqp_vsunif_{name}.trace\"")) {
+            bad.push(format!("{name}: the trace is not deqp_vsunif_{name}.trace"));
+        }
+        for region in ["vs.position", "vs.varying", "fs.fragment"] {
+            match region_words(&r.json, region) {
+                None => bad.push(format!("{name}: no {region}")),
+                Some(Err(e)) => bad.push(format!("{name}: {e}")),
+                Some(Ok(0)) => bad.push(format!("{name}: {region} has no words")),
+                Some(Ok(_)) => {}
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
 #[test]
@@ -197,4 +308,106 @@ fn struct_int() {
 #[ignore = "refused: a varying lane left unwritten (the int index of a varying array's dynamic write), lowered by lower-vsunif"]
 fn varying_array() {
     assert_matches("varying_array");
+}
+
+/// `shaders.struct.local.array_member_vertex`: a local struct's array
+/// member read at constant indices, an int uniform among the values.
+#[test]
+fn local_array_member() {
+    assert_matches("local_array_member");
+}
+
+/// `shaders.struct.local.conditional_assignment_vertex`. Compiles. The
+/// first differing instruction of `vs.varying` is `[0]`: ours `F16_TO_F32`
+/// of the mediump uniform `uf_one` and an f32 `FCMP_OR`, Mesa's
+/// `FCMP_OR.v2f16.lt.m1` of its fp16 half and `S16_TO_S32` (step V3).
+#[test]
+#[ignore = "compiles but differs: vs.varying instruction 0 (F16_TO_F32 and FCMP_OR.f32 against FCMP_OR.v2f16 of the fp16 uniform; step V3)"]
+fn local_cond_assign() {
+    assert_matches("local_cond_assign");
+}
+
+/// `shaders.struct.local.basic_equal_vertex`: `a == b` of local structs
+/// `{mediump float; mediump vec3; int}` (step V1).
+#[test]
+#[ignore = "refused: arithmetic (the vertex vec3 and int == of a struct compare; step V1)"]
+fn local_equal() {
+    assert_matches("local_equal");
+}
+
+/// `shaders.struct.local.nested_equal_vertex`: `==` of nested local
+/// structs (step V1).
+#[test]
+#[ignore = "refused: arithmetic (the vertex vec3 and int == of a nested struct compare; step V1)"]
+fn local_nested_equal() {
+    assert_matches("local_nested_equal");
+}
+
+/// `shaders.struct.local.parameter_vertex`: a local struct passed to a
+/// function, an int uniform member.
+#[test]
+fn local_parameter() {
+    assert_matches("local_parameter");
+}
+
+/// `shaders.indexing.matrix_subscript.mat2_dynamic_write_static_read_vertex`:
+/// `tmp[ui_zero] = ..` of a local mediump mat2 (step V2).
+#[test]
+#[ignore = "refused: a varying lane left unwritten (a local mat2 column written at a run-time index; step V2)"]
+fn mat2_dynwrite() {
+    assert_matches("mat2_dynwrite");
+}
+
+/// `shaders.indexing.matrix_subscript.mat2_static_write_dynamic_read_vertex`.
+/// Compiles. The first differing instruction of `vs.varying` is `[1]`: ours
+/// `FMA.f32`, Mesa's `V2F32_TO_V2F16` and a `MUX.v2i16` tree on
+/// `ICMP_OR.s32.lt.m1` (step V3); 27 words ours, 30 Mesa's.
+#[test]
+#[ignore = "compiles but differs: vs.varying instruction 1 (FMA.f32 against V2F32_TO_V2F16 and a MUX.v2i16 tree; step V3)"]
+fn mat2_subscript() {
+    assert_matches("mat2_subscript");
+}
+
+/// `shaders.indexing.tmp_array.vec4_dynamic_write_static_read_vertex`:
+/// `arr[ui_k] = ..` of a local `mediump vec4 arr[4]` (step V2).
+#[test]
+#[ignore = "refused: a varying lane left unwritten (a local array written at run-time indices; step V2)"]
+fn tmp_dynwrite() {
+    assert_matches("tmp_dynwrite");
+}
+
+/// `shaders.indexing.tmp_array.float_const_write_dynamic_read_vertex`.
+/// Compiles. Mesa keeps the 40-element `mediump float` array in thread-local
+/// storage (`STORE.i16` to `thread_local_pointer`, loads at run-time
+/// offsets; secondary offset 896): `vs.position` is 24 words ours, 104
+/// Mesa's (step V4).
+#[test]
+#[ignore = "compiles but differs: Mesa's thread-local storage of the 40-element local array (vs.position 24 words ours, 104 Mesa's; step V4)"]
+fn tmp_float_const() {
+    assert_matches("tmp_float_const");
+}
+
+/// `shaders.struct.uniform.struct_array_vertex`: `uniform S s[3]` read at
+/// constant indices, with its members' values.
+#[test]
+fn unif_struct_array() {
+    assert_matches("unif_struct_array");
+}
+
+/// `shaders.indexing.vector_subscript.vec2_dynamic_subscript_write_component_read_vertex`:
+/// `tmp[ui_zero] = ..` of a local mediump vec2 (step V2).
+#[test]
+#[ignore = "refused: a varying lane left unwritten (a local vec2 written at a run-time subscript; step V2)"]
+fn vec2_dynwrite() {
+    assert_matches("vec2_dynwrite");
+}
+
+/// `shaders.indexing.vector_subscript.vec2_component_write_dynamic_subscript_read_vertex`.
+/// Compiles. The first differing instruction of `vs.varying` is `[1]`: ours
+/// `FMA.f32`, Mesa's `V2F32_TO_V2F16` and the fp16 select (step V3); 9
+/// words ours, 20 Mesa's.
+#[test]
+#[ignore = "compiles but differs: vs.varying instruction 1 (FMA.f32 against V2F32_TO_V2F16 and an fp16 select; step V3)"]
+fn vec2_subscript() {
+    assert_matches("vec2_subscript");
 }
