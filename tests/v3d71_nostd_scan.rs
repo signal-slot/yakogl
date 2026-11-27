@@ -14,6 +14,8 @@
 
 /// The files under src/v3d/ the scan covers. Append here.
 const FILES: &[&str] = &[
+    "admit71.rs",
+    "record71.rs",
     "attr71.rs",
     "clearplan71.rs",
     "ffi71.rs",

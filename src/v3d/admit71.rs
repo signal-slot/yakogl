@@ -20,11 +20,144 @@
 
 use super::{attr71, format71, ident71, limits71, record71, rt71};
 
+/// The capacity of a refusal text, in bytes (the longest reason of the
+/// tables is 121; docs/notes/v3d71-nostd.md section 3, option (a)).
+pub const REASON_CAP: usize = 192;
+
+/// The mark a cut-short reason ends in.
+pub const REASON_CUT_MARK: &str = "...";
+
+/// A refusal text in a fixed buffer: `core` only, no allocator. Text past
+/// [`REASON_CAP`] is cut at a character boundary and the buffer ends in
+/// [`REASON_CUT_MARK`] ([`FixedReason71::cut`] is then true).
+#[derive(Clone, Copy)]
+pub struct FixedReason71 {
+    buf: [u8; REASON_CAP],
+    len: usize,
+    cut: bool,
+}
+
+impl FixedReason71 {
+    pub const fn empty() -> Self {
+        FixedReason71 { buf: [0; REASON_CAP], len: 0, cut: false }
+    }
+
+    /// The text written.
+    pub fn as_str(&self) -> &str {
+        // only whole `&str`s are copied in, cut at character boundaries
+        core::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
+    }
+
+    /// Whether text was dropped (the buffer then ends in the cut mark).
+    pub const fn cut(&self) -> bool {
+        self.cut
+    }
+
+    /// Replace the tail by the cut mark when text was dropped.
+    fn finish(&mut self) {
+        if !self.cut {
+            return;
+        }
+        let mut n = self.len.min(REASON_CAP - REASON_CUT_MARK.len());
+        while !self.as_str().is_char_boundary(n) {
+            n -= 1;
+        }
+        self.buf[n..n + REASON_CUT_MARK.len()].copy_from_slice(REASON_CUT_MARK.as_bytes());
+        self.len = n + REASON_CUT_MARK.len();
+    }
+}
+
+impl core::fmt::Write for FixedReason71 {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if self.cut {
+            return Ok(());
+        }
+        let mut n = s.len().min(REASON_CAP - self.len);
+        if n < s.len() {
+            self.cut = true;
+            while !s.is_char_boundary(n) {
+                n -= 1;
+            }
+        }
+        self.buf[self.len..self.len + n].copy_from_slice(&s.as_bytes()[..n]);
+        self.len += n;
+        Ok(())
+    }
+}
+
+/// Write `args` into a fixed buffer, marking the cut when it is too long.
+pub fn fixed_reason(args: core::fmt::Arguments<'_>) -> FixedReason71 {
+    let mut r = FixedReason71::empty();
+    // the buffer's own write never fails; a failing `Display` leaves what it wrote
+    let _ = core::fmt::Write::write_fmt(&mut r, args);
+    r.finish();
+    r
+}
+
+impl core::ops::Deref for FixedReason71 {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl core::fmt::Display for FixedReason71 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl core::fmt::Debug for FixedReason71 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl PartialEq for FixedReason71 {
+    fn eq(&self, o: &Self) -> bool {
+        self.as_str() == o.as_str()
+    }
+}
+
+impl Eq for FixedReason71 {}
+
+impl PartialEq<str> for FixedReason71 {
+    fn eq(&self, o: &str) -> bool {
+        self.as_str() == o
+    }
+}
+
+impl PartialEq<&str> for FixedReason71 {
+    fn eq(&self, o: &&str) -> bool {
+        self.as_str() == *o
+    }
+}
+
+/// The refusal text of the product build: the fixed buffer. With host-test
+/// it is a `String`, so the tests' `Refusal { reason: x.to_string() }` still
+/// compiles (P2); both are made by [`reason`].
+#[cfg(not(feature = "host-test"))]
+pub type Reason71 = FixedReason71;
+#[cfg(feature = "host-test")]
+pub type Reason71 = String;
+
+/// A reason from format arguments: `reason(format_args!("{n} bytes"))`.
+#[cfg(not(feature = "host-test"))]
+pub fn reason(args: core::fmt::Arguments<'_>) -> Reason71 {
+    fixed_reason(args)
+}
+
+/// A reason from format arguments (host-test: a `String`).
+#[cfg(feature = "host-test")]
+pub fn reason(args: core::fmt::Arguments<'_>) -> Reason71 {
+    std::fmt::format(args)
+}
+
 /// A named refusal: the module whose rule fired and its reason text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refusal {
     pub module: &'static str,
-    pub reason: String,
+    pub reason: Reason71,
 }
 
 impl core::fmt::Display for Refusal {
@@ -34,23 +167,23 @@ impl core::fmt::Display for Refusal {
 }
 
 fn from_rt(r: rt71::Refusal71) -> Refusal {
-    Refusal { module: "rt71", reason: r.as_str().to_string() }
+    Refusal { module: "rt71", reason: reason(format_args!("{}", r.as_str())) }
 }
 
 fn from_attr(r: attr71::Refusal71) -> Refusal {
-    Refusal { module: "attr71", reason: r.message().to_string() }
+    Refusal { module: "attr71", reason: reason(format_args!("{}", r.message())) }
 }
 
 fn from_record(r: record71::Refusal) -> Refusal {
-    Refusal { module: "record71", reason: r.message() }
+    Refusal { module: "record71", reason: reason(format_args!("{r}")) }
 }
 
 fn from_ident(r: ident71::Refusal) -> Refusal {
-    Refusal { module: "ident71", reason: r.to_string() }
+    Refusal { module: "ident71", reason: reason(format_args!("{r}")) }
 }
 
 fn from_format(r: format71::Refusal71) -> Refusal {
-    Refusal { module: "format71", reason: format!("{r:?}") }
+    Refusal { module: "format71", reason: reason(format_args!("{r:?}")) }
 }
 
 /// The hub identity (`HUB_IDENT1`, `HUB_IDENT3`): 7.1 with IPREV >= 10.
@@ -139,14 +272,14 @@ pub fn admit_frame(f: &Frame<'_>) -> Result<FrameAdmitted, Refusal> {
             Ok(_) => {
                 return Err(Refusal {
                     module: "admit71",
-                    reason: "a colour format is not a depth or stencil format".to_string(),
+                    reason: reason(format_args!("a colour format is not a depth or stencil format")),
                 })
             }
         }
     }
     let tile = limits71::choose_tile_size71_total(color_bytes, f.msaa, f.double_buffer).ok_or_else(|| Refusal {
         module: "limits71",
-        reason: format!("no tile size fits {color_bytes} colour bytes per pixel"),
+        reason: reason(format_args!("no tile size fits {color_bytes} colour bytes per pixel")),
     })?;
     Ok(FrameAdmitted { tile, color_bytes })
 }
