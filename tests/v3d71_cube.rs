@@ -267,6 +267,63 @@ fn texture_record_matches_every_field_of_the_reference() {
     assert!(!t.return_32);
 }
 
+/// The fields of the 7.1 Texture Shader State that `texture71::Tex71` has
+/// no member for, with the value Mesa writes for this cube. Mesa sets the
+/// chroma offsets to 1 and Cb = Cr = base >> 6 even for a non-YUV texture
+/// (v3dx_state.c:963-969, docs/notes/v3d71-cube-seamless.md); the C packer
+/// driver/src/v3d/v3d_tex71.c:134-135 writes them, the Rust modules do not.
+const UNCARRIED: [(&str, u32); 8] = [
+    ("UIF XOR disable", 0),
+    ("Flip texture X Axis", 0),
+    ("Flip texture Y Axis", 0),
+    ("Chroma offset x", 1),
+    ("Chroma offset y", 1),
+    ("texture base pointer Cb", BO >> 6),
+    ("texture_base pointer_Cr", BO >> 6),
+    ("Pad", 0),
+];
+
+#[test]
+fn fields_texture71_does_not_carry_hold_mesas_values_in_the_reference() {
+    let xml = read("third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml");
+    for (i, d) in draws().iter().enumerate() {
+        for (n, v) in UNCARRIED {
+            let (s, w) = tex_field(&xml, n);
+            assert_eq!(bits(&d.tex, s, w), v, "draw {i}: {n}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "texstate71::pack_words leaves words 4-5 zero: Chroma offset x/y (Mesa 1) and \
+            texture base pointer Cb/Cr (Mesa base >> 6) differ; the C packer v3d_tex71.c writes them"]
+fn texstate71_words_4_and_5_equal_the_reference() {
+    let st = texstate71::texture_state(&texstate71::TexDesc {
+        width: 4,
+        height: 4,
+        depth: 6,
+        levels: 1,
+        base_level: 0,
+        cube: true,
+        srgb: false,
+        transfer_func: None,
+        bytes_per_texel: 4,
+        layer_stride: 64,
+        base: BO,
+        ver: 71,
+        iprev: 10,
+    })
+    .unwrap();
+    let xml = read("third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml");
+    let w = texstate71::pack_words(&st);
+    let r = draws()[0].tex;
+    for (n, _) in UNCARRIED {
+        let (s, sz) = tex_field(&xml, n);
+        assert_eq!(bits(&w, s, sz), bits(&r, s, sz), "{n}");
+    }
+    assert_eq!(w[4..], r[4..], "words 4-5");
+}
+
 #[test]
 fn texstate71_words_equal_the_reference_where_it_owns_the_bits() {
     let t = composed();
