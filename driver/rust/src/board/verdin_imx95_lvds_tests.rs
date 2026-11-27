@@ -11,7 +11,7 @@ use crate::env::{Env, Level};
 use crate::firmware::scmi::{self, Transport};
 use crate::ip::tpm_pwm::regs as t;
 use crate::mmio::Mmio;
-use crate::model_imx95_display::{self as dm, Display};
+use crate::model_imx95_display::{self as dm, Access, Display};
 use crate::soc::imx95::display;
 use crate::soc::imx95::dpu::Framebuffer;
 use crate::soc::imx95::sm::{Fault, Status};
@@ -151,6 +151,7 @@ fn pos(log: &Log, e: &Ev) -> usize {
 }
 
 const FGENABLE: usize = dm::DPU + 0x2b_008c;
+const FGSLR: usize = dm::DPU + 0x2b_0090;
 const PSOR: usize = lv::GPIO5_BASE + lv::rgpio::PSOR as usize;
 const PCOR: usize = lv::GPIO5_BASE + lv::rgpio::PCOR as usize;
 const PDDR: usize = lv::GPIO5_BASE + lv::rgpio::PDDR as usize;
@@ -230,6 +231,7 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let cfg = Config::verdin(FB);
     let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
     r.log.borrow_mut().clear();
+    r.m.display.clear_log();
     display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
     let log = &r.log;
     let en_off = pos(log, &Ev::W(PCOR, 1 << 4));
@@ -240,9 +242,20 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let fg_off = pos(log, &Ev::W(FGENABLE, 0));
     let pll_off = pos(log, &Ev::Scmi(scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET, vec![37, 0, 0]));
     let pd_off = pos(log, &Ev::Scmi(scmi::PROTO_POWER, scmi::POWER_STATE_SET, vec![0, 13, 0x4000_0000]));
+    let token = pos(log, &Ev::W(FGSLR, 1));
     // FrameGen0 stops before any LDB register is touched
-    assert!(en_off < tpm_off && tpm_off < fg_off && fg_off < phy_off && phy_off < gate && gate < pl_off);
+    assert!(en_off < tpm_off && tpm_off < fg_off && fg_off < token && token < phy_off);
+    assert!(phy_off < gate && gate < pl_off);
     assert!(pl_off < pll_off && pll_off < pd_off);
+    // in the display blocks' own log (reads too): FGENABLE 0, the FGSLR
+    // token, the FGENSTS read, then the LDB gate
+    let dlog = r.m.display.log();
+    let at = |a: Access| dlog.iter().position(|x| *x == a).unwrap_or_else(|| panic!("{a:?} not in the log"));
+    let fg_off = at(Access::W("dpu", 0x2b_008c, 0));
+    let token = at(Access::W("dpu", 0x2b_0090, 1));
+    let ensts = dlog.iter().position(|x| matches!(x, Access::R("dpu", 0x2b_0094, _))).unwrap();
+    let gate = at(Access::W("ldb", 0x0, 0x1E));
+    assert!(fg_off < token && token < ensts && ensts < gate, "{dlog:?}");
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
