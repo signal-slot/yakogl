@@ -61,6 +61,15 @@
 #    a gl_test set, Armbian not back, no jump, a refusal before any change
 #    (kept in meta.txt and tallied as verdict=refused with its exit code, as
 #    the lease's refusals in 2 are).
+# 6. The Armadillo-X2 (x2 run and stage) against a fake board, an ssh that
+#    answers from a state directory (fake kexec_zephyr and snvs_lpgpr in
+#    X2_TOOLS): a running container refuses the run without X2_STOP_APPS;
+#    with X2_STOP_APPS=1 each undo line is in meta.txt before its podman stop,
+#    the readiness read again says containers 0, and after the return each
+#    stopped container is found running or its undo run once; a refusal after
+#    the stop and the end of a stage undo it too; every x2 record names the
+#    Armadillo-X2 as the board measured; SEL reaches LPGPR2 (4272, case 222's
+#    dtpu page; 0x1000 and 0x1004, glmark2's PERF pages).
 # Prints "board_selftest: N checks, F failed"; exit 0 only when F is 0 and
 # every check written in this file ran: each "check" and "same" call notes the
 # line it was called from, and at the end every line of this file that starts
@@ -2131,6 +2140,174 @@ check "nanopc-t6 runner refused: meta.txt keeps rc 3 and the sentence, no t_rebo
           grep -q "^ended=" "$T6_RD/meta.txt" && ! grep -q "^t_reboot=" "$T6_RD/meta.txt" &&
           says nanopc-t6 "$T6_RD" "rc=3 verdict=refused boot=kexec-dev DEV boot_verdict=refused result=none .*never a row" &&
           { "$B" nanopc-t6 tally "$T6_RD" > /dev/null 2>&1; [ $? = 3 ]; }'
+
+echo "== 6. Armadillo-X2 runs against a fake board (an ssh that answers): X2_STOP_APPS, the X2 record line, SEL"
+# The fake board keeps its state in FAKE_X2: running (the running containers'
+# names), autostart (those the reboot after the jump starts again), lpgpr (the
+# four SNVS words), log (every ssh command, and for each podman stop whether
+# the run's meta.txt under FAKE_X2_LOGS held that container's undo line yet).
+# Nothing is executed: each command is matched, as the real board would answer.
+mkdir -p "$S/x2stub" "$S/x2tools"
+cat > "$S/x2stub/ssh" <<'EOF'
+#!/bin/sh
+st=$FAKE_X2
+for c; do cmd=$c; done
+echo "ssh $cmd" >> "$st/log"
+case $cmd in
+*yakogl-board.lease*) exit 0 ;;
+*'rc-status -r'*)
+    if [ -e "$st/unsettled" ]; then echo unsettled; else echo settled; fi
+    printf '100.0\n0\n%s\n268435456\n0\n' "$(grep -c . "$st/running")" ;;
+"podman ps --format"*) cat "$st/running" ;;
+"podman stop -t 5 "*)
+    n=${cmd#podman stop -t 5 }
+    if grep -qhx "undo=podman start $n" "$FAKE_X2_LOGS"/*/meta.txt 2>/dev/null; then w=recorded; else w=missing; fi
+    echo "stop $n: undo $w before it" >> "$st/log"
+    grep -vxF "$n" "$st/running" > "$st/r.new"; mv "$st/r.new" "$st/running" ;;
+"podman start "*)
+    n=${cmd#podman start }
+    grep -qxF "$n" "$st/running" || echo "$n" >> "$st/running" ;;
+*"snvs_lpgpr write "*)
+    w=${cmd#*snvs_lpgpr write }; w=${w%%;*}
+    echo $w | sed 's/0x//g' > "$st/lpgpr" ;;
+*/snvs_lpgpr)
+    set -- $(cat "$st/lpgpr")
+    printf '0x30370090: 0x%s\n0x30370094: 0x%s\n0x30370098: 0x%s\n0x3037009c: 0x%s\n' "$1" "$2" "$3" "$4" ;;
+*sha256sum*) if [ -e "$st/badsha" ]; then echo "0000  zephyr.bin"; else echo "$FAKE_X2_SHA  zephyr.bin"; fi ;;
+*kexec_zephyr*--crash*) echo "jump" >> "$st/log"; cp "$st/autostart" "$st/running" ;;
+"uname -n") echo x2-fake.invalid ;;
+*boot_id*) echo fake-boot-id ;;
+*/proc/uptime*) echo 30.0 ;;
+esac
+exit 0
+EOF
+printf '#!/bin/sh\necho "scp $*" >> "$FAKE_X2/log"\nexit 0\n' > "$S/x2stub/scp"
+# ping: lost once (the jump), then back
+printf '#!/bin/sh\n[ -e "$FAKE_X2/pinged" ] && exit 0\n: > "$FAKE_X2/pinged"\nexit 1\n' > "$S/x2stub/ping"
+printf '#!/bin/sh\nexit 0\n' > "$S/x2tools/kexec_zephyr"
+cp "$S/x2tools/kexec_zephyr" "$S/x2tools/snvs_lpgpr"
+chmod +x "$S/x2stub/ssh" "$S/x2stub/scp" "$S/x2stub/ping" "$S/x2tools/kexec_zephyr" "$S/x2tools/snvs_lpgpr"
+x2sha=$(sha256sum "$S/img/x2.bin" | cut -d' ' -f1)
+# x2board RUNNING AUTOSTART [FLAG...]: a fresh fake board (names space-separated)
+x2board() {
+    rm -rf "$S/x2b"
+    mkdir -p "$S/x2b"
+    printf '%s\n' $1 | grep . > "$S/x2b/running"
+    printf '%s\n' $2 | grep . > "$S/x2b/autostart"
+    echo "0000000a 00000000 00000000 00000000" > "$S/x2b/lpgpr"
+    shift 2
+    for f in "$@"; do : > "$S/x2b/$f"; done
+}
+# x2run VERB NAME [VAR=VALUE...]: board.sh x2 VERB against the fake board, in its own
+# log directory; X2_OUT its output, X2_RC its exit code, X2_RD the run directory
+x2run() {
+    local verb=$1 name=$2
+    shift 2
+    X2_OUT=$(env BOARD_HOST=tester@x2-fake.invalid LOCK="$S/x2-$name.lock" LOCK_WAIT=0 X2_TOOLS="$S/x2tools" FAKE_X2="$S/x2b" \
+        FAKE_X2_LOGS="$S/x2logs-$name" FAKE_X2_SHA="$x2sha" "$@" PATH="$S/x2stub:$PATH" \
+        "$B" x2 "$verb" "$S/img/x2.bin" "$S/x2logs-$name" "$name" 2>&1)
+    X2_RC=$?
+    X2_RD=$(ls -d "$S/x2logs-$name"/*/ 2>/dev/null | head -1)
+    X2_RD=${X2_RD%/}
+}
+# line KEY=VALUE-PREFIX FILE: the first line number that starts so (0 when none)
+line() { grep -n -m1 -F -- "$1" "$2" | cut -d: -f1 | grep . || echo 0; }
+x2measured='board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the Verdin iMX8MP'
+
+x2board slint-launcher ""
+x2run run noopt
+check "x2, slint-launcher running, no X2_STOP_APPS: refused rc 3 'something is running (containers 1)', kept in meta.txt" \
+    eval '[ "$X2_RC" = 3 ] && grep -q "board.sh x2: something is running (containers 1)$" <<<"$X2_OUT" &&
+          grep -qx "refused=something is running (containers 1)" "$X2_RD/meta.txt" && grep -qx "refused_rc=3" "$X2_RD/meta.txt"'
+check "x2, no X2_STOP_APPS: no container listed, stopped or started, nothing staged, the container still running" \
+    eval '! grep -q "podman ps --format\|podman stop\|podman start\|^scp \|^jump" "$S/x2b/log" && grep -qx slint-launcher "$S/x2b/running"'
+check "x2 record: meta.txt names the Armadillo-X2 as the board measured, standing in for the Verdin iMX8MP (a refused run too)" \
+    eval 'grep -qxF "$x2measured" "$X2_RD/meta.txt" && grep -qx "board=x2" "$X2_RD/meta.txt"'
+
+x2board slint-launcher ""
+x2run run optin X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, slint-launcher running: the undo printed, the run jumps and comes back (no refusal)" \
+    eval 'grep -q "board.sh x2: X2_STOP_APPS: undo: podman start slint-launcher$" <<<"$X2_OUT" && grep -qx jump "$S/x2b/log" &&
+          ! grep -q "^refused" "$X2_RD/meta.txt" && grep -qx "back=1" "$X2_RD/meta.txt" && grep -qxF "$x2measured" "$X2_RD/meta.txt"'
+check "x2, X2_STOP_APPS=1: undo=podman start slint-launcher is in meta.txt before podman stop runs (the board saw it there), before app_stop" \
+    eval 'grep -qx "stop slint-launcher: undo recorded before it" "$S/x2b/log" &&
+          [ "$(line "undo=podman start slint-launcher" "$X2_RD/meta.txt")" -gt 0 ] &&
+          [ "$(line "undo=podman start slint-launcher" "$X2_RD/meta.txt")" -lt "$(line "app_stop=slint-launcher" "$X2_RD/meta.txt")" ] &&
+          grep -qx "apps_stopped=slint-launcher" "$X2_RD/meta.txt"'
+check "x2, X2_STOP_APPS=1: list, then stop -t 5, then the readiness read again says containers=0, then staging and the jump" \
+    eval 'l=$(line "ssh podman ps --format" "$S/x2b/log"); s=$(line "ssh podman stop -t 5 slint-launcher" "$S/x2b/log");
+          j=$(line "jump" "$S/x2b/log"); c=$(line "scp " "$S/x2b/log");
+          [ "$l" -gt 0 ] && [ "$l" -lt "$s" ] && [ "$s" -lt "$c" ] && [ "$c" -lt "$j" ] &&
+          grep -q "^board_state=openrc settled .* containers=1 " "$X2_RD/meta.txt" &&
+          grep -q "^board_state_stopped=openrc settled .* containers=0 " "$X2_RD/meta.txt"'
+check "x2, X2_STOP_APPS=1, no autostart: after the return slint-launcher is not running, the undo runs once and is recorded" \
+    eval '[ "$(grep -c "^ssh podman start slint-launcher$" "$S/x2b/log")" = 1 ] &&
+          [ "$(line "ssh podman start slint-launcher" "$S/x2b/log")" -gt "$(line "jump" "$S/x2b/log")" ] &&
+          grep -qx "app_back=slint-launcher not running after the return: undo run once (podman start slint-launcher, rc 0), running now" "$X2_RD/meta.txt" &&
+          grep -qx slint-launcher "$S/x2b/running"'
+check "x2, X2_STOP_APPS=1: the record is redacted (no board host name), and no autostart or config command ran" \
+    eval '! grep -rq "x2-fake.invalid" "$X2_RD" && ! grep -q "atmark\|rc-update\|rc-service\|set_autostart\|podman update" "$S/x2b/log"'
+
+x2board slint-launcher slint-launcher
+x2run run optback X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, the container autostarts: after the return it is running again, recorded, no undo run" \
+    eval 'grep -qx "app_back=slint-launcher running again after the return" "$X2_RD/meta.txt" && ! grep -q "podman start" "$S/x2b/log"'
+
+x2board "slint-launcher slint-home-automation" ""
+x2run run opttwo X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, two containers: both undo lines recorded before the first stop, both stopped, both started after the return" \
+    eval 'grep -qx "stop slint-launcher: undo recorded before it" "$S/x2b/log" && grep -qx "stop slint-home-automation: undo recorded before it" "$S/x2b/log" &&
+          [ "$(line "undo=podman start slint-home-automation" "$X2_RD/meta.txt")" -lt "$(line "app_stop=slint-launcher" "$X2_RD/meta.txt")" ] &&
+          [ "$(grep -c "^app_back=.* not running after the return: undo run once .* running now$" "$X2_RD/meta.txt")" = 2 ]'
+
+x2board "" ""
+x2run run optnone X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, nothing running (the board as the 11-27 probe read it): nothing listed, stopped or started; one readiness read" \
+    eval '! grep -q "podman ps --format\|podman stop\|podman start" "$S/x2b/log" && grep -qx jump "$S/x2b/log" &&
+          [ "$(grep -c "rc-status -r" "$S/x2b/log")" = 1 ] && ! grep -q "^undo=\|^app_" "$X2_RD/meta.txt"'
+
+x2board slint-launcher "" unsettled
+x2run run optunsettled X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, OpenRC unsettled: refused on that word before anything is stopped" \
+    eval '[ "$X2_RC" = 3 ] && grep -q "OpenRC is .unsettled., not settled" <<<"$X2_OUT" && ! grep -q "podman ps --format\|podman stop" "$S/x2b/log" &&
+          grep -qx slint-launcher "$S/x2b/running"'
+
+x2board slint-launcher "" badsha
+x2run run optbadsha X2_STOP_APPS=1
+check "x2, X2_STOP_APPS=1, a refusal after the stop (the image reads back wrong): no jump, the undo runs and is recorded" \
+    eval '[ "$X2_RC" = 3 ] && ! grep -qx jump "$S/x2b/log" && grep -q "^ssh podman start slint-launcher$" "$S/x2b/log" &&
+          grep -qx "app_back=slint-launcher not running after the refusal: undo run once (podman start slint-launcher, rc 0), running now" "$X2_RD/meta.txt" &&
+          grep -q "^refused=the staged image reads back as" "$X2_RD/meta.txt" && grep -qx slint-launcher "$S/x2b/running"'
+
+x2board slint-launcher ""
+x2run stage optstage X2_STOP_APPS=1
+check "x2 stage, X2_STOP_APPS=1: stopped for the stage, started again at its end (no jump), verdict=staged" \
+    eval '[ "$X2_RC" = 0 ] && grep -q "^verdict=staged board=x2 " <<<"$X2_OUT" && ! grep -qx jump "$S/x2b/log" &&
+          grep -qx "app_back=slint-launcher not running after the stage: undo run once (podman start slint-launcher, rc 0), running now" "$X2_RD/meta.txt" &&
+          grep -qx slint-launcher "$S/x2b/running"'
+
+x2board "" ""
+x2run run sel SEL=4272
+check "x2 run, SEL=4272 (gl_test case 222's dtpu page): w1 = 534510b0 in LPGPR2, LPGPR0 kept, sel recorded" \
+    eval 'grep -q "snvs_lpgpr write 0x0000000a 0x00000000 0x534510b0 0x00000000" "$S/x2b/log" && grep -qx "sel=4272" "$X2_RD/meta.txt"'
+for sel in 0x1000 0x1004; do
+    out=$(SEL=$sel dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+    check "x2 dry run, SEL=$sel (a glmark2 PERF page): w1 = 5345${sel#0x} in LPGPR2" \
+        grep -qF "write <LPGPR0 as read> 0x00000000 0x5345${sel#0x} 0x00000000" <<<"$out"
+done
+out=$(X2_STOP_APPS=1 dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "x2 dry run, X2_STOP_APPS=1: rc 0, the list and stop line before the second readiness read, the return check after the jump, the X2 record line" \
+    eval '[ "$rc" = 0 ] && [ "$(grep -c "rc-status -r" <<<"$out")" = 2 ] &&
+          grep -qF "undo '"'"'podman start <name>'"'"' printed and recorded first, then podman stop -t 5 <name>" <<<"$out" &&
+          grep -qF "after the return: each stopped container running again" <<<"$out" &&
+          grep -qF "meta.txt: board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL)" <<<"$out"'
+out=$(dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+check "x2 dry run without X2_STOP_APPS: no container list, stop or return check" eval '! grep -q "podman ps --format\|X2_STOP_APPS" <<<"$out"'
+out=$(X2_STOP_APPS=yes dry x2 run "$S/img/x2.bin" "$S/logs" 2>&1)
+rc=$?
+check "x2, X2_STOP_APPS=yes: rc 2, the two values named" eval '[ "$rc" = 2 ] && grep -q "X2_STOP_APPS=.yes.: 1 " <<<"$out"'
+check "x2 dry runs here: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
 
 # every check written above ran (the header says why): the call lines of this
 # file against the lines noted by check and same

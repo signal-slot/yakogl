@@ -83,6 +83,25 @@
 #      tools and the image copied, the record cleared and read back, the
 #      image's sha256 read back), then the tmpfs copies removed and one
 #      "verdict=staged" line; kexec_zephyr is never run. x2 only (others: rc 2).
+#   X2_STOP_APPS=1 tools/board.sh x2 run|stage <image> <logdir> [name]
+#      the board's running podman containers stopped for this one run. The
+#      readiness refuses a jump while a container runs ("something is running
+#      (containers N)": a crash-route jump ends it without a shutdown); with
+#      X2_STOP_APPS=1, once every other readiness word holds, step 2 lists the
+#      running containers (podman ps --format '{{.Names}}'), prints and
+#      records one undo line per container ("undo=podman start <name>" in
+#      meta.txt) before anything changes, runs podman stop -t 5 <name> for
+#      each, and reads the readiness again, which must say containers 0.
+#      Their autostart (/etc/atmark/containers/*.conf, podman-atmark), their
+#      config and the rootfs are never touched. After the jump the board
+#      reboots into Linux; once ssh is back the runner reads podman ps and
+#      records per container whether it runs again (app_back=...), and runs
+#      the recorded undo once for one that does not. A refusal after the stop
+#      and before the jump, and `stage` (no jump), run the undo the same way.
+#      Unset or 0: unchanged, a running container refuses the run.
+#      Every x2 record says board_measured=Armadillo-X2 (i.MX 8M Plus,
+#      GC7000UL), stands in for the Verdin iMX8MP (the owner's rule of
+#      2026-11-27: X2 runs stand in for the Verdin's).
 # --dry-run prints every command that would touch a board, the TFTP
 # root or a serial bridge and runs none of them (board reads included); it
 # still checks the image on the host. tools/board_selftest.sh runs every verb
@@ -284,7 +303,13 @@
 #                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
 #                      tree names tools/cts/gles3-mustpass.txt)
 #   SEL                i.MX8MP, x2: the selector written into the cleared record
-#                      (imx95: refused, the image reads no selector)
+#                      (imx95: refused, the image reads no selector); x2: w1 =
+#                      0x5345<SEL> in LPGPR2 (SEL=4272 is gl_test case 222's
+#                      dtpu page, SEL=0x1000 / 0x1004 glmark2's PERF pages 0 / 4)
+#   X2_STOP_APPS       x2: 1 stops the running containers for the run (above)
+#   X2_TOOLS           x2: the directory of kexec_zephyr and snvs_lpgpr (default
+#                      driver/tools/kexec-zephyr; tools/board_selftest.sh puts
+#                      fakes there)
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 #   YAKOGL_TOOLS       the yakogl-tools binary (default: built with cargo here)
 set -uo pipefail
@@ -360,6 +385,11 @@ SU='sudo -n '       # the prefix of a root command on the board (x2: root logs i
 REC_SINK=           # where the record is read: nvmem (imx8mp), devmem (x2), bbm (imx95), none
 REC_FILE=snvs.txt   # the run directory's copy of the record (imx95: bbm.txt)
 X2_DIR=
+X2_TOOLS=${X2_TOOLS:-}
+# X2_STOP_APPS=1: the containers this run stopped (undo pending), and those
+# to check after the jump (x2_apps_stop, x2_apps_back)
+X2_APPS_STOPPED=
+X2_APPS_JUMPED=
 case "$BOARD" in
 pi4)
     BOOTS="tryboot"
@@ -504,6 +534,8 @@ x2)
     # the loader, the record tool and the image: /tmp is a tmpfs there, so
     # nothing of a run outlives the reboot that ends it
     X2_DIR=/tmp/yakogl-kexec
+    # where the two tools are built (per checkout, never committed)
+    X2_TOOLS=${X2_TOOLS:-$REPO/driver/tools/kexec-zephyr}
     NO_CONSOLE_WHY="BOARD_UART was not set"
     END_RE_DEFAULT=
     LEGACY_RE='^(deqp: summary: |gl_test: all: )'
@@ -618,6 +650,12 @@ UART_REAL=
 # and a run's refusal kept in its record (run_refused)
 die() {
     echo "$NB_TAG: $1" | scrub >&2
+    # x2, X2_STOP_APPS=1: a refusal after the stop and before the jump undoes it
+    if [ -n "$X2_APPS_STOPPED" ]; then
+        local stopped=$X2_APPS_STOPPED
+        X2_APPS_STOPPED=
+        x2_apps_back "the refusal" "$stopped"
+    fi
     run_refused "$1" "${2:-3}"
     exit "${2:-3}"
 }
@@ -1547,7 +1585,7 @@ lpgpr_clear() {
 # x2_stage_tools TOOL...: the freestanding tools of driver/tools/kexec-zephyr into X2_DIR
 x2_stage_tools() {
     local t files=()
-    for t in "$@"; do files+=("$REPO/driver/tools/kexec-zephyr/$t"); done
+    for t in "$@"; do files+=("$X2_TOOLS/$t"); done
     b "mkdir -p $X2_DIR" || die "cannot create $X2_DIR on the board"
     act scp -q "${SSH_OPTS[@]}" "${files[@]}" "$BOARD_HOST:$X2_DIR/" || die "scp of $* failed"
 }
@@ -2310,9 +2348,13 @@ run_kexec() {
         # the loader and the record tool are copied by each run; they are built
         # per checkout (driver/tools/kexec-zephyr/README.md) and never committed
         for t in kexec_zephyr snvs_lpgpr; do
-            [ "$DRY" = 1 ] || [ -x "$REPO/driver/tools/kexec-zephyr/$t" ] ||
-                die "no $REPO/driver/tools/kexec-zephyr/$t (build it: driver/tools/kexec-zephyr/README.md)"
+            [ "$DRY" = 1 ] || [ -x "$X2_TOOLS/$t" ] ||
+                die "no $X2_TOOLS/$t (build it: driver/tools/kexec-zephyr/README.md)"
         done
+        case ${X2_STOP_APPS:-0} in
+        0 | 1) ;;
+        *) die "X2_STOP_APPS='$X2_STOP_APPS': 1 (the running containers stopped for this run, each undo printed first) or 0 (a running container refuses the run)" 2 ;;
+        esac
         # the console is opt-in (BOARD_UART): probed before the board is touched
         UCAP=0
         if [ -n "${BOARD_UART:-}" ] && [ "$VERB" != stage ]; then UCAP=1; pi4_uart_free; fi
@@ -2588,16 +2630,95 @@ x2_kexec_ready() {
 
 # x2_stage_steps: steps 2-4 of an x2 run, shared by run and stage: the board
 # is ours to use, the tools and the record, the image staged and read back
-x2_stage_steps() {
-    local st why rsha
-    # 2. the board is ours to use (x2_kexec_ready)
-    bget st 'i=0; while [ $i -lt 20 ] && { [ "$(rc-status -r 2>/dev/null)" != default ] || pgrep -x openrc >/dev/null; }; do sleep 2; i=$((i+1)); done; if [ "$(rc-status -r 2>/dev/null)" = default ] && ! pgrep -x openrc >/dev/null; then echo settled; else echo unsettled; fi; cut -d" " -f1 /proc/uptime; pgrep -x kexec_zephyr | wc -l; podman ps -q 2>/dev/null | wc -l; cat /sys/kernel/kexec_crash_size; cat /sys/kernel/kexec_crash_loaded' \
+# x2_ready_read KEY: the six readiness words into X2_ST, recorded as KEY
+x2_ready_read() {
+    local key=$1
+    bget X2_ST 'i=0; while [ $i -lt 20 ] && { [ "$(rc-status -r 2>/dev/null)" != default ] || pgrep -x openrc >/dev/null; }; do sleep 2; i=$((i+1)); done; if [ "$(rc-status -r 2>/dev/null)" = default ] && ! pgrep -x openrc >/dev/null; then echo settled; else echo unsettled; fi; cut -d" " -f1 /proc/uptime; pgrep -x kexec_zephyr | wc -l; podman ps -q 2>/dev/null | wc -l; cat /sys/kernel/kexec_crash_size; cat /sys/kernel/kexec_crash_loaded' \
         "settled 999.0 0 0 $((LOAD_END - YAKO_ADDR)) 0" || die "board unreachable"
     # shellcheck disable=SC2086  # six words
-    set -- $st
-    meta board_state "openrc ${1:-?} uptime ${2%.*}s kexec=${3:-?} containers=${4:-?} crash_window=${5:-?} crash_loaded=${6:-?}"
+    set -- $X2_ST
+    meta "$key" "openrc ${1:-?} uptime ${2%.*}s kexec=${3:-?} containers=${4:-?} crash_window=${5:-?} crash_loaded=${6:-?}"
+}
+# the running containers' names, one a line (X2_STOP_APPS)
+X2_PS_NAMES="podman ps --format '{{.Names}}'"
+
+# x2_apps_stop COUNT: X2_STOP_APPS=1's stop of the COUNT running containers.
+# Every undo line is printed and recorded (undo=podman start <name>) before
+# the first podman stop; X2_APPS_STOPPED holds the names from then on, so a
+# refusal (die) runs the undo. Only names podman itself allows are used.
+x2_apps_stop() {
+    local names n
+    if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ $X2_PS_NAMES   # X2_STOP_APPS=1, when containers is not 0: each name's undo 'podman start <name>' printed and recorded first, then podman stop -t 5 <name> for each"
+        return 0
+    fi
+    bget names "$X2_PS_NAMES" || die "cannot list the running containers ($X2_PS_NAMES)"
+    # shellcheck disable=SC2086  # the names, one line
+    names=$(echo $names)
+    [ -n "$names" ] || die "podman ps counted $1 running container(s) but named none"
+    for n in $names; do
+        [[ $n =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || die "the running container '$n' has a name podman would not give: nothing stopped"
+    done
+    meta apps_stopped "$names"
+    for n in $names; do
+        note "X2_STOP_APPS: undo: podman start $n"
+        meta undo "podman start $n"
+    done
+    X2_APPS_STOPPED=$names
+    for n in $names; do
+        b "podman stop -t 5 $n" > /dev/null || die "podman stop -t 5 $n failed"
+        meta app_stop "$n"
+    done
+}
+
+# x2_apps_back WHEN NAMES: the containers X2_STOP_APPS stopped, read with
+# podman ps after WHEN (the return, the refusal, the end of stage): each one
+# running again is recorded as such; for one that is not, the recorded undo
+# (podman start <name>) is run once and what it left recorded.
+x2_apps_back() {
+    local when=$1 running n rc
+    [ -n "$2" ] || return 0
+    if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ $X2_PS_NAMES   # after $when: each stopped container running again, or its undo 'podman start <name>' run once"
+        return 0
+    fi
+    bget running "$X2_PS_NAMES" || running=
+    for n in $2; do
+        if grep -qxF "$n" <<<"$running"; then
+            meta app_back "$n running again after $when"
+            note "X2_STOP_APPS: $n is running again after $when"
+            continue
+        fi
+        rc=0
+        b "podman start $n" > /dev/null 2>&1 || rc=$?
+        bget running "$X2_PS_NAMES" || running=
+        if grep -qxF "$n" <<<"$running"; then
+            meta app_back "$n not running after $when: undo run once (podman start $n, rc $rc), running now"
+            note "X2_STOP_APPS: $n was not running after $when: podman start $n (rc $rc), running now"
+        else
+            meta app_back "$n not running after $when: undo run once (podman start $n, rc $rc), still not running"
+            note "X2_STOP_APPS: $n was not running after $when and podman start $n (rc $rc) did not start it: start it by hand" >&2
+        fi
+    done
+}
+
+x2_stage_steps() {
+    local why rsha
+    # 2. the board is ours to use (x2_kexec_ready)
+    x2_ready_read board_state
     # shellcheck disable=SC2086  # six words
-    why=$(x2_kexec_ready $st) || die "$why"
+    set -- $X2_ST
+    if [ "${X2_STOP_APPS:-0}" = 1 ]; then
+        # every other word first: nothing is stopped on a board refused anyway
+        why=$(x2_kexec_ready "${1:-?}" "${2:-?}" "${3:-?}" 0 "${5:-?}" "${6:-?}") || die "$why"
+        if [ "$DRY" = 1 ] || [ "${4:-?}" != 0 ]; then
+            [[ ${4:-?} =~ ^[0-9]+$ ]] || die "something is running (containers ${4:-?})"
+            x2_apps_stop "$4"
+            x2_ready_read board_state_stopped
+        fi
+    fi
+    # shellcheck disable=SC2086  # six words
+    why=$(x2_kexec_ready $X2_ST) || die "$why${X2_APPS_STOPPED:+ (after X2_STOP_APPS stopped $X2_APPS_STOPPED)}"
     # 3. the tools and the record, 4. stage and read back
     x2_stage_tools kexec_zephyr snvs_lpgpr
     lpgpr_clear
@@ -2610,10 +2731,11 @@ x2_stage_steps() {
 # x2_stage_finish: the end of `x2 stage`: the tmpfs copies removed, one verdict
 # line; the jump is never made
 x2_stage_finish() {
-    local rec
+    local rec stopped=$X2_APPS_STOPPED
     if [ "$DRY" = 1 ]; then
         b "$X2_DIR/snvs_lpgpr   # the record read back"
         b "rm -rf $X2_DIR   # cleanup: the tmpfs copies"
+        [ "${X2_STOP_APPS:-0}" != 1 ] || x2_apps_back "the stage" "<the stopped containers>"
         echo "verdict=staged board=x2 sha256=$IMG_SHA record=<LPGPR1..3 as read> kexec=not-called (dry run)"
         exit 0
     fi
@@ -2621,6 +2743,9 @@ x2_stage_finish() {
     rec=$(lpgpr_read)
     b "rm -rf $X2_DIR" || die "cannot remove $X2_DIR on the board"
     meta cleaned "$X2_DIR removed"
+    # no jump: the containers X2_STOP_APPS stopped are started again here
+    X2_APPS_STOPPED=
+    x2_apps_back "the stage" "$stopped"
     echo "verdict=staged board=x2 sha256=$IMG_SHA record=${rec:-unread} kexec=not-called"
     exit 0
 }
@@ -2634,12 +2759,16 @@ kexec_x2() {
     if [ "$DRY" != 1 ]; then
         trap 'stop_cap; lease_release; rm -rf "$TMP"; [ -n "${BOARD_LOCK_WATCHDOG:-}" ] && kill "$BOARD_LOCK_WATCHDOG" 2>/dev/null' EXIT
     fi
-    # 6. jump: the loader as root, bounded
+    # 6. jump: the loader as root, bounded. From here a refusal no longer
+    # undoes X2_STOP_APPS's stop: the return check after the reboot does.
+    X2_APPS_JUMPED=$X2_APPS_STOPPED
+    X2_APPS_STOPPED=
     t0=$(date +%s)
     meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then
         b "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash   # timeout 120"
         echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s); then stage snvs_lpgpr again, read LPGPR1..3 and the uptime"
+        [ "${X2_STOP_APPS:-0}" != 1 ] || x2_apps_back "the return" "<the stopped containers>"
         exit 0
     fi
     timeout 120 ssh "${SSH_OPTS[@]}" -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
@@ -2655,8 +2784,12 @@ kexec_x2() {
         rec=$(lpgpr_read)
         [ -n "$rec" ] && echo "$rec" > "$RD/snvs.txt"
         meta up "$(b "cut -d' ' -f1 /proc/uptime")"
+        # X2_STOP_APPS: the stopped containers again (their autostart, or the undo once)
+        x2_apps_back "the return" "$X2_APPS_JUMPED"
     else
         meta rc_cycle 5
+        [ -z "$X2_APPS_JUMPED" ] ||
+            meta app_back "not read: Linux did not come back; the undo lines above restore $X2_APPS_JUMPED"
     fi
     stop_cap
     if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
@@ -2720,6 +2853,12 @@ cmd_run() {
         RD_MADE=1
     fi
     meta board "$BOARD"
+    # the owner's rule of 2026-11-27: the X2 stands in for the Verdin iMX8MP,
+    # and every record of it says it was measured on the X2
+    if [ "$BOARD" = x2 ]; then
+        meta board_measured "Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the Verdin iMX8MP"
+        [ "$DRY" != 1 ] || echo "DRY host\$ meta.txt: board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the Verdin iMX8MP"
+    fi
     meta boot "$BOOT"
     meta name "$NAME"
     meta probe "$PROBE"
