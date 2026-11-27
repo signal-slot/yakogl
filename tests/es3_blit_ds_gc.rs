@@ -436,8 +436,10 @@ shapes! {
 /// The two table entries the refusals name are absent today; this is the
 /// line the lift changes.
 #[test]
-fn the_table_lacks_ds_write_and_stencil_resolve_today() {
+fn the_table_lacks_ds_write_today() {
     assert!(yakogl_backend_vivante.ds_write.is_none(), "ds_write (src/vivante/backend.rs:4013)");
-    assert!(yakogl_backend_vivante.stencil_resolve.is_none(), "stencil_resolve (src/vivante/backend.rs:4014)");
+    /* stencil_resolve is set since gc-ds-read (ds_cache.rs resolve_plane): the
+     * refusals rest on ds_write alone */
+    assert!(yakogl_backend_vivante.stencil_resolve.is_some(), "stencil_resolve (src/vivante/backend.rs)");
     assert!(yakogl_backend_vivante.depth_resolve.is_some(), "depth_resolve stays");
 }
