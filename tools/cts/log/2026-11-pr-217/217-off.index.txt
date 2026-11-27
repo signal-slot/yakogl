@@ -1,0 +1,20 @@
+# tools/board.sh run record (driver/docs/one-method.md section 4; records/README.md)
+runner: tools/board.sh build c8be59f6
+board: am62p
+boot: uboot-mmc (a row)
+name: pr-217-gltest
+image: zephyr.bin sha256 aa4a7b355855e12f7ea1e1529ff25f4b3451df50c4a033f34573ae2cb5ce5e28 size 3435936 footprint 51617792
+image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=c8be59f6
+image zephyr: af17c0c8aa2a
+build line printed at boot: H0sample: build tree=c8be59f6 table=6c5b8a70
+started: 2026-11-27 13:46:56
+ended: 2026-11-27 13:49:24
+verdict: board.sh am62p pr-217-gltest rc=4 verdict=failed boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=124s
+phase scan: netboot-scan: verdict=done back=yes lines=220 hooks=pr-217-gltest-aa4a7b355855e12f-1795787216 fetched_bytes=3435936 spl1=+0.0s hook=+0.0s cleared=+0.0s fetched=+0.0s go=+0.0s zephyr=+0.0s rti_armed=+0.0s reset=+0.0s linux=+0.0s
+records:
+  none (the console has no yk-record line: the image prints none)
+files (sha256, lines):
+58e7d69088062cefe157dbd88782221c554fb5b5bceb447876d66645ea015fe9  233  console.raw
+9d6d39581969e7b4228e65e21ce5fa6e724f5cc52e556d1a8afc08b143a4a73d  233  console.ts
+179c1c4a17d8f69bad062bc7502a811dd858711f471ea8fa017cfa1287d28014  233  console.txt
+9b15a40af6440694b8e0b102540d096f5459b47fe231c38cd91299ecf5bc57dd  22  meta.txt
