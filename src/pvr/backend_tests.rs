@@ -7677,27 +7677,126 @@ fn pr_knob_off_frag_pr_zero_and_words_unchanged() {
     assert_eq!(kick_bytes(&on_cleared), kick_bytes(&off_cleared), "the option adds frag_pr and changes nothing else");
 }
 
-/// pds_pr_bgnd is non-zero only with the option, and only for a frame the
-/// load shader can reload (one attachment of one output dword, one sample).
+/// pds_pr_bgnd is non-zero only with the option, and only for a frame a
+/// shipped load shader can reload (one attachment of one output dword at
+/// one sample or 4x, or of two at one sample: super::spm::spm_load_for).
 #[test]
 fn pr_pds_pr_bgnd_only_with_the_option() {
     let rig = Rig::new();
     assert_eq!(pr_frame(&rig, 0).frag_pr.pds_pr_bgnd, [0; 3]);
     let on = pr_frame(&rig, 1).frag_pr.pds_pr_bgnd;
     assert!(on.iter().all(|&w| w != 0), "{on:x?}");
-    /* a two-dword target (RGBA16F): the load shader's one dword does not
-     * cover it, so no partial-render state */
+    /* a two-dword target (RGBA16F) and a 4x frame: their own load shaders
+     * (pr_frag_pr_for_the_2dw_and_msaa4_loads); at 2x no shipped load
+     * shader covers the frame, so no partial-render state */
     let mut d = rig.draw(3);
-    d.target_format = GLES_SURF_RGBA16F;
+    d.samples = 2;
     assert_eq!(draw(&d), 0);
     assert_eq!(pvr_backend_flush(), 0);
-    assert!(frag_pr_is_zero(&rig.kicks().last().unwrap().0.frag_pr));
-    /* a multisampled frame: the load shader is not multisampled */
-    let mut d = rig.draw(3);
-    d.samples = 4;
-    assert_eq!(draw(&d), 0);
-    assert_eq!(pvr_backend_flush(), 0);
-    assert!(frag_pr_is_zero(&rig.kicks().last().unwrap().0.frag_pr));
+    let k = rig.kicks().last().unwrap().0;
+    assert_eq!(k.samples, 2);
+    assert!(frag_pr_is_zero(&k.frag_pr));
+}
+
+/// The two-dword (RGBA16F) and 4x (RGBA8) frames with the option: each
+/// reloaded by its own load shader (spm_load_2dw_blob, spm_load_msaa4_blob,
+/// built on first use in the PR page after the scratches' DMA data), over a
+/// scratch of Mesa's size for its dwords and samples, with the PR PBE words
+/// of spm.rs and the image words of its R32G32_UINT or 4-sample R32_UINT
+/// view. With the option off neither frame has a block.
+#[test]
+fn pr_frag_pr_for_the_2dw_and_msaa4_loads() {
+    let rig = Rig::new();
+    let frame = |fmt: u8, samples: u32, knob: u32| {
+        pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, knob);
+        let mut d = rig.draw(3);
+        (d.target_w, d.target_h) = (800, 600);
+        d.viewport = [0, 0, 800, 600];
+        d.target_format = fmt;
+        d.samples = samples as u8;
+        assert_eq!(draw(&d), 0);
+        assert_eq!(pvr_backend_flush(), 0);
+        pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, 0);
+        rig.kicks().last().expect("a kick").0
+    };
+    for (fmt, samples) in [(GLES_SURF_RGBA16F, 1), (GLES_SURF_RGBA8888, 4)] {
+        assert!(frag_pr_is_zero(&frame(fmt, samples, 0).frag_pr), "knob off: {fmt} x{samples}");
+    }
+    assert!(!rig.b().pr.tried, "nothing built for the partial render with the option off");
+
+    for (fmt, samples, load, v, bytes, img0, rate) in [
+        /* 800 x 600 x 4 B x 2 dwords; U32U32 (35) at bit 27, swizzle
+         * X, Y, 0, 1; INSTANCE */
+        (GLES_SURF_RGBA16F, 1u32, SpmLoad::TwoDwords, 0usize, 3_840_000u32, 0x0257_0c7d_1800_0d84u64, 0u32),
+        /* 800 x 600 x 4 B x 4 samples; U32, smpcnt log2(4) = 2 at bit 62;
+         * FULL (sample shading) */
+        (GLES_SURF_RGBA8888, 4, SpmLoad::OneDwordMsaa4, 1, 7_680_000, 0x8257_0c7c_c000_2d84, 2),
+    ] {
+        let k = frame(fmt, samples, 1);
+        assert_eq!(k.samples, samples);
+        let b = rig.b();
+        let p = &k.frag_pr;
+        assert!(!frag_pr_is_zero(p), "{load:?}: {p:?}");
+        assert_eq!(p.spm_scratch_bytes, bytes, "{load:?}");
+        assert_eq!(p.spm_scratch_bytes as u64, load.scratch_size(800, 600));
+        let s = p.spm_scratch_gpu;
+        assert_eq!(with_platform(|pl| pl.allocs.get(&s).map(|a| a.size)), Some(bytes as usize));
+        let pbe = crate::pvr::spm::pbe_state(800, 600, load.output_dwords(), 0, samples, s).unwrap();
+        assert_eq!(p.pbe_word[0], [pbe.reg[0], pbe.reg[1]]);
+        assert!(p.pbe_word[1..].iter().all(|w| *w == [0, 0]));
+        assert_eq!(&rig.eot_emits().last().unwrap()[..2], &pbe.state, "{load:?}: the PR emit");
+        assert_eq!(*rig.eot_doutus().last().unwrap(), 0x1001, "{load:?}: the one-target DOUTU");
+        assert_eq!(p.eot_pds_data, b.eot_pr_data_off);
+
+        /* the load: this variant's kick, in its place of the PR page */
+        let page = heap_off_of(b.pr.pds.gpu);
+        let kick = page + PDS_ALIGN * (2 + PR_SCRATCH_SLOTS as u32 + v as u32);
+        assert_eq!(b.pr.variant_kick_off[v], kick);
+        let i = b.pr.scratch.iter().position(|x| x.mem.gpu == s).unwrap();
+        assert_eq!(b.pr.scratch[i].load, load);
+        assert_eq!(p.pds_pr_bgnd, pr_bgnd_words(&b.pr, i));
+        let bg0 = csb_pack!(
+            ROGUE_CR_PDS_BGRND0_BASE_pack,
+            2,
+            csb::ROGUE_CR_PDS_BGRND0_BASE {
+                shader_addr: dev_addr(kick as u64),
+                texunicode_addr: dev_addr((page + PDS_ALIGN) as u64)
+            }
+        );
+        assert_eq!(p.pds_pr_bgnd[0], dw64(bg0));
+        let usc = heap_off_of(b.pr.variant_fs[v].gpu) as u64;
+        let (words, _, temps, _) = spm_load_blob(load);
+        assert_eq!(rig.gpu_u32(b.pr.variant_fs[v].gpu), words[0]);
+        assert!(with_platform(
+            |pl| pl.kick_usc_temps.contains(&(usc, temps)) && pl.kick_usc_rates.contains(&(usc, rate))
+        ));
+        assert_eq!(rig.gpu_u32(b.pr.pds.gpu + (kick - page) as u64), usc as u32, "the fake kick's first data dword");
+
+        /* the constants: the one-dword sampler, the image of this view */
+        let c = b.pr.scratch[i].consts.gpu;
+        let got: Vec<u32> = (0..8).map(|j| rig.gpu_u32(c + 4 * j)).collect();
+        let a = s >> 2;
+        let want = [
+            0x0000_0fff,
+            0x0002_2400,
+            0,
+            0,
+            img0 as u32,
+            (img0 >> 32) as u32,
+            0x0000_031f | ((a & 0xffff) << 16) as u32,
+            0x1000_0000 | (a >> 16) as u32,
+        ];
+        assert_eq!(got, want, "{load:?}: {got:08x?}");
+    }
+    /* the one-dword frame still takes the one-dword load at its old place */
+    let k = pr_frame(&rig, 1);
+    let b = rig.b();
+    let page = heap_off_of(b.pr.pds.gpu);
+    assert_eq!(b.pr.kick_off, page);
+    let i = b.pr.scratch.iter().position(|x| x.mem.gpu == k.frag_pr.spm_scratch_gpu).unwrap();
+    assert_eq!(b.pr.scratch[i].load, SpmLoad::OneDword);
+    assert_eq!(k.frag_pr.spm_scratch_bytes, 1_920_000);
+    pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, 0);
 }
 
 /// The frag_pr block of an 800x600 RGBA8 frame: the scratch (Mesa's size,
@@ -7853,6 +7952,66 @@ fn spm_load_blob_matches_its_generator() {
         }
         assert_eq!(off, 200, "{groups} groups end at the last byte");
     }
+}
+
+/// The two further load shaders' table entries are the generator's output
+/// too: tools/pco_shc/spm_load_2dw and spm_load_msaa4, words, counts and
+/// sample shading, decoded group by group to the last byte.
+#[test]
+fn spm_load_variant_blobs_match_their_generator() {
+    for (load, hex, meta, bytes) in [
+        (
+            SpmLoad::TwoDwords,
+            include_str!("../../tools/pco_shc/spm_load_2dw/spm_load.hex"),
+            include_str!("../../tools/pco_shc/spm_load_2dw/spm_load.meta.txt"),
+            208,
+        ),
+        (
+            SpmLoad::OneDwordMsaa4,
+            include_str!("../../tools/pco_shc/spm_load_msaa4/spm_load.hex"),
+            include_str!("../../tools/pco_shc/spm_load_msaa4/spm_load.meta.txt"),
+            232,
+        ),
+    ] {
+        let (usc, entry, temps, rate) = spm_load_blob(load);
+        let words: Vec<u32> = hex
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .flat_map(|l| l.split_whitespace())
+            .map(|w| u32::from_str_radix(w.trim_start_matches("0x"), 16).unwrap())
+            .collect();
+        assert_eq!(words, usc, "{load:?}");
+        let line = |k: &str| -> &str {
+            let v = meta.lines().find_map(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(' ')));
+            v.unwrap_or_else(|| panic!("{load:?}: the meta file has {k}")).trim()
+        };
+        let one = |k: &str| -> u32 { line(k).parse().unwrap() };
+        let props = format!(
+            "output_reg_count={} tile_buffer_count=0 is_multisampled={}",
+            load.output_dwords(),
+            u32::from(load.samples() > 1)
+        );
+        assert_eq!(line("props"), props, "{load:?}");
+        assert_eq!(one("usc_dwords") as usize, usc.len());
+        assert_eq!(one("usc_bytes"), bytes);
+        assert_eq!(one("entry_offset"), entry);
+        assert_eq!(one("temps"), temps);
+        assert_eq!(one("consts_dwords"), SPM_LOAD_CONSTS_DWORDS);
+        let shading = line("uses").split_whitespace().any(|f| f == "sample_shading=1");
+        assert_eq!(rate, if shading { PDS_DOUTU_SAMPLE_RATE_FULL } else { PDS_DOUTU_SAMPLE_RATE_INSTANCE });
+        #[cfg(feature = "shaderc-online")]
+        {
+            use crate::shaderc::online::powervr::decode::decode_group;
+            let b: Vec<u8> = usc.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let mut off = entry as usize;
+            while off < b.len() {
+                let g = decode_group(&b, off).unwrap_or_else(|e| panic!("{load:?}: the group at {off}: {e:?}"));
+                off += g.total;
+            }
+            assert_eq!(off, bytes as usize, "{load:?}: the groups end at the last byte");
+        }
+    }
+    assert_eq!(spm_load_blob(SpmLoad::OneDword).0, &SPM_LOAD_USC[..]);
 }
 
 /// `ds_sample0`'s layout as the row resolves take it: the row stride (the
