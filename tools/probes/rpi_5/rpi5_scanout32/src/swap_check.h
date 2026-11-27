@@ -857,4 +857,35 @@ static inline enum swap_place_reason swap_place_after_end(const struct swap_plac
 	return SWAP_PLACE_OK;
 }
 
+/*
+ * (h) The main thread's stack (s32-nullfix). The second board run (image of
+ * 77ddb606, Zephyr's default CONFIG_MAIN_STACK_SIZE 4096) jumped to address
+ * 0x20 with lr 0x20bd18 (idle() at zephyr/kernel/idle.c:75, the return from
+ * arch_cpu_idle()) after 'u3 named: yes'. In that image z_main_stack lies
+ * right above z_idle_stacks, and main()'s deepest chain on aarch64 (static
+ * frames, -fstack-usage) is main 1024 -> hvs6s_lines 896 -> hvs6s_diff_lines
+ * 448 -> emit_line -> printk 304 -> the immediate-mode log path (vprintk,
+ * z_log_vprintk, z_log_msg_runtime_vcreate 144 plus its package on the
+ * stack, log_output_process 128, print_formatted / cbpprintf_external,
+ * cbvprintf, __d_vfprintf 208, char_out, ...): over 4096 bytes. Swap 1's
+ * record (hvs6s_lines right after run_swap1) ran off the bottom of the main
+ * stack into the top of the idle thread's stack, over the exception frame
+ * the idle thread left there when an interrupt took it out of WFI; the
+ * next k_msleep() switched to the idle thread, whose frame returned to the
+ * overwritten ELR, 0x20.
+ *
+ * SWAP_MAIN_STACK_MIN is the least main stack the probe builds with
+ * (BUILD_ASSERT in main.c), four times the 4096 that overflowed.
+ * swap_stack_ok judges the measured stack at the end (CONFIG_INIT_STACKS,
+ * k_thread_stack_space_get): the size at least the minimum and at least
+ * SWAP_STACK_MARGIN bytes never touched.
+ */
+#define SWAP_MAIN_STACK_MIN 16384u
+#define SWAP_STACK_MARGIN 4096u
+
+static inline bool swap_stack_ok(uint32_t size, uint32_t unused)
+{
+	return size >= SWAP_MAIN_STACK_MIN && unused <= size && unused >= SWAP_STACK_MARGIN;
+}
+
 #endif /* RPI5_SCANOUT32_SWAP_CHECK_H */

@@ -57,6 +57,8 @@
  *       through swap_check.h's swap_restore_judge, and our span written back
  *       to the words S6 saved once channel 0 is off it and DL.LACT is back
  *                                                        -> u3 restore
+ *   S11 the main stack's size and its never-touched bytes (s32-nullfix,
+ *       swap_check.h (h)); within the margin the end line is FAIL
  *   then the end line.
  *
  * The restore runs whenever something was written, whatever failed after
@@ -170,6 +172,12 @@
  * and stay well under MAX_POLLS' ~12 frames and FRCNT's 64-frame aliasing.
  * A pickup later than that is a FAIL, not a late pass. */
 #define LACT_FRAMES 4u
+
+/* s32-nullfix: main()'s record lines (hvs6s_lines -> printk) need more than
+ * Zephyr's default 4096-byte main stack, which overflowed into the idle
+ * thread's stack on the board (swap_check.h section (h)); prj.conf sets it. */
+BUILD_ASSERT(CONFIG_MAIN_STACK_SIZE >= SWAP_MAIN_STACK_MIN,
+	     "rpi5_scanout32: CONFIG_MAIN_STACK_SIZE below SWAP_MAIN_STACK_MIN (swap_check.h)");
 
 /* The hardware-written words, from CMakeLists.txt (empty by default). */
 #ifndef RPI5_SCANOUT32_HW_WORDS
@@ -1418,6 +1426,21 @@ int main(void)
 	if (!ran) {
 		hvs6s_fail(&plan, first_err);
 		(void)hvs6s_lines(&plansnap, &plan, &emit);
+	}
+
+	/* the main stack's high-water mark (CONFIG_INIT_STACKS), after every
+	 * record line was printed */
+	{
+		size_t unused = 0;
+		int src = k_thread_stack_space_get(k_current_get(), &unused);
+		bool sok = src == 0 && swap_stack_ok(CONFIG_MAIN_STACK_SIZE, (uint32_t)unused);
+
+		printk("rpi5_scanout32: S11 main stack size %u unused %u (%s, need %u unused)\n",
+		       (unsigned)CONFIG_MAIN_STACK_SIZE, (unsigned)unused,
+		       src != 0 ? "unmeasured" : sok ? "ok" : "low", (unsigned)SWAP_STACK_MARGIN);
+		if (!sok && fail == NULL) {
+			fail = "the main stack came within its margin (S11)";
+		}
 	}
 
 	if (fail == NULL && first_err != HVS6S_OK) {
