@@ -19,6 +19,16 @@ the triangle image by normal kexec, so with no picture left to adopt; its
 first show ran the cold chain at 1920x1080 on the GL window, through in
 63 ms; the image's check PASS, `t6-verdict.sh triangle` PASS on the UART
 record, the Mali-rendered triangle read from the capture unit's pictures.
+D9 by U-Boot's `go` (2026-11-24, development runs: `prompt-go.sh` types the
+commands at the U-Boot prompt): the image is read from the eMMC and started
+with no Linux before it. `t6_cold` at 1920x1080: the chain through in 63 ms,
+60 frames a second counted, `HPD 1` after the 90 s hold, the tool's verdict
+PASS, the pattern read from the capture unit's pictures. The triangle image:
+no picture to adopt (stop 4: VP0 in STANDBY), so its first show ran the cold
+chain at 1920x1080 on the GL window, through in 64 ms; the image's check
+PASS, the tool's verdict PASS, the Mali-rendered triangle read from the
+capture unit's pictures. Not run on this route: Slint and glmark2. Not done:
+U-Boot starting the image by itself, with nothing typed.
 The T6 leaves "work in progress" only when Zephyr and YakoGL put the
 rendered picture on a display in the product form: U-Boot starts Zephyr from
 the eMMC, with no Linux before
@@ -619,7 +629,8 @@ the full rules) and two notes on them:
   `SRST_D_VOP2HDMI_BRIDGE0` (52/14) and `SRST_P_VOPGRF` (53/3)
   (`rst-rk3588.c:540`, `:541`, `:536`, `:543`) are neither checked nor
   released by the chain; Linux drives none of them and the D0 dump reads
-  them released.
+  them released. Out of a reset (U-Boot's `go`, 2026-11-24) the chain
+  passed and the picture was up for the whole hold without touching them.
 
 ### What the start sets up itself: HDMI0's pins and the Type-A ports' 5 V
 
@@ -1226,7 +1237,7 @@ answers polls, takes injected failures and records the order.
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable (on the video clock: it waits for `CMU_STATUS` to report it running and refuses without it, section 2 (c)), HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks; no enable word touched while the video clock reads off | none alone | 250 lines + tests | no |
 | D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, the controller bound, VOP2 with VP0 started, then the controller enabled, then the window, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model, the controller's enable after VP0's start and before the window (the model refuses the enable's words while VP0 does not run); every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
 | D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection; `-DT6_COLD_MODE=1920x1080` builds it for the second mode, section 3), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4. On the board on 2026-11-24 (development runs): the CPU pattern at both modes, verdict PASS, seen on the capture unit at 1920x1080 (section 3); the triangle image the same day, its first show the cold chain at 1920x1080 on the GL window: the adopt stopped at stop 1 (PD_VOP off), the chain through in 63 ms, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), `t6-verdict.sh triangle` PASS on the UART record, the triangle seen on the capture unit, the board's own reset at the end. Still to run: the GL image at 1024x768 from cold | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
-| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; nothing is left running there, so every order the chain needs is its own: the controller's enable after VP0's start, section 2 (c); it takes the `t6_cold` and `triangle` probes beside t6_hello..t6_submit; `t6-verdict.sh` has the table for `triangle`, judged on a kexec record so far, and none for `gl_slint`, which the tool therefore does not take), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
+| D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; nothing is left running there, so every order the chain needs is its own: the controller's enable after VP0's start, section 2 (c); it takes the `t6_cold` and `triangle` probes beside t6_hello..t6_submit; with `T6_ROUTE=uboot` `t6-verdict.sh` has the tables for `t6_cold` and `triangle`, each with a predicted record cut from a board run, and none for `gl_slint`, which the tool therefore does not take), `gl_triangle` and `gl_slint` on screen. On the board on 2026-11-24 (development runs: the tool types the commands at the U-Boot prompt): t6_hello..t6_submit, verdict PASS each; `t6_cold` at 1920x1080: START reads no port running and none stopped, the chain through in 63 ms, 60 frames a second counted, `HPD 1` after the 90 s hold, the tool's verdict PASS, the pattern seen on the capture unit; the triangle image: the adopt stopped at stop 4 (VP0 in STANDBY), the chain through in 64 ms, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), the tool's verdict PASS, the triangle seen on the capture unit, the board's own reset at the end. Still to run: `gl_slint` (after its table), glmark2, and U-Boot starting the image by itself, with nothing typed | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
 Order and parallel work: D0 first (the lead; nothing else needs the board
@@ -1261,7 +1272,7 @@ variant of it.
 | U10 | Which physical connector is HDMI0 on the T6? | answered by D0: the one the LCD is on is `card0-HDMI-A-1`, `fde80000.hdmi` |
 | U11 | The 1920x720 panel's pixel clock and whether it accepts DVI | D0 with that panel: `modes`, the EDID, the PHY registers |
 | U12 | A sink that is slow to answer DDC after power saving (seen with a 1920x720 panel on this board) | D10 retries; the fixed mode stays the fallback |
-| U13 | Are the TX resets SRST_HDMITX0_REF and SRST_HDMIHDP0 needed for a cold start (no Linux driver pulses them)? | D8: the cold run first without, then with a pulse if the controller does not respond |
+| U13 | Are the TX resets SRST_HDMITX0_REF and SRST_HDMIHDP0 needed for a cold start (no Linux driver pulses them)? | answered by D8 and D9: no. The chain writes only their release word and never pulses them (`soc::rk3588_display::display_on`); the controller answered on every cold run by kexec and out of a reset by U-Boot's `go` (2026-11-24) |
 | U14 | `TIMER_BASE_CONFIG0` = 428571429: is it the reference clock rate on this board (CLK_HDMITX0_REF from aclk_hdcp1_root)? | answered by D0: yes, `clk_hdmitx0_ref` is 428571429 Hz |
 | U15 | With the capture unit's EDID (an HDMI sink), does Linux drive RGB at 8 bits per colour, so VP0's `DSP_CTRL` is the value the adopt expects? Another depth or format changes `DSP_CTRL`, and the adopt then stops at its state check | answered for 1920x1080 by the dump of 2026-11-23: RGB, 8 bits, `DSP_CTRL` 0x0000000f (section 6). For a set 1024x768 on that sink: the record's "HDMI-A-1 output" line, then the adopt's own read |
 | U16 | The capture unit's pictures of the cold route's DVI signal at 1920x1080 are limited-range coded (black reads 16), those of Linux's HDMI signal are not (section 3). Does a display treat the DVI signal's range the same way, so that black is not black there? | D10: the AVI InfoFrame names the range; a picture of the same pattern with it |

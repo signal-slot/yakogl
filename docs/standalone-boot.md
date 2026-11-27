@@ -512,6 +512,12 @@ the per-stage procedures are in `driver/docs/nanopc-t6-mali.md` ("Z1",
 section is the overview.
 A kexec run is a development result, as `driver/tools/kexec-zephyr/README.md`
 says.
+A second development route starts the same image with no Linux before it:
+U-Boot's `go` on an image read from the eMMC, typed at the U-Boot prompt by
+`driver/tools/uboot-t6/prompt-go.sh`. On 2026-11-24 the five probes, the
+display from cold (`t6_cold`) and the triangle image passed on it
+(`tools/cts/RESULTS.md`, "Mali: NanoPC-T6 on Zephyr (by U-Boot's `go`)").
+U-Boot starting the image by itself, with nothing typed, is not done.
 
 ### The boot form
 

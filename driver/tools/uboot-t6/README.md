@@ -13,7 +13,11 @@ Status:
   The list now also reads WDT0's gates, its words and the CRU's global reset
   words ("The watchdog"); that part has not run.
 - Starting an image from the prompt is a tool (`stage.sh`, `prompt-go.sh`;
-  "The route") and has not run on the board (issue #4627). The script draft
+  "The route") and ran on the board on 2026-11-24: t6_hello, t6_gpu, t6_mmu,
+  t6_fw and t6_submit, then `t6_cold` and the triangle image on HDMI, each
+  with the verdict PASS (`driver/docs/nanopc-t6-display.md`, step D9). The
+  tool types the commands; U-Boot starting the image by itself is not done.
+  The script draft
   `t6-zephyr.cmd` is gone: it needed `setexpr`, `icache` and `dcache`, which
   this build lacks.
 - The 2026-11-25 sessions (plan #408) stopped before the prompt: the
