@@ -30,8 +30,8 @@ PATTERNS = [
 # /tmp/yakogl-kexec, hex record words and image sha256 (64 hex digits, no colons) are not matched.
 HEX = r"[0-9A-Fa-f]"
 CONT = r"\bpodman\s+(start|stop|restart|kill|rm|logs|exec|inspect)\s+((-[A-Za-z-]+(\s+[0-9]+)?)\s+)*(?![0-9]+\b)[A-Za-z0-9_][A-Za-z0-9_.-]*"
-PROMPT = r"^\[?[A-Za-z0-9_][A-Za-z0-9_-]*:[~/][^\s]*[#$] "
-LOGINP = r"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_-]* login:"
+PROMPT = r"^\[?[A-Za-z0-9_][A-Za-z0-9_.-]*:[~/][^\s]*[#$] "
+LOGINP = r"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_.-]* login:"
 EXTRA = [
     # a login at a host name without a dot (root at the board's short name)
     ("login", r"(?<![A-Za-z0-9._-])[A-Za-z_][A-Za-z0-9._-]*@[A-Za-z0-9_][A-Za-z0-9_-]*", "<login>"),
@@ -43,7 +43,7 @@ EXTRA = [
     ("mac", r"(?<![0-9A-Za-z:-])(" + HEX + r"{2}[:-]){5}" + HEX + r"{2}(?![0-9A-Za-z:-])", "<mac>"),
     ("tty", r"/dev/serial/|/dev/tty(USB|ACM)|/dev/cu\.(usb|wch)", "<tty>"),
     ("usbserial", r"\busb-[A-Za-z0-9_.-]+-if[0-9]+(-port[0-9]+)?\b"
-                  r"|\biSerial\s+[0-9]+\s+\S"
+                  r"|\biSerial\s+[0-9]+\s+[^\s<]"
                   r"|\b(i?SerialNumber|ID_SERIAL(_SHORT)?|serial_?number)\b\s*[:=]?\s*[0-9A-Za-z]", "<serial>"),
     ("url", r"\b(rfc2217|socket|telnet|ssh|tcp)://[^\s\"'<>]+", "<url>"),
     # X2 runs: the i.MX UART device, a container name (undo / UNDO lines, containers_stopped=, app_back) and a
@@ -68,9 +68,13 @@ FIX = [
                 rb"[A-Za-z0-9_][A-Za-z0-9_.-]*"), rb"\1<container>"),
     (re.compile(rb"(\bcontainers_stopped=)[A-Za-z0-9_][^\s]*"), rb"\1<container>"),
     (re.compile(rb"(\bapp_back[= ]+)(?!not\b)[A-Za-z0-9_][A-Za-z0-9_.-]*"), rb"\1<container>"),
-    (re.compile(rb"^(\[?)[A-Za-z0-9_][A-Za-z0-9_-]*(:[~/][^\s]*[#$] )", re.M), rb"\1<host>\2"),
-    (re.compile(rb"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_-]* login:", re.M), b"<host> login:"),
-] + [(rx, rep) for n, rx, rep in COMPILED[3:] if n in ("tailnet", "ipv6", "mac", "usbserial")]
+    (re.compile(rb"^(\[?)[A-Za-z0-9_][A-Za-z0-9_.-]*(:[~/][^\s]*[#$] )", re.M), rb"\1<host>\2"),
+    (re.compile(rb"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_.-]* login:", re.M), b"<host> login:"),
+    # USB serials: keep the keyword, replace the whole value token (a one-character match left the tail behind)
+    (re.compile(rb"\busb-[A-Za-z0-9_.-]+-if[0-9]+(-port[0-9]+)?\b"), b"<serial>"),
+    (re.compile(rb"(\biSerial\s+[0-9]+\s+)[^\s<][^\s]*"), rb"\1<serial>"),
+    (re.compile(rb"(\b(?:i?SerialNumber|ID_SERIAL(?:_SHORT)?|serial_?number)\b\s*[:=]?\s*)[0-9A-Za-z][^\s]*"), rb"\1<serial>"),
+] + [(rx, rep) for n, rx, rep in COMPILED[3:] if n in ("tailnet", "ipv6", "mac")]
 
 
 def files(paths):
