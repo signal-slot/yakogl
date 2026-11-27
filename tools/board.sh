@@ -433,7 +433,11 @@ pi5)
     # the largest rpi_5 overlay's (none exists yet: the Pi 4's 256 MiB, 0x10000000
     # at 0x200000). Whether the firmware loads a kernel= image there is U6,
     # answered by the D1 run, not by this file.
-    YAKO_ADDR=0x200000; LOAD_END=0x10200000
+    # The load window is 288 MiB (0x12000000 from 0x200000, to 0x12200000): the
+    # size of the glmark2 overlay's sram0 and of a dEQP tree image
+    # (docs/notes/rpi5-deqp-glmark2.md section 3); the gl_test and probe images
+    # are smaller and pass the same check.
+    YAKO_ADDR=0x200000; LOAD_END=0x12200000
     MARKER='board: PM watchdog resets'   # driver/zephyr/lib/board/rpi4/rpi_wdog.c, built for the Pi 5 with the same literal
     NB_WATCHDOG="the PM watchdog"
     RESET_RE='GPU reset (recovery'
@@ -918,7 +922,7 @@ end_seen() {
 # legacy_result CONSOLE: the sample's own result line, until the board layer
 # prints yk-record: on this board. Prints a label, or nothing.
 legacy_result() {
-    local c=$1 l
+    local c=$1 l st
     { [ -n "$LEGACY_RE" ] && [ -s "$c" ]; } || return 0
     l=$(plain "$c" | grep -aE "$LEGACY_RE" | tail -1)
     case "$l" in
@@ -926,6 +930,12 @@ legacy_result() {
     "deqp: summary: "*) echo deqp_summary ;;
     "gl_test: all: "*) echo gl_test_all ;;
     *"RECORD end"*) echo gl_test_record_end ;;
+    # the pi5's tree image: the state word after the build id, not the line's last word
+    "v3d_deqp: build "*)
+        if [ "${BOARD:-}" = pi5 ]; then
+            st=$(sed -nE 's/^v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)[: ].*/\1/p' <<<"$l")
+            echo "v3d_deqp_${st:-${l##* }}"
+        else echo "v3d_deqp_${l##* }"; fi ;;
     v3d_deqp:*) echo "v3d_deqp_${l##* }" ;;
     # the Pi 5 probes (only the pi5's LEGACY_RE has them): a label ending in
     # _fail is the verdict failed (verdict_line)
@@ -1191,6 +1201,11 @@ verdict_line() {
                         # a probe's own FAIL line (pi5); every other label: the set's rule
                         case "$result" in
                         *_fail) verdict=failed ;;
+                        # the pi5's dEQP tree image ends on 'v3d_deqp: build B
+                        # DONE|INCOMPLETE|STOPPED: ...': only DONE is a finished
+                        # tree (the Pi 4's rule is unchanged)
+                        v3d_deqp_INCOMPLETE | v3d_deqp_STOPPED)
+                            if [ "$BOARD" = pi5 ]; then verdict=failed; else verdict=$(gl_test_set_verdict "$console"); fi ;;
                         *) verdict=$(gl_test_set_verdict "$console") ;;
                         esac
                         result="legacy:$result"
