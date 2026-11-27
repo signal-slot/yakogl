@@ -151,10 +151,10 @@ texts.
   | every pair | 874 | 41,012 | 31,922 | 28,126 | 1.28 | 1.13 |
   | pairs with a texture look-up | 84 | 4,401 | 4,038 | 3,260 | **1.09** | **1.24** |
 
-  The measured terrain rows show that estimate running 6 to 10 % high
-  (terrain FS 169 estimated against 153 measured, VS 164 against 154). The
-  "Mesa 4.2 (est.)" column below is Mesa 7.1 x 1.24, the ratio of the
-  texturing set. The nearest corpus program to a blur is
+  The estimated rows of the section 2 table are Mesa 7.1 x 1.24, the ratio
+  of the texturing set. The measured terrain rows show that estimate
+  running 6 to 10 % high (terrain FS 169 estimated against 153 measured,
+  VS 164 against 154). The nearest corpus program to a blur is
   `femtovg/filter_image.frag`, a Gaussian loop: ours 87, Mesa 4.2 93.
 
 ## 2. Per-shader table
