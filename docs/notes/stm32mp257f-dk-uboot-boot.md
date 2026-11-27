@@ -856,8 +856,9 @@ carries the build commit, and the shared board layer has changed since
 sources did not change). The scripts were built by `driver/tools/uboot-mp2`
 at `59b8bac6` (`mp2-mmc`, 3820 bytes as U-Boot read them).
 
-**How this run differs from the plain runner** (both are recorded as defects
-in the plan's report):
+**How this run differs from the plain runner** (the issue texts for this
+result are in the message of the commit that last changed this note,
+`git log -1 -- docs/notes/stm32mp257f-dk-uboot-boot.md`):
 
 - The runner ran from a scratch worktree of `59b8bac6` with one line
   changed. Its `/boot` listing,
