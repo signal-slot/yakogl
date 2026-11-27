@@ -19,6 +19,7 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
+BOARD_SH=${IMX8MP_GLES3_BOARD_SH:-$ROOT/tools/board.sh}	# the selftest points it at a stub
 USAGE="usage: $0 [--dry-run] [--board imx8mp|x2] tree|tally <outdir>"
 dry=()
 board=${IMX8MP_BOARD:-imx8mp}
@@ -47,9 +48,55 @@ case "$verb" in
 		fi
 		export TREE_IMAGE
 		echo "imx8mp-gles3-board: tools/board.sh ${dry[*]:+${dry[*]} }$board tree tools/cts/imx8mp-gles3-tree.txt $out" >&2
-		exec "$ROOT/tools/board.sh" "${dry[@]}" "$board" tree "$HERE/imx8mp-gles3-tree.txt" "$out" ;;
+		if [ ${#dry[@]} -gt 0 ]; then exec "$BOARD_SH" "${dry[@]}" "$board" tree "$HERE/imx8mp-gles3-tree.txt" "$out"; fi
+		# A real run goes entry by entry (board.sh's own TREE_ROWS), so the chain can stop at the first
+		# entry that failed to run: board.sh exits non-zero, or its verdict line says not_back, refused or a
+		# GPU reset (done_with_resets). Other verdicts (failed, done_stopped, ...) are results, the chain goes on.
+		# It prints "imx8mp-gles3-board: STOP e<NN> rc=<rc> verdict=<v>" and exits non-zero (the rc, else 1).
+		# INT/TERM stop the running board.sh and exit 130/143: `kill <pid>` ends a session, no pkill -f.
+		rows=${TREE_ROWS:-}
+		if [ -z "$rows" ]; then
+			n=$(grep -cvE '^[[:space:]]*(#|$)' "$HERE/imx8mp-gles3-tree.txt")
+			rows=0-$((n - 1))
+		fi
+		list=()
+		IFS=, read -ra parts <<<"$rows"
+		for part in "${parts[@]}"; do
+			a=${part%-*}; b=${part#*-}
+			for ((k = a; k <= b; k++)); do list+=("$k"); done
+		done
+		child=0 cur=0 log=$(mktemp "${TMPDIR:-/tmp}/gles3-board.XXXXXX")
+		on_sig() { # on_sig CODE
+			trap '' INT TERM
+			if [ "$child" -gt 0 ]; then kill -TERM "$child" 2>/dev/null; wait "$child" 2>/dev/null; fi
+			echo "imx8mp-gles3-board: STOPPED by signal at e$(printf %02d "$cur"); the chain ends here" >&2
+			rm -f "$log"; exit "$1"
+		}
+		trap 'on_sig 130' INT
+		trap 'on_sig 143' TERM
+		for cur in "${list[@]}"; do
+			: > "$log"
+			exec {fd}> >(tee "$log"); teepid=$!
+			TREE_ROWS=$cur "$BOARD_SH" "$board" tree "$HERE/imx8mp-gles3-tree.txt" "$out" < /dev/null >&"$fd" 2>&1 &
+			child=$!
+			wait "$child"; rc=$?
+			child=0
+			exec {fd}>&-; wait "$teepid" 2>/dev/null	# let the tee behind the log drain
+			vline=$(grep -aE '^board\.sh [^ ]+ [^ ]+ rc=[0-9]+ verdict=' "$log" | tail -1)
+			verdict=$(sed -n 's/.* verdict=\([^ ]*\).*/\1/p' <<<"$vline")
+			vrc=$(sed -n 's/.* rc=\([0-9]*\) verdict=.*/\1/p' <<<"$vline")
+			bad=0
+			case $verdict in not_back | refused | *reset*) bad=1 ;; esac
+			if [ "$rc" -ne 0 ] || [ "$bad" = 1 ]; then
+				echo "imx8mp-gles3-board: STOP e$(printf %02d "$cur") rc=${vrc:-$rc} verdict=${verdict:-none}; the chain stops" >&2
+				rm -f "$log"
+				code=$rc; [ "$code" -ne 0 ] || code=${vrc:-1}; [ "$code" -ne 0 ] || code=1
+				exit "$code"
+			fi
+		done
+		rm -f "$log" ;;
 	tally)
 		echo "imx8mp-gles3-board: tools/board.sh $board tally $out" >&2
-		exec "$ROOT/tools/board.sh" "$board" tally "$out" ;;
+		exec "$BOARD_SH" "$board" tally "$out" ;;
 	*) echo "$USAGE" >&2; exit 2 ;;
 esac
