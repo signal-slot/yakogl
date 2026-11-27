@@ -28,7 +28,10 @@ missing or matches more than once (or when the drafts are PARTIAL).
 
 The board: when every slice is an Armadillo-X2 slice (merge's board_of), each of the four drafts says "measured on
 the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" (STATUS.md: "Armadillo-X2（i.MX 8M Plus、GC7000UL）で"); a mix of X2 and
-Verdin slices names both, and the RESULTS.md and #24 drafts list each slice's board. Verdin only: as before.
+Verdin slices names both with the entries each measured (read from the records: the entries whose record lies in
+a slice of that board, e.g. "entries 0-50 on the Verdin iMX8M Plus, 13-15 and 51-132 on the Armadillo-X2"), and the
+RESULTS.md and #24 drafts list each slice's board. An X2 slice is a full record, never PARTIAL for being X2; PARTIAL
+stays for real gaps (entries without a record). Verdin only: as before.
 """
 import argparse
 import datetime
@@ -72,30 +75,6 @@ X2_LONG = 'Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
 def board_of(d):
     """'x2' or 'verdin': the board a slice was measured on (imx8mp-gles3-merge.py's board_of)."""
     return load_merge().board_of(d)
-    boards, dash, rows, readmes = set(), 0, 0, []
-    for name in sorted(os.listdir(d)):
-        path = os.path.join(d, name)
-        if name.lower().startswith('readme'):
-            txt = open(path, errors='replace').read()
-            readmes.append(txt)
-            boards.update(m.group(1).lower() for m in re.finditer(
-                r'\bboard\.sh\s+(\S+)\s+[A-Za-z_-]*\d+\s+rc=', txt))
-        elif name == 'results.tsv':
-            for l in open(path, errors='replace'):
-                f = l.rstrip('\n').split('\t')
-                if l.startswith('#') or len(f) < 8 or all(x == '-' for x in f[2:8]):
-                    continue
-                rows += 1
-                dash += f[2] == '-'
-    if 'x2' in boards:
-        return 'x2'
-    if rows and dash == rows:
-        return 'x2'
-    if boards:
-        return 'verdin'
-    if any(X2_NAME in t for t in readmes):
-        return 'x2'
-    return 'verdin'
 
 
 def expand(c):
@@ -169,7 +148,14 @@ def totals(args):
     tot = [sum(r[k] for r in rows) for k in range(1, 8)]
     missing = [i for i in range(len(table)) if mg.counts(i) is None]
     miss = (len(missing), len(table), mod.span(missing).replace(',', ', '), sum(len(per[i]) for i in missing))
-    return rows, tot, raw, miss
+    # The entries each board measured: the board of the slice that holds the entry's record (a no-record
+    # entry belongs to no board).
+    boards = {}
+    for i in range(len(table)):
+        r = mg.rec.get(i)
+        if r is not None and r.get('tally') is not None and r.get('dir') is not None:
+            boards.setdefault(board_of(r['dir']), []).append(i)
+    return rows, tot, raw, miss, {b: mod.span(e).replace(',', ', ') for b, e in boards.items()}
 
 
 def rel(d):
@@ -223,6 +209,12 @@ def find_anchors(root, repl):
     return res
 
 
+def and_join(span):
+    """'13-15, 51-132' as '13-15 and 51-132', '1, 5, 9' as '1, 5 and 9'."""
+    parts = span.split(', ')
+    return parts[0] if len(parts) == 1 else ', '.join(parts[:-1]) + ' and ' + parts[-1]
+
+
 def n(x):
     return f'{x:,}'
 
@@ -257,10 +249,10 @@ def main():
     if rc_c not in (0, 1):
         problems.append('merge --check could not run: %s' % (err_c.strip() or out_c.strip() or 'exit %d' % rc_c))
     try:
-        rows, tot, raw, miss = totals(args)
+        rows, tot, raw, miss, board_span = totals(args)
     except (OSError, ValueError) as e:
         problems.append('totals could not be read: %s' % e)
-        rows, tot, raw, miss = [], [0] * 7, [0] * 7, (0, 0, 'none', 0)
+        rows, tot, raw, miss, board_span = [], [0] * 7, [0] * 7, (0, 0, 'none', 0), {}
     mp, begun, npass, nfail, nns, nother, nnone = tot
     # Completeness is judged on mustpass cases only: merge --check (every entry has a record with a clean
     # verdict, one record per entry, one commit). Cases the records begin outside the mustpass list never
@@ -308,6 +300,15 @@ def main():
                 ', measured on the Verdin iMX8M Plus and the Armadillo-X2' if mixed else '')
     board_ja = (' Armadillo-X2（i.MX 8M Plus、GC7000UL）で' if all_x2 else
                 ' Verdin iMX8M Plus と Armadillo-X2 で' if mixed else '')
+    if mixed and len(board_span) == 2:
+        # Both boards hold records: name each board with the entries it measured, read from the records
+        # (the slice that holds an entry's record, and that slice's README for the board), never fixed.
+        order = sorted(board_span, key=lambda b: int(re.match(r'\d+', board_span[b]).group(0)))
+        name = {'x2': 'the Armadillo-X2', 'verdin': 'the Verdin iMX8M Plus'}
+        ja = {'x2': 'Armadillo-X2', 'verdin': 'Verdin iMX8M Plus'}
+        ranges = ['%s on %s' % (and_join(board_span[b]), name[b]) for b in order]
+        board_en = ', measured on entries ' + ', '.join(ranges)
+        board_ja = ' ' + 'と '.join('%s（エントリ %s）' % (ja[b], board_span[b].replace(', ', '、')) for b in order) + 'で'
     print('=== imx8mp-gles3-report: i.MX8MP dEQP-GLES3 drafts (%s) ===' % args.date)
     if not ok:
         reason = 'merge --check failed (exit %d)' % rc_c if rc_c else 'the merge totals are inconsistent'
