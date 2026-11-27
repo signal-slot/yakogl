@@ -611,6 +611,34 @@ kernel has no kexec; `fuse read 2 2 2` gives `00000000 00000080`; DRAM is
 0x90000000 + 0x70000000 and 0x100000000 + 0x180000000; the eMMC's boot
 areas are 31.5 MiB each.
 
+### Verdin iMX95: dEQP-GLES2, the whole tree
+
+The 76 rows of `tools/cts/mali-gles2-tree.txt` (the NanoPC-T6's rows), one
+image per row, built by `tools/cts/imx95-deqp-images.sh` from origin/main
+`66ddabe6` (image build string `66ddabe6`, `-DYAKOGL_WERROR=ON`, the pinned
+`MALI_CSFFW`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`).
+Each image was staged by the module's Linux on the eMMC's root file system
+(md5 against the host's) and started by the module's U-Boot through the
+installed one-shot hook of `tools/board.sh imx95` (`yako_once`, `yako_src=mmc`:
+`ext4load mmc 0:2 0xd0000000 <file>`, `dcache off; icache flush; go
+0xd0000000`), one reboot per row; the boot partitions and `bootcmd` were not
+written. Verdicts from the UART_3 console (the BBM record is not readable
+under the module's kernel). The previous whole tree, from images built at
+`e63ab28e` in six hand-typed sessions (2026-11-24/25), had 11,435 pass, 5,233
+fail, 494 not supported, 3 quality warnings
+(`tools/cts/log/*-imx95-gles2-S*-e63ab28e/`).
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| dEQP-GLES2, the whole tree: 76 rows, one image per row | `vi95_deqp` (`driver/samples/zephyr/deqp`, `verdin_imx95/mimx9596/a55`) | **76 of 76 images reached their `deqp: done` line** (`complete=1`, `deqp: summary: N cases begun, N with a result, 0 without` in every row); of the must-pass list's 17,165 cases **12,393 pass, 4,324 fail, 445 are not supported, 3 end in a quality warning**. Every row reset the board itself (72 rows show `verdin_imx95: board: run over: PSCI SYSTEM_RESET at N ms` in the read window, the longest 58,537 ms of the 600 s lifetime; the other 4 end in `deqp: summary`/`deqp: PASS` with the module back in its Linux after the usual ~60 s); no WDOG3 reset, no hang. The filters ran 17,368 cases (12,594 pass, 4,326 fail, 445 not supported, 3 warnings); the 203 outside the must-pass list are counted as they were at `e63ab28e` (201 pass, 2 fail: `random.all_features.fragment.16` and `.56`), not re-read | origin/main `66ddabe6` | 2026-11-28 06:00 to 07:57 JST | `records/verdin-imx95/20261127-2100-gles2-tree-66ddabe6` (per-row totals and the 76 `.built` lines) |
+
+Per slice of the filters (pass / fail / not supported / warning of the cases
+run): S1 4,033 / 1,126 / 34 / 3 of 5,196; S2 3,921 / 951 / 0 / 0 of 4,872;
+S3 2,291 / 1,804 / 384 / 0 of 4,479; S4 2,349 / 445 / 27 / 0 of 2,821.
+What this run does not show: the refusal texts per case. Only each row's end
+lines were read from the console; the per-text refusal counts are not
+tallied, and the full captures are not kept.
+
 ## Mali: NanoPC-T6 on Zephyr (by kexec)
 
 Zephyr images started out of the board's Armbian by kexec
