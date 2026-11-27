@@ -65,7 +65,7 @@ struct gl_texture {
 	/* A cube map (6) or a 2D array (N) keeps its faces/layers stacked
 	 * vertically in one linear texture: `layers` rows of `height` at every
 	 * level, so the storage is width x (height * layers). The shaders sample
-	 * it as a tall 2D texture (tools/glsl2usc.py emulation). */
+	 * it as a tall 2D texture (the emulation in tools/yakogl-tools/src/glsl2usc.rs). */
 	uint16_t layers;
 	/* A 3D texture (target TEXTURE_3D, `layers` = depth) tiles its slices in
 	 * a grid of grid_cols columns instead (slice k at column k % grid_cols,

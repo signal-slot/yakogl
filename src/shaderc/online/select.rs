@@ -179,7 +179,7 @@ fn op_type(op: ir::AluOp) -> Option<OpType> {
          *
          * MEASURED, 2026-09-22, by compiling the four shapes through the
          * reference compiler in one process and decoding what came back
-         * (`tests/bool_probe.rs`). A bool is an **all-ones integer mask**:
+         * (a probe test, since deleted). A bool is an **all-ones integer mask**:
          *
          *   float(u > 0.5)   cmp.gt r1.x       -> and.u32  r1, r1, #0x3f800
          *   !(u > 0.5)       cmp.gt r1.x       -> not.s32  r1.x, r1.x
@@ -937,7 +937,7 @@ impl<'a> Sel<'a> {
             /* `gl_FragCoord` is temp register 0, all four components.
              *
              * MEASURED, 2026-09-22, against the reference compiler
-             * (`tests/builtin_probe.rs`, since deleted -- the sequences are
+             * (a probe test, since deleted -- the sequences are
              * here and in backend.md):
              *
              *   gl_FragCoord.xy * k   mul  t?, t0.xyxx, uniform

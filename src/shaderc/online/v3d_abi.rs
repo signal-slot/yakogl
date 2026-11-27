@@ -558,7 +558,7 @@ mod tests {
 
     /// femtovg builds its 30 programs at canvas creation and keeps them all,
     /// deleting each program's shader objects right after its link
-    /// (renderer/opengl/program.rs). All 30 must link, and the keep region
+    /// (src/gl/program.rs). All 30 must link, and the keep region
     /// must hold them without the freed stage records fragmenting it.
     ///
     /// Each program as the GL core makes it: two shader objects compiled, the

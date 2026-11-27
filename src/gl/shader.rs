@@ -353,7 +353,7 @@ pub unsafe extern "C" fn glCompileShader(shader: GLuint) {
         !s.compiled && log_text(&st.log[ctx][obj_index(shader)]).windows(20).any(|w| w == b"not in offline table");
     if table_lacks_it {
         /* A run-time generated shader the table lacks: log its text for
-         * zephyr-module/tools/harvest-shaders.py and let the application
+         * the shader harvest and let the application
          * carry on to its other stage; glLinkProgram refuses the pair
          * (upstream 18692b4). */
         let s = &mut c.objs().shaders[obj_index(shader)];
