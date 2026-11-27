@@ -13,23 +13,75 @@ renamed afterwards.
 
 ## Directory name
 
-`<YYYY-MM-DD>-<board>-<set>-<sha8>[-rowsAA-BB]`
+`<date>-<board>-<set>-<sha8>[-<suffix>]`
 
-- `YYYY-MM-DD`: the run day (board clock);
-- `board`: `am62p`, `imx8mp` or `pi4` (`tools/board.sh`'s names);
+- `date`: the run day `YYYY-MM-DD` (board clock). Slices of 2026-11 whose day
+  was not kept carry `YYYY-MM` alone;
+- `board`: `am62p`, `imx8mp`, `pi4` (`tools/board.sh`'s names), or `t6`,
+  `imx95`, `mp2` for the boards the slice was run on by ssh or by hand;
 - `set`: what ran, the tree file's stem (`gles3` for
-  `tools/cts/am62p-gles3-tree.txt`);
+  `tools/cts/am62p-gles3-tree.txt`), `gles2`, `es2`, `gltest`, `glmark2`,
+  `sweep`, `uboot`; for `t6-gles2` and `imx95-gles2` the session
+  (`smoke`, `S1` … `S4`, with a letter for a split or rerun) follows;
 - `sha8`: the `origin/main` commit the board images were built from —
   board images are built from `origin/main` alone;
-- `-rowsAA-BB`: only when a tree ran in several slices: the rows of the
-  tree file this slice covers, counted from 1 (`-rows01-15`).
+- `suffix`: what tells slices of one commit apart: `rowsAA-BB` when a tree
+  ran in several slices (the rows of the tree file this slice covers,
+  counted from 1: `rows01-15`; `rows00-15` where a table counts from 0),
+  or a word (`aborts`, `aborts2`, `map`, `rerun`, `fbo`, `tex1`, `s32c`).
 
 Earlier slices predate this name and stand as they are: the Mali session
-records (`2026-10-27-frameboard` … `2026-11-01-final3`, `<date>-<set>`,
-described by `tools/mali/sweep_passsets.py`), the AM62P partial-render
-negatives (`2026-10-31-pr-negative`, `2026-10-31-pr-neg175`), and the Pi 4
-dEQP-GLES3 slice `2026-10-31-pi4-gles3-a` (`<date>-<board>-<set>-<letter>`,
-the plan item's letter) — the newest one and the model for what follows.
+records (`<date>-<set>`, described by `tools/mali/sweep_passsets.py`), the
+Pi 4 slices `2026-10-31-pi4-gles3-a`, `2026-11-pi4-gles3-b` and
+`2026-11-pi4-gles3-c` (`<date>-<board>-<set>-<letter>`, the plan item's
+letter), and the MP2 slices `2026-11-mp2-gles2-p9` and `2026-11-mp2-gltest-p9`
+(`<set>-<phase>`, no commit in the name).
+
+## Slices in this directory
+
+Every directory below holds a slice; each is named here and no other exists.
+
+- Mali session records (`<date>-<set>`):
+  `2026-10-27-frameboard`, `2026-10-28-boardref`, `2026-10-28-final`,
+  `2026-10-28-mid`, `2026-10-28-splitref`, `2026-10-28-tip`,
+  `2026-11-01-final3`, `2026-11-02-pr-217probe`, `2026-11-07-t6-step4a`.
+- AM62P partial-render negatives: `2026-10-31-pr-negative`,
+  `2026-10-31-pr-neg175`.
+- Pi 4 dEQP-GLES3: `2026-10-31-pi4-gles3-a`, `2026-11-pi4-gles3-b`,
+  `2026-11-pi4-gles3-c`, `2026-11-17-pi4-gles3-351fb70d-rerun`,
+  `2026-11-18-pi4-gles3-ac2fe51f-map`, `2026-11-20-pi4-gles3-21730230-S03-S08`,
+  `2026-11-pi4-gles3-625b9f5c-aborts2`, `2026-11-pi4-gles3-87881c78-aborts-a`,
+  `2026-11-pi4-gles3-87881c78-es2`, `2026-11-pi4-gles3-87881c78-fbo`,
+  `2026-11-pi4-gles3-87881c78-tex1`, `2026-11-pi4-gles3-87881c78-tex2`,
+  `2026-11-pi4-gles3-a1b8a613-map`, `2026-11-pi4-gles3-b1b5b845-aborts`,
+  `2026-11-pi4-gles3-b1b5b845-aborts2`, `2026-11-pi4-gles3-b1b5b845-aborts3`,
+  `2026-11-pi4-gles3-b1b5b845-rows00-15`, `2026-11-pi4-gles3-b1b5b845-rows16-30`, `2026-11-pi4-gles3-b1b5b845-rows31-45`, `2026-11-pi4-gles3-b1b5b845-rows46-60`, `2026-11-pi4-gles3-b1b5b845-rows61-75`, `2026-11-pi4-gles3-b1b5b845-rows76-90`,
+  `2026-11-pi4-gles3-b1b5b845-s32c`,
+  `2026-11-pi4-gles3-fad0558a-rerun`, `2026-11-pi4-gles3-fad0558a-rerun-s4`.
+- Pi 4 ES 2.0 and gl_test: `2026-11-pi4-es2-b1b5b845`,
+  `2026-11-pi4-es2-fad0558a`, `2026-11-pi4-gltest`,
+  `2026-11-pi4-gltest-87881c78`.
+- i.MX8MP dEQP-GLES3: `2026-11-imx8mp-gles3-9bc82915-rows01-13`,
+  `2026-11-imx8mp-gles3-9bc82915-rows17-34`,
+  `2026-11-imx8mp-gles3-9bc82915-rows35-51`.
+- MP2: `2026-11-mp2-gles2-p9`, `2026-11-mp2-gltest-p9`.
+- NanoPC-T6 (`t6-gles2` slices are described in their own section below):
+  `2026-11-12-t6-gles2-S1-a50d87b5`, `2026-11-12-t6-gles2-S1b-a50d87b5`,
+  `2026-11-13-t6-gles2-S2-1bd2074f`, `2026-11-13-t6-gles2-S2b-1bd2074f`,
+  `2026-11-13-t6-gles2-S3-4ecefc7b`, `2026-11-13-t6-gles2-S3b-4ecefc7b`,
+  `2026-11-13-t6-gles2-S4-9b5daae8`, `2026-11-15-t6-gles2-S1-37305608`,
+  `2026-11-15-t6-gles2-S2-37305608`, `2026-11-15-t6-gles2-S3-37305608`,
+  `2026-11-15-t6-gles2-S4-37305608`, `2026-11-21-t6-gles2-R373-a2482523`,
+  `2026-11-24-t6-gles2-S1-8ff01055`, `2026-11-24-t6-gles2-S2-8ff01055`,
+  `2026-11-24-t6-gles2-S3-8ff01055`, `2026-11-24-t6-gles2-S4-8ff01055`,
+  `2026-11-26-t6-gles2-R406-c8fbf34e`, `2026-11-25-t6-glmark2-038b7d7d`,
+  `2026-11-25-t6-glmark2-22c5fc5f`, `2026-11-25-t6-uboot-65af54b5`,
+  `2026-11-26-t6-sweep-d9efa418`, `2026-11-t6-sweep-1a22bd38`,
+  `2026-11-t6-sweep336`, `2026-11-t6-uboot-s1-cbb55860`.
+- i.MX95 (`imx95-gles2`, same files as the `t6-gles2` slices):
+  `2026-11-24-imx95-gles2-S1a-e63ab28e`, `2026-11-24-imx95-gles2-S1b-e63ab28e`,
+  `2026-11-24-imx95-gles2-S2-e63ab28e`, `2026-11-24-imx95-gles2-S3a-e63ab28e`,
+  `2026-11-24-imx95-gles2-S3b-e63ab28e`, `2026-11-25-imx95-gles2-S4-e63ab28e`.
 
 ## README.md: the record itself
 
