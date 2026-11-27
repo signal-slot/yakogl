@@ -3,8 +3,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # pr-session-selftest.sh -- pr-session.sh's --dry-run output and refusals.
-# Host only: no board, no toolchain, no environment. Not yet listed in
-# tools/cts/cts-selftest.sh; add it there as the other selftests are.
+# Host only: no board, no toolchain, no environment. Listed in
+# tools/cts/cts-selftest.sh as check 69.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 S=$HERE/pr-session.sh
