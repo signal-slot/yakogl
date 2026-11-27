@@ -70,3 +70,7 @@ misc	ir_values	this plan	2	2	0	dEQP-GLES2.functional.uniform_api.random.23
 misc	texture_lanes	this plan	1	1	0	dEQP-GLES2.functional.shaders.struct.uniform.sampler_array_fragment
 misc	work_registers	this plan	2	2	0	dEQP-GLES2.functional.shaders.matrix.mul.uniform_lowp_mat4_mat4_vertex
 misc	builtin_input	this plan	0	0	0	dEQP-GLES2.functional.shaders.builtin_variable.fragcoord_xyz
+loops	vs_for_constant	#367	31	29	2	dEQP-GLES2.functional.shaders.loops.for_constant_iterations.101_iterations_vertex
+loops	vs_for_uniform	#367	37	0	37	dEQP-GLES2.functional.shaders.loops.for_constant_iterations.infinite_with_conditional_break_vertex
+loops	fs_kept_for	#367	16	0	16	dEQP-GLES2.functional.shaders.loops.for_dynamic_iterations.basic_highp_float_fragment
+mixprec	fs_highp_declared	this plan	59	57	2	dEQP-GLES2.functional.shaders.operator.angle_and_trigonometry.degrees.highp_float_fragment

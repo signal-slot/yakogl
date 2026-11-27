@@ -65,11 +65,14 @@ check, meaningless here); 106 process exits with code 1, none a crash row.
 Section 14's index `tools/mali/testdata/deqp_shapes/index.tsv` now holds
 these counts (`cases`, `fail`, `notsupported` by the BOARD's status, per
 shape of the host's first refusal; a shape that no case reaches stays with
-0; no row added or removed). Four shapes the tip produces are not rows of
-the index and were left out as the item asks: loops `vs_for_constant` (31),
-loops `vs_for_uniform` (37), loops `fs_kept_for` (16) and mixprec
-`fs_highp_declared` (59) (they are the `#367` or newer names; see section
-11).
+0). It has 75 rows: the 71 of the earlier measure and four the tip
+produces, added by item `shapes-missing` with a pair each from this run's
+`shapes/`: loops `vs_for_constant` (31 cases, 29 Fail / 2 NS), loops
+`vs_for_uniform` (37, 0 / 37), loops `fs_kept_for` (16, 0 / 16) and mixprec
+`fs_highp_declared` (59, 57 / 2). They are `#367`'s names for the first
+three (`gm2_intloop_const_vs`, `gm2_cf_loop_uni_vs`,
+`gm2_intloop_uniform_vs`, `gm2_cf_loop_uni_fs`,
+`gm2_intloop_uniform_fs`) and this plan's for the fourth; see section 11.
 
 ### 0.1 Each taken refusal: the board at `37305608` against the tip
 
@@ -518,9 +521,10 @@ compiles on the host.
 
 ## 14. The committed pairs: `tools/mali/testdata/deqp_shapes/`
 
-One `<family>_<shape>.vert` and `.frag` per shape this plan takes (71
-pairs; the four shapes owned by #367 are not copied, their examples are in
-the tables), each the example case's shader pair verbatim from the `.qpa`
+One `<family>_<shape>.vert` and `.frag` per shape (75 pairs, one per row
+of `index.tsv`; the loops shapes owned by #367, `vs_for_constant`,
+`vs_for_uniform` and `fs_kept_for`, were added at `0f0b1ec9` with
+mixprec `fs_highp_declared`), each the example case's shader pair verbatim from the `.qpa`
 (dEQP's generated source: Apache-2.0, The Khronos Group Inc.; a REUSE
 `.license` sidecar per file names the case). `index.tsv` lists family,
 shape, owner, cases, fail, notsupported (board statuses) and the example
