@@ -31,6 +31,8 @@ const LOOP_VERTEX: &str = "a loop in a vertex shader";
 /// `MaliError::LoopMediump`.
 const LOOP_MEDIUMP: &str =
     "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)";
+/// `MaliError::MixedPrecision`.
+const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)";
 /// `MaliError::GuardMediump`.
 const GUARD_MEDIUMP: &str = "a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects)";
 /// `MaliError::LoopForm`.
@@ -47,20 +49,17 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_disc_always", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
     ("fs_disc_dyn", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
     ("fs_disc_dynamic", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
-    ("fs_do_dyn_basic_highp_float", LOOP_MEDIUMP),
+    ("fs_do_dyn_basic_highp_float", MIXED),
     ("fs_do_dyn_conditional_break", GUARD_MEDIUMP),
     ("fs_do_dyn_nested", "control flow (if, a loop, a return before the end)"),
     ("fs_do_dyn_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_do_uni_basic_highp_float", LOOP_MEDIUMP),
-    ("fs_do_uni_basic_mediump_float", LOOP_MEDIUMP),
+    ("fs_do_uni_basic_highp_float", MIXED),
     ("fs_do_uni_conditional_break", GUARD_MEDIUMP),
     ("fs_do_uni_conditional_continue", GUARD_MEDIUMP),
     ("fs_do_uni_nested", "control flow (if, a loop, a return before the end)"),
-    ("fs_do_uni_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_for_dyn_basic_mediump_float", LOOP_MEDIUMP),
     ("fs_for_dyn_nested", LOOP_MEDIUMP),
     ("fs_for_dyn_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_for_uni_basic_highp_float", LOOP_MEDIUMP),
+    ("fs_for_uni_basic_highp_float", MIXED),
     ("fs_for_uni_nested", LOOP_MEDIUMP),
     ("fs_for_uni_nested_sequence", LOOP_MEDIUMP),
     ("fs_for_uni_nested_tricky_dataflow_1", LOOP_MEDIUMP),
@@ -72,17 +71,17 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_idx_tmp_float_dldl", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_cd", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_sd", LOOP_MEDIUMP),
-    ("fs_idx_uni_float", LOOP_MEDIUMP),
+    ("fs_idx_uni_float", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_uni_vec4", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
     ("fs_idx_var_vec4_sd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("fs_idx_vec_direct_w", LOOP_MEDIUMP),
-    ("fs_idx_vec_static_w", LOOP_MEDIUMP),
+    ("fs_idx_vec_direct_w", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
+    ("fs_idx_vec_static_w", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_idx_vec_w_direct", LOOP_FORM),
     ("fs_idx_vec_w_dynsub", LOOP_FORM),
     ("fs_ret_dyn", LOOP_FORM),
     ("fs_ret_dynamic_loop_never", LOOP_FORM),
     ("fs_struct_local", LOOP_MEDIUMP),
-    ("fs_wh_dyn_basic_highp_float", LOOP_MEDIUMP),
+    ("fs_wh_dyn_basic_highp_float", MIXED),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
     ("vs_do_con_101_iterations", LOOP_VERTEX),
@@ -158,14 +157,25 @@ const REFUSALS: &[(&str, &str)] = &[
 /// as `i + 1` leaves our step before the test and a phi copy, which the cap's
 /// pressure used to hide. `fs_wh_con_101_iterations` compiles since the
 /// counted loop past 32 passes is kept (nir_fs.rs `rotated_loop`), in the
-/// same `while (i++ < 101)` form.
+/// same `while (i++ < 101)` form. `fs_do_uni_select_iteration_count`
+/// compiles since the `ub_true ? ui_three : 0` bound is a `CSEL.u32` on the
+/// bool's word (as loops' `fs_select`); it is `false`: our counter's step
+/// stands before the bound's `MOV`/`CSEL`, Mesa's after.
+/// `fs_do_uni_basic_mediump_float` and `fs_for_dyn_basic_mediump_float`
+/// compile since the fp16 float counter is one 16-bit phi of one lane (as
+/// loops' `fs_float_uni`); the second's bound reads a varying, converted
+/// since a kept loop's tests are roots of the liveness `convert_inputs16`
+/// reads (nir_fs.rs `mark_live`).
 const COMPILED: &[(&str, bool)] = &[
     ("fs_disc_texture", false),
     ("fs_do_con_select_iteration_count", true),
     ("fs_do_dyn_101_iterations", true),
     ("fs_do_uni_101_iterations", true),
+    ("fs_do_uni_basic_mediump_float", true),
+    ("fs_do_uni_select_iteration_count", false),
     ("fs_for_con_select_iteration_count", true),
     ("fs_for_dyn_101_iterations", true),
+    ("fs_for_dyn_basic_mediump_float", true),
     ("fs_for_dyn_basic_mediump_int", true),
     ("fs_for_dyn_conditional_body", true),
     ("fs_for_dyn_conditional_break", true),
@@ -176,8 +186,8 @@ const COMPILED: &[(&str, bool)] = &[
     ("fs_for_uni_function_call_inout", true),
     ("fs_for_uni_single_iteration", true),
     ("fs_scope_while", false),
-    ("fs_wh_dyn_101_iterations", false),
     ("fs_wh_con_101_iterations", false),
+    ("fs_wh_dyn_101_iterations", false),
     ("fs_wh_dyn_conditional_body", false),
     ("fs_wh_dyn_conditional_break", false),
     ("fs_wh_uni_101_iterations", false),

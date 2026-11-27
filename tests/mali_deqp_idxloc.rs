@@ -40,6 +40,8 @@ const LOOP_VERTEX: &str = "a loop in a vertex shader";
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
 /// A gl_FragColor lane that is not the varying's own or a constant.
 const FRAGCOLOR: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
+/// A uniform read at a run-time index of another form.
+const UNIFORM_INDEXED: &str = "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,";
 /// Control flow.
 const CTRL: &str = "control flow (if, a loop, a return before the end)";
 /// A loop past Mesa's unroll limits.
@@ -61,11 +63,11 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_struct_uni_nested_array", LOOP_MEDIUMP),
     ("fs_tmp_float_cd", LOOP_MEDIUMP),
     ("fs_tmp_vec3_sl_dl", LOOP_MEDIUMP),
-    ("fs_uni_vec3", LOOP_MEDIUMP),
-    ("fs_var_float_sd", LOOP_MEDIUMP),
-    ("fs_var_vec3_sd", LOOP_MEDIUMP),
+    ("fs_uni_vec3", UNIFORM_INDEXED),
+    ("fs_var_float_sd", ARITH),
+    ("fs_var_vec3_sd", ARITH),
     ("fs_vec2_dl_static", UNROLL),
-    ("fs_vec3_component_dl", LOOP_MEDIUMP),
+    ("fs_vec3_component_dl", ARITH),
     ("vs_mat2_dl_d", CONST_PRODUCT),
     ("vs_tmp_vec2_dl_sl", CONST_PRODUCT),
     ("vs_var_float_dl_s", CONST_PRODUCT),

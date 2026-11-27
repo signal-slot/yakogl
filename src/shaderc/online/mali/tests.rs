@@ -7525,16 +7525,25 @@ fn alu_divloop_is_mesa_26_2_1_with_the_loop_cap() {
 /// `--uniform-values`): every region and fact against the expect.json, the
 /// fragment program's words with the kept-loop cap's `edits`, an `int`
 /// uniform's words gl_ref.py's integers (16 (k + 1) + c), a float's their
-/// fp32 bits (docs/notes/mali-deqp-loops.md section 7, "Comparing").
+/// fp32 bits, a `bool`'s GL word (`~0` where its component is even, gl_ref.py
+/// `uniform_components`) (docs/notes/mali-deqp-loops.md section 7,
+/// "Comparing").
 fn check_deqp_loop(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) {
     let (v, f) = compile_linked(vs, fs);
     let names = uniform_names(vs, fs);
-    let ints = int_uniform_names(vs, fs);
+    let ints = typed_uniform_names(vs, fs, &["int", "ivec"]);
+    let bools = typed_uniform_names(vs, fs, &["bool", "bvec"]);
     let uv = |rows: &[(String, u16, u16)], d: u16| {
         let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
         let k = names.iter().position(|n| n == name).expect("the uniform is declared");
         let x = 16 * (k as u32 + 1) + u32::from(d - first);
-        if ints.contains(name) {
+        if bools.contains(name) {
+            if (d - first).is_multiple_of(2) {
+                u32::MAX
+            } else {
+                0
+            }
+        } else if ints.contains(name) {
             x
         } else {
             (x as f32).to_bits()
@@ -7544,9 +7553,9 @@ fn check_deqp_loop(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) {
     check_fs_stage_with(&f, json, VIEWPORT_64X64, edits, &|d| uv(&f.uniforms, d));
 }
 
-/// The uniforms `vs` and `fs` declare `int` or `ivec*` ([`uniform_names`]'s
-/// reading of the declarations).
-fn int_uniform_names(vs: &str, fs: &str) -> Vec<String> {
+/// The uniforms `vs` and `fs` declare of a type starting with one of
+/// `types` (`int`, `ivec`: [`uniform_names`]'s reading of the declarations).
+fn typed_uniform_names(vs: &str, fs: &str, types: &[&str]) -> Vec<String> {
     let mut out = Vec::new();
     for text in [vs, fs] {
         for stmt in text.split([';', '{', '}']) {
@@ -7555,7 +7564,7 @@ fn int_uniform_names(vs: &str, fs: &str) -> Vec<String> {
                 continue;
             }
             let skip = if matches!(w.get(1), Some(&("lowp" | "mediump" | "highp"))) { 3 } else { 2 };
-            if !w.get(skip - 1).is_some_and(|t| t.starts_with("int") || t.starts_with("ivec")) {
+            if !w.get(skip - 1).is_some_and(|t| types.iter().any(|p| t.starts_with(p))) {
                 continue;
             }
             let names = w.get(skip..).unwrap_or(&[]).join(" ");
@@ -7584,6 +7593,59 @@ fn deqp_loops_fs_for_uni_is_mesa_26_2_1_with_the_loop_cap() {
             CapEdit::Fix(11, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
             CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
             CapEdit::Fix(16, 0x48a1c10000058544), // MKVEC.v2i16.wait r1, r4^.h0, u2.w1.h0 (Mesa: MKVEC.v2i16.wait r1, r3^.h0, u2.w1.h0)
+        ],
+    );
+}
+
+/// deqp_loops_fs_select, a mediump kept loop (docs/notes/mali-deqp-loops.md
+/// section 13): fs_for_uni's loop, its bound `ub_true ? ui_three : 0` the
+/// header's `MOV.i32` of the int word and `CSEL.u32.eq` on the bool's word
+/// (nir_fs.rs, the walk's `Bcsel` arm of a 32-bit uniform word and a
+/// constant). The cap's compare takes r5, the select r1.
+#[test]
+fn deqp_loops_fs_select_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_loop(
+        td!("deqp_loops_fs_select.vert"),
+        td!("deqp_loops_fs_select.frag"),
+        td!("deqp_loops_fs_select.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(8, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(9, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Fix(10, 0x00f8c10280454102), // ICMP_OR.s32.ge.m1 r1, r2, r1^, r5^ (Mesa: ICMP_OR.s32.ge.m1 r1, r2, r1^, 0x0)
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(15, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-9)
+            CapEdit::Fix(18, 0x48a1c10000058644), // MKVEC.v2i16.wait r1, r4^.h0, u3.w0.h0 (Mesa: MKVEC.v2i16.wait r1, r3^.h0, u3.w0.h0)
+        ],
+    );
+}
+
+/// deqp_loops_fs_float_uni, a mediump kept loop (docs/notes/mali-deqp-loops.md
+/// section 13): `for (mediump float ndx = 0.05; ndx < uf_one; ndx +=
+/// uf_third)`, the fp16 counter one 16-bit phi of one lane, its start the
+/// pre-header's `#0x2A66`, the head `FCMP_OR.v2f16.ge` (the inverse
+/// compare of a 16-bit mask), the step `FADD.v2f16`. The float test takes
+/// the cap's `LSHIFT_OR` (the counter r3, its compare r5).
+#[test]
+fn deqp_loops_fs_float_uni_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_loop(
+        td!("deqp_loops_fs_float_uni.vert"),
+        td!("deqp_loops_fs_float_uni.frag"),
+        td!("deqp_loops_fs_float_uni.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Add(9, 0x00b4c1211145c041), // LSHIFT_OR.i32 r1, r1^.h0, 0x0.b00, r5^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x48a1c10000058644), // MKVEC.v2i16.wait r1, r4^.h0, u3.w0.h0 (Mesa: MKVEC.v2i16.wait r1, r3^.h0, u3.w0.h0)
         ],
     );
 }
