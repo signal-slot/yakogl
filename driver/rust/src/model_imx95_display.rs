@@ -38,6 +38,17 @@
 //!   (0x0C) and FetchLayer0 (0x1A) with its clock on; FetchLayer0's
 //!   sublayer 0 is enabled; a pipeline shadow load was taken; FrameGen0
 //!   has a timing and a kick; the display mode shows the primary input.
+//! - FrameGen0's sequence complete (group 0 bit 20) sets in the display
+//!   engine 0 interrupt block (`DISPIRQ0_INTERRUPTSTATUS0`, DPU + 0x38102C;
+//!   `DISPIRQ0_INTERRUPTCLEAR0` 0x381020 clears it), where NXP's
+//!   `dpu95-core.c` takes it, and never in the common-control
+//!   `IRQ_INTERRUPTSTATUS0` (DPU + 0x102C): the board polled that word for
+//!   1 s after `FGENABLE` = 0 and never saw it (vi95-down-board-check,
+//!   after 211ed16a). It sets once `FGENABLE` was cleared while FrameGen0
+//!   ran, on the [`Display::seq_after`]-th read of `DISPIRQ0_INTERRUPTSTATUS0`
+//!   that follows while the pixel clock arrives (a frame end needs it).
+//!   `DISPIRQ0_INTERRUPTENABLE0` is a plain word; the status latches
+//!   without it (Linux's handler masks the status with it).
 //! - Signature0 window 0's CRC is a function of the buffer scanned out
 //!   (the content the test gives an address), the window and the mode: the
 //!   model's stand-in for the hardware's polynomial (U7).
@@ -65,6 +76,8 @@ pub enum Access {
 mod o {
     pub const IRQ_STATUS0: u32 = 0x102c;
     pub const IRQ_CLEAR0: u32 = 0x1020;
+    pub const DIRQ0_CLEAR0: u32 = 0x38_1020;
+    pub const DIRQ0_STATUS0: u32 = 0x38_102c;
     pub const DM_EXTDST0: u32 = 0x200c;
     pub const ED0_STATICCONTROL: u32 = 0x11_0008;
     pub const ED0CFG_STATIC: u32 = 0x11_1008;
@@ -125,6 +138,9 @@ struct State {
     sig_valid: bool,
     /// FGENABLE was cleared while running; the frame has not ended.
     fg_ending: bool,
+    /// FGENABLE was cleared while running; reads of DISPIRQ0's status since
+    /// (`None`: no sequence pending).
+    seq_reads: Option<u32>,
 }
 
 pub struct Display {
@@ -135,11 +151,21 @@ pub struct Display {
     pub lag: u32,
     /// What each buffer shows, by address (the CRC's input).
     pub content: BTreeMap<u64, u32>,
+    /// The read of `DISPIRQ0_INTERRUPTSTATUS0` after the stop on which the
+    /// sequence complete sets (`None`: it never does).
+    pub seq_after: Option<u32>,
 }
 
 impl Display {
     pub fn new(sm: Rc<RefCell<Sm>>) -> Display {
-        Display { sm, st: RefCell::new(State::default()), faults: Faults::default(), lag: 2, content: BTreeMap::new() }
+        Display {
+            sm,
+            st: RefCell::new(State::default()),
+            faults: Faults::default(),
+            lag: 2,
+            content: BTreeMap::new(),
+            seq_after: Some(1),
+        }
     }
 
     fn block(addr: usize) -> (&'static str, u32) {
@@ -294,6 +320,18 @@ impl Display {
                 self.tick(&mut st);
                 Self::reg(&st, b, off)
             }
+            ("dpu", o::DIRQ0_STATUS0) => {
+                if let Some(n) = st.seq_reads.filter(|_| self.pixel_flows(&st)) {
+                    let n = n + 1;
+                    st.seq_reads = Some(n);
+                    if self.seq_after.is_some_and(|after| n >= after) {
+                        st.seq_reads = None;
+                        let s = Self::reg(&st, b, off) | 1 << 20;
+                        st.regs.insert((b, off), s);
+                    }
+                }
+                Self::reg(&st, b, off)
+            }
             ("dpu", o::SIG_STATUS) => {
                 self.tick(&mut st);
                 u32::from(st.sig_valid) << 1 | u32::from(st.sig_valid)
@@ -322,6 +360,10 @@ impl Display {
                 let s = Self::reg(&st, b, o::IRQ_STATUS0) & !val;
                 st.regs.insert((b, o::IRQ_STATUS0), s);
             }
+            ("dpu", o::DIRQ0_CLEAR0) => {
+                let s = Self::reg(&st, b, o::DIRQ0_STATUS0) & !val;
+                st.regs.insert((b, o::DIRQ0_STATUS0), s);
+            }
             ("dpu", o::ED0CFG_TRIGGER) => {
                 if val & 1 != 0 {
                     st.shadow_pending = true;
@@ -334,6 +376,9 @@ impl Display {
                 }
             }
             ("dpu", o::FG_ENABLE) => {
+                if val & 1 == 0 && self.running(&st) {
+                    st.seq_reads = Some(0);
+                }
                 if val & 1 == 0
                     && self.faults.frame_end_needed
                     && Self::reg(&st, "dpu", o::FG_ENABLE) & 1 != 0
