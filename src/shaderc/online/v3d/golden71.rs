@@ -150,4 +150,85 @@ mod tests {
         assert_ne!(got, MESA_V71[3].1);
         assert_ne!(got, "");
     }
+
+    /// The comparison of `every_mesa_v71_vector_decodes_to_mesas_text`, over
+    /// any table: one line per row whose decode differs from its text. It
+    /// copies that test's loop and format strings, so a change there must
+    /// be made here too.
+    fn mismatches(table: &[(u64, &str)]) -> Vec<String> {
+        let mut bad = Vec::new();
+        for &(w, want) in table {
+            match decode71(w) {
+                Ok(i) => {
+                    let got = text_of(&i);
+                    if got != want {
+                        bad.push(format!("{w:#018x}: got {got:?}, want {want:?}"));
+                    }
+                }
+                Err(e) => bad.push(format!("{w:#018x}: {e:?}, want {want:?}")),
+            }
+        }
+        bad
+    }
+
+    #[test]
+    fn equal_table_has_no_mismatch() {
+        assert_eq!(mismatches(MESA_V71), Vec::<String>::new());
+    }
+
+    #[test]
+    fn empty_table_has_no_mismatch() {
+        assert!(mismatches(&[]).is_empty());
+    }
+
+    #[test]
+    fn one_differing_word_gives_one_mismatch_naming_it() {
+        let mut t = MESA_V71.to_vec();
+        t[0].0 = MESA_V71[1].0;
+        let bad = mismatches(&t);
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        let want = format!("{:#018x}: got {:?}, want {:?}", MESA_V71[1].0, MESA_V71[1].1, MESA_V71[0].1);
+        assert_eq!(bad[0], want);
+    }
+
+    #[test]
+    fn one_differing_text_gives_one_mismatch_naming_it() {
+        let mut t = MESA_V71.to_vec();
+        t[3].1 = "nop                           ; nop";
+        let bad = mismatches(&t);
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        assert!(bad[0].starts_with(&format!("{:#018x}: got ", MESA_V71[3].0)), "{}", bad[0]);
+        assert!(bad[0].contains(&format!("{:?}", MESA_V71[3].1)), "{}", bad[0]);
+        assert!(bad[0].ends_with(&format!("want {:?}", t[3].1)), "{}", bad[0]);
+    }
+
+    #[test]
+    fn undecodable_word_reports_the_decode_error() {
+        let err = decode71(0).expect_err("word 0 is refused");
+        let bad = mismatches(&[(0, "nop                           ; nop")]);
+        assert_eq!(bad, vec![format!("{:#018x}: {err:?}, want {:?}", 0u64, "nop                           ; nop")]);
+    }
+
+    #[test]
+    fn longer_table_reports_only_the_added_row() {
+        let mut t = MESA_V71.to_vec();
+        t.push((MESA_V71[2].0, MESA_V71[4].1));
+        let bad = mismatches(&t);
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        assert!(bad[0].starts_with(&format!("{:#018x}:", MESA_V71[2].0)), "{}", bad[0]);
+    }
+
+    #[test]
+    fn shorter_table_matches_its_rows_but_not_the_row_count() {
+        let t = &MESA_V71[..MESA_V71_ROWS - 1];
+        assert!(mismatches(t).is_empty());
+    }
+
+    #[test]
+    fn a_differing_word_encodes_back_to_itself_not_to_the_row() {
+        let w = MESA_V71[1].0;
+        let i = decode71(w).unwrap();
+        assert_eq!(encode71(&i), Ok(w));
+        assert_ne!(encode71(&i), Ok(MESA_V71[0].0));
+    }
 }
