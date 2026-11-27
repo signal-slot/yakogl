@@ -21,7 +21,9 @@ ways without a mipmap filter — gets the
 same answer from comparing that texel's depth after sampling, so the
 plain filtered compare is exact there. `NEAREST_MIPMAP_NEAREST` over a
 chain is not that: the level is the program's pick (bit 3), not the TPU's
-rounding, so it takes the per-texel word. Every filter that blends texels
+rounding, so it takes the per-texel word `1|2|4|8|(levels-1)<<8`, not word 0
+(`mip_nearest` keeps `shadow_filter_word` from its early `return 0`,
+`src/pvr/backend.rs:7240-7242`; bit 3 is set at `:7253`). Every filter that blends texels
 or levels must compare before it weights.
 
 The BXS-4-64 has no attested hardware depth compare that the operands
@@ -109,7 +111,10 @@ samplers as well — the bit-4 select of word 12 wins then. The unit test
 `the_shadow_filter_is_sampler_meta_word_1` pins: LINEAR/LINEAR over one
 level `1`; LINEAR_MIPMAP_NEAREST over six levels `1|8|5<<8`; trilinear
 `1|16|5<<8`; NEAREST mag `1|2`; NEAREST min `1|4`; NEAREST both ways
-`0`; `NEAREST_MIPMAP_NEAREST` over six levels `1|2|4|8|5<<8`; NEAREST_MIPMAP_LINEAR
+`0`; `NEAREST_MIPMAP_NEAREST` over six levels `1|2|4|8|5<<8`
+(`src/pvr/backend.rs:12128`; the all-six-filters pin is
+`tests/es3_pvr_shadow.rs:466`, and `:475` pins word 0 for the same filter over
+one level, which walks no chain); NEAREST_MIPMAP_LINEAR
 `1|2|4|16|5<<8`; and that the wrap modes are **not** in the word —
 the TPU's gather wraps. The descriptor's LOD clamp (words 8, 9) and the
 gather's replaced level are two different things: the gathers walk the
