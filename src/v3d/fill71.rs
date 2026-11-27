@@ -395,7 +395,24 @@ pub struct DrawIn<'a> {
 #[derive(Clone, Debug)]
 pub enum Op<'a> {
     Clear(ClearReq),
-    Draw(Box<DrawIn<'a>>),
+    Draw(DrawBox<'a>),
+}
+
+/// A draw inside an [`Op`]: boxed under host-test (the tests build
+/// `Op::Draw(Box::new(..))`), inline in the product build (no allocator).
+#[cfg(feature = "host-test")]
+pub type DrawBox<'a> = Box<DrawIn<'a>>;
+#[cfg(not(feature = "host-test"))]
+pub type DrawBox<'a> = DrawIn<'a>;
+
+/// The one constructor of a [`DrawBox`].
+#[cfg(feature = "host-test")]
+pub fn boxed(d: DrawIn<'_>) -> DrawBox<'_> {
+    Box::new(d)
+}
+#[cfg(not(feature = "host-test"))]
+pub fn boxed(d: DrawIn<'_>) -> DrawBox<'_> {
+    d
 }
 
 /* ---- the result ------------------------------------------------------------ */
