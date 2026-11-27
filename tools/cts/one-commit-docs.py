@@ -108,8 +108,28 @@ CHECKLIST_LEAD = "The glmark2 figures in `website/data.js` follow the README tab
 DATED_RE = re.compile(r"^\d{8}-\d{4}-[A-Za-z0-9._-]+-([0-9a-f]{8})$")
 
 
+X2_NOTE_EN = "measured on the Armadillo-X2"
+X2_NOTE_LONG = ("measured on the Armadillo-X2 (same i.MX8MP SoC and GC7000UL GPU; the Verdin i.MX8MP "
+                "is off the farm)")
+X2_NOTE_JA = "Armadillo-X2 で測定（同じ SoC・GPU）"
+X2_CITE_RE = re.compile(r"records/(?:x2|imx8mp)/\d{8}-\d{4}-[A-Za-z0-9._-]+-[0-9a-f]{8}/?$")
+BY_EYE_OPEN = "(not looked at by eye)"
+
+
 class Refused(Exception):
     pass
+
+
+def on_x2(d):
+    """True when the record carries the marker: a file `measured-on` holding `armadillo-x2`
+    (also `measured-on: armadillo-x2`) in the record directory. Only the i.MX8MP is ever X2."""
+    if d.get("board_key") != "imx8mp":
+        return False
+    try:
+        with open(os.path.join(d["record"], "measured-on"), encoding="utf-8") as f:
+            return re.search(r"(?i)\barmadillo-x2\b", f.read()) is not None
+    except OSError:
+        return False
 
 
 def load_common_row():
@@ -197,7 +217,8 @@ def warnings_for(cr, ds, cites):
             out.append("%s: no --cite-%s: the RESULTS row cites only %s/, which readme-glmark2-check.py "
                        "--scenes does not accept (it wants records/%s/<YYYYMMDD-HHMM>-<name>-%s/)%s" % (
                            SHORT[b], b, cr.rel(d["record"]), b, d["sha8"], hint))
-        elif not cr.CITE_RE.search(cite_text(cr, cites[b])):
+        elif not (cr.CITE_RE.search(cite_text(cr, cites[b]))
+                  or (on_x2(d) and X2_CITE_RE.search(cite_text(cr, cites[b])))):
             out.append("%s: --cite-%s %s is not records/%s/<YYYYMMDD-HHMM>-<name>-<sha8>/" % (
                 SHORT[b], b, cite_text(cr, cites[b]), b))
     return out
@@ -219,6 +240,11 @@ def results_line(cr, d):
         st = pic_state(d, sc)
         if st in ("match", "mismatch"):
             said.append("%s picture a %s" % (sc, st))
+    if d["board_key"] == "imx8mp":
+        # the i.MX8MP pictures are checked by value only; the by-eye check is #17
+        said.append("pictures by value only " + BY_EYE_OPEN)
+    if on_x2(d):
+        said.append(X2_NOTE_LONG)
     if not said:
         return row
     cells = row.split(" | ")
@@ -233,7 +259,8 @@ def dates(ds):
 
 
 def scores_en(ds):
-    return ", ".join("%s %s" % (LONG[b], ds[b]["score"]) for b in ORDER)
+    return ", ".join("%s %s%s" % (LONG[b], ds[b]["score"], " (%s)" % X2_NOTE_EN if on_x2(ds[b]) else "")
+                     for b in ORDER)
 
 
 def slow_en(cr, ds):
@@ -299,6 +326,15 @@ def replace_rows(lines, span, rows, warn, what):
     lines[hi:hi] = add
 
 
+def readme_cell(cr, d):
+    cell = cr.readme_cell(d)
+    if on_x2(d):
+        cell = cell[:-len(" |")].rstrip()
+        assert cell.endswith(")")
+        cell = "%s; %s) |" % (cell[:-1], X2_NOTE_EN)
+    return cell
+
+
 def edit_readme(text, cr, ds, sha8, warn):
     lines = text.split("\n")
     span = None
@@ -310,7 +346,7 @@ def edit_readme(text, cr, ds, sha8, warn):
         warn.append("README: no '| Board | Score |' table; nothing edited")
         return text
     lo = span[0]
-    replace_rows(lines, (lo + 1, span[1]), {b: cr.readme_cell(ds[b]) for b in ORDER}, warn, "README")
+    replace_rows(lines, (lo + 1, span[1]), {b: readme_cell(cr, ds[b]) for b in ORDER}, warn, "README")
     # the paragraph that introduces the table
     hdr = lo - 1
     j = hdr - 1
@@ -397,13 +433,14 @@ def edit_webcheck(text, warn):
 
 
 def status_line(cr, ds, sha8):
+    x2 = "。i.MX8MP の値は " + X2_NOTE_JA if on_x2(ds["imx8mp"]) else ""
     gts = "、".join("%s %s" % (SHORT[b], gt_ja(cr, ds[b])) for b in ORDER)
     pics = "、".join("%s %s" % (SHORT[b], pics_ja(ds[b])) for b in ORDER)
-    return ("%s: README の glmark2 表は 3 ボードとも main %s の値（%s）: AM62P %s、Pi 4 %s、i.MX8MP %s。** "
+    return ("%s: README の glmark2 表は 3 ボードとも main %s の値（%s）: AM62P %s、Pi 4 %s、i.MX8MP %s%s。** "
             "3 ボードとも glmark2-es2 800x600 で 33 シーン実行、失敗 0、GL エラー 0、メモリ不足のシーン 0。"
             "gl_test は %s。絵は glmark2-pictures.txt の各列と %s。遅いシーンは記録だけで判定しない: %s。"
             "記録は records/<board>/common-%s/（RESULTS.md の「Common set」）。i.MX8MP の絵を目で見る確認（#17）は残る。" % (
-                STATUS_MARK, sha8, dates(ds), ds["am62p"]["score"], ds["pi4"]["score"], ds["imx8mp"]["score"],
+                STATUS_MARK, sha8, dates(ds), ds["am62p"]["score"], ds["pi4"]["score"], ds["imx8mp"]["score"], x2,
                 gts, pics, slow_ja(ds), sha8))
 
 
@@ -538,9 +575,14 @@ def edit_datajs(text, cr, ds, warn, record_commit):
         figs = json.loads("{" + re.sub(r",(\s*})", r"\1", src) + "}")
         # data_js() gives gltest.<board> no note: the old one describes an older run
         d = ds[b]
+        if on_x2(d):
+            figs["glmark2." + b]["note"] = figs["glmark2." + b]["note"].rstrip() + " " + \
+                X2_NOTE_EN[0].upper() + X2_NOTE_EN[1:] + " (same SoC and GPU)."
         gnote = "Run from main %s (the common set %s row; %s/)." % (d["sha8"], SHORT[b], cr.rel(d["record"]))
         if d["gt_failing"]:
             gnote += " Failing: %s." % ", ".join("case %s" % c for c in d["gt_failing"])
+        if on_x2(d):
+            gnote += " " + X2_NOTE_EN[0].upper() + X2_NOTE_EN[1:] + " (same SoC and GPU)."
         figs.setdefault("gltest." + b, {}).setdefault("note", gnote)
         for fid, fields in figs.items():
             m = re.search(r'(?m)^(\s*)"%s": \{\n' % re.escape(fid), text)
@@ -713,6 +755,45 @@ def self_test():
         r = subprocess.run([sys.executable, "-I", os.path.abspath(__file__)] +
                            sum([["--" + b, recs[b]] for b in ORDER], []), capture_output=True, text=True)
         check("--root is required", r.returncode == 2, r.returncode)
+        # an i.MX8MP record measured on the Armadillo-X2 (testdata/one-commit-docs/measured-on)
+        x2recs = dict(recs, imx8mp=cr.synth(tmp, "imx8mp", sha8, name="x2run"))
+        shutil.copy(os.path.join(HERE, "testdata", "one-commit-docs", "measured-on"), x2recs["imx8mp"])
+        x2cites = dict(cites)
+        x2cites["imx8mp"] = os.path.join(tmp, "records", "imx8mp", "20261125-1300-x2-%s" % sha8)
+        shutil.copytree(x2recs["imx8mp"], x2cites["imx8mp"])
+        tree2 = os.path.join(tmp, "tree2")
+        for rel in FILES.values():
+            os.makedirs(os.path.dirname(os.path.join(tree2, rel)) or tree2, exist_ok=True)
+            shutil.copy(os.path.join(REPO, rel), os.path.join(tree2, rel))
+        warn2 = apply(tree2, x2recs, x2cites, today="2026-11-26", out=log)
+        check("X2 case: no warnings", not warn2, warn2)
+        got = {k: open(os.path.join(tree2, v), encoding="utf-8").read() for k, v in FILES.items()}
+        for ln in open(os.path.join(HERE, "testdata", "one-commit-docs", "x2-expect.txt"), encoding="utf-8"):
+            if not ln.strip() or ln.startswith("#"):
+                continue
+            key, _, sub = ln.rstrip("\n").partition(" | ")
+            check("X2 case: %s has %r" % (key, sub), sub in got[key.lower()], key)
+        check("X2 case: the other boards' README cells carry no X2 note",
+              "| AM62P | 468 (main `%s`, 2026-11-25) |" % sha8 in got["readme"]
+              and got["readme"].count("Armadillo-X2") == 1)
+        r = subprocess.run(args[:3] + ["--readme", os.path.join(tree2, FILES["readme"]),
+                                       "--results", os.path.join(tree2, FILES["results"]),
+                                       "--status-file", os.path.join(tree2, FILES["status"]),
+                                       "--checklist-file", os.path.join(tree2, FILES["checklist"]),
+                                       "--roadmap-file", os.path.join(tree2, FILES["roadmap"])] + args[11:],
+                           capture_output=True, text=True)
+        check("X2 case: readme-glmark2-check.py passes (exit %d)" % r.returncode,
+              r.returncode == 0 and "ok:" in r.stdout, "\n" + r.stdout + r.stderr)
+        wd2 = os.path.join(tmp, "web2")
+        os.makedirs(wd2)
+        shutil.copy(os.path.join(tree2, FILES["readme"]), os.path.join(wd2, "README.md"))
+        shutil.copy(os.path.join(tree2, FILES["datajs"]), os.path.join(wd2, "data.js"))
+        r = subprocess.run(["bash", os.path.join(REPO, "tools", "website-check.sh")],
+                           capture_output=True, text=True, env=dict(os.environ, WEBSITE_GLMARK2_DIR=wd2))
+        check("X2 case: website-check.sh glmark2 comparison passes (exit %d)" % r.returncode,
+              r.returncode == 0, "\n" + r.stdout + r.stderr)
+        check("no X2 note without the marker", "Armadillo-X2" not in text and "Armadillo-X2" not in snap["status"]
+              and "Armadillo-X2" not in snap["results"] and "Armadillo-X2" not in snap["datajs"])
         log.close()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
