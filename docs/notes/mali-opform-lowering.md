@@ -347,3 +347,22 @@ at "a fragment varying load or conversion"; `rnd_splat18` at
   `deqp_opform_matsub_uniform`, `deqp_unitype_fsmat3_mediump`.
   A constant matrix's sums (arith `matrix_storeout_fs_mediump`, the same
   production) are drawn otherwise by Mesa and stay refused.
+- **O3, class HS only.** `HalfSwapped@MulB` is admitted, and
+  `grafted_locals` grafts a vector local assigned a varying's swizzle
+  (`in1 = v_in1.wzyx`) as GLSL's `opt_tree_grafting` does any rvalue: the
+  product's tree then loads `v_in0` first and converts its lane before
+  `v_in1`'s load, Mesa's order (without it our order had `v_in1`'s load
+  first and the pre-RA scheduler chose another order than Mesa's).
+  Byte-equal: `deqp_opform_mul_float_vec4`.
+- **Not landed: O3's class HO** (`ret_never`, arith
+  `other_storeoutput_fs_none`). With `HalfSwapped@Output` admitted,
+  `ret_never` stops at "a fragment varying load or conversion of a form
+  no reference draws" (`conversion_order`: Mesa's pair with the odd lane
+  low, `V2F32_TO_V2F16 r0, r3^, r2^`, is not built) and
+  `other_storeoutput_fs_none` at `Defect(Operand)`, so the production
+  stays out of `ADMITTED`.
+- **Not landed: O1, and O2's constant matrix.** Admission is not enough
+  for them (the gate-off list above): they need the pair graph built from
+  Mesa's per-read narrowing (section 5's note). `deqp_intrnd_dead_cond_fs`
+  (`Mk@MulB` under a uniform's word, byte-equal with the gate off) is left
+  to its own test's owner (`tests/mali_deqp_intrnd.rs`).

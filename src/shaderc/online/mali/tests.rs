@@ -4816,6 +4816,10 @@ fn the_fragment_productions_are_the_references() {
      * (`Uniform` at `NegSrc`), `FADD.v2f16 r1, u2.w1, u2.w0.neg`
      * (plan #367 fsoperand) */
     fs.push(td!("gm2_fsop_4.frag"));
+    /* dEQP's `in0 * v_in1.wzyx`: a swapped pair second in a product
+     * (`HalfSwapped` at `MulB`, `FMA.v2f16 r2, r0.h00, r2^.h10, 0x0.neg`)
+     * (plan #387 mali-train-3a, opform O3) */
+    fs.push(td!("deqp_opform_mul_float_vec4.frag"));
     /* built for their vertex shaders' link constants and equal lanes: one
      * lane in both halves of an output word (gm2_arithconst_3's three
      * equal colour lanes) */
