@@ -198,6 +198,13 @@ if(CONFIG_YAKOGL)
   else()
     set(YAKOGL_PVR_INSTANCE_DIVISOR OFF)
   endif()
+  # The Vivante back end's STM32MP257F profile (the crate's `vivante-st`
+  # feature), off unless the image selects it.
+  if(CONFIG_YAKOGL_VIVANTE_ST)
+    set(YAKOGL_VIVANTE_ST ON)
+  else()
+    set(YAKOGL_VIVANTE_ST OFF)
+  endif()
 
   # ---- the C part: the Zephyr OSAL + the ABI/FFI layout pins ---------------------
   # The in-process compiler is lent its working region by a static this file
@@ -291,5 +298,5 @@ if(CONFIG_YAKOGL)
     add_dependencies(yakogl yakogl_rust)
     zephyr_link_libraries(yakogl_rust_lib)
   endif()
-  message(STATUS "YakoGL: GPU=${YAKOGL_GPU} shaderc=${YAKOGL_SHADERC} no-table=${YAKOGL_NO_SHADER_TABLE} test-knobs=${YAKOGL_TEST_KNOBS} gl-test-runner=${YAKOGL_GL_TEST_RUNNER} linkage=${YAKOGL_RUST_LINKAGE} rust-target=${YAKOGL_RUST_TARGET_RESOLVED} cpu='${YAKOGL_RUST_TARGET_CPU}'")
+  message(STATUS "YakoGL: GPU=${YAKOGL_GPU} shaderc=${YAKOGL_SHADERC} no-table=${YAKOGL_NO_SHADER_TABLE} test-knobs=${YAKOGL_TEST_KNOBS} gl-test-runner=${YAKOGL_GL_TEST_RUNNER} vivante-st=${YAKOGL_VIVANTE_ST} linkage=${YAKOGL_RUST_LINKAGE} rust-target=${YAKOGL_RUST_TARGET_RESOLVED} cpu='${YAKOGL_RUST_TARGET_CPU}'")
 endif()

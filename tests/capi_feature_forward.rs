@@ -255,7 +255,7 @@ fn every_zephyr_switch_reaches_a_forwarded_feature() {
             "YAKOGL_{var} passes `{feature}`, which capi/Cargo.toml's [features] does not have"
         );
     }
-    for var in ["NO_SHADER_TABLE", "REPORT_ES2", "TEST_KNOBS", "GL_TEST_RUNNER", "PVR_INSTANCE_DIVISOR"] {
+    for var in ["NO_SHADER_TABLE", "REPORT_ES2", "TEST_KNOBS", "GL_TEST_RUNNER", "PVR_INSTANCE_DIVISOR", "VIVANTE_ST"] {
         assert!(seen.contains(var), "zephyr/CMakeLists.txt no longer sets YAKOGL_{var}: {seen:?}");
     }
 }
@@ -266,7 +266,7 @@ fn every_zephyr_switch_reaches_a_forwarded_feature() {
 fn the_opt_in_es3_features_are_forwarded() {
     let capi = features_table(CAPI_MANIFEST);
     let root = features_table(ROOT_MANIFEST);
-    for name in ["msaa-fbo", "color-buffer-float", "pvr-instance-divisor"] {
+    for name in ["msaa-fbo", "color-buffer-float", "pvr-instance-divisor", "vivante-st"] {
         assert!(root.contains_key(name), "the yakogl crate has no feature `{name}`");
         assert_eq!(
             capi.get(name).map(String::as_str),

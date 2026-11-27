@@ -222,6 +222,11 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_PVR_INSTANCE_DIVISOR)
     list(APPEND _features "pvr-instance-divisor")
   endif()
+  # The Vivante back end's STM32MP257F profile (the crate's `vivante-st`), a
+  # global too: off unless the image asks for it (Kconfig YAKOGL_VIVANTE_ST).
+  if(YAKOGL_VIVANTE_ST)
+    list(APPEND _features "vivante-st")
+  endif()
   # Any other crate feature, comma or semicolon separated (a global, empty by
   # default): tools/cts/host-deqp-run.sh's EXTRA_FEATURES for an opt-in feature
   # that has no option of its own yet.
