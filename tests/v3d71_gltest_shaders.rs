@@ -11,19 +11,40 @@
 //! | `color_uv` | `tools/shaders/gl_test_es100/color_uv.vert` + `color_uv.frag` (gl_test's `gl_test_vs_src` + `gl_test_fs_src`, `driver/tools/pvrlab/gl_test_shaders_es100.h`) | 5, 58, 59, 67, 102 (`link_program` in each; 66 links none) | **compiled** |
 //! | `clear` | `src/v3d/backend.rs` `CLEAR_VS` + `CLEAR_FS` (the float clear quad the table draws for a clear the TLB cannot do: scissored, stencil-masked, colour-masked; `init_clear_program`) | the clear quad of 5, 58, 59, 66, 67 and 102 | **compiled** |
 //!
-//! Case by case (`driver/tools/pvrlab/gl_test.c`):
+//! Case by case (`driver/tools/pvrlab/gl_test.c`; the list is gl_test's
+//! Kconfig `V3D_GL_TEST_CASES` default for YAKOGL_GPU_V3D71, which
+//! main_rpi5.c runs; pinned in `CASES` and `EXPECTED` below):
 //!
-//! * 5 `case_scissor`: `color_uv` (compiled), `clear` for its scissored
-//!   clear (compiled);
-//! * 58 `case_clearscis`: `color_uv` (compiled), `clear` (compiled);
-//! * 59 `case_clearmask`: `color_uv` (compiled), `clear` for its masked
-//!   clears (compiled);
-//! * 66 `case_clearvp`: no program of its own, `clear` for its scissored
-//!   clear (compiled);
-//! * 67 `case_fbods`: `color_uv` (compiled), `clear` for its scissored
-//!   stencil clears (compiled);
-//! * 102 `case_maskclear`: `color_uv` (compiled), `clear` for the clear
-//!   under a partial colour mask (compiled).
+//! | case | gl_test.c | shader | outcome at 7.1 |
+//! |---|---|---|---|
+//! | 5 | `case_scissor` | `color_uv.vert` (gl_test_vs_src) | our compiler |
+//! | 5 | `case_scissor` | `color_uv.frag` (gl_test_fs_src) | our compiler |
+//! | 5 | `case_scissor` | `CLEAR_VS` + `CLEAR_FS` (scissored clear) | our compiler |
+//! | 58 | `case_clearscis` | `color_uv.vert` + `color_uv.frag` | our compiler |
+//! | 58 | `case_clearscis` | `CLEAR_VS` + `CLEAR_FS` (scissored clears) | our compiler |
+//! | 59 | `case_clearmask` | `color_uv.vert` + `color_uv.frag` | our compiler |
+//! | 59 | `case_clearmask` | `CLEAR_VS` + `CLEAR_FS` (masked clears) | our compiler |
+//! | 66 | `case_clearvp` | links none; `CLEAR_VS` + `CLEAR_FS` (scissored clear) | our compiler |
+//! | 67 | `case_fbods` | `color_uv.vert` + `color_uv.frag` | our compiler |
+//! | 67 | `case_fbods` | `CLEAR_VS` + `CLEAR_FS` (scissored stencil clears) | our compiler |
+//! | 102 | `case_maskclear` | `color_uv.vert` + `color_uv.frag` | our compiler |
+//! | 102 | `case_maskclear` | `CLEAR_VS` + `CLEAR_FS` (partial colour mask) | our compiler |
+//!
+//! "Our compiler" means `compile_program71` returns a program whose fs, vs
+//! and cs each have a nonzero instruction count; a refusal would be named in
+//! this column by its `V3d71Error` (`Outcome::Refused`). Whether the 7.1
+//! table draws a given clear with `Clear Render Targets` or with the clear
+//! quad is clearplan71's answer; the quad is listed for every case that may
+//! need it. The tests also check that `color_uv` is the ES 1.00 pair the
+//! rpi_5 image links (gl_test_shaders_es100.h; the image always defines
+//! GL_TEST_ES100) and that each case's function links only that pair.
+//!
+//! Run it with
+//!
+//! ```text
+//! cargo test --no-default-features \
+//!   --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_gltest_shaders
+//! ```
 //!
 //! No program of the six cases is refused, so cases71 takes both from here
 //! and needs Mesa's offline binaries for none of them. The integer clear
@@ -60,9 +81,9 @@
 //! thread end's STVPMV, see `run_vertex`): until it does, those print a GAP
 //! and check the words only.
 //!
-//! A program the compiler cannot build would be pinned here as a named
-//! refusal (the test asserting the exact `V3d71Error`, this table naming
-//! it); there is none today.
+//! A program the compiler cannot build is pinned in `EXPECTED` as
+//! `Outcome::Refused("<V3d71Error as {:?}>")`, the test asserting that exact
+//! refusal and the table above naming it; there is none today.
 //!
 //! Feature set: `--no-default-features --features
 //! host-test,gpu-v3d,shaderc-online,no-shader-table`.
@@ -502,22 +523,26 @@ fn check_stage(what: &str, c: &Code71<'_>, threads: u32, single_seg: bool) {
 /// Compile every program at 7.1 (once, in one scratch region: it is one per
 /// process), check every stage, and produce the files. In [`programs`]'s
 /// order.
-fn compile() -> &'static [Compiled] {
-    static ONCE: std::sync::OnceLock<Vec<Compiled>> = std::sync::OnceLock::new();
+///
+/// A program the front end or `compile_program71` refuses is an `Err` with
+/// the refusal's name (`{:?}` of the `V3d71Error`, or `lower: <message>`),
+/// which [`the_six_cases_shaders_have_their_pinned_outcome`] compares with
+/// [`EXPECTED`]; a stage that compiles but fails a check still panics.
+fn compile() -> &'static [Result<Compiled, String>] {
+    static ONCE: std::sync::OnceLock<Vec<Result<Compiled, String>>> = std::sync::OnceLock::new();
     ONCE.get_or_init(|| programs().iter().map(compile_one).collect())
 }
 
-fn compile_one(prog: &Program) -> Compiled {
+fn compile_one(prog: &Program) -> Result<Compiled, String> {
     let name = prog.name;
     store::with_scratch(|a| {
         let v = lower::compile_to_ir(a, Stage::Vertex, a.alloc_str(prog.vs).unwrap())
-            .unwrap_or_else(|e| panic!("{name} vertex shader: {}", e.msg));
+            .map_err(|e| format!("lower: vertex: {}", e.msg))?;
         let f = lower::compile_to_ir(a, Stage::Fragment, a.alloc_str(prog.fs).unwrap())
-            .unwrap_or_else(|e| panic!("{name} fragment shader: {}", e.msg));
+            .map_err(|e| format!("lower: fragment: {}", e.msg))?;
         let v = &a.alloc_filled(1, v.module).unwrap()[0];
         let f = &a.alloc_filled(1, f.module).unwrap()[0];
-        let p = compile_program71(v, f, Prim::Triangles, TARGET71, a)
-            .unwrap_or_else(|e| panic!("{name} at 7.1: {e:?} (pin it as a named refusal: this test's header)"));
+        let p = compile_program71(v, f, Prim::Triangles, TARGET71, a).map_err(|e| format!("{e:?}"))?;
         check_stage(&format!("{name} fs"), &p.fs.code, p.fs.threads, p.fs.single_seg);
         check_stage(&format!("{name} vs"), &p.vs.code, p.vs.threads, p.vs.single_seg);
         check_stage(&format!("{name} cs"), &p.cs.code, p.cs.threads, p.cs.single_seg);
@@ -526,7 +551,7 @@ fn compile_one(prog: &Program) -> Compiled {
         assert_eq!((fs.flat_shade_flags_hi, fs.noperspective_flags_hi, fs.centroid_flags_hi), (0, 0, 0), "{name}");
         assert_eq!(fs.rt_mask, 1, "{name}: the FS writes RT0 only");
         let uni = |c: &Code71<'_>| c.uniforms.iter().map(|u| (u.contents, u.data)).collect::<Vec<_>>();
-        Compiled {
+        Ok(Compiled {
             json: json71(&p, v, f),
             header: header71(prog, &p, v, f),
             stages: vec![
@@ -537,7 +562,7 @@ fn compile_one(prog: &Program) -> Compiled {
             vs_vattr_sizes: p.vs.vattr_sizes,
             cs_vattr_sizes: p.cs.vattr_sizes,
             fs_input_slots: p.fs.input_slots.to_vec(),
-        }
+        })
     })
     .expect("scratch")
 }
@@ -548,6 +573,8 @@ fn the_committed_files_are_this_compilers_output() {
      * the test cache's key follows them; the regeneration writes the files
      * and asks for a rebuild, which then compares. */
     for (prog, c) in programs().iter().zip(compile()) {
+        /* a refused program has no files; its refusal is pinned in EXPECTED */
+        let Ok(c) = c else { continue };
         for (ext, text, committed) in [("json", &c.json, prog.committed_json), ("h", &c.header, prog.committed_header)]
         {
             let path = format!("{DIR}/ours_{}.{ext}", prog.name);
@@ -564,7 +591,7 @@ fn the_committed_files_are_this_compilers_output() {
 /// The program of `name`.
 fn compiled(name: &str) -> &'static Compiled {
     let i = programs().iter().position(|p| p.name == name).unwrap();
-    &compile()[i]
+    compile()[i].as_ref().unwrap_or_else(|e| panic!("{name} is refused at 7.1 ({e}): EXPECTED pins it"))
 }
 
 /// A stream with every contents code this program reads resolved; a GL
@@ -773,4 +800,122 @@ fn clear_fragment_shader_writes_the_clear_colour() {
         ..Shape::bare("clear fs")
     };
     run71_stream(words, &resolve("fs", uniforms), &shape).unwrap_or_else(|e| panic!("{e}"));
+}
+
+/* ---- the six cases, their shaders and their pinned outcome ---------------- */
+
+/// What the 7.1 online compiler gives one program of the six cases.
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    /// Compiled: every stage (fs, vs, cs) has a nonzero instruction count.
+    Compiled,
+    /// Refused by name: `{:?}` of the `V3d71Error` (or `lower: <message>`).
+    /// None today; a later item decides between a fix and Mesa's offline
+    /// binaries for a program pinned here.
+    #[allow(dead_code)]
+    Refused(&'static str),
+}
+
+/// The six cases (main_rpi5.c's list, gl_test's Kconfig `V3D_GL_TEST_CASES`
+/// for YAKOGL_GPU_V3D71), gl_test.c's function of each and the programs it
+/// draws with: `color_uv` is the one it links (`link_program`), `clear` the
+/// table's clear quad for its glClear calls.
+const CASES: [(u32, &str, &[&str]); 6] = [
+    (5, "case_scissor", &["color_uv", "clear"]),
+    (58, "case_clearscis", &["color_uv", "clear"]),
+    (59, "case_clearmask", &["color_uv", "clear"]),
+    (66, "case_clearvp", &["clear"]),
+    (67, "case_fbods", &["color_uv", "clear"]),
+    (102, "case_maskclear", &["color_uv", "clear"]),
+];
+
+/// Each program's outcome at 7.1, pinned (the header's table).
+const EXPECTED: [(&str, Outcome); 2] = [("color_uv", Outcome::Compiled), ("clear", Outcome::Compiled)];
+
+#[test]
+fn the_six_cases_shaders_have_their_pinned_outcome() {
+    let progs = programs();
+    assert_eq!(progs.len(), EXPECTED.len(), "a program without a pinned outcome");
+    for (prog, c) in progs.iter().zip(compile()) {
+        let want =
+            &EXPECTED.iter().find(|e| e.0 == prog.name).unwrap_or_else(|| panic!("{} not in EXPECTED", prog.name)).1;
+        match (c, want) {
+            (Ok(c), Outcome::Compiled) => {
+                for (stage, words, _) in &c.stages {
+                    assert!(!words.is_empty(), "{} {stage}: no instructions", prog.name);
+                    println!("{} {stage}: {} instructions", prog.name, words.len());
+                }
+            }
+            (Err(e), Outcome::Refused(name)) => assert_eq!(e, name, "{}: another refusal", prog.name),
+            (Ok(_), Outcome::Refused(name)) => {
+                panic!("{}: compiles now, pinned as refused ({name}): update EXPECTED", prog.name)
+            }
+            (Err(e), Outcome::Compiled) => panic!("{}: refused at 7.1 ({e}), pinned as compiled", prog.name),
+        }
+    }
+    for (case, _, uses) in CASES {
+        for u in uses {
+            assert!(EXPECTED.iter().any(|e| e.0 == *u), "case {case}: {u} has no pinned outcome");
+        }
+    }
+}
+
+/// The text of `static const char <name>[] = "..." "...";` in a C file,
+/// with its escapes (`\n`, `\"`, `\\`) undone.
+fn c_string(file: &str, name: &str) -> String {
+    let start = file.find(&format!("static const char {name}[] =")).unwrap_or_else(|| panic!("{name} not found"));
+    let body = &file[start..];
+    let body = &body[..body.find(";\n").unwrap()];
+    let mut out = String::new();
+    for line in body.lines().skip(1) {
+        let l = line.trim();
+        let l = l.strip_prefix('"').and_then(|l| l.strip_suffix('"')).unwrap_or_else(|| panic!("{name}: {line}"));
+        let mut it = l.chars();
+        while let Some(ch) = it.next() {
+            if ch == '\\' {
+                match it.next() {
+                    Some('n') => out.push('\n'),
+                    Some(c @ ('"' | '\\')) => out.push(c),
+                    other => panic!("{name}: escape {other:?}"),
+                }
+            } else {
+                out.push(ch);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn color_uv_is_the_es100_pair_the_rpi5_image_links() {
+    /* the rpi_5 image always defines GL_TEST_ES100 (gl_test's CMakeLists.txt),
+     * so gl_test_vs_src / gl_test_fs_src are the ES 1.00 header's */
+    let h = include_str!("../driver/tools/pvrlab/gl_test_shaders_es100.h");
+    assert_eq!(c_string(h, "gl_test_vs_src"), COLOR_UV_VS, "color_uv.vert");
+    assert_eq!(c_string(h, "gl_test_fs_src"), COLOR_UV_FS, "color_uv.frag");
+}
+
+#[test]
+fn the_six_cases_are_the_rpi5_list_and_link_only_color_uv() {
+    let kconfig = include_str!("../driver/samples/zephyr/gl_test/Kconfig");
+    let list: Vec<String> = CASES.iter().map(|c| c.0.to_string()).collect();
+    let line = format!("default \"{}\" if YAKOGL_GPU_V3D71", list.join(","));
+    assert!(kconfig.contains(&line), "gl_test's Kconfig has no `{line}`");
+
+    let src = include_str!("../driver/tools/pvrlab/gl_test.c");
+    for (case, func, uses) in CASES {
+        assert!(src.contains(&format!("case {case}: rc = {func}();")), "case {case} is not {func}");
+        let head = format!("\nstatic int {func}(void)\n");
+        let start = src.find(&head).unwrap_or_else(|| panic!("{func} not found"));
+        let body = &src[start + head.len()..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        for direct in ["glCreateShader", "glShaderSource", "glCreateProgram"] {
+            assert!(!body.contains(direct), "{func} calls {direct}: a program this test does not list");
+        }
+        let links: Vec<&str> =
+            body.match_indices("link_program(").map(|(i, _)| &body[i..i + body[i..].find(')').unwrap() + 1]).collect();
+        let want: &[&str] =
+            if uses.contains(&"color_uv") { &["link_program(gl_test_vs_src, gl_test_fs_src)"] } else { &[] };
+        assert_eq!(links, want, "{func}'s programs");
+    }
 }
