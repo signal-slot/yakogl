@@ -157,14 +157,33 @@ if [ $rc = 0 ] && [ "$(cat "$W/img3/SHA256SUMS")" = "$want" ] &&
 	ok "a build writes SHA256SUMS (sha256sum format, both labels) and COMMIT (the full HEAD sha)"
 else bad "sums: rc $rc: $(cat "$W/img3/SHA256SUMS" 2>&1) $(cat "$W/err")"; fi
 
-# rewritten, never merged: a selective build lists only its own labels
-echo "deadbeef  OLD/zephyr/zephyr.bin" > "$W/img3/SHA256SUMS"
-echo 0123456789abcdef0123456789abcdef01234567 > "$W/img3/COMMIT"
+# merged, not rewritten: a selective build replaces only its own labels' lines
+printf 'deadbeef  OLD/zephyr/zephyr.bin\n0000  B2/zephyr/zephyr.bin\n' > "$W/img3/SHA256SUMS"
 out=$("$S" "$W/fake.txt" "$W/img3" B2 2>"$W/err"); rc=$?
-if [ $rc = 0 ] && [ "$(cat "$W/img3/SHA256SUMS")" = "$(cd "$W/img3" && sha256sum B2/zephyr/zephyr.bin)" ] &&
+if [ $rc = 0 ] && [ "$(cat "$W/img3/SHA256SUMS")" = "$(printf 'deadbeef  OLD/zephyr/zephyr.bin\n%s' "$(cd "$W/img3" && sha256sum B2/zephyr/zephyr.bin)")" ] &&
 	[ "$(cat "$W/img3/COMMIT")" = "$HEAD_SHA" ]; then
-	ok "SHA256SUMS and COMMIT are rewritten, not merged: a selective build lists only its own labels"
-else bad "rewrite: rc $rc: $(cat "$W/img3/SHA256SUMS") $(cat "$W/err")"; fi
+	ok "SHA256SUMS is merged: the selected label's line is replaced, the others kept"
+else bad "merge: rc $rc: $(cat "$W/img3/SHA256SUMS") $(cat "$W/err")"; fi
+
+# two selective runs into one directory: both labels listed
+out=$("$S" "$W/fake.txt" "$W/img7" A1 2>"$W/err"); rc1=$?
+out=$("$S" "$W/fake.txt" "$W/img7" B2 2>>"$W/err"); rc2=$?
+if [ $rc1 = 0 ] && [ $rc2 = 0 ] && [ "$(cat "$W/img7/SHA256SUMS")" = "$(cd "$W/img7" && sha256sum A1/zephyr/zephyr.bin B2/zephyr/zephyr.bin)" ] &&
+	[ "$(cat "$W/img7/COMMIT")" = "$HEAD_SHA" ]; then
+	ok "two selective builds: SHA256SUMS lists both labels, one COMMIT"
+else bad "two runs: $rc1 $rc2: $(cat "$W/img7/SHA256SUMS") $(cat "$W/err")"; fi
+
+# a different commit in COMMIT: exit 2, nothing built or changed
+echo 0123456789abcdef0123456789abcdef01234567 > "$W/img7/COMMIT"
+cp "$W/img7/SHA256SUMS" "$W/sums.before"
+out=$("$S" "$W/fake.txt" "$W/img7" NEWROW 2>"$W/err"); rc=$?
+if [ $rc = 2 ] && grep -q "fresh directory" "$W/err" && [ ! -e "$W/img7/NEWROW" ] &&
+	cmp -s "$W/sums.before" "$W/img7/SHA256SUMS" && [ "$(cat "$W/img7/COMMIT")" = 0123456789abcdef0123456789abcdef01234567 ]; then
+	ok "a COMMIT of another commit: exit 2, 'use a fresh directory', nothing built or rewritten"
+else bad "commit mismatch: rc $rc: $(cat "$W/err")"; fi
+out=$("$S" --plan "$W/fake.txt" "$W/img7" A1 2>&1); rc=$?
+if [ $rc = 0 ] && grep -q "would be refused" <<<"$out"; then ok "--plan says the mismatch would be refused"
+else bad "plan mismatch: rc $rc: $out"; fi
 
 # a row whose build failed (FAILROW) or whose image is empty (EMPTYROW) is
 # left out and named; a real re-run would also find its .built rc=0 gone
