@@ -230,6 +230,124 @@ question this probe can only bound.
 
 ## On the board
 
+### 2026-11-27: 8 vblank swaps landed, firmware list restored (PASS, q4: yes)
+
+This is the current result. It replaces the open status of the 2026-11-26 run
+below.
+
+One tryboot session on the Pi 5 (BCM2712 D0), with the image of `c0b4f33b`
+(the integration tip, with s32-nullfix's 16 KiB main stack; it printed
+`rpi5_scanout32: build c0b4f33b`; Zephyr `af17c0c8aa2a`; sha256
+`0ff2fc09860e`, 90400 bytes), built with `-DYAKOGL_WERROR=ON` and the default
+`RPI5_SCANOUT32_HW_WORDS="4:skip"`, no warnings. `tools/board.sh pi5 run`
+with `BOARD_END_RE='^rpi5_scanout32: (PASS|FAIL)'` and the name argument
+`rpi5_scanout32`:
+
+```
+board.sh pi5 rpi5_scanout32 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout32_pass resets=0 record=absent back_after=183s
+```
+
+The image printed its end line about 4 s after Zephyr started. The PM
+watchdog then reset the SoC, and tryboot returned the board to Linux by
+itself (a new `boot_id`). `meta.txt` has `end_seen=1`, `back=1`,
+`throttled_before=0x0`, `throttled_after=0x0` and `cleanup=staged image
+removed, tryboot.txt put back (read back)`. The card had no `tryboot.txt`
+before the run and none after it. The sha256 of every file under
+`/boot/firmware` (435 files) was the same before and after the run. No retry
+was made.
+
+The walk, the placement and the saved words are as `rpi5_dlmap` predicted:
+
+```
+rpi5_scanout32: S2 ch0 CTRL0 0x877f0437 LPTRS 0x000002a0 STATUS 0x00814198 DL 0x000002a0
+rpi5_scanout32: S2 ch0 FRCNT series 2 4 5 6 7 8 (6 reads 20 ms apart): 6 frames, advancing
+rpi5_scanout32: S3 list read from word 672: 4096 words; END at word 928 (list index 256)
+rpi5_scanout32: S3 dl[928] = 0x80000000
+rpi5_scanout32: S5 dlswap snapshot ok (ok) mem_words 4096 (CXM_SIZE 0x00001000) lptrs 0x000002a0 fw_head 672 fw_len 257 entries 8, walk stopped at word 928 (0x80000000), END found
+u3 snapshot: list-ptr=0x000002a0 heade=672 words=257 hash=0x7fdcbefd hwskip=4:skip
+u3 walk: heade=672 end=928 words=257 entries=8 invalid=7 mem=4096 len=20 place=929
+rpi5_scanout32: S6 saved words 929..948: 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0 0xb0b0b0b0
+u3 dlist: placed word 929 len 20 (slot A 929, slot B 939)
+u3 plane: addr=0x0000a00000 fmt=XRGB8888 pitch=7680 w=1920 h=1080 addr_b=0x0000217000 pattern_a=bars pattern_b=bars-red-blue-exchanged
+```
+
+All 8 swaps alternated A and B. Each swap was written just after an `FRCNT`
+step, `DL.LACT` reached the new head within that frame, and `FRCNT` advanced
+across every write:
+
+```
+dlswap lact-pickup ok polls=0 frcnt=14..15 want=929 lact=929
+dlswap swap1 ok ok lptrs-readback ok frcnt-advance ok settle ok
+u3 swap 1: buf A list-ptr=0x000003a1 frcnt 14 -> 15 judge=pointer-named-ours slot=929 plane=0x0000a00000 fw=672+257 ours=10
+u3 vblank 1: landed=yes why=landed frcnt 14 -> 15 steps=1 invblank=yes tight=ok pickup_reads=127288 pickup_us=16666.426 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+u3 named: yes LPTRS 0x000003a1 after swap 1, our list at word 929, first read 0x000003a1 poll 0, DL.LACT pickup ok (want 929 lact 929)
+dlswap swap2 ok ok lptrs-readback ok frcnt-advance ok settle ok
+dlswap lact-pickup ok polls=0 frcnt=28..29 want=939 lact=939
+u3 swap 2: buf B list-ptr=0x000003ab frcnt 28 -> 29 judge=pointer-named-ours slot=939 plane=0x0000217000 fw=672+257 ours=10
+u3 vblank 2: landed=yes why=landed frcnt 28 -> 29 steps=1 invblank=yes tight=ok pickup_reads=127355 pickup_us=16666.629 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+u3 swap 3: buf A list-ptr=0x000003a1 frcnt 32 -> 33 judge=pointer-named-ours slot=929 plane=0x0000a00000 fw=672+257 ours=10
+u3 vblank 3: landed=yes why=landed frcnt 32 -> 33 steps=1 invblank=yes tight=ok pickup_reads=127358 pickup_us=16666.407 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+u3 swap 4: buf B list-ptr=0x000003ab frcnt 36 -> 37 judge=pointer-named-ours slot=939 plane=0x0000217000 fw=672+257 ours=10
+u3 vblank 4: landed=yes why=landed frcnt 36 -> 37 steps=1 invblank=yes tight=ok pickup_reads=127269 pickup_us=16666.611 read_us=0.065 boundary=yes since_us=0.019 yline 0 -> 0 (yline record only)
+u3 swap 5: buf A list-ptr=0x000003a1 frcnt 40 -> 41 judge=pointer-named-ours slot=929 plane=0x0000a00000 fw=672+257 ours=10
+u3 vblank 5: landed=yes why=landed frcnt 40 -> 41 steps=1 invblank=yes tight=ok pickup_reads=127416 pickup_us=16666.463 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+u3 swap 6: buf B list-ptr=0x000003ab frcnt 44 -> 45 judge=pointer-named-ours slot=939 plane=0x0000217000 fw=672+257 ours=10
+u3 vblank 6: landed=yes why=landed frcnt 44 -> 45 steps=1 invblank=yes tight=ok pickup_reads=127354 pickup_us=16666.629 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+u3 swap 7: buf A list-ptr=0x000003a1 frcnt 48 -> 49 judge=pointer-named-ours slot=929 plane=0x0000a00000 fw=672+257 ours=10
+u3 vblank 7: landed=yes why=landed frcnt 48 -> 49 steps=1 invblank=yes tight=ok pickup_reads=127358 pickup_us=16666.611 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+dlswap swap8 ok ok lptrs-readback ok frcnt-advance ok settle ok
+dlswap lact-pickup ok polls=0 frcnt=52..53 want=939 lact=939
+u3 swap 8: buf B list-ptr=0x000003ab frcnt 52 -> 53 judge=pointer-named-ours slot=939 plane=0x0000217000 fw=672+257 ours=10
+u3 vblank 8: landed=yes why=landed frcnt 52 -> 53 steps=1 invblank=yes tight=ok pickup_reads=127359 pickup_us=16666.666 read_us=0.065 boundary=yes since_us=0.037 yline 0 -> 0 (yline record only)
+rpi5_scanout32: S8 sequence ok (pass) index -1 swap pointer-named-ours, 8 of 8 swaps ok
+rpi5_scanout32: S8 vblank ok: every swap written in the vblank and picked up within one frame step
+rpi5_scanout32: S9 readback A ok 0 mismatches of 8160 (invd 0, sum 0xc1c58f8e), B ok 0 mismatches of 8160 (invd 0, sum 0xa9ac55b6)
+dlswap restore-after frcnt=59 mode=2 lptrs=0x000002a0 lact=672 bgenb=1 status=0x00bb4008
+dlswap restore-lact ok polls=0 frcnt=57..58 want=672 lact=672
+dlswap restore-diff word 676 entry 0 off 4 was 0x80000188 now 0x8000037c hw=skip
+dlswap restore-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip
+rpi5_scanout32: S10 our words 929..948 back to the words saved at S6
+rpi5_scanout32: S10 dlswap restore ok (ok); fw 672..+257 byte-equal index -1 want 0x00000000 got 0x00000000
+u3 restore: PASS byte-equal except hw words off 4 (1 differed: 1 skip, 0 expect) list-ptr=0x000002a0 heade=672 words=257 hash=0x7fdcbefd hwskip=4:skip
+rpi5_scanout32: S11 main stack size 16384 unused 12108 (ok, need 4096 unused)
+rpi5_scanout32: PASS (8 swaps alternating A/B, list at word 929, each written in the vblank and picked up within one frame step, DL.LACT picked up each and came back, FRCNT advanced, buffers read back, firmware list restored byte-equal except hw words off 4)
+```
+
+(Swaps 3 to 7 each printed the same `dlswap swap<k> ok ok lptrs-readback ok
+frcnt-advance ok settle ok` and `dlswap lact-pickup ok polls=0` lines, with
+`want` alternating 929 and 939.) In our own list the hardware wrote back only
+offset 4 of the plane entry: word 933 (slot A) or 943 (slot B), 0xc0c0c0c0
+before and 0x800003c2 after (swap 1: 0x80000437), all `hw=skip`. In the
+firmware's list it wrote back only word 676 (entry 0, offset 4). So the Q2
+word set `4:skip` holds for our list as well as for the firmware's. The main
+stack used 4276 of its 16384 bytes (`unused 12108`). That is more than the
+earlier 4 KiB stack had, which agrees with s32-nullfix's diagnosis.
+
+`verdicts.sh` on the console with its `HH:MM:SS ` prefix stripped exited 0
+(`8 of 8 expected verdict lines ... (8 swap line(s))`, `missing: none`):
+
+```
+q4: yes (channel 0's list pointer swapped 8 times under the running scanout, named after the first swap, DL.LACT picked up every swap, FRCNT advanced through every swap, every swap written in the vblank and picked up within one frame step)
+verdicts: PASS (8 swaps alternating, our list named at word 929 after the firmware list's END at word 928 (heade 672), DL.LACT picked up each swap and came back, each swap landed in vblank within one frame step, FRCNT advanced, firmware list restored byte-equal except hw words off 4 (hwskip=4:skip))
+```
+
+Reading it: Q4 is answered yes from the registers. Channel 0's list pointer
+can be swapped at vblank under the running scanout. All 8 swaps landed in
+the frame after the write, and the firmware's list and our 20 words came back.
+What "What it proves" leaves open is still open: no camera saw the
+pixels, and taking the `FRCNT` step as the start of vblank rests on no
+source.
+
+The console was captured as in the earlier sections. The farm's console lease
+holds the serial bridge, so `BOARD_UART` was a local
+`am62p_netboot_uart.py feed` relay of the lease's copy of the same console,
+written once the image had reset. The copy left out the boot loader's lines,
+the `S3 dl[...]` lines other than dl[672..680], dl[704], every 32nd word
+after it, dl[927] and dl[928], and the next boot's loader lines. Every other
+line from `board: watchdog armed` through `feeding stopped` is as the board
+printed it. The run directory `20261127-1017-rpi5_scanout32-0ff2fc09` is
+under the gitignored `records/` and is not committed.
+
 ### 2026-11-25: placement refused, nothing written (Q4 unanswered)
 
 One tryboot session on the Pi 5 (BCM2712 D0), with the image of `458834ea`
@@ -358,8 +476,9 @@ and `dlswap restore-words ok fw 672..928 byte-equal except hw words off 4 (1
 differed)`. After `u3 named: yes` the image printed no `u3 swap 2`, no
 `u3 vblank 2`, no `u3 restore` and no end line. The fault is an instruction
 fetch from address 0x20 (a jump through a null pointer; `lr` 0x20bd18) at
-1.6 s of Zephyr time, between swap 1 and swap 2. Its cause is not known from
-this log.
+1.6 s of Zephyr time, between swap 1 and swap 2. The cause was found later
+(`c0b4f33b`). The 4 KiB main stack overflowed into the idle stack. The
+2026-11-27 run above used the 16 KiB stack.
 
 `verdicts.sh` on the console with its `HH:MM:SS ` prefix stripped exited 1:
 
@@ -377,8 +496,7 @@ landed (`u3 vblank 1: landed=yes`, `lact-pickup ok`, `restore-lact ok`), but
 the 8-swap loop, the alternation of the two buffers and `u3 restore: PASS`
 were not reached, so `q4: yes` is not given. `u3 named: yes` shows only
 swap 1; the restore compare in swap 1's own library run is not the probe's
-`u3 restore`. The next step is to find the null jump (code, not a board
-retry).
+`u3 restore`. Superseded by the 2026-11-27 run above.
 
 The console was captured as in the 2026-11-25 section: the farm's console
 lease holds the serial bridge, so `BOARD_UART` was a local
