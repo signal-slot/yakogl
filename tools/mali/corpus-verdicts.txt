@@ -17,7 +17,7 @@ tools/shaders/es100/branchlane.frag: ok
 tools/shaders/es100/branchquad.frag: ok
 tools/shaders/es100/clipping.frag: ok
 tools/shaders/es100/clipping.vert: ok
-tools/shaders/es100/cond_complex.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/cond_complex.frag: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 tools/shaders/es100/cond_sequence.frag: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 tools/shaders/es100/contloops.frag: Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet
 tools/shaders/es100/cubebias.frag: ok
@@ -62,7 +62,7 @@ tools/shaders/es100/ioswap.vert: ok
 tools/shaders/es100/light_amount.frag: ok
 tools/shaders/es100/light_amount_0_16.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
 tools/shaders/es100/light_amount_2_2.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-tools/shaders/es100/loop_full.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/loop_full.frag: Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet
 tools/shaders/es100/loop_nested.dowhile.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/loop_nested.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loop_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
@@ -99,7 +99,7 @@ tools/shaders/es100/textured.vert: ok
 tools/shaders/es100/tmparr_const.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/tmparr_const.vert: ok
 tools/shaders/es100/transc.frag: ok
-tools/shaders/es100/tri_discard.frag: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/tri_discard.frag: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet
 tools/shaders/es100/tri_discard.vert: ok
 tools/shaders/es100/tri_fragcoord.frag: ok
 tools/shaders/es100/tri_fragcoord.vert: ok

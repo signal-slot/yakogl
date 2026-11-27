@@ -317,3 +317,10 @@ gm2_fsop_6  gm2_fsop_6.vert gm2_fsop_6.frag triangles vs.position=equal vs.varyi
 gm2_fsop_7  gm2_fsop_7.vert gm2_fsop_7.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:15:dc1ee4ad5593
 gm2_fsop_8  gm2_fsop_8.vert gm2_fsop_8.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:2:e437ec4172ec
 gm2_fsop_9  gm2_fsop_9.vert gm2_fsop_9.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+# #367 lower-train-2 step BOOL_AND: shadow fs cf4b's `&&` of two compares choosing between two constants
+# (docs/notes/mali-bool-and.md), drawn without --uniform-values (neither stage has a uniform: the same words with
+# them). Our compiler is byte-equal to gm2_nbshrf_1 and _2 (tests/mali_bool_and.rs). pan_shc's SPIR-V path has no
+# lower_precision: its compares are fp32 and its varying program stores the three lanes the fragment shader reads
+# (`mediump`). gm2_nbshrf_2 is not listed: pan_shc's vertex position program has the reference's words but other facts
+# (13 FAU words, the reference 16), a result the list has no form for.
+gm2_nbshrf_1  gm2_nbshrf_1.vert gm2_nbshrf_1.frag triangles vs.position=equal vs.varying=differs:mediump:17:81f0e36140de fs.fragment=differs:mediump:14:33fe93ab7ae5
