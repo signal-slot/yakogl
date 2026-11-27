@@ -64,12 +64,10 @@ fn spec_error(spec: &str, e: SpecError) -> Error {
 /// at the second of these. A list that is tried, with every candidate named
 /// when none is found, cannot produce that mistake again.
 ///
-/// The third is the laptop's, and it is `build-new` on purpose: that
-/// checkout's `build` compiles MRT shaders to nothing and `build2` asserts.
-const PCO_SHC_CANDIDATES: [&str; 3] = [
+/// `PCO_SHC` overrides the list; a host whose build lives elsewhere sets it.
+const PCO_SHC_CANDIDATES: [&str; 2] = [
     "../scratchpad/mesa-build/mesa-26.2.1/build/src/imagination/vulkan/pco_shc",
     "~/pvr-lab/mesa-build/mesa-26.2.1/build/src/imagination/vulkan/pco_shc",
-    "~/com/github/signal-slot/yakogl-in-rust/work/pco-shc/mesa/build-new/src/imagination/vulkan/pco_shc",
 ];
 
 /// Expand a leading `~` against `$HOME`; other paths are taken as given.
