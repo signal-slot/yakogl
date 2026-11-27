@@ -332,15 +332,14 @@ GL core and checks each reason against the double-quoted text here.
 
 | Refusal | Where | Condition | GL feature | Case |
 |---|---|---|---|---|
-| backend71 `REF_INSTANCED` "an instanced draw (more than one instance): the 7.1 table assembles one instance per draw" | `backend71.rs:702` | instance count above 1 | `glDrawArraysInstanced` | none |
-| backend71 `REF_PSIZ` "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records" | `backend71.rs:703` | the program writes `gl_PointSize` | `GL_POINTS` | none |
-| backend71 `REF_INDEX_TYPE` "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only" | `backend71.rs:700` | a GlesDraw with u8 or u32 indices; the GL core widens both to u16 first | | none |
-| backend71 `REF_TARGET` "fill71's target descriptor is not the framebuffer's (size or render target count)" | `backend71.rs:704` | a defect of the caller if it fires | | none |
-| table71 `REF_CLEAR_PROGRAM` "the clear program did not build, so a clear the TLB cannot do is not drawn" | `table71.rs:141` | the clear quad's program did not compile or link | masked or scissored `glClear` | none (it builds, `tests/v3d71_gltest_shaders.rs`) |
-| table71 `REF_NO_RECORDING` | `table71.rs:135` | a product build (the recording path is `host-test` only) | every draw | all six on a product image |
-| table71 "the draw's arrays do not fit the job's data arena" | `table71.rs:1409` | one draw's arrays above `DATA_BYTES` (1 MiB) | large client arrays | none |
-| table71 "the draw does not fit an empty job's control lists" | `table71.rs:1569` | one draw above the binning list or indirect buffer, or its texture records above `RECS_BYTES` | | none |
-| table71 "out of GPU memory for the binner's buffers" | `table71.rs:1485` | | | none |
+| backend71 `REF_PSIZ` "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records" | `backend71.rs:706` | the program writes `gl_PointSize` | `GL_POINTS` | none |
+| backend71 `REF_INDEX_TYPE` "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only" | `backend71.rs:704` | a GlesDraw with u8 or u32 indices; the GL core widens both to u16 first | | none |
+| backend71 `REF_TARGET` "fill71's target descriptor is not the framebuffer's (size or render target count)" | `backend71.rs:707` | a defect of the caller if it fires | | none |
+| table71 `REF_CLEAR_PROGRAM` "the clear program did not build, so a clear the TLB cannot do is not drawn" | `table71.rs:162` | the clear quad's program did not compile or link | masked or scissored `glClear` | none (it builds, `tests/v3d71_gltest_shaders.rs`) |
+| table71 `REF_NO_RECORDING` | `table71.rs:156` | a product build (the recording path is `host-test` only) | every draw | all six on a product image |
+| table71 "the draw's arrays do not fit the job's data arena" | `table71.rs:1438` | one draw's arrays above `DATA_BYTES` (1 MiB) | large client arrays | none |
+| table71 "the draw does not fit an empty job's control lists" | `table71.rs:1597` | one draw above the binning list or indirect buffer, or its texture records above `RECS_BYTES` | | none |
+| table71 "out of GPU memory for the binner's buffers" | `table71.rs:1513` | | | none |
 | texglue71 `Texture3d` "texture glue 7.1: a 3D texture is not laid out by texture71" | `texglue71.rs:383` (`target_of`) | a `sampler3D` look-up | `GL_TEXTURE_3D` | none |
 | texglue71 `Array2d` "texture glue 7.1: a 2D array texture is not laid out by texture71" | `texglue71.rs:382` | a `sampler2DArray` look-up | `GL_TEXTURE_2D_ARRAY` | none |
 | texglue71 `ReturnSize`, `BorderClass`, `*Code` | `texglue71.rs:331-377` | the program's TMU output size is not the format's; a border colour of the other class; a code outside the GL core's enums | | none |

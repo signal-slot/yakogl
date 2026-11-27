@@ -58,7 +58,7 @@
 //! * a clear quad when the clear program did not build
 //!   ([`REF_CLEAR_PROGRAM`], the 4.2 table's string);
 //! * what `backend71` does not assemble (8-bit and 32-bit indices,
-//!   instanced, point size) and
+//!   point size) and
 //!   everything `glue71`, `fill71` and their modules refuse;
 //! * what the texture path does not sample (texglue71's 3D and 2D array
 //!   textures, table71tex's own; docs/notes/v3d71-refusals.md section 10);

@@ -28,9 +28,10 @@
 //! * the unsupported shapes a GL program can reach, each refused with
 //!   `GL_INVALID_OPERATION` and one log line `yakogl/v3d71: draw refused:
 //!   <module>: <reason>`, whose reason the note lists in double quotes and
-//!   whose module it names: an instanced draw and a vertex program writing
-//!   `gl_PointSize` (backend71), a 3D texture and a 2D array texture
-//!   (texglue71).
+//!   whose module it names: a vertex program writing `gl_PointSize`
+//!   (backend71), a 3D texture and a 2D array texture (texglue71). An
+//!   instanced draw is drawn since backend71 assembles instanced arrays
+//!   (tests/v3d71_instanced.rs).
 #![cfg(all(feature = "gpu-v3d71", feature = "host-test", feature = "shaderc-online"))]
 
 #[path = "v3d71_table_cases.rs"]
@@ -92,7 +93,6 @@ fn the_six_cases_pass_as_mesas_jobs_or_name_a_listed_refusal() {
     listed(READS_STENCIL);
 }
 
-const VS: &str = "attribute vec4 a_pos;\nvoid main() { gl_Position = a_pos; }\n\0";
 const VS_PSIZ: &str = "attribute vec4 a_pos;\nvoid main() { gl_Position = a_pos; gl_PointSize = 4.0; }\n\0";
 const FS_RED: &str = "precision mediump float;\nvoid main() { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }\n\0";
 const VS3: &str = "#version 300 es\nin vec4 a_pos;\nout vec2 v_uv;\n\
@@ -138,11 +138,6 @@ unsafe fn layered(target: GLenum) {
 
 type Shape = unsafe fn();
 
-unsafe fn instanced() {
-    program(VS, FS_RED);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 2);
-}
-
 unsafe fn point_size() {
     program(VS_PSIZ, FS_RED);
     glDrawArrays(GL_POINTS, 0, 6);
@@ -162,12 +157,7 @@ unsafe fn texture_array() {
 
 #[test]
 fn unsupported_shapes_name_a_listed_refusal() {
-    let shapes: [(&str, Shape, &str); 4] = [
-        (
-            "instanced",
-            instanced,
-            "backend71: an instanced draw (more than one instance): the 7.1 table assembles one instance per draw",
-        ),
+    let shapes: [(&str, Shape, &str); 3] = [
         (
             "gl_PointSize",
             point_size,
