@@ -290,6 +290,32 @@ def judge(probe, log, out):
     return r.returncode, lines[-1] if lines else ""
 
 
+CNTFRQ0_RE = re.compile(rb"^t6: CNTFRQ_EL0 0(?![0-9A-Za-z])", re.M)
+
+
+def note_cause(log, out, vrc, vline):
+    """An image that stopped on "t6: CNTFRQ_EL0 0" (the board glue found no
+    counter frequency and refused to start the osal and firmware) is named
+    in verdict.txt: a "cause:" line above the rest, and the verdict a
+    failure (the image failure's own rc 1 -> exit 11), never a pass.
+    Returns (rc, last line)."""
+    with open(log, "rb") as f:
+        data = f.read().replace(b"\r", b"").replace(b"\0", b"")
+    if not CNTFRQ0_RE.search(data):
+        return vrc, vline
+    with open(out) as f:
+        lines = f.read().splitlines()
+    last = lines[-1] if lines else ""
+    probe = last.split()[1] if last.startswith("VERDICT ") and len(last.split()) > 1 else ""
+    if not (last.startswith("VERDICT ") and " FAIL" in last):
+        last = ("VERDICT %s FAIL (cause: CNTFRQ_EL0 0)" % probe) if probe else "VERDICT FAIL (cause: CNTFRQ_EL0 0)"
+    cause = "cause: CNTFRQ_EL0 0 at entry (U-Boot left the counter frequency unset)"
+    lines = lines[:-1] + [cause, last]
+    with open(out, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return (vrc or 1), last
+
+
 RETURN_RE = re.compile(rb"PSCI SYSTEM_RESET at \d+ ms")
 FEED_RE = re.compile(rb"yakogl-wdt: nanopc_t6 first feed at (\d+) ms")
 
@@ -377,6 +403,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
                 say("STOP (9): U-Boot did not answer %s in %d s; nothing more was written" % (go, 10 * scale))
                 return 9
             vrc, vline = judge(probe, log, os.path.join(rec, "verdict.txt"))
+            vrc, vline = note_cause(log, os.path.join(rec, "verdict.txt"), vrc, vline)
             note_return(log, os.path.join(rec, "verdict.txt"))
             say("verdict: %s" % vline)
             if not back:
@@ -799,6 +826,24 @@ def self_test():
         check(rc == 1 and "FAIL" in last, "judge_sample, deqp no summary + banner: FAIL (rc %d, %r)" % (rc, last))
         rc, last = judged(gl[:-1] + ["U-Boot SPL 2026.07"])
         check(rc == 1, "judge_sample, an SPL line is no banner: FAIL (rc %d)" % rc)
+
+    # 6h. A "t6: CNTFRQ_EL0 0" stop: named as its cause, a failure (the
+    # image failure's rc: 11 with Linux back), feeder and return lines kept
+    # just above VERDICT.
+    fx = os.path.join(HERE, "testdata", "prompt-go", "cntfrq0-stop.txt")
+    with open(fx) as f:
+        stop = [l.rstrip("\n") for l in f if not l.startswith("#")]
+    for probe in ("gl_test", "t6_hello"):
+        rc, f, files = case(lines=stop, probe=probe)
+        v = files.get("verdict.txt", b"").decode().splitlines()
+        check(rc == 11, "cntfrq0 stop (%s): exit 11, the image failure (got %d)" % (probe, rc))
+        check("cause: CNTFRQ_EL0 0 at entry (U-Boot left the counter frequency unset)" in v
+              and v[-1].startswith("VERDICT %s FAIL" % probe) and v[-2].startswith("return:")
+              and v[-3].startswith("feeder:") and v[-4].startswith("cause: CNTFRQ_EL0 0"),
+              "cntfrq0 stop (%s): cause named, feeder and return above VERDICT (%r)" % (probe, v[-5:]))
+    # a pass record without the line has no cause line
+    rc, f, files = case()
+    check(b"cause:" not in files.get("verdict.txt", b"cause:"), "cntfrq0: a good run has no cause line")
 
     # 7. What may be typed.
     ok = go_allowed(name, size)
