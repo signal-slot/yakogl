@@ -6,8 +6,9 @@
 //!
 //! ES 3.0.6 4.4.2.1 and table 6.36 ask GL_MAX_SAMPLES >= 4, and 6.1.15 asks
 //! glGetInternalformativ(GL_SAMPLES) of every colour-renderable, depth and
-//! stencil format to reach it. The PowerVR's table says `max_samples` 4, and
-//! a 4x framebuffer object draws as the 4x window does:
+//! stencil format to reach it. With the `msaa-fbo` feature the PowerVR's
+//! table says `max_samples` 4, and a 4x framebuffer object draws as the 4x
+//! window does:
 //!
 //! * GL_MAX_SAMPLES 4; GL_SAMPLES {4} for the ES 3.0 colour-renderable
 //!   formats and the depth/stencil ones, no count for the integer ones;
@@ -26,11 +27,18 @@
 //!   (note (e) open point 6), ES 3.0 4.3.3 leaves it to the implementation.
 //! * Two colour attachments at 4x are refused by name (GL_INVALID_OPERATION).
 //!
+//! Without `msaa-fbo` (opt-in: a hardware-facing change, BOARD-UNVERIFIED)
+//! the table says `max_samples` 0 and the pins after the 4x tests hold:
+//! GL_MAX_SAMPLES 1, GL_SAMPLES {1}, 2 and 4 samples GL_INVALID_OPERATION,
+//! and a one-sample renderbuffer draws as a one-sample frame (no CR_ISP_AA
+//! 4X, no `downscale`, no sample store).
+//!
 //! HOST-ONLY: the GPU is a stand-in that paints memory; no board was used.
 //! The rig (platform, C generator stand-ins) is the one of
 //! tests/es3_invalidate_blit_pvr.rs.
 //!
 //! ```text
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test pvr_msaa_rb
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_msaa_rb
 //! ```
 //!
@@ -47,6 +55,8 @@
 ))]
 /* the stand-ins take the C generators' parameter lists as they are */
 #![allow(clippy::too_many_arguments)]
+/* without msaa-fbo only the pins of the capability off use the helpers */
+#![cfg_attr(not(feature = "msaa-fbo"), allow(dead_code))]
 
 use core::ffi::{c_char, c_void, CStr};
 use std::collections::BTreeMap;
@@ -811,6 +821,7 @@ fn four_sample_kicks() -> Vec<(PvrRenderKick, Vec<[u32; 2]>)> {
 /* ---- the counts ------------------------------------------------------------------ */
 
 /// ES 3.0.6 table 6.36: GL_MAX_SAMPLES is at least 4.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn max_samples_is_four() {
     let _g = rig();
@@ -821,6 +832,7 @@ fn max_samples_is_four() {
 /// depth/stencil formats list 4 samples (dEQP's "Maximum sample count
 /// returned by glGetInternalformativ() for GL_RGBA8 is only 1" cases); an
 /// integer format lists none (ES 3.0 has no multisample integer storage).
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn internalformat_lists_four_samples_for_the_es3_formats() {
     let _g = rig();
@@ -852,6 +864,7 @@ fn internalformat_lists_four_samples_for_the_es3_formats() {
 /// least"); 8, past GL_MAX_SAMPLES, and any count of an integer format are
 /// GL_INVALID_OPERATION; a 4x RGBA8 + 4x D24S8 framebuffer is complete and
 /// has GL_SAMPLES 4, GL_SAMPLE_BUFFERS 1.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn four_sample_storage_is_accepted_and_complete() {
     let _g = rig();
@@ -877,6 +890,7 @@ fn four_sample_storage_is_accepted_and_complete() {
 /// renderbuffer's PBE store with `downscale` (the end-of-tile resolve into
 /// its single-sample storage), and a second emit, `downscale` off, into the
 /// sample store (an FBO kick is never a swap's, so it may not be the last).
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn four_sample_draw_resolves_on_the_tile_store() {
     let _g = rig();
@@ -903,6 +917,7 @@ fn four_sample_draw_resolves_on_the_tile_store() {
 /// glBlitFramebuffer from the 4x framebuffer into a single-sample one waits
 /// for the 4x kick and copies what its end-of-tile store resolved into the
 /// renderbuffer (the fake GPU's `paint`): every destination pixel.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn blit_resolve_copies_the_resolved_colour() {
     let _g = rig();
@@ -937,6 +952,7 @@ fn blit_resolve_copies_the_resolved_colour() {
 /// word at (2x, 2y) of the 4x buffer (the ISP's 2-by-2 scaled image,
 /// row-linear at twice the aligned width). BOARD-UNVERIFIED: which sample the
 /// BXS-4-64 stores there.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn depth_stencil_blit_reads_one_sample_a_pixel() {
     let _g = rig();
@@ -977,6 +993,7 @@ fn depth_stencil_blit_reads_one_sample_a_pixel() {
 
 /// Two colour attachments at 4x are not built on the PowerVR: the draw is
 /// refused by name (GL_INVALID_OPERATION), and no 4x kick is made of it.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn two_colour_attachments_at_four_samples_are_refused() {
     let _g = rig();
@@ -1003,4 +1020,55 @@ fn two_colour_attachments_at_four_samples_are_refused() {
     );
     assert!(four_sample_kicks().is_empty(), "nothing drawn");
     release(&[fb], &[a, b]);
+}
+
+/* ---- without msaa-fbo: the capability is off ------------------------------------- */
+
+/// GL_MAX_SAMPLES is 1 and every renderable format lists the one count 1; an
+/// integer format lists none.
+#[cfg(not(feature = "msaa-fbo"))]
+#[test]
+fn without_msaa_fbo_max_samples_is_one() {
+    let _g = rig();
+    assert_eq!(geti(GL_MAX_SAMPLES), 1);
+    for f in [GL_RGBA8, GL_RGB565, GL_DEPTH24_STENCIL8] {
+        assert_eq!(sample_counts(f), [1], "GL_SAMPLES of {f:#x}");
+    }
+    assert_eq!(sample_counts(GL_RGBA8UI), [0; 0]);
+}
+
+/// 2 and 4 samples are GL_INVALID_OPERATION; 1 sample is stored as 1 and
+/// draws as a one-sample frame: no CR_ISP_AA 4X, one emit into the
+/// renderbuffer, `downscale` off.
+#[cfg(not(feature = "msaa-fbo"))]
+#[test]
+fn without_msaa_fbo_fbos_are_single_sampled() {
+    let _g = rig();
+    let mut rb = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        for samples in [2, 4] {
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, W, H);
+            assert_eq!(glGetError(), GL_INVALID_OPERATION, "{samples} samples");
+        }
+        glDeleteRenderbuffers(1, &rb);
+    }
+    let colour = renderbuffer(GL_RGBA8, 1);
+    let ds = renderbuffer(GL_DEPTH24_STENCIL8, 1);
+    assert_eq!((rb_samples(colour), rb_samples(ds)), (1, 1));
+    let fb = framebuffer(&[colour], Some(ds));
+    clear_and_draw();
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
+    assert!(four_sample_kicks().is_empty(), "no 4x kick: {:?}", logs());
+    let (kicks, emits) = with_platform(|p| (p.kicks.clone(), p.emits.clone()));
+    let i = kicks.iter().rposition(|k| (k.width, k.height) == (W as u32, H as u32)).expect("the FBO's kick");
+    let k = &kicks[i];
+    assert_ne!(k.frag.isp_aa, isp_aa_4x(), "not CR_ISP_AA 4X");
+    assert_eq!(k.frag.num_rt, 1, "no sample store");
+    assert_eq!(k.frag.pbe_word[0][0] & PBE_DOWNSCALE, 0, "no resolve on the store");
+    assert_eq!(emit_address(emits[i][0]), rb_gpu(colour), "emit 0 stores into the renderbuffer");
+    release(&[fb], &[colour, ds]);
 }
