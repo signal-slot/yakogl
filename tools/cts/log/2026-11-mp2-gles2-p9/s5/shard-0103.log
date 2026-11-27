@@ -1,0 +1,611 @@
+board-stm32mp2.sh <board-host>: shard-0103: build 5cc68d3c boot uboot-sd image sha256 4c51e4a672118bed footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0103 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=63s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0103/20261127-0231-shard-0103-4c51e4a6/INDEX.txt
+yakogl-mp2: hook
+yakogl-mp2: once=shard-0103-4c51e4a672118bed-1795746690
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+10808384 bytes read in 659 ms (15.6 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 x2=0xf8099c98 x3=0xa0000000 pc=0xa0747eec cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 167099493 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 600 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 600000 ms of uptime
+sample: build tree=66fcaa3a table=6c5b8a70
+*** Booting Zephyr OS build af17c0c8aa2a ***
+deqp: case filter 'dEQP-GLES2.functional.shaders.random.texture.fragment.36,dEQP-GLES2.functional.shaders.random.texture.fragment.37,dEQP-GLES2.functional.shaders.random.texture.fragment.38,dEQP-GLES2.functional.shaders.random.texture.fragment.39,dEQP-GLES2.functional.shaders.random.texture.fragment.4,dEQP-GLES2.functional.shaders.random.texture.fragment.40,dEQP-GLES2.functional.shaders.random.texture.fragment.41,dEQP-GLES2.functional.shaders.random.texture.fragment.42,dEQP-GLES2.functional.shaders.random.texture.fragment.43,dEQP-GLES2.functional.shaders.random.texture.fragment.44,dEQP-GLES2.functional.shaders.random.texture.fragment.45,dEQP-GLES2.functional.shaders.random.texture.fragment.46,dEQP-GLES2.functional.shaders.random.texture.fragment.47,dEQP-GLES2.functional.shaders.random.texture.fragment.48,dEQP-GLES2.functional.shaders.random.texture.fragment.49,dEQP-GLES2.functional.shaders.random.texture.fragment.5,dEQP-GLES2.functional.shaders.random.texture.fragment.50,dEQP-GLES2.functional.shaders.random.texture.fragment.51,dEQP-GLES2.functional.shaders.random.texture.fragment.52,dEQP-GLES2.functional.shaders.random.texture.fragment.53,dEQP-GLES2.functional.shaders.random.texture.fragment.54,dEQP-GLES2.functional.shaders.random.texture.fragment.55,dEQP-GLES2.functional.shaders.random.texture.fragment.56,dEQP-GLES2.functional.shaders.random.texture.fragment.57,dEQP-GLES2.functional.shaders.random.texture.fragment.58,dEQP-GLES2.functional.shaders.random.texture.fragment.59,dEQP-GLES2.functional.shaders.random.texture.fragment.6,dEQP-GLES2.functional.shaders.random.texture.fragment.60,dEQP-GLES2.functional.shaders.random.texture.fragment.61,dEQP-GLES2.functional.shaders.random.texture.fragment.62,dEQP-GLES2.functional.shaders.random.texture.fragment.63,dEQP-GLES2.functional.shaders.random.texture.fragment.64,dEQP-GLES2.functional.shaders.random.texture.fragment.65,dEQP-GLES2.functional.shaders.random.texture.fragment.66,dEQP-GLES2.functional.shaders.random.texture.fragment.67,dEQP-GLES2.functional.shaders.random.texture.fragment.68,dEQP-GLES2.functional.shaders.random.texture.fragment.69,dEQP-GLES2.functional.shaders.random.texture.fragment.7,dEQP-GLES2.functional.shaders.random.texture.fragment.70,dEQP-GLES2.functional.shaders.random.texture.fragment.71,dEQP-GLES2.functional.shaders.random.texture.fragment.72,dEQP-GLES2.functional.shaders.random.texture.fragment.73,dEQP-GLES2.functional.shaders.random.texture.fragment.74,dEQP-GLES2.functional.shaders.random.texture.fragment.75,dEQP-GLES2.functional.shaders.random.texture.fragment.76,dEQP-GLES2.functional.shaders.random.texture.fragment.77,dEQP-GLES2.functional.shaders.random.texture.fragment.78,dEQP-GLES2.functional.shaders.random.texture.fragment.79,dEQP-GLES2.functional.shaders.random.texture.fragment.8,dEQP-GLES2.functional.shaders.random.texture.fragment.80,dEQP-GLES2.functional.shaders.random.texture.fragment.81,dEQP-GLES2.functional.shaders.random.texture.fragment.82,dEQP-GLES2.functional.shaders.random.texture.fragment.83,dEQP-GLES2.functional.shaders.random.texture.fragment.84,dEQP-GLES2.functional.shaders.random.texture.fragment.85,dEQP-GLES2.functional.shaders.random.texture.fragment.86,dEQP-GLES2.functional.shaders.random.texture.fragment.87,dEQP-GLES2.functional.shaders.random.texture.fragment.88,dEQP-GLES2.functional.shaders.random.texture.fragment.89,dEQP-GLES2.functional.shaders.random.texture.fragment.9,dEQP-GLES2.functional.shaders.random.texture.fragment.90,dEQP-GLES2.functional.shaders.random.texture.fragment.91,dEQP-GLES2.functional.shaders.random.texture.fragment.92,dEQP-GLES2.functional.shaders.random.texture.fragment.93,dEQP-GLES2.functional.shaders.random.texture.fragment.94,dEQP-GLES2.functional.shaders.random.texture.fragment.95,dEQP-GLES2.functional.shaders.random.texture.fragment.96,dEQP-GLES2.functional.shaders.random.texture.fragment.97,dEQP-GLES2.functional.shaders.random.texture.fragment.98,dEQP-GLES2.functional.shaders.random.texture.fragment.99,dEQP-GLES2.functional.shaders.random.texture.vertex.0,dEQP-GLES2.functional.shaders.random.texture.vertex.1,dEQP-GLES2.functional.shaders.random.texture.vertex.10,dEQP-GLES2.functional.shaders.random.texture.vertex.11,dEQP-GLES2.functional.shaders.random.texture.vertex.12,dEQP-GLES2.functional.shaders.random.texture.vertex.13,dEQP-GLES2.functional.shaders.random.texture.vertex.14,dEQP-GLES2.functional.shaders.random.texture.vertex.15,dEQP-GLES2.functional.shaders.random.texture.vertex.16,dEQP-GLES2.functional.shaders.random.texture.vertex.17,dEQP-GLES2.functional.shaders.random.texture.vertex.18,dEQP-GLES2.functional.shaders.random.texture.vertex.19,dEQP-GLES2.functional.shaders.random.texture.vertex.2,dEQP-GLES2.functional.shaders.random.texture.vertex.20,dEQP-GLES2.functional.shaders.random.texture.vertex.21,dEQP-GLES2.functional.shaders.random.texture.vertex.22,dEQP-GLES2.functional.shaders.random.texture.vertex.23,dEQP-GLES2.functional.shaders.random.texture.vertex.24,dEQP-GLES2.functional.shaders.random.texture.vertex.25,dEQP-GLES2.functional.shaders.random.texture.vertex.26,dEQP-GLES2.functional.shaders.random.texture.vertex.27,dEQP-GLES2.functional.shaders.random.texture.vertex.28,dEQP-GLES2.functional.shaders.random.texture.vertex.29,dEQP-GLES2.functional.shaders.random.texture.vertex.3,dEQP-GLES2.functional.shaders.random.texture.vertex.30,dEQP-GLES2.functional.shaders.random.texture.vertex.31,dEQP-GLES2.functional.shaders.random.texture.vertex.32,dEQP-GLES2.functional.shaders.random.texture.vertex.33,dEQP-GLES2.functional.shaders.random.texture.vertex.34,dEQP-GLES2.functional.shaders.random.texture.vertex.35,dEQP-GLES2.functional.shaders.random.texture.vertex.36,dEQP-GLES2.functional.shaders.random.texture.vertex.37,dEQP-GLES2.functional.shaders.random.texture.vertex.38,dEQP-GLES2.functional.shaders.random.texture.vertex.39,dEQP-GLES2.functional.shaders.random.texture.vertex.4,dEQP-GLES2.functional.shaders.random.texture.vertex.40,dEQP-GLES2.functional.shaders.random.texture.vertex.41,dEQP-GLES2.functional.shaders.random.texture.vertex.42,dEQP-GLES2.functional.shaders.random.texture.vertex.43,dEQP-GLES2.functional.shaders.random.texture.vertex.44,dEQP-GLES2.functional.shaders.random.texture.vertex.45,dEQP-GLES2.functional.shaders.random.texture.vertex.46,dEQP-GLES2.functional.shaders.random.texture.vertex.47,dEQP-GLES2.functional.shaders.random.texture.vertex.48,dEQP-GLES2.functional.shaders.random.texture.vertex.49,dEQP-GLES2.functional.shaders.random.texture.vertex.5,dEQP-GLES2.functional.shaders.random.texture.vertex.6,dEQP-GLES2.functional.shaders.random.texture.vertex.7,dEQP-GLES2.functional.shaders.random.texture.vertex.8,dEQP-GLES2.functional.shaders.random.texture.vertex.9,dEQP-GLES2.functional.shaders.random.trigonometric.fragment.0,dEQP-GLES2.functional.shaders.random.trigonometric.fragment.1,dEQP-GLES2.functional.shaders.random.trigonometric.fragment.10,dEQP-GLES2.functional.shaders.random.trigonometric.fragment.11,dEQP-GLES2.functional.shaders.random.trigonometric.fragment.12'
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.4'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.40'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.40
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.41'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.41
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.42'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.49'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.49
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.51'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.51
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.52'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.52
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.55'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.55
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.57'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.58'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.58
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.59'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.63'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.63
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.64'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.66'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.67'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.67
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.73'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.74'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.74
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.75'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.76'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.76
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.77'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.77
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.78'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.78
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.79'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.79
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.80'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.80
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.81'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.81
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.83'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.85'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.86'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.88'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.88
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.89'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.9'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.9
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.92'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.95'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.96'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.texture.fragment.96
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.98'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.fragment.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.1'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.10'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.11'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.13'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.13
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.2'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.23'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.26'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.28'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.4'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.40'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.40
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.42'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.49'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.49
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.9'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.texture.vertex.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.1'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.10'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.10
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.11'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.11
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.12
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        117/125 (93.6%)
+  Failed:        8/125 (6.4%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 117 passed, 8 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 8064 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 6059 ms

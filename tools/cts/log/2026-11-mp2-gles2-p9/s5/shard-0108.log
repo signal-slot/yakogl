@@ -1,0 +1,611 @@
+board-stm32mp2.sh <board-host>: shard-0108: build 5cc68d3c boot uboot-sd image sha256 6536237af6884804 footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0108 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=47s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0108/20261127-0239-shard-0108-6536237a/INDEX.txt
+yakogl-mp2: hook
+yakogl-mp2: once=shard-0108-6536237af6884804-1795747179
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+yakogl-mp2: cleared
+10808384 bytes read in 659 ms (15.6 MiB/s)
+yakogl-mp2: go 0xa0000000
+## Starting application at 0xA0000000 ...
+
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+mp2-handover: v=1 el=2 sctlr=0x30c50830 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 x2=0xf8099c98 x3=0xa0000000 pc=0xa0747eec cntfrq=40000000 mpidr=0x80000000 psci=0x10001
+mp2: system counter at PRE_KERNEL_1: 166160761 ticks
+mp2: OP-TEE watchdog armed by this image (32 s); PSCI SYSTEM_RESET at 600 s of uptime at the latest
+gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET every 1000 ms until 600000 ms of uptime
+sample: build tree=66fcaa3a table=6c5b8a70
+*** Booting Zephyr OS build af17c0c8aa2a ***
+deqp: case filter 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_vertex,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_fragment,dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_vertex'
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_vertex
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        125/125 (100.0%)
+  Failed:        0/125 (0.0%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 125 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 6400 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 4914 ms
