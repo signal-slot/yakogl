@@ -2604,18 +2604,20 @@ step "test    $MALI_CONFIG (tests/mali_{blend_states,draw_oom,fragment_random,cu
     --test mali_blend_states --test mali_draw_oom --test mali_fragment_random \
     --test mali_cube_samplers --test mali_rgb565_stencil --test mali_cube_complete \
     --test mali_attr_gap --test mali_attr_active --test mali_vcube_magswitch
-# Plan #377's dEQP-GLES2 compile-refusal families: each tests/mali_deqp_<family>.rs
-# compiles the shader pairs of its Mesa 26.2.1 references
+# Plan #377's dEQP-GLES2 compile-refusal families, and plan #402's vsconst and
+# mixprec3: each tests/mali_deqp_<family>.rs compiles the shader pairs of its
+# Mesa 26.2.1 references
 # (tools/mali/testdata/deqp_<family>_*) and byte-compares the program with their
 # expect.json through tests/mali_ref; a reference the compiler still refuses is
 # #[ignore]d and one test of the file pins its exact refusal text. The files
 # therefore run as-is, not through tests_as_declared (which wants no ignored
 # test); tests/mali_ref_selftest.rs is that shared module's own test.
-step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uniarray,mixprec,colourpair,loops,misc}.rs, mali_ref_selftest.rs)" \
+step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uniarray,mixprec,colourpair,loops,misc,vsconst,mixprec3}.rs, mali_ref_selftest.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_deqp_intval --test mali_deqp_varylink --test mali_deqp_constop \
     --test mali_deqp_unitype --test mali_deqp_uniarray --test mali_deqp_mixprec \
     --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
+    --test mali_deqp_vsconst --test mali_deqp_mixprec3 \
     --test mali_ref_selftest
 # The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
 # tests/mali_corpus_diff.rs, checks itself on committed references; then the
