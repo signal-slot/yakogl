@@ -395,44 +395,44 @@ proven.
 
 The Pi 5 has no camera the farm can lease, and nothing is judged by a
 picture (`docs/notes/rpi5-display.md:155-164`; the s32 statement,
-`tools/probes/rpi_5/rpi5_scanout32/README.md:214-219`). A monitor frame, if
+`tools/probes/rpi_5/rpi5_scanout32/README.md:222-228`). A monitor frame, if
 someone takes one, confirms and never proves
 (`docs/notes/rpi5-display.md:160-162`).
 
 The proof is: the placement lines; the per-swap `u3 swap` and `u3 vblank`
 lines with `FRCNT` advancing through each swap and `DL.LACT` picking the new
-head (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:441-483`, judged by
-`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:90-109`); the
+head (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:616-660`, judged by
+`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:87-124`); the
 `u3 restore: PASS byte-equal except hw words` line
-(`tools/probes/rpi_5/rpi5_scanout32/README.md:33`); and a CPU read-back of
+(`tools/probes/rpi_5/rpi5_scanout32/README.md:38`); and a CPU read-back of
 each buffer after an invalidate (section 5 step 3), checking inside, outside
 and at the edge of the rendered shape with the triangle's tolerance 3
 (`tools/probes/rpi_5/rpi5_triangle/src/main.c:71`, `:437`, `:498`). The slot
 entry read back from the list must name the buffer just rendered, as s32's
 sequence judge requires of every swap
-(`tools/probes/rpi_5/rpi5_scanout32/README.md:31`).
+(`tools/probes/rpi_5/rpi5_scanout32/README.md:36`).
 
 `docs/notes/rpi5-display.md:153` proposed the line `rpi5_gl_scanout: 4096 px,
 0 wrong` (the 64x64-triangle figure). The per-frame lines below are the plan
 at the tip; the exact names are proposals, **unverified**, and every one
 follows the "every step prints a line even on the failing path" rule
-(`tools/probes/rpi_5/rpi5_scanout32/README.md:20`):
+(`tools/probes/rpi_5/rpi5_scanout32/README.md:25`):
 
 | Line | Meaning |
 |---|---|
 | `rpi5_gl_scanout: frame <n> buf <A\|B> job done\|timeout\|error <hex>` | step 4 per frame |
 | `rpi5_gl_scanout: frame <n> readback <n> px, <n> wrong` | step 3's read-back of frame n against the expected render |
 | `rpi5_gl_scanout: orientation <ok\|flipped>` | the top screen row holds the shape's top (section 7) |
-| `rpi5_gl_scanout: PASS (...)` / `FAIL (reason)`, then `feeding stopped, reset expected ...` | the end line, as s32's (`tools/probes/rpi_5/rpi5_scanout32/README.md:35`) |
+| `rpi5_gl_scanout: PASS (...)` / `FAIL (reason)`, then `feeding stopped, reset expected ...` | the end line, as s32's (`tools/probes/rpi_5/rpi5_scanout32/README.md:40`) |
 
 The judge is a `verdicts.sh` with a host selftest, reusing s32's rules: PASS
 needs the placement valid, every swap counted with its pickup, every swap
 landed, and the restore byte-equal but for declared words
-(`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:113-125`); a refusal is
-`FAIL (placement refused: ...)` with `q4: unanswered` (`:121-122`); a
-missing line is an incomplete log, never a PASS (`:333-334`). The plane line
+(`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:126-149`); a refusal is
+`FAIL (placement refused: ...)` with `q4: unanswered` (`:137-138`); a
+missing line is an incomplete log, never a PASS (`:349-352`). The plane line
 must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
-`tools/probes/rpi_5/rpi5_scanout32/src/main.c:830`).
+`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1053`).
 
 ## 9. The ordered items
 
