@@ -1613,3 +1613,79 @@ vertex kept loop (`vs_for_uni`, `vs_float_uni`, `vs_dowhile_uni`,
 local carried from a run-time value), loops3 `vs_fn_*` (a loop that is not
 `vs_loop_shape`, `put_loop`), gaps `loops_fs_kept_for_index` (a local array
 read by the counter in a mediump kept loop, `array_read_by_counter`).
+
+## 14. The kept vertex loop in 16-bit pairs (spike-vsloop-rest, lower-vsloop, at 92344e4d)
+
+HOST-ONLY. spike-vsloop-rest's diff (50bc21ed) is already at the
+tip, so lower-vsloop changed no code. This section records the design
+the tip now has. No glmark2 verdict moves (`mali_glmark2_corpus`,
+`tests/fixtures/mali_glmark2_verdicts.txt` unchanged).
+`tools/mali/corpus-verdicts.txt` moves one shader forward:
+`loop_uniform.dowhile.vert` now compiles.
+
+1. **A mediump float local carried from a run-time value** (an
+   attribute's lanes) no longer makes `vs_kept_begin` refuse. Each
+   aligned pair of lanes the body stores whole becomes one 16-bit `vec2`
+   phi, as Mesa carries it. The pair is narrowed in the pre-header
+   (`V2F32_TO_V2F16`) and its latch `vec2` is the `MKVEC.v2i16` in the
+   body (`vs_latch_vec16`). The phi's lane in `KeptLoop::phis` is flagged
+   `VS_PAIR` (lanes `c`, `c + 1`). Two things still refuse: a half-stored
+   pair, and a lane that is not 32 bits before the loop. At most
+   `VS_PAIR_LOCALS` (4) locals are carried this way.
+2. **Where the latch `vec2`s stand.** `KeptLoop::pair_at`/`npair` give,
+   per paired local, the place right after the body's last store to it
+   (the walk's `StoreLocal` arm updates it). `vs_kept_end` puts the
+   later pair's `vec2` first, as `deqp_loops_vs_for_uni` has `res.zw`'s
+   `MKVEC` before `res.xy`'s. A local stored before the head test (a
+   `do .. while`) has its `vec2`s after the test, in the latch
+   (`deqp_loops_vs_dowhile_uni`).
+3. **A lone mediump float lane carried from a constant**, in a loop that
+   also carries pairs, is a one-lane 16-bit phi whose start is the
+   constant's fp16 bits. This is the fragment walk's `fs_float_uni` form
+   (section 13). The head test `ndx < uf_one` of an fp16 counter stays a
+   16-bit compare (`vs_kept_cmp16`, `FCMP_OR.v2f16.ge.m1`), and the
+   walk's `Head` arm takes it unwidened. An fp32 float counter's `flt`
+   inverts to `fge` (`FCMP_OR.f32.ge.m1`, `deqp_loops_vs_float_uni`).
+4. **A mediump float local the body only reads**, holding an
+   attribute's lanes, is narrowed before the loop. That is where Mesa's
+   `f2fmp` of its assignment stands
+   (`deqp_loops4_vs_wh_dyn_basic_mediump_float`).
+5. **A counted loop past `max_unroll_iterations`** (the 101-pass
+   `for`/`do_while`) is kept when it carries fp16 pairs. `walk` rotates
+   its steps in place into Mesa's do-while (that is why `vs_steps` now
+   returns `&mut [Step]`). A highp one with no pair has no reference and
+   stays `LoopVertex` (`mali_int_loops.rs`
+   `a_counted_loop_of_33_passes_stays_refused`).
+
+**Compares.** A kept loop carries a pass counter (the cap) in its words,
+which `mali_ref::assert_matches` does not edit. So every lowered kept
+vertex loop has two checks:
+- a compile check in its `tests/mali_deqp_*.rs`;
+- a `CapEdit` compare against Mesa's words in
+  `src/shaderc/online/mali/tests.rs` (`check_deqp_vs_loop`,
+  `*_is_mesa_26_2_1_with_the_loop_cap`).
+
+These compares cover:
+- loops: `vs_for_uni`, `vs_vector`, `vs_select`, `vs_float_uni` and
+  `vs_dowhile_uni`;
+- loops2: `vs_do_uni_basic_{highp,mediump}_float`,
+  `vs_for_dyn_basic_mediump_float`, `vs_for_uni_basic_lowp_float`,
+  `vs_wh_dyn_basic_highp_float` and `vs_do_con_101_iterations`;
+- loops4: all nine former `LoopVertex` pins (its `CAPPED` list);
+- the measure's `loops_vs_for_constant` (deqp_shapes).
+
+For the two `deqp_missing` references:
+- `loops_vs_for_constant` (the 101-pass `for`) is byte-equal (`MATCHED`).
+- `loops_vs_for_uniform` compiles and differs only by the cap: 27 words
+  against Mesa's 24. It is pinned in `DIFFERS`, and the same pair is
+  compared with the cap as `deqp_loops_vs_for_uni`.
+
+**Left.**
+- loops2 has two "compiles, differs" pins: `vs_do_dyn_basic_highp_float`
+  and `vs_wh_con_101_iterations`. Both differ in instruction order, like
+  the fragment pins.
+- Plan #402 holds the `LoopVertex` pins that remain: `mali_deqp_vsloop`
+  (8), `mali_deqp_vsloop2` (8, the divergent `break`/`continue` and
+  nested forms), and one each in idxloc, loops3, unif2 and vsmix. They
+  need the constant guard, and the `break`/`continue` unroll and kept
+  forms. loops2 still has 95 `LoopVertex` rows.
