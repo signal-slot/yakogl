@@ -70,6 +70,16 @@ const LOWERED: &[&str] = &[
     "op_common_max_vs_highp",
     "op_common_min_vs_highp",
     "op_common_sign_vs_highp",
+    /* arith step 1b: `sin`, `cos`, `log2` of a mediump varying's lane, the
+     * fp32 kernel on the load's own word and the result narrowed; `tan`'s
+     * shared reduction and tables; `log`'s fp16 product after the
+     * narrowing; `pow` of two varyings' lanes */
+    "op_angle_cos_fs_mediump",
+    "op_angle_sin_fs_mediump",
+    "op_angle_tan_fs_mediump",
+    "op_exponential_log2_fs_mediump",
+    "op_exponential_log_fs_mediump",
+    "op_exponential_pow_fs_mediump",
     /* arith step 2, the kernels: vertex `sin`, `cos`, `log2`, `exp2` and
      * `pow` at fp32 (the mediump references' words are the highp ones'),
      * highp `tan` (shared reduction and tables), `exp`, `log` */
@@ -87,16 +97,10 @@ const LOWERED: &[&str] = &[
     "op_exponential_pow_vs_highp",
     "op_exponential_pow_vs_mediump",
     "random_fexp2_vs_none",
-    /* arith step 1b: `sin`, `cos`, `log2` of a mediump varying's lane, the
-     * fp32 kernel on the load's own word and the result narrowed; `tan`'s
-     * shared reduction and tables; `log`'s fp16 product after the
-     * narrowing; `pow` of two varyings' lanes */
-    "op_angle_cos_fs_mediump",
-    "op_angle_sin_fs_mediump",
-    "op_angle_tan_fs_mediump",
-    "op_exponential_log2_fs_mediump",
-    "op_exponential_log_fs_mediump",
-    "op_exponential_pow_fs_mediump",
+    /* smoothstep of mediump varying lanes: `x - e0` and its loads before
+     * `e1`'s (nir_fs.rs `swapped_compares`), `1.0 / (e1 - e0)` one
+     * `FRCP.f16` of the computed lane */
+    "op_common_smoothstep_fs_mediump",
 ];
 
 /// The references that compile with other words than Mesa's. None yet.
@@ -256,7 +260,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.smoothstep fs highp: 7 cases of shaders.operator.common_functions.smoothstep.highp_float_fragment */
     ("op_common_smoothstep_fs_highp", FORM),
     /* op.common.smoothstep fs mediump: 14 cases of shaders.operator.common_functions.smoothstep.mediump_float_fragment */
-    ("op_common_smoothstep_fs_mediump", ARITH),
     /* op.exponential.exp2 fs highp: 2 cases of shaders.operator.exponential.exp2.highp_vec3_fragment */
     ("op_exponential_exp2_fs_highp", OPERAND),
     /* op.exponential.exp2 fs mediump: 2 cases of shaders.operator.exponential.exp2.mediump_vec3_fragment */
@@ -841,7 +844,6 @@ fn op_common_smoothstep_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.smoothstep, fs, mediump; 14 cases)"]
 fn op_common_smoothstep_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_smoothstep_fs_mediump");
 }
