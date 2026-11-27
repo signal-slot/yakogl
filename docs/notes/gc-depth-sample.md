@@ -653,9 +653,14 @@ verdict, not a rerun case. The page words came from the console's
 
 | item (measured on the Armadillo-X2 in place of the Verdin iMX8MP) | value |
 |---|---|
-| origin/main commit, image sha256, `records/x2/<dir>` name, w1, w2, w3 | **not carried into this item's brief**: the x2-session report holds them and they are not in the tree (records are gitignored). Fill them from that report; they are not guessed here |
+| origin/main commit the image was built from | `c8be59f6` (`c8be59f6fb07600ccaa5ef70eb62b34ea82a4281`), measured on the Armadillo-X2 |
+| image sha256 | begins `786dca85`; the full digest is not in any commit or note (the record is gitignored), so it is missing here, not guessed |
+| record directory | `records/x2/20261127-0752-dtpu-x2-c8be59f6-786dca85/` (gitignored, redacted) |
+| w1, w2, w3 | `0x00003091`, `0x10000001`, `0x00201000` (page at `0x10b0`, from the console's `yk-record` line on the X2; w3 is stated in commit 9f2962fb) |
+| check 5 | passes (P1 within 255 of P0), so the decoder gives no index |
+| check 6 | passes (the raw A8R8G8B8 view is the PE's word); first-failure index: not in the record, as there is none |
 | check 3 passed | yes |
-| check 4 | fails, first at index 1: P1 `0xfffeff81` against P0 `0xff000082`, inside the code-3 precision bound |
+| check 4 | fails, first at index 1 (GL x 1, y 63): P1 `0xfffeff81` against P0 `0xff000082`, inside the code-3 precision bound |
 | check 7 (stale cache) | fails: with mode 1 and no wait, the first stale texel is at index 32 |
 | verdict code | **3** |
 | outcome it selects | **(a) plus the texture-cache flush** (knob mode 4), not plain (a); see `gc-depth-sample-wire.md`, "The X2 verdict" |
