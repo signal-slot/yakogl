@@ -7,7 +7,9 @@
 //! constant lane of a constructed vector read as the constant, t4c) and rank
 //! 3 (a `mul` read once by an `add` is a `mad`, refused toward an invariant
 //! output, for a product read twice and for two uniforms; plan #421 item
-//! cc-mad). Each
+//! cc-mad) and rank 5' (a blur tap's offset is one `mad`, refused toward an
+//! invariant output, for two scales, for no zero lane and for a scale of
+//! unknown sign; item cc-tapmad). Each
 //! case pins the instruction count the note targets and says, from the
 //! listing, which instruction went.
 //!
@@ -384,6 +386,95 @@ fn rank3_two_uniforms_are_not_one_mad() {
     assert_eq!(count(&p, "mad"), 1, "one constant register: {p:?}");
 }
 
+/// Inputs for the rank 5' cases: `b.x` of both signs and `-0.0`, and an
+/// `a.y` of `-0.0`, where `a.y + 0.0` is `+0.0` and a zero lane read as
+/// `s * 0.0 + a.y` must be too.
+const TAPS: [([f32; 4], [f32; 4]); 4] = [
+    ([0.125, 0.75, 0.3, 0.9], [0.003_125, 0.5, 0.25, 1.0]),
+    ([1.000_000_1, -0.0, 0.0, 1.0], [-0.001_666_7, -2.0, 0.5, 0.5]),
+    ([-0.0, 0.333_333_34, 0.1, 0.2], [-0.0, 1.0e-30, 0.7, 0.1]),
+    ([123.456, 0.0, -1.0, 2.0], [7.0e-3, 3.0, 0.0, -0.0]),
+];
+
+/// Rank 5' (`select.rs` `fuse_tap_offsets`): a blur tap, `a.xy + vec2(2.0 *
+/// s, 0.0)` with `s = abs(b.x)`, is one `mad` reading `(2.0, 0.0)` from the
+/// constant file: `mad t, s.xxxx, (2, 0), a`. Its value is the `mul` and the
+/// `add` bit for bit, `-0.0` in `a.y` included (`s >= +0`, so `s * 0.0` is
+/// `+0.0`). Tap 0, `vec2(0.0 * s, 0.0)`, has no add left: the look-up reads
+/// the coordinate.
+fn rank5_a_tap_offset_is_one_mad() {
+    let src = fs("", "float s = abs(b.x); gl_FragColor = vec4(a.xy + vec2(2.0 * s, 0.0), b.zw);");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("tap", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul"), count(&p, "add")), (1, 0, 0), "one mad: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    let mad = c.code.iter().position(|i| i.op().name == "mad").expect("a mad");
+    let k = c.code[mad].src(1).expect("the mad's second source");
+    assert!(!k.is_immediate(), "the k vector is a constant-file read: {}", p[mad]);
+    let lane = |l: usize| c.consts[k.reg as usize][k.swizzle[l] as usize & 3];
+    assert_eq!((lane(0), lane(1)), (2.0f32.to_bits(), 0), "the mad reads (2.0, +0.0): {}", p[mad]);
+    for (a, b) in TAPS {
+        let s = b[0].abs();
+        let want = [a[0] + 2.0 * s, a[1] + 0.0, b[2], b[3]].map(f32::to_bits);
+        assert_eq!(bits_of(&c, a, b), want, "tap: a {a:?} b {b:?}");
+    }
+
+    let src = fs("", "float s = abs(b.x); gl_FragColor = texture2D(T, a.xy + vec2(0.0 * s, 0.0));");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("tap 0", &p);
+    assert_eq!(count(&p, "add") + count(&p, "mad"), 0, "tap 0 reads the coordinate: {p:?}");
+}
+
+/// Rank 5' is refused toward an invariant output, as rank 3 is: the
+/// GC7000's `mad` rounding is not measured. The guard is the same
+/// shader-wide one.
+fn rank5_no_tap_mad_toward_an_invariant_output() {
+    let decl = "attribute vec4 p;\nattribute vec4 q;\n";
+    let body = "void main() { float s = abs(q.x); gl_Position = vec4(p.xy + vec2(2.0 * s, 0.0), p.zw); }\n";
+    let plain = compile(SHC_STAGE_VERTEX, &format!("{decl}{body}"));
+    show("tap vertex", &plain);
+    assert_eq!(count(&plain, "mad"), 1, "with no invariant output the tap is a mad: {plain:?}");
+    let p = compile(SHC_STAGE_VERTEX, &format!("{decl}invariant gl_Position;\n{body}"));
+    show("tap invariant", &p);
+    assert_eq!(count(&p, "mad"), 0, "invariant gl_Position: no mad: {p:?}");
+    assert_eq!((count(&p, "mul"), count(&p, "add")), (1, 1), "the mul and the add stay: {p:?}");
+}
+
+/// Two different scales are two muls: `vec2(2.0 * abs(b.x), 3.0 *
+/// abs(b.y))` is not one scalar times a constant vector. A slot with no
+/// zero lane (`vec2(2.0 * s, 3.0 * s)`) is not rewritten either: the `mad`
+/// would only cost a constant. And a scale of unknown sign (`b.x`) keeps
+/// its instructions, since `b.x * 0.0 + a.y` is not `a.y + 0.0` for a
+/// negative `b.x` and `a.y = -0.0`; t5 and t5v are that shape.
+fn rank5_two_scales_keep_the_muls() {
+    let src = fs("", "gl_FragColor = vec4(a.xy + vec2(2.0 * abs(b.x), 3.0 * abs(b.y)), b.zw);");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("two scales", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul")), (0, 2), "two muls: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in TAPS {
+        let want = [a[0] + 2.0 * b[0].abs(), a[1] + 3.0 * b[1].abs(), b[2], b[3]].map(f32::to_bits);
+        assert_eq!(bits_of(&c, a, b), want, "two scales: a {a:?} b {b:?}");
+    }
+
+    let p = compile(
+        SHC_STAGE_FRAGMENT,
+        &fs("", "float s = abs(b.x); gl_FragColor = vec4(a.xy + vec2(2.0 * s, 3.0 * s), b.zw);"),
+    );
+    show("no zero lane", &p);
+    assert_eq!(count(&p, "mad"), 0, "no zero lane, no mad: {p:?}");
+
+    let src = fs("", "gl_FragColor = vec4(a.xy + vec2(2.0 * b.x, 0.0), b.zw);");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("unknown sign", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul")), (0, 1), "the sign of b.x is unknown: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in TAPS {
+        let want = [a[0] + 2.0 * b[0], a[1] + 0.0, b[2], b[3]].map(f32::to_bits);
+        assert_eq!(bits_of(&c, a, b), want, "unknown sign: a {a:?} b {b:?}");
+    }
+}
+
 /// One test: the online compiler's scratch arena is not reentrant, so the
 /// cases run one after another on one thread.
 #[test]
@@ -401,4 +492,7 @@ fn gc_select_fold_micro_shaders() {
     rank3_no_mad_toward_an_invariant_output();
     rank3_a_product_read_twice_is_not_fused();
     rank3_two_uniforms_are_not_one_mad();
+    rank5_a_tap_offset_is_one_mad();
+    rank5_no_tap_mad_toward_an_invariant_output();
+    rank5_two_scales_keep_the_muls();
 }
