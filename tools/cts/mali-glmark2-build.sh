@@ -550,7 +550,8 @@ run ln -s libEGL.so.1 "$part/lib/libEGL.so"
 run cp -r "$BUILD/glmark2/data/shaders" "$BUILD/glmark2/data/models" "$BUILD/glmark2/data/textures" "$part/share/glmark2/"
 if [ "$dry" = 1 ]; then
 	echo "+ check $part (readelf: AArch64, RUNPATH \$ORIGIN/../lib, NEEDED within $NEEDED_OK, the pair, GLIBC_$GLIBC_FLOOR GLIBCXX_$GLIBCXX_FLOOR CXXABI_$CXXABI_FLOOR)"
-	echo "+ write $part/BUILD-INFO (commit=$describe dev=${dev_info%% *} glmark2=$GLMARK2_PIN flavour=$FLAVOUR gl_report=$gl_report glibc_max= glibcxx_max= cxxabi_max=)"
+	echo "+ write $part/BUILD-INFO (commit=$describe dev=${dev_info%% *} glmark2=$GLMARK2_PIN flavour=$FLAVOUR glibc_max= glibcxx_max= cxxabi_max=)"
+	echo "+ BUILD-INFO also gets gl_report=$gl_report"
 	echo "+ check $part with its BUILD-INFO (--check)"
 else
 	if [ -z "${READELF:-}" ]; then
