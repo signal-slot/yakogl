@@ -360,7 +360,7 @@ fn es2_build_keeps_its_answers() {
 #[cfg(not(feature = "report-es2"))]
 mod es3 {
     use super::*;
-    use yakogl::backend::{GLES_SURF_R32I, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI};
+    use yakogl::backend::{GLES_SURF_R16F, GLES_SURF_R32I, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI};
 
     /// The limits are the back end's: 4 with a four-target back end, the
     /// build's own count without one (4 on the PowerVR, 3 on the GC7000 and
@@ -598,7 +598,13 @@ mod es3 {
 
     /* ---- the clear of several mixed attachments: what the back end gets --- */
 
-    const MIXED: [GLenum; 4] = [GL_RGBA8, GL_RGBA8UI, GL_R32I, GL_RGBA16F];
+    /// On the PowerVR the half-float class is R16F (one output register):
+    /// RGBA16F's two would pass the four a pixel has beside three
+    /// one-register targets, and the framebuffer would be
+    /// GL_FRAMEBUFFER_UNSUPPORTED (plan #368 pvr-budget-fb).
+    const HALF: GLenum = if cfg!(feature = "gpu-powervr") { GL_R16F } else { GL_RGBA16F };
+    const HALF_SURF: u8 = if cfg!(feature = "gpu-powervr") { GLES_SURF_R16F } else { GLES_SURF_RGBA16F };
+    const MIXED: [GLenum; 4] = [GL_RGBA8, GL_RGBA8UI, GL_R32I, HALF];
 
     /// ES 3.0 has glColorMask and one scissor box, no per-buffer mask
     /// (glColorMaski is ES 3.2): a clear of several draw buffers carries one
@@ -630,7 +636,7 @@ mod es3 {
         }
         let c = last_clear();
         let formats: Vec<u8> = c.targets.iter().map(|t| t.3).collect();
-        assert_eq!(formats, [GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI, GLES_SURF_R32I, GLES_SURF_RGBA16F]);
+        assert_eq!(formats, [GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI, GLES_SURF_R32I, HALF_SURF]);
         assert!(c.do_clear && c.clear_target_mask == 0, "glClear: every target");
         release(fb, &rbs);
     }
@@ -768,7 +774,7 @@ mod es3 {
         assert_eq!(err(), GL_NO_ERROR);
         let c = last_clear();
         assert_eq!(c.clear_target_mask, 1 << 3);
-        assert_eq!((c.targets[3].0, c.targets[3].3), (gpus[3], GLES_SURF_RGBA16F));
+        assert_eq!((c.targets[3].0, c.targets[3].3), (gpus[3], HALF_SURF));
         assert_eq!(c.clear_bits, f.map(f32::to_bits));
 
         // SAFETY: four readable words each.
