@@ -532,6 +532,36 @@ pub struct FgStatus {
     pub fgenable: u32,
     pub fgensts: u32,
     pub fgchstat: u32,
+    /// What [`wait_stopped`] saw while it waited (`None` from [`fg_status`]
+    /// itself): the frame counter at the start and the end.
+    pub stop: Option<StopWait>,
+}
+
+/// A wait for FrameGen0 to stop ([`wait_stopped`]): the time waited, the
+/// polls and `FGTIMESTAMP` (frame index in bits 31:14, line index in 13:0)
+/// read when the wait began and when it ended. A frame index that did not
+/// move over the wait says the pixel clock is dead; one that moved says the
+/// stop was slow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StopWait {
+    pub waited_us: u32,
+    pub polls: u32,
+    pub ts_start: u32,
+    pub ts_end: u32,
+}
+
+impl StopWait {
+    pub const fn frame_start(&self) -> u32 {
+        self.ts_start >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT
+    }
+    pub const fn frame_end(&self) -> u32 {
+        self.ts_end >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT
+    }
+    /// Frames counted between the two reads (the counter is 18 bits).
+    pub const fn frames(&self) -> u32 {
+        self.frame_end().wrapping_sub(self.frame_start())
+            & (r::diseng_framegen0_fgtimestamp::FRAMEINDEX_MASK >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT)
+    }
 }
 
 impl FgStatus {
@@ -548,6 +578,7 @@ pub fn fg_status(m: &impl Mmio, base: usize) -> FgStatus {
         fgenable: rd(m, base, r::DISENG_FRAMEGEN0_FGENABLE),
         fgensts: rd(m, base, r::DISENG_FRAMEGEN0_FGENSTS),
         fgchstat: rd(m, base, r::DISENG_FRAMEGEN0_FGCHSTAT),
+        stop: None,
     }
 }
 
@@ -569,20 +600,35 @@ pub fn wait_sync(m: &impl Mmio, base: usize, budget_us: u32, delay_us: &mut impl
     }
 }
 
-/// Wait up to `budget_us` until FrameGen0 reads stopped.
+/// FrameGen0's `FGTIMESTAMP`: frame index (31:14), line index (13:0).
+pub fn fg_timestamp(m: &impl Mmio, base: usize) -> u32 {
+    rd(m, base, r::DISENG_FRAMEGEN0_FGTIMESTAMP)
+}
+
+/// Wait up to `budget_us` until FrameGen0 reads stopped, in
+/// [`POLL_STEP_US`] steps through `delay_us`. `FGTIMESTAMP` is read when the
+/// wait starts and when it ends (stopped or out of budget), so the result
+/// tells a frozen frame counter from a moving one. On a timeout the error
+/// is the last status with [`FgStatus::stop`] set.
 pub fn wait_stopped(
     m: &impl Mmio,
     base: usize,
     budget_us: u32,
     delay_us: &mut impl FnMut(u32),
-) -> Result<u32, FgStatus> {
+) -> Result<StopWait, FgStatus> {
+    let ts_start = fg_timestamp(m, base);
     let mut waited = 0;
+    let mut polls = 0;
     loop {
-        let s = fg_status(m, base);
-        if !s.running() {
-            return Ok(waited);
-        }
-        if waited >= budget_us {
+        let mut s = fg_status(m, base);
+        polls += 1;
+        let done = !s.running();
+        if done || waited >= budget_us {
+            let w = StopWait { waited_us: waited, polls, ts_start, ts_end: fg_timestamp(m, base) };
+            if done {
+                return Ok(w);
+            }
+            s.stop = Some(w);
             return Err(s);
         }
         delay_us(POLL_STEP_US);
