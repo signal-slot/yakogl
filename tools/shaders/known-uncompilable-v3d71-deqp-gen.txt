@@ -7,13 +7,22 @@
 # message and a listed program that now compiles all fail the test.
 
 # 7.1-only, harness: dEQP-GLES2.functional.attribute_location.bind_aliasing.
-# max_cond_{float,vec2,vec3,vec4,mat2,mat3}. The vertex shader declares more
-# than 16 attributes and the case aliases several of them to one location with
-# glBindAttribLocation. The harvest holds the shader text only, not the
-# bindings, so this harness sees every declared attribute and chain71 refuses
-# above 16; the 4.2 run compiled them through the GL with the bindings. The
-# bindings are not in index.tsv or programs/, so the harness cannot honour
-# them. Not a back-end defect.
+# max_cond_{float,vec2,vec3,vec4,mat2,mat3}. The limit hit is the 16 vertex
+# attribute records of V3D (one per distinct attribute location the vertex
+# shader reads, V3D's 16 vec4 attribute inputs). The check is
+# src/shaderc/online/v3d/chain71.rs:521-522 (`records.len() > 16`, NotYet
+# "more than 16 vertex attributes"); 4.2 has the same check and message at
+# src/shaderc/online/v3d/chain.rs:517. `records` is built the same way in both
+# (chain71.rs:507-518, chain.rs:503-514): the distinct `SOp::Attr` locations of
+# the prepared vertex shader. The back ends do not differ; the inputs do. The
+# case declares more than 16 attributes and aliases several to one location
+# with glBindAttribLocation, so the GL run that made the 4.2 outcome in
+# index.tsv had at most 16 distinct locations. The harvest keeps the shader
+# text only, not the bindings, and compile_program71 gives every declared
+# attribute its own location, so `records` exceeds 16 here. Refusing is
+# right for that input (more than 16 distinct locations cannot be bound). Not
+# a back-end defect; the bindings are not in index.tsv or programs/, so the
+# harness cannot honour them.
 016a206a31f8f211: Chain(NotYet("more than 16 vertex attributes"))
 0bb58d4b9d48e3ec: Chain(NotYet("more than 16 vertex attributes"))
 3e3e588f2c00e2ce: Chain(NotYet("more than 16 vertex attributes"))
