@@ -105,8 +105,10 @@ fn struct_array() {
     mali_ref::assert_matches("deqp_uniarray_struct");
 }
 
+/// The int member `s.c`'s `S32_TO_F32` beside an fp32 member lane, the two
+/// halves paired by `MKVEC.v2i16` before ATEST (nir_fs.rs `Leaf::WideInt`,
+/// plan #402 item lower-fsunif).
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp (the int member s.c's S32_TO_F32 beside an fp32 member lane), owned by intval"]
 fn struct_member_fs() {
     mali_ref::assert_matches("deqp_uniarray_struct_member_fs");
 }
@@ -157,10 +159,6 @@ const REFUSALS: &[(&str, &str)] = &[
     (
         "struct",
         "a gl_FragColor lane other than the varying's own lane or a constant",
-    ),
-    (
-        "struct_member_fs",
-        "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp",
     ),
 ];
 
