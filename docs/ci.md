@@ -401,6 +401,12 @@ took 2261 s. A document pull request's gate took 4 s there (#225).
 - `[profile.test] opt-level = 3` (inherits dev otherwise): about 2x on the
   compiler-heavy tests, measured above. Debug assertions and overflow
   checks stay on. The dev profile for the edit loop is unchanged.
+- `[profile.test] debug = false`: the test binaries carry no DWARF. With it a
+  gate run wrote about 120 GiB and spent about 2 h on build output; no test
+  reads debug information (a panic's location and the symbol table stay).
+  What this change is *not*: a cause of any red test. Four pull requests that
+  made it failed on tests that depend on shared scratch paths and pinned
+  counts instead (3.9).
 - The one-test corpus binaries (`es3_ubo`, `stack_survey`, `gc_const_map`,
   `online_corpus`, ...) split their corpus into several `#[test]`s (by
   dEQP group, by shader directory), so the harness runs them on several
@@ -584,6 +590,66 @@ whose inputs are prepared: false misses. The other inputs `deps-env.sh
 `PCO_SPM_LOAD_CAPTURE`, `MESA_PAN_TREE`, `DEQP_GLES3_TEST_DIR`, `LZ4`,
 `MALI_CSFFW`) are read the same way; treat a `missing` for any of them from a
 bare shell as unconfirmed until it is repeated after the exports.
+
+### 3.9 What a test may share with another row, and what it may pin (2026-11-27)
+
+Four pull requests with `debug = false` in `[profile.test]` failed the gate
+three times, each time on a different test, and the profile was not the cause
+(the same tests pass on main and with the profile, and every red one passed
+run alone; no test reads DWARF, and the C the tests build is compiled by `cc`
+with its own flags). Two defects of the tests:
+
+- **A fixed scratch path.** The rows of one run share one target directory
+  (the binaries of every feature set), hence one `CARGO_TARGET_TMPDIR`
+  (`target/tmp`); the cargo rows also run a row's binaries at once
+  (`--jobs`, YAKOGL_CHECK_TEST_JOBS). A test that builds a C harness at
+  `$CARGO_TARGET_TMPDIR/<name>/harness` and runs it, run by two rows at once,
+  had one row's `cc` relink the executable the other was spawning:
+  `spawn().unwrap()` panicked with "Text file busy", "Permission denied" or
+  "No such file" (reproduced on main: 39 of 40 concurrent instances of
+  `v3d71_cube_packed` failed, 37 of 40 again in a `debug = false` build, both
+  times at the panic site the CI reported,
+  `tests/v3d71_cube_packed.rs:233:92`;
+  0 of 40 after the fix; `v3d71_texfill` and `tests/v3d71_ref/mod.rs`, used
+  by six binaries, had the same form). Name every scratch path by
+  `std::process::id()`; `tests/scratch_path_unique.rs` fails a test file that
+  names `CARGO_TARGET_TMPDIR` or `temp_dir()` and not `process::id()`.
+- **A pinned count of a directory other pull requests grow.**
+  `shaderc71_mali_testdata` pinned the pairs of `tools/mali/testdata` (1818)
+  and the numbers that compiled. The tree grows with every pull request that
+  adds a dEQP shape, and each one had to know to move the pins as it landed:
+  7a806750 pinned 1800 on a base main had left behind (1814 pairs), so main
+  failed this test from 00:23 to 08:28 on 2026-11-26 and every pull request
+  that merged with that main (the gate checks `refs/pull/N/merge`) failed it,
+  whatever it changed; da7b250c and 956f22af re-pinned after it. A pin of a
+  count over a tree many pull requests add to is a red main by construction:
+  pin the exceptions by name. It now pins the keys of the pairs that do not
+  compile (a pair that compiles changes nothing) and a floor.
+
+Why this change in particular. `Cargo.toml` selects every row (the scope map
+of tools/check.sh), so a change of a profile runs the full 2 h 45 min to
+3 h 30 min gate on `refs/pull/N/merge`, where a typical pull request runs a
+few rows; and with no DWARF the builds end sooner, so the rows' test phases
+overlap more. Every race of a test that two rows share, and every red that
+another pull request just put on main, shows only in a run that reaches all
+of them; the change that reaches all of them is the one that meets them, and
+each of its failures was a different test. Not reproduced here: the
+`gc_npot_repeat` red of run 45898370233 and the one red row of #14509 (those
+jobs' logs are not readable from this host; `gc_npot_repeat` passes on this
+tree, it writes no scratch file, and its 18 cases serialize on one mutex, so
+it is not claimed as explained).
+
+**The gate does not stop at the first red row** (and why). `tools/check.sh`
+runs its rows through a pool and `run_row` records each row's verdict
+whatever the others did; the report prints a `FAIL` line when the row ends
+(in order) and the script exits 1 once every row has ended. Every cargo row
+also runs `--no-fail-fast`. The reason is the one stated at `--no-fail-fast`
+(a pull request's author gets the whole list of red rows in one run, not one
+per 3 h run). What it would take for a red to be known at the first failure:
+a step of gate.yml that watches `build/check/tests-*/rows/*.verdict` for
+`fail` and marks the pull request's status red (or cancels the run) while
+the rest continues; check.sh needs no change for that. Not done: it is a
+policy choice (cancelling would lose the other rows' results).
 
 ## 5. Steps, in order
 

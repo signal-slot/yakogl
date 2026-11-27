@@ -11,7 +11,8 @@
 //! word of its FS, VS and CS decodes with codec71 to its instruction and the
 //! instructions pass verify71 and `registers_fit_threads71`.
 //!
-//! Four counts are pinned: pairs, compiled at 4.2, compiled at 7.1, and the
+//! Pinned: the pairs each back end does not compile (by key, so that a pair
+//! added to the tree changes nothing), a floor on the pair count, and the
 //! 7.1-only refusals (pairs 4.2 compiles and 7.1 refuses). Those are listed,
 //! one `<key>: <exact message>` line each, in
 //! `tools/shaders/known-uncompilable-v3d71-mali.txt` (the format of
@@ -36,14 +37,25 @@ use yakogl::shaderc::online::v3d::verify71::{registers_fit_threads71, verify71};
 use yakogl::shaderc::online::{lower, store};
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
-/// `X.vert` + `X.frag` pairs of tools/mali/testdata.
-const PAIRS: usize = 1818;
-/// Of them, the pairs the 4.2 back end compiles and links.
-const COMPILED_42: usize = 1814;
-/// Of them, the pairs the 7.1 back end compiles.
-const COMPILED_71: usize = 1815;
-/// Pairs 4.2 compiles and 7.1 refuses (the lines of the list).
-const ONLY_71_REFUSED: usize = 0;
+/// A floor on the pairs of tools/mali/testdata, so that a tree that lost its
+/// pairs fails. It is not their count: the tree grows with every pull request
+/// that adds a dEQP shape, and a pinned count turned each of them into a
+/// red main for every other open pull request (main failed this test from
+/// 7a806750, 1814 pairs against a pin of 1800, until da7b250c re-pinned it,
+/// and 956f22af had to move the pins again, 1815 to 1818). Pin the
+/// exceptions by name, never the count of a tree many pull requests grow.
+const MIN_PAIRS: usize = 1800;
+/// The pairs the 4.2 back end does not compile and link, by key. Pinned by
+/// name: a pair added that compiles changes nothing here.
+const NOT_COMPILED_42: &[&str] = &[
+    "deqp_defects_encode_max_cond_float",
+    "deqp_defects_encode_reduced",
+    "deqp_misc3_bind_max_cond_mat4",
+    "gm2_locals_vsum",
+];
+/// The pairs the 7.1 back end does not compile, by key.
+const NOT_COMPILED_71: &[&str] =
+    &["deqp_defects_encode_max_cond_float", "deqp_defects_encode_reduced", "gm2_locals_vsum"];
 
 fn pairs(dir: &Path, root: &Path, out: &mut Vec<(String, PathBuf, PathBuf)>) {
     for e in std::fs::read_dir(dir).expect("tools/mali/testdata is readable") {
@@ -142,6 +154,7 @@ fn every_mali_testdata_pair_compiles_at_7_1_or_is_a_listed_refusal() {
     let t0 = std::time::Instant::now();
 
     let (mut c42, mut c71) = (0usize, 0usize);
+    let (mut no42, mut no71) = (Vec::<&str>::new(), Vec::<&str>::new());
     let mut only71: BTreeMap<String, String> = BTreeMap::new();
     for (key, v, f) in &all {
         let vs = std::fs::read_to_string(v).expect("a UTF-8 source");
@@ -150,6 +163,12 @@ fn every_mali_testdata_pair_compiles_at_7_1_or_is_a_listed_refusal() {
         let b = compile71(key, &vs, &fs);
         c42 += usize::from(a);
         c71 += usize::from(b.is_ok());
+        if !a {
+            no42.push(key);
+        }
+        if b.is_err() {
+            no71.push(key);
+        }
         if let (true, Err(m)) = (a, b) {
             only71.insert(key.clone(), m);
         }
@@ -177,8 +196,8 @@ fn every_mali_testdata_pair_compiles_at_7_1_or_is_a_listed_refusal() {
         bad.push(format!("listed but now compiles (remove it): {k}"));
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
-    assert_eq!(all.len(), PAIRS, "pairs");
-    assert_eq!(c42, COMPILED_42, "compiled at 4.2");
-    assert_eq!(c71, COMPILED_71, "compiled at 7.1");
-    assert_eq!(only71.len(), ONLY_71_REFUSED, "7.1-only refusals");
+    println!("not compiled at 4.2: {no42:?}\nnot compiled at 7.1: {no71:?}");
+    assert!(all.len() >= MIN_PAIRS, "{} pairs, at least {MIN_PAIRS} expected", all.len());
+    assert_eq!(no42, NOT_COMPILED_42, "pairs not compiled at 4.2 (add a new refusal to the list only with its reason)");
+    assert_eq!(no71, NOT_COMPILED_71, "pairs not compiled at 7.1");
 }

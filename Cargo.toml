@@ -247,8 +247,16 @@ opt-level = 1
 # overflow checks stay on, as in `dev`. cargo ignores `panic` for tests (the
 # harness needs unwinding), so dev's `panic = "abort"` is unchanged where it
 # applies. The edit loop's `dev` profile keeps opt-level 1.
+#
+# No debug information (`debug = false`): at opt-level 3 the full DWARF of
+# `dev` was most of the gate's build output, about 120 GiB and about 2 h of
+# build per run. No test reads symbols or DWARF (a panic's location is the
+# source's `file!()`/`line!()`; the symbol table stays), and the C the tests
+# build is compiled by `cc` with its own flags, not by this profile
+# (docs/ci.md, section 3.4).
 [profile.test]
 opt-level = 3
+debug = false
 debug-assertions = true
 overflow-checks = true
 
