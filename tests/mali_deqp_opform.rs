@@ -30,7 +30,11 @@ mod mali_ref;
 /// (opform O2, class OB with NS): the column sums of a matrix uniform plus
 /// or minus a lane alone are admitted (nir_fs.rs `select`'s gate,
 /// `uniform_lane_sum`).
-const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform"];
+/// `mul_float_vec4` since the same item (opform O3, class HS):
+/// `HalfSwapped` at `MulB` is admitted, and a vector local assigned a
+/// varying's swizzle is grafted into its read (nir_fs.rs `ADMITTED`,
+/// `grafted_locals`).
+const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform", "mul_float_vec4"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -42,7 +46,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("matmul_const", TEXT_OPERAND),
     ("matneg_mat3", TEXT_OPERAND),
     ("min_vec3", TEXT_OPERAND),
-    ("mul_float_vec4", TEXT_OPERAND),
     ("ret_dynamic", TEXT_OPERAND),
     ("ret_never", TEXT_OPERAND),
     ("rnd_constneg85", TEXT_OPERAND),
@@ -123,7 +126,6 @@ fn min_vec3() {
 
 /// `v_in0.z * v_in1.wzyx`: a swapped half second in a product (class HS).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn mul_float_vec4() {
     mali_ref::assert_matches("deqp_opform_mul_float_vec4");
 }
