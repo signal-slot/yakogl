@@ -230,10 +230,18 @@ jobs:
         # on 4 cores, once per runner, and never again while its binary is
         # there. Every other entry is a tree a host is prepared with, never
         # built here. The LLVM directories go on PATH first: that build runs
-        # clang and llvm-spirv.
+        # clang and llvm-spirv. The dEQP GLES2 shader library
+        # (DEQP_GLES2_TEST_DIR) is the GLES3 corpus's twin, one sparse
+        # directory of the same commit. DEQP_ES2_PROGRAMS, the dEQP-GLES2
+        # programs the shaderc71_deqp_programs row compiles, is a harvest at a
+        # pinned yakogl commit: its build makes HOST_DEQP_CTS (VK-GL-CTS with
+        # its external sources, about 2.1 GB, network), builds deqp-gles2 and
+        # that commit's library and runs the gles2 mustpass on the host, once
+        # per runner like MP2_QEMU, and never again while its index.tsv is
+        # there.
         run: |
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
-          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU
+          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR DEQP_GLES2_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU DEQP_ES2_PROGRAMS
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {

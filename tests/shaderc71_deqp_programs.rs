@@ -48,14 +48,16 @@ static GEN_COUNTS_71: &str = include_str!("../tools/shaders/deqp_es2_gen_counts_
 static KNOWN_71: &str = include_str!("../tools/shaders/known-uncompilable-v3d71-deqp-gen.txt");
 
 /// The pins, from the harvest of CTS 93bca01 at tip da11eb6b
-/// (`tools/cts/deqp-es2-programs.sh`): the programs, those the 4.2 back end
-/// compiled (index.tsv), those the 7.1 back end compiled, and those it
-/// refused. A harvest of another CTS commit moves them: re-derive and change
-/// them with the corpus.
+/// (`tools/cts/deqp-es2-programs.sh`; the deps.toml entry DEQP_ES2_PROGRAMS
+/// makes it at that tip): the programs, those the 4.2 back end compiled
+/// (index.tsv), those the 7.1 back end compiled, and those it refused. A
+/// harvest of another CTS commit or tip moves them: re-derive and change them
+/// with the corpus. The 7.1 two are this tree's: 9720 and 879 before
+/// c2a54983, one fewer compiled since (uniform_api.random.79, OutOfScratch).
 const PROGRAMS: usize = 10599;
 const COMPILED_42: usize = 9723;
-const COMPILED_71: usize = 9720;
-const REFUSED_71: usize = 879;
+const COMPILED_71: usize = 9719;
+const REFUSED_71: usize = 880;
 /// Programs 4.2 refused and 7.1 compiles. Each 7.1-only refusal (4.2
 /// compiled, 7.1 refuses) is in `known-uncompilable-v3d71-deqp-gen.txt`.
 const COMPILED_71_ONLY: usize = 3;

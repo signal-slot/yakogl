@@ -20,3 +20,14 @@
 a6e80f0513a4176f: Chain(NotYet("more than 16 vertex attributes"))
 d575a06ead6d52a3: Chain(NotYet("more than 16 vertex attributes"))
 db3328c4bfc47f49: Chain(NotYet("more than 16 vertex attributes"))
+
+# 7.1-only, back end: dEQP-GLES2.functional.uniform_api.random.79 (a vertex
+# and a fragment shader of about 7.8 KB each, dozens of uniform structs and
+# arrays). The compile's scratch is the 4 MiB SCRATCH_BYTES (store.rs) on the
+# host and the board alike. The front end takes 1705252 bytes of it; the 7.1
+# build peaked at 3965648 bytes before c2a54983, which builds a fragment
+# shader in a third order (interleave71_sig) and keeps the winning build's
+# scratch, and now runs out at 4193544 of 4194304. 4.2 compiles it. A
+# back-end defect (the scratch chain71 build71 holds per stage), not the
+# harness.
+65f8449680efb41d: OutOfScratch
