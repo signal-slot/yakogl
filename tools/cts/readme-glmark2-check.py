@@ -26,7 +26,9 @@ row text, markdown bold ignored; figures of another commit, "<scene> <n> ms at
 styles match: glmark2-ms.py --cells prints "terrain 178.86 ms (6 FPS)", and RESULTS.md rows have "terrain 250 ms
 (4 FPS)". A record directory is records/<board>/<YYYYMMDD-HHMM>-<name>-<sha8>/
 with <board> pi4, imx8mp or am62p and <sha8> the common commit's first 8
-characters (by prefix).
+characters (by prefix). The i.MX8MP row may instead cite records/x2/ when its
+text says "measured on the Armadillo-X2" (or "measured on the X2"); without
+that note a records/x2 cite does not count.
 
 --verdicts reads the row text (markdown bold and backticks ignored, case
 ignored) for each of these; a number must not be part of a longer number:
@@ -104,6 +106,10 @@ BOARDS = {
     "imx8mp": "i.MX8MP",
 }
 RECORD_DIR = {"AM62P": "am62p", "Raspberry Pi 4": "pi4", "i.MX8MP": "imx8mp"}
+# The i.MX8MP row may cite records/x2/ when it says it was measured on the
+# Armadillo-X2 (same SoC and GPU; farm rule of 2026-11-27).
+X2_BOARDS = {"i.MX8MP"}
+X2_NOTE = re.compile(r"\bmeasured\s+on\s+(?:the\s+)?(?:armadillo[- ])?x2\b", re.I)
 WANT = ["AM62P", "Raspberry Pi 4", "i.MX8MP"]
 HASH = re.compile(r"`([0-9a-f]{7,40})`")
 
@@ -207,8 +213,11 @@ def scene_fails(board, text, scenes, commit):
         elif not re.fullmatch(r"\d+(?:\.\d+)?", m.group(1)):
             fails.append("RESULTS: the %s glmark2 row has a non-numeric %s figure '%s'" % (
                 board, sc, m.group(1)))
-    recs = re.findall(r"records/%s/\d{8}-\d{4}-[A-Za-z0-9._-]+-([0-9a-f]{8})/?(?![\w-])" %
-                      RECORD_DIR[board], text)
+    dirs = [RECORD_DIR[board]]
+    if board in X2_BOARDS and X2_NOTE.search(text):
+        dirs.append("x2")
+    recs = re.findall(r"records/(?:%s)/\d{8}-\d{4}-[A-Za-z0-9._-]+-([0-9a-f]{8})/?(?![\w-])" %
+                      "|".join(dirs), text)
     if not recs:
         fails.append("RESULTS: the %s glmark2 row cites no record directory "
                      "records/%s/<YYYYMMDD-HHMM>-<name>-<sha8>/" % (board, RECORD_DIR[board]))
