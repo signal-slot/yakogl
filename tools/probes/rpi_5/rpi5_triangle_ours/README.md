@@ -26,12 +26,13 @@ Built from `0c58c457` with `-DYAKOGL_WERROR=ON` (82,208 bytes, image sha256
 `0fb81874ead08a6f...`), run once through `tools/board.sh pi5 run`,
 `get_throttled` 0x0 before and after: `rc=0 verdict=done boot=tryboot row
 boot_verdict=complete result=legacy:v3d_triangle_pass resets=0
-back_after=215s`, and
+back_after=215s`. The verdict line:
 
-`v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside,
-2796 outside, 288 edge, tol 3; shaders ours)`
+```
+v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside, 2796 outside, 288 edge, tol 3; shaders ours)
+```
 
-— the same pixels as the `rpi5_triangle` run of the same build (the full
+The same pixels as the `rpi5_triangle` run of the same build (the full
 console: `../rpi5_triangle/README.md`, "On the board").
 
 Re-run 2026-11-25 from origin/main `a6f49077` (image sha256 `4e23b31b`) as
