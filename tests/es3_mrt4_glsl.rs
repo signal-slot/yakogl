@@ -262,13 +262,29 @@ fn two_outputs_on_one_location_fail() {
     must_fail("layout(location = 1) out vec4 a;\nlayout(location = 1) out vec4 b;", "a = vec4(1.0); b = vec4(2.0);");
 }
 
-/// The stand-in at 0 is the build's own count, 3: location 3 fails there.
+/// At three draw targets (the stand-in at 3: every build but the PowerVR's
+/// ES 3.0 report, whose `backend::DRAW_TARGETS` is 4) location 3 fails.
 #[test]
-fn build_count_rejects_location_3() {
-    let _g = context_with(0);
+fn three_targets_reject_location_3() {
+    let _g = context_with(3);
     let _r = Restore;
     let o = build(&fs("layout(location = 3) out vec4 o;", "o = vec4(1.0);"));
-    assert!(!(o.compiled && o.linked), "location 3 accepted at the build's count: {o:?}");
+    assert!(!(o.compiled && o.linked), "location 3 accepted at three draw targets: {o:?}");
     assert!(!o.log.is_empty(), "no info log");
     assert_eq!(o.error, GL_NO_ERROR);
+}
+
+/// The stand-in at 0 is the build's own count: the first location past it
+/// fails, the last one inside it links.
+#[test]
+fn build_count_rejects_the_location_past_it() {
+    let _g = context_with(0);
+    let _r = Restore;
+    let n = backend::DRAW_TARGETS;
+    let o = build(&fs(&format!("layout(location = {n}) out vec4 o;"), "o = vec4(1.0);"));
+    assert!(!(o.compiled && o.linked), "location {n} accepted at the build's count: {o:?}");
+    assert!(!o.log.is_empty(), "no info log");
+    assert_eq!(o.error, GL_NO_ERROR);
+    let o = build(&fs(&format!("layout(location = {}) out vec4 o;", n - 1), "o = vec4(1.0);"));
+    assert!(o.compiled && o.linked && o.error == GL_NO_ERROR, "{o:?}");
 }
