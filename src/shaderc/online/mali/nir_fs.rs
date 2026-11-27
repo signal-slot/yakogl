@@ -2853,6 +2853,15 @@ impl<'s> Fs<'s> {
              * `bcsel_pan(b, 1.0, 0.0)` the colour's store folds into its
              * `MUX.v2i16` ([`mask_colour`]), as the Bcsel arm of the walk
              * makes `b ? 1.0 : 0.0` */
+            /* `float(!b)` is `bcsel(b, 0.0, 1.0)` (nir_opt_algebraic.py:
+             * `bcsel(inot(a), b, c)` is `bcsel(a, c, b)`): the select's arms
+             * swapped and no `inot` (deqp_cfold2_const_call_other_bvec's
+             * `false == ref_out0`: `MUX.v2i16 r0, 0x3C000000.h11, 0x0`
+             * of the uniform's word) */
+            AluOp::B2f if self.bool32(p) && not(self, p).is_some() => {
+                let Some(inner) = not(self, p) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                self.op32(Alu::Bcsel, [inner, Val::Const(0), Val::Const(F32_ONE)], at)
+            }
             AluOp::B2f if self.bool32(p) => self.op32(Alu::B2f, [p, u, u], at),
             AluOp::Bnot | AluOp::Inot if self.mask_lane(p) => match not(self, p) {
                 Some(inner) => Ok(inner),
@@ -14278,7 +14287,7 @@ pub fn convert_inputs16(f: &mut Fs<'_>) -> Result<(), MaliError> {
     for id in 0..f.nir.n {
         let nd = f.nir.nodes[id];
         let Kind::Alu(op) = nd.kind else { continue };
-        if nd.bits != 16 {
+        if nd.bits != 16 || !f.read(Val::Lane(id as u16, 0)) {
             continue;
         }
         for &v in &nd.src[..op.arity()] {

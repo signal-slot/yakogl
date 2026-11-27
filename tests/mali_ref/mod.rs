@@ -469,6 +469,7 @@ pub const STRUCT_VALUES: &[&str] = &[
     "deqp_fclane2_struct_basic_float",
     "deqp_fclane2_struct_basic_int",
     "deqp_fclane2_struct_nested_float",
+    "deqp_intval5_light_amount_2_2",
     "deqp_structmember_uniform_struct",
     "deqp_structmember_uniform_struct_partial",
     "deqp_structmember_uniform_struct_partial_vec4",

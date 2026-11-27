@@ -199,6 +199,25 @@ conversions are made for the loads the colour's leaves name
 Reached at `0fd576ea` (from ColourForm). Fix: list the varying of a
 uniform-by-varying product among the converted leaves.
 
+### 2.1a What the fix landed (the Mali compiler train, step 5)
+
+`pair_hi_unread` and `pair_lo_unread` (124 of the 187 cases) are byte-equal
+with Mesa. The cause was narrower than the two candidates above:
+`convert_inputs16` counted the varying lanes read by every 16-bit node,
+dead ones too. `bvec2 in0 = bvec2(v_in0)` leaves a `fneu` for each lane, and
+the one of the lane nothing reads is dead, so the aligned pair was converted
+as one `V2F32_TO_V2F16` although the layout places only the live lane. The
+function now counts the lanes a live node reads (`Fs::read`), so the live
+lane is converted alone, Mesa's `FADD.f32 r0.h0, r0^, 0x0.neg` after the
+`.v2` load. `deqp_gaps_intval_int_uniform`
+(`swizzles.vector_swizzles.mediump_ivec2_gggg_fragment`) is byte-equal by
+the same change.
+
+Still `Defect(IrIndex)`: `b2f16_pair` (15; Mesa's words are one two-lane
+`FCMP_OR.v2f16.ne.f1`, the compare writing the float), `val16_abs_fold` (6),
+`load_mat3` (18) and `mat4_pair_unread` (10). `load_vec3_cmp`,
+`sqrt_op_value` and `mat3_uniform_conv` are named refusals, as before.
+
 ### 2.2 Is it a regression of intval step 1 (`ab9cde96`)?
 
 No case compiled at `ab9cde96^`. For 179 of the 187, the three commits

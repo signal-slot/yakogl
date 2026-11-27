@@ -23,8 +23,14 @@ mod mali_ref;
 /// The references that compile byte-equal, without the `deqp_gaps_` prefix.
 /// `mixprec_fs_mixed_other` since the walk leaves its dead int and float
 /// values out (nir_fs.rs `ir_live`).
-const MATCHED: &[&str] =
-    &["intval_bool_literal", "intval_float_compare", "intval_harness_isok", "intval_other", "mixprec_fs_mixed_other"];
+const MATCHED: &[&str] = &[
+    "intval_bool_literal",
+    "intval_float_compare",
+    "intval_harness_isok",
+    "intval_int_uniform",
+    "intval_other",
+    "mixprec_fs_mixed_other",
+];
 
 /// The references that compile and differ from their expect.json.
 const DIFFERS: &[&str] = &["mixprec_fs_varying_plain"];
@@ -36,10 +42,6 @@ const CAPPED: &[&str] = &["loops_fs_kept_while"];
 
 /// Every refused reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    (
-        "intval_int_uniform",
-        "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)",
-    ),
     (
         "loops_fs_kept_for_index",
         "Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet",
@@ -75,7 +77,6 @@ fn intval_harness_isok() {
 /// compared with an `ivec4` uniform
 /// (`swizzles.vector_swizzles.mediump_ivec2_gggg_fragment`).
 #[test]
-#[ignore = "refused: Valhall back end defect (IrIndex); pinned by refusals_pinned"]
 fn intval_int_uniform() {
     mali_ref::assert_matches("deqp_gaps_intval_int_uniform");
 }

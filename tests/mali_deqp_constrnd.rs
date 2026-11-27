@@ -37,10 +37,11 @@
 //! constant condition taken inline, the explicit level's `f2i16` of a
 //! constant) makes `lod_const_vs` byte-equal, and `atan_zero_lanes_vs`
 //! with the unitype lowering of its mediump int uniform; `sqrt_zero_vs` and
-//! `atan_const_vs` fold their constants and refuse later. `int_bits_vs` keeps the constant fold's refusal: its int and bool
-//! compares of constants fold exactly, but they let through shapes whose
-//! programs differ from Mesa's (light_amount_2_2, deqp_cfold2_zero_operand_icmp),
-//! so `fold_int_const` takes only the folds a reference draws byte-equal.
+//! `atan_const_vs` fold their constants and refuse later. `int_bits_vs` folds
+//! its int and bool compares of constants too (ConstantFold step A, nir.rs
+//! `fold_int_alu`) and refuses by name at its `f + e` of a select of two
+//! constants, which Mesa's algebraic rules distribute into the select
+//! (`CSEL.u32.eq` of two FAU floats) and the vertex walk does not.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_constrnd
@@ -66,7 +67,7 @@ fn constrnd_atan_zero_lanes_vs() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (the int and bool compares of constants, which nir.rs fold_int_const leaves refused: the uniform-array select chain they let through differs from Mesa's)"]
+#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference (an integer sum of a constant and a select of two constants, which Mesa distributes into the select)"]
 fn constrnd_int_bits_vs() {
     mali_ref::assert_matches("deqp_constrnd_int_bits_vs");
 }
@@ -85,8 +86,6 @@ fn constrnd_atan_const_vs() {
 /// The vertex walk's arithmetic refusal (a libm fold of a constant, or
 /// #367's vertex ARITH).
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
-/// The refusal of a fold of constants that are not finite normal floats.
-const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
 /// Every ignored reference above, and the refusal the compiler gives it now.
 const REFUSED: &[(&str, &str)] = &[
@@ -95,7 +94,7 @@ const REFUSED: &[(&str, &str)] = &[
         "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)",
     ),
     ("deqp_constrnd_sqrt_zero_vs", ARITH),
-    ("deqp_constrnd_int_bits_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_int_bits_vs", "a shape Mesa's algebraic rules rewrite without a reference"),
     ("deqp_constrnd_atan_const_vs", ARITH),
 ];
 

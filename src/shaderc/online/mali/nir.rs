@@ -893,6 +893,46 @@ fn fold_int_const(op: Alu, bits: u8, k: [u32; 3]) -> Option<u32> {
     }
 }
 
+/// [`fold_int`] of the walk's 32-bit integer or boolean [`Alu`] operation
+/// `op` on the constant operands `x` and `y` (ConstantFold step A of
+/// docs/notes/mali-deqp-cfold2.md): the compares (`>` and `>=` with the
+/// operands swapped), the bitwise and arithmetic operations and the
+/// conversions, each through the one fold the fragment walk uses. `iabs`
+/// (`abs(9)`, deqp_cfold2_const_other_iabs) and `isub` are folded here as
+/// `nir_constant_expressions.py` gives them. `None` for an operation that
+/// is no integer one, and for `iand`: the one constant `iand` the measure
+/// meets is the sign test of the front end's `atan` expansion
+/// (deqp_cfold2_const_call_transcendental_atan), whose folded value is not
+/// Mesa's `atanf` (step B of the note), so it stays refused.
+fn fold_int_alu(op: Alu, x: u32, y: u32) -> Option<u32> {
+    let (a, p, q) = match op {
+        Alu::Icmp(Cmpf::Lt) => (AluOp::Ilt, x, y),
+        Alu::Icmp(Cmpf::Le) => (AluOp::Ile, x, y),
+        Alu::Icmp(Cmpf::Gt) => (AluOp::Ilt, y, x),
+        Alu::Icmp(Cmpf::Ge) => (AluOp::Ile, y, x),
+        Alu::Icmp(Cmpf::Eq) => (AluOp::Ieq, x, y),
+        Alu::Icmp(Cmpf::Ne) => (AluOp::Ine, x, y),
+        Alu::Inot => (AluOp::Inot, x, y),
+        Alu::Ior => (AluOp::Ior, x, y),
+        Alu::Ixor => (AluOp::Ixor, x, y),
+        Alu::Iadd => (AluOp::Iadd, x, y),
+        Alu::Imul => (AluOp::Imul, x, y),
+        Alu::Ineg => (AluOp::Ineg, x, y),
+        /* in an int's range: the cast of another value is not defined */
+        Alu::F2i if f32::from_bits(x).abs() < 2_147_483_648.0 => (AluOp::F2i, x, y),
+        Alu::I2f => (AluOp::I2f, x, y),
+        Alu::B2i => (AluOp::B2i, x, y),
+        Alu::U2f => return Some((x as f32).to_bits()),
+        Alu::Isub => return Some(x.wrapping_sub(y)),
+        Alu::Iabs => return Some((x as i32).wrapping_abs() as u32),
+        _ => return None,
+    };
+    match fold_int(a, Val::Const(p), Val::Const(q)) {
+        Some(Val::Const(r)) => Some(r),
+        _ => None,
+    }
+}
+
 /// `nir_opt_constant_folding` of one lane of the front end's integer and
 /// boolean operation `a` (a boolean is NIR's 32-bit 0 / ~0 after
 /// `pan_nir_lower_bool_to_bitsize`), and the rules of nir_opt_algebraic.py
@@ -2257,6 +2297,18 @@ impl<'s> Nir<'s> {
                 self.note_user(Prod::Folded);
                 return Ok(Val::Const(r));
             }
+            /* the other integer and boolean operations of constants, which
+             * `nir_opt_constant_folding` folds once a loop is unrolled or
+             * a constant lane meets a compare (deqp_cfold2_zero_operand_icmp's
+             * counter, deqp_cfold2_random_mixed_inot's `inot` of false): the
+             * operands are ints (an int below 2^23 is a denormal as a
+             * float, `~0` a NaN), so this stands before the float test */
+            if bits == 32 {
+                if let Some(r) = fold_int_alu(op, k(0), k(1)) {
+                    self.note_user(Prod::Folded);
+                    return Ok(Val::Const(r));
+                }
+            }
             let f = |k: usize| f32::from_bits(consts[k].unwrap_or(0));
             /* the viewport transform's clamp of `1/w`: `frcp` of a zero w
              * is the IEEE infinity of its sign, which `fmax` and `fmin`
@@ -2392,6 +2444,28 @@ impl<'s> Nir<'s> {
          * whole ([`Nir::nonuniform_const`]) */
         let uniform = !self.nonuniform_const;
         match op {
+            /* `bcsel(true, b, c)` is `b`, `bcsel(false, b, c)` `c`
+             * (nir_opt_algebraic.py): the select of an unrolled loop's
+             * `arr[i]` once the counter's compare has folded
+             * (deqp_cfold2_zero_operand_icmp: no `CSEL` is left) */
+            Alu::Bcsel if bits == 32 && matches!(a, Val::Const(_)) => {
+                self.note_user(Prod::Folded);
+                return Ok(if a == Val::Const(0) { c } else { b });
+            }
+            /* `iadd(bcsel(c, #x, #y), #d)` is `bcsel(c, x + d, y + d)` in
+             * Mesa (nir_opt_algebraic.py:3430-3433, `imul` too), and the
+             * `i2f` of that select then reads two float constants
+             * (deqp_constrnd_int_bits_vs: `CSEL.u32.eq` of two FAU floats, no
+             * `IADD_IMM`, no `S32_TO_F32`). Not lowered: refused by name */
+            Alu::Iadd | Alu::Imul
+                if bits == 32
+                    && [(a, b), (b, a)].iter().any(|&(k, s)| {
+                        matches!(k, Val::Const(_))
+                            && matches!(vs_alu_of(self, s), Some((Alu::Bcsel, [_, Val::Const(_), Val::Const(_)])))
+                    }) =>
+            {
+                return Err(MaliError::AlgebraicForm);
+            }
             Alu::Fadd if uniform && (is_zero(a) || is_zero(b)) => {
                 self.note_user(Prod::Identity);
                 return Ok(if is_zero(a) { b } else { a });
@@ -4169,11 +4243,18 @@ fn vs_tex_read16(m: &Module<'_>, id: ir::InstrId) -> Result<bool, MaliError> {
 /// estimate by `frcp` scaled by `0x4f7ffffe`, refined once by the 16-bit
 /// halves' `umul_high`, the quotient by another, two corrections and the
 /// sign; deqp_intval_opvs_div_ivec2_highp, the sequence twice). Both
-/// operands are run-time values here: none of the folds of the fragment
+/// operands are run-time values here (two constants are folded): none of the folds of the fragment
 /// walk's `iop` applies, except `extract_u16(extract_u16(a, 1), 0)` as its
 /// source.
 fn vs_idiv(vs: &mut Nir<'_>, n: Val, d: Val) -> Result<Val, MaliError> {
     let u = Val::Undef;
+    /* of two constants, the quotient the GLSL front end folds (`9 / 3`,
+     * deqp_cfold2_const_other_iabs; a zero divisor has no reference) */
+    if let (Val::Const(a), Val::Const(b)) = (n, d) {
+        if b != 0 {
+            return Ok(Val::Const((a as i32).wrapping_div(b as i32) as u32));
+        }
+    }
     let op = |vs: &mut Nir<'_>, op: Alu, a: Val, b: Val, c: Val| -> Result<Val, MaliError> {
         if let (Alu::Extract16(0), Some((Alu::Extract16(1), _))) = (op, vs_alu_of(vs, a)) {
             return Ok(a);

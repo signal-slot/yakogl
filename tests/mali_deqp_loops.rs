@@ -195,13 +195,13 @@ fn vs_for_uni() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, the vertex twin's of the array rule (`fs_idx_dyn_is_its_constant_bound_twin`; the constop family), then byte-equal"]
+#[ignore = "refused: a constant product in a shape Mesa's algebraic rules move or fold, the vertex twin's of the array rule (`fs_idx_dyn_is_its_constant_bound_twin`; its counter's integer constants fold, ConstantFold step A)"]
 fn vs_idx_dyn() {
     mali_ref::assert_matches("deqp_loops_vs_idx_dyn");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, after the vertex unroll of plan #367 lower-int-loops, then lower-loops-1"]
+#[ignore = "refused: a constant product in a shape Mesa's algebraic rules move or fold (its unrolled counter's integer constants fold, ConstantFold step A)"]
 fn vs_idx_static() {
     mali_ref::assert_matches("deqp_loops_vs_idx_static");
 }
@@ -251,8 +251,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_loops_vs_dowhile_uni", "a loop in a vertex shader"),
     ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),
     ("deqp_loops_vs_for_uni", "a loop in a vertex shader"),
-    ("deqp_loops_vs_idx_dyn", "a constant operation on or to a value that is not a finite normal float"),
-    ("deqp_loops_vs_idx_static", "a constant operation on or to a value that is not a finite normal float"),
+    ("deqp_loops_vs_idx_dyn", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
+    ("deqp_loops_vs_idx_static", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("deqp_loops_vs_select", "a loop in a vertex shader"),
     ("deqp_loops_vs_vector", "a loop in a vertex shader"),
 ];

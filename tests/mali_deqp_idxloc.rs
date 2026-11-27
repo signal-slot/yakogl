@@ -44,8 +44,10 @@ const FRAGCOLOR: &str = "a gl_FragColor lane other than the varying's own lane o
 const CTRL: &str = "control flow (if, a loop, a return before the end)";
 /// A loop past Mesa's unroll limits.
 const UNROLL: &str = "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,";
-/// A constant operation on a value that is not a finite normal float.
-const NONFINITE: &str = "a constant operation on or to a value that is not a finite normal float";
+/// A constant product Mesa's algebraic rules move or fold (the next refusal
+/// of the vertex references once the unrolled counter's integer constants
+/// fold, ConstantFold step A).
+const CONST_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)";
 
 /// Every reference (without the `deqp_idxloc_` prefix) still refused, with the
 /// first refusal of its pair at the tip, without the "Valhall: " prefix and
@@ -64,9 +66,9 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_var_vec3_sd", LOOP_MEDIUMP),
     ("fs_vec2_dl_static", UNROLL),
     ("fs_vec3_component_dl", LOOP_MEDIUMP),
-    ("vs_mat2_dl_d", NONFINITE),
-    ("vs_tmp_vec2_dl_sl", NONFINITE),
-    ("vs_var_float_dl_s", NONFINITE),
+    ("vs_mat2_dl_d", CONST_PRODUCT),
+    ("vs_tmp_vec2_dl_sl", CONST_PRODUCT),
+    ("vs_var_float_dl_s", CONST_PRODUCT),
     ("vs_vec3_dl_component", LOOP_VERTEX),
 ];
 

@@ -39,17 +39,21 @@ mod mali_ref;
 /// suffix.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
+/// The loop references' next refusal: their unrolled counters' integer
+/// constants fold now (ConstantFold step A, `docs/notes/mali-deqp-cfold2.md`).
+const CONSTANT_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold";
+
 /// The references the compiler makes byte-equal. None yet.
 const MATCHED: &[&str] = &[];
 
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("dynloop_tmp_array", CONSTANT_FOLD),
-    ("dynloop_varying_array", CONSTANT_FOLD),
-    ("dynloop_matrix_subscript", CONSTANT_FOLD),
-    ("mixloop_tmp_array", CONSTANT_FOLD),
-    ("mixloop_varying_array", CONSTANT_FOLD),
-    ("mixloop_vector_subscript", CONSTANT_FOLD),
+    ("dynloop_tmp_array", CONSTANT_PRODUCT),
+    ("dynloop_varying_array", CONSTANT_PRODUCT),
+    ("dynloop_matrix_subscript", CONSTANT_PRODUCT),
+    ("mixloop_tmp_array", CONSTANT_PRODUCT),
+    ("mixloop_varying_array", CONSTANT_PRODUCT),
+    ("mixloop_vector_subscript", CONSTANT_PRODUCT),
     ("fsdiv_highp_mat2", CONSTANT_FOLD),
     ("fsdiv_highp_mat3", CONSTANT_FOLD),
 ];
