@@ -51,6 +51,10 @@ rc14-mrt-draw-buffers	dEQP-GLES3.functional.draw_buffers_indexed.*	RC14 four dra
 rc14-mrt-draw-buffers	dEQP-GLES3.functional.shaders.constant_expressions.other.complex_*	RC14 four draw buffers
 rc10-limits-state	dEQP-GLES3.functional.state_query.*	RC10 limits and state queries
 rc10-limits-state	dEQP-GLES3.functional.implementation_limits.*	RC10 limits and state queries
+# The two narrow blit lines come before the wide RC8 fbo.blit line (first match wins): the
+# default-framebuffer blits and the sRGB8_ALPHA8 blit conversions keep their own causes.
+gc-blit-default-fb	dEQP-GLES3.functional.fbo.blit.default_framebuffer.*	glBlitFramebuffer from or to the default framebuffer (RC8, board)
+gc-srgb-target	dEQP-GLES3.functional.fbo.blit.conversion.srgb8_alpha8_*	sRGB8_ALPHA8 blit conversion (RC7, board)
 rc8-blit-msaa	dEQP-GLES3.functional.fbo.blit.*	RC8 glBlitFramebuffer and multisample
 rc8-blit-msaa	dEQP-GLES3.functional.fbo.msaa.*	RC8 glBlitFramebuffer and multisample
 rc8-blit-msaa	dEQP-GLES3.functional.multisample.*	RC8 glBlitFramebuffer and multisample; GC: max_samples 0 (src/vivante/backend.rs), GL_MAX_SAMPLES 1, so multisample.fbo_max_samples.* draws 1 sample and ignores coverage (e23: proportionality_alpha_to_coverage, proportionality_sample_coverage, proportionality_sample_coverage_inverted, sample_coverage_invert); fix: item gc-msaa-fbo, docs/notes/es3-msaa-renderbuffers.md
@@ -136,7 +140,6 @@ gc-int64-mrt-beside	dEQP-GLES3.functional.fragment_out.array.uint.rgba16ui_*	GC7
 # Seen on the board at 9bc82915 (docs/es3-cts-failures.md, "GC7000UL (i.MX8MP) failures by group"): picture and
 # read-back verdicts the host never sees, so these causes are 'board-only' there. Narrow lines first: a blit from
 # the window, an sRGB or 16F target and the R/RG integer attachments are named before the generic RC1 lines.
-gc-blit-default-fb	dEQP-GLES3.functional.fbo.blit.default_framebuffer.*	glBlitFramebuffer from or to the default framebuffer (RC8, board)
 gc-srgb-target	dEQP-GLES3.functional.fbo.*srgb8_alpha8*	sRGB8_ALPHA8 colour target (RC7, board)
 gc-srgb-target	dEQP-GLES3.functional.fragment_out.*srgb8_alpha8*	sRGB8_ALPHA8 colour target (RC7, board)
 gc-16f-rgb16f-tex	dEQP-GLES3.functional.fbo.color.tex*.rgb16f	GL_RGB16F texture refused as a colour attachment (board; src/gl/framebuffer.rs attachment_storage:511 at 9bc82915, an es3_formats texture that is not RGBA8, integer or RGB10_A2 is no render target, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT; fixed on main by c558647b, with 8428875e for the read-back of the missing alpha; read from the code, the record names no message)

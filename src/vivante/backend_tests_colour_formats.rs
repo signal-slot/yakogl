@@ -5,7 +5,8 @@
 //! `docs/es3/imx8mp-gles3-compare-9bc82915.tsv` column 2), on the rig of
 //! `backend_tests.rs`:
 //!
-//! - `gc-srgb-target` (46 cases: `fbo.*srgb8_alpha8*`,
+//! - `gc-srgb-target` (58 cases: `fbo.*srgb8_alpha8*` (the 12
+//!   `fbo.blit.conversion.srgb8_alpha8_to_*` of them on their own map line),
 //!   `fragment_out.{basic,array}.fixed.srgb8_alpha8_*`). RT0's PE_LOGIC_OP
 //!   sRGB bit went out with its `_MASK` bit, which keeps the old value, so the
 //!   pixel engine never encoded; and the resolve engine's fill of a clear

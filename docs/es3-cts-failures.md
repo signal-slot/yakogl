@@ -81,10 +81,12 @@ three sessions (recipe, "What the three sessions measured"). e26 stops at its fi
 with an `other` status and never begins the 123 cases after it, the same record on a rerun: not a watchdog end.
 Entries 13-15 and 51-132 (14,351 mustpass cases) have not run. Per cause: "GC7000UL (i.MX8MP) failures
 by group" below; per case against the host: `docs/es3/imx8mp-gles3-compare-9bc82915.tsv`. The cause map
-`tools/cts/imx8mp-gles3-causes.tsv` gives every one of the 873 named fails a cause (0 unclassified): RC1 275,
-RC8 150, R and RG integer texture attachments 116, RC14 80, 16F targets 51, sRGB targets 46, RC17 26, narrow
-targets 27, RC13 25, `default_vertex_attrib` 24, the rest 53; none sits on an `unexplained-*` line any more (the
-root-cause investigations of plan #410 named them) and 5 are CRC pair mates that did not fail ("Per cause" below).
+`tools/cts/imx8mp-gles3-causes.tsv` gives every one of the 873 named fails a cause (0 unclassified), per cause:
+RC1 240, RC8 108, R and RG integer texture attachments 116, GC 64-bit integer targets beside another
+draw buffer 63, sRGB targets 58, RC14 52, 16F targets 51, blits from the default framebuffer 30, RC17 26,
+narrow targets 27, RC13 25, `default_vertex_attrib` 24, the rest 53; none sits on an `unexplained-*` line any
+more (the root-cause investigations of plan #410 named them) and 5 are CRC pair mates that did not fail
+("Per cause" below).
 
 ## Feature state
 
@@ -164,7 +166,7 @@ fails than that and were not paged, so 969 of the 1,851 fails have no name.
 | Group (entries) | Fail | NotSupported | Where the named fails are | Causes |
 |---|---:|---:|---|---|
 | shaders (25-50) | 1,152 | 0 | e27 `builtin_functions.precision` 152 (`sinh`, `sqrt`, `step`, `sub`, `tan`, `tanh`, `transpose`, `trunc`, `smoothstep`), e47 `random.texture` 22, e45 `random` 8 (one of them a CRC pair mate), e43 `precision.int.highp_div_fragment` 1; unnamed: e25 364 (`arrays`, `builtin_functions.common`, `pack_unpack`, `precision.abs` .. `precision.cos`), e26 277 (`precision.dot` .. `precision.radians`, then the stop), e29 328 (`conversions.vector_to_vector`, `declarations`, `derivate`, `discard`, `fragdata`, `fragdepth`, `function`, `functions`) | RC1 (dEQP's shader executor draws into 32-bit integer targets, which the GC7000UL refuses by name: the host reads `GL_INVALID_OPERATION` on the draw for `builtin_functions.common` and `precision`; e27's `vec3`, `vec4` and `mat2`..`mat3x4` outputs, 120), RC14 (e27's `transpose` `mat4`, `mat4x2`, `mat4x3`, 18: the executor's fourth output, `GL_INVALID_ENUM` on its framebuffer), RC13 (`random.texture` 22 and `random.all_features` 3: the compiler refuses the shader on the host too), `gc-tanh-rcp-denormal` (`precision.tanh.highp` scalar and `vec2` 4), `gc-idiv-float-quotient` (`precision.int.highp_div_fragment`), 4 CRC pair mates (the 3 below and `random.basic_expression.fragment.38`); the rest is unnamed |
-| fbo (4-9) | 400 | 255 | `color` 116, `render` 80, `blit` 94 (`conversion` 48, `default_framebuffer` 30, `depth_stencil` 16), `invalidate` 29, `completeness` 34, `msaa` 34, `depth` 10, 3 CRCs of e8 outside the list | RC1 (RGBA32I/UI targets 36 + 16 + 12 + 8), R and RG integer texture attachments (below), RC7 (sRGB targets), 16F targets, RC8 (`msaa`, `depth_stencil`, blits from the window), `depth` clamp |
+| fbo (4-9) | 400 | 255 | `color` 116, `render` 80, `blit` 94 (`conversion` 48, `default_framebuffer` 30, `depth_stencil` 16), `invalidate` 29, `completeness` 34, `msaa` 34, `depth` 10, 3 CRCs of e8 outside the list | RC1 (RGBA32I/UI targets 36 + 16 + 12 + 8), R and RG integer texture attachments (below), RC7 (sRGB targets), 16F targets, RC8 (`msaa`, `depth_stencil`), blits from the default framebuffer (below), `depth` clamp |
 | fragment_out (18-20) | 215 | 115 | `array.int`/`uint` 72, `basic.int`/`uint` 24 (RC1, host-predicted: 48 of them are the RGBA32I/UI outputs), `array.fixed` 12 and `basic.fixed` 13 (`srgb8_alpha8`, `r8_highp_float`), `array.float` 24 (`rg16f` 12, `rgba16f` 12) and `basic.float` 3 (`rg16f_*_vec4`), `random` 60; e20 also holds the 8 `implementation_limits` fails | RC1, RC7, 16F targets, RC14 (`random`: a fourth attachment is `GL_INVALID_ENUM` on the host, 26 of the 54 predicted) |
 | primitive_restart .. shader_api (24) | 26 (+7 other) | 26 | `read_pixels` 24 (every `rgba_int` and `rgba_uint` `alignment`, `rowlength` and `skip` case; host-predicted, RC1), `rasterization` lines 7 (`interpolation.basic.lines`, `line_strip`, `projected.lines`, `fbo.*.interpolation.lines`, `rbo_multisample_max.*.lines_wide`) | RC1, RC8, line rasterization |
 | clipping .. dither (2) | 24 | 0 | `default_vertex_attrib` non-square matrices: `mat2x3`, `mat2x4`, `mat3x2`, `mat3x4`, `mat4x2`, `mat4x3` x `1f`, `1fv`, `4f`, `4fv` (every square type passes) | `gc-select-nonsquare-attrib`: `varying_columns` in `src/shaderc/online/select.rs` knows `mat2`/`mat3`/`mat4` only, so a non-square matrix attribute read through column 1 alone gets no attribute row (`glGetAttribLocation` -1); host-traced, not Appendix A T1 |
@@ -225,7 +227,7 @@ vivante rows). The first matching line of the map decides; 0 cases are unclassif
 | Cause id | Host-predicted | Board-only | Total | Issue named in the tree |
 |---|---:|---:|---:|---|
 | `rc1-int-color-rt` | 233 | 7 | 240 | #335, #355 |
-| `rc8-blit-msaa` | 94 | 56 | 150 | #339 |
+| `rc8-blit-msaa` | 94 | 14 | 108 | #339 |
 | `gc-rg-int-attachment` | 0 | 116 | 116 | none |
 | `gc-int64-mrt-beside` (64-bit integer target beside another draw buffer, `fragment_out`) | 63 | 0 | 63 | none |
 | `rc14-mrt-draw-buffers` | 44 | 8 | 52 | none |
@@ -233,7 +235,8 @@ vivante rows). The first matching line of the map decides; 0 cases are unclassif
 | `gc-16f-rgb16f-tex` | 0 | 13 | 13 | none (fixed on main by `c558647b`) |
 | `gc-16f-attach-n` | 0 | 12 | 12 | none (fixed on main by `c558647b`) |
 | `gc-16f-target` (unexplained remainder: `fragment_out.array.float.rgba16f_*`) | 0 | 12 | 12 | none |
-| `gc-srgb-target` | 0 | 46 | 46 | none |
+| `gc-srgb-target` | 0 | 58 | 58 | none |
+| `gc-blit-default-fb` | 0 | 30 | 30 | none |
 | `rc17-fbo-completeness` | 12 | 14 | 26 | #335, #355, #354 |
 | `gc-narrow-target` | 0 | 27 | 27 | none |
 | `rc13-shader-compiler` | 25 | 0 | 25 | none |
@@ -260,6 +263,11 @@ too); the 4 `precision.tanh.highp` scalar and `vec2` cases from `rc13-shader-com
 lines: 10 before, 0 now. The investigation commit then moved 24 e2 cases to `gc-select-nonsquare-attrib`,
 `precision.int.highp_div_fragment` to `gc-idiv-float-quotient`, `random.basic_expression.fragment.38` to
 `crc-pair-mate` and the two e23 `clear_buffer{iv,uiv}` cases from `rc17-fbo-completeness` to `gc-negative-api-fixed`.
+The map order was then corrected to what its own comment states: the `fbo.blit.default_framebuffer.*` line and a
+new `fbo.blit.conversion.srgb8_alpha8_*` line were placed before the wide `fbo.blit.*` line, which had taken them
+by first match. 30 board cases moved from `rc8-blit-msaa` to `gc-blit-default-fb` and 12 to `gc-srgb-target`
+(46 → 58). The "Board-only, by cause" table above had already counted the 30 default-framebuffer blits and the 12
+sRGB conversions as their own groups, so that table and the per-cause table now agree.
 
 **Not named: entries 25, 26 and 29 (969 fails).** Each has more fails than
 40 pages hold. e25 (`shaders.arrays`, `builtin_functions.common`,
