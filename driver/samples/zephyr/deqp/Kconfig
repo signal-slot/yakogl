@@ -126,9 +126,10 @@ config DEQP_PVR_NATIVE_ARRAY
 	default -1
 	help
 	  Passed to pvr_set_native_array before the run when it is 0 or 1;
-	  -1 leaves the library's default (off until a board run says
-	  otherwise, docs/es3/pvr-2darray.md). Read when a shader compiles:
-	  1 makes the online compiler sample a sampler2DArray by layer
+	  -1 leaves the library's default, which is on since 02c5c9af
+	  (PVR_NATIVE_ARRAY_DEFAULT is 1 in src/shaderc/mod.rs); 0 turns it
+	  off, the stacked image (docs/es3/pvr-2darray.md). Read when a
+	  shader compiles: on (-1 or 1) makes the online compiler sample a sampler2DArray by layer
 	  address (smp tao) over a twiddled layer-major copy instead of the
 	  stacked image (texture.filtering.2d_array, texture.shadow.2d_array,
 	  texture.vertex.2d_array, the sampler2darray texture_functions).
