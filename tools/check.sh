@@ -2470,12 +2470,10 @@ color_buffer_float_builds() {
   done
 }
 step "check   color-buffer-float on the four GPUs' host configurations" color_buffer_float_builds
-# The `pvr-instance-divisor` feature (no effect yet) builds with each GPU's
-# host configuration, so the P3 back-end item starts from a tree that
-# compiles. No test row with the feature here: with only the declaration in
-# the tree such a row selects 0 tests and warns, and a row fails on any
-# warning. The rows that run the feature's tests land with the back end that
-# reads it.
+# The `pvr-instance-divisor` feature: PowerVR hardware instance divisors up to
+# 0xffff (the back end's max_instance_divisor); inert on the other GPUs. It
+# builds with each GPU's host configuration here; the PowerVR rows below
+# clippy it and run its tests.
 pvr_instance_divisor_builds() {
   local c
   for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
@@ -2484,6 +2482,16 @@ pvr_instance_divisor_builds() {
   done
 }
 step "check   pvr-instance-divisor on the four GPUs' host configurations" pvr_instance_divisor_builds
+PVR_DIVISOR_CONFIG="host-test,gpu-powervr,shaderc-online,pvr-instance-divisor"
+scope pvr
+step "clippy  $PVR_DIVISOR_CONFIG" cargo clippy --no-default-features --features "$PVR_DIVISOR_CONFIG" --all-targets
+for t in es3_pvr_divisor es3_pvr_divisor_split es3_pvr_divisor_edges; do
+  step "test    $PVR_DIVISOR_CONFIG (tests/$t.rs)" \
+    cargo_test --no-fail-fast --no-default-features --features "$PVR_DIVISOR_CONFIG" --test "$t"
+done
+step "test    $PVR_DIVISOR_CONFIG (--lib pvr::backend::)" \
+  cargo_test --no-fail-fast --no-default-features --features "$PVR_DIVISOR_CONFIG" --lib pvr::backend::
+scope v3d
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \
