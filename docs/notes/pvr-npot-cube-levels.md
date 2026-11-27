@@ -11,6 +11,12 @@ does not apply them. Line numbers are those of the tree this note was written
 on (integration tip `3e788de9`; origin/main `2c4b32fa` has no `src/gl` change
 beyond it).
 
+Status: applied (plan #388, item fix-npot-cube2), with
+`tests/pvr_npot_cube.rs`. One difference from section 3: the lib test keeps
+its name `a_powervr_npot_cube_keeps_its_base_level`, which
+`docs/es2-cts-failures.md` cites, and pins the packed chain. The board rerun
+of the section 7 cases is still to do.
+
 ## 1. Where the patch comes from
 
 The fix exists as commit `2d215408` "pvr: a NPOT cube map holds its mip chain,

@@ -145,10 +145,10 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * npot_mip_chains); the PowerVR's TPU finds level i+1 by its own
      * power-of-two arithmetic, so a 2D chain there is laid out as the chain
      * of its power-of-two extent, as Mesa's pvr driver lays one out
-     * (texture.rs pot_chain_layout). A stacked NPOT cube map on the PowerVR
-     * keeps its base level, complete, and is sampled from it: the one way
-     * the PowerVR falls short of the extension, right at level 0 and
-     * aliased where minified. */
+     * (texture.rs pot_chain_layout). A NPOT cube map on the PowerVR holds
+     * its chain packed (texture.rs packed_npot_cube), which the native
+     * cube's copy re-lays for the TPU; a stacked-cube program (the native
+     * cube off) samples its level 0 alone. */
     b"GL_OES_texture_npot\0",
     /* GL_OES_depth_texture and GL_OES_packed_depth_stencil.
      *

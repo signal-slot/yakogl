@@ -2238,6 +2238,13 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_native_switch_cach
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_native_switch_cache
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
+# A NPOT PowerVR cube map with a mip chain (dEQP-GLES3 texture.specification
+# *cube_57x57*): the GL core holds the chain packed (texture.rs
+# packed_npot_cube), every level lands where the descriptor the native
+# cube's bind gets points, and a stacked-cube program samples level 0 alone.
+# Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_npot_cube.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_npot_cube
 # PowerVR textureSize (the 38 dEQP shaders.texture_functions.texturesize
 # cases): every sampler kind in both stages, with the TPU's own cube, array
 # and volume on and off, run in the byte model over the descriptor words the
