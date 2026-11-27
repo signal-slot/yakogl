@@ -23,12 +23,16 @@ A='| `FAM-a` | 2 | `src/x.rs:1` | #1 |'
 B='| FAM-b | 1 | `src/y.rs:2` | #2 |'
 mk pass "$A
 $B"
-mk count "| FAM-a | 3 | s | #1 |
+mk count "| FAM-a | 3 | \`src/x.rs:1\` | #1 |
 $B"
 mk missing "$A"
 mk extra "$A
 $B
 | FAM-c | 1 | s | #3 |"
+mk nosite "$A
+| FAM-b | 1 | src/y.rs | #2 |"
+mk noissue "$A
+| FAM-b | 1 | \`src/y.rs:2\` | see text |"
 printf '## Other\n' >"$tmp/absent.md"
 
 # run NAME WANT_EXIT WANT_TEXT
@@ -42,6 +46,8 @@ run pass 0 "ok, 2 families, 3 rows"
 run count 1 "table says 3, triage counts 2"
 run missing 1 "family 'FAM-b' (1 rows) is missing"
 run extra 1 "'FAM-c' names a family with no rows"
+run nosite 1 "has no file:line site"
+run noissue 1 "has no #NNN"
 run absent 2 "section '## AM62P failures by cause family' is absent"
 
 rc=0
@@ -50,4 +56,8 @@ python3 -I "$chk" "$here/../../docs/es3-cts-failures.md" "$here/../../docs/es3/a
 if [ "$rc" != 2 ] || ! grep -q "AM62P failures by cause family" "$tmp/out"; then
   cat "$tmp/out" >&2; fail "current doc: exit $rc"
 fi
+# no arguments: the defaults run and print a verdict (0, 1 or 2, never a crash)
+rc=0
+python3 -I "$chk" >"$tmp/out" 2>&1 || rc=$?
+[ "$rc" -le 2 ] && [ -s "$tmp/out" ] || { cat "$tmp/out" >&2; fail "defaults: exit $rc"; }
 echo "check-gles3-failures-doc-selftest: ok"
