@@ -2348,6 +2348,8 @@ step "test    $V3D_CONFIG (tests/es3_msaa_gl_clear.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_clear
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_complete.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_complete
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_copy.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_copy
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_coverage.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_coverage
 step "test    $V3D_CONFIG (tests/es3_msaa_gl_draws.rs)" \
