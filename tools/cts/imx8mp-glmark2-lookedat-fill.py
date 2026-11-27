@@ -80,7 +80,10 @@ def fill(a, nf):
         if not val:
             raise Refuse(f"value of {tok} is empty")
         if re.search(r"[<>|\r\n]", val):
-            raise Refuse(f"value of {tok} contains <, >, | or a newline")
+            hint = (" (picdiff prints '|diff|'; write 'abs diff' for it,"
+                    " verdicts.py splits rows on every '|')"
+                    if "|" in val else "")
+            raise Refuse(f"value of {tok} contains <, >, | or a newline{hint}")
         if C5.search(val):
             raise Refuse(f"value of {tok} looks like an address or credential")
         if tok in sets:
