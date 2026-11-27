@@ -3257,10 +3257,12 @@ mod tests {
         }
         let outputs = if cfg!(any(feature = "gpu-v3d", feature = "gpu-powervr")) { 64 } else { vectors * 4 };
         assert_eq!(geti1(GL_MAX_VERTEX_OUTPUT_COMPONENTS), outputs);
-        /* every colour attachment: three, and four on the Mali, whose draw
-         * writes four targets (`mali::backend::DRAW_TARGETS`); the query
-         * itself is ES 3.0's (see es2_has_no_draw_buffer_queries) */
-        let targets = if cfg!(feature = "gpu-mali") { 4 } else { 3 };
+        /* every colour attachment: three, and four on the Mali and the
+         * PowerVR, whose draws write four targets (`backend::DRAW_TARGETS`;
+         * this test is the ES 3.0 report's, the PowerVR's ES 2.0 report
+         * stays at three); the query itself is ES 3.0's (see
+         * es2_has_no_draw_buffer_queries) */
+        let targets = if cfg!(any(feature = "gpu-mali", feature = "gpu-powervr")) { 4 } else { 3 };
         if !crate::REPORT_ES2 {
             assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), targets);
         }

@@ -269,8 +269,8 @@ fn known_gaps() -> Vec<(&'static str, &'static str)> {
         // the PowerVR reports 4 (src/pvr/backend.rs max_samples)
         v.push(("MAX_SAMPLES", "1: the back end table's max_samples is 0 (gl/msaa.rs backend_max_samples)"));
     }
-    if !cfg!(feature = "gpu-mali") {
-        // the Mali reports 4 (gl/context.rs CAP_COLOR_ATTACHMENTS)
+    if !cfg!(any(feature = "gpu-mali", feature = "gpu-powervr")) {
+        // the Mali and the PowerVR report 4 (backend.rs DRAW_TARGETS)
         v.extend_from_slice(&[
             ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
             ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),

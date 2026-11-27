@@ -887,11 +887,15 @@ pub const GLES_MAX_TARGETS: usize = 4;
 /// ([`draw_targets`]). The GL core's arrays hold [`GLES_MAX_TARGETS`]; a
 /// back end that writes fewer keeps the points past its count unnamed, so
 /// nothing is advertised that it cannot draw. ES 3.0 asks for 4 (Table
-/// 6.34); all three stay at 3 until their own half lands:
+/// 6.34); the GC7000 and the V3D stay at 3 until their own half lands:
 ///
-/// - PowerVR: the end-of-tile programs and the kick's PBE words exist for
-///   three targets (`PVR_RENDER_MAX_RT`, driver/src/pvr_render.h); a fourth
-///   needs its PBE state per render target (docs/es3/pvr-formats.md).
+/// - PowerVR: four in the ES 3.0 report: four end-of-tile pairs and four
+///   PBE states (`PVR_RENDER_MAX_RT`, driver/src/pvr_render.h;
+///   `pvr::backend::eot_four_rt`), the pixel's four output registers shared
+///   by the targets (`pvr::mrt_layout`; a list past them is refused by
+///   name, docs/notes/pvr-mrt4-budget.md). Three in the ES 2.0 report
+///   (`report-es2`): GL_MAX_COLOR_ATTACHMENTS_NV and the three end-of-tile
+///   pairs of every dEQP-GLES2 run stay as they were.
 /// - GC7000: the PE has four render targets (etnaviv `num_rts`) and
 ///   `vivante::backend::mrt_targets` takes four, but no board has drawn four.
 /// - V3D: the TLB takes targets 0-3 and the compiler writes four
@@ -909,7 +913,11 @@ pub const DRAW_TARGETS: usize = {
     }
     #[cfg(feature = "gpu-powervr")]
     {
-        3
+        if cfg!(feature = "report-es2") {
+            3
+        } else {
+            4
+        }
     }
     #[cfg(feature = "gpu-mali")]
     {

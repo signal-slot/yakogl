@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `pvr_debug_set_draw_targets`, the setter driver/samples/zephyr/deqp calls
-//! under CONFIG_PVR_DEQP_MRT4 (docs/notes/mrt4-deqp-cases.md): default 3,
-//! set 4 answered by GL_MAX_DRAW_BUFFERS and GL_MAX_COLOR_ATTACHMENTS,
-//! previous count returned, 0 restores, out of range refused.
+//! under CONFIG_PVR_DEQP_MRT4 (docs/notes/mrt4-deqp-cases.md): the default is
+//! the build's own count (`backend::DRAW_TARGETS`: 4 in the ES 3.0 report, 3
+//! under `report-es2`), a set count is answered by GL_MAX_DRAW_BUFFERS and
+//! GL_MAX_COLOR_ATTACHMENTS, the previous count is returned, 0 restores, out
+//! of range is refused.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,test-knobs --test pvr_draw_targets_knob
@@ -112,7 +114,7 @@ fn geti(pname: GLenum) -> GLint {
 }
 
 #[test]
-fn the_knob_sets_four_and_restores_three() {
+fn the_knob_sets_a_count_and_restores_the_builds() {
     // SAFETY: statics; this file has one test, so nothing else calls the library.
     unsafe {
         osal_set_ops(&OSAL);
@@ -120,21 +122,30 @@ fn the_knob_sets_four_and_restores_three() {
         assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
     }
     use yakogl::pvr::debug::pvr_debug_set_draw_targets as set;
-    assert_eq!(backend::draw_targets(), 3);
-    assert_eq!(geti(GL_MAX_DRAW_BUFFERS), 3);
+    /* the build's own count: four in the ES 3.0 report, three under
+     * `report-es2` (`backend::DRAW_TARGETS`) */
+    let own = backend::DRAW_TARGETS as i32;
+    assert_eq!(own, if cfg!(feature = "report-es2") { 3 } else { 4 });
+    assert_eq!(backend::draw_targets() as i32, own);
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), own);
+
+    /* each count is answered, and the call returns the one before it */
+    let mut was = own;
+    for n in [3, 4, 3] {
+        assert_eq!(set(n), was, "returns the previous count");
+        assert_eq!(backend::draw_targets() as i32, n);
+        assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), n);
+        if !cfg!(feature = "report-es2") {
+            assert_eq!(geti(GL_MAX_DRAW_BUFFERS), n);
+        }
+        was = n;
+    }
+
+    assert_eq!(set(5), 3, "out of range is refused");
+    assert_eq!(set(-1), 3);
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), 3);
 
-    assert_eq!(set(4), 3, "returns the previous count");
-    assert_eq!(backend::draw_targets(), 4);
-    assert_eq!(geti(GL_MAX_DRAW_BUFFERS), 4);
-    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), 4);
-
-    assert_eq!(set(5), 4, "out of range is refused");
-    assert_eq!(set(-1), 4);
-    assert_eq!(geti(GL_MAX_DRAW_BUFFERS), 4);
-
-    assert_eq!(set(0), 4, "0 restores the default");
-    assert_eq!(backend::draw_targets(), 3);
-    assert_eq!(geti(GL_MAX_DRAW_BUFFERS), 3);
-    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), 3);
+    assert_eq!(set(0), 3, "0 restores the default");
+    assert_eq!(backend::draw_targets() as i32, own);
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), own);
 }

@@ -229,8 +229,9 @@ pub const CAP_SAMPLERS: usize = 16;
 pub const CAP_COLOR_ATTACHMENTS: usize = crate::backend::GLES_MAX_TARGETS;
 const _: () = assert!(crate::backend::DRAW_TARGETS <= CAP_COLOR_ATTACHMENTS);
 /// GL_MAX_DRAW_BUFFERS: the colour outputs one draw WRITES, which is what
-/// the back end draws ([`crate::backend::draw_targets`]; 3 on every GPU
-/// until each back end's half of ES 3.0's 4 lands). The query,
+/// the back end draws ([`crate::backend::draw_targets`]; ES 3.0's 4 on the
+/// PowerVR and the Mali, 3 on the GC7000 and the V3D until their half
+/// lands). The query,
 /// glDrawBuffers, glClearBuffer and the shader's gl_MaxDrawBuffers all read
 /// this one function; arrays are sized by [`CAP_COLOR_ATTACHMENTS`].
 pub fn max_draw_buffers() -> usize {
