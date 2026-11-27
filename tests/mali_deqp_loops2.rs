@@ -8,8 +8,9 @@
 //! (`tools/mali/deqp-host-measure.sh`) logged them, drawn once on Mesa's
 //! drm-shim with `--uniform-values`.
 //!
-//! No reference is byte-compared yet: `refusals_pinned` asserts the exact
-//! `MaliError` text of each refused one (the vertex shader's when it
+//! [`MATCHED`] is byte-compared (plan #402 `lower-vsloop`), [`DIFFERS`]
+//! pinned as compiling with other words. For the rest `refusals_pinned`
+//! asserts the exact `MaliError` text of each refused one (the vertex shader's when it
 //! refuses, else the fragment shader's), and `compiled_pinned` that each of
 //! [`COMPILED`] (the mediump kept loops of plan #377, docs/notes/
 //! mali-deqp-loops.md section 10) compiles. The lowering that
@@ -21,9 +22,11 @@
 //! the directory in step.
 //!
 //! [`OPEN_STEPS`] (plan #387 item loops2-refs,
-//! `docs/notes/mali-loops2-lowering.md`) holds 80 more references of this
-//! prefix: one per dEQP shape of each open loop step (LP1-LP8 and IDX of
-//! that note) that no reference pinned before. Their sources are the dEQP
+//! `docs/notes/mali-loops2-lowering.md`) holds the open ones of 80 more
+//! references of this prefix: one per dEQP shape of each open loop step
+//! (LP1-LP8 and IDX of that note) that no reference pinned before. The 20 of
+//! LP4 and LP5 left it with plan #402 `lower-vsloop` (19 in [`MATCHED`], one
+//! in [`DIFFERS`]). Their sources are the dEQP
 //! generators' output rebuilt line for line (each `.license` says which).
 //! `open_steps_refused` asserts each one's exact first refusal at the tip;
 //! `open_steps_compares` is the byte compare, `#[ignore]`d while they are
@@ -46,6 +49,9 @@ const LOOP_MEDIUMP: &str =
 const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)";
 /// `MaliError::GuardMediump`.
 const GUARD_MEDIUMP: &str = "a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects)";
+/// `MaliError::ConstantProduct`: the `invariance.*.loop_*` pairs once their
+/// constant loop is unrolled (plan #402 `lower-vsloop`).
+const CONST_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)";
 /// `MaliError::LoopForm`.
 const LOOP_FORM: &str = "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,";
 
@@ -95,7 +101,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_wh_dyn_basic_highp_float", MIXED),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
-    ("vs_do_con_nested", LOOP_VERTEX),
     ("vs_do_dyn_conditional_body", LOOP_VERTEX),
     ("vs_do_dyn_conditional_break", LOOP_VERTEX),
     ("vs_do_dyn_nested_sequence", LOOP_VERTEX),
@@ -106,7 +111,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_do_uni_nested", LOOP_VERTEX),
     ("vs_fn_after_seq", LOOP_VERTEX),
     ("vs_fn_mixed", LOOP_VERTEX),
-    ("vs_fn_return_in_loop", LOOP_VERTEX),
     ("vs_for_dyn_conditional_body", LOOP_VERTEX),
     ("vs_for_dyn_conditional_break", LOOP_VERTEX),
     ("vs_for_dyn_nested", LOOP_VERTEX),
@@ -118,7 +122,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_for_uni_nested_sequence", LOOP_VERTEX),
     ("vs_for_uni_nested_tricky_dataflow_1", LOOP_VERTEX),
     ("vs_for_uni_nested_tricky_dataflow_2", LOOP_VERTEX),
-    ("vs_for_uni_unconditional_break", LOOP_VERTEX),
     ("vs_idx_mat4_dldl", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("vs_idx_tmp_vec4_dd", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("vs_idx_tmp_vec4_dldl", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
@@ -127,17 +130,13 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_idx_vec_dldl", LOOP_VERTEX),
     ("vs_idx_vec_w_direct", LOOP_VERTEX),
     ("vs_idx_vec_w_dynsub", LOOP_VERTEX),
-    ("vs_inv_highp_1", LOOP_VERTEX),
-    ("vs_inv_lowp_loop_1", LOOP_VERTEX),
-    ("vs_inv_mediump_1", LOOP_VERTEX),
-    ("vs_inv_mediump_2", LOOP_VERTEX),
+    ("vs_inv_highp_1", CONST_PRODUCT),
+    ("vs_inv_lowp_loop_1", CONST_PRODUCT),
+    ("vs_inv_mediump_1", CONST_PRODUCT),
+    ("vs_inv_mediump_2", CONST_PRODUCT),
     ("vs_ret_dyn", LOOP_VERTEX),
     ("vs_ret_dynamic_loop_never", LOOP_VERTEX),
-    ("vs_ret_infinite", LOOP_VERTEX),
-    ("vs_ret_static", LOOP_VERTEX),
     ("vs_ret_static_dyn", LOOP_VERTEX),
-    ("vs_ret_static_loop_always", LOOP_VERTEX),
-    ("vs_ret_static_loop_never", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_body", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_break", LOOP_VERTEX),
     ("vs_wh_dyn_nested_sequence", LOOP_VERTEX),
@@ -221,6 +220,63 @@ const COMPILED: &[(&str, bool)] = &[
     ("vs_wh_dyn_basic_highp_float", true),
 ];
 
+/// The vertex loops plan #402's `lower-vsloop` (step 1, `nir.rs`
+/// `vs_put_jloop`) unrolls with their jumps, byte-equal to Mesa's words:
+/// the constant `do_while` nest, the inlined `return`s in a constant or
+/// infinite loop, each folded once its pass is known, and the 19 vertex
+/// references of steps LP4 (constant bound) and LP5 (an unconditional break
+/// or only a continue) of `docs/notes/mali-loops2-lowering.md`.
+const MATCHED: &[&str] = &[
+    "vs_do_con_nested",
+    "vs_do_con_nested_sequence",
+    "vs_do_con_nested_tricky_dataflow_2",
+    "vs_do_con_only_continue",
+    "vs_do_con_unconditional_continue",
+    "vs_do_dyn_infinite_with_unconditional_break_last",
+    "vs_do_dyn_unconditional_break",
+    "vs_do_uni_infinite_with_unconditional_break_first",
+    "vs_fn_return_in_loop",
+    "vs_for_con_conditional_body",
+    "vs_for_con_conditional_continue",
+    "vs_for_con_double_continue",
+    "vs_for_con_infinite_with_unconditional_break_first",
+    "vs_for_con_unconditional_break",
+    "vs_for_dyn_only_continue",
+    "vs_for_uni_infinite_with_unconditional_break_last",
+    "vs_ret_infinite",
+    "vs_ret_static",
+    "vs_ret_static_loop_always",
+    "vs_ret_static_loop_never",
+    "vs_wh_con_conditional_break",
+    "vs_wh_con_infinite_with_conditional_break",
+    "vs_wh_con_mixed_break_continue",
+    "vs_wh_dyn_infinite_with_unconditional_break_first",
+    "vs_wh_uni_only_continue",
+];
+
+/// The vertex loops `lower-vsloop` takes whose words differ from Mesa's
+/// only in the fp16 narrowing: `for (i = 0; i < ui_three; i++) { res =
+/// res.yzwx; break; }` is one guarded pass, ours fp32 `CSEL.u32` selects,
+/// Mesa's `V2F32_TO_V2F16` and `MUX.v2i16` (deqp_vsmix_dyn_unconditional_break's
+/// form), and its `while (i++ < ui_three)` twin (step LP5).
+const DIFFERS: &[&str] = &["vs_for_uni_unconditional_break", "vs_wh_uni_unconditional_break"];
+
+#[test]
+fn matched() {
+    for name in MATCHED {
+        mali_ref::assert_matches(&format!("deqp_loops2_{name}"));
+    }
+}
+
+#[test]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_loops2_{name}"));
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; move it to MATCHED");
+    }
+}
+
 #[test]
 fn refusals_pinned() {
     for (name, text) in REFUSALS {
@@ -255,8 +311,10 @@ const CONTROL_FLOW: &str = "control flow (if, a loop, a return before the end)";
 /// lowered yet" suffix. Mesa keeps a loop in the `LP1`
 /// `*_unconditional_continue`, `LP2`, `LP3`, `LP6`, `LP7`, `LP8` and
 /// `vs_idx_vec3_dynsubw_dlr` references (compare those with `CapEdit`); the
-/// `LP1` `*_only_continue`, `LP4`, `LP5` and other `IDX` ones have no loop
-/// in Mesa's words (plain `mali_ref::assert_matches`).
+/// `LP1` `*_only_continue` and other `IDX` ones have no loop in Mesa's words
+/// (plain `mali_ref::assert_matches`). Steps LP4 and LP5 (vertex loops with
+/// no loop in Mesa's words) left this table for [`MATCHED`] and
+/// [`DIFFERS`] with plan #402's `lower-vsloop`.
 const OPEN_STEPS: &[(&str, &str, &str)] = &[
     ("fs_for_uni_only_continue", "LP1", CONTROL_FLOW),
     ("fs_for_dyn_only_continue", "LP1", CONTROL_FLOW),
@@ -290,26 +348,6 @@ const OPEN_STEPS: &[(&str, &str, &str)] = &[
     ("fs_do_uni_nested_tricky_dataflow_1", "LP3", CONTROL_FLOW),
     ("fs_do_uni_nested_tricky_dataflow_2", "LP3", CONTROL_FLOW),
     ("fs_do_dyn_nested_tricky_dataflow_2", "LP3", CONTROL_FLOW),
-    ("vs_for_con_conditional_continue", "LP4", LOOP_VERTEX),
-    ("vs_for_con_double_continue", "LP4", LOOP_VERTEX),
-    ("vs_for_con_unconditional_break", "LP4", LOOP_VERTEX),
-    ("vs_for_con_conditional_body", "LP4", LOOP_VERTEX),
-    ("vs_wh_con_conditional_break", "LP4", LOOP_VERTEX),
-    ("vs_wh_con_mixed_break_continue", "LP4", LOOP_VERTEX),
-    ("vs_wh_con_infinite_with_conditional_break", "LP4", LOOP_VERTEX),
-    ("vs_do_con_unconditional_continue", "LP4", LOOP_VERTEX),
-    ("vs_do_con_only_continue", "LP4", LOOP_VERTEX),
-    ("vs_do_con_nested_sequence", "LP4", LOOP_VERTEX),
-    ("vs_do_con_nested_tricky_dataflow_2", "LP4", LOOP_VERTEX),
-    ("vs_for_con_infinite_with_unconditional_break_first", "LP4", LOOP_VERTEX),
-    ("vs_for_uni_infinite_with_unconditional_break_last", "LP5", LOOP_VERTEX),
-    ("vs_wh_dyn_infinite_with_unconditional_break_first", "LP5", LOOP_VERTEX),
-    ("vs_do_uni_infinite_with_unconditional_break_first", "LP5", LOOP_VERTEX),
-    ("vs_do_dyn_infinite_with_unconditional_break_last", "LP5", LOOP_VERTEX),
-    ("vs_do_dyn_unconditional_break", "LP5", LOOP_VERTEX),
-    ("vs_wh_uni_unconditional_break", "LP5", LOOP_VERTEX),
-    ("vs_wh_uni_only_continue", "LP5", LOOP_VERTEX),
-    ("vs_for_dyn_only_continue", "LP5", LOOP_VERTEX),
     ("vs_for_uni_function_call_inout", "LP6", LOOP_VERTEX),
     ("vs_wh_dyn_function_call_inout", "LP6", LOOP_VERTEX),
     ("vs_do_uni_function_call_inout", "LP6", LOOP_VERTEX),
@@ -361,7 +399,7 @@ fn open_steps_refused() {
 /// (`--ignored`). Each fails at the tip with its refusal; a loop Mesa keeps
 /// also needs `CapEdit` (see [`OPEN_STEPS`]).
 #[test]
-#[ignore = "refused at the tip: steps LP1-LP8 and IDX of docs/notes/mali-loops2-lowering.md"]
+#[ignore = "refused at the tip: steps LP1-LP3, LP6-LP8 and IDX of docs/notes/mali-loops2-lowering.md"]
 fn open_steps_compares() {
     for (name, _, _) in OPEN_STEPS {
         mali_ref::assert_matches(&format!("deqp_loops2_{name}"));
@@ -380,8 +418,12 @@ fn references_listed() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSALS.iter().map(|(n, _)| n.to_string()).chain(COMPILED.iter().map(|(n, _)| n.to_string())).collect();
+    let mut listed: Vec<String> = REFUSALS
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .chain(COMPILED.iter().map(|(n, _)| n.to_string()))
+        .chain(MATCHED.iter().chain(DIFFERS).map(|n| n.to_string()))
+        .collect();
     listed.extend(OPEN_STEPS.iter().map(|(n, _, _)| n.to_string()));
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops2_* reference is not in REFUSALS, or the other way round");

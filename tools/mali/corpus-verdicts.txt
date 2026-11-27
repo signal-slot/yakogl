@@ -87,7 +87,7 @@ tools/shaders/es100/rasterization.frag: ok
 tools/shaders/es100/rasterization.vert: ok
 tools/shaders/es100/ret_dynloop_never.frag: Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, is not lowered yet
 tools/shaders/es100/ret_nested.frag: ok
-tools/shaders/es100/ret_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
+tools/shaders/es100/ret_nested.vert: ok
 tools/shaders/es100/selects.frag: ok
 tools/shaders/es100/sharedint.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/sharedint.vert: ok
