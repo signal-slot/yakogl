@@ -13,7 +13,9 @@
 //! fusion of a `mul` read once by an `add` into a `mad` (`select.rs`
 //! `fuse_mul_add`, rank 3) and rank 2's rest (plan #421 item cc-copies:
 //! `peephole.rs` `fold_copies` and `retarget_producers`, `alloc.rs`
-//! `copy_source_dying_here`); the comments give the counts before them.
+//! `copy_source_dying_here`) and a blur tap's offset as one `mad` (`select.rs`
+//! `fuse_tap_offsets`, rank 5'; plan #421 item cc-tapmad); the comments give
+//! the counts before them.
 //!
 //! The glmark2 texts are GPL-3.0 and never committed: they are built here from
 //! a glmark2 checkout (`GLMARK2_SRC`, its `data/shaders`) as glmark2's
@@ -82,23 +84,24 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
     ("terrain.vert", SHC_STAGE_VERTEX, 40, 9), // etna 39, 9; before 56, 9; 48 before rank 4c, 44 before rank 3, 42 before cc-copies
     ("terrain.frag", SHC_STAGE_FRAGMENT, 75, 12), // etna 72, 11; before 127, 16 (sr patch), 148, 19; 81 before rank 4c, 80 before rank 3, 76 before cc-copies
-    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 48, 12), // etna 46, 5; before 66, 12; 62 before rank 4, 57 before rank 3, 49 before cc-copies
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 48, 12), // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4, 57 before rank 3, 49 before cc-copies
-    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 27, 8), // etna 24, 5; before 42, 8; 38 before rank 4, 32 before rank 3, 28 before cc-copies
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 27, 8), // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4, 32 before rank 3, 28 before cc-copies
+    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 29, 10), // etna 46, 5; before 66, 12; 62 before rank 4, 57 before rank 3, 49 before cc-copies, 48, 12 before rank 5'
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 29, 10), // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4, 57 before rank 3, 49 before cc-copies, 48, 12 before rank 5'
+    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 16, 6), // etna 24, 5; before 42, 8; 38 before rank 4, 32 before rank 3, 28 before cc-copies, 27, 8 before rank 5'
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 16, 6), // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4, 32 before rank 3, 28 before cc-copies, 27, 8 before rank 5'
     ("normalmap.frag", SHC_STAGE_FRAGMENT, 17, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T, 21 before rank 4, 20 before rank 3, 19 before cc-copies
     ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
     ("quad.vert", SHC_STAGE_VERTEX, 4, 3),         // etna 4, 2; before 7, 3; 7 before rank 3, 5 before cc-copies
     ("luminance.frag", SHC_STAGE_FRAGMENT, 6, 4),  // etna 3, 3; before 7, 4; 7 before cc-copies
 ];
-/// The ten's instructions: etna_shc 279; 305 before rank 2's rest (plan #421
+/// The ten's instructions: etna_shc 279; 294 before rank 5' (a blur tap's
+/// offset as one mad), 305 before rank 2's rest (plan #421
 /// item cc-copies: partial-mask copies, producer retargets, an output in its
 /// dying source's register), 338 before rank 3 (mul + add as one
 /// mad), 343 before rank 4c (a constructor's
 /// constant lane read as the constant), 366 before rank 4 (float constant
 /// folding), 382 before rank T (the retarget past a constant lane), 428
 /// before the unroll, 475 before the patch.
-const GLMARK2_TOTAL: u32 = 294;
+const GLMARK2_TOTAL: u32 = 234;
 
 /// The noise height map, `terrain-noise.frag` (4 calls of `snoise`; glmark2's
 /// hash `terrain-1637be2eef2e8a5e`), as `ShaderSource` hands it over: instructions
@@ -173,6 +176,16 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
             SHC_STAGE_FRAGMENT,
             fs("", "gl_FragColor = vec4(a.xy + vec2(0.0, -1.0 * b.x), a.xy + vec2(0.0, 1.0 * b.x));"),
             6,
+        ),
+        // t5a, rank 5': t5 with the scale `abs(b.x)`, provably >= +0 as tilt's
+        // `TextureStep * abs(..)` is: each tap is one `mad` (`s.xxxx * (∓1, 0) +
+        // a.xy`); 6 before rank 5'. t5 and t5v keep their 6: the sign of `b.x` is
+        // not known, and a zero lane `s * 0.0 + a.y` is `a.y + 0.0` only for s >= +0
+        (
+            "t5a",
+            SHC_STAGE_FRAGMENT,
+            fs("", "float s = abs(b.x); gl_FragColor = vec4(a.xy + vec2(-1.0 * s, 0.0), a.xy + vec2(1.0 * s, 0.0));"),
+            2,
         ),
     ]
 }
