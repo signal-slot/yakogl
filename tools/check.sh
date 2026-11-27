@@ -2557,6 +2557,18 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_d
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_incomplete_fb
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_uniform_names.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_uniform_names
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_blend_key.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_blend_key
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_copytex.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_copytex
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_pending_clear.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_pending_clear
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_read_format.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_read_format
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_uniforms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_uniforms
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_frag_location.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_frag_location
 step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_current_attrib.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test gl_es2ctx_sweep_current_attrib
 step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_program_hint.rs)" \
@@ -2595,6 +2607,24 @@ step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_incomplete_fb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_incomplete_fb
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_uniform_names.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_uniform_names
+step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_frag_location.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_frag_location
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_blend_key.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_blend_key
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_clear_plan.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_clear_plan
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_colormask.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_colormask
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_fbo_complete.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_fbo_complete
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_mixed_size.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_mixed_size
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_read_format.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_read_format
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_uniform_words.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_uniform_words
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_t5_mem.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_t5_mem
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
