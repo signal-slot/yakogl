@@ -79,6 +79,10 @@
 #   cargo clippy --all-targets            ZERO warnings, tests included
 #   cargo test                            the suite
 #
+# The test binaries are built at opt-level 3 without debug information
+# ([profile.test] in Cargo.toml, docs/ci.md section 3.4): with DWARF a run
+# wrote about 120 GiB.
+#
 # The configurations are not interchangeable. `gpu-vivante` compiles a
 # different backend and a different shader table, `report-es2` changes which
 # GL version's rules apply, `shaderc-online` compiles the in-process
