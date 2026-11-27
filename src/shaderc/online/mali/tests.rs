@@ -543,6 +543,23 @@ fn check_vs_stage_with(v: &Stage, json: &str, vp: Viewport, uv_v: &dyn Fn(u16) -
     );
 }
 
+/// [`check_vs_stage_with`] of a vertex shader whose varying program holds
+/// a kept loop: its words Mesa's with the kept-loop cap's `edits`
+/// ([`CapEdit`], [`capped`]), the facts the reference's.
+fn check_vs_stage_capped(v: &Stage, json: &str, vp: Viewport, edits: &[CapEdit], uv_v: &dyn Fn(u16) -> u32) {
+    let (ran_at, pos) = vs_ran(v, json);
+    let var = vs_regions(v).1;
+    let rp = region(json, "vs.position").expect("vs.position");
+    assert_words("vs.position", &pos, &rp.words);
+    assert_facts("vs.position", &rp, v.info.work_reg_count, v.info.preload, &v.info.fau, vp, uv_v);
+    let rv = capped(region(json, "vs.varying").expect("vs.varying"), edits);
+    assert_words("vs.varying", &var, &rv.words);
+    let sec = v.info.secondary.expect("a varying program");
+    assert_facts("vs.varying", &rv, sec.work_reg_count, sec.preload, &v.info.fau, vp, uv_v);
+    /* the position program is Mesa's: the varying one starts where it does */
+    assert_eq!(Some(sec.offset - ran_at), secondary_offset(json), "secondary_offset");
+}
+
 /// A program pair as the product links it: the program's two stages
 /// through the back end's entry points in the GL core's order
 /// ([`link_stages`], [`link_records`]). Panics when the route refuses it.
@@ -7521,6 +7538,562 @@ fn alu_divloop_is_mesa_26_2_1_with_the_loop_cap() {
 }
 
 /* ---- dEQP-GLES2 mediump kept loops (plan #377) ------------------------ */
+
+/// [`check_deqp_loop`] of a reference whose kept loop is in the vertex
+/// shader's varying program: that program's words with the kept-loop cap's
+/// `edits`, the fragment program and every other region and fact the
+/// reference's (gl_ref.py's uniform words, as [`check_deqp_loop`]).
+fn check_deqp_vs_loop(vs: &str, fs: &str, json: &str, edits: &[CapEdit]) {
+    let (v, f) = compile_linked(vs, fs);
+    let names = uniform_names(vs, fs);
+    let ints = typed_uniform_names(vs, fs, &["int", "ivec"]);
+    let bools = typed_uniform_names(vs, fs, &["bool", "bvec"]);
+    let uv = |rows: &[(String, u16, u16)], d: u16| {
+        let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+        let k = names.iter().position(|n| n == name).expect("the uniform is declared");
+        let x = 16 * (k as u32 + 1) + u32::from(d - first);
+        if bools.contains(name) {
+            if (d - first).is_multiple_of(2) {
+                u32::MAX
+            } else {
+                0
+            }
+        } else if ints.contains(name) {
+            x
+        } else {
+            (x as f32).to_bits()
+        }
+    };
+    check_vs_stage_capped(&v, json, VIEWPORT_64X64, edits, &|d| uv(&v.uniforms, d));
+    check_fs_stage_with(&f, json, VIEWPORT_64X64, &[], &|d| uv(&f.uniforms, d));
+}
+
+/// deqp_loops_vs_for_uni, the vertex twin of
+/// [`deqp_loops_fs_for_uni_is_mesa_26_2_1_with_the_loop_cap`]
+/// (`for (mediump int ndx = 0; ndx < ui_three; ndx++) res = res.yzwx;` in
+/// the vertex shader, docs/notes/mali-deqp-loops.md section 8.4 (a)): the
+/// loop is in the varying program, the position program Mesa's 24-word
+/// pass-through. `res` enters as two `V2F32_TO_V2F16` of the attribute and
+/// is carried as two 16-bit `vec2` phis, the body two `MKVEC.v2i16` (the
+/// `zw` pair's first), the stores' `F16_TO_F32` of the phis' halves.
+#[test]
+fn deqp_loops_vs_for_uni_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops_vs_for_uni.vert"),
+        td!("deqp_loops_vs_for_uni.frag"),
+        td!("deqp_loops_vs_for_uni.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f8c10280418b02), // ICMP_OR.s32.ge.m1 r1, r2, u5.w1, r1^ (Mesa: .., 0x0)
+            CapEdit::Fix(10, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(11, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: offset:-7)
+            CapEdit::Fix(16, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops_vs_vector (`for (ivec4 i = ivec4(0); i.x < ui_three; i++)`):
+/// the `ivec4` counter is one scalar phi, the words those of
+/// [`deqp_loops_vs_for_uni_is_mesa_26_2_1_with_the_loop_cap`], the same edits.
+#[test]
+fn deqp_loops_vs_vector_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops_vs_vector.vert"),
+        td!("deqp_loops_vs_vector.frag"),
+        td!("deqp_loops_vs_vector.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f8c10280418b02), // ICMP_OR.s32.ge.m1 r1, r2, u5.w1, r1^ (Mesa: .., 0x0)
+            CapEdit::Fix(10, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(11, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: offset:-7)
+            CapEdit::Fix(16, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops_vs_select (`i < (ub_true ? ui_three : 0)`): the bound's
+/// `CSEL.u32.eq` on the bool uniform's word in the header, as the fragment
+/// twin's ([`deqp_loops_fs_select_is_mesa_26_2_1_with_the_loop_cap`]); the
+/// cap's compare takes r5, the select's r1.
+#[test]
+fn deqp_loops_vs_select_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops_vs_select.vert"),
+        td!("deqp_loops_vs_select.frag"),
+        td!("deqp_loops_vs_select.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(8, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(9, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Fix(10, 0x00f8c10280454102), // ICMP_OR.s32.ge.m1 r1, r2, r1^, r5^ (Mesa: .., 0x0)
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(15, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: offset:-9)
+            CapEdit::Fix(18, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops_vs_float_uni (`for (highp float ndx = 0.05; ndx < uf_one;
+/// ndx += uf_third)`): the fp32 counter's head test `FCMP_OR.f32.ge.m1`
+/// (`inot(flt)`), the cap's compare OR-ed in by its own `LSHIFT_OR` (the
+/// fragment walk's float form), the step `FADD.f32` after the body's pairs.
+#[test]
+fn deqp_loops_vs_float_uni_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops_vs_float_uni.vert"),
+        td!("deqp_loops_vs_float_uni.frag"),
+        td!("deqp_loops_vs_float_uni.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c23d4ccccdc0), // IADD_IMM.i32 r2, 0x0, #0x3D4CCCCD (Mesa: .reconverge)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f4c50280c08c02), // FCMP_OR.f32.ge.m1 r5, r2, u6.w0, 0x0 (Mesa: r1)
+            CapEdit::Add(9, 0x00b4c1011141c045), // LSHIFT_OR.i32 r1, r5^, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops2_vs_do_uni_basic_highp_float (`loops.do_while_uniform_iterations.basic_highp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp32 counter (`FCMP_OR.f32`, the cap's own
+/// `LSHIFT_OR`).
+#[test]
+fn deqp_loops2_vs_do_uni_basic_highp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_do_uni_basic_highp_float.vert"),
+        td!("deqp_loops2_vs_do_uni_basic_highp_float.frag"),
+        td!("deqp_loops2_vs_do_uni_basic_highp_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c23d4ccccdc0), // IADD_IMM.i32 r2, 0x0, #0x3D4CCCCD (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x3D4CCCCD)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f4c50280c08c02), // FCMP_OR.f32.ge.m1 r5, r2, u6.w0, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r1, r2, u6.w0, 0x0)
+            CapEdit::Add(10, 0x00b4c1011141c045), // LSHIFT_OR.i32 r1, r5^, 0x0.b00, r1^
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(16, 0x0090c100000b0004), // F16_TO_F32 r1, r4.h0 (Mesa: F16_TO_F32 r1, r3.h0)
+            CapEdit::Fix(17, 0x0090c200100b0044), // F16_TO_F32 r2, r4^.h1 (Mesa: F16_TO_F32 r2, r3^.h1)
+        ],
+    );
+}
+
+/// deqp_loops2_vs_do_uni_basic_mediump_float (`loops.do_while_uniform_iterations.basic_mediump_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops2_vs_do_uni_basic_mediump_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_do_uni_basic_mediump_float.vert"),
+        td!("deqp_loops2_vs_do_uni_basic_mediump_float.frag"),
+        td!("deqp_loops2_vs_do_uni_basic_mediump_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(10, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(16, 0x0090c100000b0004), // F16_TO_F32 r1, r4.h0 (Mesa: F16_TO_F32 r1, r3.h0)
+            CapEdit::Fix(17, 0x0090c200100b0044), // F16_TO_F32 r2, r4^.h1 (Mesa: F16_TO_F32 r2, r3^.h1)
+        ],
+    );
+}
+
+/// deqp_loops2_vs_for_dyn_basic_mediump_float (`loops.for_dynamic_iterations.basic_mediump_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`); the bound's `one` narrowed before the loop.
+#[test]
+fn deqp_loops2_vs_for_dyn_basic_mediump_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_for_dyn_basic_mediump_float.vert"),
+        td!("deqp_loops2_vs_for_dyn_basic_mediump_float.frag"),
+        td!("deqp_loops2_vs_for_dyn_basic_mediump_float.expect.json"),
+        &[
+            CapEdit::Fix(5, 0x0110c300002a66c0), // IADD_IMM.i32 r3, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x2A66)
+            CapEdit::Add(6, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(7, 0x0091c50000000042), // MOV.i32 r5, r2^ (Mesa: MOV.i32 r4, r2^)
+            CapEdit::Add(9, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(10, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(12, 0x00b4c2211146c042), // LSHIFT_OR.i32 r2, r2^.h0, 0x0.b00, r6^
+            CapEdit::Fix(14, 0x00a1c20010050105), // MKVEC.v2i16 r2, r5.h1, r1.h0 (Mesa: MKVEC.v2i16 r2, r4.h1, r1.h0)
+            CapEdit::Fix(15, 0x00a1c10010054541), // MKVEC.v2i16 r1, r1^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r1, r1^.h1, r4^.h0)
+            CapEdit::Fix(17, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(20, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops2_vs_for_uni_basic_lowp_float (`loops.for_uniform_iterations.basic_lowp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops2_vs_for_uni_basic_lowp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_for_uni_basic_lowp_float.vert"),
+        td!("deqp_loops2_vs_for_uni_basic_lowp_float.frag"),
+        td!("deqp_loops2_vs_for_uni_basic_lowp_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(9, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: F16_TO_F32 r2, r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops2_vs_wh_dyn_basic_highp_float (`loops.while_dynamic_iterations.basic_highp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp32 counter (`FCMP_OR.f32`, the cap's own
+/// `LSHIFT_OR`).
+#[test]
+fn deqp_loops2_vs_wh_dyn_basic_highp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_wh_dyn_basic_highp_float.vert"),
+        td!("deqp_loops2_vs_wh_dyn_basic_highp_float.frag"),
+        td!("deqp_loops2_vs_wh_dyn_basic_highp_float.expect.json"),
+        &[
+            CapEdit::Fix(4, 0x0110c33d4ccccdc0), // IADD_IMM.i32 r3, 0x0, #0x3D4CCCCD (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x3D4CCCCD)
+            CapEdit::Add(5, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(6, 0x0891c50000000041), // MOV.i32.wait0 r5, r1^ (Mesa: MOV.i32.wait0 r4, r1^)
+            CapEdit::Add(8, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(9, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(11, 0x00b4c1011146c041), // LSHIFT_OR.i32 r1, r1^, 0x0.b00, r6^
+            CapEdit::Fix(13, 0x00a1c10010050205), // MKVEC.v2i16 r1, r5.h1, r2.h0 (Mesa: MKVEC.v2i16 r1, r4.h1, r2.h0)
+            CapEdit::Fix(14, 0x00a1c20010054542), // MKVEC.v2i16 r2, r2^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r2, r2^.h1, r4^.h0)
+            CapEdit::Fix(16, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(19, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_do_uni_basic_lowp_float (`loops.do_while_uniform_iterations.basic_lowp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops4_vs_do_uni_basic_lowp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_do_uni_basic_lowp_float.vert"),
+        td!("deqp_loops4_vs_do_uni_basic_lowp_float.frag"),
+        td!("deqp_loops4_vs_do_uni_basic_lowp_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(10, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(16, 0x0090c100000b0004), // F16_TO_F32 r1, r4.h0 (Mesa: F16_TO_F32 r1, r3.h0)
+            CapEdit::Fix(17, 0x0090c200100b0044), // F16_TO_F32 r2, r4^.h1 (Mesa: F16_TO_F32 r2, r3^.h1)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_for_dyn_basic_highp_float (`loops.for_dynamic_iterations.basic_highp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp32 counter (`FCMP_OR.f32`, the cap's own
+/// `LSHIFT_OR`).
+#[test]
+fn deqp_loops4_vs_for_dyn_basic_highp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_for_dyn_basic_highp_float.vert"),
+        td!("deqp_loops4_vs_for_dyn_basic_highp_float.frag"),
+        td!("deqp_loops4_vs_for_dyn_basic_highp_float.expect.json"),
+        &[
+            CapEdit::Fix(4, 0x0110c33d4ccccdc0), // IADD_IMM.i32 r3, 0x0, #0x3D4CCCCD (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x3D4CCCCD)
+            CapEdit::Add(5, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(6, 0x0891c50000000041), // MOV.i32.wait0 r5, r1^ (Mesa: MOV.i32.wait0 r4, r1^)
+            CapEdit::Add(8, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(9, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(11, 0x00b4c1011146c041), // LSHIFT_OR.i32 r1, r1^, 0x0.b00, r6^
+            CapEdit::Fix(13, 0x00a1c10010050205), // MKVEC.v2i16 r1, r5.h1, r2.h0 (Mesa: MKVEC.v2i16 r1, r4.h1, r2.h0)
+            CapEdit::Fix(14, 0x00a1c20010054542), // MKVEC.v2i16 r2, r2^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r2, r2^.h1, r4^.h0)
+            CapEdit::Fix(16, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(19, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_for_dyn_basic_lowp_float (`loops.for_dynamic_iterations.basic_lowp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`); the bound's `one` narrowed before the loop.
+#[test]
+fn deqp_loops4_vs_for_dyn_basic_lowp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_for_dyn_basic_lowp_float.vert"),
+        td!("deqp_loops4_vs_for_dyn_basic_lowp_float.frag"),
+        td!("deqp_loops4_vs_for_dyn_basic_lowp_float.expect.json"),
+        &[
+            CapEdit::Fix(5, 0x0110c300002a66c0), // IADD_IMM.i32 r3, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x2A66)
+            CapEdit::Add(6, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(7, 0x0091c50000000042), // MOV.i32 r5, r2^ (Mesa: MOV.i32 r4, r2^)
+            CapEdit::Add(9, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(10, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(12, 0x00b4c2211146c042), // LSHIFT_OR.i32 r2, r2^.h0, 0x0.b00, r6^
+            CapEdit::Fix(14, 0x00a1c20010050105), // MKVEC.v2i16 r2, r5.h1, r1.h0 (Mesa: MKVEC.v2i16 r2, r4.h1, r1.h0)
+            CapEdit::Fix(15, 0x00a1c10010054541), // MKVEC.v2i16 r1, r1^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r1, r1^.h1, r4^.h0)
+            CapEdit::Fix(17, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(20, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_for_uni_basic_mediump_float (`loops.for_uniform_iterations.basic_mediump_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops4_vs_for_uni_basic_mediump_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_for_uni_basic_mediump_float.vert"),
+        td!("deqp_loops4_vs_for_uni_basic_mediump_float.frag"),
+        td!("deqp_loops4_vs_for_uni_basic_mediump_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(9, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: F16_TO_F32 r2, r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_wh_dyn_basic_lowp_float (`loops.while_dynamic_iterations.basic_lowp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`); the bound's `one` narrowed before the loop.
+#[test]
+fn deqp_loops4_vs_wh_dyn_basic_lowp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_wh_dyn_basic_lowp_float.vert"),
+        td!("deqp_loops4_vs_wh_dyn_basic_lowp_float.frag"),
+        td!("deqp_loops4_vs_wh_dyn_basic_lowp_float.expect.json"),
+        &[
+            CapEdit::Fix(5, 0x0110c300002a66c0), // IADD_IMM.i32 r3, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x2A66)
+            CapEdit::Add(6, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(7, 0x0091c50000000042), // MOV.i32 r5, r2^ (Mesa: MOV.i32 r4, r2^)
+            CapEdit::Add(9, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(10, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(12, 0x00b4c2211146c042), // LSHIFT_OR.i32 r2, r2^.h0, 0x0.b00, r6^
+            CapEdit::Fix(14, 0x00a1c20010050105), // MKVEC.v2i16 r2, r5.h1, r1.h0 (Mesa: MKVEC.v2i16 r2, r4.h1, r1.h0)
+            CapEdit::Fix(15, 0x00a1c10010054541), // MKVEC.v2i16 r1, r1^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r1, r1^.h1, r4^.h0)
+            CapEdit::Fix(17, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(20, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_wh_dyn_basic_mediump_float (`loops.while_dynamic_iterations.basic_mediump_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`); the bound's `one` narrowed before the loop.
+#[test]
+fn deqp_loops4_vs_wh_dyn_basic_mediump_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_wh_dyn_basic_mediump_float.vert"),
+        td!("deqp_loops4_vs_wh_dyn_basic_mediump_float.frag"),
+        td!("deqp_loops4_vs_wh_dyn_basic_mediump_float.expect.json"),
+        &[
+            CapEdit::Fix(5, 0x0110c300002a66c0), // IADD_IMM.i32 r3, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r3, 0x0, #0x2A66)
+            CapEdit::Add(6, 0x5110c400001000c0), // IADD_IMM.i32.reconverge r4, 0x0, #0x1000
+            CapEdit::Fix(7, 0x0091c50000000042), // MOV.i32 r5, r2^ (Mesa: MOV.i32 r4, r2^)
+            CapEdit::Add(9, 0x0110c4ffffffff44), // IADD_IMM.i32 r4, r4^, #0xFFFFFFFF
+            CapEdit::Add(10, 0x00f8c60480c0c004), // ICMP_OR.s32.lt.m1 r6, r4, 0x0, 0x0
+            CapEdit::Add(12, 0x00b4c2211146c042), // LSHIFT_OR.i32 r2, r2^.h0, 0x0.b00, r6^
+            CapEdit::Fix(14, 0x00a1c20010050105), // MKVEC.v2i16 r2, r5.h1, r1.h0 (Mesa: MKVEC.v2i16 r2, r4.h1, r1.h0)
+            CapEdit::Fix(15, 0x00a1c10010054541), // MKVEC.v2i16 r1, r1^.h1, r5^.h0 (Mesa: MKVEC.v2i16 r1, r1^.h1, r4^.h0)
+            CapEdit::Fix(17, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-8)
+            CapEdit::Fix(20, 0x0090c200000b0045), // F16_TO_F32 r2, r5^.h0 (Mesa: F16_TO_F32 r2, r4^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_wh_uni_basic_highp_float (`loops.while_uniform_iterations.basic_highp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp32 counter (`FCMP_OR.f32`, the cap's own
+/// `LSHIFT_OR`).
+#[test]
+fn deqp_loops4_vs_wh_uni_basic_highp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_wh_uni_basic_highp_float.vert"),
+        td!("deqp_loops4_vs_wh_uni_basic_highp_float.frag"),
+        td!("deqp_loops4_vs_wh_uni_basic_highp_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c23d4ccccdc0), // IADD_IMM.i32 r2, 0x0, #0x3D4CCCCD (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x3D4CCCCD)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f4c50280c08c02), // FCMP_OR.f32.ge.m1 r5, r2, u6.w0, 0x0 (Mesa: FCMP_OR.f32.ge.m1 r1, r2, u6.w0, 0x0)
+            CapEdit::Add(9, 0x00b4c1011141c045), // LSHIFT_OR.i32 r1, r5^, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: F16_TO_F32 r2, r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_wh_uni_basic_lowp_float (`loops.while_uniform_iterations.basic_lowp_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops4_vs_wh_uni_basic_lowp_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_wh_uni_basic_lowp_float.vert"),
+        td!("deqp_loops4_vs_wh_uni_basic_lowp_float.frag"),
+        td!("deqp_loops4_vs_wh_uni_basic_lowp_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(9, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: F16_TO_F32 r2, r3^.h0)
+        ],
+    );
+}
+
+/// deqp_loops4_vs_wh_uni_basic_mediump_float (`loops.while_uniform_iterations.basic_mediump_float_vertex`):
+/// `res` carried as two fp16 pairs and an fp16 counter (one 16-bit phi,
+/// `FCMP_OR.v2f16`, the cap's `LSHIFT_OR` of its mask's `.h0`).
+#[test]
+fn deqp_loops4_vs_wh_uni_basic_mediump_float_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops4_vs_wh_uni_basic_mediump_float.vert"),
+        td!("deqp_loops4_vs_wh_uni_basic_mediump_float.frag"),
+        td!("deqp_loops4_vs_wh_uni_basic_mediump_float.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200002a66c0), // IADD_IMM.i32 r2, 0x0, #0x2A66 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x2A66)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(6, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(7, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(8, 0x00f5c50280c08c02), // FCMP_OR.v2f16.ge.m1 r5, r2.h00, u6.w0.h00, 0x0 (Mesa: FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00, 0x0)
+            CapEdit::Add(9, 0x00b4c1211141c045), // LSHIFT_OR.i32 r1, r5^.h0, 0x0.b00, r1^
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+            CapEdit::Fix(14, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+            CapEdit::Fix(17, 0x0090c200000b0044), // F16_TO_F32 r2, r4^.h0 (Mesa: F16_TO_F32 r2, r3^.h0)
+        ],
+    );
+}
+
+/// The edits of a 101-pass counted vertex loop Mesa keeps as a do-while
+/// (`max_unroll_iterations` 32): the cap's start is the loop's own count of
+/// head entries (`#0x66`), the rest the do-while's of
+/// [`deqp_loops_vs_dowhile_uni_is_mesa_26_2_1_with_the_loop_cap`].
+const VS_CON_101_EDITS: &[CapEdit] = &[
+    CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+    CapEdit::Add(4, 0x5110c300000066c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x66
+    CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+    CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+    CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+    CapEdit::Fix(9, 0x00f8c10280418b02), // ICMP_OR.s32.ge.m1 r1, r2, u5.w1, r1^ (Mesa: ICMP_OR.s32.ge.m1 r1, r2, u5.w1, 0x0)
+    CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: MKVEC.v2i16 r1, r3.h1, r0.h0)
+    CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3^.h0)
+    CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: BRANCHZ.eq.reconverge 0x0, offset:-7)
+    CapEdit::Fix(15, 0x0090c100000b0004), // F16_TO_F32 r1, r4.h0 (Mesa: F16_TO_F32 r1, r3.h0)
+    CapEdit::Fix(16, 0x0090c200100b0044), // F16_TO_F32 r2, r4^.h1 (Mesa: F16_TO_F32 r2, r3^.h1)
+];
+
+/// deqp_loops2_vs_do_con_101_iterations (`do res = res.yzwx; while (++i <
+/// 101);`): kept past the unroll limit, the bound 101 a pushed word
+/// (`ICMP_OR.s32.ge.m1 r1, r2, u5.w1`).
+#[test]
+fn deqp_loops2_vs_do_con_101_iterations_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops2_vs_do_con_101_iterations.vert"),
+        td!("deqp_loops2_vs_do_con_101_iterations.frag"),
+        td!("deqp_loops2_vs_do_con_101_iterations.expect.json"),
+        VS_CON_101_EDITS,
+    );
+}
+
+/// The `vs_for_constant` shape's own pair (`deqp_shapes/loops_vs_for_constant`,
+/// `loops.for_constant_iterations.101_iterations_vertex`: `for (mediump int
+/// i = 0; i < 101; i++) res = res.yzwx;`): Mesa rotates it into the do-while
+/// of [`deqp_loops2_vs_do_con_101_iterations_is_mesa_26_2_1_with_the_loop_cap`]
+/// (nir.rs `walk`, the kept counted loop's rotation), whose expect.json
+/// a Mesa 26.2.1 drm-shim draw of this pair (`tools/mali/deqp_ref.sh
+/// --instrument shim`, spike-vsloop-rest) equals in every region's words,
+/// FAU and facts; so the reference is that one.
+#[test]
+fn deqp_shapes_loops_vs_for_constant_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_shapes/loops_vs_for_constant.vert"),
+        td!("deqp_shapes/loops_vs_for_constant.frag"),
+        td!("deqp_loops2_vs_do_con_101_iterations.expect.json"),
+        VS_CON_101_EDITS,
+    );
+}
+
+/// deqp_loops_vs_dowhile_uni (`do { res = res.yzwx; ndx++; } while (ndx <
+/// ui_three);`): Mesa's do-while, the step and the test first in the
+/// header, the body's two `MKVEC.v2i16` after the `BRANCHZ` to the exit,
+/// and the exit's stores the phis' halves rotated (`F16_TO_F32 r0, r0^.h1`,
+/// `r1, r3.h0`, `r2, r3^.h1`): no `vec2` reaches it.
+#[test]
+fn deqp_loops_vs_dowhile_uni_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_vs_loop(
+        td!("deqp_loops_vs_dowhile_uni.vert"),
+        td!("deqp_loops_vs_dowhile_uni.frag"),
+        td!("deqp_loops_vs_dowhile_uni.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f8c10280418b02), // ICMP_OR.s32.ge.m1 r1, r2, u5.w1, r1^ (Mesa: .., 0x0)
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: offset:-7)
+            CapEdit::Fix(15, 0x0090c100000b0004), // F16_TO_F32 r1, r4.h0 (Mesa: r3.h0)
+            CapEdit::Fix(16, 0x0090c200100b0044), // F16_TO_F32 r2, r4^.h1 (Mesa: r3^.h1)
+        ],
+    );
+}
 
 /// [`check_linked_capped`] of a `deqp_loops_*` reference (drawn with
 /// `--uniform-values`): every region and fact against the expect.json, the
