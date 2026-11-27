@@ -30,10 +30,10 @@
 //! The render check runs the fragment case's built USC bytes through the host
 //! byte model (tests/usc_exec `run_binary`) under the R32UI variant (each
 //! column's first component in pixel outputs 0-3) and compares the bits with
-//! the CPU's. The four-channel RGBA32UI variant dEQP's executor draws into is
-//! refused by name ("integer colour outputs past the pixel's four output
-//! registers": the tile-buffer spill, a later item), and so is every
-//! three-column shape under it, so that variant is not checked here.
+//! the CPU's. The RG32UI and RGBA32UI variants dEQP's executor draws into
+//! pass the pixel's four output registers and store the columns that do not
+//! fit to tile buffers, which the byte model does not run: their draws are
+//! tests/pvr_int_spill.rs's.
 //!
 //! HOST-ONLY: compile, link and the byte model; nothing is drawn on a GPU.
 //!
