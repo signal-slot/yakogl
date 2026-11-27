@@ -51,3 +51,15 @@ Fields, with the line each comes from (`absent` if the line is not there):
 The `glmark2-counters` lines in `testdata/` are made up, written to the design,
 until a GM image prints them. The other counters are cumulative over the whole console, not terrain's alone.
 `testdata/` is synthetic (no board address, host name or UART path).
+
+`compare.py` compares two or more records of one scene (default terrain,
+`--scene`): per `glmark2-jobs` entry the render, bin, prep and idle times with
+each later record's difference from the first, the TFU entries' count and sum,
+the `glmark2-frame` gl, swap and frame times, `wait.ns` (ms a frame) and the
+chosen counters a frame (`--counters mip.queued,jobs`). It names the entries
+as `docs/notes/v3d-blur-jobs.md` does (noise, normal map, terrain draw, the
+blurs) and reuses `parse.py` unchanged. `compare_selftest.sh` runs it on two
+synthetic records it writes itself.
+
+    python3 -I tools/hostharness/terrain-records/compare.py <dir|log> <dir|log> [...]
+    bash tools/hostharness/terrain-records/compare_selftest.sh
