@@ -1336,19 +1336,20 @@ credentials, set by the session; never in a file, a log or a commit).
    rewritten and then checked, in this order:
 
    ```sh
-   python3 -I tools/cts/imx95-redact-check.py <logdir>/console
+   python3 -I tools/cts/imx95-redact-check.py --fix <logdir>/console
    python3 -I tools/cts/imx95-redact-check.py --check <logdir>/console
    python3 -I tools/cts/mali-slice-redact.py <logdir>
    python3 -I tools/redact-diff-scan.py origin/main..HEAD
    ```
 
-   - `imx95-redact-check.py PATH...` rewrites each file (a directory is
+   - `imx95-redact-check.py --fix PATH...` rewrites each file (a directory is
      walked) in place: the values become `<redacted>`, `<serial>`, `<mac>`,
      `<addr>`, `<addr6>`, `<uart>`, `<home>`, `<host>`, and NUL bytes are
      removed. `--check PATH...` changes nothing: it prints `path:line:kind`
      (kinds `env serial somhost mac addr6 addr uart home tailnet secret nul`,
      never the value) and exits 1 on a hit, 0 when clean, 2 on a usage
-     error or a missing path. After a rewrite `--check` must be clean; a hit
+     error or a missing path. A call with no mode flag prints the hits,
+     rewrites nothing and exits 2. After a rewrite `--check` must be clean; a hit
      then means a rule missed a spelling: fix the line by hand and report
      the pattern. The UART and home rules take everything up to the next
      whitespace, a trailing `,` included.
@@ -1356,7 +1357,7 @@ credentials, set by the session; never in a file, a log or a commit).
      slice, `README.md` and `rows.tsv` included, and prints `REDACT
      <file>:<line>: <kind>` (ipv4, tailnet, ipv6, mac, userhost, serial-path,
      uart, usb-serial, uboot-id, ...; never the matched text). Exit 1 on a
-     hit: edit the line (or rerun `imx95-redact-check.py`), never the
+     hit: edit the line (or rerun `imx95-redact-check.py --fix`), never the
      scanner.
    - `redact-diff-scan.py origin/main..HEAD` reads only the lines the
      commit(s) add (ipv4, tailnet-ip, tailnet-dns, tty, mac, credential,

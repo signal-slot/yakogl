@@ -3,11 +3,13 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Redact or check a Verdin iMX95 U-Boot console capture for board identifiers.
 
-  imx95-redact-check.py PATH...          rewrite each file in place (a directory is walked)
+  imx95-redact-check.py --fix PATH...    rewrite each file in place (a directory is walked)
   imx95-redact-check.py --check PATH...  print path:line:kind for every identifier a rewrite
                                          would replace (never the value); exit 1 on any, 0 when
                                          clean. The dEQP version token (rule a) is no identifier:
                                          a raw one is not a hit, and its quad is not an address.
+  imx95-redact-check.py PATH...          no mode flag: print the hits like --check, change
+                                         nothing and exit 2 (pass --check or --fix)
 
 The module's own U-Boot (UART_3) prints what the T6's Linux route never showed: printenv's
 ethaddr/eth1addr, serial#, serverip and ipaddr, and the Toradex banner's 'Serial#'. The rules,
@@ -137,8 +139,9 @@ def files(paths):
 
 
 def main(argv):
-    check = bool(argv) and argv[0] == "--check"
-    paths = argv[1:] if check else argv
+    mode = argv[0] if argv and argv[0] in ("--check", "--fix") else None
+    paths = argv[1:] if mode else argv
+    check = mode != "--fix"  # no flag reports only, like --check
     if not paths or any(p.startswith("-") for p in paths):
         sys.stderr.write(__doc__)
         return 2
@@ -165,6 +168,10 @@ def main(argv):
             if new != data:
                 with open(path, "wb") as f:
                     f.write(new)
+    if mode is None:
+        sys.stderr.write("imx95-redact-check: no mode given, nothing rewritten: "
+                         "pass --check to report or --fix to rewrite in place\n")
+        return 2
     return 1 if check and hits else 0
 
 
