@@ -1087,9 +1087,8 @@ fn fitting_combinations_are_complete_today() {
 /// honoured); before it each buffer took the clear with the others.
 /// The draw with a GL program: RGBA16F x2 draws both targets on those
 /// registers (the online compiler builds the RGBA16F key of a two-output
-/// shader per target, issue #313); RGBA16F + RGBA8 x2 is refused by name
-/// (the `MixRefused` rows above: a mix of float classes has no key yet,
-/// `fitting_float_combinations_draw_every_target`).
+/// shader per target, issue #313); RGBA16F + RGBA8 x2 draws too, through the
+/// per-target key of a mix of float classes (item fix-float-mix).
 #[test]
 fn fitting_float_combinations_clear_every_target_today() {
     let _g = rig();
@@ -1103,15 +1102,12 @@ fn fitting_float_combinations_clear_every_target_today() {
             assert_eq!(emits, want_emits(row.fmts, row.regs), "{}: clear {k} emits: {c:?}", row.label);
         }
         let obs = drawn(row.fmts.len(), class_of(row.fmts));
-        if row.fmts.iter().all(|f| *f == F16) {
-            assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
-            let (num_rt, emits) = obs.one(row.label);
-            assert_eq!(num_rt as usize, row.fmts.len(), "{}: {obs:?}", row.label);
-            assert_eq!(emits, want_emits(row.fmts, row.regs), "{}: PBE states: {obs:?}", row.label);
-        } else {
-            assert_eq!(obs.err, GL_INVALID_OPERATION, "{}: {:?}", row.label, obs.log);
-            assert!(obs.kicks.is_empty(), "{}: refused, no kick: {obs:?}", row.label);
-        }
+        /* a mix of float classes has its own per-target key (item
+         * fix-float-mix): RGBA16F + RGBA8 x2 draws as RGBA16F x2 does */
+        assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
+        let (num_rt, emits) = obs.one(row.label);
+        assert_eq!(num_rt as usize, row.fmts.len(), "{}: {obs:?}", row.label);
+        assert_eq!(emits, want_emits(row.fmts, row.regs), "{}: PBE states: {obs:?}", row.label);
     }
 }
 
