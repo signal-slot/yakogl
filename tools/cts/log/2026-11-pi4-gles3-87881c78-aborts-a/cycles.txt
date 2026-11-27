@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 87881c78, 2026-11-27, the eight tryboot cycles in run order: image sha256, Linux boot id before and after, reboot time (UTC), seconds to Linux, clean-up, run and end lines (README.md)
+== cycles
+S07 sha256=5776b65c22f5a6bcb3a759b270a22d3e113b26c9825b0ff24bb70ec9ddbd2b56 boot_id_before=5058d227-e3dd-4304-b70d-e523a5a278be reboot=2026-11-27T02:30:01Z back_after=302s boot_id_after=d66139f4-dfad-4554-ad22-1bd3e85cafdd cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   4 cases in 6036 ms, record at 6 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20531, last 20927, high-water 21653
+   v3d_deqp: build 87881c78 DONE, all passed: 4 cases, P 4 F 0 R 0 N 0 other 0
+T17a sha256=2f116ee4b22804f555b9a52f4c017bee5724191514beb91f3bd53bc6056a7588 boot_id_before=d66139f4-dfad-4554-ad22-1bd3e85cafdd reboot=2026-11-27T02:35:25Z back_after=301s boot_id_after=7949c457-14ea-46e3-8e82-eaab93cb3c7e cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   71 cases in 6219 ms, record at 6 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20141, last 20141, high-water 20190
+   v3d_deqp: build 87881c78 DONE, all passed: 71 cases, P 71 F 0 R 0 N 0 other 0
+TF1a sha256=43070d6b16403cb3345b815855d8c57c9f076f13f9f0afbf4e022bca71aaf313 boot_id_before=7949c457-14ea-46e3-8e82-eaab93cb3c7e reboot=2026-11-27T02:40:50Z back_after=312s boot_id_after=1ef7b97d-b9fd-4620-aa1f-b60828929d8e cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   184 cases in 12556 ms, record at 12 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20156, last 20189, high-water 20314
+   v3d_deqp: build 87881c78 DONE, all passed: 184 cases, P 184 F 0 R 0 N 0 other 0
+TF1b sha256=5f0a092be15ee0933dcdd07a5cbcabe1d6f03edcd64b80500c85b0de7368290f boot_id_before=1ef7b97d-b9fd-4620-aa1f-b60828929d8e reboot=2026-11-27T02:46:15Z back_after=304s boot_id_after=91c9f8b4-bf67-45c1-b0aa-14233bbd0036 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   189 cases in 11553 ms, record at 11 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20147, last 20189, high-water 20314
+   v3d_deqp: build 87881c78 DONE, all passed: 189 cases, P 189 F 0 R 0 N 0 other 0
+TF2a sha256=cf3157c3b077101820a68c766c6bb5bc2f6b597b2ecfadb0e775063e7a657915 boot_id_before=91c9f8b4-bf67-45c1-b0aa-14233bbd0036 reboot=2026-11-27T02:51:32Z back_after=303s boot_id_after=240776e0-50e4-481f-aa33-266880e9e1ed cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   177 cases in 10872 ms, record at 10 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20160, last 20174, high-water 20262
+   v3d_deqp: build 87881c78 DONE, all passed: 177 cases, P 177 F 0 R 0 N 0 other 0
+TF2b sha256=11ce2edd2e14e1ebb9f70f5aff4f38cc551afe2a388570c2cea64c4919c7852a boot_id_before=240776e0-50e4-481f-aa33-266880e9e1ed reboot=2026-11-27T02:56:48Z back_after=304s boot_id_after=d044e972-4177-4aba-aba8-572817689462 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   189 cases in 11053 ms, record at 11 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20146, last 20174, high-water 20262
+   v3d_deqp: build 87881c78 DONE, all passed: 189 cases, P 189 F 0 R 0 N 0 other 0
+TF2c sha256=71510ecff863e72d47ba9e0f8c1d52269fc066e4767f98608e750e0c4d7a7831 boot_id_before=d044e972-4177-4aba-aba8-572817689462 reboot=2026-11-27T03:02:09Z back_after=303s boot_id_after=d3b77164-8a03-46dd-a301-23f941349490 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   60 cases in 4253 ms, record at 4 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20169, last 20199, high-water 20331
+   v3d_deqp: build 87881c78 DONE, all passed: 60 cases, P 60 F 0 R 0 N 0 other 0
+S03a sha256=b08bc31b7ef5819823a335f46d061fe3146e2bb30597b21506f4a465db9376ce boot_id_before=d3b77164-8a03-46dd-a301-23f941349490 reboot=2026-11-27T03:07:24Z back_after=302s boot_id_after=94c337f0-9d5d-4371-b457-ccfaafcafc26 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   276 cases in 209009 ms, record at 210 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   carve-out (KiB, of 48636): after #0 20523, last 21664, high-water 22918
+   v3d_deqp: build 87881c78 INCOMPLETE (the photo deadline came first): 276 cases, P 276 F 0 R 0 N 0 other 0
