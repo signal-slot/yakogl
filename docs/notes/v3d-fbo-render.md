@@ -223,13 +223,12 @@ of it) and none run on a board yet:
    (`PER_TARGET_MASK`, `src/gl/draw.rs:2723`; `rt_colormask_own` /
    `rt_colormask`, `src/v3d/ffi.rs:391-394`, `driver/src/v3d/v3d_job.c:787-792`),
    so an R8I texture beside an RGBA8 renderbuffer draws. What stays one for
-   all RTs is the blend state: one `BLEND_CFG` (RT 0's), and
-   `per_target_masks` (`src/gl/draw.rs:2747`) still refuses by name
-   (`GL_INVALID_OPERATION`) uneven masks under `glEnable(GL_BLEND)` with both
-   integer and non-integer targets (the G3 entry of
-   [v3d-format-matrix.md](v3d-format-matrix.md)). `9cccb4ae` made
-   `BLEND_ENABLES` per RT in the job builder (integer targets left out), but
-   the GL core's refusal is not lifted by it.
+   all RTs is one `BLEND_CFG`. `9cccb4ae` made `BLEND_ENABLES` per RT in
+   the job builder (integer targets left out), and plan #383 item
+   `v3d-per-rt-blend-enable` lifted the GL core's refusal of uneven masks
+   under `glEnable(GL_BLEND)` with both integer and non-integer targets
+   (`PER_TARGET_BLEND_ENABLE`, `src/gl/draw.rs`; the V3D 7.1 build keeps
+   it; the G3 entry of [v3d-format-matrix.md](v3d-format-matrix.md)).
 
 The steps this section once listed (`V3D_SAMPLED_TEXFMTS` bits 26-39,
 `tmu_format` rows, `gles_texfmt_return_32`, a narrow `copy_image_for`) are
