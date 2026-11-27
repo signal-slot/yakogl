@@ -168,6 +168,15 @@ expect stale-record 1 'e03 WORSE passed 994->0 bad 0->994 (row not clean)' "$T/s
 
 # bad input
 expect no-args 2 'baseline' --help
+
+# an Armadillo-X2 session: board.sh x2 lines (kexec-dev, DEV, three-word records) read the same and say the board
+sed -e 's/^board\.sh imx8mp /board.sh x2 /' -e 's/boot=uboot-mmc row boot_verdict=cycled/boot=kexec-dev DEV boot_verdict=complete/' \
+    -e 's/\(record=[0-9a-f]*,[0-9a-f]*,[0-9a-f]*\),[0-9a-f]*/\1/' "$T/all.md" > "$T/x2.md"
+expect x2-same 0 'es2 regress: 29/29 entries, 0 worse, 0 missing' "$T/x2.md"
+expect x2-board-line 0 '^measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the Verdin i.MX8MP$' "$T/x2.md"
+if python3 -I "$TOOL" "$T/all.md" | grep -q 'Armadillo-X2'; then echo "FAIL verdin-no-x2-line"; fails=$((fails + 1)); else echo "ok   verdin-no-x2-line"; fi
+{ grep -v '^board\.sh imx8mp e05 ' "$T/all.md"; grep '^board\.sh x2 e05 ' "$T/x2.md"; } > "$T/mixed.md"
+expect two-boards 2 'two boards' "$T/mixed.md"
 expect bad-path 2 'es2 regress:' "$T/nonexistent"
 
 [ "$fails" = 0 ] && echo "imx8mp-es2-regress-selftest: all ok" || echo "imx8mp-es2-regress-selftest: $fails failed"

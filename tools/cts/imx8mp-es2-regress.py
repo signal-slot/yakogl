@@ -13,6 +13,13 @@ own shape. The text files carry the verdict lines tools/board.sh imx8mp prints
     board.sh imx8mp e<NN> rc=<n> verdict=done ... resets=absent|0
         record=<w0>,<w1>,<w2>,<w3> back_after=<n>s ...
 
+or, for a session on the Armadillo-X2 (the same i.MX 8M Plus and GC7000UL;
+tools/board.sh x2, crash-route kexec, a three-word record), the same line as
+`board.sh x2 e<NN> rc=<n> verdict=done boot=kexec-dev DEV ...`. One session is
+one board's: lines of both boards in the inputs stop the tool (exit 2). An X2
+session prints 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the
+Verdin i.MX8MP' before its summary.
+
 The line has no tally of its own; the DEQP record words do: w1 = passed (low
 16 bits) and failed (high), w2 = not supported (low) and other (high), w3 low
 16 bits = cases begun (as board.sh results_tsv derives them; a three-word
@@ -51,7 +58,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINE = os.path.join(HERE, "imx8mp-full-tree-29460f96.results.tsv")
-LINE = re.compile(r"board\.sh imx8mp e(\d+)(-p\d+)? rc=(-?\d+)(.*)")
+LINE = re.compile(r"board\.sh (?:imx8mp|x2) e(\d+)(-p\d+)? rc=(-?\d+)(.*)")
+BOARD = re.compile(r"board\.sh (imx8mp|x2) e\d")
+X2_MEASURED = "measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the Verdin i.MX8MP"
 REC = re.compile(r"\brecord=(\S*)")
 WORDS = re.compile(r"[0-9a-fA-F]{1,8}(?:,[0-9a-fA-F]{1,8}){2,3}$")
 KIND = re.compile(r"\bresult=record:(\S+)")
@@ -114,6 +123,9 @@ def check_words(where, w, clean, kname, b):
     return counts(tb, p, f, n, o)
 
 
+BOARDS = set()
+
+
 def read_text(path, bl=None):
     bl = bl or {}
     out = {}
@@ -121,6 +133,10 @@ def read_text(path, bl=None):
         m = LINE.search(ln)
         if not m or m.group(2):
             continue
+        BOARDS.add(BOARD.search(ln).group(1))
+        if len(BOARDS) > 1:
+            raise ValueError("%s: verdict lines of two boards (board.sh imx8mp and board.sh x2): "
+                             "one session is one board's" % path)
         rest = m.group(0)
         i = int(m.group(1))
         clean = m.group(3) == "0" and "verdict=done" in rest and \
@@ -202,6 +218,8 @@ def main(argv):
         print("e%02d %s passed %d->%d bad %d->%d%s" % (
             i, v, b["passed"], r["passed"], bad(b), bad(r),
             "" if r["clean"] else " (row not clean)"))
+    if "x2" in BOARDS:
+        print(X2_MEASURED)
     print("es2 regress: %d/29 entries, %d worse, %d missing" % (n, w, m))
     return 0 if n == 29 and w == 0 else 1
 

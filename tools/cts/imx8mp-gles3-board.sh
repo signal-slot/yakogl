@@ -16,6 +16,18 @@
 # when unset, the newest $IMX8MP_OUT/es3-*/zephyr/zephyr.bin (x2: $IMX8MP_OUT/x2/es3-*/zephyr/zephyr.bin; the
 # two never stand in for each other). Everything else (BOARD_HOST, BOARD_BOOT, BOARD_UART, TREE_ROWS, NAMES) is
 # board.sh's own environment. The board.sh command line is printed on stderr before it is run.
+#
+# Two X2 knobs, read by `tree` only, for a host that reaches the X2 by ssh alone (docs/es3/board-recipe-imx8mp.md,
+# "The 9bc82915 slices on the Armadillo-X2"):
+#   X2_PING=auto|icmp|ssh  board.sh x2 waits for the board after each jump with `ping`, then ssh. ssh puts
+#                          tools/cts/x2-ping/ (a ping that answers when the board's sshd does) first in PATH; auto
+#                          (the default) does that when `ping -c1 -W2 <host>` gets no answer; icmp leaves PATH alone.
+#   X2_KEEP_KEY=1          the board's /root is a tmpfs: a key added to /root/.ssh/authorized_keys for this session
+#                          (a lent host's lease key) is gone after the first jump's reboot, and every later row ends
+#                          rc 5. With 1, the live authorized_keys is persisted (persist_file) before the tree when it
+#                          holds lines the persisted copy lacks, and the persisted copy is put back byte for byte after
+#                          board.sh ends, whatever its rc (sha256 checked; the live file keeps the session's key). A
+#                          restore that cannot run prints the undo and exits 7 when board.sh's rc was 0.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -36,6 +48,60 @@ case $board in
 	*) echo "imx8mp-gles3-board: the board is imx8mp or x2, not '$board'" >&2; exit 2 ;;
 esac
 verb=${1:?$USAGE}
+
+# ---- X2 only: X2_PING and X2_KEEP_KEY (see the header)
+AK=/root/.ssh/authorized_keys
+AKP=/live/rootfs/root/.ssh/authorized_keys   # the persisted copy: Armadillo Base OS's rootfs under the overlay
+x2_ssh() { timeout 60 ssh -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@"; }
+x2_ping() {
+	local mode=${X2_PING:-auto} host
+	case $mode in auto | icmp | ssh) ;; *) echo "imx8mp-gles3-board: X2_PING is auto, icmp or ssh, not '$mode'" >&2; exit 2 ;; esac
+	if [ "$mode" = auto ]; then
+		host=${BOARD_HOST:-}; host=${host#*@}
+		if [ -z "$host" ] || [ ${#dry[@]} -gt 0 ] || ping -c1 -W2 "$host" > /dev/null 2>&1; then mode=icmp; else mode=ssh; fi
+	fi
+	if [ "$mode" = ssh ]; then
+		PATH=$HERE/x2-ping:$PATH; export PATH
+		echo "imx8mp-gles3-board: X2_PING=ssh: board.sh's ping is tools/cts/x2-ping/ping (the board answers when its sshd does)" >&2
+	fi
+}
+x2_keep_key() {
+	local n
+	: "${BOARD_HOST:?X2_KEEP_KEY=1 needs BOARD_HOST}"
+	KD=$(mktemp -d "${TMPDIR:-$PWD}/x2-keep-key.XXXXXX") || exit 2
+	if [ ${#dry[@]} -gt 0 ]; then
+		echo "DRY board\$ cat $AKP   # the persisted copy, kept on the host for the restore" >&2
+		echo "DRY board\$ grep -cvxF -f $AKP $AK; persist_file $AK   # only when the live file holds lines the copy lacks" >&2
+		return 0
+	fi
+	x2_ssh "[ -f $AKP ] && command -v persist_file > /dev/null && cat $AKP" < /dev/null > "$KD/persisted" ||
+		{ echo "imx8mp-gles3-board: X2_KEEP_KEY: cannot read $AKP or no persist_file on the board; nothing changed" >&2; exit 2; }
+	n=$(x2_ssh "grep -cvxF -f $AKP $AK" < /dev/null) || n=0
+	if [ "${n:-0}" = 0 ]; then
+		echo "imx8mp-gles3-board: X2_KEEP_KEY: every live key is persisted already; nothing to keep" >&2
+		: > "$KD/none"
+		return 0
+	fi
+	x2_ssh "persist_file $AK && cmp -s $AK $AKP" < /dev/null ||
+		{ echo "imx8mp-gles3-board: X2_KEEP_KEY: persist_file failed; restoring" >&2; x2_restore_key; exit 2; }
+	echo "imx8mp-gles3-board: X2_KEEP_KEY: $n live key line(s) persisted for the session; the copy of $(wc -c < "$KD/persisted") bytes goes back after board.sh" >&2
+}
+x2_restore_key() {
+	local want got
+	[ -n "${KD:-}" ] || return 0
+	if [ ${#dry[@]} -gt 0 ] || [ -e "$KD/none" ]; then
+		[ ${#dry[@]} -eq 0 ] || echo "DRY board\$ the kept copy -> $AK; persist_file $AK; the live file back; sha256sum $AKP" >&2
+		rm -rf "$KD"; return 0
+	fi
+	want=$(sha256sum < "$KD/persisted" | cut -d' ' -f1)
+	got=$(x2_ssh "t=/tmp/.yk-ak.\$\$; cat > \$t.orig && cp $AK \$t.live && cp \$t.orig $AK && persist_file $AK; r=\$?; cp \$t.live $AK; rm -f \$t.orig \$t.live; [ \$r = 0 ] && sha256sum < $AKP" < "$KD/persisted" | cut -d' ' -f1)
+	if [ -n "$got" ] && [ "$got" = "$want" ]; then
+		echo "imx8mp-gles3-board: X2_KEEP_KEY: the persisted $AK is back as it was (sha256 ${want:0:16})" >&2
+		rm -rf "$KD"; return 0
+	fi
+	echo "imx8mp-gles3-board: X2_KEEP_KEY: NOT restored (sha256 '${got:-no answer}', want ${want:0:16}): put $KD/persisted back as $AK on the board and run persist_file $AK, then put the live file back" >&2
+	return 1
+}
 out=${2:?$USAGE}
 case "$verb" in
 	tree)
@@ -46,6 +112,18 @@ case "$verb" in
 			[ -n "$TREE_IMAGE" ] || { echo "imx8mp-gles3-board: no $imgs image in $IMX8MP_OUT" >&2; exit 2; }
 		fi
 		export TREE_IMAGE
+		if [ "$board" = x2 ]; then
+			x2_ping
+			if [ "${X2_KEEP_KEY:-0}" = 1 ]; then
+				x2_keep_key
+				trap 'x2_restore_key; exit 130' INT TERM
+				echo "imx8mp-gles3-board: tools/board.sh ${dry[*]:+${dry[*]} }$board tree tools/cts/imx8mp-gles3-tree.txt $out" >&2
+				"$ROOT/tools/board.sh" "${dry[@]}" "$board" tree "$HERE/imx8mp-gles3-tree.txt" "$out"
+				rc=$?
+				x2_restore_key || { [ "$rc" != 0 ] || rc=7; }
+				exit "$rc"
+			fi
+		fi
 		echo "imx8mp-gles3-board: tools/board.sh ${dry[*]:+${dry[*]} }$board tree tools/cts/imx8mp-gles3-tree.txt $out" >&2
 		exec "$ROOT/tools/board.sh" "${dry[@]}" "$board" tree "$HERE/imx8mp-gles3-tree.txt" "$out" ;;
 	tally)
