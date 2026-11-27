@@ -717,6 +717,28 @@ pub fn reconstruct(k: &mut YdPvrKm, id: u32, hwrts: &[u32]) {
 /// `HWRTDATA_PARTIAL_RENDERED` (the latter only ever set if the
 /// partial-render knob ran): the reset of the associated HWRTs in
 /// drm/imagination's `pvr_free_list_reconstruct`.
+///
+/// The render-target-array words (`sRTACtl`, `HWRTDATA_RTA_CTL`, the eight
+/// dwords of `RGXFWIF_RTA_CTL`, rgx_fwif_shared.h:1218-1235) and the two
+/// arrays they point at (the valid targets and the partial-render counts)
+/// are left as they are, knob on or off. This follows the DDK's own reset.
+/// TI DDK 25.2 (ti-img-rogue-driver at 72723eea, the commit
+/// third_party/ti-img-rogue-ddk-25.2/UPSTREAM names; the file is not
+/// vendored), services/server/devices/rogue/rgxta3d.c:
+/// `RGXProcessRequestFreelistsReconstruction` (:1121) walks the HWRT data
+/// of each rebuilt list (:1213-1251, the `!SUPPORT_SHADOW_FREELISTS` branch;
+/// the AM62P's config_kernel.h does not define that macro). For each one it
+/// writes only `eState` = HWR and clears `HWRTDATA_HAS_LAST_TA` in
+/// `ui32HWRTDataFlags` (:1237-1240). It writes no `sRTACtl` word and neither
+/// array. The DDK writes `sRTACtl` only when it creates the HWRT data, in
+/// `RGXCreateHWRTData_aux` (:1401-1408; it allocates both arrays zeroed at
+/// :1423 and :1457). Upstream Linux does the same
+/// (`pvr_free_list_reconstruct`, docs/notes/pvr-pr-hwrt.md). So nothing
+/// has to be cleared here. The counts are the firmware's
+/// (rgx_fwif_shared.h:1226-1227). If it leaves them stale after an HWR,
+/// only a board dump can show that. The tests
+/// `reset_hwrts_leaves_the_rta_words_and_arrays_with_the_knob` and
+/// `without_the_knob_reset_hwrts_moves_only_state_and_flags` pin this.
 pub fn reset_hwrts(k: &YdPvrKm, fl_fw_addr: u32, hwrts: &[u32]) -> u32 {
     let mut n = 0;
     for &off in hwrts {
@@ -1524,6 +1546,91 @@ mod grow_tests {
         assert_eq!(reset_hwrts(&r.k, FL_FW, &[HWRT_A, HWRT_B]), 2);
         assert_eq!(seen(&r), [0, 0]);
         assert_eq!(r32(&r, HWRT_A, HWRTDATA_FLAGS), 0x1, "only the seeded words move, to clear");
+    }
+
+    /// The HWRT data's bytes, read back from the Rig's heap.
+    fn hwrt_bytes(r: &Rig, off: u32) -> Vec<u8> {
+        // SAFETY: HWRTDATA_SIZE bytes inside the Rig's buffer.
+        unsafe { core::slice::from_raw_parts(r.k.heap_cpu(off), HWRTDATA_SIZE) }.to_vec()
+    }
+
+    /// The bytes of `before` and `after` other than the state and flag
+    /// words: what `reset_hwrts` must leave alone.
+    fn without_state_and_flags(b: &[u8]) -> Vec<u8> {
+        let mut v = b.to_vec();
+        v[HWRTDATA_STATE..HWRTDATA_STATE + 4].fill(0);
+        v[HWRTDATA_FLAGS..HWRTDATA_FLAGS + 4].fill(0);
+        v
+    }
+
+    /// With the knob on, the render service gives each HWRT slot the two
+    /// RTA arrays and writes their addresses and `ui32MaxRTs` into sRTACtl
+    /// (render.rs); the firmware writes the index words and the counts. A
+    /// reconstruction, as the DDK's RGXProcessRequestFreelistsReconstruction
+    /// (rgxta3d.c:1237-1240, see `reset_hwrts`), moves only the state and
+    /// the two flag bits. The eight sRTACtl words, the valid-target array
+    /// and the partial-render counts read back exactly as seeded.
+    #[test]
+    fn reset_hwrts_leaves_the_rta_words_and_arrays_with_the_knob() {
+        use crate::gpu::pvr::render::RTA_MAX_RTS;
+        const VALID: u32 = 0x2400;
+        const COUNTS: u32 = 0x2410;
+        const VALID_FW: u32 = 0xC000_2400;
+        const COUNTS_FW: u32 = 0xC000_2410;
+        let mut r = grown_twice();
+        w32(&mut r, HWRT_A, HWRTDATA_FREELISTS + GLOBAL_FREELIST * HWRTDATA_FREELIST_PTR_SIZE, FL_FW);
+        w32(&mut r, HWRT_A, HWRTDATA_STATE, 7); // TAOUTOFMEM
+        w32(&mut r, HWRT_A, HWRTDATA_FLAGS, HWRTDATA_HAS_LAST_TA | HWRTDATA_PARTIAL_RENDERED | 0x1);
+        // sRTACtl as a refused grow with a partial render leaves it: the
+        // firmware's index words (offsets 0-12) non-zero, the host's two
+        // addresses and RTA_MAX_RTS, and a flags word the host never writes.
+        let rta = [1, 2, 3, 4, VALID_FW, COUNTS_FW, RTA_MAX_RTS as u32, 0x5a5a_0001];
+        for (n, v) in rta.iter().enumerate() {
+            w32(&mut r, HWRT_A, HWRTDATA_RTA_CTL + 4 * n, *v);
+        }
+        for i in 0..RTA_MAX_RTS {
+            w32(&mut r, VALID, 4 * i, i as u32);
+            w32(&mut r, COUNTS, 4 * i, 5 + i as u32);
+        }
+        let before = hwrt_bytes(&r, HWRT_A);
+        reconstruct(&mut r.k, 1, &[HWRT_A]);
+        assert_eq!(
+            (r32(&r, HWRT_A, HWRTDATA_STATE), r32(&r, HWRT_A, HWRTDATA_FLAGS)),
+            (RTDATA_STATE_HWR, 0x1),
+            "the state and the two flag bits move"
+        );
+        let words: Vec<u32> =
+            (0..HWRTDATA_RTA_CTL_SIZE / 4).map(|n| r32(&r, HWRT_A, HWRTDATA_RTA_CTL + 4 * n)).collect();
+        assert_eq!(words, rta, "every sRTACtl word stays");
+        let arr = |off: u32| (0..RTA_MAX_RTS).map(|i| r32(&r, off, 4 * i)).collect::<Vec<u32>>();
+        assert_eq!(arr(VALID), [0, 1, 2], "the valid-target array stays");
+        assert_eq!(arr(COUNTS), [5, 6, 7], "the partial-render counts stay the firmware's");
+        assert_eq!(without_state_and_flags(&hwrt_bytes(&r, HWRT_A)), without_state_and_flags(&before));
+    }
+
+    /// With the knob off the render service writes no sRTACtl word and
+    /// makes no RTA array, so the eight words are zero; `reset_hwrts`
+    /// keeps them zero, and every byte of the HWRT data but the state and
+    /// the flag words is as it was (beside
+    /// `without_the_knob_partial_rendered_is_never_set`).
+    #[test]
+    fn without_the_knob_reset_hwrts_moves_only_state_and_flags() {
+        let mut r = grown_twice();
+        // SAFETY: HWRTDATA_SIZE bytes inside the Rig's buffer.
+        let h = unsafe { core::slice::from_raw_parts_mut(r.k.heap_cpu(HWRT_A), HWRTDATA_SIZE) };
+        for (i, b) in h.iter_mut().enumerate() {
+            *b = (i as u8).wrapping_mul(29) | 1;
+        }
+        h[HWRTDATA_RTA_CTL..][..HWRTDATA_RTA_CTL_SIZE].fill(0);
+        w32(&mut r, HWRT_A, HWRTDATA_FREELISTS + GLOBAL_FREELIST * HWRTDATA_FREELIST_PTR_SIZE, FL_FW);
+        w32(&mut r, HWRT_A, HWRTDATA_STATE, 1);
+        w32(&mut r, HWRT_A, HWRTDATA_FLAGS, HWRTDATA_HAS_LAST_TA | 0x1);
+        let before = hwrt_bytes(&r, HWRT_A);
+        assert_eq!(reset_hwrts(&r.k, FL_FW, &[HWRT_A]), 1);
+        let after = hwrt_bytes(&r, HWRT_A);
+        assert_eq!((r32(&r, HWRT_A, HWRTDATA_STATE), r32(&r, HWRT_A, HWRTDATA_FLAGS)), (RTDATA_STATE_HWR, 0x1));
+        assert_eq!(&after[HWRTDATA_RTA_CTL..HWRTDATA_RTA_CTL + HWRTDATA_RTA_CTL_SIZE], &[0u8; 32][..]);
+        assert_eq!(without_state_and_flags(&after), without_state_and_flags(&before));
     }
 }
 
