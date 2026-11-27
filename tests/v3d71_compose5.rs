@@ -25,7 +25,7 @@
 //! [`KNOWN_WORD_GAPS`], each with its reason. `LINE_WIDTH`, `POINT_SIZE` and
 //! `BLEND_CCOLOR` have a `PacketSpec` in `draw71` (the `gap_*` tests assert
 //! it); the shape tests hold the reference's values. `draw71::translate`
-//! packs `Z updates enable` 0 under GL_EQUAL, as Mesa does (draw71eq), so
+//! packs `Z updates enable` 0 under GL_EQUAL, as Mesa does (3f499a50, draw71eq), so
 //! `depth_equal_z_updates_off` runs the draw with the depth mask on, as GL
 //! has it, and matches the reference.
 //!
