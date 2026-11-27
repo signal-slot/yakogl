@@ -199,7 +199,7 @@ pub mod unreach {
 /// CCGR93 inside MEDIAMIX: the module text, step 4). Nothing is written.
 /// The LCDIF needs MEDIAMIX, its bus clock and its own APB clock and reset
 /// in MEDIA_BLK_CTRL (`SFT_EN_LCDIF_APB_CLK`): the register model's rule
-/// too ([`crate::model`], `check_media_ip`).
+/// too (`crate::model`, `check_media_ip`).
 pub fn lcdif_unreachable(m: &impl Mmio, gpc_base: usize, ccm_base: usize, blk_base: usize) -> u32 {
     let mut why = 0;
     if !mediamix_on_at(m, gpc_base) {

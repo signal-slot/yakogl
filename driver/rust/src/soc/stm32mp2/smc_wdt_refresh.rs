@@ -4,7 +4,7 @@
 //! STM32MP257F-DK, for an image that runs longer than the watchdog's 32 s
 //! (plan #362, issues #7 and #1281). Off by default: no board-layer code calls
 //! it; an image that wants it calls [`Refresh::init`] (from C,
-//! [`yd_mp2_wdtr_init`]), the probe `tools/probes/stm32mp257f_dk/mp2_wdt` does.
+//! `yd_mp2_wdtr_init`), the probe `tools/probes/stm32mp257f_dk/mp2_wdt` does.
 //!
 //! Host tests: `cargo test -p yakogl-drivers --features stm32mp2
 //! smc_wdt_refresh` (the module is compiled for every host test run; the C

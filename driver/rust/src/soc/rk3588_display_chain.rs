@@ -782,7 +782,7 @@ pub fn bring_up(
 
 /// Stop the picture and power the chain down, from any state: VOP2 made
 /// readable when its domain is on, every window off and every running port
-/// in STANDBY (as START with `force_cold`), then [`power_down`]. A failure
+/// in STANDBY (as START with `force_cold`), then `power_down`. A failure
 /// is reported at [`stage::SHUT_DOWN`].
 pub fn shut_down(m: &impl Mmio, b: &Bases, env: &impl Env) -> Result<(), Failed> {
     let mut found = find(m, b);

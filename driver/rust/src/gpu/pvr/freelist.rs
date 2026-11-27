@@ -523,7 +523,7 @@ fn page_phys(k: &YdPvrKm, i: usize, p: u32) -> u64 {
 /// Answer a FREELIST_GROW for `id` (`c`: the first six words of the
 /// firmware's command, for the log): the DDK's RGXProcessRequestGrow. The
 /// ready pages become current, then one grow's worth of new pages is listed
-/// below the stack ([`serve`]) and the firmware is told the delta and the new
+/// below the stack (`serve`) and the firmware is told the delta and the new
 /// totals on the KCCB.
 pub fn grow(k: &mut YdPvrKm, id: u32, c: &[u32; 6], resp: &mut KccbCmd, ondemand: Option<&mut GrowSource<'_>>) {
     k.fl_grow_reqs += 1;

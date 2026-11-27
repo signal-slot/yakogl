@@ -592,7 +592,7 @@ pub unsafe extern "C" fn RGXPollReg64(
     PVRSRV_OK
 }
 
-/// `RGXWriteRegMemoryBarrier32`: see [`Bus::wmb`].
+/// `RGXWriteRegMemoryBarrier32`: see `Bus::wmb`.
 ///
 /// # Safety
 /// See the section comment.
@@ -603,7 +603,7 @@ pub unsafe extern "C" fn RGXWriteRegMemoryBarrier32(hPrivate: *const c_void, ui3
     l.bus().wmb(l.reg(ui32RegAddr));
 }
 
-/// `RGXWriteRegMemoryBarrier64`: see [`Bus::wmb`].
+/// `RGXWriteRegMemoryBarrier64`: see `Bus::wmb`.
 ///
 /// # Safety
 /// See the section comment.

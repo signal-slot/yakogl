@@ -136,10 +136,10 @@ pub mod clk {
     pub const ACLK_VOP_ROOT: Clk = cru_gate(52, 0);
     pub const ACLK_VOP_ROOT_MUX: Field = super::sel(110, 5, 3);
     pub const ACLK_VOP_ROOT_DIV: Field = super::sel(110, 0, 5);
-    /// `HCLK_VOP_ROOT` gate 52/2, mux CLKSEL_CON(110)[11:10] (:1914-1916).
+    /// `HCLK_VOP_ROOT` gate 52/2, mux CLKSEL_CON(110)\[11:10\] (:1914-1916).
     pub const HCLK_VOP_ROOT: Clk = cru_gate(52, 2);
     pub const HCLK_VOP_ROOT_MUX: Field = super::sel(110, 10, 2);
-    /// `PCLK_VOP_ROOT` gate 52/3, mux CLKSEL_CON(110)[13:12] (:1917-1919).
+    /// `PCLK_VOP_ROOT` gate 52/3, mux CLKSEL_CON(110)\[13:12\] (:1917-1919).
     pub const PCLK_VOP_ROOT: Clk = cru_gate(52, 3);
     pub const PCLK_VOP_ROOT_MUX: Field = super::sel(110, 12, 2);
     /// `aclk_vop_sub_src`, ACLK_VOP's parent: CLKSEL_CON(115) bit 9, 0 =
@@ -150,8 +150,8 @@ pub mod clk {
     pub const HCLK_VOP: Clk = cru_gate(52, 8);
     /// `ACLK_VOP` 52/9 from `aclk_vop_sub_src` (:2089-2090).
     pub const ACLK_VOP: Clk = cru_gate(52, 9);
-    /// `DCLK_VOP0_SRC` 52/10, mux CLKSEL_CON(111)[8:7] (gpll, cpll, v0pll,
-    /// aupll), divider [6:0] (:2091-2093, :442). Not used while DCLK_VOP0
+    /// `DCLK_VOP0_SRC` 52/10, mux CLKSEL_CON(111)\[8:7\] (gpll, cpll, v0pll,
+    /// aupll), divider \[6:0\] (:2091-2093, :442). Not used while DCLK_VOP0
     /// runs from the PHY.
     pub const DCLK_VOP0_SRC: Clk = cru_gate(52, 10);
     /// `DCLK_VOP0` 52/13; mux [`DCLK_VOP0_MUX`]: 0 `dclk_vop0_src`, 1
@@ -160,12 +160,12 @@ pub mod clk {
     pub const DCLK_VOP0_MUX: Field = super::sel(112, 7, 2);
     pub const DCLK_VOP0_FROM_HDMIPHY0: u32 = 1;
 
-    /// `aclk_hdcp1_root` 59/0, mux CLKSEL_CON(128)[6:5], divider [4:0]
+    /// `aclk_hdcp1_root` 59/0, mux CLKSEL_CON(128)\[6:5\], divider \[4:0\]
     /// (:1890-1892); the parent of `CLK_HDMITX0_REF`.
     pub const ACLK_HDCP1_ROOT: Clk = cru_gate(59, 0);
-    /// `hclk_vo1_root` 59/2, mux CLKSEL_CON(128)[14:13] (:1896-1898).
+    /// `hclk_vo1_root` 59/2, mux CLKSEL_CON(128)\[14:13\] (:1896-1898).
     pub const HCLK_VO1_ROOT: Clk = cru_gate(59, 2);
-    /// `pclk_vo1_root` 59/4, mux CLKSEL_CON(129)[3:2] (:1902-1904).
+    /// `pclk_vo1_root` 59/4, mux CLKSEL_CON(129)\[3:2\] (:1902-1904).
     pub const PCLK_VO1_ROOT: Clk = cru_gate(59, 4);
     /// `ACLK_VO1USB_TOP_ROOT` 74/0 and `HCLK_VO1USB_TOP_ROOT` 74/2, both
     /// critical (:1920-1925): the links of `aclk_hdcp1_pre` and `HCLK_VO1`.
@@ -179,7 +179,7 @@ pub mod clk {
     /// `PCLK_HDMITX0` 60/11 from `pclk_vo1_root` (:1962-1963).
     pub const PCLK_HDMITX0: Clk = cru_gate(60, 11);
     /// `CLK_HDMITX0_EARC` 60/15, mux CLKSEL_CON(133) bit 6 (gpll, cpll),
-    /// divider [5:1] (:1964-1966).
+    /// divider \[5:1\] (:1964-1966).
     pub const CLK_HDMITX0_EARC: Clk = cru_gate(60, 15);
     /// `CLK_HDMITX0_REF` 61/0 from `aclk_hdcp1_root` (:1967-1968).
     pub const CLK_HDMITX0_REF: Clk = cru_gate(61, 0);
@@ -353,7 +353,7 @@ pub const ACLK_VOP_HZ: u64 = 500_000_000;
 pub const ACLK_VOP_ROOT_CPLL: u32 = 1;
 pub const ACLK_VOP_ROOT_DIV3: u32 = 3;
 
-/// The words [`aclk_vop_set`] writes: CLKSEL_CON(110)[7:0] = mux 1 (cpll),
+/// The words `aclk_vop_set` writes: CLKSEL_CON(110)\[7:0\] = mux 1 (cpll),
 /// divider field 2 (0x00ff_0022), CLKSEL_CON(115) bit 9 = 0 (0x0200_0000).
 pub const ACLK_VOP_SEL110: u32 = ((clk::ACLK_VOP_ROOT_MUX.mask() | clk::ACLK_VOP_ROOT_DIV.mask()) << 16)
     | (ACLK_VOP_ROOT_CPLL << 5)
