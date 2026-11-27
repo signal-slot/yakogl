@@ -21,7 +21,12 @@
 #
 #   c1  imx8mp-gles3-merge.py --check over the slice directories
 #       tools/cts/log/*-imx8mp-gles3-*-rows* exits 0 and prints
-#       '133 entries with a record: OK'.
+#       '133 entries with a record: OK'. A slice may be the Verdin's
+#       (board.sh imx8mp lines) or the Armadillo-X2's (board.sh x2 lines,
+#       kexec-dev: rows of this campaign by the owner's decision of
+#       2026-11-27), and a tree may mix both where merge accepts it; a slice
+#       README with board.sh x2 lines must also say 'measured on the
+#       Armadillo-X2' (the owner's rule: each record says so), else c1 FAILs.
 #   c2  imx8mp-gles3-merge.py --notpass over them equals
 #       docs/es3/imx8mp-gles3-notpass.tsv without its '# SPDX' lines.
 #   c3  imx8mp-gles3-report.py --date <day> over them exits 0, no PARTIAL.
@@ -30,7 +35,7 @@
 #   c5  docs/es3/board-recipe-imx8mp.md no longer says 'nothing has run on
 #       the board yet' and names 'rows01-13'.
 #   c6  the tools/cts/log/*-imx8mp-es2-*/README.md files hold at least 29
-#       lines 'board.sh imx8mp e<N> rc='.
+#       lines 'board.sh imx8mp e<N> rc=' or 'board.sh x2 e<N> rc='.
 #   c7  check-imx8mp-gles3-tree.py -q prints 'matched exactly once 42810'
 #       and OK.
 #   c8  no /dev/tty(USB|ACM), IPv4 address or login (a user name, '@',
@@ -106,13 +111,22 @@ dirs=()
 for d in "${rows[@]}"; do [ -d "$d" ] && dirs+=("$d"); done
 
 # c1
+# the Armadillo-X2 slices: board.sh x2 verdict lines in the README; each must say it was measured on the X2
+nx2=0 unmarked=
+for d in "${dirs[@]}"; do
+	[ -f "$d/README.md" ] && grep -q 'board\.sh x2 e[0-9]* rc=' "$d/README.md" || continue
+	nx2=$((nx2 + 1))
+	grep -q 'measured on the Armadillo-X2' "$d/README.md" || unmarked="$unmarked $(basename "$d")"
+done
 if [ ${#dirs[@]} -eq 0 ]; then
 	res 1 FAIL "no slice directory matches tools/cts/log/*-imx8mp-gles3-*-rows*"
+elif [ -n "$unmarked" ]; then
+	res 1 FAIL "X2 slice README without 'measured on the Armadillo-X2':$unmarked"
 else
 	out=$(tool imx8mp-gles3-merge.py --check "${dirs[@]}" 2>&1)
 	rc=$?
 	if [ $rc -eq 0 ] && printf '%s\n' "$out" | grep -q '133 entries with a record: OK'; then
-		res 1 ok "133 entries with a record: OK (${#dirs[@]} slice dirs)"
+		res 1 ok "133 entries with a record: OK (${#dirs[@]} slice dirs, $nx2 measured on the Armadillo-X2)"
 	else
 		res 1 FAIL "merge --check exit $rc: $(printf '%s\n' "$out" | tail -1)"
 	fi
@@ -208,13 +222,13 @@ fi
 n=0
 for d in "${es2[@]}"; do
 	[ -f "$d/README.md" ] || continue
-	k=$(grep -c 'board.sh imx8mp e[0-9]* rc=' "$d/README.md")
+	k=$(grep -Ec 'board\.sh (imx8mp|x2) e[0-9]* rc=' "$d/README.md")
 	n=$((n + k))
 done
 if [ "$n" -ge 29 ]; then
-	res 6 ok "$n 'board.sh imx8mp e<N> rc=' lines in the es2 READMEs (>= 29)"
+	res 6 ok "$n 'board.sh imx8mp|x2 e<N> rc=' lines in the es2 READMEs (>= 29)"
 else
-	res 6 FAIL "$n 'board.sh imx8mp e<N> rc=' lines in ${#es2[@]} es2 directories (need >= 29)"
+	res 6 FAIL "$n 'board.sh imx8mp|x2 e<N> rc=' lines in ${#es2[@]} es2 directories (need >= 29)"
 fi
 
 # c7

@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Write the README.md of one i.MX8MP dEQP-GLES3 board slice from a session's `tools/board.sh imx8mp` output.
+"""Write the README.md of one i.MX8MP dEQP-GLES3 board slice from a session's `tools/board.sh imx8mp` (or x2) output.
 
   imx8mp-gles3-slice.py --commit HASH40 --rows AA-BB --date YYYY-MM-DD --lines FILE [--lines FILE...]
                         [--records DIR...] [--results results.tsv] [--out DIR]
-                        [--artefacts FILE] [--preflight FILE] [--window START/END]
+                        [--artefacts FILE] [--preflight FILE] [--window START/END] [--run-date YYYY-MM-DD]
 
 --rows is the slice's table rows, counted from 1 as the directory name `<date>-imx8mp-gles3-<hash8>-rows<AA>-<BB>`
 counts them: rows01-13 are entries 0-12 (`e<NN>` counts from 0). AA-AA (or AA) is a one-row slice.
 --lines is the captured board.sh stdout (`-` is stdin; the run's and the tally's lines may be in one file):
-every `board.sh imx8mp e<NN> rc=.. verdict=.. ...` line, verbatim. Page lines (`e<NN>-p<k>`) are counted per
+every `board.sh imx8mp e<NN> rc=.. verdict=.. ...` line, verbatim, or every `board.sh x2 e<NN> ...` line of an
+Armadillo-X2 session (tools/cts/imx8mp-gles3-board.sh --board x2: boot=kexec-dev, DEV, "never a row" in board.sh's
+words; by the owner's decision of 2026-11-27 they are rows of this campaign, docs/es3/board-recipe-imx8mp.md,
+"Running a GLES3 slice on the Armadillo-X2"). The board is read from the lines; one slice is one board's session,
+so lines of both boards are refused (exit 2). An X2 slice's README says "measured on the Armadillo-X2 (tools/board.sh
+x2, crash-route kexec)", names its records under records/x2/ and its image under $IMX8MP_OUT/x2/; a Verdin slice's
+README is byte for byte what it was before.
+--run-date is the day the session ran when it is not the slice's --date (the campaign's slice names keep
+2026-11-16, docs/es3/board-recipe-imx8mp.md): it goes into the "Run ..." lines, --date stays in the name. Page lines (`e<NN>-p<k>`) are counted per
 entry, not copied. A line seen twice verbatim counts once; two different lines for one entry (a rerun: pass
 the line that counts), an entry outside the range, or an entry of the range without a line are refused
 (exit 2), as is a commit that is not 40 hex characters. --records names the record directories
@@ -35,7 +43,9 @@ file is under --out, else $TMPDIR, else the current directory; never /tmp or /va
 import argparse, os, re, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LINE = re.compile(r'^\s*(board\.sh\s+imx8mp\s+e(\d+)(?:-p(\d+))?\s+rc=\S+\s+verdict=\S+.*?)\s*$')
+LINE = re.compile(r'^\s*(board\.sh\s+(imx8mp|x2)\s+e(\d+)(?:-p(\d+))?\s+rc=\S+\s+verdict=\S+.*?)\s*$')
+X2_MEASURED = 'measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)'
+
 RUN_DIR = re.compile(r'-e(\d+)-[0-9a-f]{8}$')
 
 
@@ -52,14 +62,15 @@ def parse_rows(s):
 
 
 def read_lines(paths):
-    rows, pages = {}, {}
+    rows, pages, boards = {}, {}, set()
     for p in paths:
         f = sys.stdin if p == '-' else open(p, errors='replace')
         for l in f:
             m = LINE.match(l)
             if not m:
                 continue
-            line, e, pg = m.group(1), int(m.group(2)), m.group(3)
+            line, e, pg = m.group(1), int(m.group(3)), m.group(4)
+            boards.add(m.group(2))
             if pg is not None:
                 pages.setdefault(e, set()).add(int(pg))
             elif e in rows and rows[e] != line:
@@ -68,7 +79,9 @@ def read_lines(paths):
                 rows[e] = line
         if f is not sys.stdin:
             f.close()
-    return rows, pages
+    if len(boards) > 1:
+        raise Refuse('verdict lines of two boards (board.sh imx8mp and board.sh x2): one slice is one board\'s session')
+    return rows, pages, (boards.pop() if boards else 'imx8mp')
 
 
 def run_dirs(records):
@@ -115,10 +128,12 @@ def parse_window(s):
 
 
 def rel_artefact(path):
-    """The part of an artefact path below $IMX8MP_OUT: from es3-<hash8> or the stage 1 directory on."""
+    """The part of an artefact path below $IMX8MP_OUT: from es3-<hash8> (x2/es3-<hash8>) or the stage 1 directory on."""
     parts = path.split('/')
     for i, c in enumerate(parts):
         if re.match(r'es3-[0-9a-f]{8}(\.|$)', c) or c.startswith('deqp-stage1'):
+            if i > 0 and parts[i - 1] == 'x2' and c.startswith('es3-'):
+                i -= 1
             return '/'.join(parts[i:])
     return parts[-1]
 
@@ -149,20 +164,31 @@ def read_preflight(path):
     return nok, bad, last[-1]
 
 
-def what_ran(a, lo, hi, h8):
+def what_ran(a, lo, hi, h8, board='imx8mp'):
     o = ['', '## What ran', '']
     if a.window:
         st, en = parse_window(a.window)
         o += ['Run %s, %s-%s UTC (the board\'s clock): %s of `tools/cts/imx8mp-gles3-tree.txt`'
-              % (a.date, st, en, 'row %d' % lo if lo == hi else 'rows %d-%d' % (lo, hi)),
+              % (a.run_date or a.date, st, en, 'row %d' % lo if lo == hi else 'rows %d-%d' % (lo, hi)),
               '(`TREE_ROWS=%d-%d`), one boot per entry.' % (lo - 1, hi - 1), '']
     if a.artefacts:
-        o += ['`tools/cts/imx8mp-gles3-artefacts.sh es3-%s` (bytes, sha256, file below `$IMX8MP_OUT`):' % h8, '',
+        o += ['`tools/cts/imx8mp-gles3-artefacts.sh %ses3-%s` (bytes, sha256, file below `$IMX8MP_OUT`):'
+              % ('x2/' if board == 'x2' else '', h8), '',
               '```'] + read_artefacts(a.artefacts) + ['```', '']
     if a.preflight:
         nok, bad, last = read_preflight(a.preflight)
-        o += ['`tools/cts/imx8mp-gles3-preflight.sh --commit %s --out $IMX8MP_OUT`: %d `ok` line%s, %s`%s`.'
-              % (a.commit, nok, '' if nok == 1 else 's', '%d `FAIL`, ' % bad if bad else '', last), '']
+        o += ['`tools/cts/imx8mp-gles3-preflight.sh %s--commit %s --out $IMX8MP_OUT`: %d `ok` line%s, %s`%s`.'
+              % ('--board x2 ' if board == 'x2' else '', a.commit, nok, '' if nok == 1 else 's', '%d `FAIL`, ' % bad if bad else '', last), '']
+    if board == 'x2':
+        rec = '$REC'
+        o += ['The run, knob names only (values come from the environment; `$REC` is',
+              '`records/x2/<YYYYMMDD-HHMM>-es3-%s-rows%02d-%02d-<image sha8>`):' % (h8, lo, hi), '', '```',
+              'TREE_ROWS=%d-%d TREE_IMAGE=$IMX8MP_OUT/x2/es3-%s/zephyr/zephyr.bin IMX8MP_BOARD=x2 \\' % (lo - 1, hi - 1, h8),
+              '  BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt BOARD_HOST=$BOARD_HOST [BOARD_UART=$BOARD_UART] \\',
+              '  tools/cts/imx8mp-gles3-board.sh tree %s' % rec,
+              'IMX8MP_BOARD=x2 tools/cts/imx8mp-gles3-board.sh tally %s' % rec, '```', '',
+              '`BOARD_HOST` and `BOARD_UART` are named, never their values.']
+        return o
     o += ['The run, knob names only (values come from the environment):', '', '```',
           'TREE_ROWS=%d-%d TREE_IMAGE=$IMX8MP_OUT/es3-%s/zephyr/zephyr.bin BOARD_BOOT=uboot-mmc \\' % (lo - 1, hi - 1, h8),
           '  BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt RUN_BOUND=$RUN_BOUND BOARD_UART=$BOARD_UART \\',
@@ -185,11 +211,12 @@ CONSOLE = ['', '## Console', '',
 def build(a):
     if not re.fullmatch(r'[0-9a-f]{40}', a.commit):
         raise Refuse('--commit must be the full 40-hex commit, got %r' % a.commit)
-    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', a.date):
-        raise Refuse('--date must be YYYY-MM-DD, got %r' % a.date)
+    for k, v in (('--date', a.date), ('--run-date', a.run_date)):
+        if v is not None and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', v):
+            raise Refuse('%s must be YYYY-MM-DD, got %r' % (k, v))
     lo, hi = parse_rows(a.rows)
     want = list(range(lo - 1, hi))
-    rows, pages = read_lines(a.lines)
+    rows, pages, board = read_lines(a.lines)
     extra = sorted(set(rows) - set(want))
     if extra:
         raise Refuse('verdict lines for entries outside rows %d-%d: %s' % (lo, hi, ' '.join('e%02d' % e for e in extra)))
@@ -212,19 +239,31 @@ def build(a):
     o = ['<!-- SPDX-License-Identifier: Apache-2.0 -->', '<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->',
          '# i.MX8MP dEQP-GLES3 table image es3-%s, %s (%s)' % (h8, span, ent), '',
          'commit %s' % a.commit, '',
-         'Run %s on the Toradex Verdin iMX8M Plus (GC7000UL): the slice `%s-imx8mp-gles3-%s-rows%02d-%02d`, %s of'
-         % (a.date, a.date, h8, lo, hi, span),
-         '`tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the selector does), one boot per entry, from the'
-         % ent,
-         'campaign commit above. The procedure is `docs/es3/board-recipe-imx8mp.md`, "Running a GLES3 slice session".']
+         ]
+    if board == 'x2':
+        o += ['Run %s on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), %s: the slice' % (a.run_date or a.date, X2_MEASURED),
+              '`%s-imx8mp-gles3-%s-rows%02d-%02d`, %s of `tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the'
+              % (a.date, h8, lo, hi, span, ent),
+              'selector does), one crash-route kexec per entry, from the campaign commit above. The Toradex Verdin iMX8M',
+              'Plus is off the farm; by the owner\'s decision of 2026-11-27 these kexec-dev runs (board.sh\'s `DEV`, "never',
+              'a row") are rows of this campaign. The procedure is `docs/es3/board-recipe-imx8mp.md`, "Running a GLES3',
+              'slice on the Armadillo-X2".']
+    else:
+        o += ['Run %s on the Toradex Verdin iMX8M Plus (GC7000UL): the slice `%s-imx8mp-gles3-%s-rows%02d-%02d`, %s of'
+              % (a.run_date or a.date, a.date, h8, lo, hi, span),
+              '`tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the selector does), one boot per entry, from the'
+              % ent,
+              'campaign commit above. The procedure is `docs/es3/board-recipe-imx8mp.md`, "Running a GLES3 slice session".']
     if a.records:
         o += ['', 'Records (gitignored): %s.' % ', '.join(
-            '`records/imx8mp/%s`' % os.path.basename(os.path.normpath(r)) for r in a.records)]
+            '`records/%s/%s`' % (board, os.path.basename(os.path.normpath(r))) for r in a.records)]
     new = bool(a.artefacts or a.preflight or a.window)
     if new:
-        o += what_ran(a, lo, hi, h8)
+        o += what_ran(a, lo, hi, h8, board)
     o += ['', '## Verdict lines', '',
-          'Verbatim from `tools/board.sh imx8mp` (`back_after` is reboot to ssh, `uptime` Linux\'s at that moment):',
+          ('Verbatim from `tools/board.sh x2` (`back_after` is the jump to ssh; `DEV` and "never a row" are board.sh\'s'
+           ' words, rows here by the owner\'s decision of 2026-11-27):' if board == 'x2' else
+           'Verbatim from `tools/board.sh imx8mp` (`back_after` is reboot to ssh, `uptime` Linux\'s at that moment):'),
           '', '```']
     o += [rows[e] for e in want]
     o += ['```', '', '## Per entry', '']
@@ -286,6 +325,7 @@ def main():
     ap.add_argument('--artefacts', metavar='FILE')
     ap.add_argument('--preflight', metavar='FILE')
     ap.add_argument('--window', metavar='START/END')
+    ap.add_argument('--run-date', metavar='YYYY-MM-DD')
     a = ap.parse_args()
     try:
         text = build(a)

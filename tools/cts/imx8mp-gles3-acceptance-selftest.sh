@@ -4,7 +4,9 @@
 #
 # Self-test of imx8mp-gles3-acceptance.sh: a fake repository under
 # $TMPDIR with stub python tools, one all-pass case and one case per check
-# that must turn only that check to FAIL.
+# that must turn only that check to FAIL; Armadillo-X2 slices (alone, mixed with
+# a Verdin slice, without their measured-on line) and, with the real merge
+# tool, a mixed Verdin + X2 tree of 133 entries.
 #
 #   sh tools/cts/imx8mp-gles3-acceptance-selftest.sh
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
@@ -172,6 +174,76 @@ run_case "--commit takes a longer hash (cut to 8)" 0 ""
 ARGS=
 out=$(sh "$ACC" --commit xyz "$R" 2>&1); rc=$?
 if [ "$rc" = 2 ]; then echo "ok   --commit with non-hex: usage error 2"; else echo "FAIL --commit non-hex: rc=$rc"; BAD=$((BAD + 1)); fi
+
+# Armadillo-X2 slices (board.sh x2 verdict lines; rows by the owner's decision of 2026-11-27)
+X2L='board.sh x2 e17 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent back_after=40s (kexec-dev: a development run, never a row)'
+fresh x2
+printf 'Run 2026-11-13 on the Armadillo-X2, measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)\n%s\n' "$X2L" \
+	>"$R/tools/cts/log/2026-11-13-imx8mp-gles3-0123abcd-rows17-31/README.md"
+run_case "a Verdin and an X2 slice (mixed tree) pass" 0 ""
+if sh "$ACC" "$R" 2>/dev/null | grep -q '^c1 ok .*(2 slice dirs, 1 measured on the Armadillo-X2)$'; then
+	echo "ok   c1 counts the X2 slices"
+else
+	echo "FAIL c1 X2 count"; BAD=$((BAD + 1))
+fi
+fresh x2b
+printf '%s\n' "$X2L" >"$R/tools/cts/log/2026-11-13-imx8mp-gles3-0123abcd-rows17-31/README.md"
+run_case "an X2 slice that does not say it was measured on the X2 fails c1" 1 "c1"
+if sh "$ACC" "$R" 2>/dev/null | grep -q "^c1 FAIL X2 slice README without 'measured on the Armadillo-X2': 2026-11-13-imx8mp-gles3-0123abcd-rows17-31$"; then
+	echo "ok   c1 names the unmarked X2 slice"
+else
+	echo "FAIL c1 unmarked X2 slice name"; BAD=$((BAD + 1))
+fi
+fresh x2c
+sed -i 's/^board\.sh imx8mp /board.sh x2 /' "$R/tools/cts/log/2026-11-12-imx8mp-es2-0123abcd/README.md"
+run_case "c6 counts board.sh x2 lines of an es2 record" 0 ""
+
+# The real merge tool on a mixed tree: a Verdin slice (entries 0-66) and an X2 slice (entries 67-132, '-' in
+# begun and noresult, board.sh x2 lines) of one commit give c1 ok
+fresh real
+rm -r "$R"/tools/cts/log/*-imx8mp-gles3-*
+cp "$HERE/imx8mp-gles3-merge.py" "$HERE/imx8mp-gles3-tree.txt" "$HERE/gles3-mustpass.txt" "$R/tools/cts/"
+V="$R/tools/cts/log/2026-11-16-imx8mp-gles3-0123abcd-rows01-67"
+X="$R/tools/cts/log/2026-11-16-imx8mp-gles3-0123abcd-rows68-133"
+mkdir -p "$V" "$X"
+python3 -I - "$HERE/imx8mp-gles3-tree.txt" "$V" "$X" <<'PYEOF'
+import sys
+table = [l.rstrip('\n') for l in open(sys.argv[1]) if l.strip() and not l.lstrip().startswith('#')]
+c = '0123abcd' + '0' * 32
+for d, lo, hi, board in ((sys.argv[2], 0, 67, 'imx8mp'), (sys.argv[3], 67, 133, 'x2')):
+    with open(d + '/README.md', 'w') as f:
+        f.write('commit %s\n' % c)
+        if board == 'x2':
+            f.write('measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)\n')
+        for i in range(lo, hi):
+            if board == 'x2':
+                f.write('board.sh x2 e%02d rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP '
+                        'resets=absent back_after=40s (kexec-dev: a development run, never a row)\n' % i)
+            else:
+                f.write('board.sh imx8mp e%02d rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled '
+                        'result=record:DEQP resets=absent back_after=90s uptime=25s\n' % i)
+    with open(d + '/results.tsv', 'w') as f:
+        f.write('# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names\n')
+        for i, e in enumerate(table):
+            if not lo <= i < hi:
+                f.write('%d\t%s\t-\t-\t-\t-\t-\t-\t-\n' % (i, e))
+            elif board == 'x2':
+                f.write('%d\t%s\t-\t1\t0\t0\t0\t-\t-\n' % (i, e))
+            else:
+                f.write('%d\t%s\t1\t1\t0\t0\t0\t0\t-\n' % (i, e))
+PYEOF
+out=$(sh "$ACC" "$R" 2>/dev/null)
+if printf '%s\n' "$out" | grep -q '^c1 ok 133 entries with a record: OK (2 slice dirs, 1 measured on the Armadillo-X2)$'; then
+	echo "ok   the real merge tool accepts a mixed Verdin + X2 tree (c1)"
+else
+	echo "FAIL real merge on a mixed tree"; printf '%s\n' "$out"; BAD=$((BAD + 1))
+fi
+sed -i '/measured on the Armadillo-X2/d' "$X/README.md"
+if sh "$ACC" "$R" 2>/dev/null | grep -q "^c1 FAIL X2 slice README without 'measured on the Armadillo-X2': ${X##*/}$"; then
+	echo "ok   the same tree without the X2 line fails c1"
+else
+	echo "FAIL real tree without the X2 line"; BAD=$((BAD + 1))
+fi
 
 if [ $BAD -eq 0 ]; then
 	echo "imx8mp-gles3-acceptance-selftest: all cases passed"
