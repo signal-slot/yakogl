@@ -386,7 +386,7 @@ mod tests {
         let mut r = rig();
         let mut d = YdImx95Lvds::default();
         assert_eq!(up_on(&mut r.sm, &r.m, &r.env, &PHYS, FB.addr, FB.stride, &mut d), 0);
-        r.m.seq.borrow_mut().after = None;
+        r.m.display.seq_after = None;
         assert_eq!(down_on(&mut r.sm, &r.m, &r.env, &PHYS, &mut d), -ETIMEDOUT);
         assert_eq!((d.state, d.stop), (STATE_DOWN, STOP_DISPLAY));
         assert!(r.env.lines.borrow().iter().any(|l| l.contains("the down stopped: SeqTimeout")));

@@ -77,23 +77,11 @@ impl Env for LogEnv {
     }
 }
 
-/// FrameGen0's sequence complete (`IRQ_INTERRUPTSTATUS0` bit 20) over the
-/// display model, which does not have it: it sets on the `after`-th read of
-/// `IRQ_INTERRUPTSTATUS0` that follows a write of `FGENABLE` = 0 (never when
-/// `after` is `None`) and clears when written to `IRQ_INTERRUPTCLEAR0`.
-#[derive(Default)]
-pub(crate) struct SeqComplete {
-    pub(crate) after: Option<u32>,
-    armed: bool,
-    reads: u32,
-    set: bool,
-}
-
-/// The display model for its blocks; TPM5 and GPIO5 as a register file
-/// (TPM5's PARAM reads a 32-bit counter, as the i.MX 95's).
+/// The display model for its blocks (FrameGen0's sequence complete is the
+/// model's, in its DISPIRQ0 block: `Display::seq_after`); TPM5 and GPIO5 as
+/// a register file (TPM5's PARAM reads a 32-bit counter, as the i.MX 95's).
 pub(crate) struct Joined {
     pub(crate) display: Display,
-    pub(crate) seq: RefCell<SeqComplete>,
     regs: RefCell<HashMap<usize, u32>>,
     log: Log,
 }
@@ -107,18 +95,6 @@ fn display_block(a: usize) -> bool {
 
 impl Mmio for Joined {
     fn read32(&self, a: usize) -> u32 {
-        if a == IRQ_STATUS0 {
-            let v = self.display.read32(a);
-            let mut q = self.seq.borrow_mut();
-            if q.armed {
-                q.reads += 1;
-                if q.after.is_some_and(|n| q.reads >= n) {
-                    q.armed = false;
-                    q.set = true;
-                }
-            }
-            return v | if q.set { SEQ_BIT } else { 0 };
-        }
         if display_block(a) {
             return self.display.read32(a);
         }
@@ -134,14 +110,6 @@ impl Mmio for Joined {
     }
     fn write32(&self, a: usize, v: u32) {
         self.log.borrow_mut().push(Ev::W(a, v));
-        if a == FGENABLE && v & 1 == 0 {
-            let mut q = self.seq.borrow_mut();
-            q.armed = true;
-            q.reads = 0;
-        }
-        if a == IRQ_CLEAR0 && v & SEQ_BIT != 0 {
-            self.seq.borrow_mut().set = false;
-        }
         if display_block(a) {
             self.display.write32(a, v)
         } else {
@@ -172,12 +140,7 @@ pub(crate) fn rig() -> Rig {
     let log: Log = Rc::new(RefCell::new(Vec::new()));
     let sm = Rc::new(RefCell::new(Sm::verdin()));
     Rig {
-        m: Joined {
-            display: Display::new(sm.clone()),
-            seq: RefCell::new(SeqComplete { after: Some(1), ..SeqComplete::default() }),
-            regs: RefCell::new(HashMap::new()),
-            log: log.clone(),
-        },
+        m: Joined { display: Display::new(sm.clone()), regs: RefCell::new(HashMap::new()), log: log.clone() },
         sm: LogSm { sm, log: log.clone() },
         env: LogEnv { log: log.clone(), lines: RefCell::new(Vec::new()) },
         log,
@@ -190,10 +153,14 @@ fn pos(log: &Log, e: &Ev) -> usize {
 
 const FGENABLE: usize = dm::DPU + 0x2b_008c;
 const FGSLR: usize = dm::DPU + 0x2b_0090;
-/// `IRQ_INTERRUPTSTATUS0`, `IRQ_INTERRUPTCLEAR0` (`PERI_DISPLAY_SEERIS.h`)
-/// and `kDPU_Group0DiSengcfgSeqComplete0Interrupt` (`fsl_dpu.h`), restated.
-const IRQ_STATUS0: usize = dm::DPU + 0x102c;
-const IRQ_CLEAR0: usize = dm::DPU + 0x1020;
+/// `DISPIRQ0_INTERRUPTENABLE0`, `_INTERRUPTCLEAR0`, `_INTERRUPTSTATUS0`
+/// (`PERI_DISPLAY_SEERIS.h`, NXP's `dpu95-core.c` `dpu_base + 0x381000`),
+/// the common-control `IRQ_INTERRUPTSTATUS0` and
+/// `DPU95_IRQ_DISENGCFG_SEQCOMPLETE0` (`dpu95.h`), restated.
+const DIRQ0_ENABLE0: u32 = 0x38_1008;
+const DIRQ0_CLEAR0: u32 = 0x38_1020;
+const DIRQ0_STATUS0: u32 = 0x38_102c;
+const COMCTRL_STATUS0: u32 = 0x102c;
 const SEQ_BIT: u32 = 1 << 20;
 const PSOR: usize = lv::GPIO5_BASE + lv::rgpio::PSOR as usize;
 const PCOR: usize = lv::GPIO5_BASE + lv::rgpio::PCOR as usize;
@@ -285,20 +252,22 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let fg_off = pos(log, &Ev::W(FGENABLE, 0));
     let pll_off = pos(log, &Ev::Scmi(scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET, vec![37, 0, 0]));
     let pd_off = pos(log, &Ev::Scmi(scmi::PROTO_POWER, scmi::POWER_STATE_SET, vec![0, 13, 0x4000_0000]));
-    let token = pos(log, &Ev::W(FGSLR, 1));
     // FrameGen0 stops before any LDB register is touched
-    assert!(en_off < tpm_off && tpm_off < fg_off && fg_off < token && token < phy_off);
+    assert!(en_off < tpm_off && tpm_off < fg_off && fg_off < phy_off);
     assert!(phy_off < gate && gate < pl_off);
     assert!(pl_off < pll_off && pll_off < pd_off);
-    // in the display blocks' own log (reads too): FGENABLE 0, the FGSLR
-    // token, the FGENSTS read, then the LDB gate
+    // no FGSLR shadow token while FrameGen0 stops (Linux's
+    // dpu95_crtc_disable sends none)
+    assert!(!log.borrow()[..gate].contains(&Ev::W(FGSLR, 1)));
+    // in the display blocks' own log (reads too): FGENABLE 0, the
+    // sequence complete in DISPIRQ0, the FGENSTS read, then the LDB gate
     let dlog = r.m.display.log();
     let at = |a: Access| dlog.iter().position(|x| *x == a).unwrap_or_else(|| panic!("{a:?} not in the log"));
     let fg_off = at(Access::W("dpu", 0x2b_008c, 0));
-    let token = at(Access::W("dpu", 0x2b_0090, 1));
+    let seq = dlog.iter().position(|x| matches!(x, Access::R("dpu", DIRQ0_STATUS0, v) if v & SEQ_BIT != 0)).unwrap();
     let ensts = dlog.iter().position(|x| matches!(x, Access::R("dpu", 0x2b_0094, _))).unwrap();
     let gate = at(Access::W("ldb", 0x0, 0x1E));
-    assert!(fg_off < token && token < ensts && ensts < gate, "{dlog:?}");
+    assert!(fg_off < seq && seq < ensts && ensts < gate, "{dlog:?}");
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
@@ -380,43 +349,55 @@ fn a_frame_gen_that_never_stops_still_brings_the_ldb_down_and_returns_not_stoppe
     assert!(sm.sm.borrow().on(13));
 }
 
-/// The down waits for FrameGen0's sequence complete (`IRQ_INTERRUPTSTATUS0`
-/// bit 20) before it touches the LDB: a stale bit is cleared before the
-/// stop, the bit is polled until it sets (here on the fifth read), cleared
-/// again, and only then are the LDB's clocks gated.
+/// The down waits for FrameGen0's sequence complete (DISPIRQ0
+/// `INTERRUPTSTATUS0` bit 20, where Linux takes it) before it touches the
+/// LDB, in Linux's `dpu95_crtc_disable` order: a stale bit cleared and the
+/// event enabled in DISPIRQ0, `FGENABLE` = 0 with no `FGSLR` token, the bit
+/// polled until it sets (here on the fifth read), cleared, the event
+/// masked again, and only then the LDB's clocks gated.
 #[test]
 fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
-    let r = rig();
+    let mut r = rig();
     let mut sm = r.sm;
     let cfg = Config::verdin(FB);
     let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
-    r.m.seq.borrow_mut().after = Some(5);
+    r.m.display.seq_after = Some(5);
     r.log.borrow_mut().clear();
     r.m.display.clear_log();
+    r.env.lines.borrow_mut().clear();
     display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
     assert_eq!(lv::SEQ_COMPLETE0, SEQ_BIT);
     assert_eq!(lv::SEQ_COMPLETE_BUDGET_US, 1_000_000);
+    assert_eq!(lv::DISP_IRQ0 + lv::disp_irq::INTERRUPTSTATUS0, DIRQ0_STATUS0);
 
     let dlog = r.m.display.log();
     let at = |a: Access| dlog.iter().position(|x| *x == a).unwrap_or_else(|| panic!("{a:?} not in the log"));
-    let cleared = at(Access::W("dpu", 0x1020, SEQ_BIT));
+    let cleared = at(Access::W("dpu", DIRQ0_CLEAR0, SEQ_BIT));
+    let enabled = at(Access::W("dpu", DIRQ0_ENABLE0, SEQ_BIT));
     let fg_off = at(Access::W("dpu", 0x2b_008c, 0));
+    let masked = at(Access::W("dpu", DIRQ0_ENABLE0, 0));
     let gate = at(Access::W("ldb", 0x0, 0x1E));
     let polls: Vec<usize> = dlog
         .iter()
         .enumerate()
-        .filter(|(i, a)| *i > fg_off && matches!(a, Access::R("dpu", 0x102c, _)))
+        .filter(|(i, a)| *i > fg_off && matches!(a, Access::R("dpu", DIRQ0_STATUS0, _)))
         .map(|(i, _)| i)
         .collect();
-    assert!(cleared < fg_off, "{dlog:?}");
+    assert!(cleared < enabled && enabled < fg_off, "{dlog:?}");
+    // no shadow token between the stop and the gate
+    assert!(!dlog[fg_off..gate].contains(&Access::W("dpu", 0x2b_0090, 1)), "{dlog:?}");
+    // the common-control word is not what is waited on
+    assert!(!dlog[fg_off..gate].iter().any(|a| matches!(a, Access::R("dpu", COMCTRL_STATUS0, _))), "{dlog:?}");
     // five polls, the fifth saw the bit, all before the gate; no LDB
     // register touched before the fifth
-    assert!(polls.len() >= 5 && polls[4] < gate, "{dlog:?}");
+    assert_eq!(polls.len(), 5, "{dlog:?}");
+    assert!(matches!(dlog[polls[4]], Access::R(_, _, v) if v & SEQ_BIT != 0), "{dlog:?}");
+    assert!(polls[4] < gate, "{dlog:?}");
     assert!(!dlog[..polls[4]].iter().any(|a| matches!(a, Access::W("ldb", ..))), "{dlog:?}");
-    // the bit cleared after it was seen, then the gate
-    let reclear = dlog.iter().rposition(|a| *a == Access::W("dpu", 0x1020, SEQ_BIT)).unwrap();
-    assert!(polls[4] < reclear && reclear < gate, "{dlog:?}");
-    assert!(!r.m.seq.borrow().set);
+    // the bit cleared after it was seen, the event masked, then the gate
+    let reclear = dlog.iter().rposition(|a| *a == Access::W("dpu", DIRQ0_CLEAR0, SEQ_BIT)).unwrap();
+    assert!(polls[4] < reclear && reclear < masked && masked < gate, "{dlog:?}");
+    assert_eq!(r.m.display.peek("dpu", DIRQ0_STATUS0) & SEQ_BIT, 0);
     // four poll steps waited between the five reads
     let waits: Vec<u32> = r
         .log
@@ -428,12 +409,13 @@ fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
         })
         .collect();
     assert_eq!(&waits[..4], &[dpu::POLL_STEP_US; 4]);
-    assert!(r
-        .env
-        .lines
-        .borrow()
-        .iter()
-        .any(|l| l.starts_with("verdin-imx95 LVDS down: SeqComplete0 after 400 us, FGENSTS stopped")));
+    let lines = r.env.lines.borrow();
+    assert_eq!(
+        lines[0],
+        "verdin-imx95 LVDS down: FGENABLE 0 (no FGSLR token), waiting up to 1000000 us for SeqComplete0 in DISPIRQ0 (DPU+0x38102c bit 20)"
+    );
+    assert!(lines[1].starts_with("verdin-imx95 LVDS down: SeqComplete0 after 400 us, FGENSTS stopped"), "{lines:?}");
+    drop(lines);
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38));
     assert!(r.m.display.refused().is_empty());
 }
@@ -443,16 +425,18 @@ fn down_gates_the_ldb_only_after_frame_gen_reports_its_sequence_complete() {
 /// ungated and the display's power on.
 #[test]
 fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
-    let r = rig();
+    let mut r = rig();
     let mut sm = r.sm;
     let cfg = Config::verdin(FB);
     let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
-    r.m.seq.borrow_mut().after = None;
+    r.m.display.seq_after = None;
     r.log.borrow_mut().clear();
     let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
-    let Error::SeqTimeout { waited_us, irq, fg } = e else { panic!("{e:?}") };
+    let Error::SeqTimeout { waited_us, irq, comctrl, fg } = e else { panic!("{e:?}") };
     assert_eq!(waited_us, lv::SEQ_COMPLETE_BUDGET_US);
-    assert_eq!(irq & SEQ_BIT, 0);
+    assert_eq!((irq & SEQ_BIT, comctrl & SEQ_BIT), (0, 0));
+    // the event is masked again on the way out
+    assert_eq!(r.m.display.peek("dpu", DIRQ0_ENABLE0), 0);
     assert_eq!(fg.fgenable, 0);
     let log = r.log.borrow();
     let waited: u32 = log
@@ -470,5 +454,28 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     // the LDB still reads as the up left it (`ldb::up`: 0x14, not gated)
     assert_eq!(r.m.display.peek("ldb", 0x0), 0x14);
     assert!(sm.sm.borrow().on(13) && sm.sm.borrow().enabled(38));
-    assert!(r.env.lines.borrow().iter().any(|l| l.contains("no SeqComplete0 in 1000000 us")));
+    assert!(r
+        .env
+        .lines
+        .borrow()
+        .iter()
+        .any(|l| l.contains("no SeqComplete0 in 1000000 us (DISPIRQ0 INTERRUPTSTATUS0 0x")));
+}
+
+/// As the board after 211ed16a: the sequence complete never shows in the
+/// common-control `IRQ_INTERRUPTSTATUS0`. A down that waited there (or on
+/// anything but DISPIRQ0) would time out; this one completes, and the
+/// model's sequence needs the stop to have come while FrameGen0 ran.
+#[test]
+fn the_sequence_complete_is_only_in_the_display_interrupt_block() {
+    let r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    // before the stop neither word has it
+    assert_eq!(r.m.read32(dm::DPU + DIRQ0_STATUS0 as usize) & SEQ_BIT, 0);
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    let dlog = r.m.display.log();
+    assert!(dlog.iter().any(|a| matches!(a, Access::R("dpu", DIRQ0_STATUS0, v) if v & SEQ_BIT != 0)));
+    assert!(!dlog.iter().any(|a| matches!(a, Access::R("dpu", COMCTRL_STATUS0, v) if v & SEQ_BIT != 0)));
 }
