@@ -13,7 +13,9 @@ On the Armadillo-X2 (`board.sh x2 e<NN> ...`, slices written by imx8mp-gles3-sli
 of up to 1500 s for Linux) the line has back_after only, the seconds from the jump to ssh answering in the new
 Linux, and that is the time used (not U-Boot's; uptime is never subtracted on x2). A slice with x2 lines says so
 on a '# ' line under its name (in --tsv: a '# ' comment line before the slice's rows); Verdin output is unchanged.
-The failure-name page boots (e<NN>-p<page>) are not entries and are skipped. An entry twice in a README: the
+A refused jump (`rc=3 verdict=refused`) is no time sample: skipped with a '# ' note. A line without back_after
+reads the optional eNN.meta.txt beside the README (a ping-less x2 return: 'ssh back <n>s' of the timeline, else
+t_back - t_reboot, else lost=). The failure-name page boots (e<NN>-p<page>) are not entries and are skipped. An entry twice in a README: the
 last line counts.
 
 Output, one row per entry in the README, in the order given: entry (eNN), measured seconds, estimate
@@ -57,6 +59,28 @@ def estimates(S, a):
     return dict(enumerate(sec))
 
 
+def meta_time(p):
+    """seconds of a return from a record's meta.txt (optional file eNN.meta.txt beside the README), or None.
+
+    A refused jump (jump=refused / refused_rc, no t_reboot) has no time. A return without ping ('ping n/a' in the
+    timeline) is timed from the fields it has: 'ssh back <n>s' of the timeline, else t_back - t_reboot, else lost=
+    (the ping loss, a lower bound) when back=1; ping entries are never needed."""
+    if not os.path.isfile(p):
+        return None
+    kv = {}
+    for l in open(p, errors='replace'):
+        k, _, v = l.rstrip('\n').partition('=')
+        kv[k] = v
+    if kv.get('jump', '').startswith('refused') or ('refused_rc' in kv and 't_reboot' not in kv) or kv.get('back') != '1':
+        return None
+    m = re.search(r'\bssh back (\d+)s', kv.get('timeline', ''))
+    if m:
+        return int(m.group(1))
+    if kv.get('t_back', '').isdigit() and kv.get('t_reboot', '').isdigit():
+        return int(kv['t_back']) - int(kv['t_reboot'])
+    return int(kv['lost']) if kv.get('lost', '').isdigit() else None
+
+
 def read_times(d):
     """([(entry, seconds or None)] sorted by entry, one per entry (last line wins), set of boards named)
 
@@ -64,20 +88,28 @@ def read_times(d):
     kexec; an x2 line has no uptime, and one that had it would not be subtracted."""
     got = {}
     boards = set()
+    refused = set()
     p = os.path.join(d, 'README.md')
     if not os.path.isfile(p):
-        return [], boards
+        return [], boards, []
     for l in open(p, errors='replace'):
         m = LINE.search(l)
         if not m:
             continue
+        boards.add(m.group(1))
+        if m.group(4) == 'refused':  # a refused jump (rc=3): the board was not rebooted, no time sample
+            refused.add(int(m.group(2)))
+            got.pop(int(m.group(2)), None)
+            continue
+        refused.discard(int(m.group(2)))
         kv = dict(re.findall(r'\b(back_after|uptime)=(\d+)s', m.group(5)))
         t = None
         if 'back_after' in kv:
             t = int(kv['back_after']) - (0 if m.group(1) == 'x2' else int(kv.get('uptime', 0)))
-        boards.add(m.group(1))
+        else:
+            t = meta_time(os.path.join(d, 'e%02d.meta.txt' % int(m.group(2))))
         got[int(m.group(2))] = t
-    return sorted(got.items()), boards
+    return sorted(got.items()), boards, sorted(refused)
 
 
 def fmt(x, f='%.1f'):
@@ -106,7 +138,7 @@ def main():
         out.write('%-6s %10s %10s %7s\n' % ('entry', 'measured_s', 'estimate_s', 'ratio'))
     for d in a.slices:
         name = os.path.basename(os.path.normpath(d))
-        rows, boards = read_times(d)
+        rows, boards, refused = read_times(d)
         note = X2_NOTE if 'x2' in boards else None
         n = tm = te = 0
         if not a.tsv:
@@ -115,6 +147,9 @@ def main():
                 out.write('# %s\n' % note)
         elif note:
             out.write('# %s: %s\n' % (name, note))
+        for i in refused:
+            msg = 'e%02d refused (rc=3 verdict=refused, the board was not rebooted): no time sample, skipped' % i
+            out.write('# %s: %s\n' % (name, msg) if a.tsv else '# %s\n' % msg)
         for i, t in rows:
             e = est.get(i)
             r = t / e if t is not None and e else None
