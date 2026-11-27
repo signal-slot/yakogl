@@ -114,6 +114,24 @@ want tests/es3_half_float_mrt_gc.rs "vivante treekey"
 want src/mali/backend.rs "mali treekey"
 want tests/mali_blend_states.rs "mali treekey"
 want tests/mali_vcube_magswitch.rs "mali treekey"
+# plan #373 later pins (check-rows2)
+want tests/mali_vcube_lod.rs "mali treekey"
+want tests/mali_draw_inval.rs "mali treekey"
+want tests/mali_draw_inval_rest.rs "mali treekey"
+want tests/mali_api_stub.rs "mali treekey"
+want tests/mali_blend_words.rs "mali treekey"
+want tests/mali_fragment_random_cases.rs "mali treekey"
+want tests/mali_zs_fidelity.rs "mali treekey"
+want tests/mali_recreate_colour.rs "mali treekey"
+want tests/mali_rebind_stencil_gl.rs "mali treekey"
+want tests/mali_zs_words.rs "mali treekey"
+want tests/mali_blend_words_es2.rs "mali treekey"
+want tests/mali_blend_states_es2.rs "mali treekey"
+want tests/mali_cube_samplers_es2.rs "mali treekey"
+want tests/mali_fragment_random_es2.rs "mali treekey"
+want tests/mali_draw_oom_es2.rs "mali treekey"
+want tests/mali_rgb565_stencil_es2.rs "mali treekey"
+want tests/mali_draw_inval_es2.rs "mali treekey"
 # plan #377's dEQP byte-compare tests, their shared module, and the
 # deqp_<family>_* references they read
 want tests/mali_deqp_intval.rs "mali treekey"
@@ -558,7 +576,7 @@ expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "
 # the test knobs); the bound says --local trimmed the plan, not the exact count.
 # One gap: its shaderc-online rows compile tests/es3_shaderc_corpus.rs, and the
 # plans here run without the dEQP corpus (DEQP_GLES3_TEST_DIR unset above).
-expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+expect "local: the summary says so" '^check.sh: (9|[123][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
 expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"

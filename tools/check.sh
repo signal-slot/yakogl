@@ -2780,6 +2780,19 @@ step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzl
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
+# Plan #373's later GL-on-mock pins (check-rows2): the plain build, then the
+# `report-es2` build the board's dEQP-GLES2 library is. mali_api_stub keeps its
+# #[ignore]s (the cargo test row passes them as ignored, not run).
+step "test    $MALI_CONFIG (tests/mali_{vcube_lod,draw_inval,draw_inval_rest,api_stub,blend_words,fragment_random_cases,zs_fidelity,recreate_colour,rebind_stencil_gl}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_vcube_lod --test mali_draw_inval --test mali_draw_inval_rest \
+    --test mali_api_stub --test mali_blend_words --test mali_fragment_random_cases \
+    --test mali_zs_fidelity --test mali_recreate_colour --test mali_rebind_stencil_gl
+step "test    $MALI_CONFIG,report-es2 (tests/mali_{zs_words,blend_words_es2,blend_states_es2,cube_samplers_es2,fragment_random_es2,draw_oom_es2,rgb565_stencil_es2,draw_inval_es2}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
+    --test mali_zs_words --test mali_blend_words_es2 --test mali_blend_states_es2 \
+    --test mali_cube_samplers_es2 --test mali_fragment_random_es2 --test mali_draw_oom_es2 \
+    --test mali_rgb565_stencil_es2 --test mali_draw_inval_es2
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.
