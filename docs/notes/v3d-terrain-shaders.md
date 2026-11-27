@@ -11,6 +11,13 @@ the `glmark2-jobs` entries at frame 10 (`render` 7930 and 9352 us,
 no board run. Code is read at `537da3a8`. glmark2 is the pinned `22c527cb`
 (`$CONNECTED_DEPS_DIR/glmark2-src`).
 
+Updated 2026-11-27 (plan #419, items `mesa-noise-count`, `sched-pair`,
+`board-sched`, `docs-terrain`): `3e950f0f` (the allocator keeps
+accumulators for short values and allocates the list order again) moved our
+counts to noise 1090, VS 156, FS 146, CS 87 (sections 2 and 5 give them,
+the 1495 / 172 / 160 / 97 below are the counts before it); the Pi 4 measured
+the result (section 4, "After `3e950f0f`").
+
 Updated 2026-11-27 (plan #419, item `docs-rows23`): Mesa's 4.2 `v3d_shc` was
 since built and run over terrain's own texts (item `mesa-noise-count`), and
 its counts for the noise and terrain programs are measured below (rows
@@ -20,7 +27,9 @@ marked "measured"); the other Mesa 4.2 counts stay estimates.
 
 ## Answer in short
 
-- **Our compiler's counts.** The two tilt-shift blurs compile to 78
+- **Our compiler's counts at `3e950f0f`** (the texts below this bullet give
+  the counts before it, 1495 / 172 / 160 / 97): noise 1090, terrain VS 156,
+  FS 146, CS 87. The two tilt-shift blurs compile to 78
   (horizontal) and 80 (vertical) instructions at **4 threads**. Each does 9
   TMU look-ups with a 16-bit return, 18 `ldtmu`, a per-pixel P1 and no
   spill. That is at Mesa's level: Mesa's 7.1 count is 64 and 66, and the
@@ -134,7 +143,8 @@ texts.
   bloom V, `895a73bc` the overlay (`tDiffuse * opacity`), `d697bb50` the
   luminance pass, `c549a79a` the normal map.
 - **4.2: measured for terrain's own programs (2026-11-27, item
-  `mesa-noise-count`).** `tools/v3d/README.md:10-29` builds `v3d_shc` in a
+  `mesa-noise-count`; how: Mesa 26.2.1's `v3d_shc` built per
+  `tools/v3d/README.md` and run over the harness texts).** `tools/v3d/README.md:10-29` builds `v3d_shc` in a
   Mesa 26.2.1 tree (`$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz`);
   run over the harness texts it gives the noise FS **1161** words, the
   terrain VS **154** at 4 threads, the terrain FS **153** and the terrain
@@ -166,12 +176,12 @@ terrain VS only); the other rows are the 7.1 x 1.24 estimates.
 
 | program (job) | stage | ours words | ours threads | ours add / mul halves used | ours look-ups (`retire`) | ours `ldtmu` (16-bit words) | ours `thrsw` | ours `ldunif` / uniforms | spills | Mesa 7.1 words, threads | Mesa 4.2 words (est. unless marked) |
 |---|---|---:|---:|---|---:|---:|---:|---|---:|---|---:|
-| noise (`terrain-noise.frag`) | fs | **1495** | **2** | 872 / 830 | 0 | 0 | 3 | 21 / 21 | 0 | not compiled (translator) | **1161, measured** |
+| noise (`terrain-noise.frag`) | fs | **1495** (1090 at `3e950f0f`) | **2** | 872 / 830 | 0 | 0 | 3 | 21 / 21 | 0 | not compiled (translator) | **1161, measured** |
 | normal map | fs | 35 | 4 | 16 / 17 | 3 | 3 | 3 | 3 / 9 | 0 | 28, 4 | 35 |
 | luminance (set-up only) | fs | 14 | 4 | 6 / 7 | 1 | 2 | 3 | 3 / 5 | 0 | 15, 4 | 19 |
-| terrain (`terrain.frag`) | fs | 160 | 4 | 89 / 119 | 5 | 9 | 5 | 39 / 49 | 0 | 136, 4 | **153, measured** |
-| terrain (`terrain.vert`) | vs | 172 | **2** | 109 / 98 | 2 | 3 | 3 | 85 / 89 | 0 | 132, 4 | **154 at 4, measured** |
-| terrain (`terrain.vert`) | cs (bin) | 97 | 4 | 60 / 54 | 1 | 1 | 3 | 63 / 65 | 0 | not in the table | **92, measured** |
+| terrain (`terrain.frag`) | fs | 160 (146 at `3e950f0f`) | 4 | 89 / 119 | 5 | 9 | 5 | 39 / 49 | 0 | 136, 4 | **153, measured** |
+| terrain (`terrain.vert`) | vs | 172 (156 at `3e950f0f`) | **2** | 109 / 98 | 2 | 3 | 3 | 85 / 89 | 0 | 132, 4 | **154 at 4, measured** |
+| terrain (`terrain.vert`) | cs (bin) | 97 (87 at `3e950f0f`) | 4 | 60 / 54 | 1 | 1 | 3 | 63 / 65 | 0 | not in the table | **92, measured** |
 | bloom H / V (radius 2) | fs | 48 / 50 | 4 | 22 / 31 | 5 | 10 | 5 | - / 16 | 0 | 39 / 40, 4 | 48 / 50 |
 | overlay | fs | 14 | 4 | 4 / 8 | 1 | 2 | 3 | 1 / 3 | 0 | 14, 4 | 17 |
 | tilt-shift H (radius 4) | fs | **78** | 4 | 38 / 56 | 9 | 18 | 7 | 10 / 28 | 0 | 64, 4 | 79 |
@@ -313,6 +323,25 @@ us.
   host), so the order is inferred. Item v3d-jobs-readout (in review) reads
   the same line.
 
+### After `3e950f0f` (measured on the Pi 4, `ce73e98e` -> `3e950f0f`)
+
+| job | model before | measured before | model at the new count | measured after |
+|---|---:|---:|---:|---:|
+| noise (1495 -> 1090 words) | 6.1 ms | 7930 us | about 4.5 ms | **5791 us** |
+| terrain draw (VS 172 -> 156, FS 160 -> 146) | 8.65 ms | 9373 us | about 7.8 ms | **8819 us** |
+
+Noise moved by -2.14 ms for -405 words (5.3 us a word; the model's slope is
+4.1 us a word), so the noise job is a little above its ALU model, as before.
+Job 4 moved by -0.55 ms: its words fell by 16 (VS) and 14 (FS) a lane-pass,
+and the model's -2 ms rested on reaching about 115 and 125 words, the floors,
+which no compiler reaches; Mesa's counts (154 / 153) are already reached by
+ours on the FS side (146 against 153). The frame fell 34.758 -> 31.906 ms, `wait.ns` 28.34 ->
+25.57 ms. **The blur model:** render plus TFU is about 27 ms, noise 5.8 and
+terrain 8.8 ms, which leaves about 12 ms for six small entries; two blurs of
+7 to 9 ms would need 14 to 18 ms, so the blurs did not read 7 to 9 ms. The
+per-entry blur values were not read into this note, so that is an
+inference from the sums, and no TMU cache study is indicated by it.
+
 ## 5. Fix candidates, ranked
 
 Board record values are the `glmark2-jobs: [terrain] ...: frame 10` line
@@ -320,7 +349,9 @@ Board record values are the `glmark2-jobs: [terrain] ...: frame 10` line
 entries before the terrain draw; "the terrain entry" is the one before the
 `tfu 1/8xxus` entry (section 4).
 
-1. **Noise: pair the add and mul halves better in the V3D scheduler.** 1495
+1. **Noise: pair the add and mul halves better in the V3D scheduler. Done at
+   `3e950f0f`: 1495 -> 1090 words (below Mesa's 1161), render 7930 -> 5791 us
+   measured (the prediction of about 5000 us was not reached).** Before it: 1495
    words for 872 add and 830 mul operations; a floor of about 872 to 900
    words. Mesa 4.2's count for the same text is now measured (2026-11-27):
    **1161 words**. The floor is a theoretical bound — nothing reaches it;
@@ -351,7 +382,10 @@ entries before the terrain draw; "the terrain entry" is the one before the
      carries the negates, and the listing has no SFU `recip`. Expected:
      unknown until the listings are compared.
 2. **Terrain draw: the same pairing for its VS (172 words for 109 add / 98
-   mul) and FS (160 for 89 / 119).** Floors of about 115 and 125, again
+   mul) and FS (160 for 89 / 119). Done in part at `3e950f0f`: VS 156 (2
+   threads), FS 146, CS 87; the terrain entry's `render` 9373 -> 8819 us
+   measured (about 7000 was predicted). What is left: the VS at 4 threads as
+   Mesa, the FS's duplicate `rsqrt`, look-up placement.** Floors of about 115 and 125, again
    below what Mesa reaches: its measured 4.2 counts for the same programs
    are 154 (VS, at 4 threads), 153 (FS) and 92 (CS) — the reachable
    reference, as in candidate 1. Expected: ALU 8.65 to about 6.5 ms,
@@ -410,4 +444,5 @@ or a test.
 - **Quad helper lanes, per-tile vertex re-shading, instruction-cache size,
   the V3D clock**: not measured. Each one makes the terrain and noise
   models larger, never smaller.
-- **No board run.** Every board figure is quoted from `pi4-slow-terrain.md`.
+- **Board run:** none in this note's own session; the measured values are
+  quoted from `pi4-slow-terrain.md` ("Board runs").
