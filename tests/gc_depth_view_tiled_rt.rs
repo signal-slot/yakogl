@@ -23,13 +23,12 @@
 //! knob is live in this rig: the same scene with a depth renderbuffer gets
 //! a super-tiled depth surface.
 //!
-//! The guard is indirect: `ds_cache::depth_view` (and so `gc_depth_sampled`
-//! and `depth_sample::binding`) never looks at the surface's layout. A live
-//! super-tiled plane (a depth renderbuffer's) is answered "yes" and would be
-//! described LINEAR. No GL call reaches that (a renderbuffer cannot be
-//! sampled), so it is no wrong texel today; the ignored test
-//! [`the_depth_view_refuses_a_super_tiled_plane`] states the rule the wire
-//! note asks for and fails until `depth_view` reports the layout.
+//! The guard is direct as well: `ds_cache::depth_view` (and so
+//! `gc_depth_sampled` and `depth_sample::binding`) refuses a plane whose
+//! surface is not `Linear`, so a live super-tiled plane (a depth
+//! renderbuffer's) is never described LINEAR. No GL call reaches that (a
+//! renderbuffer cannot be sampled); [`the_depth_view_refuses_a_super_tiled_
+//! plane`] pins the refusal.
 //!
 //! The rig is tests/gc_tiled_rt.rs's stand-in OSAL (host memory, the
 //! submitted streams kept), without its model of the GPU: what is read is the
@@ -529,9 +528,6 @@ fn a_depth_renderbuffer_goes_super_tiled_in_the_same_rig() {
 /// texture's id is asked, and a texture plane is never super-tiled), so no
 /// wrong texel is drawn; this pins the latent defect for the fix.
 #[test]
-#[ignore = "defect: ds_cache::depth_view ignores Surface::layout, so gc_depth_sampled answers yes for a live \
-            super-tiled depth plane that depth_sample::view_binding then describes LINEAR \
-            (gc-depth-sample-wire.md, 'What this note does not decide', last bullet)"]
 fn the_depth_view_refuses_a_super_tiled_plane() {
     let _g = serial();
     let r = run(Depth::Renderbuffer, true);
