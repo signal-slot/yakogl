@@ -729,7 +729,21 @@ pub fn job_state(d: &GlesDraw) -> Result<V3dJobState, Refusal> {
     }
 
     if d.blend {
-        let dst_alpha_one = d.target_alpha_bits == 0;
+        /* `target_alpha_bits` is target 0's. A target 0 that does not blend
+         * (an integer one beside a blended target: draw.rs
+         * `draw_blends_a_target`) says nothing of the alpha the one
+         * BLEND_CFG's DST_ALPHA factors read in the RTs that blend, and the
+         * job state carries no other target's alpha width: such factors are
+         * refused by name, the others need none. */
+        let rt0_blends = rt_blendable(d, 0);
+        let reads_dst_alpha = |x: u8| blend_factor(x as u32, true) != blend_factor(x as u32, false);
+        if !rt0_blends
+            && [d.blend_src_rgb, d.blend_dst_rgb, d.blend_src_alpha, d.blend_dst_alpha].into_iter().any(reads_dst_alpha)
+        {
+            return Err("a blend factor reading the destination alpha with target 0 not blending (its alpha \
+                        width is target 0's, not the blended targets')");
+        }
+        let dst_alpha_one = rt0_blends && d.target_alpha_bits == 0;
         let f = |x: u8| blend_factor(x as u32, dst_alpha_one).ok_or("an unknown blend factor");
         if d.blend_eq_rgb as u32 > SHC_BLEND_MAX || d.blend_eq_alpha as u32 > SHC_BLEND_MAX {
             return Err("an unknown blend equation");
@@ -1103,6 +1117,32 @@ mod tests {
         d.blend = false;
         let st = job_state(&d).unwrap();
         assert!(!st.blend_enabled && !st.rt_blend_own);
+    }
+
+    /// An integer target 0 beside a blended RGBA8 target 1 (draw.rs
+    /// `draw_blends_a_target`): RT 1 alone blends; a factor reading the
+    /// destination alpha is refused by name (target 0's alpha width is not
+    /// the blended target's).
+    #[test]
+    fn an_integer_target_0_leaves_target_1_blending() {
+        let mut d = draw();
+        d.blend = true;
+        (d.blend_src_rgb, d.blend_dst_rgb, d.blend_src_alpha, d.blend_dst_alpha) =
+            (SHC_BF_SRC_ALPHA as u8, SHC_BF_INV_SRC_ALPHA as u8, 1, 1);
+        d.target_format = GLES_SURF_RGBA8I;
+        d.target_alpha_bits = 0;
+        let t = |gpu, format| GlesDrawTarget { gpu, w: 64, h: 64, format, out_shift: 0 };
+        d.targets[0] = t(d.target_gpu, d.target_format);
+        d.targets[1] = t(0x0200_0000, GLES_SURF_RGBA8888);
+        d.num_targets = 2;
+        let st = job_state(&d).unwrap();
+        assert!(st.blend_enabled);
+        assert_eq!((st.rt_blend_own, st.rt_blend_mask), (true, 0b0010), "RT 1 blends, integer RT 0 does not");
+        assert_eq!((st.rgb_src, st.rgb_dst), (V3D_BLEND_FACTOR_SRC_ALPHA, V3D_BLEND_FACTOR_INV_SRC_ALPHA));
+        for f in [SHC_BF_DST_ALPHA, SHC_BF_INV_DST_ALPHA, SHC_BF_SRC_ALPHA_SATURATE] {
+            d.blend_src_rgb = f as u8;
+            assert!(job_state(&d).is_err(), "factor {f:#x} reads RT 1's alpha: refused");
+        }
     }
 
     #[test]
