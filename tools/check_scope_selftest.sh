@@ -52,6 +52,17 @@ want capi/assemble.cmake all
 want Cargo.toml all
 want tools/check.sh all
 want tools/land.sh all
+# a self-test no other line of the map claims reaches the tools rows (its
+# own row is one of them); the script it tests, unknown to the map, every row
+want tools/some_new_tool_selftest.sh tools
+want tools/some-new-tool-selftest.sh tools
+want tools/check_pool_selftest.sh tools
+want tools/newdir/selftest.sh tools
+want tools/some_new_tool.sh all
+want tools/selftest_helper.sh all
+# it decides which test targets the whole-suite rows build
+want tools/check_live_tests.py all
+want tools/check_live_tests_selftest.py tools
 want third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml all
 want some/new/place.rs all
 # one GPU
@@ -422,6 +433,40 @@ same "full plan: no row skipped" "" "$(rows skip "$out")"
 same "full plan: the rows of every plan" \
   "$(rows 'plan|gap|skip' "$docs_plan")
 gen     precompiled tables for the tier configurations" "$(rows 'plan|gap' "$out")"
+# A row that names a self-test is reached by a change of that self-test: the
+# row's `scope` line holds a scope of the self-test's own path (or the path
+# selects every row). scope_of_path sends a self-test it does not know to
+# the tools rows on the strength of this, so it is checked for every row and
+# not only for those: a self-test run from a row of another scope would
+# otherwise change with that row skipped. A row whose `scope` line is not
+# made of literal words cannot be checked and is named.
+checks=$((checks + 1))
+bad=$(python3 -I - <<'PY'
+import re, subprocess
+text = re.sub(r"\\\n", " ", open("tools/check.sh").read())
+scope, rows = None, []
+for line in text.split("\n"):
+    s = line.strip()
+    m = re.match(r"scope\s+(.*)$", s)
+    if m:
+        words = m.group(1).split()
+        scope = words if all(re.fullmatch(r"[a-z0-9]+", w) for w in words) else None
+    elif re.match(r"step\s", s):
+        for p in re.findall(r"(?<![\w./-])((?:tools|driver)/[\w./-]*selftest\.(?:sh|py))", s):
+            rows.append((p, scope))
+paths = sorted({p for p, _ in rows})
+out = subprocess.run(["tools/check.sh", "--scope-of"] + paths, capture_output=True, text=True, check=True).stdout
+of = {l.split()[0]: l.split()[1:] for l in out.splitlines() if l.strip()}
+if not rows:
+    print("  no row of tools/check.sh names a self-test: the scan reads nothing")
+for p, scope in rows:
+    if scope is None:
+        print("  %s: its row's scope line is not literal words" % p)
+    elif of.get(p) != ["all"] and not set(scope) & set(of.get(p, [])):
+        print("  %s: path scope '%s', its row's scope '%s'" % (p, " ".join(of.get(p, [])), " ".join(scope)))
+PY
+) || bad="  the scan failed"
+[ -z "$bad" ] || { echo "FAIL a row that names a self-test is not reached by a change of it:"; printf '%s\n' "$bad"; fails=$((fails + 1)); }
 # Every scope a row names is one a path selects: a row under a scope that no
 # path maps to (scope_of_path) runs in the full plan only, never for a change
 # to its own files. The scopes reached through config_scopes are its GPUs and
