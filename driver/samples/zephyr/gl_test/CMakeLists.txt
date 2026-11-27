@@ -42,11 +42,8 @@ endif()
 # boards/stm32mp257f_dk_stm32mp257fxx_a35.conf.
 if(BOARD MATCHES "^stm32mp257f_dk")
   set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
-  # libyakogl takes the ST Vivante profile (the crate's `vivante-st`: the
-  # GCNanoUltra31_VIP2's limits are the active ones). Appended to the
-  # capi cmake's YAKOGL_EXTRA_FEATURES, so only this board's image has it;
-  # the i.MX8MP, AM62P, Pi, X2 and T6 images keep their own profile.
-  list(APPEND YAKOGL_EXTRA_FEATURES "vivante-st")
+  # The ST Vivante profile comes from CONFIG_YAKOGL_VIVANTE_ST in this
+  # board's conf, as for deqp and glmark2.
 endif()
 
 # The Verdin iMX95's A55: the board layer's app.conf and app.overlay, then
