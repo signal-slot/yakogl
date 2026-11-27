@@ -6,14 +6,14 @@
 # #24), in one run. Read-only: it runs the record's checkers and greps the
 # result documents, it writes nothing.
 #
-#   tools/cts/imx8mp-gles3-acceptance.sh [--date YYYY-MM-DD] [--commit HASH8] [<repo root>]
+#   tools/cts/imx8mp-gles3-acceptance.sh [--date YYYY-MM-DD] [--commit [x2-]HASH8] [<repo root>]
 #
 # <repo root>  the repository whose record is checked (default: the one that
 #              holds this script); the checkers are run from its tools/cts.
 # --date       the campaign day for c3 (default: the date in the name of the
 #              tools/cts/log/*-imx8mp-gles3-*-rows01-13 directory, else the
 #              date of the 'Run YYYY-MM-DD, ...' line of its README.md).
-# --commit     the campaign commit (8 hex or more): c1-c3 read only the slices
+# --commit     the campaign commit (8 hex or more, or x2-<hex> for the X2 slices only): c1-c3 read only the slices (Verdin <hash8> and X2 x2-<hash8> directories both; "slice <dir>: measured on ..." lines say the board)
 #              tools/cts/log/*-imx8mp-gles3-<hash8>*-rows*, as the recipe's
 #              `ls -d ...-<hash8>-rows*`. Without it every slice directory is
 #              read, so a tree holding two campaigns (9bc82915 and 05769bf2
@@ -51,8 +51,9 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 DATE=
-USAGE="usage: $0 [--date YYYY-MM-DD] [--commit HASH8] [<repo root>]"
+USAGE="usage: $0 [--date YYYY-MM-DD] [--commit [x2-]HASH8] [<repo root>]"
 COMMIT=
+BOARDONLY=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--date)
@@ -62,6 +63,9 @@ while [ $# -gt 0 ]; do
 		;;
 	--commit)
 		[ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }
+		case $2 in
+		x2-*) BOARDONLY=x2; set -- "$1" "${2#x2-}" "${@:3}" ;;
+		esac
 		case $2 in
 		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
 		*) echo "imx8mp-gles3-acceptance: --commit wants 8 or more hex digits: $2" >&2; exit 2 ;;
@@ -102,21 +106,45 @@ tool() { # tool <script> args... : python3 -I of a tool under the root
 }
 
 shopt -s nullglob
-rows=("$LOG"/*-imx8mp-gles3-"$COMMIT"*-rows*)
+# both shapes: Verdin '<sha8>' and Armadillo-X2 'x2-<sha8>' ('--commit x2-<sha8>': X2 only)
+rows=()
+[ "$BOARDONLY" = x2 ] || rows+=("$LOG"/*-imx8mp-gles3-"$COMMIT"*-rows*)
+rows+=("$LOG"/*-imx8mp-gles3-x2-"$COMMIT"*-rows*)
 es2=("$LOG"/*-imx8mp-es2-*)
 gles3=("$LOG"/*-imx8mp-gles3-*)
 r01=("$LOG"/*-imx8mp-gles3-"$COMMIT"*-rows01-13)
 shopt -u nullglob
 dirs=()
-for d in "${rows[@]}"; do [ -d "$d" ] && dirs+=("$d"); done
+for d in "${rows[@]}"; do
+	[ -d "$d" ] || continue
+	case " ${dirs[*]:-} " in *" $d "*) continue ;; esac
+	dirs+=("$d")
+done
+# which board each slice was measured on: x2- in the name, or board.sh x2 lines in the README
+for d in "${dirs[@]}"; do
+	b=$(basename "$d")
+	case $b in
+	*-imx8mp-gles3-x2-*) echo "slice $b: measured on the Armadillo-X2" ;;
+	*)
+		if [ -f "$d/README.md" ] && grep -q 'board\.sh x2 e[0-9]* rc=' "$d/README.md"; then
+			echo "slice $b: measured on the Armadillo-X2"
+		else
+			echo "slice $b: measured on the Verdin"
+		fi
+		;;
+	esac
+done
 
 # c1
 # the Armadillo-X2 slices: board.sh x2 verdict lines in the README; each must say it was measured on the X2
 nx2=0 unmarked=
 for d in "${dirs[@]}"; do
-	[ -f "$d/README.md" ] && grep -q 'board\.sh x2 e[0-9]* rc=' "$d/README.md" || continue
+	case $(basename "$d") in
+	*-imx8mp-gles3-x2-*) ;;
+	*) [ -f "$d/README.md" ] && grep -q 'board\.sh x2 e[0-9]* rc=' "$d/README.md" || continue ;;
+	esac
 	nx2=$((nx2 + 1))
-	grep -q 'measured on the Armadillo-X2' "$d/README.md" || unmarked="$unmarked $(basename "$d")"
+	[ -f "$d/README.md" ] && grep -q 'measured on the Armadillo-X2' "$d/README.md" || unmarked="$unmarked $(basename "$d")"
 done
 if [ ${#dirs[@]} -eq 0 ]; then
 	res 1 FAIL "no slice directory matches tools/cts/log/*-imx8mp-gles3-*-rows*"
