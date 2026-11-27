@@ -747,6 +747,20 @@ static void test_place(void)
 	CHECK(!strcmp(swap_place_reason_name((enum swap_place_reason)99), "?"));
 }
 
+/* (h) s32-nullfix: the 4096-byte main stack of the second board run
+ * overflowed into the idle stack; it is refused whatever was measured. */
+static void test_stack(void)
+{
+	CHECK(!swap_stack_ok(4096u, 4096u));
+	CHECK(!swap_stack_ok(4096u, 0u));
+	CHECK(SWAP_MAIN_STACK_MIN >= 4u * 4096u);
+	CHECK(swap_stack_ok(SWAP_MAIN_STACK_MIN, SWAP_MAIN_STACK_MIN - 4400u));
+	CHECK(swap_stack_ok(SWAP_MAIN_STACK_MIN, SWAP_STACK_MARGIN));
+	CHECK(!swap_stack_ok(SWAP_MAIN_STACK_MIN, SWAP_STACK_MARGIN - 1u));
+	CHECK(!swap_stack_ok(SWAP_MAIN_STACK_MIN, 0u));
+	CHECK(!swap_stack_ok(SWAP_MAIN_STACK_MIN, SWAP_MAIN_STACK_MIN + 1u));
+}
+
 int main(void)
 {
 	test_judge();
@@ -762,6 +776,7 @@ int main(void)
 	test_lact_restore();
 	test_vblank();
 	test_place();
+	test_stack();
 	printf("swap_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;
 }

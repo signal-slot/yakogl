@@ -16,6 +16,9 @@
 # placed at 929 over fill words, zeros below HEADE or after the END not
 # preferred, overlaps with another channel's HEADE/LACT/list stepped past, no
 # room, a channel not walked to an END, no END (the old 256-word walk) refused.
+# And the main stack (s32-nullfix): swap_stack_ok refuses the 4096-byte main
+# stack that overflowed into the idle stack on the board, and a measured
+# stack within SWAP_STACK_MARGIN.
 cd "$(dirname "$0")/../../../.." || exit 1
 cc=${CC:-cc}
 out=build/rpi5_scanout32
