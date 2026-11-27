@@ -104,6 +104,14 @@ struct Platform {
     /// What the model could not do (a panic inside the OSAL's `submit`
     /// would abort the process): checked by the test after the case.
     model_errors: Vec<String>,
+    /// The 4x target's size in pixels, when it is not `SIZE` x `SIZE`: the
+    /// samples a layer paints and the storage pitch a reload reads.
+    extent: Option<(u32, u32)>,
+    /// When set, every draw into a 4x scratch also writes this into the
+    /// scratch's padding (the samples past the target's `2w` x `2h`): what
+    /// the padding of a real scratch may hold, which no resolve may carry
+    /// into the target.
+    pad_garbage: Option<[u8; 4]>,
 }
 
 static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
@@ -229,16 +237,29 @@ fn run_model(words: &[u32], p: &mut Platform) {
                 let (addr, pitch) = (u64::from(r(&m, pe_pipe_color_addr(0))), r(&m, GC_PE_COLOR_STRIDE));
                 p.ms_draws.push(addr);
                 let layer = p.layers.pop_front().expect("a 4x draw the test did not expect");
-                let n = 2 * SIZE;
-                for sy in 0..n {
-                    for sx in 0..n {
+                let (tw, th) = p.extent.unwrap_or((SIZE, SIZE));
+                let (nx, ny) = (2 * tw, 2 * th);
+                /* the storage's row in pixels: whole pixel pairs (gl/context.rs `tex_pitch`) */
+                let storage_px = (tw + 1) & !1;
+                let garbage = p.pad_garbage;
+                let (gx, gy) = match garbage {
+                    Some(_) => (pitch / 4, yakogl::msaa_hw::gc::scratch_rows(th)),
+                    None => (nx, ny),
+                };
+                for sy in 0..gy {
+                    for sx in 0..gx {
+                        if sx >= nx || sy >= ny {
+                            let off = layout::offset(Layout::SuperTiled, sx, sy, 4, pitch) as u64;
+                            bytes(p, addr + off, 4).copy_from_slice(&garbage.unwrap());
+                            continue;
+                        }
                         let px = match &layer {
                             Layer::Paint(f) => match f(sx, sy) {
                                 Some([r, g, b, a]) => [b, g, r, a],
                                 None => continue,
                             },
                             Layer::Broadcast { src } => {
-                                let at = *src + u64::from((sy / 2) * SIZE * 4 + (sx / 2) * 4);
+                                let at = *src + u64::from((sy / 2) * storage_px * 4 + (sx / 2) * 4);
                                 bytes(p, at, 4).try_into().unwrap()
                             }
                         };
@@ -432,6 +453,8 @@ fn on_gc7000(case: impl FnOnce()) {
         p.layers.clear();
         p.ms_draws.clear();
         p.resolves.clear();
+        p.extent = None;
+        p.pad_garbage = None;
     });
     if let Err(e) = r {
         std::panic::resume_unwind(e);
@@ -1180,4 +1203,199 @@ fn depth_resolve_keeps_one_sample() {
         // SAFETY: a plain GL call.
         unsafe { glDisable(GL_DEPTH_TEST) };
     });
+}
+
+/* ---- gc-msaa-pad: 4x FBOs of sizes that are not multiples of 16 x 4 -------- */
+
+/// What the model writes into the padding of a 4x scratch
+/// (`Platform::pad_garbage`): no resolve may carry it into a target.
+#[cfg(feature = "msaa-fbo")]
+const GARBAGE8: [u8; 4] = [0x11, 0x22, 0x33, 0x44];
+/// What a test fills a 4x target's whole storage allocation with before the
+/// job: the bytes outside the target's rectangle must keep it.
+#[cfg(feature = "msaa-fbo")]
+const SENTINEL: u8 = 0x5a;
+
+/// A bound `w` x `h` framebuffer with a 4x RGBA8 colour renderbuffer, or a
+/// 1x one at `samples` 0.
+#[cfg(feature = "msaa-fbo")]
+fn framebuffer_sized(samples: GLsizei, w: u32, h: u32) -> Fbo {
+    let (mut fb, mut rb) = (0, 0);
+    // SAFETY: plain GL calls on names this test makes.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, w as GLsizei, h as GLsizei);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "{w}x{h} at {samples}");
+    // SAFETY: a plain GL call.
+    assert_eq!(unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }, GL_FRAMEBUFFER_COMPLETE);
+    assert_eq!(rb_samples(rb), samples);
+    Fbo { fb, colour: rb, depth: None }
+}
+
+/// The resolved pixel `(x, y)` of [`pad_pattern`], as GL R,G,B,A: blue in
+/// the last column and the last row (the RS window's padding begins right
+/// after them), red left of pixel 10, pixel 10 half red, black elsewhere.
+#[cfg(feature = "msaa-fbo")]
+fn pad_expected(w: u32, h: u32, x: u32, y: u32) -> [u8; 4] {
+    if x == w - 1 || y == h - 1 {
+        BLUE8
+    } else if x < 10 {
+        RED8
+    } else if x == 10 {
+        [128, 0, 0, 255]
+    } else {
+        BLACK8
+    }
+}
+
+/// The samples the PE writes for [`pad_expected`] over a black clear: pixel
+/// 10's left two samples (sample column 20) red, its right two untouched.
+#[cfg(feature = "msaa-fbo")]
+fn pad_pattern(w: u32, h: u32) -> Layer {
+    Layer::Paint(Box::new(
+        move |sx, sy| {
+            if sx / 2 == w - 1 || sy / 2 == h - 1 {
+                Some(BLUE8)
+            } else {
+                (sx <= 20).then_some(RED8)
+            }
+        },
+    ))
+}
+
+/// A 4x RGBA8 FBO of `w` x `h`, a size the RS cannot take as its window
+/// (gc-msaa-pad): its draws keep 4 samples in the target's own scratch (no
+/// single-sample fallback), the job ends in the RS's 2x2 downsample over the
+/// padded rectangle (`rs_resolve_extent`) into a temporary at the padded
+/// pitch (never the storage), and the storage then holds exactly the
+/// resolved `w` x `h`: every byte of its allocation outside that rectangle
+/// (the odd width's pitch column, the bytes past the last row) keeps what
+/// it held, and the scratch's padding (garbage here) reaches nothing. A
+/// resolve blit into a 1x FBO of the same size reads the same pixels back.
+#[cfg(feature = "msaa-fbo")]
+fn a_padded_4x_fbo_resolves_exactly_its_rectangle(w: u32, h: u32) {
+    use yakogl::msaa_hw::gc::{resolve_pad_pitch, rs_resolvable, rs_resolve_extent, rs_window_resolve};
+    assert!(!rs_resolvable(w, h), "{w}x{h} is a padded size");
+    on_gc7000(|| {
+        with_platform(|p| {
+            p.extent = Some((w, h));
+            p.pad_garbage = Some(GARBAGE8);
+        });
+        let fbo = framebuffer_sized(4, w, h);
+        let (m, d) = (kicked(), ms_draws());
+        colour_program(RED);
+        SEEN.lock().unwrap().clear();
+        let quad = [-1.0f32, -1.0, 0.5, 1.0, 1.0, -1.0, 0.5, 1.0, -1.0, 1.0, 0.5, 1.0, 1.0, 1.0, 0.5, 1.0];
+        /* the clear and the draw are recorded, not submitted, until the
+         * finish below: the storage is filled and the layers queued between */
+        // SAFETY: plain GL calls; `quad` outlives the finish.
+        unsafe {
+            glViewport(0, 0, w as GLsizei, h as GLsizei);
+            glClearColor(0.0, 0.0, 0.0, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, quad.as_ptr() as *const c_void);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        let seen = SEEN.lock().unwrap().iter().rev().find(|s| s.draws).cloned();
+        let s = seen.expect("the draw reached the back end");
+        assert_eq!((s.samples, s.targets.len(), s.size), (4, 1, (w, h)));
+        let target = s.targets[0].0;
+        /* the whole allocation holding the storage */
+        let (base, len) = with_platform(|p| {
+            let (&base, a) = p.allocs.range_mut(..=target).next_back().expect("the storage's allocation");
+            // SAFETY: the allocation's own bytes.
+            let all = unsafe { core::slice::from_raw_parts_mut(a.as_mut_ptr() as *mut u8, a.len() * 8) };
+            all.fill(SENTINEL);
+            (base, all.len())
+        });
+        let stride = ((w + 1) & !1) * 4;
+        assert!(target - base + u64::from(stride * h) <= len as u64, "the storage fits its allocation");
+        expect_layers([all(BLACK8), pad_pattern(w, h)]);
+        // SAFETY: a plain GL call.
+        unsafe { glFinish() };
+
+        /* kept at 4x: the clear and the draw into the slot's scratch */
+        let (scratch, loadable) = yakogl::vivante::msaa_fbo::kept(target).expect("a slot for the padded 4x target");
+        assert!(loadable, "the submitted job's samples count");
+        assert_eq!(ms_draws_since(d), [scratch, scratch], "the clear and the draw at 4x, no single-sample fallback");
+
+        /* the resolve: the padded window, into the temporary at its pitch */
+        let kicked_words = kicks_since(m);
+        assert!(downsamples(&kicked_words), "the job ends in the RS downsample");
+        let last = |reg: u32| kicked_words.iter().rev().find(|(r, _)| *r == reg).map(|w| w.1);
+        let (ew, eh) = rs_resolve_extent(w, h);
+        assert_eq!(last(GC_RS_WINDOW_SIZE), Some(rs_window_resolve(ew, eh)), "{ew}x{eh} pixels, in samples");
+        assert_eq!(last(GC_RS_DEST_STRIDE), Some(resolve_pad_pitch(w, 4)));
+        let (src, pad) = with_platform(|p| p.resolves.last().copied()).expect("a resolve");
+        assert_eq!(src, scratch, "the RS reads the slot's scratch");
+        assert!(!(base..base + len as u64).contains(&pad), "the RS writes the temporary, never the storage");
+
+        /* the storage: the rectangle resolved, every other byte untouched */
+        with_platform(|p| {
+            let all = bytes(p, base, len).to_vec();
+            let mut wrong = Vec::new();
+            for (i, &b) in all.iter().enumerate() {
+                let off = i as i64 - (target - base) as i64;
+                let (y, x) = (off.div_euclid(i64::from(stride)), off.rem_euclid(i64::from(stride)) / 4);
+                let want = if off >= 0 && (y as u32) < h && (x as u32) < w {
+                    let [r, g, b, a] = pad_expected(w, h, x as u32, y as u32);
+                    [b, g, r, a][(off % 4) as usize]
+                } else {
+                    SENTINEL
+                };
+                if b.abs_diff(want) > 1 && wrong.len() < 8 {
+                    wrong.push((x, y, off % 4, b, want));
+                }
+            }
+            assert!(wrong.is_empty(), "{w}x{h}: (x, y, byte, got, want) {wrong:?}");
+        });
+
+        /* the GL resolve blit reads the same pixels */
+        let dst = framebuffer_sized(0, w, h);
+        // SAFETY: plain GL calls on names this test made.
+        unsafe {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo.fb);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst.fb);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
+            let (wi, hi) = (w as GLint, h as GLint);
+            glBlitFramebuffer(0, 0, wi, hi, 0, 0, wi, hi, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        // SAFETY: room for w x h RGBA8 pixels.
+        unsafe {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, dst.fb);
+            glReadPixels(0, 0, w as GLsizei, h as GLsizei, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                let got: [u8; 4] = px[i..i + 4].try_into().unwrap();
+                let want = pad_expected(w, h, x, y);
+                assert!(near(got, want), "{w}x{h} pixel ({x}, {y}): {got:?}, want {want:?}");
+            }
+        }
+    });
+}
+
+/// dEQP fbo.msaa's size (gc-msaa-pad): neither axis aligned.
+#[cfg(feature = "msaa-fbo")]
+#[test]
+fn a_119x131_4x_fbo_is_kept_and_resolves_exactly_its_rectangle() {
+    a_padded_4x_fbo_resolves_exactly_its_rectangle(119, 131);
+}
+
+/// dEQP renderbuffer_resize's size: the height aligned, the width not.
+#[cfg(feature = "msaa-fbo")]
+#[test]
+fn a_40x40_4x_fbo_is_kept_and_resolves_exactly_its_rectangle() {
+    a_padded_4x_fbo_resolves_exactly_its_rectangle(40, 40);
 }

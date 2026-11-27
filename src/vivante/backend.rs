@@ -178,6 +178,15 @@ pub(crate) struct GcState {
     /// reads: `msaa` for the window, the target's own slot for a 4x
     /// framebuffer object (msaa_fbo.rs).
     ms_dest_scratch: u64,
+    /// The CPU view of `ms_dest_gpu` (`GlesDraw::target_cpu`), as an
+    /// address: where a padded resolve's rectangle is copied ([`PadCopy`]).
+    ms_dest_cpu: usize,
+    /// The linear temporary a padded resolve writes (a 4x framebuffer object
+    /// whose size is not the RS's alignment, msaa_fbo.rs `needs_pad`), grown
+    /// as needed, and the copy out of it the submit still owes.
+    ms_pad: OsalGpuMem,
+    ms_pad_bytes: u32,
+    ms_pad_copy: Option<PadCopy>,
 
     /* the clear quad's two shaders, uploaded once; the mipmap quad draws
      * with the same vertex shader (mipmap.rs) */
@@ -243,6 +252,10 @@ impl GcState {
         ms_dest_surf: 0,
         ms_dest_stride: 0,
         ms_dest_scratch: 0,
+        ms_dest_cpu: 0,
+        ms_pad: OsalGpuMem::ZERO,
+        ms_pad_bytes: 0,
+        ms_pad_copy: None,
         clear_vs_code: OsalGpuMem::ZERO,
         clear_ps_code: OsalGpuMem::ZERO,
         mipgen_ps_code: OsalGpuMem::ZERO,
@@ -1256,6 +1269,24 @@ fn ensure_msaa(w: u32, h: u32, bpp: u32) -> i32 {
     0
 }
 
+/// Make the padded resolve's temporary at least `bytes` long (`ms_pad`).
+fn ensure_ms_pad(bytes: u32) -> i32 {
+    let g = g();
+    if !g.ms_pad.impl_.is_null() && bytes <= g.ms_pad_bytes {
+        return 0;
+    }
+    if !g.ms_pad.impl_.is_null() {
+        osal::gpu_free(&mut g.ms_pad);
+        g.ms_pad_bytes = 0;
+    }
+    if osal::gpu_alloc(GC_HEAP_DATA, bytes as usize, OSAL_MEM_DATA, &mut g.ms_pad) != 0 {
+        g.ms_pad = OsalGpuMem::ZERO;
+        return -1;
+    }
+    g.ms_pad_bytes = bytes;
+    0
+}
+
 /// The sample positions and centroid table a 4x draw needs, or the single
 /// sampled state. The values are the blob's, by way of Mesa.
 /// A per-draw PS_MSAA_CONFIG for a multisampled draw: sample coverage on at
@@ -1461,14 +1492,68 @@ fn ms_rs_format(surf_format: u8, bpp: u32) -> u32 {
     }
 }
 
+/// The copy a padded resolve leaves to the CPU (gc-msaa-pad): the target's
+/// own `w` x `h` out of the linear temporary the RS wrote, into the storage,
+/// once the kick that holds the resolve has completed ([`finish_pad_copy`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct PadCopy {
+    /// The temporary's CPU view and row pitch in bytes.
+    src: usize,
+    src_pitch: u32,
+    /// Its bytes, for the cache invalidate.
+    src_bytes: u32,
+    /// The storage's CPU view and row pitch in bytes.
+    dst: usize,
+    dst_stride: u32,
+    /// The rectangle: bytes a row, rows.
+    row_bytes: u32,
+    rows: u32,
+}
+
 /// Average the supertiled scratch surface back into the linear target, 2x2
 /// samples to a pixel (see GC_MSAA_ENABLE for how this follows etnaviv).
+///
+/// A target whose size is not the RS's alignment (only a 4x framebuffer
+/// object: the window's 4x needs one, `ms_resolvable`) is resolved over the
+/// padded rectangle (`msaa_hw::gc::rs_resolve_extent`, as Mesa rounds the
+/// window up within a resource's padding, etnaviv_rs.c:807-821) into the
+/// linear temporary `ms_pad`, never into the storage, which has no padding:
+/// a 119-wide window at the storage's pitch would write into the next row
+/// and past the last one. The submit then copies the `w` x `h` rectangle
+/// out ([`PadCopy`]). The PE drew with the real viewport and scissor, so
+/// the padding columns and rows of the scratch hold nothing the copy keeps.
 fn emit_resolve(c: &mut GcCmd) {
     let g = g();
     let src_pitch = ms_pitch(g.ms_dest_w, g.ms_dest_bpp);
-    let dst_stride = g.ms_dest_stride;
+    let mut dst_stride = g.ms_dest_stride;
     let fmt = ms_rs_format(g.ms_dest_surf, g.ms_dest_bpp);
-    let (sw, sh) = (g.ms_dest_w * 2, g.ms_dest_h * 2);
+    let (mut sw, mut sh) = (g.ms_dest_w * 2, g.ms_dest_h * 2);
+    let mut dst = g.ms_dest_gpu as u32;
+    g.ms_pad_copy = None;
+    if !msaa_hw::gc::rs_resolvable(g.ms_dest_w, g.ms_dest_h) {
+        let (w, h, bpp) = (g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp);
+        let pad_pitch = msaa_hw::gc::resolve_pad_pitch(w, bpp);
+        let pad_bytes = msaa_hw::gc::resolve_pad_bytes(w, h, bpp);
+        if g.ms_dest_cpu == 0 || g.ms_pad.cpu.is_null() || g.ms_pad_bytes < pad_bytes {
+            /* the draw set both up (`draw_one`); without them no window
+             * the RS takes stays inside the storage */
+            glog_once!("yakogl/vivante: a padded 4x resolve has no temporary or no CPU view; not resolved");
+            return;
+        }
+        let (ew, eh) = msaa_hw::gc::rs_resolve_extent(w, h);
+        (sw, sh) = (ew * 2, eh * 2);
+        dst = g.ms_pad.gpu as u32;
+        g.ms_pad_copy = Some(PadCopy {
+            src: g.ms_pad.cpu as usize,
+            src_pitch: pad_pitch,
+            src_bytes: pad_bytes,
+            dst: g.ms_dest_cpu,
+            dst_stride,
+            row_bytes: w * bpp,
+            rows: h,
+        });
+        dst_stride = pad_pitch;
+    }
     let config = rs_source_format(fmt)
         | rs_dest_format(fmt)
         | GC_RS_SOURCE_TILED
@@ -1477,8 +1562,45 @@ fn emit_resolve(c: &mut GcCmd) {
      * (TS mode 0: this backend runs no tile status); the window is in
      * source samples */
     let src_stride = (src_pitch << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW;
-    let (src, dst) = (g.ms_dest_scratch as u32, g.ms_dest_gpu as u32);
+    let src = g.ms_dest_scratch as u32;
     emit_rs(c, &RsBlit { config, src, src_stride, dst, dst_stride, w: sw, h: sh });
+}
+
+/// The copy a padded resolve left ([`PadCopy`]), once `fence` (the kick
+/// holding the resolve) has completed: the target's `w` x `h` from the
+/// temporary into the storage, nothing else of the storage written. It runs
+/// right after the submit, before anything else can be recorded, so no later
+/// job, CPU reader or reload draw (which samples the storage) sees the
+/// storage before it.
+fn finish_pad_copy(copy: PadCopy, fence: i64) {
+    if wait_fence(fence) != 0 {
+        glog_once!("yakogl/vivante: the wait for a padded 4x resolve failed; its target is not written");
+        return;
+    }
+    let PadCopy { src, src_pitch, src_bytes, dst, dst_stride, row_bytes, rows } = copy;
+    let dst_bytes = (rows.saturating_sub(1) * dst_stride + row_bytes) as usize;
+    // SAFETY: `src` is the live `ms_pad` mapping of at least `src_bytes`
+    // (`emit_resolve` checked), `dst` the CPU view of the storage the GL core
+    // gave for this target, `rows` rows of `dst_stride` with the last one
+    // `row_bytes` long (`target_pitch` x `target_h`); the kick that wrote
+    // `src` has completed and nothing else writes either until this returns.
+    unsafe {
+        osal::cache_invd(src as *mut c_void, src_bytes as usize);
+        let from = core::slice::from_raw_parts(src as *const u8, src_bytes as usize);
+        let to = core::slice::from_raw_parts_mut(dst as *mut u8, dst_bytes);
+        if !msaa_hw::gc::copy_resolved_rect(
+            from,
+            src_pitch as usize,
+            to,
+            dst_stride as usize,
+            row_bytes as usize,
+            rows as usize,
+        ) {
+            glog_once!("yakogl/vivante: a padded 4x resolve does not fit its temporary; its target is not written");
+            return;
+        }
+        osal::cache_flush(dst as *mut c_void, dst_bytes);
+    }
 }
 
 /// The reload quad's corners in clip space (x, y, z, w): a triangle strip
@@ -3001,8 +3123,10 @@ fn frame_submit() -> i32 {
         tiled_rt_untile(&mut f.w, &g.trt);
     }
     g.trt = Track::NONE;
+    let mut pad_copy = None;
     if g.ms_dest_gpu != 0 {
         emit_resolve(&mut f.w);
+        pad_copy = g.ms_pad_copy.take();
         /* a 4x framebuffer object's scratch now holds every sample of the
          * job, and the stream resolves it into the storage (msaa_fbo.rs) */
         super::msaa_fbo::stored(g.ms_dest_gpu);
@@ -3045,6 +3169,11 @@ fn frame_submit() -> i32 {
     g.frames[g.cur].kick_id = g.kick_id;
     g.kicks += 1;
     g.cur = (g.cur + 1) % GC_FRAMES;
+    /* a padded 4x resolve went into the temporary: its rectangle reaches
+     * the storage now (`emit_resolve`) */
+    if let Some(copy) = pad_copy {
+        finish_pad_copy(copy, fence);
+    }
     0
 }
 
@@ -3470,6 +3599,10 @@ pub extern "C" fn gc_shutdown() {
     super::mipmap::reset();
     /* the kept samples of every 4x framebuffer object (msaa_fbo.rs) */
     super::msaa_fbo::release_all();
+    if !g.ms_pad.impl_.is_null() {
+        osal::gpu_free(&mut g.ms_pad);
+        g.ms_pad_bytes = 0;
+    }
     if !g.black_tex.impl_.is_null() {
         osal::gpu_free(&mut g.black_tex);
     }
@@ -3930,7 +4063,16 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
             }
             g().msaa.gpu
         };
+        /* a size that is not the RS's alignment resolves into the padded
+         * temporary, and the submit copies its rectangle out (`emit_resolve`) */
+        if fbo_draw(gl)
+            && super::msaa_fbo::needs_pad(gl)
+            && ensure_ms_pad(msaa_hw::gc::resolve_pad_bytes(gl.target_w, gl.target_h, bpp)) != 0
+        {
+            return -ENOMEM;
+        }
         let g = g();
+        g.ms_dest_cpu = gl.target_cpu as usize;
         g.ms_dest_gpu = gl.target_gpu;
         g.ms_dest_w = gl.target_w;
         g.ms_dest_h = gl.target_h;

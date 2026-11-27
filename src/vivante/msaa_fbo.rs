@@ -26,8 +26,8 @@
 //! **Validity.** A slot is loadable (`Slot::needs_load`) once a job that drew
 //! into it was submitted with its RS resolve ([`stored`]). Anything that
 //! writes the target without its samples makes it not loadable
-//! ([`touched`]): a single-sampled draw (a 4x FBO drawn 1x because the RS
-//! cannot resolve it, or a 1x draw into the same address) and a CPU free of
+//! ([`touched`]): a single-sampled draw (a 4x FBO drawn 1x because
+//! [`unsupported`] says so, or a 1x draw into the same address) and a CPU free of
 //! the storage ([`released`]). The next job into a not-loadable slot starts
 //! from the resolved image in every sample (`msaa_hw::gc::SampleLoad::
 //! Broadcast`, the reload draw `backend.rs` builds), unless it begins with a
@@ -70,19 +70,25 @@ fn free(mut s: Scratch) {
 
 /// Why a 4x FBO draw cannot keep its samples here, or `None` when it can:
 /// one colour target (the 8-RT bank is drawn in place, never through the
-/// scratch, `emit_pe_state`), a size the RS resolves
-/// ([`hw::rs_resolvable`]: width a multiple of 16, height of 4), a surface
-/// the RS resolves ([`hw::rs_resolve_format_of_surface`]: RGBA8888, the sRGB
-/// bytes, RGB565) and the reload draw has a form for ([`hw::reload_draw`]).
+/// scratch, `emit_pe_state`), a surface the RS resolves
+/// ([`hw::rs_resolve_format_of_surface`]: RGBA8888, the sRGB bytes, RGB565)
+/// and the reload draw has a form for ([`hw::reload_draw`]).
 /// Such a draw is drawn single-sampled (open point 4 of note (e)): the
 /// resolved colour is right, its edges are not antialiased.
+///
+/// Any size is kept (gc-msaa-pad). A target whose size is not the RS's
+/// alignment is resolved over the padded rectangle into a temporary
+/// (`backend.rs` `emit_resolve`, [`hw::rs_resolve_extent`]), and the CPU
+/// then copies its own `w` x `h` into the storage once the job is done. That
+/// copy needs the storage's CPU view (`GlesDraw::target_cpu`), which every
+/// GL core renderbuffer has; one without it is drawn single-sampled.
 pub fn unsupported(gl: &GlesDraw, hw_targets: usize) -> Option<&'static str> {
     if gl.target_gpu == 0 {
         Some("no colour target")
     } else if hw_targets != 1 {
         Some("more than one colour target")
-    } else if !hw::rs_resolvable(gl.target_w, gl.target_h) {
-        Some("not a resolve size (width a multiple of 16, height of 4)")
+    } else if needs_pad(gl) && gl.target_cpu.is_null() {
+        Some("a padded resolve with no CPU view of the storage")
     } else if hw::rs_resolve_format_of_surface(gl.target_format).is_none()
         || hw::reload_draw(gl.target_format).is_none()
     {
@@ -90,6 +96,13 @@ pub fn unsupported(gl: &GlesDraw, hw_targets: usize) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+/// Does the resolve of `gl`'s target go through the padded temporary? True
+/// when the target's size is not the RS's alignment ([`hw::rs_resolvable`]):
+/// the RS window cannot be the target itself.
+pub fn needs_pad(gl: &GlesDraw) -> bool {
+    !hw::rs_resolvable(gl.target_w, gl.target_h)
 }
 
 /// The scratch of the 4x target of `gl`, made now when there is none, and

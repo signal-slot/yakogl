@@ -54,8 +54,10 @@
 //! 3. **Refusing (`-ENOTSUP`) a draw it cannot make 4x**, per open point 4:
 //!    a target whose slot has no samples yet (first draw, or evicted) and no
 //!    whole clear (the RS cannot upsample `rb.mem` into the scratch, and a
-//!    draw that copies it is not built), a size [`rs_resolvable`] refuses, and
-//!    a format [`rs_resolve_format`] returns `None` for. Refusing is the
+//!    draw that copies it is not built), and a format [`rs_resolve_format`]
+//!    returns `None` for. (A size [`rs_resolvable`] refuses was refused too
+//!    until gc-msaa-pad. It is now resolved over [`rs_resolve_extent`] into
+//!    a padded temporary.) Refusing is the
 //!    choice this module documents; drawing single-sampled (today's rule for
 //!    the window, `backend.rs:3354-3360`) is a coverage loss the item may
 //!    take instead, with a host test of the stream either way.
@@ -129,10 +131,79 @@ pub const fn sample_size(w: u32, h: u32, bytes_per_pixel: u32) -> SampleSize {
 /// a target width in multiples of 16 (the window of `2w` samples is then a
 /// multiple of 32) and a target height in multiples of 4 (`2h` a multiple of
 /// 8). `ms_resolvable`, src/vivante/backend.rs:965-967, note (c3) "Tile and
-/// memory". dEQP's `fbo.msaa` and `multisample.*` targets (128, 256 or a
-/// power of two a side) all pass.
+/// memory".
+///
+/// A size this refuses is still drawn 4x (item gc-msaa-pad): it is resolved
+/// over [`rs_resolve_extent`], the target rounded up to that alignment, into
+/// a padded linear temporary of [`resolve_pad_pitch`] x the padded rows, and
+/// only the target's own `w` x `h` is then copied into its storage
+/// ([`copy_resolved_rect`]). True here means the resolve may go straight into
+/// the storage: the window is exactly the target.
 pub const fn rs_resolvable(w: u32, h: u32) -> bool {
     w & 15 == 0 && h & 3 == 0
+}
+
+/// The RS's alignment of a 4x resolve in target pixels: 16 wide, 4 high
+/// ([`rs_resolvable`]).
+pub const RS_RESOLVE_ALIGN_W: u32 = 16;
+pub const RS_RESOLVE_ALIGN_H: u32 = 4;
+
+/// The rectangle, in target pixels, a 4x resolve of a `w` x `h` target
+/// covers: the target rounded up to [`RS_RESOLVE_ALIGN_W`] x
+/// [`RS_RESOLVE_ALIGN_H`]. Mesa does the same: when a blit covers the whole
+/// level, `etna_try_rs_blit` rounds the window up to the RS alignment in
+/// source samples (`align(width, w_align)`, `align(height, h_align)`,
+/// etnaviv_rs.c:807-821). It may do that because every etnaviv resource is
+/// padded that far (`padded_width`, `padded_height`, the checks at
+/// :832-837), and it falls back to a draw otherwise (`goto manual`). Here the
+/// 4x scratch is padded further ([`scratch_pitch`], [`scratch_rows`]: a
+/// supertile, 32 pixels a side), so the padded window always reads inside it.
+/// The GL core's storage is not padded, so for a size [`rs_resolvable`]
+/// refuses the window is written into a padded temporary instead.
+pub const fn rs_resolve_extent(w: u32, h: u32) -> (u32, u32) {
+    (align_up(w, RS_RESOLVE_ALIGN_W), align_up(h, RS_RESOLVE_ALIGN_H))
+}
+
+/// The row pitch in bytes of the linear temporary a padded resolve of a
+/// target `w` pixels wide writes: the padded width of [`rs_resolve_extent`]
+/// at `bytes_per_pixel`. A multiple of 64 bytes at 4 bytes a pixel and of 32
+/// at 2.
+pub const fn resolve_pad_pitch(w: u32, bytes_per_pixel: u32) -> u32 {
+    rs_resolve_extent(w, 1).0 * bytes_per_pixel
+}
+
+/// Bytes of the linear temporary of a padded resolve of a `w` x `h` target:
+/// [`resolve_pad_pitch`] times the padded rows.
+pub const fn resolve_pad_bytes(w: u32, h: u32, bytes_per_pixel: u32) -> u32 {
+    resolve_pad_pitch(w, bytes_per_pixel) * rs_resolve_extent(w, h).1
+}
+
+/// Copy the `rows` x `row_bytes` rectangle at the start of `src` (rows
+/// `src_pitch` apart) to the start of `dst` (rows `dst_stride` apart),
+/// touching no other byte of `dst`: the step that moves a padded resolve's
+/// target rectangle into the storage. Returns false, copying nothing, when
+/// either slice is too short for the rectangle.
+pub fn copy_resolved_rect(
+    src: &[u8],
+    src_pitch: usize,
+    dst: &mut [u8],
+    dst_stride: usize,
+    row_bytes: usize,
+    rows: usize,
+) -> bool {
+    if rows == 0 || row_bytes == 0 {
+        return true;
+    }
+    let need = |pitch: usize| (rows - 1).checked_mul(pitch).and_then(|n| n.checked_add(row_bytes));
+    match (need(src_pitch), need(dst_stride)) {
+        (Some(s), Some(d)) if s <= src.len() && d <= dst.len() && row_bytes <= src_pitch.min(dst_stride) => {}
+        _ => return false,
+    }
+    for y in 0..rows {
+        let (from, to) = (y * src_pitch, y * dst_stride);
+        dst[to..to + row_bytes].copy_from_slice(&src[from..from + row_bytes]);
+    }
+    true
 }
 
 /// The depth/stencil surface a 4x draw tests and writes: the target's extent
@@ -626,6 +697,52 @@ mod tests {
         }
         assert!(!rs_resolvable(100, 50) && !rs_resolvable(127, 4) && !rs_resolvable(16, 6));
         assert!(rs_resolvable(0, 0), "an empty target is the caller's refusal, not the RS's");
+    }
+
+    /// The padded resolve of any size (gc-msaa-pad): the window is aligned
+    /// for the RS, covers the target, and reads inside the 4x scratch.
+    #[test]
+    fn padded_resolve_extent_fits_the_scratch() {
+        assert_eq!(rs_resolve_extent(119, 131), (128, 132));
+        assert_eq!(rs_resolve_extent(40, 40), (48, 40));
+        assert_eq!(rs_resolve_extent(1, 1), (16, 4));
+        assert_eq!(rs_resolve_extent(64, 64), (64, 64));
+        assert_eq!(resolve_pad_pitch(119, 4), 512);
+        assert_eq!(resolve_pad_bytes(119, 131, 4), 512 * 132);
+        assert_eq!(resolve_pad_bytes(40, 40, 2), 96 * 40);
+        for w in 1..=300 {
+            for h in [1, 2, 3, 4, 5, 39, 40, 131, 257] {
+                let (ew, eh) = rs_resolve_extent(w, h);
+                assert!(ew >= w && eh >= h, "{w}x{h}");
+                assert_eq!(((ew * MS_SCALE) % 32, (eh * MS_SCALE) % 8), (0, 0), "{w}x{h}");
+                assert!(rs_resolvable(ew, eh), "{w}x{h}");
+                assert_eq!(rs_resolvable(w, h), (ew, eh) == (w, h), "{w}x{h}");
+                for bpp in [2, 4] {
+                    assert!(ew * MS_SCALE * bpp <= scratch_pitch(w, bpp), "{w}x{h}x{bpp}");
+                    assert!(eh * MS_SCALE <= scratch_rows(h), "{w}x{h}");
+                }
+            }
+        }
+        assert_eq!(rs_window_resolve(128, 132), 0x0108_0100, "119x131: 256 x 264 samples");
+    }
+
+    /// The rectangle copy writes exactly `rows` x `row_bytes` and refuses
+    /// slices too short for it.
+    #[test]
+    fn copy_resolved_rect_touches_only_the_rectangle() {
+        let src: Vec<u8> = (0..16 * 4).map(|i| i as u8).collect();
+        let mut dst = vec![0xa5u8; 6 * 3 + 2];
+        assert!(copy_resolved_rect(&src, 16, &mut dst, 6, 5, 3));
+        for y in 0..3 {
+            assert_eq!(&dst[y * 6..y * 6 + 5], &src[y * 16..y * 16 + 5]);
+            assert_eq!(dst[y * 6 + 5], 0xa5, "row {y}'s pitch padding");
+        }
+        assert_eq!(&dst[18..], [0xa5, 0xa5], "past the last row");
+        let mut short = vec![0u8; 6 * 2 + 4];
+        assert!(!copy_resolved_rect(&src, 16, &mut short, 6, 5, 3));
+        assert!(short.iter().all(|&b| b == 0));
+        assert!(!copy_resolved_rect(&src, 4, &mut dst, 6, 5, 2), "a row wider than its pitch");
+        assert!(copy_resolved_rect(&src, 16, &mut dst, 6, 0, 3));
     }
 
     /// The depth surface of a 4x draw is twice the target on both axes
