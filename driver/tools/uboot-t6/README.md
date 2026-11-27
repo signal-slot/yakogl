@@ -95,7 +95,7 @@ first stop code: record its cause, do not retry it.
 | 9 | `python3 -I tools/cts/t6-uboot-deqp-compare.py --uboot <rows out-dir\|rows.tsv\|record dir> --armbian tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055` | 0 | 2 bad input; 3 only with `--kexec` (a bad kexec file) |
 | 10 | `BOARD_HOST=... driver/tools/uboot-t6/stage.sh undo <dir>/t6-boot.fingerprint` | 0 | 1 `/boot/yakogl` removed but a stock file differs (named); 2 usage; 3 refused |
 | 11 | `tools/cts/t6-redact-check.sh <record>` | 0 | 1 a finding (file, line and kind, never the text); 2 usage or a missing file |
-| 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, a secret survived redaction (a real reads record carries the `mmc part` UUIDs and the `serial#`: see step 12); 2 usage or no text file; 3 destination exists |
+| 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, something survived redaction (see step 12); 2 usage or no text file; 3 destination exists |
 
 Notes on the steps:
 
@@ -118,7 +118,9 @@ Notes on the steps:
    `<LABEL>/zephyr/zephyr.bin`, summed by a top-level `SHA256SUMS` (line
    `<LABEL>/zephyr/zephyr.bin`) or by one under the label (line
    `zephyr/zephyr.bin`); a label without `zephyr.bin`, or a top-level file
-   other than `<LABEL>.built`, `SHA256SUMS` and `COMMIT`, is named; both
+   other than `<LABEL>.built`, `<LABEL>.log` (the build log
+   `t6-deqp-images.sh` writes beside its `.built`; accepted only with that
+   `.built`), `SHA256SUMS` and `COMMIT`, is named; both
    layouts in one directory fail. A real
    `t6-deqp-images.sh <table> <img-dir> [LABEL...]` writes both at the top of
    `<img-dir>` when its builder exits 0: `SHA256SUMS` (one line
@@ -173,12 +175,14 @@ Notes on the steps:
     same.
 11. Run it on the copy that is going into the tree; a finding is fixed in
     the copy by hand. Nothing of `records/` leaves unchecked.
-12. `answers.txt` and `uart.log` carry the board's MACs and serial number
-    and are never copied as they are; the log tool refuses what survives.
-    A real reads record carries the `mmc part` UUIDs and the `serial#`
-    (rules for both are a pending redaction item), so the refusal is
-    expected. Until then run it with `--exclude answers.txt --exclude
-    uart.log` and quote the reads from the summary block (step 7).
+12. Every text file of the record, `answers.txt` and `uart.log` included, is
+    copied through `tools/cts/console-redact.py`, which replaces MAC
+    addresses, U-Boot's `serial#` value and the UUIDs and GUIDs on `mmc
+    part` output (`PARTUUID=` too), so a real reads record copies as it is,
+    with no `--exclude`. A refusal (exit 1) names a file and a kind of
+    something that survived (a UUID off partition output, say): fix the
+    copy by hand, or leave that file out with `--exclude NAME`, and run it
+    again.
 
 ### Board rules
 
