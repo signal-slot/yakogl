@@ -75,7 +75,7 @@ The stage-2 probe `rpi5_scanout32` ran once on the Pi 5 (tryboot, image from
   `q4: yes`, 8 of 8 swaps `landed=yes why=landed`, `u3 restore: PASS`;
   `tools/probes/rpi_5/rpi5_scanout32/README.md`, "2026-11-27";
   `docs/notes/rpi5-display.md` section 4). The first run's
-  `q4: unanswered (placement refused)` (no END found by a 256-word walk) was
+  refusal to place its list (no END found by a 256-word walk) was
   fixed by the whole-memory walk, which put our list at word 929 right
   after the firmware's END at word 928. This is a register answer; nobody
   looked at the picture.
