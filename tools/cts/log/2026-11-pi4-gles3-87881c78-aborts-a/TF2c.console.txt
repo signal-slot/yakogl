@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 87881c78, 2026-11-27, image TF2c: UART console of the run, the END of it only (the first lines are not kept, see the next line and README.md)
+[condensed: this file holds only the END of the console, from the 'v3d_deqp: case #56' line to the image's end line; the firmware lines, the start of the run and the lines of cases #0 to #55 were read but not written down (README.md)]
+v3d_deqp: case #56 P 70ms k2/13 c20196/20331 r0 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.7'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.7
+v3d_deqp: case #57 P 83ms k2/13 c20196/20331 r0 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.8'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.8
+v3d_deqp: case #58 P 89ms k2/13 c20199/20331 r0 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.9'..
+deqp: Pass dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.9
+v3d_deqp: case #59 P 81ms k2/13 c20199/20331 r0 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.9
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        60/60 (100.0%)
+  Failed:        0/60 (0.0%)
+  Not supported: 0/60 (0.0%)
+  Warnings:      0/60 (0.0%)
+  Waived:        0/60 (0.0%)
+deqp: done: 60 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 60 cases begun, 60 with a result, 0 without
+v3d_deqp DONE, all passed: build 87881c78, filter 'dEQP-GLES3.functional.transform_feedback.random_full_array_capture.*'
+  60 cases in 4253 ms, record at 4 s after boot, reset at ~250 s
+  totals: P 60  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 60 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 60 cases begun, 60 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 13; slowest #0 199 ms
+  carve-out (KiB, of 48636): after #0 20169, last 20199, high-water 20331
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1200 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20155904 bytes used now, 20819456 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 16/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1260 calls, 44379 map reads (35 a call, at most 1153 in one); free runs 7, longest 29082624 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1200 jobs ended; emitted 32660, skipped 33490; groups compared 18360, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x338d000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build 87881c78 DONE, all passed: 60 cases, P 60 F 0 R 0 N 0 other 0

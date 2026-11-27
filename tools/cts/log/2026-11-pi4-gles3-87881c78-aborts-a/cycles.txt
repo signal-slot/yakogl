@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 87881c78, 2026-11-27, the tryboot cycles of S07 T17a TF1a TF1b TF2a TF2b TF2c S03a: image sha256 (the file built, and read back equal from /boot/firmware), seconds from the reboot command to ssh answering, clean-up (README.md)
+S07 sha256=5776b65c22f5a6bcb3a759b270a22d3e113b26c9825b0ff24bb70ec9ddbd2b56 back_after=303s cleanup=staged image and tryboot.txt removed (none was there before)
+T17a sha256=2f116ee4b22804f555b9a52f4c017bee5724191514beb91f3bd53bc6056a7588 back_after=298s cleanup=staged image and tryboot.txt removed
+TF1a sha256=43070d6b16403cb3345b815855d8c57c9f076f13f9f0afbf4e022bca71aaf313 back_after=298s cleanup=staged image and tryboot.txt removed
+TF1b sha256=5f0a092be15ee0933dcdd07a5cbcabe1d6f03edcd64b80500c85b0de7368290f back_after=299s cleanup=staged image and tryboot.txt removed
+TF2a sha256=cf3157c3b077101820a68c766c6bb5bc2f6b597b2ecfadb0e775063e7a657915 back_after=299s cleanup=staged image and tryboot.txt removed
+TF2b sha256=11ce2edd2e14e1ebb9f70f5aff4f38cc551afe2a388570c2cea64c4919c7852a back_after=302s cleanup=staged image and tryboot.txt removed
+TF2c sha256=71510ecff863e72d47ba9e0f8c1d52269fc066e4767f98608e750e0c4d7a7831 back_after=305s cleanup=staged image and tryboot.txt removed
+S03a sha256=b08bc31b7ef5819823a335f46d061fe3146e2bb30597b21506f4a465db9376ce back_after=301s cleanup=staged image and tryboot.txt removed
+== after the last cycle: /boot/firmware holds no yakogl-*.bin and no tryboot.txt (it had none before the session), checked over ssh

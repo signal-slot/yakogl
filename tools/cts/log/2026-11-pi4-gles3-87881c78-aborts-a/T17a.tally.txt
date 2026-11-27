@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image T17a: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt T17a.console.txt
+T17a.console.txt: deqp: done: 71 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 71 cases begun, 71 with a result, 0 without | INCOMPLETE: 6 cases have a result line here, the summary says 71 had a result
+  Lost in capture: 65 cases the image ran have no result line here (T17a.console.txt)
+    the image's counters: deqp: summary 71 cases begun, 71 with a result; deqp: done 71 passed, 0 failed, 0 not supported, 0 warnings; 87881c78 DONE, all passed: 71 cases, P 71 F 0 R 0 N 0 other 0; result lines seen: 6
+    by the image's done counters the lost cases were: Pass 65
+    case numbers #2-#66, 65 without an intact result line (after dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_npot, before dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_npot)
+mustpass cases with a result: 6 (of 6 seen)
+group                                       pass   fail    n/s  other
+texture                                        6      0      0      0
+TOTAL                                          6      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T17a: deqp: summary 71 cases begun, 71 with a result; deqp: done 71 passed, 0 failed, 0 not supported, 0 warnings; 87881c78 DONE, all passed: 71 cases, P 71 F 0 R 0 N 0 other 0; 6 result lines seen, 65 LOST in capture

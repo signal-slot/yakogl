@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image TF2c: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt TF2c.console.txt
+TF2c.console.txt: deqp: done: 60 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 60 cases begun, 60 with a result, 0 without | INCOMPLETE: 3 cases have a result line here, the summary says 60 had a result
+  Lost in capture: 57 cases the image ran have no result line here (TF2c.console.txt)
+    the image's counters: deqp: summary 60 cases begun, 60 with a result; deqp: done 60 passed, 0 failed, 0 not supported, 0 warnings; 87881c78 DONE, all passed: 60 cases, P 60 F 0 R 0 N 0 other 0; result lines seen: 3
+    by the image's done counters the lost cases were: Pass 57
+    case numbers #0-#56, 57 without an intact result line (after the start, before dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.7)
+mustpass cases with a result: 3 (of 3 seen)
+group                                       pass   fail    n/s  other
+transform_feedback                             3      0      0      0
+TOTAL                                          3      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  TF2c: deqp: summary 60 cases begun, 60 with a result; deqp: done 60 passed, 0 failed, 0 not supported, 0 warnings; 87881c78 DONE, all passed: 60 cases, P 60 F 0 R 0 N 0 other 0; 3 result lines seen, 57 LOST in capture
