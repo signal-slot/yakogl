@@ -1,0 +1,4 @@
+# host-gles3-part commit=c29a5ffe gpu=vivante module=gles3 cases=10
+# section tip
+vivante	functional.depth_stencil_clear	0	10	0	0	0
+# section notpass

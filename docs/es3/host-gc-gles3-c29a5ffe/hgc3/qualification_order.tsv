@@ -1,0 +1,4 @@
+# host-gles3-part commit=c29a5ffe gpu=vivante module=gles3 cases=79
+# section tip
+vivante	functional.shaders	64	15	0	0	0
+# section notpass

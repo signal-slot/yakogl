@@ -1,0 +1,4 @@
+# host-gles3-part commit=c29a5ffe gpu=vivante module=gles3 cases=51
+# section tip
+vivante	functional.rasterizer_discard	0	51	0	0	0
+# section notpass
