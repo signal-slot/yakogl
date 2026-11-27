@@ -741,6 +741,11 @@ pub struct Nir<'s> {
     /// Each varying's components stored (`varyings`' order): all of them,
     /// or the fragment shader's reads for a program's vertex shader.
     pub masks: [u8; MAX_VARYINGS],
+    /// Each stored component's 32-bit word in the varying buffer
+    /// (`varyings`' order; [`fill`]): the next words from its varying's
+    /// offset, unless a convergent lane laid out before an interpolated one
+    /// moves after it (deqp_varylink2_vec_uniform's `g` at word 3).
+    pub lane_words: [[u8; 4]; MAX_VARYINGS],
     /// Each node's basic block (`nir_instr::block`); the entry block is 0.
     /// The order lists a block's nodes together, blocks in layout order
     /// (the then side, the else side, then the join; `emit_cf_list`).
@@ -1366,6 +1371,7 @@ impl<'s> Nir<'s> {
             varyings: [VaryingAt { location: 0, comps: 0, offset: 0 }; MAX_VARYINGS],
             nvar: 0,
             masks: [0; MAX_VARYINGS],
+            lane_words: [[0; 4]; MAX_VARYINGS],
             block: scratch.alloc_filled(MAX_NODES, 0u8).map_err(oom)?,
             cur: 0,
             nblocks: 1,
@@ -7700,7 +7706,13 @@ fn walk<'s>(
     }
     /* the convergent lanes that take the interpolated vec4's free words:
      * stored as they are, no conversion */
-    let filled = fill(&classes[..nclasses])?;
+    let mut words = [0u8; 4 * MAX_VARYINGS];
+    let filled = fill(&classes[..nclasses], &mut words)?;
+    for (&(loc, c, _), &w) in classes[..nclasses].iter().zip(&words) {
+        if let Some(k) = vs.varyings[..vs.nvar].iter().position(|v| v.location == loc) {
+            vs.lane_words[k][c as usize & 3] = w;
+        }
+    }
     /* the viewport transform, before the position's store */
     vs.user = false;
     vs.exact_build = false;
@@ -7845,17 +7857,23 @@ fn walk<'s>(
             }
         }
         let lea = vs.push(Kind::Lea { out: 1 }, [Val::Undef; 3])?;
+        /* in word order (deqp_varylink2_vec_uniform: the uniform lane 1
+         * stored last, at word 3) */
+        let mut order = [(0u8, 0u8, 0u8); 4 * MAX_VARYINGS];
+        let mut norder = 0;
         for k in 0..vs.nvar {
-            let v = vs.varyings[k];
-            let lanes = varyings[v.location as usize].ok_or(MaliError::Defect(Defect::IrIndex))?;
-            let mask = vs.masks[k];
-            let stored = (0..v.comps as usize).filter(|&c| mask & (1 << c) != 0);
-            for (j, c) in stored.enumerate() {
-                /* the output's store is per 16-byte slot: a slot's first
-                 * word past offset 0 is its `iadd` (constant second) */
-                let word = (v.offset / 4) as u8 + j as u8;
-                store(&mut vs, 1, lea, word, word.is_multiple_of(4), lanes[c])?;
+            for c in (0..vs.varyings[k].comps).filter(|&c| vs.masks[k] & (1 << c) != 0) {
+                *order.get_mut(norder).ok_or(MaliError::VaryingLocation)? = (vs.lane_words[k][c as usize], k as u8, c);
+                norder += 1;
             }
+        }
+        order[..norder].sort_unstable();
+        for &(word, k, c) in &order[..norder] {
+            let v = vs.varyings[k as usize];
+            let lanes = varyings[v.location as usize].ok_or(MaliError::Defect(Defect::IrIndex))?;
+            /* the output's store is per 16-byte slot: a slot's first
+             * word past offset 0 is its `iadd` (constant second) */
+            store(&mut vs, 1, lea, word, word.is_multiple_of(4), lanes[c as usize])?;
         }
     }
     /* the values of the invariant outputs, exact ([`Nir::mark_exact`]) */
@@ -7916,27 +7934,62 @@ fn walk<'s>(
 
 /// `fs_assign_slot_groups` (nir_opt_varyings.c:5228-5290, documented at
 /// :419-425) over the stored lanes in scalar slot order, `(location, lane,
-/// convergent)`: the interpolated lanes take the first scalar slots, then the
-/// convergent ones fill the words left free in the last interpolated vec4
-/// (interpolated, stored as they are: deqp_posvary_tex_uniform_w's uniform
-/// alpha), and those left over are flat in vec4s of their own after them
-/// (`FMA x, 0, x`, `.src_flat32`; deqp_posvary_flat_sep_kau_bs26's `e` at
-/// word 4 after a full vec4). With no interpolated lane all are flat
-/// (varyconst_*). The lanes in another order (a convergent lane before an
-/// interpolated one, deqp_posvary_flat_sep_vec4_bs51) would move, which the
-/// per-varying layout cannot hold: refused. The
-/// convergent lanes left interpolated, as `location * 4 + lane` bits;
-/// [`super::nir_fs`]'s `layout` applies the same rule to the same lanes.
-pub(super) fn fill(lanes: &[(u8, u8, bool)]) -> Result<u64, MaliError> {
+/// convergent)`: the interpolated lanes take the first scalar slots in
+/// their order, then the convergent ones fill the words left free in the
+/// last interpolated vec4 (interpolated, stored as they are:
+/// deqp_posvary_tex_uniform_w's uniform alpha), and those left over are
+/// flat in vec4s of their own after them (`FMA x, 0, x`, `.src_flat32`;
+/// deqp_posvary_flat_sep_kau_bs26's `e` at word 4 after a full vec4). With
+/// no interpolated lane all are flat (varyconst_*). A convergent lane laid
+/// out before an interpolated one moves after it (deqp_varylink2_vec_uniform's
+/// `vec4(i + h, g, f, b)`: `g` at word 3; deqp_posvary_flat_sep_vec4_bs51's
+/// uniform vec4 `a` at words 1-3 and its w flat at word 4, after the float
+/// `b`). `words[i]` is lane `i`'s word. The convergent lanes left
+/// interpolated, as `location * 4 + lane` bits; [`super::nir_fs`]'s `layout`
+/// applies the same rule to the same lanes.
+pub(super) fn fill(lanes: &[(u8, u8, bool)], words: &mut [u8]) -> Result<u64, MaliError> {
     let interp = lanes.iter().filter(|l| !l.2).count();
-    if interp == 0 {
-        return Ok(0);
+    let free = if interp == 0 { 0 } else { (4 - interp % 4) % 4 };
+    let (mut i, mut c) = (0usize, 0usize);
+    let mut filled = 0u64;
+    for (k, l) in lanes.iter().enumerate() {
+        let w = if l.2 {
+            if c < free {
+                filled |= 1 << (l.0 as u32 * 4 + l.1 as u32);
+            }
+            c += 1;
+            interp + c - 1
+        } else {
+            i += 1;
+            i - 1
+        };
+        *words.get_mut(k).ok_or(MaliError::VaryingLocation)? =
+            u8::try_from(w).map_err(|_| MaliError::VaryingLocation)?;
     }
-    if lanes[..interp].iter().any(|l| l.2) {
-        return Err(MaliError::VaryingNotFromAttribute);
+    Ok(filled)
+}
+
+/// The runs of one varying's components at consecutive words, `(byte
+/// offset, components)`, in component order: one varying record each
+/// ([`super::VaryingSlot`]; a varying of which a lane [`fill`] moved is in
+/// more than one place). `words[c]` is component `c`'s word, None when it is
+/// not stored.
+pub(super) fn runs(words: [Option<u8>; 4]) -> ([(u16, u8); 4], usize) {
+    let mut out = [(0u16, 0u8); 4];
+    let mut n = 0;
+    let mut last: Option<u8> = None;
+    for (c, w) in words.iter().enumerate() {
+        let Some(w) = *w else { continue };
+        match last {
+            Some(p) if n > 0 && w == p.wrapping_add(1) => out[n - 1].1 |= 1 << c,
+            _ => {
+                out[n] = (4 * u16::from(w), 1 << c);
+                n += 1;
+            }
+        }
+        last = Some(w);
     }
-    let free = (4 - interp % 4) % 4;
-    Ok(lanes[interp..].iter().take(free).fold(0u64, |m, l| m | 1 << (l.0 as u32 * 4 + l.1 as u32)))
+    (out, n)
 }
 
 /// Mesa's link keeps only the components the fragment shader reads

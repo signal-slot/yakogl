@@ -1566,7 +1566,7 @@ fn compile_stage<'s>(
         }
         sc.varyings[0] = VaryingSlot { varying: None, comps: 4, section: Section::Position, offset: 0, mask: 0xf };
         sc.nvar = 1;
-        for (v, &mask) in vs.varyings[..vs.nvar].iter().zip(&vs.masks) {
+        for (k, (v, &mask)) in vs.varyings[..vs.nvar].iter().zip(&vs.masks).enumerate() {
             /* an output the program's fragment shader does not read is not
              * in the layout: Mesa's link removes it (nir_opt_varyings.c
              * `remove_dead_varyings`), and the frame counts what is listed
@@ -1574,14 +1574,20 @@ fn compile_stage<'s>(
             if mask == 0 {
                 continue;
             }
-            sc.varyings[sc.nvar] = VaryingSlot {
-                varying: Some(v.location),
-                comps: mask.count_ones() as u8,
-                section: Section::Generic,
-                offset: v.offset,
-                mask,
-            };
-            sc.nvar += 1;
+            /* one record per run of its words ([`nir::runs`]) */
+            let words: [Option<u8>; 4] =
+                core::array::from_fn(|c| (mask & (1 << c) != 0).then_some(vs.lane_words[k][c]));
+            let (runs, nruns) = nir::runs(words);
+            for &(offset, mask) in &runs[..nruns] {
+                *sc.varyings.get_mut(sc.nvar).ok_or(MaliError::VaryingLocation)? = VaryingSlot {
+                    varying: Some(v.location),
+                    comps: mask.count_ones() as u8,
+                    section: Section::Generic,
+                    offset,
+                    mask,
+                };
+                sc.nvar += 1;
+            }
         }
         pos_words + var.words
     } else {
@@ -2261,7 +2267,12 @@ pub fn fragment_reads(r: &MaliShader<'_>) -> Result<ProgramReads, MaliError> {
     let mut out =
         ProgramReads { reads: [(0, 0); select::MAX_VARYINGS], n: 0, moved: [0; motion::MAX_BYTES], nmoved: 0 };
     for v in r.varyings.iter().filter(|v| v.section == Section::Generic) {
-        if let (Some(loc), Some(o)) = (v.varying, out.reads.get_mut(out.n)) {
+        let Some(loc) = v.varying else { continue };
+        /* a varying in more than one run ([`nir::runs`]): one read of
+         * every lane */
+        if let Some(o) = out.reads[..out.n].iter_mut().find(|o| o.0 == loc) {
+            o.1 |= v.mask;
+        } else if let Some(o) = out.reads.get_mut(out.n) {
             *o = (loc, v.mask);
             out.n += 1;
         }

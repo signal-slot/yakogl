@@ -958,3 +958,52 @@ scenes compile-clean, as before) and no `tools/mali/corpus-verdicts.txt`
 line. The unit test `each_mali_link_outcome_is_its_own_line` now asserts
 that an unwritten varying has no stored slot, where it used to assert a
 refusal.
+
+## Lowering: a varying lane computed from no attribute (item lower-noattr, 2026-11-27)
+
+Mesa's link (`fs_assign_slot_groups`, nir_opt_varyings.c:5228-5290)
+lays out the interpolated lanes first, in their order, then the
+convergent ones (a constant or uniforms alone): those fill the words
+left free in the last interpolated vec4 and the rest are flat in vec4s
+of their own after them. Until now `nir::fill` refused a convergent lane
+laid out *before* an interpolated one (`VaryingNotFromAttribute`),
+because a varying was one record at one offset. Now the lane moves:
+
+- `nir::fill(lanes, &mut words)` gives each lane its 32-bit word as well
+  as the convergent lanes left interpolated; `Nir::lane_words` keeps the
+  word of each stored component.
+- The vertex shader stores its outputs in word order, not varying order
+  (deqp_varylink2_vec_uniform's uniform `g` is stored last, at word 3).
+- `nir::runs` splits one varying's components into runs of consecutive
+  words, one `VaryingSlot` (vertex side, `mod.rs`) and one `FsRead`
+  (fragment side, `nir_fs.rs`) each. Both stages build them with the
+  same `fill` and `runs`, so `link::pair` comparing the first record of
+  a location is enough.
+
+Byte-equal now: `deqp_posvary_flat_lane_vec4_v86` (`vec4(c, c, b, a -
+5.0)`, the uniform `c` at word 2, one `.v3` load). Its vertex shader
+alone compiles in `bs51`, `c30`, `vec_uniform` and `scalar_uniform`;
+each is refused next in its fragment shader, re-pinned:
+
+| reference | refused now |
+|---|---|
+| posvary `flat_sep_vec4_bs51` | arithmetic (`int(d)`) |
+| posvary `flat_lane_vec4_c30` | a fragment varying load form |
+| varylink2 `vec_uniform` | a gl_FragColor lane form (the load's lanes read `x, w, y, z`) |
+| varylink2 `scalar_uniform` | a fragment varying load form |
+
+The unit tests in `tests.rs` that asserted the refusal now assert the
+vertex shader compiles (`a_varying_lane_of_uniforms_alone_is_loaded_flat`,
+`a_vertex_shader_refused_without_its_equal_lanes_reports_that_refusal`,
+whose program refusals are now `FsVaryingLoad` and `ColourForm` at the
+linked vertex step); the gap case of the refusal is now a phi of
+uniforms alone, the shape still refused.
+
+Still `VaryingNotFromAttribute`: `loop_uniform` and posvary
+`loop_phi_array` (one dEQP case, NotSupported on the board): Mesa
+interpolates a phi over a uniform-bound loop (step M4 of
+`mali-posvary-lowering.md`), which needs the int-uniform loop lowered
+first. Not covered by the tests: the descriptor layout of a mixed
+program (`bs51`'s smooth vec4 plus a flat word at byte 16);
+`tests/mali_ref` does not compare descriptors. No glmark2 verdict moved
+(`mali_glmark2_corpus` passes against the unchanged fixture).
