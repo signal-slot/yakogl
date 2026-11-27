@@ -350,8 +350,65 @@ The host prediction it would have been compared with
   does not exist). A session should note whether its commit includes
   `25fa1a96` (wide loads in the resolve).
 
-The X2 is the same SoC (i.MX8MP) and GPU (GC7000UL) as the Verdin iMX8MP but
-not the stage-2 board; its ms per frame are development numbers. To run it:
-the owner stops the container before each run, or turns its autostart off for
-the session; `board.sh x2 status` must read `containers 0`; one `origin/main`
-commit.
+The X2 is the same SoC (i.MX8MP) and GPU (GC7000UL) as the Verdin iMX8MP and
+now stands in for it (owner's rule of 2026-11-27, below). How to run it: the
+update below; the owner's decision this stop waited on is no longer needed.
+
+## Update, 2026-11-27 (plan #417, item x2-runner-app): the runner stops the containers for a run
+
+**The stop above is lifted in `tools/board.sh` (`c10c1936`): an x2 run can
+stop the board's application containers for the run, prints the undo first,
+starts them again afterwards, and leaves autostart alone. The X2 stands in
+for the Verdin iMX8MP for the GC7000UL depth-sample and slow-scene sessions
+(owner's rule of 2026-11-27: the Verdin is away; same SoC, same GPU),
+recorded rows included. Every x2 record now carries
+`board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the
+Verdin iMX8MP` in its `meta.txt`.**
+
+The behaviour as implemented (`tools/board.sh`, usage header; x2 `run` and
+`stage`):
+
+- `X2_STOP_APPS=1` is the opt-in. Unset or `0` keeps the old behaviour
+  exactly: while a container runs, the readiness read refuses the jump
+  (`something is running (containers N)`, rc 3).
+- With `1`, once every other readiness word holds (OpenRC settled, kexec
+  not loaded, crash window; nothing is stopped on a board refused for
+  another reason), step 2 lists the running containers
+  (`podman ps --format '{{.Names}}'`), validates each name, prints one
+  `X2_STOP_APPS: undo: podman start <name>` line per container and records
+  `undo=podman start <name>` in `meta.txt` before anything changes, then
+  runs `podman stop -t 5 <name>` for each (recording `app_stop=`) and reads
+  the readiness again; that second read (`board_state_stopped=`) must say
+  `containers 0` before anything is staged.
+- After the jump, once ssh is back — and likewise for a refusal after the
+  stop and before the jump, and at the end of `stage` (which never jumps) —
+  the runner reads the containers again and records `app_back=` per
+  container: running again on its own, or not running with the recorded
+  undo run once (`podman start <name>`) and what it left. If Linux does not
+  come back, the `undo=` lines in `meta.txt` stand as the way to restore
+  them.
+- Autostart (`/etc/atmark/containers/*.conf`, podman-atmark), the container
+  config and the rootfs are never touched.
+- `tools/board_selftest.sh` pins all of this against a fake board (its
+  section 6; 553 checks, 0 failed as it landed): the refusal without the
+  opt-in, the undo recorded before the board's `podman stop`, `containers
+  0` on the second read, the return check with and without autostart, two
+  containers, nothing running, a refusal before and after the stop,
+  `stage`, `SEL`.
+- `kexec_zephyr` and `snvs_lpgpr` stay prerequisites: built on the worker,
+  in `X2_TOOLS` (default `driver/tools/kexec-zephyr`;
+  `driver/tools/kexec-zephyr/README.md`).
+
+The read-only probe of 2026-11-27 found the board with no container running
+and the containers' autostart off (`set_autostart no`), so the sessions can
+run as the board is; with nothing running, `X2_STOP_APPS=1` does nothing but
+one extra readiness read. With a container up, prefixing the script carries
+the opt-in to every `board.sh` call it makes (it unsets only
+`NETBOOT_NO_WATCHDOG`, `BOARD_UART` and `SEL`):
+
+```sh
+X2_STOP_APPS=1 tools/cts/x2-glmark2-scenes.sh --commit origin/main <outdir> terrain shadow refract
+```
+
+In each record, check `board_measured=`, and when the opt-in acted, the
+`undo=`, `app_stop=` and `app_back=` lines of `meta.txt`.
