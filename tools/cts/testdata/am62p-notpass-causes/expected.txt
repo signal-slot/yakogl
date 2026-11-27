@@ -1,0 +1,16 @@
+cause	cases	state	document	what
+NR-3D-LML	1	known	docs/notes/pvr-3d-mipmap-hang.md section 8; texture-failure-map.md section 2.1 (filtering.3d)	3D linear_mipmap_linear: no result (issue #1285, level-0 slice grid, slow check)
+K6	1	known	texture-failure-map.md 2.2.1 K6	stacked 2D array: smallest levels under one row per layer
+K1	1	known	texture-failure-map.md 2.2.1 K1	integer cube sampler refused by the compiler
+K2	1	known	texture-failure-map.md 2.2.1 K2 (fixed by ecd9743e)	RGBA32F stored as halves: values above 65504 became infinity
+K3	1	known	texture-failure-map.md 2.2.1 K3	NPOT cube keeps only its base level (src/gl change)
+FBO-5	1	known	fbo-fix-designs.md 5	3D slice of an R/RG integer format
+FBO-1	1	known	fbo-fix-designs.md 1	R/RG integer colour textures and renderbuffers stored as RGBA (fbo-rint)
+FBO-4	1	known	fbo-fix-designs.md 4	3D slices rendered through an FBO, sampled through the slice grid
+S-F	1	known	backend-caps.md 11.9	GL_EXT_draw_buffers_indexed (and advanced blend) not claimed; not ES 3.0
+T-SHADOW	1	known	texture-failure-map.md 2.1 (shadow)	shadow look-ups: compare, stacked 2D array, low-quality result
+NS-ASTC	1	known	texture-failure-map.md 3	ASTC: not an ES 3.0 requirement
+total	13	known	11	open	0
+unattributed	2
+	NotSupported	dEQP-GLES3.functional.fbo.multiview.samples_1	Multiview is not supported
+	Fail	dEQP-GLES3.functional.brand_new.family.case	something new
