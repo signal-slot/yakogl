@@ -217,6 +217,12 @@ path_scopes() {
   # by tools/cts/imx8mp-glmark2-verdicts.py; the row that lints it (gmverdicts)
   # is reached by an edit of the document alone, and no other tools row is.
   docs/notes/imx8mp-glmark2-pictures-by-eye.md) echo "docs gmverdicts" ;;
+  # tools/cts/one-commit-rehearsal-selftest.sh copies these four documents
+  # (and tools/cts/RESULTS.md, STATUS.md, tools/website-check.sh, which are
+  # in `tools` already) and runs the one-commit docs edit and the website
+  # comparison on them: an edit of one alone can make that row fail, so it
+  # reaches the row (onecommit) and no other tools row.
+  README.md | ROADMAP.md | website/data.js | docs/release/checklist.md) echo "docs onecommit" ;;
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
   tools/precompile/* | tools/shaders/*) echo precompile ;;
   # a precompile fixture is read by the tables' rows and by the tests that name it
@@ -3706,6 +3712,14 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # alone reaches this row too (scope gmverdicts, scope_of_path). Host only.
   scope tools gmverdicts
   step "tools   imx8mp-glmark2-verdicts-selftest.sh (the i.MX8MP glmark2 by-eye verdict table lint)" no_board_env bash tools/cts/imx8mp-glmark2-verdicts-selftest.sh
+  scope tools onecommit
+  # The one-commit glmark2 docs edit rehearsed on synthetic records
+  # (cts-selftest.sh runs it as check 67 as well). It reads README.md,
+  # ROADMAP.md, website/data.js and docs/release/checklist.md as they are, so
+  # an edit of one of them alone reaches this row (scope onecommit,
+  # scope_of_path); a docs-only change that breaks it fails here, not on the
+  # next pull request that reaches `tools`. Host only, under a second.
+  step "tools   one-commit-rehearsal-selftest.sh (one-commit docs edit on synthetic records)" no_board_env bash tools/cts/one-commit-rehearsal-selftest.sh
   scope tools
   # The NanoPC-T6's dEQP-GLES2 runner, tools/cts/mali-deqp-run.sh, against a
   # fake board (ssh, scp and deqp-gles2 stubs: a clean run, a crash with
