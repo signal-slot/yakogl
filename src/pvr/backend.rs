@@ -6441,10 +6441,12 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
 }
 
 /// The descriptor a draw binds for `t` ([`build_tex_desc`] with the
-/// debug option off), for the host tests that pin the state words of a
-/// texture kind against their design (tests/es3_pvr_2darray.rs).
+/// debug option off: the bind's own level and LOD parameters,
+/// [`TexLod::of_bind`]), for the host tests that pin the state words of a
+/// texture kind against their design (tests/es3_pvr_2darray.rs,
+/// tests/es3_pvr_base_lod.rs).
 pub fn texture_descriptor(t: &GlesTextureBind) -> [u32; TEX_DESC_DWORDS as usize] {
-    texture_descriptor_lod(t, &TexLod::DEFAULT)
+    texture_descriptor_lod(t, &TexLod::of_bind(t))
 }
 
 /// [`texture_descriptor`] with GL_TEXTURE_BASE_LEVEL, MAX_LEVEL, MIN_LOD and
@@ -6471,8 +6473,10 @@ fn compose_tex_swizzle(fmt: [csb::ROGUE_TEXSTATE_SWIZ; 4], bind: &[u8; 4]) -> [c
     })
 }
 
+/// A draw's descriptor: the bind's own GL_TEXTURE_BASE_LEVEL, MIN_LOD and
+/// MAX_LOD ([`TexLod::of_bind`]; GL's defaults on a zeroed bind).
 fn build_tex_desc(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32) {
-    build_tex_desc_lod(w, t, warned, &TexLod::DEFAULT);
+    build_tex_desc_lod(w, t, warned, &TexLod::of_bind(t));
 }
 
 /// [`build_tex_desc`] with the texture's level and LOD parameters (`lod`,
