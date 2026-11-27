@@ -4,6 +4,7 @@
 """One issue draft per cause from the i.MX8MP dEQP-GLES3 board vs HOST-ONLY comparison.
 
   imx8mp-gles3-issues.py COMPARE.tsv [--causes FILE] [--commit SHA8] [--examples N] [--verdict board-only] [--strict]
+                         [--slices DIR...]
 
 COMPARE.tsv is `imx8mp-gles3-compare.py --tsv`: one line per board not-pass case,
 'verdict<TAB>cause<TAB>eNN<TAB>outcome<TAB>case'. --causes is imx8mp-gles3-causes.tsv ('id<TAB>glob<TAB>title',
@@ -11,11 +12,24 @@ default: next to this script). Prints markdown, one block per cause with cases o
 board-only), the largest first: proposed title, case count, table entries, example cases, campaign commit and
 a Reproduce line. A cause id ending in '-no-record' or starting with 'unexplained-' only fits an entry
 without a board record: each such cause with cases prints a stderr WARNING (exit status stays 0; --strict
-makes it 1). Nothing but the TSV's case names, entry ids and outcomes is printed (no address, no path).
+makes it 1). --slices names the slice directories (tools/cts/log/*-imx8mp-gles3-*, or a board.sh record)
+the TSV came from; merge.py's board_of() tells the board of each. When one is an Armadillo-X2 slice
+(three-word records, begun '-' allowed; `board.sh x2` lines; a README naming the Armadillo-X2) every draft says
+`measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2` and names the 8-hex commit and
+the slice directories as the records. Without --slices, or with Verdin slices only, the text is unchanged.
+Nothing but the TSV's case names, entry ids and outcomes is printed (no address, no path).
 """
 import argparse
+import importlib.util
 import os
 import sys
+
+
+def load_board_of(here):
+    spec = importlib.util.spec_from_file_location("imx8mp_gles3_merge", os.path.join(here, "imx8mp-gles3-merge.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.board_of
 
 
 def main():
@@ -27,7 +41,19 @@ def main():
     ap.add_argument("--examples", type=int, default=5)
     ap.add_argument("--verdict", default="board-only")
     ap.add_argument("--strict", action="store_true", help="exit 1 if a no-record/unexplained cause has cases")
+    ap.add_argument("--slices", nargs="+", default=[], metavar="DIR", help="slice directories the TSV came from")
     a = ap.parse_args()
+
+    boards = {}
+    if a.slices:
+        board_of = load_board_of(here)
+        boards = {d: board_of(d) for d in a.slices}
+    x2 = "x2" in boards.values()
+    records = ", ".join(os.path.basename(d.rstrip("/")) for d in a.slices) if x2 else ""
+    if x2 and not (len(a.commit) >= 8 and all(c in "0123456789abcdef" for c in a.commit.lower())):
+        print("imx8mp-gles3-issues: an Armadillo-X2 draft needs --commit with the 8-hex campaign commit",
+              file=sys.stderr)
+        return 2
 
     titles = {}
     try:
@@ -82,7 +108,12 @@ def main():
             print("- Examples:")
             for e, o, c in sorted(rows, key=lambda r: (eidx(r[0]), r[2]))[:a.examples]:
                 print("  - `%s` (%s, %s)" % (c, e, o))
-        print("- Campaign commit: %s" % commit)
+        if x2:
+            print("- Board: measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2")
+            print("- Campaign commit: %s" % commit[:8])
+            print("- Records: %s" % records)
+        else:
+            print("- Campaign commit: %s" % commit)
         print("- Reproduce: docs/es3/board-recipe-imx8mp.md ('Running a GLES3 slice session'), "
               "the table entries above")
         print()

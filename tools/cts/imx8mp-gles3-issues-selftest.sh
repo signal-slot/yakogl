@@ -64,3 +64,22 @@ nr --strict > "$tmp/nr2.out" 2>/dev/null || true; cmp -s "$tmp/nr2.out" "$tmp/nr
 [ -z "$(run 2>&1 >/dev/null)" ] || fail "warning without a no-record cause"
 run --strict >/dev/null || fail "--strict failed without a no-record cause"
 echo "ok: no-record warning, --strict"
+
+# Armadillo-X2 slices (--slices): the draft names the X2, the 8-hex commit and the slice directories; Verdin
+# slices keep the plain text. board_of() comes from imx8mp-gles3-merge.py (three-word rows, begun '-').
+x2d="$tmp/20261127-imx8mp-gles3-x2-c29a5ffe-rows01-13"; vd="$tmp/20261105-imx8mp-gles3-rows01-13"
+mkdir "$x2d" "$vd"
+printf '0\tdEQP-GLES3.a.*\t-\t10\t1\t0\t0\t-\tdEQP-GLES3.a.x1\n' > "$x2d/results.tsv"
+printf 'slice\n' > "$x2d/README.md"
+printf '0\tdEQP-GLES3.a.*\t11\t10\t1\t0\t0\t0\tdEQP-GLES3.a.x1\n' > "$vd/results.tsv"
+printf 'slice\n' > "$vd/README.md"
+run --commit c29a5ffe84f7d891fc84fe8b151b9eefedbb351d --slices "$x2d" > "$tmp/x2.md"
+[ "$(grep -c 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2' "$tmp/x2.md")" = 3 ] || fail "x2 line per draft"
+grep -q 'Campaign commit: c29a5ffe$' "$tmp/x2.md" || fail "x2 8-hex commit"
+grep -q 'Records: 20261127-imx8mp-gles3-x2-c29a5ffe-rows01-13$' "$tmp/x2.md" || fail "x2 records"
+run --commit abcd1234 --slices "$vd" > "$tmp/vd.md"
+run --commit abcd1234 > "$tmp/nos.md"
+cmp -s "$tmp/vd.md" "$tmp/nos.md" || fail "Verdin slices changed the text"
+if grep -q Armadillo "$tmp/vd.md"; then fail "Verdin draft names the X2"; fi
+if run --slices "$x2d" >/dev/null 2>&1; then fail "x2 draft without a commit"; fi
+echo "ok: Armadillo-X2 drafts, Verdin text unchanged"
