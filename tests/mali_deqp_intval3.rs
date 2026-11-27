@@ -36,12 +36,21 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_intval3_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &["rsg_sconv55_fs"];
+const LOWERED: &[&str] = &[
+    "opfs_not_equal_int_highp",
+    "opfs_notequal_ivec3_mediump",
+    "reslib_int_to_bool_fs",
+    "reslib_ivec4_to_bvec4_fs",
+    "rsg_sconv55_fs",
+];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
 
 const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet";
+/// `rsg_condcomb80_fs` past its `!=` of run-time ints (intval-rest M1): the
+/// `if` on it.
+const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
 /// The later refusals of the references whose int and bool values are all
 /// dead (`nir_fs.rs` `ir_live`).
 const FRAGCOLOR: &str =
@@ -55,8 +64,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("cond_compound_fs", INT_VALUE),
     ("idx_tmp_vec3_dynwrite_fs", INT_VALUE),
     ("opfs_logical_and_bool", INT_VALUE),
-    ("opfs_not_equal_int_highp", INT_VALUE),
-    ("opfs_notequal_ivec3_mediump", INT_VALUE),
     ("opfs_post_decrement_effect_ivec2_highp", INT_VALUE),
     ("opfs_pre_decrement_result_int_mediump", INT_VALUE),
     /* the sequence's first operand is dead: the colour's lanes next */
@@ -66,10 +73,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("reslib_const_int_vs", INT_VALUE),
     ("reslib_func_bool_fs", INT_VALUE),
     ("reslib_inout_int_fs", INT_VALUE),
-    ("reslib_int_to_bool_fs", INT_VALUE),
-    ("reslib_ivec4_to_bvec4_fs", INT_VALUE),
     ("rsg_cond12_fs", INT_VALUE),
-    ("rsg_condcomb80_fs", INT_VALUE),
+    ("rsg_condcomb80_fs", CONTROL_FLOW),
     ("rsg_exp76_fs", INT_VALUE),
     ("rsg_sconv72_fs", INT_VALUE),
     /* every int and bool value dead: the uniform's form next */
@@ -140,7 +145,6 @@ fn opfs_logical_and_bool() {
 /// `shaders.operator.binary_operator.not_equal.highp_int_fragment`:
 /// `ICMP_OR.u32.ne.m1` of two run-time ints.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_not_equal_int_highp() {
     mali_ref::assert_matches("deqp_intval3_opfs_not_equal_int_highp");
 }
@@ -148,7 +152,6 @@ fn opfs_not_equal_int_highp() {
 /// `shaders.operator.int_compare.notEqual.mediump_ivec3_fragment`:
 /// `notEqual` per lane, `vec3(bvec3)` as `MUX.v2i16`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_notequal_ivec3_mediump() {
     mali_ref::assert_matches("deqp_intval3_opfs_notequal_ivec3_mediump");
 }
@@ -220,7 +223,6 @@ fn reslib_inout_int_fs() {
 /// `shaders.conversions.scalar_to_scalar.int_to_bool_fragment`: `bool(int)`
 /// is `ICMP_OR.u32.ne 0`, compared with a `uniform bool` word.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn reslib_int_to_bool_fs() {
     mali_ref::assert_matches("deqp_intval3_reslib_int_to_bool_fs");
 }
@@ -228,7 +230,6 @@ fn reslib_int_to_bool_fs() {
 /// `shaders.conversions.vector_to_vector.ivec4_to_bvec4_fragment`: four
 /// `bool(int)` compared with a `uniform bvec4`, `ICMP_AND` and `LSHIFT_AND`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn reslib_ivec4_to_bvec4_fs() {
     mali_ref::assert_matches("deqp_intval3_reslib_ivec4_to_bvec4_fs");
 }
@@ -244,7 +245,7 @@ fn rsg_cond12_fs() {
 /// `shaders.random.conditionals.combined.80`: `d != d` of a `uniform ivec4`
 /// folds to false; the colour is the FAU's constants.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: control flow (the `if` on `d != d`, which Mesa folds to false); pinned by refusals_pinned"]
 fn rsg_condcomb80_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_condcomb80_fs");
 }

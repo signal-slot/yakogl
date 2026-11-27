@@ -27,10 +27,10 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal when
 /// drawn), without the `deqp_intval4_` prefix.
-const LOWERED: &[&str] = &["bvec3_cmp_fs"];
+const LOWERED: &[&str] = &["bvec2_of_ivec2_fs", "bvec3_cmp_fs", "ne_int_fs", "ne_ivec2_fs", "not_eq_int_fs"];
 
 /// The references that compile with other words than Mesa's (hazards).
-const DIFFERS: &[&str] = &["not_eq_int_fs"];
+const DIFFERS: &[&str] = &[];
 
 const TEXT0: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
 const TEXT1: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
@@ -40,11 +40,8 @@ const TEXT3: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("and_icmp_fs", TEXT2),
-    ("bvec2_of_ivec2_fs", TEXT2),
     ("bvec4_cmp_fs", TEXT0),
     ("logical_or_fs", TEXT2),
-    ("ne_int_fs", TEXT2),
-    ("ne_ivec2_fs", TEXT2),
     ("sel_int_fs", TEXT3),
     ("sel_ivec2_fs", TEXT3),
     ("uapi_bool_fs", TEXT1),
@@ -91,7 +88,6 @@ fn and_icmp_fs() {
 
 /// `bvec2(ivec2)`, the `conversions.vector_to_vector` template of the `intval3` reslib references at width 2.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn bvec2_of_ivec2_fs() {
     mali_ref::assert_matches("deqp_intval4_bvec2_of_ivec2_fs");
 }
@@ -118,21 +114,18 @@ fn logical_or_fs() {
 
 /// `binary_operator.not_equal.mediump_int_fragment`: `!=` of two mediump ints.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn ne_int_fs() {
     mali_ref::assert_matches("deqp_intval4_ne_int_fs");
 }
 
 /// `binary_operator.not_equal.mediump_ivec2_fragment`: whole-vector `!=` of two ivec2.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn ne_ivec2_fs() {
     mali_ref::assert_matches("deqp_intval4_ne_ivec2_fs");
 }
 
 /// `!(i == 2)` of a run-time mediump int (a `random` shape, the smallest pair with the form).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by refusals_pinned"]
 fn not_eq_int_fs() {
     mali_ref::assert_matches("deqp_intval4_not_eq_int_fs");
 }

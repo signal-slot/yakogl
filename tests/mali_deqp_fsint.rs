@@ -44,7 +44,7 @@ const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet
 
 /// The references the lowering makes byte-equal, without the `deqp_fsint_`
 /// prefix: each has a running byte-compare test below.
-const MATCHED: &[&str] = &[];
+const MATCHED: &[&str] = &["ne_ivec4_highp", "notequal_ivec4_highp"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -58,8 +58,6 @@ const VARYING_LOAD: &str = "Valhall: a fragment varying load or conversion of a 
 const REFUSED: &[(&str, &str)] = &[
     ("conv_bool_float_int_to_bvec3", INT_VALUE),
     ("conv_vec2_ivec2_to_bvec4", INT_VALUE),
-    ("ne_ivec4_highp", INT_VALUE),
-    ("notequal_ivec4_highp", INT_VALUE),
     ("postdec_result_ivec3_mediump", INT_VALUE),
     ("predec_effect_ivec4_lowp", INT_VALUE),
     ("sequence_bool_vec2_highp", VARYING_LOAD),
@@ -141,13 +139,11 @@ fn fs_words_pinned() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (any(ine) of four lanes); pinned by refusals_pinned"]
 fn ne_ivec4_highp() {
     mali_ref::assert_matches("deqp_fsint_ne_ivec4_highp");
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (notEqual of ivec4, a computed alpha); pinned by refusals_pinned"]
 fn notequal_ivec4_highp() {
     mali_ref::assert_matches("deqp_fsint_notequal_ivec4_highp");
 }
