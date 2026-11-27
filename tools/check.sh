@@ -2386,6 +2386,24 @@ step "test    host-test,gpu-vivante (tests/msaa_hw_gc_api.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante --test msaa_hw_gc_api
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_msaa_rb.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_msaa_rb
+# The graphicsfuzz bubblesort_flag shaders through the PowerVR online chain and the USC byte model.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_metamorph_bubblesort.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_metamorph_bubblesort
+# Integer-format cube textures on the PowerVR's stacked and native cube paths.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_int_cube.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_int_cube
+# The lod-0 texelFetch(Offset) look-ups of 3D and 2D-array textures on the PowerVR.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_texfetch_fixed.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_texfetch_fixed
+# The dEQP-GLES3 2D-array group shapes with the native 2D array on and off.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_array_native_cases.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_array_native_cases
+# The PowerVR texture state words with base level, max level and min/max LOD.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_tex_lod_words.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_tex_lod_words
+# GL_MAX_VERTEX_OUTPUT_COMPONENTS 64 on the PowerVR.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_vout64.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_vout64
 # Flat shading on the V3D and the GC7000UL (docs/notes/es3-flatshading.md): a
 # regression guard that pins the provoking vertex (the last), the flat flags
 # and the native primitive of every mode. Compiles to nothing under report-es2.
