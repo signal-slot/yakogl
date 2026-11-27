@@ -235,6 +235,38 @@ gen "$T/filled.md" > /dev/null 2>&1 \
   && ok "records/imx8mp/<dir>/ form gives the same entry" \
   || bad "records/imx8mp/<dir>/ form differs"
 
+# X2 record: meta.txt board=x2 -> the body says Armadillo-X2; the Title is
+# unchanged; a host or tty path in measured_on is left out; no board= line
+# gives the unchanged (Verdin) entry
+XREC=20261124-1217-gm16-desktop-89abcdef
+mkdir -p "$T/$XREC"
+printf 'commit=%s\nimage sha256=%s\nboard=x2\nmeasured_on=%s\n' "0123abcd$(printf 'f%.0s' $(seq 32))" \
+  "89abcdef$(printf '0%.0s' $(seq 56))" "Armadillo-X2 (i.MX8MP, GC7000UL), kexec-dev development run" \
+  > "$T/$XREC/meta.txt"
+python3 "$WS" --note "$T/filled.md" --row "$ROW" --record "$T/$XREC" --picdiff "$PIC" \
+  --what "$WHAT" > "$T/x2.out" 2> "$T/x2.err" || bad "X2 record refused: $(cat "$T/x2.err")"
+for want in "Armadillo-X2" "kexec-dev development run" \
+            "**Title**: $scene: renders wrong on the i.MX8MP (GC7000UL)"; do
+  grep -qF -- "$want" "$T/x2.out" && ok "X2 body has: $want" || bad "X2 body lacks: $want"
+done
+grep -qF "Verdin iMX8M" "$T/x2.out" && bad "X2 body names the Verdin as the board"
+printf 'commit=%s\nboard=x2\nmeasured_on=%s\n' "0123abcd$(printf 'f%.0s' $(seq 32))" \
+  "$tty on $tailnet" > "$T/$XREC/meta.txt"
+python3 "$WS" --note "$T/filled.md" --row "$ROW" --record "$T/$XREC" --picdiff "$PIC" \
+  --what "$WHAT" > "$T/x2b.out" 2>&1
+if grep -qF "Armadillo-X2" "$T/x2b.out" && ! grep -qE "tty|ts\.net|measured_on:" "$T/x2b.out"; then
+  ok "X2 record with a tty/host in measured_on: wording kept, value left out"
+else
+  bad "X2 record with a tty/host in measured_on leaks or lacks the wording"
+fi
+printf 'commit=%s\n' "0123abcd$(printf 'f%.0s' $(seq 32))" > "$T/$XREC/meta.txt"
+python3 "$WS" --note "$T/filled.md" --row "$ROW" --record "$T/$XREC" --picdiff "$PIC" \
+  --what "$WHAT" > "$T/nob.out" 2>&1
+grep -qF "Armadillo" "$T/nob.out" && bad "no board= line: X2 wording present" \
+  || ok "no board= line: no X2 wording"
+grep -qF "Verdin iMX8M Plus (i.MX8MP), Vivante GC7000UL" "$T/nob.out" \
+  && ok "no board= line: Verdin entry as before" || bad "no board= line: entry changed"
+
 if [ "$fail" != 0 ]; then
   echo "== imx8mp-glmark2-wrongscene self-test FAILED" >&2
   exit 1
