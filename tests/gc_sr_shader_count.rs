@@ -20,6 +20,10 @@
 //! SKIP line; a `GLMARK2_CORPUS` that lacks a file fails. The micro-shaders
 //! are this repository's own and always run.
 //!
+//! The four fragment programs are also held against W6's fallback rule
+//! (`tiled_rt::long_program` at `LONG_PROGRAM_INSTRS`): from the pins, always,
+//! and from the compiler's output over the corpus, under the same SKIP rule.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test gc_sr_shader_count -- --nocapture
 //! ```
@@ -28,8 +32,12 @@ use core::ffi::c_char;
 use std::path::Path;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
-/// Instructions and temporaries of one compile.
-fn count(stage: u32, src: &str) -> (u32, u32) {
+/// Dwords of shader code and temporaries of one compile.
+fn compile(stage: u32, src: &str) -> (u32, u32) {
+    // The online back end keeps one compile state for the process, and this
+    // file's tests run on threads of their own: one compile at a time.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
     let (mut sh, mut log) = (ShcShader::ZERO, [0 as c_char; 1024]);
     let text = format!("{src}\0");
@@ -38,7 +46,41 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
     let rc = unsafe { f(stage, text.as_ptr() as *const c_char, &mut sh, log.as_mut_ptr(), log.len()) };
     let msg: String = log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
     assert_eq!(rc, 0, "compile failed: {msg}");
-    (sh.usc_dw / 4, sh.temps.into())
+    (sh.usc_dw, sh.temps.into())
+}
+
+/// Instructions and temporaries of one compile.
+fn count(stage: u32, src: &str) -> (u32, u32) {
+    let (dw, temps) = compile(stage, src);
+    (dw / 4, temps)
+}
+
+/// The corpus directory and its file names; `None` (after a SKIP line naming
+/// `what`) when `GLMARK2_CORPUS` is unset and the default place holds none.
+fn corpus(what: &str) -> Option<(std::path::PathBuf, Vec<String>)> {
+    let named = std::env::var_os("GLMARK2_CORPUS");
+    let dir = match &named {
+        Some(d) => std::path::PathBuf::from(d),
+        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("build/glmark2-host/shaders"),
+    };
+    let files: Vec<String> = std::fs::read_dir(&dir)
+        .map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    if files.is_empty() && named.is_none() {
+        eprintln!(
+            "SKIP gc_sr_shader_count {what}: no corpus at {} (set GLMARK2_SRC and run tools/hostharness/glmark2/run.sh)",
+            dir.display()
+        );
+        return None;
+    }
+    Some((dir, files))
+}
+
+/// The text of the corpus file whose name ends in `-<hash>.<ext>.glsl`, with its name.
+fn corpus_text(dir: &Path, files: &[String], hash: &str, ext: &str) -> (String, String) {
+    let suffix = format!("-{hash}.{ext}.glsl");
+    let f = files.iter().find(|f| f.ends_with(&suffix)).unwrap_or_else(|| panic!("{} has no *{suffix}", dir.display()));
+    (f.clone(), std::fs::read_to_string(dir.join(f)).expect("a shader file"))
 }
 
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
@@ -105,28 +147,10 @@ fn shadow_and_refract_shaders_count() {
         }
     }
 
-    let named = std::env::var_os("GLMARK2_CORPUS");
-    let dir = match &named {
-        Some(d) => std::path::PathBuf::from(d),
-        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("build/glmark2-host/shaders"),
-    };
-    let files: Vec<String> = std::fs::read_dir(&dir)
-        .map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
-        .unwrap_or_default();
-    if files.is_empty() && named.is_none() {
-        eprintln!(
-            "SKIP gc_sr_shader_count glmark2 half: no corpus at {} (set GLMARK2_SRC and run tools/hostharness/glmark2/run.sh)",
-            dir.display()
-        );
-    } else {
+    if let Some((dir, files)) = corpus("glmark2 half") {
         let mut total = 0;
         for (hash, ext, want_n, want_t) in GLMARK2 {
-            let suffix = format!("-{hash}.{ext}.glsl");
-            let f = files
-                .iter()
-                .find(|f| f.ends_with(&suffix))
-                .unwrap_or_else(|| panic!("{} has no *{suffix}", dir.display()));
-            let src = std::fs::read_to_string(dir.join(f)).expect("a shader file");
+            let (f, src) = corpus_text(&dir, &files, hash, ext);
             let stage = if ext == "vert" { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
             let (n, t) = count(stage, &src);
             println!("gc7000 {f}: {n} instructions, {t} temps (pinned {want_n}, {want_t})");
@@ -141,4 +165,69 @@ fn shadow_and_refract_shaders_count() {
         }
     }
     assert!(wrong.is_empty(), "counts moved; re-pin with the note's table:\n{}", wrong.join("\n"));
+}
+
+/// The four fragment programs of [`GLMARK2`] against W6's fallback rule
+/// (`tiled_rt::long_program` at `LONG_PROGRAM_INSTRS`, 64 instructions,
+/// inclusive; `docs/notes/gc-tiled-wire.md` W6): (name, text hash, verdict).
+/// None qualifies. Refract's fragment program was 64 instructions, exactly on
+/// the threshold, before rank 3 (a `mul` read once by an `add` is a `mad`) and
+/// is 55 since, so the narrow rule no longer takes refract's pass; shadow's
+/// ground (13), depth (3) and horse (1) passes never did. The instruction
+/// counts are [`GLMARK2`]'s pins, read from that table, so a re-pin there
+/// moves this test with it and only a verdict that flips needs a decision.
+const LONG: [(&str, &str, bool); 4] = [
+    ("refract", "3fae89c9ab969ea3", false),
+    ("ground", "cf4bf899d84af04d", false),
+    ("depth", "928e172a68b7f175", false),
+    ("horse", "474800a67afed087", false),
+];
+/// Refract's fragment program, in instructions: [`GLMARK2`]'s pin, named here
+/// because W6's narrow rule turns on it (9 below `LONG_PROGRAM_INSTRS`).
+const REFRACT_FRAG_INSTRS: u32 = 55;
+
+/// The pinned sizes against the rule, with no corpus: the verdicts of
+/// [`LONG`] follow from [`GLMARK2`]'s pins and the threshold, and the table
+/// names refract at [`REFRACT_FRAG_INSTRS`]. This half always runs.
+#[test]
+fn pinned_fragment_sizes_against_long_program() {
+    use yakogl::vivante::tiled_rt::{long_program, LONG_PROGRAM_INSTRS};
+    assert_eq!(LONG_PROGRAM_INSTRS, 64, "LONG's verdicts were read at the 64 threshold");
+    for (name, hash, long) in LONG {
+        let (_, ext, instrs, _) =
+            GLMARK2.iter().find(|g| g.0 == hash).unwrap_or_else(|| panic!("{name}: not in GLMARK2"));
+        assert_eq!(*ext, "frag", "{name}");
+        assert_eq!(
+            long_program(instrs * 4, LONG_PROGRAM_INSTRS),
+            long,
+            "{name}: {instrs} instructions against {LONG_PROGRAM_INSTRS}; W6's narrow rule changes for this pass"
+        );
+        if name == "refract" {
+            assert_eq!(
+                *instrs, REFRACT_FRAG_INSTRS,
+                "refract's fragment pin moved; restate its distance to the threshold"
+            );
+        }
+    }
+    assert!(!long_program(REFRACT_FRAG_INSTRS * 4, LONG_PROGRAM_INSTRS));
+    // where refract stood before rank 3: exactly on the inclusive threshold
+    assert!(long_program(64 * 4, LONG_PROGRAM_INSTRS));
+}
+
+/// The same verdicts from the compiler's own output (`usc_dw`, the value W6
+/// would hand `long_program`) for the corpus texts. Same corpus rules as the
+/// test above: a SKIP line without one.
+#[test]
+fn glmark2_fragment_programs_against_long_program() {
+    use yakogl::vivante::tiled_rt::{long_program, LONG_PROGRAM_INSTRS};
+    let Some((dir, files)) = corpus("long_program half") else { return };
+    for (name, hash, long) in LONG {
+        let (f, src) = corpus_text(&dir, &files, hash, "frag");
+        let (dw, _) = compile(SHC_STAGE_FRAGMENT, &src);
+        let want = GLMARK2.iter().find(|g| g.0 == hash).expect("in GLMARK2").2;
+        println!("gc7000 {f}: {name} fragment, {} instructions ({dw} dwords), long_program {long}", dw / 4);
+        assert_eq!(dw % 4, 0, "{name}: whole instructions");
+        assert_eq!(dw / 4, want, "{name}: instructions against GLMARK2's pin");
+        assert_eq!(long_program(dw, LONG_PROGRAM_INSTRS), long, "{name}: long_program at {LONG_PROGRAM_INSTRS}");
+    }
 }

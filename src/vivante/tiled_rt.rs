@@ -283,13 +283,17 @@ pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
 /// W6's fallback (`gc-tiled-wire.md`): if the RS resolve costs more than early
 /// depth saves, the W4 rule narrows to draws with a long fragment program.
 /// The figures (our GC7000 compiler, `tests/gc_terrain_shader_count.rs`
-/// `GLMARK2`; `gc-terrain-shaders.md`): `terrain.frag` 80 (148 in
-/// `gc-slow-host-counts.md`, before ranks T and 4a-4c), the blur passes
-/// `tilt_*.frag` 57 and `bloom_*.frag` 32, `normalmap.frag` 20,
+/// `GLMARK2`; `gc-terrain-shaders.md`): `terrain.frag` 76 (80 before rank 3,
+/// 148 in `gc-slow-host-counts.md`, before ranks T and 4a-4c), the blur passes
+/// `tilt_*.frag` 49 and `bloom_*.frag` 28, `normalmap.frag` 19,
 /// `luminance.frag` 7, `overlay.frag` 2. 64 lies between the terrain pass and
 /// the longest blur, so terrain's pass qualifies and the blits and overlays
-/// do not. The notes carry no instruction counts for the shadow and refract
-/// programs; this threshold is not derived from them.
+/// do not. Shadow's and refract's fragment programs
+/// (`tests/gc_sr_shader_count.rs`, same compiler): refract 55, ground 13,
+/// depth 3, horse 1. None qualifies. Refract was 64, exactly on this
+/// inclusive threshold, until rank 3 (a `mul` read once by an `add` is a
+/// `mad`) took nine instructions off it; that test pins the four verdicts.
+/// The threshold is not derived from these four.
 pub const LONG_PROGRAM_INSTRS: u32 = 64;
 
 /// Whether a fragment program of `usc_dw` dwords of shader code (the shader
@@ -307,10 +311,10 @@ mod tests {
     #[test]
     fn long_program_splits_terrain_from_blits_and_overlays() {
         for (name, instrs, want) in [
-            ("terrain.frag", 80, true),
-            ("tilt_h.frag", 57, false),
-            ("bloom_v.frag", 32, false),
-            ("normalmap.frag", 20, false),
+            ("terrain.frag", 76, true),
+            ("tilt_h.frag", 49, false),
+            ("bloom_v.frag", 28, false),
+            ("normalmap.frag", 19, false),
             ("luminance.frag", 7, false),
             ("overlay.frag", 2, false),
         ] {
