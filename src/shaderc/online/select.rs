@@ -4232,6 +4232,430 @@ impl<'a> Sel<'a> {
         self.compact(dead)
     }
 
+    /// A blur tap's offset is one `mad` (rank 5' of
+    /// docs/notes/gc-compiler-ranks-3-5.md): `coord + vec2(k * s, 0.0)` is
+    /// selected as a vector `v` assembled lane by lane (`mul v.x, k, s` or,
+    /// since rank 4b, `mov v.x, ±s`; `mov v.y, 0.0`) and one `add d, c, v`.
+    /// When every lane of `v` is a constant multiple of ONE scalar `s`, the
+    /// add becomes `mad d, s.cccc, (k0, k1, k2, k3), c` with the `k` vector a
+    /// literal in the constant file (`const_reg` packs the taps' ±k into
+    /// shared registers), and the lane stores go. A tap whose lanes are all
+    /// zero (tap 0, `coord + vec2(0.0 * s, 0.0)`) reads the coordinate
+    /// itself where its only readers are texture look-ups, and is one `add
+    /// d, c, 0.0` where they are not.
+    ///
+    /// Runs after [`Sel::fuse_mul_add`] with the same shader-wide invariant
+    /// guard: no rewrite in a shader with an `invariant` output.
+    ///
+    /// # Values (rule R1 of plan #421's design-mad-tap)
+    ///
+    /// A lane `k * s` is the same product in both forms (`k * s + c` is the
+    /// `mul` then the `add`, product rounded first, as on the host
+    /// interpreter and in Mesa's `fmad` model of the GC `mad`), and `±s` is
+    /// `s * ±1.0 + c`, exact. A zero lane is where the two can differ:
+    /// `s * 0.0 + c` is `c + 0.0` only when `s * 0.0` is `+0`, that is when
+    /// `s` is `+0` or positive and finite. So:
+    ///
+    /// * `s` must be provably `>= +0`: an `abs` source, a non-negative
+    ///   finite literal, or a copy or product of those, up to three
+    ///   definitions back. A tap whose scale has an unknown sign (t5, t5v)
+    ///   is left alone. The proof cannot rule out an infinite or NaN `s`
+    ///   that the shader's inputs produce at run time (`TextureStep *
+    ///   abs(..)` from an infinite or NaN coordinate); there the zero lane
+    ///   reads NaN where it read `c.y`, and the tap's other lane is NaN in
+    ///   both forms.
+    /// * a zero lane is a literal `+0.0` (bits 0), and each `k` a finite,
+    ///   non-zero literal; a `-k` tap reads its own `(-k, +0)`, never a
+    ///   negated `(k, 0)`.
+    /// * the slot has at least one zero lane: without one `1.0 - x.y`
+    ///   would be an equal-length `mad` that only costs a constant.
+    ///
+    /// Tap 0's coordinate is `c + 0.0`, which is `c` except that `-0.0`
+    /// becomes `+0.0`; a texture look-up does not tell the two apart (the
+    /// wrap of `±0` is the same texel), so it reads `c` only when every
+    /// reader is a `texld` coordinate.
+    ///
+    /// # When a slot is rewritten
+    ///
+    /// * `v` is a virtual register read once, by this F32 `add` (plain:
+    ///   unconditional, not saturated), through no modifier;
+    /// * every write of `v` is a plain F32 `mov` or `mul` before the add,
+    ///   no lane written twice, and from the first of them to the add the
+    ///   code is one straight line in which nothing writes `s`;
+    /// * `s` is one temporary or input lane in every lane, and `s`, the
+    ///   constant and `c` fit the caps (`within_caps`, checked BEFORE the
+    ///   constant is placed, so a refused slot leaves the file as it was).
+    fn fuse_tap_offsets(&mut self) -> Result<(), SelectError> {
+        #[derive(Clone, Copy)]
+        enum Lane {
+            Undef,
+            Zero,
+            S(TapBase, u32),
+        }
+        const ONE: u32 = 0x3f80_0000;
+        const SIGN: u32 = 0x8000_0000;
+
+        let n = self.instrs.len();
+        if n < 3 || self.m.outputs.iter().any(ir::IoDecl::is_invariant) {
+            return Ok(());
+        }
+        let (Some(mul), Some(add), Some(mad), Some(texld)) =
+            (build::op_id("mul"), build::op_id("add"), build::op_id("mad"), build::op_id("texld"))
+        else {
+            return Ok(());
+        };
+        let mov = self.mov;
+        let (Some(m0), Some(m1)) = (mul.slot_of_operand(0), mul.slot_of_operand(1)) else { return Ok(()) };
+        let (Some(a0), Some(a1)) = (add.slot_of_operand(0), add.slot_of_operand(1)) else { return Ok(()) };
+        let Some(ms) = mov.slot_of_operand(MOV_OPERAND) else { return Ok(()) };
+        let Some(tc) = texld.slot_of_operand(0) else { return Ok(()) };
+        let dead = self.arena.alloc_filled(n, false)?;
+        let plain = |ins: &SelInstr| {
+            ins.ty == OpType::F32
+                && ins.cond.is_none()
+                && !ins.saturate
+                && ins.tex.is_none()
+                && ins.target.is_none()
+                && !ins.rtz
+        };
+
+        for j in 0..n {
+            let a = self.instrs.as_slice()[j];
+            if a.op != add || !plain(&a) {
+                continue;
+            }
+            let am = match a.dst {
+                Some(SelDst::Virtual { write_mask, .. } | SelDst::Fixed { write_mask, .. }) => write_mask,
+                _ => continue,
+            };
+            /* Which source is the assembled slot: a virtual register written
+             * only by plain movs and muls before the add, read only here. */
+            let mut found = None;
+            for (k, other) in [(a0, a1), (a1, a0)] {
+                let Some(SelSrc::Virtual { v, swizzle, neg: false, abs: false }) = a.srcs[k] else { continue };
+                let Some(c) = a.srcs[other] else { continue };
+                if let Some(defs) = self.tap_defs(v, j, k, mul, mov, &*dead) {
+                    found = Some((v, swizzle, c, defs));
+                    break;
+                }
+            }
+            let Some((v, swizzle, c, first)) = found else { continue };
+
+            /* Each lane the add takes from `v`: zero, `k * s`, or never
+             * written (the add's lane is then undefined in both forms). */
+            let mut lanes = [Lane::Undef; 4];
+            let mut ok = true;
+            for l in 0..4 {
+                if am & (1 << l) == 0 {
+                    continue;
+                }
+                let comp = swizzle[l] & 3;
+                let def = (first..j).find(|q| {
+                    !dead[*q]
+                        && matches!(self.instrs.as_slice()[*q].dst,
+                            Some(SelDst::Virtual { v: w, write_mask }) if w == v && write_mask & (1 << comp) != 0)
+                });
+                let Some(q) = def else { continue };
+                let ins = self.instrs.as_slice()[q];
+                let lane = if ins.op == mov {
+                    match ins.srcs[ms] {
+                        Some(src) if self.literal_lane(src, comp) == Some(0) => Some(Lane::Zero),
+                        Some(src) => tap_base(src, comp).map(|(b, neg)| Lane::S(b, if neg { ONE | SIGN } else { ONE })),
+                        None => None,
+                    }
+                } else {
+                    let (Some(x), Some(y)) = (ins.srcs[m0], ins.srcs[m1]) else {
+                        ok = false;
+                        break;
+                    };
+                    let pick = |kk: SelSrc, ss: SelSrc| {
+                        let kb = self.literal_lane(kk, comp)?;
+                        if !f32::from_bits(kb).is_finite() || kb & !SIGN == 0 {
+                            return None;
+                        }
+                        let (b, neg) = tap_base(ss, comp)?;
+                        Some(Lane::S(b, if neg { kb ^ SIGN } else { kb }))
+                    };
+                    pick(x, y).or_else(|| pick(y, x))
+                };
+                match lane {
+                    Some(lane) => lanes[l] = lane,
+                    None => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if !ok {
+                continue;
+            }
+            let mut base: Option<TapBase> = None;
+            let mut zeros = 0;
+            for lane in lanes {
+                match lane {
+                    Lane::Undef => {}
+                    Lane::Zero => zeros += 1,
+                    Lane::S(b, _) => {
+                        if base.is_some_and(|o| o != b) {
+                            ok = false;
+                        }
+                        base = Some(b);
+                    }
+                }
+            }
+            if !ok || zeros == 0 {
+                continue;
+            }
+
+            /* Nothing between the first lane store and the add writes `s`. */
+            if let Some(b) = base {
+                let src = match b {
+                    TapBase::V(w, comp, abs) => SelSrc::Virtual { v: w, swizzle: [comp; 4], neg: false, abs },
+                    TapBase::In(reg, comp, abs) => SelSrc::Input { reg, swizzle: [comp; 4], neg: false, abs },
+                };
+                let clobbered = (first + 1..j).any(|q| {
+                    !dead[q]
+                        && match (self.instrs.as_slice()[q].dst, src) {
+                            (Some(SelDst::Virtual { v: w, .. }), SelSrc::Virtual { v: r, .. }) => w == r,
+                            (Some(SelDst::Fixed { reg, .. }), SelSrc::Input { reg: r, .. }) => reg == r,
+                            _ => false,
+                        }
+                });
+                if clobbered || !self.non_negative(src, first, 3) {
+                    continue;
+                }
+                let kbits: [u32; 4] = core::array::from_fn(|l| match lanes[l] {
+                    Lane::S(_, k) => k,
+                    _ => 0,
+                });
+                /* The caps with a stand-in for the constant's register, so a
+                 * refusal places nothing in the file. */
+                let stand_in = SelSrc::Physical(build::Src::reg(build::RGROUP_UNIFORM_0, u16::MAX));
+                let mut fused = SelInstr::new(mad, OpType::F32).operand(0, src).operand(1, stand_in).operand(2, c);
+                fused.dst = a.dst;
+                if !within_caps(&fused.srcs) || !fused.srcs.iter().flatten().all(|r| mad.takes_group(group_of(r))) {
+                    continue;
+                }
+                let k = self.const_file_src(kbits, ir::SWIZZLE_IDENTITY)?;
+                let mut fused = SelInstr::new(mad, OpType::F32).operand(0, src).operand(1, k).operand(2, c);
+                fused.dst = a.dst;
+                self.instrs.as_mut_slice()[j] = fused;
+            } else if !self.tap_zero_read_directly(j, c, texld, tc, &*dead) {
+                let Ok(zero) = build::Src::imm_f32(0.0) else { continue };
+                let mut sum = SelInstr::new(add, OpType::F32).operand(0, c).operand(1, SelSrc::Physical(zero));
+                sum.dst = a.dst;
+                if !within_caps(&sum.srcs) || !sum.srcs.iter().flatten().all(|r| add.takes_group(group_of(r))) {
+                    continue;
+                }
+                self.instrs.as_mut_slice()[j] = sum;
+            } else {
+                /* Every reader now reads `c`; the add is dead. */
+                dead[j] = true;
+            }
+            for q in first..j {
+                if !dead[q] && matches!(self.instrs.as_slice()[q].dst, Some(SelDst::Virtual { v: w, .. }) if w == v) {
+                    dead[q] = true;
+                }
+            }
+        }
+
+        self.compact(dead)
+    }
+
+    /// The writes of the slot `v` that [`Sel::fuse_tap_offsets`] may fold
+    /// into the add at `j`, which reads it in source `k`: the first of them
+    /// when every write of `v` is a plain F32 `mov` or `mul` before `j`, no
+    /// lane is written twice, the one read of `v` anywhere is that source,
+    /// and the code from the first write to `j` is one straight line.
+    fn tap_defs(&self, v: VReg, j: usize, k: usize, mul: OpId, mov: OpId, dead: &[bool]) -> Option<usize> {
+        let (mut first, mut lanes) = (None, 0u8);
+        for (q, ins) in self.instrs.as_slice().iter().enumerate() {
+            if dead[q] {
+                continue;
+            }
+            for (sk, sl) in ins.srcs.iter().enumerate() {
+                if matches!(sl, Some(SelSrc::Virtual { v: r, .. }) if *r == v) && (q, sk) != (j, k) {
+                    return None;
+                }
+            }
+            let Some(SelDst::Virtual { v: w, write_mask }) = ins.dst else { continue };
+            if w != v {
+                continue;
+            }
+            let ok = q < j
+                && (ins.op == mov || ins.op == mul)
+                && ins.ty == OpType::F32
+                && ins.cond.is_none()
+                && !ins.saturate
+                && ins.tex.is_none()
+                && !ins.rtz
+                && lanes & write_mask == 0;
+            if !ok {
+                return None;
+            }
+            lanes |= write_mask;
+            first.get_or_insert(q);
+        }
+        let first = first?;
+        let straight = self.instrs.as_slice().iter().enumerate().all(|(q, ins)| {
+            !ins.target.is_some_and(|t| (t as usize) > first && (t as usize) <= j)
+                && !(q > first && q < j && !dead[q] && ins.target.is_some())
+        });
+        straight.then_some(first)
+    }
+
+    /// The bits of lane `comp` of a literal source, after its modifiers:
+    /// an f20 immediate (one value in every lane) or a literal of the
+    /// constant file read directly. `None` for anything else.
+    fn literal_lane(&self, src: SelSrc, comp: u8) -> Option<u32> {
+        let SelSrc::Physical(p) = src else { return None };
+        if p.is_immediate() {
+            /* IMMED_TYPE 0 is f20: the top 20 bits of the f32. */
+            return ((p.amode >> 1) & 3 == 0).then(|| p.imm_payload_bits().map(|b| b << 12)).flatten();
+        }
+        if p.group != build::RGROUP_UNIFORM_0 || p.amode != 0 {
+            return None;
+        }
+        let slot = *self.consts.as_slice().get(p.reg as usize * 4 + (p.swizzle[comp as usize & 3] & 3) as usize)?;
+        if slot != ConstSlot::literal(slot.data) {
+            return None;
+        }
+        let mut bits = slot.data;
+        if p.abs {
+            bits &= 0x7fff_ffff;
+        }
+        if p.neg {
+            bits ^= 0x8000_0000;
+        }
+        Some(bits)
+    }
+
+    /// Is `src` (a scalar read, every lane the same component) provably
+    /// `>= +0`? An `abs` read, a non-negative finite literal, or a copy or
+    /// product of those through `depth` single definitions, each written
+    /// unconditionally before `before` with no branch or branch target
+    /// between (so the read at `before` is that write's value, never an
+    /// uninitialised register). A NaN or an infinity from the shader's own
+    /// inputs is not ruled out (see [`Sel::fuse_tap_offsets`]).
+    fn non_negative(&self, src: SelSrc, before: usize, depth: u8) -> bool {
+        let (abs, neg) = match src {
+            SelSrc::Virtual { abs, neg, .. } | SelSrc::Input { abs, neg, .. } => (abs, neg),
+            SelSrc::Physical(_) => {
+                return self.literal_lane(src, 0).is_some_and(|b| b & 0x8000_0000 == 0 && f32::from_bits(b).is_finite())
+            }
+        };
+        if neg {
+            return false;
+        }
+        if abs {
+            return true;
+        }
+        let SelSrc::Virtual { v, swizzle, .. } = src else { return false };
+        if depth == 0 {
+            return false;
+        }
+        let comp = swizzle[0] & 3;
+        let mut writer = None;
+        for (q, ins) in self.instrs.as_slice().iter().enumerate() {
+            if let Some(SelDst::Virtual { v: w, write_mask }) = ins.dst {
+                if w == v && write_mask & (1 << comp) != 0 {
+                    if writer.is_some() {
+                        return false;
+                    }
+                    writer = Some(q);
+                }
+            }
+        }
+        let Some(at) = writer else { return false };
+        if at >= before
+            || self.instrs.as_slice().iter().enumerate().any(|(q, ins)| {
+                ins.target.is_some_and(|t| (t as usize) > at && (t as usize) <= before)
+                    || (q > at && q < before && ins.target.is_some())
+            })
+        {
+            return false;
+        }
+        let ins = self.instrs.as_slice()[at];
+        if ins.ty != OpType::F32 || ins.cond.is_some() || ins.tex.is_some() || ins.target.is_some() {
+            return false;
+        }
+        /* Every source read through the written lane, a constant-file one
+         * too (`lane_of` leaves an immediate as it is). */
+        let lane = |s: SelSrc| lane_of(s, comp);
+        if ins.op == self.mov {
+            let Some(slot) = self.mov.slot_of_operand(MOV_OPERAND) else { return false };
+            return ins.srcs[slot].is_some_and(|s| self.non_negative(lane(s), at, depth - 1));
+        }
+        let Some(mul) = build::op_id("mul") else { return false };
+        if ins.op == mul {
+            let (Some(x), Some(y)) =
+                (mul.slot_of_operand(0).and_then(|i| ins.srcs[i]), mul.slot_of_operand(1).and_then(|i| ins.srcs[i]))
+            else {
+                return false;
+            };
+            return self.non_negative(lane(x), at, depth - 1) && self.non_negative(lane(y), at, depth - 1);
+        }
+        false
+    }
+
+    /// Tap 0: `add d, c, v` with every lane of `v` zero. When `d` is written
+    /// only here and every reader of it is a `texld` coordinate (slot `tc`)
+    /// after `j`, read without a modifier, with no branch, branch target or
+    /// write of `c` from `j` to the last reader, the readers read `c`
+    /// instead and the caller drops the add. `false` changes nothing.
+    fn tap_zero_read_directly(&mut self, j: usize, c: SelSrc, texld: OpId, tc: usize, dead: &[bool]) -> bool {
+        let Some(SelDst::Virtual { v: d, .. }) = self.instrs.as_slice()[j].dst else { return false };
+        if matches!(c, SelSrc::Physical(_)) {
+            return false;
+        }
+        let mut last = None;
+        for (q, ins) in self.instrs.as_slice().iter().enumerate() {
+            if dead[q] {
+                continue;
+            }
+            if q != j && matches!(ins.dst, Some(SelDst::Virtual { v: w, .. }) if w == d) {
+                return false;
+            }
+            for (k, sl) in ins.srcs.iter().enumerate() {
+                if let Some(SelSrc::Virtual { v: r, neg, abs, .. }) = sl {
+                    if *r == d {
+                        if q <= j || ins.op != texld || k != tc || *neg || *abs {
+                            return false;
+                        }
+                        last = Some(q);
+                    }
+                }
+            }
+        }
+        let Some(last) = last else { return false };
+        for (q, ins) in self.instrs.as_slice().iter().enumerate() {
+            if ins.target.is_some_and(|t| (t as usize) > j && (t as usize) <= last) {
+                return false;
+            }
+            if q > j && q < last && !dead[q] {
+                let writes_c = match (ins.dst, c) {
+                    (Some(SelDst::Virtual { v: w, .. }), SelSrc::Virtual { v: r, .. }) => w == r,
+                    (Some(SelDst::Fixed { reg, .. }), SelSrc::Input { reg: r, .. }) => reg == r,
+                    _ => false,
+                };
+                if ins.target.is_some() || writes_c {
+                    return false;
+                }
+            }
+        }
+        for (q, item) in self.instrs.as_mut_slice().iter_mut().enumerate() {
+            if q <= j || q > last || dead[q] {
+                continue;
+            }
+            if let Some(SelSrc::Virtual { v: r, swizzle, .. }) = item.srcs[tc] {
+                if r == d {
+                    item.srcs[tc] = Some(compose(c, swizzle));
+                }
+            }
+        }
+        true
+    }
+
     /// Delete `mov d, <uniform or literal>` by making every reader name the
     /// constant directly.
     ///
@@ -4933,6 +5357,7 @@ fn select_from<'a>(
     s.nodes(m.body)?;
     s.propagate_copies()?;
     s.fuse_mul_add()?;
+    s.fuse_tap_offsets()?;
     s.fold_constant_reads()?;
     s.legalise_operands()?;
     s.eliminate_dead()?;
@@ -5406,6 +5831,26 @@ fn negated(s: SelSrc) -> Option<SelSrc> {
             Some(SelSrc::Physical(p))
         }
     }
+}
+
+/// The scalar a tap's lane scales, for [`Sel::fuse_tap_offsets`]: a
+/// temporary or input read at lane `comp` of `src`, as its register, the
+/// component and the `abs` flag, with the negate returned apart (it is
+/// carried by the lane's constant). `None` for a constant-file or immediate
+/// read.
+fn tap_base(src: SelSrc, comp: u8) -> Option<(TapBase, bool)> {
+    match src {
+        SelSrc::Virtual { v, swizzle, neg, abs } => Some((TapBase::V(v, swizzle[comp as usize & 3] & 3, abs), neg)),
+        SelSrc::Input { reg, swizzle, neg, abs } => Some((TapBase::In(reg, swizzle[comp as usize & 3] & 3, abs), neg)),
+        SelSrc::Physical(_) => None,
+    }
+}
+
+/// See [`tap_base`].
+#[derive(Clone, Copy, PartialEq)]
+enum TapBase {
+    V(VReg, u8, bool),
+    In(u8, u8, bool),
 }
 
 /// Where `operand(0)` of a `mov` actually lands, for the tests that check the
