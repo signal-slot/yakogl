@@ -506,8 +506,14 @@ Expected verdicts:
 `pvr-instance-divisor`; before that was added the run had to pass
 `-DYAKOGL_EXTRA_FEATURES=yakogl/pvr-instance-divisor`), the patched VK-GL-CTS at `93bca01`:
 
-- Before P3 (`03a923ed`): `dEQP-GLES3.functional.instanced.*` is 111 cases,
-  0 Pass / 111 Fail / 0 NotSupported. Every picture verdict is Fail on the
+- Before P3 (`03a923ed`): 111 cases, 0 Pass / 111 Fail / 0 NotSupported. The
+  111 are the two instanced groups together: `dEQP-GLES3.functional.instanced.*`
+  (45 cases) plus `dEQP-GLES3.functional.draw.draw_{arrays,elements}_instanced.*`
+  (66 cases), counted in the pinned VK-GL-CTS `93bca01` mustpass union
+  (`android/cts/main/gles3-main-*.txt`). Neither glob alone is 111:
+  `draw.*instanced*` is 97 cases, because it also matches 21 `draw_arrays.*`/
+  `draw_elements.*`/`draw_range_elements.*` cases and the 10
+  `draw.instancing.*` cases. Every picture verdict is Fail on the
   host, because the host back end renders no real picture (the same on v3d
   and Vivante). The one `draw refused` line of the P1-less tip is gone since
   P1's wiring (`db633936`): state "0 refusals" only against tips from
