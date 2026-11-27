@@ -37,10 +37,10 @@
 //! such as 0.6 is a compiler refusal (an fp16 constant not exact), not a
 //! blend one. Every state leaves `GL_NO_ERROR` and `draws_refused` unchanged.
 //!
-//! The word comparison of tests/mali_blend_words.rs holds in this build too
-//! (its copy gated `report-es2` passed against tools/mali/testdata/pan_blend_ref);
-//! it is not folded in here because both tests install their own OSAL mock
-//! into a process-wide backend, so it needs its own test file.
+//! The word comparison of tests/mali_blend_words.rs holds in this build too:
+//! its `report-es2` copy is tests/mali_blend_words_es2.rs (checked against
+//! tools/mali/testdata/pan_blend_ref). It is a separate file because both
+//! tests install their own OSAL mock into a process-wide backend.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table,report-es2 --test mali_blend_states_es2
