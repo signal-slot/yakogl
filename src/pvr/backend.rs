@@ -1383,6 +1383,39 @@ fn es3_tex_format(format: u8) -> Option<(TexFormat, u32)> {
     })
 }
 
+/// The four-channel integer classes, which also hold the R, RG and RGB
+/// integer formats the PowerVR does not sample packed (R8UI in RGBA8UI,
+/// RG32I in RGBA32I, ...: `PVR_SAMPLED_TEXFMTS`, es3_formats' widening).
+const fn is_int_store(format: u8) -> bool {
+    matches!(
+        format,
+        GLES_TEXFMT_RGBA8UI
+            | GLES_TEXFMT_RGBA8I
+            | GLES_TEXFMT_RGBA16UI
+            | GLES_TEXFMT_RGBA16I
+            | GLES_TEXFMT_RGBA32UI
+            | GLES_TEXFMT_RGBA32I
+    )
+}
+
+/// Format `f` of the ES 3.0 class bound as `t`, reading alpha as 1 when `t`
+/// is an integer store whose GL format has no alpha (`no_alpha`:
+/// GL_RED_INTEGER, GL_RG_INTEGER, GL_RGB_INTEGER; ES 3.0.6 3.8.15 and table
+/// 3.24 read an absent alpha as 1). The store's alpha lane is not that 1: a
+/// glTexImage2D(..., NULL) store is cleared to 0, and a draw into an R or RG
+/// integer texture packs all four lanes of the four-channel surface, the
+/// absent ones from the shader's output (dEQP fbo.color.tex2d.r8ui writes
+/// 0 there: its output scale is valueMax - valueMin, 0 for an absent
+/// channel). An `isampler2D` then read (r, 0, 0, 0) where GL says
+/// (r, 0, 0, 1). Green and blue stay the store's: an upload stores 0 there,
+/// and what a draw stores there is the GL core's colour mask's.
+const fn int_store_alpha(mut f: TexFormat, t: &GlesTextureBind) -> TexFormat {
+    if t.no_alpha != 0 && is_int_store(t.format) {
+        f.swiz[3] = SWIZ_ONE;
+    }
+    f
+}
+
 /// TEXSTATE_IMAGE_WORD0 of a `width` x `height` image of format `f`, as
 /// `textype` (the format's own, or CUBE for the native cube).
 fn tex_image_word0(f: TexFormat, textype: csb::ROGUE_TEXSTATE_TEXTYPE, width: u32, height: u32) -> [u32; 2] {
@@ -6532,7 +6565,7 @@ fn build_tex_desc_lod(w: &mut [u32], t: &GlesTextureBind, warned: &mut u32, lod:
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
         w[7] = if t.format == GLES_TEXFMT_R32F { TEX_PCK_INFO_F32 } else { TEX_PCK_INFO_F16 };
     } else if let Some((f, pck)) = es3_tex_format(t.format) {
-        fmt = f;
+        fmt = int_store_alpha(f, t);
         w[4] = t.stride_texels.wrapping_mul(t.height).wrapping_mul(gles_texfmt_bytes(t.format));
         w[7] = pck;
     } else if t.format == PVR_TEXFMT_DEPTH_BUFFER {
