@@ -99,6 +99,11 @@ if(CONFIG_YAKOGL_GPU_V3D71)
   target_compile_definitions(app PRIVATE V3D_BUILD="${V3D_BUILD}")
 
   target_sources(app PRIVATE src/main_rpi5.c)
+  # gl_test.c reaches zephyr_v3d.h (osal_v3d_mem_used, ...) only through
+  # case 140's include, which a 7.1 build leaves out (tfu140); the 7.1 OSAL
+  # (zephyr_v3d71.c) defines the same instruments, so declare them here.
+  set_source_files_properties("${PVR_REPO}/tools/pvrlab/gl_test.c" PROPERTIES
+    COMPILE_OPTIONS "-include;${YAKOGL_DIR}/src/osal/zephyr_v3d.h")
   target_include_directories(app PRIVATE
     "${PVR_REPO}/zephyr/lib/board/rpi4"             # rpi_mbox.h, rpi_wdog.h
     "${PVR_REPO}/src/v3d"
