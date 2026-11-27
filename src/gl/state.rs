@@ -500,6 +500,7 @@ pub unsafe extern "C" fn glColorMask(r: GLboolean, g: GLboolean, b: GLboolean, a
     gl_trace!(glColorMask);
     let Some(c) = context::current() else { return };
     c.color_writemask = [r, g, b, a].map(|v| if v != 0 { 1.0 } else { 0.0 });
+    context::dbi(c).set_color_mask([r, g, b, a].map(|v| v != 0));
 }
 
 /* --------------------------------------------------------------------------- */
@@ -519,7 +520,10 @@ fn set_cap(cap: GLenum, on: bool) {
     }
     match cap {
         GL_DEPTH_TEST => c.depth_test = on,
-        GL_BLEND => c.blend = on,
+        GL_BLEND => {
+            c.blend = on;
+            context::dbi(c).set_blend_enable(on);
+        }
         GL_CULL_FACE => c.cull_face = on,
         GL_SCISSOR_TEST => c.scissor_test = on,
         GL_STENCIL_TEST => c.stencil_test = on,
@@ -729,6 +733,13 @@ fn valid_blend_factor(f: GLenum, dst: bool) -> bool {
     }
 }
 
+/// ES 3.0 4.1.7 adds MIN and MAX to the ES 2.0 three; GL_EXT_blend_minmax
+/// is not in ALL_EXTENSION_NAMES, so a report-es2 build refuses them.
+fn valid_blend_equation(m: GLenum) -> bool {
+    matches!(m, GL_FUNC_ADD | GL_FUNC_SUBTRACT | GL_FUNC_REVERSE_SUBTRACT)
+        || (!crate::REPORT_ES2 && matches!(m, GL_MIN | GL_MAX))
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn glBlendFuncSeparate(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: GLenum, dstAlpha: GLenum) {
     gl_trace!(glBlendFuncSeparate);
@@ -745,6 +756,7 @@ pub unsafe extern "C" fn glBlendFuncSeparate(srcRGB: GLenum, dstRGB: GLenum, src
     c.blend_dst = dstRGB;
     c.blend_src_a = srcAlpha;
     c.blend_dst_a = dstAlpha;
+    context::dbi(c).set_blend_func_separate(srcRGB, dstRGB, srcAlpha, dstAlpha);
 }
 
 #[no_mangle]
@@ -759,22 +771,186 @@ pub unsafe extern "C" fn glBlendEquationSeparate(modeRGB: GLenum, modeAlpha: GLe
     let Some(c) = context::current() else { return };
     /* ES 3.0 4.1.7 adds MIN and MAX to the ES 2.0 three; GL_EXT_blend_minmax
      * is not in ALL_EXTENSION_NAMES, so a report-es2 build refuses them */
-    let valid = |m: GLenum| {
-        matches!(m, GL_FUNC_ADD | GL_FUNC_SUBTRACT | GL_FUNC_REVERSE_SUBTRACT)
-            || (!crate::REPORT_ES2 && matches!(m, GL_MIN | GL_MAX))
-    };
-    if !valid(modeRGB) || !valid(modeAlpha) {
+    if !valid_blend_equation(modeRGB) || !valid_blend_equation(modeAlpha) {
         c.set_error(GL_INVALID_ENUM, "glBlendEquationSeparate");
         return;
     }
     c.blend_eq = modeRGB;
     c.blend_eq_a = modeAlpha;
+    context::dbi(c).set_blend_equation_separate(modeRGB, modeAlpha);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn glBlendEquation(mode: GLenum) {
     gl_trace!(glBlendEquation);
     glBlendEquationSeparate(mode, mode);
+}
+
+/* ---- GL_EXT/OES_draw_buffers_indexed (not advertised) -------------------------
+ * The per-draw-buffer state lives in `context::dbi`; the non-indexed calls
+ * above set every buffer. Draws do not read it yet. Enum errors are checked
+ * before the index (GL_INVALID_VALUE), as in the extension's Errors list. */
+
+/// Record `r` (an error code from the module) on the context.
+fn dbi_result(c: &mut GlContext, r: Result<(), GLenum>, name: &'static str) {
+    if let Err(e) = r {
+        c.set_error(e, name);
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glEnableiEXT(target: GLenum, index: GLuint) {
+    gl_trace!(glEnableiEXT);
+    let Some(c) = context::current() else { return };
+    let r = context::dbi(c).enablei(target, index);
+    dbi_result(c, r, "glEnableiEXT");
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glDisableiEXT(target: GLenum, index: GLuint) {
+    gl_trace!(glDisableiEXT);
+    let Some(c) = context::current() else { return };
+    let r = context::dbi(c).disablei(target, index);
+    dbi_result(c, r, "glDisableiEXT");
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glIsEnablediEXT(target: GLenum, index: GLuint) -> GLboolean {
+    gl_trace!(glIsEnablediEXT);
+    let Some(c) = context::current() else { return GL_FALSE_B };
+    match context::dbi(c).is_enabledi(target, index) {
+        Ok(on) => on as GLboolean,
+        Err(e) => {
+            c.set_error(e, "glIsEnablediEXT");
+            GL_FALSE_B
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glBlendEquationSeparateiEXT(buf: GLuint, modeRGB: GLenum, modeAlpha: GLenum) {
+    gl_trace!(glBlendEquationSeparateiEXT);
+    let Some(c) = context::current() else { return };
+    let r = if !valid_blend_equation(modeRGB) || !valid_blend_equation(modeAlpha) {
+        Err(GL_INVALID_ENUM)
+    } else {
+        context::dbi(c).blend_equation_separatei(buf, modeRGB, modeAlpha)
+    };
+    dbi_result(c, r, "glBlendEquationSeparateiEXT");
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glBlendEquationiEXT(buf: GLuint, mode: GLenum) {
+    gl_trace!(glBlendEquationiEXT);
+    glBlendEquationSeparateiEXT(buf, mode, mode);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glBlendFuncSeparateiEXT(
+    buf: GLuint,
+    srcRGB: GLenum,
+    dstRGB: GLenum,
+    srcAlpha: GLenum,
+    dstAlpha: GLenum,
+) {
+    gl_trace!(glBlendFuncSeparateiEXT);
+    let Some(c) = context::current() else { return };
+    let r = if !valid_blend_factor(srcRGB, false)
+        || !valid_blend_factor(dstRGB, true)
+        || !valid_blend_factor(srcAlpha, false)
+        || !valid_blend_factor(dstAlpha, true)
+    {
+        Err(GL_INVALID_ENUM)
+    } else {
+        context::dbi(c).blend_func_separatei(buf, srcRGB, dstRGB, srcAlpha, dstAlpha)
+    };
+    dbi_result(c, r, "glBlendFuncSeparateiEXT");
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glBlendFunciEXT(buf: GLuint, sfactor: GLenum, dfactor: GLenum) {
+    gl_trace!(glBlendFunciEXT);
+    glBlendFuncSeparateiEXT(buf, sfactor, dfactor, sfactor, dfactor);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glColorMaskiEXT(index: GLuint, r: GLboolean, g: GLboolean, b: GLboolean, a: GLboolean) {
+    gl_trace!(glColorMaskiEXT);
+    let Some(c) = context::current() else { return };
+    let res = context::dbi(c).color_maski(index, [r, g, b, a].map(|v| v != 0));
+    dbi_result(c, res, "glColorMaskiEXT");
+}
+
+/* The OES names are the same functions under a second symbol. */
+
+#[no_mangle]
+pub unsafe extern "C" fn glEnableiOES(target: GLenum, index: GLuint) {
+    glEnableiEXT(target, index);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glDisableiOES(target: GLenum, index: GLuint) {
+    glDisableiEXT(target, index);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glIsEnablediOES(target: GLenum, index: GLuint) -> GLboolean {
+    glIsEnablediEXT(target, index)
+}
+#[no_mangle]
+pub unsafe extern "C" fn glBlendEquationiOES(buf: GLuint, mode: GLenum) {
+    glBlendEquationiEXT(buf, mode);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glBlendEquationSeparateiOES(buf: GLuint, modeRGB: GLenum, modeAlpha: GLenum) {
+    glBlendEquationSeparateiEXT(buf, modeRGB, modeAlpha);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glBlendFunciOES(buf: GLuint, sfactor: GLenum, dfactor: GLenum) {
+    glBlendFunciEXT(buf, sfactor, dfactor);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glBlendFuncSeparateiOES(
+    buf: GLuint,
+    srcRGB: GLenum,
+    dstRGB: GLenum,
+    srcAlpha: GLenum,
+    dstAlpha: GLenum,
+) {
+    glBlendFuncSeparateiEXT(buf, srcRGB, dstRGB, srcAlpha, dstAlpha);
+}
+#[no_mangle]
+pub unsafe extern "C" fn glColorMaskiOES(index: GLuint, r: GLboolean, g: GLboolean, b: GLboolean, a: GLboolean) {
+    glColorMaskiEXT(index, r, g, b, a);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn glGetBooleani_v(target: GLenum, index: GLuint, data: *mut GLboolean) {
+    gl_trace!(glGetBooleani_v);
+    let Some(c) = context::current() else { return };
+    if data.is_null() {
+        return;
+    }
+    match target {
+        GL_COLOR_WRITEMASK => match context::dbi(c).get_color_maski(index) {
+            Ok(m) => {
+                for (i, v) in m.iter().enumerate() {
+                    // SAFETY: GL_COLOR_WRITEMASK yields four values; the application provides room.
+                    util::app_set(data, i, *v as GLboolean);
+                }
+            }
+            Err(e) => c.set_error(e, "glGetBooleani_v"),
+        },
+        /* the other indexed state is integer: value != 0, as glGetBooleanv */
+        GL_BLEND_EQUATION_RGB
+        | GL_BLEND_EQUATION_ALPHA
+        | GL_BLEND_SRC_RGB
+        | GL_BLEND_DST_RGB
+        | GL_BLEND_SRC_ALPHA
+        | GL_BLEND_DST_ALPHA => match context::dbi(c).get_integeri(target, index) {
+            Ok(v) => util::app_set(data, 0, (v != 0) as GLboolean),
+            Err(e) => c.set_error(e, "glGetBooleani_v"),
+        },
+        _ => c.set_error(GL_INVALID_ENUM, "glGetBooleani_v"),
+    }
 }
 
 #[no_mangle]
@@ -1487,6 +1663,17 @@ pub unsafe extern "C" fn glGetInteger64v(pname: GLenum, data: *mut GLint64) {
 /// as many values as that pname yields into a caller expecting one -- and
 /// `Err(GL_INVALID_VALUE)` for an index past the points.
 fn indexed_state(c: &GlContext, target: GLenum, index: GLuint) -> Result<GLint64, GLenum> {
+    if matches!(
+        target,
+        GL_BLEND_EQUATION_RGB
+            | GL_BLEND_EQUATION_ALPHA
+            | GL_BLEND_SRC_RGB
+            | GL_BLEND_DST_RGB
+            | GL_BLEND_SRC_ALPHA
+            | GL_BLEND_DST_ALPHA
+    ) {
+        return context::dbi(c).get_integeri(target, index).map(GLint64::from);
+    }
     let ubo = |i: GLuint| context::uniform_buffers(c).get(i as usize).copied().ok_or(GL_INVALID_VALUE);
     match target {
         GL_UNIFORM_BUFFER_BINDING => Ok(GLint64::from(names::name_of(c, Kind::Buffer, ubo(index)?.buffer))),

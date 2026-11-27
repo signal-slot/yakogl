@@ -600,9 +600,10 @@ fn draw_buffers_indexed_is_not_advertised_and_its_indexed_state_is_invalid_enum(
     // blend_isenabledi rows): not indexed state here, so GL_INVALID_ENUM —
     // and nothing written (the buffer keeps its sentinel).
     for (what, target) in [
-        ("GL_BLEND_SRC_RGB", GL_BLEND_SRC_RGB),
-        ("GL_BLEND_EQUATION_RGB", GL_BLEND_EQUATION_RGB),
+        /* the six blend pnames answer since dbi-entry (tests/es3_dbi_api.rs);
+         * GL_COLOR_WRITEMASK is glGetBooleani_v's, four values */
         ("GL_COLOR_WRITEMASK", GL_COLOR_WRITEMASK),
+        ("GL_BLEND", GL_BLEND),
     ] {
         Q::error_clear();
         let mut v = i32::MIN;
