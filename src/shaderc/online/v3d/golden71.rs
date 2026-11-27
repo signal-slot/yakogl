@@ -95,3 +95,79 @@ fn mesa_v71_vectors_fields() {
     assert_eq!((a.add.op, a.mul.op), (AddOp71::SetnnmodeUu, MulOp71::V8dot));
     assert_eq!((a.mul.waddr, a.mul.a.raddr, a.mul.b.raddr), (12, 1, 2));
 }
+
+#[test]
+fn text_of_is_stable_and_matches_the_table_text() {
+    for &(w, want) in MESA_V71 {
+        let i = decode71(w).unwrap();
+        // Equal input gives equal text, twice over.
+        assert_eq!(text_of(&i), text_of(&i));
+        assert_eq!(text_of(&i), want);
+    }
+}
+
+#[test]
+fn text_of_differs_when_one_word_differs() {
+    // Row 0 with its add destination (waddr 10) changed to 11: one field, one text.
+    let w = MESA_V71[0].0;
+    let i = decode71(w).unwrap();
+    let Instr71::Alu(mut a) = i else { panic!("ALU") };
+    a.add.waddr = 11;
+    let other = text_of(&Instr71::Alu(a));
+    assert_ne!(other, MESA_V71[0].1);
+    assert!(other.starts_with("add rf11, 1, rf2"), "{other:?}");
+    // The encode of the changed instruction is a different word.
+    assert_ne!(encode71(&Instr71::Alu(a)), Ok(w));
+}
+
+#[test]
+fn rows_are_distinct_and_fixed_width_text() {
+    for (n, &(w, text)) in MESA_V71.iter().enumerate() {
+        // The add half is padded to a 30-column field before "; ".
+        assert_eq!(text.find("; "), Some(30), "row {n}: {text:?}");
+        for &(w2, t2) in &MESA_V71[n + 1..] {
+            assert_ne!(w, w2);
+            assert_ne!(text, t2);
+        }
+    }
+}
+
+#[test]
+fn the_mismatch_report_names_word_got_and_want() {
+    // The report line of the decode test, for a row whose text is wrong.
+    let (w, want) = (MESA_V71[0].0, "not the text");
+    let got = text_of(&decode71(w).unwrap());
+    assert_ne!(got, want);
+    let line = format!("{w:#018x}: got {got:?}, want {want:?}");
+    assert_eq!(line, "0x39c0000a3803f042: got \"add rf10, 1, rf2              ; nop\", want \"not the text\"");
+}
+
+#[test]
+fn empty_and_other_length_tables_are_told_apart() {
+    // The row-count guard: an empty table or one of another length is not 5.
+    let empty: &[(u64, &str)] = &[];
+    assert_ne!(empty.len(), MESA_V71_ROWS);
+    assert_ne!(MESA_V71[..4].len(), MESA_V71_ROWS);
+    assert_eq!(MESA_V71.len(), MESA_V71_ROWS);
+}
+
+#[test]
+fn swap_branch_is_taken_only_by_commutative_add_ops() {
+    let mut swapped = 0;
+    for &(w, _) in MESA_V71 {
+        if let Instr71::Alu(a) = decode71(w).unwrap() {
+            if matches!(a.add.op, AddOp71::Fadd | AddOp71::Faddnf | AddOp71::Fmin | AddOp71::Fmax) {
+                swapped += 1;
+            }
+        }
+    }
+    // None of the five Mesa rows is FADD/FADDNF/FMIN/FMAX: the swap arm is not reached.
+    assert_eq!(swapped, 0);
+    // A hand-made FADD with a and b swapped (and their flags) encodes to the same word.
+    let Instr71::Alu(mut a) = decode71(MESA_V71[0].0).unwrap() else { panic!("ALU") };
+    a.add.op = AddOp71::Fadd;
+    let w = encode71(&Instr71::Alu(a)).expect("fadd encodes");
+    core::mem::swap(&mut a.add.a, &mut a.add.b);
+    core::mem::swap(&mut a.sig.small_imm_a, &mut a.sig.small_imm_b);
+    assert_eq!(encode71(&Instr71::Alu(a)), Ok(w));
+}
