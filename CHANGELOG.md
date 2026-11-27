@@ -26,16 +26,16 @@ records at the tip.
   ms4 row is still from `e9901869a`); i.MX8MP 17,318 at `0fbe61a3`; Pi 4
   17,126 at `46f93767`.
 - glmark2-es2 on the AM62P reads 489: 33 scenes, 0 failed, 0 GL errors
-  (main `b884868c`, 2026-11-27, record `031e7bef`; shadow 10.56, refract
-  34.83 and terrain 79.90 ms a frame; 468 on 2026-11-01). Common-set
+  (main `8133663c`, 2026-11-27, record `0ada3ad3`; shadow 10.56, refract
+  34.83 and terrain 79.91 ms a frame; 468 on 2026-11-01). Common-set
   re-runs since: i.MX8MP 42 (33 scenes, 0 failed, 0 GL errors, main
   `f87dde43`, 2026-11-07) and Pi 4 195 (33 scenes, 0 failed, 0 GL
-  errors, main `bdd2ba1c`, 2026-11-25; pictures 28 of 33 match); the figures are the "Common set" rows of
+  errors, main `33910e48`, 2026-11-27, also at `bdd2ba1c`; pictures 28 of 33 match); the figures are the "Common set" rows of
   `tools/cts/RESULTS.md`. The README table stays #1196's one-commit table.
-- `gl_test` on the common set: the AM62P 50 of 50 from main `b884868c`
-  (2026-11-27, `031e7bef`; case 20 `etc` passes now); the i.MX8MP 49 of
+- `gl_test` on the common set: the AM62P 50 of 50 from main `8133663c`
+  (2026-11-27, `0ada3ad3`; case 20 `etc` passes now); the i.MX8MP 49 of
   49 run, case 16 skipped, from main `f87dde43` (`8737e5a3`); the Pi 4 13
-  of 13 from main `bdd2ba1c` (2026-11-25).
+  of 13 from main `33910e48` (2026-11-27).
 - `gl_test` on the NanoPC-T6 (its own Linux, panthor): 165 of 256 cases
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
