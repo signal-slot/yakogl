@@ -409,8 +409,8 @@ image otherwise. Empty until a session runs.
 
 | row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
 |---|---|---|---:|---|---|
-| before | 72972ba4 | n/a (not built) | | | |
-| tip | ecd9743e (stop, not run) | off | | | |
+| before | 72972ba4 | n/a (not built) | - (console only, not a row: FrameTime 247.588) | verdict= `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s` | record=absent (console: `594b120e fc3f0004 6104003f 00258320`) |
+| tip | b947cc22 (stop 2026-11-27, not run) | off | - | verdict= stop: not run (the command stopped after terrain's not_back) | - |
 | tip | | on | | | |
 | D (on minus off) | | | | | |
 
@@ -427,3 +427,16 @@ board. The board answered from the leased worker and `tools/board.sh x2
 status` read `containers 1`: `slint-launcher` still runs, so `board.sh x2 run`
 would refuse the jump and none was made. Details: `x2-glmark2-slow-scenes.md`,
 "Session A: stop, 2026-11-25".
+
+Stop, 2026-11-27 (item x2-before-rerun; measured on the Armadillo-X2
+standing in for the Verdin iMX8MP, record
+`records/x2/20261127-0954-before-72972ba4/`): the first jump with
+`fa8dcf85`'s loader. The loader printed `crash: i.MX 8M Plus (fsl,imx8mp):
+gpio-mxc and irqsteer rows are let through` and jumped, with no container
+running. The 72972ba4 terrain image ran to `glmark2: PASS`, and the console
+showed `FPS: 5 FrameTime: 247.588 ms` (`gc frame 213117` us of `frame 246797`).
+After the reset the board refused the task machine's ssh key, which lives on
+the board's tmpfs only. The run therefore ended `verdict=not_back` (rc 5) and
+was not retried. The console figure is not a board.sh row. Shadow, refract
+and the tip `b947cc22` were not run. Details: `x2-glmark2-slow-scenes.md`,
+"Stop, 2026-11-27 (plan #355, item x2-before-rerun)".

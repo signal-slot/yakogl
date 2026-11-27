@@ -449,3 +449,91 @@ through`, and the first jump with it is watched on the X2 console: that line
 is what shows the X2 list was in use. The next X2 sessions run with it: the
 dtpu rerun of `gc-depth-sample.md` unchanged, and the glmark2 before rerun
 can reuse its three images (built from `02c5c9af`).
+
+## Stop, 2026-11-27 (plan #355, item x2-before-rerun): the board came back, but not to this worker's ssh key
+
+**No board.sh row was measured: the first run ended `verdict=not_back` and
+the command stopped with no retry.** Measured on the Armadillo-X2 (i.MX 8M
+Plus, GC7000UL), standing in for the Verdin iMX8MP; the record's `meta.txt`
+says `board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the
+Verdin iMX8MP`. Record: `records/x2/20261127-0954-before-72972ba4/`
+(gitignored, redacted).
+
+Commits: before `72972ba4`; tip `b947cc22` (`origin/main` as this task's
+clone shows it, `refs/connected/origin/remotes/origin/main`; `git fetch
+origin` failed here, access denied). The tip run was not started. Leases:
+`target:x2` and `target:x2-console` (read only, no character sent).
+
+What held this time:
+
+- Reachability: ssh as root from the leased worker logged in, and
+  `tools/board.sh x2 status` read `board lease: none`, runlevel `default`,
+  `kexec_loaded 0`, `kexec_crash_loaded 0`, crash window `268435456`.
+- `kexec_zephyr` and `snvs_lpgpr` built from the tip (`b947cc22`, which has
+  `fa8dcf85` and `c10c1936`) with `clang --target=aarch64-none-elf -O2 -static
+  -nostdlib -ffreestanding -fno-stack-protector` and the Zephyr SDK's
+  `ld.bfd` (the SDK's `aarch64-zephyr-elf-gcc` fails the link: its default
+  script's `ram` region overflows by 47648 bytes).
+- The command was `X2_STOP_APPS=1 tools/cts/x2-glmark2-scenes.sh --commit
+  72972ba4 records/x2/20261127-0954-before-72972ba4 terrain shadow refract`.
+  A dry run of the terrain image first returned rc 0 for all four runs. The
+  terrain image (sha256 `0a20645ad2108716...`, footprint 157057024, marker
+  `gc_wdog_arm: armed` present) ran with `board_state=openrc settled uptime
+  3498s kexec=0 containers=0`, so `X2_STOP_APPS=1` stopped nothing (no `undo=`,
+  `app_stop=` or `app_back=` line in `meta.txt`).
+- **The crash list held.** The loader printed (`kexec.log`):
+  `crash: i.MX 8M Plus (fsl,imx8mp): gpio-mxc and irqsteer rows are let through`
+  and `crash: /proc/interrupts: every row with a handler is on a measured chip
+  (...; i.MX 8M Plus also gpio-mxc, irqsteer)`. `jump=ok`: this is the first
+  jump with `fa8dcf85`'s loader.
+- **The image ran terrain to the end.** The console (read only) showed the
+  crashdump kernel start, `sample: build tree=72972ba4`, glmark2
+  `[terrain] <default>: FPS: 5 FrameTime: 247.588 ms`, `glmark2-frame: ... 41
+  frames; us per frame: gl 224580, swap 22081, show 136, other 0, frame
+  246797`, `glmark2-steps: ... gc frame 213117 ...`, `yk-record: 594b120e
+  fc3f0004 6104003f 00258320`, `glmark2: PASS`, then `board: resetting the
+  SoC`, U-Boot's `reset cause: watchdog` and Linux to `armadillo login:`
+  about a minute after the jump. The image adopted the LCDIF at 1920x1080.
+  `gc_wdog_arm: armed` does not show on the console (printed before the
+  console starts, as the resource notes say); the build check found it in
+  the image.
+
+What stopped it: **after the reboot, the board refused this task machine's
+ssh key** (`Permission denied (publickey,...)`). The key connected installs
+for a task machine goes into `/root/.ssh` on the board's tmpfs overlay; only
+the farm nodes' keys are persisted, so every reboot drops it. `board.sh`
+waited its 1500 s for ssh, then wrote:
+
+```
+board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s (kexec-dev: a development run, never a row)
+x2-glmark2-scenes: the board did not come back (rc 5): stopped, no retry; it needs a person
+```
+
+(`meta.txt`: `jump=ok`, `lost=10`, `timeline=jump 0s, ping lost 10s, ping
+back ?s, ssh back ?s, route --crash`, `rc_cycle=5`.) Under the session rule,
+there was no retry. The tip run and the selector runs (`0x1000`, `0x1001`,
+`0x1003`) were not started, so no PERF page was read and no record words
+came from LPGPR. The board does **not** need a power cycle. Its console shows
+Linux at the login prompt. What it needs is a login after the reboot:
+either a session from a worker whose key survives a reboot (a farm node), or
+the task machine's key kept across the run's reboot. Both are owner
+decisions, and this item persists nothing. The board was found and left with
+no container running. The staged files in `/tmp/yakogl-kexec` went with the
+reboot. LPGPR1..3 hold what the run wrote. After the stop, an ssh login could
+not check anything.
+
+Rows (`x2-scene-table.py --before 72972ba4` on the record prints the
+not_back row, with the image sha8 in its commit column, and no pair). The
+console figure is an observation, not a board.sh row:
+
+| commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line | record words |
+|---|---|---|---|---|---|---|
+| 72972ba4 | - | terrain | - (console only: FrameTime 247.588, frame 246.797 us/1000) | - (console: 5) | verdict= `board.sh x2 terrain-nosel rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back result=none resets=absent record=absent back_after=?s` | record=absent (console: `yk-record: 594b120e fc3f0004 6104003f 00258320`) |
+| 72972ba4 | - | shadow | - | - | verdict= stop: not run (the command stopped after terrain's not_back) | - |
+| 72972ba4 | - | refract | - | - | verdict= stop: not run (same) | - |
+| b947cc22 | off | terrain | - | - | verdict= stop: not run (same) | - |
+| b947cc22 | off | shadow | - | - | verdict= stop: not run (same) | - |
+| b947cc22 | off | refract | - | - | verdict= stop: not run (same) | - |
+
+To run it next time: the same commands, with ssh that survives the run's
+reboot. The loader and the readiness checks no longer stop it.
