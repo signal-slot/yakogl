@@ -24,9 +24,20 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
+/// `arr_mat_array`'s `mediump mat3 u_var0[5]`: a matrix array has no
+/// element rule (nir.rs `array_element`; docs/notes/mali-unif2-lowering.md
+/// step 8).
 const ARRAY: &str = "Valhall: a uniform array is not lowered yet";
 const LOOP_VS: &str = "Valhall: a loop in a vertex shader is not lowered yet";
+/// `fs_other`'s fragment shader alone (glCompileShader, before the link
+/// folds `b` and `c`): `d * b` of a uniform and a varying lane in one pair.
 const FS_OTHER: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
+/// The fragment colour `vec4(result, result, result, 1.0)` of a computed
+/// `result` (the fclane broadcast, tests/mali_deqp_fclane.rs
+/// `bcast_compare_*`): where the int and bool shapes stand once their
+/// uniforms load, every vertex program of them byte-equal (plan #377
+/// spike-uniform-rest3: nir.rs `array_element` of int and bool arrays,
+/// `vs_b2f_and`, `vs_reduce`'s bvec2 arm; select.rs `UboLayout::fs16`).
 const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 /// A vertex shader uniform kept fp16 Mesa's way other than the plain ones:
 /// `arr_struct_array`'s members of a struct array's nested struct array
@@ -40,15 +51,15 @@ const LOWERED: &[&str] = &["fs_mat_uniform", "vs_mat_uniform"];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("arr_bool_array", ARRAY),
-    ("arr_int_array", ARRAY),
+    ("arr_bool_array", LANE),
+    ("arr_int_array", LANE),
     ("arr_mat_array", ARRAY),
     ("arr_struct_array", VS_PRECISION),
-    ("fs_bool_uniform", FS_OTHER),
-    ("fs_int_uniform", FS_OTHER),
+    ("fs_bool_uniform", LANE),
+    ("fs_int_uniform", LANE),
     ("fs_other", FS_OTHER),
-    ("fs_struct_uniform", FS_OTHER),
-    ("vs_bool_uniform", ARITH),
+    ("fs_struct_uniform", LANE),
+    ("vs_bool_uniform", LANE),
     /* the int uniform read as its word since plan #387 intval-vs16
      * (vs16-2); the loop it bounds is next */
     ("vs_int_uniform", LOOP_VS),

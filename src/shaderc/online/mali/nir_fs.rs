@@ -10877,7 +10877,26 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                     } else if half == 0 && ubo.half(e) == Some((w, 1, base)) {
                         Swz::H01
                     } else {
-                        return Err(MaliError::FsUniform);
+                        /* two components in halves of two different words
+                         * (two mediump float uniforms, each its own word):
+                         * one `MKVEC.v2i16` of the two FAU halves
+                         * (deqp_unif2_fs_other's `MKVEC.v2i16 r1, u2.w0.h0,
+                         * u2.w1.h0` of `vec2(d, e)`) */
+                        let (v, hv, bv) = ubo.half(e).ok_or(MaliError::FsUniform)?;
+                        /* each a one-component load (a float, or a float
+                         * array's element); a matrix's or a vector's lanes
+                         * across two words have no reference */
+                        if v == w || ubo.row_comps(d) != Some(1) || ubo.row_comps(e) != Some(1) {
+                            return Err(MaliError::FsUniform);
+                        }
+                        let leaf = |w: u16, h: u8, base: u16| Leaf::Uniform {
+                            base,
+                            comp: (w - base) as u8,
+                            swz: if h == 0 { Swz::H00 } else { Swz::H11 },
+                        };
+                        let x = lone_node(pr, P::Leaf(leaf(w, half, base)), place)?;
+                        let y = lone_node(pr, P::Leaf(leaf(v, hv, bv)), place)?;
+                        return pr.push(P::Leaf(Leaf::Pack { x, y }), place);
                     };
                     P::Leaf(Leaf::Uniform { base, comp: (w - base) as u8, swz })
                 }
@@ -12093,6 +12112,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * in no other shader (deqp_arith_op_binary_mul_fs_mediump's differs) */
     let mid = f.live_look_ups().any(|(_, t)| t.load.is_some() && t.load_lane == 1);
     let admitted = if mid { admitted | prod(Form::Mk, Place::MulB) } else { admitted };
+    /* two float uniforms' halves of two words as one word ([`vectorise`]),
+     * read second in a product: `MKVEC.v2i16 r0, u2.w1.h0, u2.w0.h0`, then
+     * `FMA.v2f16 r0, u3.w0, r0^, 0x0.neg` (deqp_unifmp_rsg_sconv12,
+     * deqp_unif2_fs_other) */
+    let uniform = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Uniform { .. }));
+    let two = pr.nodes[..pr.n].iter().any(|n| matches!(*n, P::Leaf(Leaf::Pack { x, y }) if uniform(x) && uniform(y)));
+    let admitted = if two { admitted | prod(Form::Mk, Place::MulB) } else { admitted };
     if f.prods & !admitted != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
     }

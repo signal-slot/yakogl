@@ -42,6 +42,10 @@ mod mali_ref;
 
 /// The refusal, without the `Valhall: ` prefix.
 const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
+/// The ivec3 and bvec3 arrays' elements load since plan #377
+/// spike-uniform-rest3 (nir.rs `array_element`); their compares'
+/// reduction (`vs_reduce`, n = 3) is next.
+const ARITHMETIC: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// The references the compiler makes byte-equal. None yet.
 const MATCHED: &[&str] = &[];
@@ -53,8 +57,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("mat2_struct", UNIFORM_ARRAY),
     ("mat4_mixed", UNIFORM_ARRAY),
     ("struct_vec3_mat2", UNIFORM_ARRAY),
-    ("ivec3_part", UNIFORM_ARRAY),
-    ("bvec3_part", UNIFORM_ARRAY),
+    ("ivec3_part", ARITHMETIC),
+    ("bvec3_part", ARITHMETIC),
     ("struct_nested", UNIFORM_ARRAY),
 ];
 
@@ -117,14 +121,14 @@ fn struct_vec3_mat2() {
 
 /// `uniform mediump ivec3 u_var0[2]`: `u_var0[1]` is read.
 #[test]
-#[ignore = "refused: a uniform array (uniform ivec3 u_var0[2])"]
+#[ignore = "refused: arithmetic (the ivec3 compare's reduction)"]
 fn ivec3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_ivec3_part");
 }
 
 /// `uniform bvec3 u_var1[5]`: elements 1 and 3 are read.
 #[test]
-#[ignore = "refused: a uniform array (uniform bvec3 u_var1[5])"]
+#[ignore = "refused: arithmetic (the bvec3 compare's reduction)"]
 fn bvec3_part() {
     mali_ref::assert_matches("deqp_vsuniarr2_bvec3_part");
 }
