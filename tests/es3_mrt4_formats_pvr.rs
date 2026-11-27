@@ -735,14 +735,18 @@ fn clear_and_read(internal: GLenum) -> (GLenum, GLenum) {
 /// What a four-target draw (RGBA8 on 0-2, the format on 3) comes to today.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Outcome {
-    /// Complete and drawn: four PBE states when attachment 3 takes one
-    /// output register, three when it takes two (it does not fit).
+    /// Complete and drawn: four PBE states, attachment 3 on output
+    /// register 3.
     Draws,
+    /// Over the output-register budget: attachment 3 takes two registers and
+    /// does not fit beside three RGBA8 targets in four
+    /// (`mrt_layout::register_layout` refuses it), so the framebuffer is
+    /// `GL_FRAMEBUFFER_UNSUPPORTED` and a draw or clear is refused as an
+    /// incomplete framebuffer (plan #368 pvr-budget-fb).
+    OverBudget,
     /// Complete; the back end refuses the draw by name: an integer
     /// attachment beside another one (`GL_INVALID_OPERATION`).
     RefusedInteger,
-    /// Complete; refused by name: an sRGB attachment beside another format.
-    RefusedSrgb,
     /// The renderbuffer storage is refused (`GL_INVALID_ENUM`), so the
     /// framebuffer is incomplete.
     NotRenderable,
@@ -756,7 +760,7 @@ use Outcome::*;
 /// two, an RGBA8-class or packed integer one)).
 const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_RGBA8, "RGBA8", GLES_SURF_RGBA8888, Draws, true),
-    (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8", GLES_SURF_SRGB8_A8, RefusedSrgb, false),
+    (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8", GLES_SURF_SRGB8_A8, OverBudget, false),
     /* the 10-bit class is drawn as RGBA8 on the PowerVR today
      * (docs/es3/backend-caps.md section 3) */
     (GL_RGB10_A2, "RGB10_A2", GLES_SURF_RGBA8888, Draws, true),
@@ -781,9 +785,8 @@ const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_R11F_G11F_B10F, "R11F_G11F_B10F", GLES_SURF_RGBA8888, NotRenderable, true),
     /* RG16F is kept as four halves (the GL core hands RGBA16F over): two
      * registers, so it does NOT fit beside three RGBA8 targets in four
-     * (pvr-budget4-test's): drawn as three targets, attachment 3 not
-     * emitted, where the one-register rows draw four */
-    (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, Draws, false),
+     * (pvr-budget4-test's) */
+    (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, OverBudget, false),
     (GL_RGB565, "RGB565", GLES_SURF_RGBA8888, Draws, true),
     (GL_RGBA4, "RGBA4", GLES_SURF_RGBA8888, Draws, true),
     (GL_RGB5_A1, "RGB5_A1", GLES_SURF_RGBA8888, Draws, true),
@@ -824,7 +827,8 @@ fn four_draw_buffers_are_offered() {
 
 /// Completeness and the surface the GL core hands over for attachment 3, for
 /// each format: every name but GL_R11F_G11F_B10F is a complete framebuffer
-/// beside RGBA8 on 0-2.
+/// beside RGBA8 on 0-2, and but for the two-register ones (sRGB and RG16F,
+/// over the output-register budget: GL_FRAMEBUFFER_UNSUPPORTED).
 #[test]
 fn completeness_and_surface_of_attachment_3() {
     let _g = rig();
@@ -836,7 +840,8 @@ fn completeness_and_surface_of_attachment_3() {
             continue;
         }
         assert_eq!(f.build_err, GL_NO_ERROR, "{name}: building");
-        assert_eq!(f.status, GL_FRAMEBUFFER_COMPLETE, "{name}: status");
+        let want = if outcome == OverBudget { GL_FRAMEBUFFER_UNSUPPORTED } else { GL_FRAMEBUFFER_COMPLETE };
+        assert_eq!(f.status, want, "{name}: status");
         assert_eq!(fb_target_format_n(ctx(), 3), surf, "{name}: surface of attachment 3");
         for a in 0..3 {
             assert_eq!(fb_target_format_n(ctx(), a), GLES_SURF_RGBA8888, "{name}: attachment {a}");
@@ -849,19 +854,17 @@ fn completeness_and_surface_of_attachment_3() {
 }
 
 /// A four-target draw: since item pvr-backend (plan #368) the formats the
-/// back end draws reach the hardware as FOUR targets when attachment 3 takes
-/// one output register (`attachment_3_gets_its_pbe_state_on_register_3`
-/// pins its state). The end-of-tile data always carries four pairs (the
-/// driver's four-pair program, `pvr::backend::eot_four_rt`). RG16F, kept as
-/// four halves, takes two registers and does not fit beside three RGBA8
-/// targets: it is not emitted (three PBE states, the fourth pair zero), as
-/// pvr-budget4-test's budget says. Before pvr-backend every row came to
-/// three states (`num_targets` clamped to three).
+/// back end draws reach the hardware as FOUR targets, attachment 3 on one
+/// output register (`attachment_3_gets_its_pbe_state_on_register_3` pins its
+/// state). The end-of-tile data always carries four pairs (the driver's
+/// four-pair program, `pvr::backend::eot_four_rt`). The two-register rows
+/// (sRGB, RG16F kept as four halves) do not fit beside three RGBA8 targets
+/// and are refused: see `over_budget_attachment_3_is_unsupported`.
 #[test]
 fn four_pbe_states_reach_the_hardware() {
     let _g = rig();
     assert_eq!(PVR_RENDER_EOT_MAX_RT, 4);
-    for (internal, name, _, outcome, one_reg) in ROWS {
+    for (internal, name, _, outcome, _) in ROWS {
         if outcome != Draws {
             continue;
         }
@@ -870,24 +873,41 @@ fn four_pbe_states_reach_the_hardware() {
         let frame = drawn(class_of(internal)).unwrap_or_else(|e| panic!("{name}: draw error {e:#x}: {:?}", logs()));
         assert_eq!(frame.emits.len(), 4, "{name}: four end-of-tile pairs");
         assert_eq!(&frame.emits[..3], [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2)], "{name}: PBE states 0-2");
-        if one_reg {
-            assert_eq!(frame.num_rt, 4, "{name}: kick num_rt");
-        } else {
-            assert_eq!(frame.num_rt, 3, "{name}: attachment 3 does not fit the output registers");
-            assert_eq!(frame.emits[3], decode(0), "{name}: the fourth pair is zero");
+        assert_eq!(frame.num_rt, 4, "{name}: kick num_rt");
+    }
+}
+
+/// An attachment 3 of two output registers (sRGB, RG16F) is over the budget
+/// beside three RGBA8 targets: GL_FRAMEBUFFER_UNSUPPORTED, and the draw
+/// and the clear are refused as an incomplete framebuffer.
+#[test]
+fn over_budget_attachment_3_is_unsupported() {
+    let _g = rig();
+    for (internal, name, _, outcome, _) in ROWS {
+        if outcome != OverBudget {
+            continue;
         }
+        let f = Fbo::new(internal);
+        assert_eq!(f.status, GL_FRAMEBUFFER_UNSUPPORTED, "{name}");
+        assert_eq!(drawn(class_of(internal)).err(), Some(GL_INVALID_FRAMEBUFFER_OPERATION), "{name}: draw");
+        // SAFETY: plain GL calls.
+        let e = unsafe {
+            while glGetError() != GL_NO_ERROR {}
+            glClearBufferfv(GL_COLOR, 3, [0f32; 4].as_ptr());
+            glGetError()
+        };
+        assert_eq!(e, GL_INVALID_FRAMEBUFFER_OPERATION, "{name}: clear");
     }
 }
 
 /// The back end refuses, by name, an integer attachment 3 beside RGBA8
-/// targets, and an sRGB one: `GL_INVALID_OPERATION`, no kick.
+/// targets: `GL_INVALID_OPERATION`, no kick.
 #[test]
 fn integer_and_srgb_attachment_3_are_refused_by_name_today() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
         let want = match outcome {
             RefusedInteger => "an integer colour attachment beside another colour attachment",
-            RefusedSrgb => "an SRGB8_ALPHA8 colour attachment beside one of another format",
             _ => continue,
         };
         let f = Fbo::new(internal);
@@ -917,11 +937,11 @@ fn read_is_refused(internal: GLenum) -> bool {
 fn clear_buffer_and_read_of_attachment_3() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
-        if outcome == NotRenderable {
+        if matches!(outcome, NotRenderable | OverBudget) {
             continue;
         }
         let _f = Fbo::new(internal);
-        let want = (GL_NO_ERROR, if read_is_refused(internal) { GL_INVALID_OPERATION } else { GL_NO_ERROR });
+        let want = (GL_NO_ERROR, GL_NO_ERROR);
         assert_eq!(clear_and_read(internal), want, "{name}: clear, read");
         /* the other clear family for the class is a type mismatch */
         let wrong = if int_class(internal) { 0 } else { 1 };
