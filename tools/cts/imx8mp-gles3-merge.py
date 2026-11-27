@@ -111,8 +111,10 @@ def board_of(d):
                     continue
                 rows += 1
                 dash += f[2] == '-'
-    if 'x2' in boards:
+    if any(b.startswith('x2') for b in boards):      # x2, x2-console, x2-display
         return 'x2'
+    if any(re.search(r'measured on the\s+' + X2_NAME, t) for t in readmes):
+        return 'x2'          # the README states it outright, whatever name the runner gave the board
     if rows and dash == rows:
         return 'x2'
     if boards:
@@ -122,15 +124,20 @@ def board_of(d):
     return 'verdin'
 
 
-def board_label(dirs):
+def board_label(dirs, rec=None):
     """The line that names the board the inputs were measured on, or None when no input is an Armadillo-X2
-    slice (a Verdin-only merge prints exactly what it printed before). Directories by their last component."""
+    slice (a Verdin-only merge prints exactly what it printed before). Directories by their last component.
+    With rec (Merge.rec), a mixed merge also names the entries each slice contributed."""
     boards = [(os.path.basename(os.path.normpath(d)), board_of(d)) for d in dirs]
     if not any(b == 'x2' for _, b in boards):
         return None
     if all(b == 'x2' for _, b in boards):
         return 'measured on the %s' % X2_LONG
-    return 'boards: %s' % '; '.join('%s: %s' % (n, X2_LONG if b == 'x2' else 'Verdin iMX8M Plus') for n, b in boards)
+    def ents(d):
+        ids = [i for i, r in (rec or {}).items() if r['dir'] == d and r.get('tally') is not None]
+        return ' (entries %s)' % span(ids) if ids else ''
+    return 'boards: %s' % '; '.join('%s: %s%s' % (n, X2_LONG if b == 'x2' else 'Verdin iMX8M Plus', ents(d))
+                                    for (n, b), d in zip(boards, dirs))
 
 
 def same_commit(a, b):
@@ -414,7 +421,7 @@ def do_notpass(m, out, skip_noresult=False):
     commits = sorted({c for _, c in m.commits if c})
     out.write('# i.MX8MP dEQP-GLES3 at %s: every case that is not Pass, per entry of tools/cts/imx8mp-gles3-tree.txt\n'
               % (' and '.join(commits) or 'an unnamed commit'))
-    label = board_label([d for d, _ in m.commits])
+    label = board_label([d for d, _ in m.commits], m.rec)
     if label:
         out.write('# %s\n' % label)
     out.write('# rows: e<i>:<status> <case>, in entry then mustpass order (NoResult = the entry has no usable record; '
@@ -476,7 +483,7 @@ def do_totals(m, out):
     missing = [i for i in range(len(m.table)) if m.counts(i) is None]
     out.write('no record: %d of %d entries (%s), %d mustpass cases\n' % (
         len(missing), len(m.table), span(missing), sum(len(m.per[i]) for i in missing)))
-    label = board_label([d for d, _ in m.commits])
+    label = board_label([d for d, _ in m.commits], m.rec)
     if label:
         out.write('%s\n' % label)
 
@@ -509,7 +516,7 @@ def run(argv, out=None):
                 len(missing), len(table), span(missing), sum(len(m.per[i]) for i in missing)))
         for p in m.problems:
             print('FAIL:', p)
-        label = board_label([d for d, _ in m.commits])
+        label = board_label([d for d, _ in m.commits], m.rec)
         if label:
             print(label)
         print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(m.rec), 'FAILED' if m.problems else 'OK'))
@@ -765,8 +772,34 @@ def selftest():
         expect('x2 label: --totals ends with the X2 line', out.splitlines()[-1] == xl)
         rc, out, _ = call(*base_args, '--notpass', A, XF)
         expect('x2 label: a mixed merge names each slice\'s board, no blanket X2 claim',
-               '# boards: a: Verdin iMX8M Plus; x2-fail: Armadillo-X2 (i.MX 8M Plus, GC7000UL)' in out.splitlines()
+               '# boards: a: Verdin iMX8M Plus (entries 0-1); x2-fail: Armadillo-X2 (i.MX 8M Plus, GC7000UL) (entries 2)' in out.splitlines()
                and xl not in out)
+        # one commit measured on both boards: Verdin entries 0-1, X2 (board name x2-console) entries 2-3
+        XC = slice_('x2-console', c1, [(2, entries[2], 1, 1, 0, 0, 0, 0, '-'), F_rows[0]], board='x2-console')
+        rc, out, _ = call(*base_args, '--check', A, XC)
+        ls = out.splitlines()
+        expect('mixed boards: a Verdin and an x2-console slice of one commit pass --check', rc == 0 and 'FAIL' not in out)
+        expect('mixed boards: the summary names the board of each entry range',
+               'boards: a: Verdin iMX8M Plus (entries 0-1); x2-console: ' + X2_LONG + ' (entries 2-3)' in ls)
+        rc, out, _ = call(*base_args, '--notpass', A, XC)
+        expect('mixed boards: --notpass header names the entry ranges',
+               '# boards: a: Verdin iMX8M Plus (entries 0-1); x2-console: ' + X2_LONG + ' (entries 2-3)' in out.splitlines())
+        rc, out, _ = call(*base_args, '--totals', A, XC)
+        expect('mixed boards: --totals ends with the board line', out.splitlines()[-1].startswith('boards: a: Verdin'))
+        XRD = slice_('x2-named', c1, [(2, entries[2], 1, 1, 0, 0, 0, 0, '-')])     # runner board name not x2
+        with open(os.path.join(XRD, 'README.md'), 'a') as f:
+            f.write('Measured on the Armadillo-X2, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)\n')
+        expect('mixed boards: a README stating the X2 outright wins over the verdict-line board name',
+               board_of(XRD) == 'x2')
+        XO = slice_('x2-other', c2, [(2, entries[2], 1, 1, 0, 0, 0, 0, '-')], board='x2')
+        rc, out, _ = call(*base_args, '--check', '--partial', A, XO)
+        expect('mixed boards: a Verdin and an x2 slice of different commits are refused',
+               rc == 1 and 'different commits' in out)
+        XD = slice_('x2-dup', c1, [(1, entries[1], 1, 1, 0, 0, 0, 0, '-')], board='x2')
+        rc, out, _ = call(*base_args, '--check', '--partial', A, XD)
+        expect('mixed boards: an entry in both a Verdin and an x2 slice is refused', rc == 1 and 'entry 1 is in both' in out)
+        rc, out, _ = call(*base_args, '--check', A)
+        expect('mixed boards: missing entries are still refused without --partial (Verdin slice alone)', rc == 1 and 'no record' in out)
         XR = slice_('x2-readme', c1, [(0, entries[0], 4, 4, 0, 0, 0, 0, '-')], lines=False)
         with open(os.path.join(XR, 'README.md'), 'a') as f:
             f.write('Run 2026-11-28, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)\n')
