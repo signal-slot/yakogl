@@ -1,0 +1,13 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	T6S1R01	224	done	13	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 12530 ms first_refused=link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shade
+2	T6S1R02	264	done	14	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 13621 ms first_refused=-
+3	T6S1R03	349	done	24	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 24078 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times
+4	T6S1R04	101	done	6	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 6443 ms first_refused=-
+5	T6S1R05	390	done	8	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 7530 ms first_refused=-
+6	T6S1R06	319	done	23	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 22876 ms first_refused=-
+7	T6S1R07	89	done	3	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 2603 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+8	T6S1R08	1	done	0	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 360 ms first_refused=-
+9	T6S1R09	357	done	13	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 12924 ms first_refused=-
+10	T6S1R10	396	done	8	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 7795 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+11	T6S1R11	40	done	3	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 3055 ms first_refused=-
+12	T6S1R12	248	done	42	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 42238 ms first_refused=-

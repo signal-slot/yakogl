@@ -1,0 +1,13 @@
+commit=e63ab28e30ae913f06bb595bc10f972fc1c2ff77
+session=S1b
+rows=13-24
+tree=tools/cts/mali-gles2-tree.txt
+boot_id_before=-
+boot_id_after=-
+kernel=zephyr
+lib=vi95_deqp e63ab28e
+started=-
+ended=-
+board=verdin-imx95
+os=zephyr
+route=u-boot-go

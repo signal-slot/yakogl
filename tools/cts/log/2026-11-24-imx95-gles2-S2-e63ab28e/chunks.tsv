@@ -1,0 +1,15 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+25	T6S2R01	400	done	29	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 28697 ms first_refused=-
+26	T6S2R02	239	done	17	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 16563 ms first_refused=-
+27	T6S2R03	196	done	22	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 21547 ms first_refused=-
+28	T6S2R04	400	done	48	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 47626 ms first_refused=-
+29	T6S2R05	400	done	46	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 46298 ms first_refused=-
+30	T6S2R06	288	done	56	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 56096 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+31	T6S2R07	372	done	21	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 20778 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader:
+32	T6S2R08	372	done	23	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 22979 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane
+33	T6S2R09	398	done	22	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 22497 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+34	T6S2R10	374	done	21	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 21113 ms first_refused=online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +,
+35	T6S2R11	400	done	22	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 22161 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32
+36	T6S2R12	336	done	19	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 18651 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowere
+37	T6S2R13	361	done	20	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 20280 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet)
+38	T6S2R14	336	done	19	-	-	-	-	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 19316 ms first_refused=online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32
