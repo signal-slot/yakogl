@@ -673,6 +673,25 @@ agree with `layout.rs`. It does not show what the hardware does.
   refract: 0 bytes, 0 ms (their targets are textures). Source:
   `gc-slow-host-counts.md`, "Predicted effect of W7 to W9". No RS job count
   in any scene moves.
+- **Host-priced (commit d18a8132, plan #355 item w8w9-host-price).** Scratch
+  instrumentation (not committed) in the scene harness of
+  `tests/gc_scene_kicks_tiled.rs` (`tests/common/gc_scenes.rs`, the stand-in
+  OSAL, GPU model Done, frame 6) printed every RS fill of a frame: window
+  size, `RS_CLEAR_CONTROL` bits, destination. Fills write window width x
+  height x 4 bytes. Knob off and on give the same fills for shadow and
+  refract; terrain's knob-on stream adds only the W4 tile-in and copy-back
+  jobs. Colour fills (bits `0xffff`) a frame:
+
+  | Scene | Window | Offscreen colour | Of which W8 replaces |
+  |---|---|---|---|
+  | terrain | 1.92 MB (800x600) | four 256x256 targets, 0.26 MB each, and two 800x600 targets, 1.92 MB each (one fused with the depth pass's depth clear, the W4 shadow's; one without depth); 4.89 MB, 6.81 MB with the window | **1.92 MB** (the shadow's colour) as wired |
+  | shadow | 1.92 MB | none (its offscreen clear has colour mask 0) | **0 B** |
+  | refract | 1.92 MB | 1600x1200, 7.68 MB: a texture target, not a W4 shadow | **0 B** as wired; 7.68 MB only after W10 to W12 let a texture target carry a TS |
+
+  So W8 as wired saves 1.92 MB a frame on terrain and 0 B on shadow and
+  refract, as the paragraph above predicted. The window's 1.92 MB is W13's,
+  not W8's. The clear W8 replaces is the full, unscissored, all-channel
+  colour clear of a W4 shadow, an RS fill today.
 - **What**: in `record` (`backend.rs:3097`), a colour clear of a shadow
   target that is full, unscissored and has every channel
   (`clear_components == 0xf`) becomes:
@@ -742,6 +761,32 @@ agree with `layout.rs`. It does not show what the hardware does.
   no depth-TS arm, so W9's own board check stays. As with W8, it saves bytes,
   not RS jobs: terrain's pass's depth fill, 1.92 MB, becomes a 7 680-byte TS
   fill in the same job (0.24 to 0.96 ms). Shadow and refract get 0 without W12.
+- **Host-priced (commit d18a8132, same run as W8's figures).** Depth fills
+  (bits `0xeeee`: depth bytes only) a frame, window and padded surface size
+  as the RS writes it:
+
+  | Scene | Window depth | Offscreen depth | Of which W9 replaces |
+  |---|---|---|---|
+  | terrain | 832x640, 2.13 MB (800x600 unpadded, 1.92 MB) | one more 832x640, 2.13 MB (the pass's depth clear, fused with its 800x600 colour clear) | **2.13 MB** (1.92 MB unpadded) as wired |
+  | shadow | 2.13 MB | 1600x1216, **7.78 MB** (1600x1200 unpadded, 7.68 MB), depth only, colour mask 0 | **0 B** as wired; 7.78 MB only with W12 |
+  | refract | 2.13 MB | 1600x1216, **7.78 MB**, fused with a 7.68 MB colour clear | **0 B** as wired; 7.78 MB only with W12 |
+
+  - The window clears are 3.84 MB a frame unpadded (two 800x600x4 fills), 4.05
+    MB as the RS writes them (1.92 MB colour + 2.13 MB depth). Window
+    surfaces stay linear, so neither W8 nor W9 touches them (W13 would).
+  - The earlier figure "about 7.65 MB" for the offscreen depth is this run's
+    7.68 MB unpadded, 7.78 MB padded (about 1.7 % apart).
+  - **W12 dependency.** The offscreen depth of shadow and refract is a depth
+    texture (`tiled_rt::spec_of` refuses it), so it is not a PE-private
+    surface and W9 as written does not reach it. W9's TS fill replaces it only
+    once W12 makes that surface super-tiled with a TS and gives the CPU depth
+    resolve (`resolve_depth`) a TS-aware read (W12b). At the TS ratio
+    above (7 680 B for 1.92 MB) the 7.78 MB fill becomes about 31 KB. Without
+    W12, W9's saving on shadow and refract is 0 B a frame.
+  - Together, as wired, W8 and W9 remove 1.92 MB colour + 2.13 MB depth
+    (4.05 MB) a frame from terrain's fills (of 11.07 MB) and 0 B from shadow
+    and refract. After W12, W9 adds about 7.78 MB a frame to each of shadow
+    and refract.
 - **What**: a `SuperTiled` (private) `ds_cache` surface gets a TS buffer of
   `ts::ts_bytes(stride * rows)`. A depth clear for which
   `ts::whole_word_clear` holds becomes:
