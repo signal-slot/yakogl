@@ -5,8 +5,11 @@
 //!
 //! Helpers are copied from tests/es3_msaa_gl.rs (its header says what the
 //! stand-in is). Here the stand-in also records the `samples` of every
-//! application `GlesDraw` it receives in `ALL`. `GlesDraw::target_id` /
-//! `target_gen` do not exist yet and are not asserted.
+//! application `GlesDraw` it receives in `ALL`, and the `(target_id,
+//! target_gen)` of each in `IDS`; the tests at the end pin the documented
+//! contract of those two fields (src/backend.rs): the id of the colour
+//! renderbuffer, stable across redraws, the generation moved by every
+//! glRenderbufferStorage*, both 0 for the window and a texture.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl_draws
@@ -66,6 +69,9 @@ struct Seen {
 /// `samples` of every application draw the back end received, in order.
 static ALL: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
+/// `(target_id, target_gen)` of every application draw, in order.
+static IDS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
 
 /// The 4x targets drawn since the last `finish`: (`target_gpu`, w, h).
@@ -79,6 +85,8 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples });
     if d.index_count != 0 {
         ALL.lock().unwrap().push(d.samples);
+        IDS.lock().unwrap().push((d.target_id, d.target_gen));
+        assert_eq!((d.target_ids[0], d.target_gens[0]), (d.target_id, d.target_gen), "slot 0 mirrors the scalar pair");
     }
     if d.samples > 1 {
         PENDING.lock().unwrap().push((d.target_gpu, d.target_w, d.target_h));
@@ -244,6 +252,7 @@ fn context_on(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
     }
     SEEN.lock().unwrap().clear();
     ALL.lock().unwrap().clear();
+    IDS.lock().unwrap().clear();
     PENDING.lock().unwrap().clear();
     DS_READS.lock().unwrap().clear();
     DS_WRITES.lock().unwrap().clear();
@@ -696,4 +705,178 @@ fn mixed_counts_draw_is_refused() {
     }
     assert_eq!(draw().samples, 4);
     drop(fbo);
+}
+
+/* ---- GlesDraw::target_id / target_gen ------------------------------------- */
+
+/// Bind `fb`, draw once and return the `(target_id, target_gen)` the back end got.
+fn ids_on(fb: GLuint) -> (u32, u32) {
+    // SAFETY: a framebuffer name this test made, or 0.
+    unsafe { glBindFramebuffer(GL_FRAMEBUFFER, fb) };
+    draw();
+    *IDS.lock().unwrap().last().expect("a draw was recorded")
+}
+
+/// Specify `rb` again with `samples`, `format`.
+fn restore(rb: GLuint, samples: GLsizei, format: GLenum) {
+    // SAFETY: plain GL calls on a renderbuffer this test made.
+    unsafe {
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, format, 8, 8);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+}
+
+/// An FBO draw carries a non-zero id, and a redraw the same pair.
+#[test]
+fn target_id_set_and_stable_across_redraws() {
+    let _g = context_ms4();
+    for samples in [4, 0] {
+        program(); // the previous FBO's drop unset it
+        let fbo = framebuffer(samples, &[GL_RGBA8]).unwrap();
+        let first = ids_on(fbo.fb);
+        assert_ne!(first.0, 0, "samples {samples}: an FBO draw names its renderbuffer");
+        assert_ne!(first.1, 0, "samples {samples}: and its storage generation");
+        assert_eq!(ids_on(fbo.fb), first, "samples {samples}: a redraw");
+        // another binding in between changes nothing
+        ids_on(0);
+        assert_eq!(ids_on(fbo.fb), first, "samples {samples}: after a draw elsewhere");
+    }
+}
+
+/// Two FBOs have two ids.
+#[test]
+fn target_id_differs_between_fbos() {
+    let _g = context_ms4();
+    program();
+    let a = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let b = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let (ia, ib) = (ids_on(a.fb), ids_on(b.fb));
+    assert_ne!(ia.0, ib.0);
+    assert_eq!(ids_on(a.fb), ia);
+    assert_eq!(ids_on(b.fb), ib);
+}
+
+/// The id is the renderbuffer's: the same renderbuffer on another FBO keeps it.
+#[test]
+fn target_id_follows_the_renderbuffer() {
+    let _g = context_ms4();
+    program();
+    let a = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let ia = ids_on(a.fb);
+    let mut fb2 = 0;
+    // SAFETY: plain GL calls; the renderbuffer is a's.
+    unsafe {
+        glGenFramebuffers(1, &mut fb2);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb2);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, a.rbs[0]);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(ids_on(fb2), ia);
+    // SAFETY: a name made above.
+    unsafe { glDeleteFramebuffers(1, &fb2) };
+}
+
+/// Every glRenderbufferStorage* moves the generation, the id stays: the same
+/// parameters again, another sample count, another format, a single-sample call.
+#[test]
+fn target_gen_moves_with_every_storage() {
+    let _g = context_ms4();
+    program();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let rb = fbo.rbs[0];
+    let mut last = ids_on(fbo.fb);
+    let steps: [(GLsizei, GLenum, &str); 4] = [
+        (4, GL_RGBA8, "same parameters"),
+        (0, GL_RGBA8, "single sample"),
+        (4, GL_RGBA8, "4x again"),
+        (4, GL_RGBA4, "format"),
+    ];
+    for (samples, format, what) in steps {
+        restore(rb, samples, format);
+        let now = ids_on(fbo.fb);
+        assert_eq!(now.0, last.0, "{what}: the id is the renderbuffer's");
+        assert_ne!(now.1, last.1, "{what}: new storage, new generation");
+        assert_ne!(now.1, 0);
+        last = now;
+    }
+    // plain glRenderbufferStorage is a storage call too
+    // SAFETY: plain GL calls on the bound renderbuffer.
+    unsafe { glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, 8, 8) };
+    assert_eq!(err(), GL_NO_ERROR);
+    let now = ids_on(fbo.fb);
+    assert_eq!(now.0, last.0);
+    assert_ne!(now.1, last.1, "glRenderbufferStorage");
+}
+
+/// A generation seen once is not handed out again for that renderbuffer.
+#[test]
+fn target_gen_is_never_reused() {
+    let _g = context_ms4();
+    program();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let mut seen = vec![ids_on(fbo.fb).1];
+    for _ in 0..4 {
+        restore(fbo.rbs[0], 4, GL_RGBA8);
+        let g = ids_on(fbo.fb).1;
+        assert!(!seen.contains(&g), "generation {g} came back");
+        seen.push(g);
+    }
+}
+
+/// Detaching and attaching the same renderbuffer is not a storage call: the
+/// documented generation (`storage_gen`, moved by glRenderbufferStorage*) and
+/// id are unchanged. Another renderbuffer in the slot has another id.
+#[test]
+fn target_pair_across_detach_and_reattach() {
+    let _g = context_ms4();
+    program();
+    let fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let before = ids_on(fbo.fb);
+    // SAFETY: plain GL calls on the bound framebuffer.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo.fb);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, 0);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_ne!(status(), GL_FRAMEBUFFER_COMPLETE, "nothing attached");
+    // SAFETY: the renderbuffer is this test's.
+    unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, fbo.rbs[0]) };
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(ids_on(fbo.fb), before, "the same renderbuffer, the same storage");
+
+    let (e, other) = storage(4, GL_RGBA8);
+    assert_eq!(e, GL_NO_ERROR);
+    // SAFETY: names this test made.
+    unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, other) };
+    assert_eq!(err(), GL_NO_ERROR);
+    let after = ids_on(fbo.fb);
+    // SAFETY: as above.
+    unsafe { glDeleteRenderbuffers(1, &other) };
+    assert_ne!(after.0, before.0, "another renderbuffer, another id");
+}
+
+/// The window and a texture attachment have no renderbuffer: both fields 0.
+#[test]
+fn target_pair_is_zero_for_window_and_texture() {
+    let _g = context_ms4();
+    program();
+    assert_eq!(ids_on(0), (0, 0), "the window");
+    let tex = texture();
+    let mut fb = 0;
+    // SAFETY: plain GL calls; names made here.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE);
+    assert_eq!(ids_on(fb), (0, 0), "a texture");
+    // SAFETY: names made above.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fb);
+        glDeleteTextures(1, &tex);
+    }
 }
