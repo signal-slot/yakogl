@@ -1710,4 +1710,181 @@ void main() { gl_FragColor = v_a + v_b; }
         same_meaning(&ops, sig);
         assert_eq!(sig, [0, 1, 2, 3, 4, 5]);
     }
+
+    fn fs_of(body: &str) -> std::string::String {
+        std::format!(
+            "#version 100\nprecision mediump float;\nvarying vec4 v_color;\nuniform sampler2D u_tex;\nuniform samplerCube u_cube;\nvoid main() {{\n{body}\n}}\n"
+        )
+    }
+    fn tmu_writes(l: &Selected71<'_>) -> usize {
+        count(l, |o| {
+            matches!(o, Op71::Mul { dst: Dst71::Magic(32..=46), .. } | Op71::Add { dst: Dst71::Magic(32..=46), .. })
+        })
+    }
+    fn lowers(body: &str, f: impl FnOnce(&Selected71<'_>)) {
+        let src = fs_of(body);
+        with_fs(&src, |s, l| {
+            let l = l.expect("lowers");
+            fs_common(s, &l);
+            f(&l);
+        });
+    }
+    fn magic_dsts(l: &Selected71<'_>) -> Vec<u8> {
+        l.ops
+            .iter()
+            .filter_map(|o| match o {
+                Op71::Mul { dst: Dst71::Magic(w @ 32..=46), .. } | Op71::Add { dst: Dst71::Magic(w @ 32..=46), .. } => {
+                    Some(*w)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+    fn n_op(l: &Selected71<'_>, k: AddOp71) -> usize {
+        count(l, |o| matches!(o, Op71::Add { op, .. } if *op == k))
+    }
+
+    #[test]
+    fn float_builtins_keep_their_add_pipe_forms() {
+        lowers("gl_FragColor = floor(v_color) + fract(v_color) + abs(v_color);", |l| {
+            /* floor x4, fract's floor x4, and fract's fsub x4 */
+            assert_eq!(n_op(l, AddOp71::Ffloor), 8, "{:?}", l.ops);
+            assert_eq!(n_op(l, AddOp71::Fsub), 4, "{:?}", l.ops);
+            assert_eq!(tmu_writes(l), 0);
+        });
+        lowers(
+            "gl_FragColor = min(v_color, vec4(0.5)) + max(v_color, vec4(0.25)) + mix(v_color, vec4(1.0), 0.5);",
+            |l| {
+                assert_eq!(n_op(l, AddOp71::Fmin), 4, "{:?}", l.ops);
+                assert_eq!(n_op(l, AddOp71::Fmax), 4, "{:?}", l.ops);
+                /* the constants are small immediates, never a uniform load */
+                assert_eq!(count(l, |o| matches!(o, Op71::Ldunif { .. })), 0, "{:?}", l.ops);
+            },
+        );
+    }
+
+    #[test]
+    fn comparisons_set_flags_then_conditional_moves() {
+        lowers("gl_FragColor = vec4(lessThan(v_color, vec4(0.5)));", |l| {
+            let fcmp = count(l, |o| matches!(o, Op71::Flags { unit: FlagOp71::Add(AddOp71::Fcmp), .. }));
+            assert_eq!(fcmp, 4, "{:?}", l.ops);
+            let cond = count(l, |o| matches!(o, Op71::CondMov { .. }));
+            assert!(cond >= 4, "{:?}", l.ops);
+            /* every conditional move follows a flag-setting operation */
+            let first_flag = l.ops.iter().position(|o| matches!(o, Op71::Flags { .. })).unwrap();
+            let first_cond = l.ops.iter().position(|o| matches!(o, Op71::CondMov { .. })).unwrap();
+            assert!(first_flag < first_cond);
+        });
+    }
+
+    #[test]
+    fn conversions_use_ftoiz_and_itof() {
+        lowers("gl_FragColor = vec4(ivec4(v_color * 4.0)) * 0.25;", |l| {
+            assert_eq!(n_op(l, AddOp71::Ftoiz), 4, "{:?}", l.ops);
+            assert_eq!(n_op(l, AddOp71::Itof), 4, "{:?}", l.ops);
+        });
+        /* bool conversion tests against zero with flags (PushZ), no ftoiz */
+        lowers("gl_FragColor = vec4(bvec4(v_color));", |l| {
+            assert_eq!(n_op(l, AddOp71::Ftoiz), 0);
+            assert!(
+                count(l, |o| matches!(o, Op71::Flags { pf: super::super::isa::Pf::PushZ, .. })) >= 4,
+                "{:?}",
+                l.ops
+            );
+        });
+    }
+
+    #[test]
+    fn discard_sets_the_sample_mask_with_setmsf() {
+        lowers("if (v_color.x < 0.5) discard; gl_FragColor = v_color;", |l| {
+            assert_eq!(count(l, |o| matches!(o, Op71::Setmsf { .. })), 1, "{:?}", l.ops);
+            let flag = l.ops.iter().position(|o| matches!(o, Op71::Flags { .. })).unwrap();
+            let msf = l.ops.iter().position(|o| matches!(o, Op71::Setmsf { .. })).unwrap();
+            assert!(flag < msf, "the flags come before the mask is set");
+            assert_eq!(tmu_writes(l), 0);
+        });
+    }
+
+    #[test]
+    fn texture2d_writes_t_then_s() {
+        lowers("gl_FragColor = texture2D(u_tex, v_color.xy);", |l| {
+            /* T (34), then S (33), which retires the lookup */
+            assert_eq!(magic_dsts(l), [34, 33], "{:?}", l.ops);
+            assert_eq!(count(l, |o| matches!(o, Op71::Wrtmuc { .. })), 2);
+        });
+    }
+
+    #[test]
+    fn texture2dproj_divides_by_w_before_the_tmu_writes() {
+        for body in
+            ["gl_FragColor = texture2DProj(u_tex, v_color.xyz);", "gl_FragColor = texture2DProj(u_tex, v_color);"]
+        {
+            lowers(body, |l| {
+                assert_eq!(magic_dsts(l), [34, 33], "{body}: {:?}", l.ops);
+                assert_eq!(n_op_sfu(l), 1, "{body}: one reciprocal");
+                let rcp = l.ops.iter().position(|o| matches!(o, Op71::Sfu { op: Sfu71::Recip, .. })).unwrap();
+                let first_tmu =
+                    l.ops.iter().position(|o| matches!(o, Op71::Mul { dst: Dst71::Magic(32..=46), .. })).unwrap();
+                assert!(rcp < first_tmu);
+            });
+        }
+    }
+    fn n_op_sfu(l: &Selected71<'_>) -> usize {
+        count(l, |o| matches!(o, Op71::Sfu { .. }))
+    }
+
+    #[test]
+    fn texture_cube_writes_t_r_then_s() {
+        lowers("gl_FragColor = textureCube(u_cube, v_color.xyz);", |l| {
+            assert_eq!(magic_dsts(l), [34, 35, 40], "{:?}", l.ops);
+            /* the major-axis divide: fmax of |x|,|y|,|z| and one reciprocal */
+            assert_eq!(n_op(l, AddOp71::Fmax), 2, "{:?}", l.ops);
+            assert_eq!(n_op_sfu(l), 1);
+        });
+    }
+
+    #[test]
+    fn two_lookups_keep_their_tmu_writes_in_order_and_their_loads() {
+        lowers("gl_FragColor = texture2D(u_tex, v_color.xy) + texture2D(u_tex, v_color.zw);", |l| {
+            assert_eq!(magic_dsts(l), [34, 33, 34, 33], "{:?}", l.ops);
+            assert_eq!(count(l, |o| matches!(o, Op71::Ldtmu { .. })), 4);
+            /* all loads come after the last TMU write */
+            let last_w = l.ops.iter().rposition(|o| matches!(o, Op71::Mul { dst: Dst71::Magic(32..=46), .. })).unwrap();
+            let first_ld = l.ops.iter().position(|o| matches!(o, Op71::Ldtmu { .. })).unwrap();
+            assert!(last_w < first_ld);
+        });
+    }
+
+    #[test]
+    fn texture2dlod_in_a_vertex_shader_lowers_with_its_lod_write() {
+        let vs = "#version 100
+attribute vec4 a_pos;
+uniform sampler2D u_tex;
+varying vec4 v_color;
+void main() { gl_Position = a_pos; v_color = texture2DLod(u_tex, a_pos.xy, 1.0); }
+";
+        with_vs(vs, PASS_FS, false, |s, l| match l {
+            Ok(l) => {
+                no_42_forms(&l);
+                assert!(!l.fragment);
+                assert!(count(&l, |o| matches!(o, Op71::Ldtmu { .. })) >= 1, "{:?}", l.ops);
+                assert_eq!(
+                    count(&l, |o| matches!(o, Op71::Ldtmu { .. })),
+                    count42(s, |o| matches!(o, VOp::Ldtmu { .. }))
+                );
+                /* the lod goes to its own TMU write, so there are at least three */
+                assert!(magic_dsts(&l).len() >= 3, "{:?}", l.ops);
+            }
+            Err(e) => panic!("texture2DLod in a VS must lower: {e:?}"),
+        });
+    }
+
+    #[test]
+    fn unsupported_vpm_forms_are_errors_not_panics() {
+        let n = Operand::None;
+        for op in [AddOp::LdvpmdOut, AddOp::LdvpmgOut, AddOp::LdvpmvOut, AddOp::Vpmsetup] {
+            let r = lower_one(&[VOp::Add { op, dst: Dst::V(V(0)), a: Operand::V(V(1)), b: n }], 4);
+            assert!(matches!(r, Err(Select71Error::NotOn71(_))), "{op:?}: {r:?}");
+        }
+    }
 }
