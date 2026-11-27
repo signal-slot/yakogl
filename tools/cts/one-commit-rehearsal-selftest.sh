@@ -5,7 +5,8 @@
 #   tools/cts/one-commit-rehearsal-selftest.sh
 #
 # Rehearses the one-commit glmark2 docs edit (#1196) on synthetic records:
-# copies the six real doc files to a temporary tree, builds three synthetic
+# copies the seven real files one-commit-docs.py edits (the six doc files and
+# tools/website-check.sh) to a temporary tree, builds three synthetic
 # common records (am62p, pi4, imx8mp) at HEAD's sha8 with common-row.py's
 # synth(), runs one-commit-docs.py --root on the copy, then
 # readme-glmark2-check.py (--ref HEAD --scenes terrain,shadow,refract
@@ -17,7 +18,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-FILES="README.md tools/cts/RESULTS.md tools/cts/STATUS.md website/data.js docs/release/checklist.md ROADMAP.md"
+FILES="README.md tools/cts/RESULTS.md tools/cts/STATUS.md website/data.js docs/release/checklist.md ROADMAP.md tools/website-check.sh"
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/one-commit-rehearsal.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
@@ -25,7 +26,9 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 SHA8=$(git -C "$REPO" rev-parse --short=8 HEAD)
 
-# (1) the six real files, copied
+# (1) the seven real files, copied: the same set one-commit-docs.py edits
+# (its FILES dict) -- a file added there must be listed here too, or apply()
+# refuses on the missing copy and this rehearsal stops.
 TREE=$TMP/tree
 for f in $FILES; do
     mkdir -p "$TREE/$(dirname "$f")"
@@ -54,6 +57,8 @@ python3 -I "$HERE/one-commit-docs.py" --root "$TREE" \
     --cite-am62p "$CITE_am62p" --cite-pi4 "$CITE_pi4" --cite-imx8mp "$CITE_imx8mp" \
     >"$TMP/docs.out" 2>&1 || { cat "$TMP/docs.out" >&2; fail "one-commit-docs.py exited non-zero"; }
 cmp -s "$TREE/README.md" "$REPO/README.md" && fail "README.md was not edited"
+grep -qx "edited tools/website-check.sh" "$TMP/docs.out" ||
+    fail "one-commit-docs.py did not edit the copied tools/website-check.sh: its FILES dict and this self-test's file list drifted apart"
 
 # (4) the record checker on the edited copy
 python3 -I "$HERE/readme-glmark2-check.py" \
