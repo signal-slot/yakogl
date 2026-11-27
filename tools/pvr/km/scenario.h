@@ -993,4 +993,32 @@ static void scenario_render_pr(const struct km_api *a)
 	fw.a = NULL;
 }
 
+/* render-pr-zs: one kick whose frag_pr carries every word the backend can
+ * send except the background PDS: the SPM scratch, the PR PBE words, the PR
+ * EOT data and a non-zero isp_zlsctl. pds_pr_bgnd stays zero (not written
+ * into the 3D_PR yet). The values are fixed: scratch at SC_GENERAL + 0xB000
+ * (1920000 bytes), PBE pairs 0xE0..0xE7 (dw30..45), EOT data 0xC8 (dw15,
+ * 44 bytes), ISP_ZLSCTL 0x0000000200000034 (dw24 = 0x34, dw25 = 0x2). The
+ * record shows the 3D_PR dwords 15, 24, 25 and 30..45 against the 3D's. */
+static void scenario_render_pr_zs(const struct km_api *a)
+{
+	static const uint64_t pbe[4][2] = { { 0xE0, 0xE1 }, { 0xE2, 0xE3 }, { 0xE4, 0xE5 }, { 0xE6, 0xE7 } };
+
+	printf("= scenario render-pr-zs (partial-render knob on, filled frag_pr with ZLSCTL)\n");
+	a->render_pr(1);
+	sc_render_setup(a);
+	memset(&sc_kick.frag_pr, 0, sizeof(sc_kick.frag_pr));
+	sc_kick.frag_pr.spm_scratch_gpu = SC_GENERAL + 0xB000u;
+	sc_kick.frag_pr.spm_scratch_bytes = 1920000u;
+	memcpy(sc_kick.frag_pr.pbe_word, pbe, sizeof(pbe));
+	sc_kick.frag_pr.eot_pds_data = 0xC8u;
+	sc_kick.frag_pr.eot_pds_data_bytes = 44u;
+	sc_kick.frag_pr.isp_zlsctl = 0x0000000200000034ull;
+	sc_pr_render(a, 1024, 600);
+
+	rec_tick = NULL;
+	rec_wtick = NULL;
+	fw.a = NULL;
+}
+
 #endif /* PVR_KM_SCENARIO_H */
