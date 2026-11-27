@@ -88,6 +88,15 @@
 # U-Boot) is WDOG_S + 120 = 720, so a hung image is waited for until its own
 # watchdog has fired; RETURN_BOUND stays 600, the U-Boot value. WDOG_S,
 # RUN_BOUND and RETURN_BOUND can be set in the environment.
+# --self-test is hermetic: it re-runs itself once without any variable this
+# script reads, so its expected lines hold whatever the caller has exported
+# (TMPDIR is kept). Run and build behaviour are not touched.
+if [ "${1:-}" = --self-test ] && [ -z "${IMX8MP_DUMP_SELFTEST_CLEAN:-}" ]; then
+    exec env -u GLMARK2_SRC -u WEST_VENV -u ZEPHYR_VENV -u IMX8MP_DUMP_BOARD \
+        -u IMX8MP_DUMP_CONSOLE -u ZEPHYR_WS -u ZEPHYR_WORKSPACE -u MODS -u DRY \
+        -u WDOG_S -u RUN_BOUND -u RETURN_BOUND -u PICTURES -u BOARD_UART \
+        IMX8MP_DUMP_SELFTEST_CLEAN=1 bash "$0" --self-test
+fi
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -361,6 +370,12 @@ self_test() {
     case $out in *verdin* | *EXTRA_CONF_FILE* | *PANEL_CONSOLE*) echo "self-test: x2 build line has verdin or console flags: $out" >&2; return 1 ;; esac
     out=$(IMX8MP_DUMP_BOARD=x2 bash "$0" --dry-run build /nonexistent-dir "$(grep -m1 'effect2d' <<< "$all" | cut -d' ' -f1)")
     case $out in *'kernel=0,1,0\;1,-4,1\;0,1,0\;'*) ;; *) echo "self-test: x2 effect2d kernel not escaped: $out" >&2; return 1 ;; esac
+    local k14='kernel=1,1,1,1,1\;1,1,1,1,1\;1,1,1,1,1\;'
+    out=$(IMX8MP_DUMP_BOARD=x2 bash "$0" --dry-run build /nonexistent-dir 14)
+    case $out in *"$k14"*) ;; *) echo "self-test: x2 scene 14 kernel not escaped in full: $out" >&2; return 1 ;; esac
+    out=$(DRY=1 cmd_build /nonexistent-dir 14)
+    case $out in *"$k14"*) ;; *) echo "self-test: scene 14 kernel not escaped in full: $out" >&2; return 1 ;; esac
+    echo "self-test: scene 14 effect2d kernel ok (default and x2)"
     (IMX8MP_DUMP_BOARD=nosuch bash "$0" scenes > /dev/null 2>&1); [ $? -eq 2 ] || { echo "self-test: bad IMX8MP_DUMP_BOARD accepted" >&2; return 1; }
     out=$(DRY=1 cmd_build /nonexistent-dir terrain)
     case $out in *'-DCONFIG_GLMARK2_ARGS="-b terrain"'*) ;; *) echo "self-test: terrain build line: $out" >&2; return 1 ;; esac
