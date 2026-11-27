@@ -211,3 +211,48 @@ fn mutations_are_detected() {
     assert_ne!(k, BOARD_KCONFIG);
     assert!(!board_depends_on_bcm2712(&k));
 }
+
+fn n(s: &str) -> u64 {
+    s.parse().unwrap()
+}
+
+/// The statics the overlay's comment lists (carve-out, tiled copies, compiler
+/// scratch, C heap) fit the window, which starts at the firmware's kernel=
+/// address, and the firmware's DTB at 0x2efec600 lies above its end.
+#[test]
+fn statics_fit_the_window_and_the_dtb_lies_above_it() {
+    let (base, size) = sram_reg(OVERLAY);
+    assert_eq!(base, 0x20_0000);
+    assert_eq!(size, 288 << 20);
+    assert_eq!(base + size, 0x1220_0000, "the end the overlay's comment names");
+    assert!(base + size <= 1 << 32, "below 4 GiB (PTEs, mailbox buffer)");
+    assert!(0x2efe_c600 > base + size, "the DTB is above the window");
+
+    let carve = n(conf_value(CONF, "YAKOGL_V3D_CARVEOUT_BYTES").unwrap());
+    let tiled = n(conf_value(CONF, "YAKOGL_V3D_TILED_COPIES_BYTES").unwrap());
+    let heap = n(conf_value(PRJ, "COMMON_LIBC_MALLOC_ARENA_SIZE").unwrap());
+    assert_eq!((carve, tiled, heap), (96 << 20, 24 << 20, 96 << 20));
+    // the conf sets no scratch, so the Kconfig default (4 MiB) applies; the
+    // overlay's comment says 2 MiB (reported, not fixed)
+    assert!(conf_value(CONF, "YAKOGL_SHADERC_SCRATCH_BYTES").is_none());
+    let scratch: u64 = 4 << 20;
+    let data: u64 = 10 << 20; // glmark2's ~9.4 MB of data files, rounded up
+    assert!(carve + tiled + scratch + heap + data < size, "room for code and data");
+    assert!(n(conf_value(CONF, "MAX_XLAT_TABLES").unwrap()) >= 64 + carve / (2 << 20));
+    assert!(0x2000_0000 >= size + carve, "KERNEL_VM_SIZE covers the image and the alias");
+}
+
+/// No screen and no console override: the conf and overlay name no uart,
+/// display or board-screen symbol (the console is the board defconfig's).
+#[test]
+fn there_is_no_screen_and_no_console_override() {
+    for l in active(CONF) {
+        for bad in ["UART", "CONSOLE", "BOARD_RPI5", "DISPLAY", "FRAMEBUFFER"] {
+            assert!(!l.contains(bad), "{l}");
+        }
+    }
+    let ov = active(OVERLAY).join("\n");
+    for bad in ["uart", "chosen", "display", "zephyr,console"] {
+        assert!(!ov.contains(bad), "{bad}");
+    }
+}
