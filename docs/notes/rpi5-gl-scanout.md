@@ -26,28 +26,28 @@ Goal: one Zephyr image for the Pi 5 that
 
 - keeps the firmware's running scanout: it drives HDMI0 with a
   1920x1080 16 bpp picture and hotplug on that port
-  (`docs/notes/rpi5-display.md:296-312`, Q6 answered);
+  (`docs/notes/rpi5-display.md:361-374`, Q6 answered);
 - renders full-screen frames with the driver's 7.1 bin-and-render job — the
   `rpi5_triangle` path, board-proven at 64x64 with `FLDONE`/`FRDONE` and a
   read-back check at tolerance 3 (`driver/docs/rpi5-v3d71-facts.md:675-676`)
   — straight into one of two 32 bpp buffers;
 - shows each buffer by swapping channel 0's list pointer `LPTRS` at vblank
   between two of our own plane slots
-  (`tools/probes/rpi_5/rpi5_scanout32/README.md:31`);
+  (`tools/probes/rpi_5/rpi5_scanout32/README.md:36,107-112`);
 - restores the firmware's list at the end and stops feeding the watchdog, so
   the board returns to Linux by tryboot
   (`docs/notes/rpi5-display.md:136-139`,
-  `tools/probes/rpi_5/rpi5_scanout32/README.md:159-169`; the 2026-11-25
+  `tools/probes/rpi_5/rpi5_scanout32/README.md:165-179`; the 2026-11-25
   session came back on its own,
-  `tools/probes/rpi_5/rpi5_scanout32/README.md:229-243`).
+  `tools/probes/rpi_5/rpi5_scanout32/README.md:365-370`).
 
 Non-goals:
 
 - No mode set, no pixel valve, HDMI, PHY or clock writes. The image writes
   only channel 0's `LPTRS` and list words its own placement check approved,
   and writes nothing at all when that check refuses
-  (`tools/probes/rpi_5/rpi5_scanout32/README.md:13-16`,
-  `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:176-179`). A full
+  (`tools/probes/rpi_5/rpi5_scanout32/README.md:14-21`,
+  `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:122-130`). A full
   mode set stays the fallback, scheduled only if a boot leaves no picture
   (`docs/notes/rpi5-display.md:127-129`).
 - No CPU copy or format conversion between the render target and the plane:
@@ -62,15 +62,15 @@ Non-goals:
 ## 2. What the board already says (2026-11-25)
 
 The stage-2 probe `rpi5_scanout32` ran once on the Pi 5 (tryboot, image from
-`458834ea`; record `tools/probes/rpi_5/rpi5_scanout32/README.md:221-294`):
+`458834ea`; record `tools/probes/rpi_5/rpi5_scanout32/README.md:351-422`):
 
 - It **refused its placement and wrote nothing**: the firmware's list at
   `HEADE` 672 reaches no END word within the walked 256-word window (8
   entries, stopped at word 896), and with no END the library puts our list
   only wholly before `HEADE`
-  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:18-22,41-51,389,417`),
+  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:17-19,41-50,428`),
   where words 32..671 hold 619 non-zero words, so no 20-word zero span was
-  found (`tools/probes/rpi_5/rpi5_scanout32/README.md:245-256`).
+  found (`tools/probes/rpi_5/rpi5_scanout32/README.md:372-380`).
 - **Q4 is answered yes** by the third run (2026-11-27, image `c0b4f33b`,
   `q4: yes`, 8 of 8 swaps `landed=yes why=landed`, `u3 restore: PASS`;
   `tools/probes/rpi_5/rpi5_scanout32/README.md`, "2026-11-27";
@@ -82,39 +82,39 @@ The stage-2 probe `rpi5_scanout32` ran once on the Pi 5 (tryboot, image from
 - The read-only compare of the firmware's 256 words passed with exactly one
   differing word, 676, entry offset 4, the declared `4:skip` word: the HVS
   writes that context word back while scanning
-  (`tools/probes/rpi_5/rpi5_scanout32/README.md:264,279-283`; Q2's board
+  (`tools/probes/rpi_5/rpi5_scanout32/README.md:390-392,407-410`; Q2's board
   answer `docs/notes/rpi5-display.md:194-210`; the Linux reading behind it
   `driver/docs/rpi5-v3d71-facts.md:438`). This is already folded into the
   probe: the knob `RPI5_SCANOUT32_HW_WORDS` defaults to `4:skip`
   (`tools/probes/rpi_5/rpi5_scanout32/CMakeLists.txt:34`), the skip applies
   to the firmware's span and to our own slot read-back
-  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:124-149`,
-  `tools/probes/rpi_5/rpi5_scanout32/README.md:53-86`), and every differing
+  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:156-181`,
+  `tools/probes/rpi_5/rpi5_scanout32/README.md:59-89`), and every differing
   word is named and judged
-  (`tools/probes/rpi_5/rpi5_scanout32/README.md:85-99`).
+  (`tools/probes/rpi_5/rpi5_scanout32/README.md:91-105`).
 
 So the frame loop below runs on top of a library whose swap and restore
 mechanics are written and host-checked against a channel model
 (`tools/v3d/check71.d/hvs6_dlist_swap.sh`, 269 checks,
-`tools/probes/rpi_5/rpi5_scanout32/README.md:175-179`) but not yet proven by
+`tools/probes/rpi_5/rpi5_scanout32/README.md:181-187`) but not yet proven by
 a board swap. Everything about a swap that follows is **unverified** on this
 firmware until a fixed `rpi5_scanout32` makes one.
 
 ## 3. The plane
 
 Linear, unscaled, one plane — the entry `hvs6w_write_plane` writes
-(`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:94-138`): a 9-word
-entry plus the list's END word, 10 words (`:61-64`); the decoder's ADDR_MODE
-0 (linear) comes from the zeroed field (`:97`); no POS1 word, no scaling, no
+(`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:106-148`): a 9-word
+entry plus the list's END word, 10 words (`:66-69`); the decoder's ADDR_MODE
+0 (linear) comes from the zeroed field (`:104`); no POS1 word, no scaling, no
 flip, no tiling (`:31`).
 
 | Field | Value | Source |
 |---|---|---|
-| Size and position | 1920x1080 at (0,0) — the firmware's mode | `docs/notes/rpi5-display.md:296-312`; the same frame bounds as `rpi5_scanout32` (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:141-145`) |
-| Depth | 32 bpp | `hvs6w_bpp` returns 4 for the 8888 formats (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:81-92`) |
-| Pitch | 7680 bytes = 1920 x 4; checked as a multiple of 4, at least one row, at most 17 bits | `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:113-114`; `pitch = w * 4` at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:812` |
-| Buffer size | 1920 x 1080 x 4 = 8294400 bytes per buffer | `tools/probes/rpi_5/rpi5_scanout32/src/main.c:144-145` (`FB_BYTES`) |
-| Fetch address | 40-bit `addr`, carried in PTR0 upper bits and PTR1 | `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:115-116`, `:132-133` |
+| Size and position | 1920x1080 at (0,0) — the firmware's mode | `docs/notes/rpi5-display.md:361-374`; the same frame bounds as `rpi5_scanout32` (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:155-156`) |
+| Depth | 32 bpp | `hvs6w_bpp` returns 4 for the 8888 formats (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:87-99`) |
+| Pitch | 7680 bytes = 1920 x 4; checked as a multiple of 4, at least one row, at most 17 bits | `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:120-121`; `pitch = w * 4` at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1035` |
+| Buffer size | 1920 x 1080 x 4 = 8294400 bytes per buffer | `tools/probes/rpi_5/rpi5_scanout32/src/main.c:155-158` (`FB_BYTES`) |
+| Fetch address | 40-bit `addr`, carried in PTR0 upper bits and PTR1 | `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:122-123`, `:142-143` |
 
 **Format.** The 7.1 raster store writes R, G, B, A to memory bytes 0-3
 *(facts, host reading, never run against a scanout)*. With that memory order
@@ -125,30 +125,30 @@ entry for it is **XBGR8888**: format code `RGBA8888` (7) with order `ABGR`
 inverse map `:108-114`, Linux's use of these two orders `:22-27`). The plane
 must therefore be XBGR8888, not the XRGB8888 `rpi5_scanout32` uses today
 (`tools/probes/rpi_5/rpi5_scanout32/README.md:6`, the `u3 plane` line at
-`tools/probes/rpi_5/rpi5_scanout32/src/main.c:830-832`). The writer cannot
+`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1053-1056`). The writer cannot
 express XBGR8888 yet: `enum hvs6w_format` has XRGB8888, ARGB8888 and RGB565
-only (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:46-50`) and
-picks order `ARGB` for every 32-bit format (`:118-124`). Adding
+only (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:47-55`) and
+picks order `ARGB` for every 32-bit format (`:131-134`). Adding
 `HVS6W_XBGR8888` (code 7, order ABGR) is item G1. Whether the 7.1 store can
 swap R and B is **unverified** (glscan-survey found no such setting);
 XRGB8888 would need it, so it is not the plan. If the byte-order answer at
 G2/G4 turns out reversed, the plane becomes XRGB8888 and G1 is dropped.
 
 Alpha is ignored: CTL2 is written opaque (`HVS6W_CTL2_OPAQUE` at
-`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:68-69`, written at
-`:129`) and the CTL0 alpha-mask field is FIXED (`:65-67`, `:125-127`). The
+`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:73-74`, written at
+`:139`) and the CTL0 alpha-mask field is FIXED (`:70-72`, `:135-137`). The
 entry's word 4 is the POS3 context word (the writer puts Linux's filler
-`0xc0c0c0c0` there, `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:70-71,131`)
+`0xc0c0c0c0` there, `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:75-76,141`)
 — the one word the HVS writes back
 (`driver/docs/rpi5-v3d71-facts.md:438`, confirmed on the board, section 2),
 so our own slot keeps the same `4:skip` treatment at its read-back
-(`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:135-136,1315-1333`).
+(`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:165-168,1411-1429`).
 
 ## 4. The buffers
 
 Two buffers A and B, `FB_BYTES` each, page-aligned static arrays in the
 image (the pattern `rpi5_scanout32` already uses:
-`tools/probes/rpi_5/rpi5_scanout32/src/main.c:141-145`, `:180-181`). They
+`tools/probes/rpi_5/rpi5_scanout32/src/main.c:155-158`, `:199-200`). They
 live in the image's `sram0`: every Pi 5 probe overlay sets `sram0` to 32 MiB
 from `0x200000`, below 4 GiB
 (`tools/probes/rpi_5/rpi5_scanout32/boards/rpi_5.overlay:4,14-15`). 2 x
@@ -162,12 +162,12 @@ One buffer, two addresses:
   the offset is 0, the identity, because the BCM2712 `soc` has no
   dma-ranges (`driver/zephyr/lib/board/rpi5_scanout/bus_addr.h:35-44`), and
   display-path addresses are 40 bits (`:46-60`, refused at
-  `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:115-116`).
+  `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:122-123`).
   `rpi5_scanout32` converts `k_mem_phys_addr` through `bcm2712_arm_to_bus`
   (`driver/zephyr/lib/board/rpi5_scanout/bus_addr.h:144-157`, called at
-  `tools/probes/rpi_5/rpi5_scanout32/src/main.c:820-821`), prints both
-  values (`:825-832`), and puts the bus value in the plane entry
-  (`:850`, `:947`, `:967`). IOMMU4 is off on the board, so a list address is
+  `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1043-1044`), prints both
+  values (`:1047-1051`), and puts the bus value in the plane entry
+  (`:1074`, `:1161`). IOMMU4 is off on the board, so a list address is
   an ARM physical address (`docs/notes/rpi5-display.md:43`).
 - **For the V3D**, a GPU VA from the probe's own page table: `gpu_map` maps
   the buffer's physical address into the job's VA space, writable
@@ -196,9 +196,9 @@ neighbours the store can overrun into.
 
 The buffers are cacheable image RAM, never mapped a second time
 (`device_map` of a RAM page is `-EBUSY` and a panic,
-`tools/probes/rpi_5/rpi5_scanout32/README.md:48-51`). All of this needs
+`tools/probes/rpi_5/rpi5_scanout32/README.md:54-57`). All of this needs
 `CONFIG_CACHE_MANAGEMENT=y`, or every `sys_cache_data_*` call is a no-op
-(`tools/probes/rpi_5/rpi5_scanout32/prj.conf:9-12`).
+(`tools/probes/rpi_5/rpi5_scanout32/prj.conf:9-11`).
 
 1. **Before the job**, flush and invalidate every range the job reads or
    writes — control lists, shader code, vertices, tile allocation, tile
@@ -218,15 +218,15 @@ The buffers are cacheable image RAM, never mapped a second time
    (`sys_cache_data_invd_range` at
    `tools/probes/rpi_5/rpi5_triangle/src/main.c:424`; the s32 pattern
    read-back cleans and invalidates at
-   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1040-1044`).
+   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1254-1255`).
 4. **A CPU write to a buffer** (a test pattern, not a rendered frame) is
    followed by `sys_cache_data_flush_range`
-   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:818-819`).
+   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1041-1042`).
 5. **List words** are device memory in the SoC window: no cache line holds
-   them (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:240`,
-   `tools/probes/rpi_5/rpi5_scanout32/README.md:50-51`); the library still
+   them (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:262-269`,
+   `tools/probes/rpi_5/rpi5_scanout32/README.md:56-57`); the library still
    cleans its list range and barriers before `LPTRS`
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:100-102,1334-1338`),
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:260-263,1430-1434`),
    a no-op there.
 
 **Open:** which GPU flush makes a render visible to the HVS's fetch is not
@@ -236,29 +236,29 @@ of the same bytes). Step 2 plus G4's pixel samples are the test.
 ## 6. The frame loop
 
 It reuses `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h`
-unchanged; the sequence below is the library's (`:83-123`). **Precondition:**
+unchanged; the sequence below is the library's (`:114-154`). **Precondition:**
 the placement refusal of section 2 is fixed in the probe or the library
 first; until then every swap line is **unverified** on this firmware.
 
 1. **Snapshot** the firmware's `LPTRS` and its list walked entry by entry to
    its END (`hvs6s_snapshot`,
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:875`; rules
-   `:84-89`, 256-word window `:254`), hashing the span with the declared
-   hardware words left out (`:124-149`).
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:931`; rules
+   `:115-121`, 256-word window `:284-289`), hashing the span with the declared
+   hardware words left out (`:156-164`).
 2. **Place** two slots, 20 words (10 each — `HVS6W_LIST_WORDS` at
    `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:63-64`, the pair
-   span at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:153`): the first
+   span at `tools/probes/rpi_5/rpi5_scanout32/src/main.c:166`): the first
    fit at or after word 32
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:75-78,250,256`)
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:72-75,122-123`)
    whose words all read zero, clear of the firmware's span and of every
-   channel's `HEADE`/`LACT` (`:90-98`,
-   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:748-760`). A refusal names
+   channel's `HEADE`/`LACT` (`:73-79`,
+   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:433`). A refusal names
    the reason and writes nothing
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:402-418`,
-   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:801`).
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:409-432`,
+   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:1019-1024`).
 3. **Render frame n into the hidden buffer** — the one the channel does not
    scan: buffer B on odd n, A on even (the alternation `rpi5_scanout32`
-   already swaps, `tools/probes/rpi_5/rpi5_scanout32/README.md:31`). One 7.1
+   already swaps, `tools/probes/rpi_5/rpi5_scanout32/README.md:36`). One 7.1
    job at 1920x1080 with the tiling and sizes of section 7 and the Y flip of
    section 7, cache steps 1-3 of section 5.
 4. **Wait for the job**: bin and render done (`FLDONE`/`FRDONE` core
@@ -267,81 +267,81 @@ first; until then every swap line is **unverified** on this firmware.
    block. A timeout or `OUTOMEM` stops the loop before any swap: a buffer
    the job did not finish is never shown. The poll bound is **unverified**
    (`rpi5_scanout32` uses `MAX_POLLS` 200, about 12 frames,
-   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:150`).
+   `tools/probes/rpi_5/rpi5_scanout32/src/main.c:163`).
 5. **Swap at vblank**: `hvs6s_swap`
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1291`) builds
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1387`) builds
    the slot's entry from `cfg.plane` — the bus address of the buffer just
    rendered, as `rpi5_scanout32` sets it per swap
-   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:947`, `:967`) — writes the
+   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:1074`, `:1161`) — writes the
    10 words and reads every one back with the `4:skip` tolerance
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1303-1333`),
-   cleans and barriers (`:1334-1338`), waits for a frame edge found by reads
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1409-1429`),
+   cleans and barriers (`:1430-1434`), waits for a frame edge found by reads
    only: channel 0's `STATUS.FRCNT` (bits 21:16,
    `driver/zephyr/lib/board/rpi5_scanout/hvs6_vblank.h:54-57`) read in a
    tight loop until it steps (`hvs6s_wait_vblank_reads` at
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1187`; the
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1283`; the
    read-only detector `hvs6v_wait_frame` at
    `driver/zephyr/lib/board/rpi5_scanout/hvs6_vblank.h:124`, rule `:9-11`;
    the same loop carried in the library as `hvs6s_find_step`,
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1158`); then
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1255`); then
    writes `LPTRS` as one write
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1356`; Linux
-   updates a live channel the same way, `:62-64`). Taking the FRCNT step as
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1452`; Linux
+   updates a live channel the same way, `:93-95`). Taking the FRCNT step as
    the start of the vertical blank is an assumption no source states
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:170-173`), and
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:202-206`), and
    `PV_INTSTAT` is not touched
    (`driver/zephyr/lib/board/rpi5_scanout/hvs6_vblank.h:17-19`).
 6. **The swap counts only when `DL.LACT` picks the new list up**: a tight
    loop reads `DL` then `STATUS` until `DL.LACT` (bits 11:0,
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:260-263`) equals
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:295-298`) equals
    the head just written
-   (`hvs6s_tight_loop` `:1239`, `:1361-1391`; the bounded criterion `:104-109`,
-   error `HVS6S_ERR_LACT_PICKUP` `:391,419`; Linux completes a flip the same
-   way, `:66-71`, `driver/docs/rpi5-v3d71-facts.md:507-512`). The s32 bounds
+   (`hvs6s_tight_loop` `:1335`, `:1466`; the bounded criterion `:136-145`,
+   error `HVS6S_ERR_LACT_PICKUP` `:430`, `:1549`; Linux completes a flip the same
+   way, `:96-102`, `driver/docs/rpi5-v3d71-facts.md:507-512`). The s32 bounds
    apply: `LACT_FRAMES` 4 frames past the write
-   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:161`).
+   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:174`).
 7. **Do not reuse the other buffer yet**: the swap returns only after
    `FRCNT` advanced twice past the write (`HVS6S_SETTLE_FRAMES` 2,
-   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:277`, enforced
-   `:111-113,1437-1455`; Linux ages a list
-   one frame past the swap and the library uses two to be safe, `:72-74`).
+   `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:312`, enforced
+   `:143-145,1534-1544`; Linux ages a list
+   one frame past the swap and the library uses two to be safe, `:103-105`).
    Only then may the next frame render into the buffer the channel has left;
    `rpi5_scanout32` additionally holds each buffer on screen 1 s
-   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:148`, `k_msleep` at
-   `:882`, `:982`).
+   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:161`, `k_msleep` at
+   `:1104`, `:1196`).
 8. **Alternate for a fixed number of frames** (8, as in S8,
-   `tools/probes/rpi_5/rpi5_scanout32/README.md:31`), printing one `u3 swap`
+   `tools/probes/rpi_5/rpi5_scanout32/README.md:36`), printing one `u3 swap`
    and one `u3 vblank` record per swap
-   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:441-483`; judged by
-   `tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:90-109`).
+   (`tools/probes/rpi_5/rpi5_scanout32/src/main.c:616-670`; judged by
+   `tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:52-58,105-111`).
 9. **Restore**: `hvs6s_restore`
-   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1472`) finds a
-   frame edge by reads again (`:1500-1506`), writes the firmware's `LPTRS`
+   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h:1568`) finds a
+   frame edge by reads again (`:1596-1602`), writes the firmware's `LPTRS`
    back —
-   always, even when no edge was found (`:1511`, safety `:213-216`) — waits
+   always, even when no edge was found (`:1607`, safety `:245-248`) — waits
    two `FRCNT` advances and `DL.LACT` back on the firmware's head
-   (`:114-123`, `dlswap restore-lact`), then compares the firmware's span
+   (`:146-151`, `dlswap restore-lact`), then compares the firmware's span
    byte-equal against the snapshot **except the declared hardware-written
-   word** (`tools/probes/rpi_5/rpi5_scanout32/README.md:33,53-86`; the
+   word** (`tools/probes/rpi_5/rpi5_scanout32/README.md:33,59-89`; the
    default `4:skip` at `tools/probes/rpi_5/rpi5_scanout32/CMakeLists.txt:34`;
    the fold of Q2's answer into the probe, every differing word named at
-   `README.md:85-99` and judged by
-   `tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:46` with its selftest).
+   `README.md:91-105` and judged by
+   `tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:564-583` with its selftest).
    The
    restore runs whatever failed after the first write
-   (`README.md:37`). Our own slot words go back to zero only when the
-   restore has passed (`README.md:33`).
+   (`README.md:42`). Our own slot words go back to zero only when the
+   restore has passed (`README.md:18-20`).
 10. **Stop feeding the watchdog**: the board returns to Linux by tryboot
     through `tools/board.sh pi5`
-    (`tools/probes/rpi_5/rpi5_scanout32/README.md:159-169`,
+    (`tools/probes/rpi_5/rpi5_scanout32/README.md:165-179`,
     `docs/notes/rpi5-display.md:136-139`), as the 2026-11-25 run did even in
-    its failure (`README.md:229-243`).
+    its failure (`README.md:365-370`).
 
 No step programs the pixel valve, HDMI or PHY. Whether the swap is
 glitch-free on screen (Q4, answered yes by registers in `docs/notes/rpi5-display.md` section 4) stays what
 only a landed swap plus registers can say, with the limits spelled out at
-`docs/notes/rpi5-display.md:272-279`: `landed=yes` means "no register shows
-a problem" (the landing rules, `tools/probes/rpi_5/rpi5_scanout32/README.md:101-146`).
+`docs/notes/rpi5-display.md:315-322`: `landed=yes` means "no register shows
+a problem" (the landing rules, `tools/probes/rpi_5/rpi5_scanout32/README.md:107-155`).
 
 ## 7. Frame sizes, Y orientation, edge tiles
 
@@ -374,11 +374,11 @@ cover both. G4's read-back samples in the last tile row answer it.
 
 **Y.** GL's row 0 is the bottom of the picture; the HVS fetches memory row 0
 as the top line (POS0 y and POS2 lines at
-`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:128,130`). The
+`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:138,140`). The
 board-proven case is *not* flipped: `y0_top = false` puts GL y=0 at memory
 row 0, and the triangle's read-back matched unflipped
 (`tools/probes/rpi_5/rpi5_triangle/src/main.c:322-323`; "rows not flipped",
-with a flipped re-check giving more wrong pixels at `:477-486`,
+with a flipped re-check giving more wrong pixels at `:482-487`,
 `driver/docs/rpi5-v3d71-facts.md:676`). A full-screen frame therefore needs
 one flip, not two. The plan takes the viewport path, Mesa's:
 `v3d_viewport_gl(.., y0_top = true, fb_height = 1080, ..)`
@@ -438,8 +438,8 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
 
 - **G1 — XBGR plane format.** `hvs6w_format` gains `HVS6W_XBGR8888` (code
   7, order ABGR) and `hvs6w_write_plane` writes it
-  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:46-50`,
-  `:118-124`); the format table already knows the entry
+  (`driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:47-55`,
+  `:131-134`); the format table already knows the entry
   (`driver/zephyr/lib/board/rpi5_scanout/hvs6_fmt.h:77`). Its host mock and
   check script exist and get the case
   (`driver/zephyr/lib/board/test/hvs6_dlist_write_mock.c`,
@@ -447,7 +447,7 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
   P9. Plan item g1-xbgr.
 - **G2 — probe skeleton (needs P9).** New `tools/probes/rpi_5/rpi5_gl_scanout/`
   (main.c; prj.conf with the watchdog and `CONFIG_CACHE_MANAGEMENT` as
-  `tools/probes/rpi_5/rpi5_scanout32/prj.conf:6-12`; CMakeLists; the s32
+  `tools/probes/rpi_5/rpi5_scanout32/prj.conf:6-11`; CMakeLists; the s32
   overlay): the two buffers with guard rows, `gpu_map`, the sizes from
   `v3d_frame_alloc_sizes`, the `y0_top = true` viewport, one 7.1 render into
   buffer A, the read-back lines — no swap yet. It also settles the GPU VA
@@ -460,10 +460,10 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
   `tools/v3d/check71.d/hvs6_dlist_swap.sh`. The board answer to Q4 came
   with s32's third run (2026-11-27: `q4: yes`); G3 takes it as it is. Needs G1, G2.
 - **G4 — board session.** The probe's `verdicts.sh` and selftest first (the
-  s32 pattern, `tools/probes/rpi_5/rpi5_scanout32/README.md:175-179`), then
+  s32 pattern, `tools/probes/rpi_5/rpi5_scanout32/README.md:181-187`), then
   one run on `target:rpi5` with the exclusive `target:rpi5-console`, through
   `tools/board.sh pi5` with `BOARD_END_RE` and tryboot
-  (`tools/probes/rpi_5/rpi5_scanout32/README.md:159-169`): read-back lines,
+  (`tools/probes/rpi_5/rpi5_scanout32/README.md:165-179`): read-back lines,
   `FRCNT` through each swap, every swap landed, `u3 restore: PASS`, the
   board back in Linux by the watchdog. Session rules:
   `docs/notes/rpi5-display.md:136-139`, `tools/probes/rpi_5/README.md:24-34`.
@@ -498,7 +498,7 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
    **unverified** (section 7).
 8. Whether a raw RGB plane needs the UPM fields in PTR0 that Linux sets:
    the board question s32 left open
-   (`tools/probes/rpi_5/rpi5_scanout32/README.md:217-219`,
+   (`tools/probes/rpi_5/rpi5_scanout32/README.md:227-229`,
    `driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_write.h:33-36`). A gl
    frame that renders and reads back proves the fetch path with or without
    them.
@@ -509,5 +509,5 @@ must name `fmt=XBGR8888` after G1 (today's prints `fmt=XRGB8888`,
 10. Whether the hardware writes words other than entry offset 4 in the
     firmware's 32-word entry (list words 680-703,
     `driver/docs/rpi5-v3d71-facts.md:534-535`): the 2026-11-25 compare saw
-    only word 676 (`tools/probes/rpi_5/rpi5_scanout32/README.md:279-283`);
+    only word 676 (`tools/probes/rpi_5/rpi5_scanout32/README.md:390-392,407-410`);
     s32's knob takes up to four offsets if a gl run shows more.
