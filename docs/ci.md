@@ -570,6 +570,48 @@ CI gate job's `--check` step runs on a warm cache and does not set
 CARGO_INCREMENTAL, so it ignores them. `GATE_FULL_RUN=1 tools/setup-gate-host.sh
 --check` makes them `missing` and the exit status 1; use it before a full run.
 
+#### The prune knob: `YAKOGL_CHECK_PRUNE=1`
+
+`YAKOGL_CHECK_PRUNE=1 tools/check.sh ...` is for a full run on a small disk.
+It is off by default (nothing is pruned: the CI runners keep these
+directories warm between runs) and only the value `1` turns it on. With it:
+
+- cargo writes no incremental files: check.sh exports `CARGO_INCREMENTAL=0`
+  unless the caller already set it;
+- a row that passed removes the build directories only it reads, before the
+  row is complete (so a row waiting on its `uses` lane starts after the
+  removal). These are `<target>/check-artefact` (the "no Mesa reference"
+  row's archives), `build/pvr-check/rgx-target` (after pvr `km_check`, its
+  last reader) and `build/zephyr-werror/<image>` (each image a Zephyr row
+  built, after that row's own checks of it). Each removal is noted as
+  "check.sh: pruned <dir>" in the row's output;
+- kept: a row that failed keeps its directories, and so does everything a
+  later row reads: the shared target's deps, the test-ok store,
+  `build/precompiled`, `build/glmark2-host`. A check.sh started from a row (a
+  self-test) never prunes.
+
+Whether a pruned run fits a 193 GB host has not been measured yet. Without
+pruning a full gate needs about 220 GB free (3.8).
+
+Fallback for a host that still runs short: `tools/env/gate_prune.sh
+<target-dir> --artefacts`, run from outside the gate (not by check.sh), for
+example between two parts of a walk. `--artefacts` removes the compiled test
+and example executables of finished rows and keeps rlib/rmeta/.so/.d files,
+build-script output, `.fingerprint`, every `release*` profile tree and `.a`
+archives; `--incremental` removes the `incremental` directories, and with
+neither flag it does both. `--if-free-below <GiB>` acts only when the
+target's filesystem has less free space than that. It refuses a directory
+that is not a cargo target directory.
+
+#### The uboot-mp2 qemu row needs `MP2_QEMU`
+
+The row "uboot-mp2 qemu" runs `driver/tools/uboot-mp2/qemu/run.sh`, which
+needs a `qemu-system-aarch64` (from `MP2_QEMU` or the PATH), an aarch64 cross
+compiler and some host tools. When it prints `run.sh: skip: <why>` the row is
+a gap, not a pass, and a gap keeps the summary from reading "0 gap(s)". For a
+full walk build the pinned binary and export it first: `tools/cts/deps-env.sh
+--build MP2_QEMU`, then export what `tools/cts/deps-env.sh --present` prints.
+
 ### 3.8 Free disk check
 
 `setup-gate-host.sh --check` also prints `disk` (the filesystem of
@@ -578,6 +620,10 @@ repository's `build/`): `ok disk <GB> free`, or a line naming the need. A full
 gate needs about 220 GB free without pruning (walk-fit, disk-map);
 `YAKOGL_GATE_MIN_FREE_GB` overrides that. A shortfall is `warn`, and `missing`
 (exit status 1) when the threshold is set explicitly or `GATE_FULL_RUN=1`.
+
+The 220 GB default is the unpruned figure; `setup-gate-host.sh --check` does
+not know about `YAKOGL_CHECK_PRUNE`, so for a pruned run lower the threshold
+with `YAKOGL_GATE_MIN_FREE_GB` (3.7). What a pruned run needs is not measured.
 
 Run the check in the shell that starts the gate, after the exports the full
 gate is started with: `export $(tools/cts/deps-env.sh --present);
