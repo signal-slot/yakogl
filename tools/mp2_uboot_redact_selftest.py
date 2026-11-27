@@ -263,6 +263,33 @@ def body(t):
     rc, out, err = run(allow("no-such-allow"))
     report(rc == 2, "--allow: a missing allowlist stops with exit 2", detail(rc, out, err))
 
+    # ---- the Co-Authored-By noreply@anthropic.com trailer ------------------------
+    NR = "noreply" + "@" + "anthropic.com"
+    trailer = "Co-Authored-By: Claude Opus 5.5 <%s>" % NR
+    rc, out, err = run(["-"], stdin=("subject\n\nbody\n\n  %s  \n" % trailer).encode())
+    report(rc == 0 and not out, "the exact trailer passes", detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("co-authored-by: X <%s>\n" % NR.upper()).encode())
+    report(rc == 0, "trailer key and address are case-insensitive", detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("Co-Authored-By: X <%s@%s>\n" % ("someone", "corp.lan")).encode())
+    report(rc == 1 and "login" in out, "a trailer with another address is refused",
+           detail(rc, out, err))
+    # today's rules refuse the bare address as a login; kept as it was
+    rc, out, err = run(["-"], stdin=("contact %s\n" % NR).encode())
+    report(rc == 1 and ":1: login:" in out, "the address outside a trailer is still refused (login)",
+           detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("Co-Authored-By: X <%s> contact %s\n" % (NR, NR)).encode())
+    report(rc == 1, "a trailer followed by more text is refused", detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("Co-Authored-By: X %s <%s>\n" % (V4_DOC1, NR)).encode())
+    report(rc == 1 and ": ipv4:" in out and "login" not in out,
+           "a trailer line that also holds an IPv4 address is refused", detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("Co-Authored-By: mp2bench.local <%s>\n" % NR).encode())
+    report(rc == 1 and "lanhost" in out, "a trailer line that also holds a host name is refused",
+           detail(rc, out, err))
+    rc, out, err = run(["-"], stdin=("%s\nreach me at %s\n" % (trailer, NR)).encode())
+    report(rc == 1 and ":2: login:" in out and ":1:" not in out,
+           "a trailer plus a separate line with the address: only that line is refused",
+           detail(rc, out, err))
+
     # ---- usage and the tree ---------------------------------------------------
     rc, out, err = run([])
     report(rc == 2, "no path: exit 2", detail(rc, out, err))

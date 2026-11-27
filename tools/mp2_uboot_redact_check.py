@@ -45,6 +45,13 @@ a second look, not the same code. Kinds:
               NETBOOT_SERVER, when that variable is set and 3 characters or
               longer
 
+One exemption: a line that, stripped of surrounding whitespace, is exactly a
+git trailer "Co-Authored-By: <name> <noreply@anthropic.com>" (key and address
+case-insensitive) carries the project's mandatory agent attribution, a fixed
+public address and not a login. Only that address in that trailer is not a
+"login" finding; the same address anywhere else, any other address, and any
+other finding on a trailer line (an IPv4 address, a host name) are refused.
+
 Memory addresses (0xa0000000, a0000000) and sha256 digests are not
 findings: none of the shapes above matches them.
 
@@ -101,6 +108,8 @@ RE_LOGIN = re.compile(r"(?<![\w.%+-])([A-Za-z_][\w.-]*)@([A-Za-z0-9][\w-]*"
 RE_HEX_UNIT = re.compile(r"^(?:[0-9A-Fa-f]+(?:,[0-9A-Fa-f]+)*$|[0-9])")
 RE_EXAMPLE_HOST = re.compile(r"(?:^|\.)(?:example\.(?:com|net|org)|[\w-]+\.(?:invalid|example|test))$",
                              re.I)
+RE_TRAILER = re.compile(r"^co-authored-by:[ \t]+[^<>\n]+<(noreply@anthropic\.com)>$",
+                        re.I)
 RE_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 # overlapping matches: the earlier kind wins
@@ -163,6 +172,13 @@ def find_line(line, envs):
             raw.append((m.start(), m.end(), "ipv4"))
     for m in RE_LANHOST.finditer(line):
         raw.append((m.start(), m.end(), "lanhost"))
+
+    tm = RE_TRAILER.match(line.strip())
+    if tm:
+        off = len(line) - len(line.lstrip())
+        a = off + tm.start(1)
+        raw = [f for f in raw if not (f[2] == "login" and f[0] == a
+                                      and f[1] == a + len(tm.group(1)))]
 
     kept = []
     for f in sorted(raw, key=lambda f: (ORDER.index(f[2]), f[0])):
