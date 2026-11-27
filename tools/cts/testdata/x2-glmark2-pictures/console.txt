@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# One scene's console as the stub board.sh of x2-glmark2-pictures-selftest.sh
+# writes it into its run directory's console.txt ("HH:MM:SS line"; '#' lines
+# are skipped): @PICTURE@ is the scene's line of pictures.txt, the hold line
+# is left out for the scene the test names in STUB_NO_HOLD.
+*** Booting Zephyr OS build selftest ***
+gc_wdog_arm: armed
+=======================================================
+@PICTURE@
+=======================================================
+board: holding 20 s, then the reset
