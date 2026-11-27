@@ -75,7 +75,11 @@ fn six_cases_of_p9_are_the_default_on_the_v3d71() {
     let d = defaults(GL_KCONFIG, "V3D_GL_TEST_CASES");
     assert_eq!(d.len(), 2, "one V3D71 default, one for the Pi 4: {d:?}");
     // the 7.1 default is read first (Kconfig takes the first true default)
-    assert_eq!(d[0], "\"5,58,59,66,67,102\" if YAKOGL_GPU_V3D71");
+    assert_eq!(
+        d[0], "\"5,58,59,66,67,102\" if YAKOGL_GPU_V3D71",
+        "P9's case list moved: update driver/samples/zephyr/gl_test/Kconfig (V3D_GL_TEST_CASES), \
+         docs/notes/pre-study-rpi5.md and the README's Pi 5 section in the same commit"
+    );
     assert!(!d[1].contains(" if "), "the Pi 4's default is unconditional: {}", d[1]);
     // the image does not override the list
     assert!(conf("V3D_GL_TEST_CASES").is_none());
@@ -104,14 +108,23 @@ fn memory_windows_fit_the_image() {
         .find_map(|l| l.trim().strip_prefix("reg = <").and_then(|r| r.strip_suffix(">;")))
         .expect("the overlay's reg");
     let cells: Vec<u64> = reg.split_whitespace().map(num).collect();
-    assert_eq!(cells, [0x0, 0x20_0000, 0x600_0000]);
+    assert_eq!(
+        cells,
+        [0x0, 0x20_0000, 0x600_0000],
+        "sram0 (96 MiB from 0x200000) moved: update boards/rpi_5.overlay, this test and the \
+         README's Pi 5 section in the same commit"
+    );
     assert!(OVERLAY.contains("&sram0 {"));
     let (base, size) = (cells[1], cells[2]);
     assert_eq!(size, 96 << 20);
     assert!(base + size <= 1 << 32, "the window stays below 4 GiB");
 
     let carve = num(conf("YAKOGL_V3D_CARVEOUT_BYTES").expect("carve-out"));
-    assert_eq!(carve, 48 << 20);
+    assert_eq!(
+        carve,
+        48 << 20,
+        "the 48 MiB carve-out moved: update boards/rpi_5.conf (YAKOGL_V3D_CARVEOUT_BYTES) and the overlay's size comment together"
+    );
     // the carve-out is a static of the image: it leaves room for the code,
     // the compiler's 4 MiB scratch (YAKOGL_SHADERC_SCRATCH_BYTES's default,
     // which the image does not override) and the libc arena
@@ -136,7 +149,8 @@ fn memory_windows_fit_the_image() {
 fn console_is_the_board_defconfigs_uart() {
     // no chosen/console override, no second uart: the overlay is the sram0
     // window alone
-    assert!(!OVERLAY.contains("uart"));
+    assert!(CONF.contains("uart10"), "the conf's comment names uart10 as the console; update boards/rpi_5.conf");
+    assert!(!OVERLAY.contains("uart"), "the overlay must not name a uart: the console is the defconfig's uart10");
     assert!(!OVERLAY.contains("chosen"));
     assert!(!CONF.lines().any(|l| l.starts_with("CONFIG_UART") || l.contains("CONSOLE")));
     assert_eq!(conf("PRINTK"), Some("y"));
@@ -151,7 +165,10 @@ fn console_is_the_board_defconfigs_uart() {
 fn watchdog_holds_for_the_run_and_the_record() {
     let hold = entries(GL_KCONFIG, "V3D_GL_TEST_HOLD_S");
     assert_eq!(hold.len(), 1);
-    assert!(hold[0].contains(&"default 200"));
+    assert!(
+        hold[0].contains(&"default 200"),
+        "V3D_GL_TEST_HOLD_S (YAKOGL_RPI5_WDOG_HOLD_S's source) moved: update gl_test/Kconfig and this test"
+    );
     assert!(hold[0].contains(&"range 30 300"));
     // the board layer's hold follows the sample's on the 7.1 only, and the
     // board layer's own default (the probes') stays
