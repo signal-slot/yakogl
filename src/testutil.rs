@@ -2291,6 +2291,15 @@ impl Drop for TestGl {
     }
 }
 
+/// [`SERIAL`] alone, for a test that makes no context but reads something a
+/// rig stands in for (`backend::HOST_DRAW_TARGETS` behind the shader's
+/// `gl_MaxDrawBuffers`): while it is held no rig is alive, and every rig put
+/// the build's own values back before it let the lock go. Not for a thread
+/// that holds a [`TestGl`] or an [`OwnOsal`]: the lock is not re-entrant.
+pub fn serial() -> MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// A test that runs a real backend over an OSAL of its own (the Mali
 /// backend's mock, src/mali/backend_tests.rs) instead of the mocks above:
 /// [`SERIAL`] held, the library's statics reset and `ops` and `backend`
@@ -2790,5 +2799,28 @@ mod tests {
         assert!(logs.iter().any(|l| l.contains("glTexImage3D")), "{logs:?}");
         assert!(logs.iter().any(|l| l.starts_with("GL error")), "the error-log budget is back: {logs:?}");
         gl.error();
+    }
+
+    /// A test with no context takes [`serial`] before it reads what a rig
+    /// stands in for. While another test's rig answers as a back end with
+    /// another number of colour targets the lock waits, and the count read
+    /// under it is the build's own. (Revert check: without the `serial()`
+    /// line the read is the rig's count.)
+    #[test]
+    fn serial_waits_for_a_rig_and_reads_the_builds_own_draw_targets() {
+        use crate::backend::{draw_targets, DRAW_TARGETS, GLES_MAX_TARGETS};
+        let (ready, is_ready) = std::sync::mpsc::channel();
+        let rig = std::thread::spawn(move || {
+            let gl = TestGl::new(4, 4);
+            gl.backend_draws_targets((DRAW_TARGETS % GLES_MAX_TARGETS + 1) as u8);
+            ready.send(()).unwrap();
+            /* long enough for the reader to reach its read (the revert
+             * check) or the lock */
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        });
+        is_ready.recv().unwrap();
+        let _serial = serial();
+        assert_eq!(draw_targets(), DRAW_TARGETS);
+        rig.join().unwrap();
     }
 }
