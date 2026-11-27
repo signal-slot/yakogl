@@ -612,11 +612,34 @@ class FakeBoard(threading.Thread):
         prompt loop ends); here every command is answered at the prompt."""
         return False
 
+    def word(self, addr):
+        """The word at addr; 0 when the table lacks it, None for UART2's
+        reads (LCR, USR, clock select, gates) the table lacks."""
+        if addr in self.words:
+            return self.words[addr]
+        uart2 = (UART2_LCR, UART2_USR) + tuple(UART2_SEL + 4 * i for i in range(3)) + \
+            tuple(UART2_GATE12 + 4 * i for i in range(2))
+        return None if addr in uart2 else 0
+
     def answer(self, cmd):
         if cmd.startswith("md.l "):
             _, a, n = cmd.split()
             a, n = int(a, 16), int(n, 16)
-            return "%08x:" % a + "".join(" %08x" % self.words.get(a + 4 * i, 0) for i in range(n)) + "\r\n"
+            # U-Boot's form: at most 4 words a line, each line with its own
+            # address and the ASCII column. An address the words table lacks
+            # is answered "not in fixture" when it is one of UART2's, never as
+            # zero: a decode must not take an invented 0 for a reading. Other
+            # words still read 0 (the plan's decisions are taken on them).
+            lines = []
+            for i in range(0, n, 4):
+                ws = [self.word(a + 4 * (i + j)) for j in range(min(4, n - i))]
+                if None in ws:
+                    lines.append("%08x: (not in fixture)" % (a + 4 * i))
+                    continue
+                asc = "".join(chr(c) if 32 <= c < 127 else "." for w in ws for c in w.to_bytes(4, "little"))
+                lines.append("%08x: %s%s  %s" % (a + 4 * i, " ".join("%08x" % w for w in ws),
+                                                 " " * (9 * (4 - len(ws))), asc))
+            return "\r\n".join(lines) + "\r\n"
         if cmd == "dm tree":
             return self.dm.replace("\n", "\r\n")
         if cmd == "printenv":
@@ -980,6 +1003,17 @@ def self_test():
     pvt = dict(sec4)
     pvt[md(0xFD7C0578)] = "fd7c0578: 00005f24\n"
     check(clock_prediction(pvt) == "move", "replay: the PVTPLL bit predicts move")
+
+    # FakeBoard prints md.l the way U-Boot does: 4 words a line, address and
+    # ASCII column; a UART2 address it lacks is "not in fixture", not a 0.
+    fb = FakeBoard(-1, words={0x1000 + 4 * i: 0x41424344 + i for i in range(7)})
+    ans7 = fb.answer("md.l 0x1000 7").split("\r\n")[:-1]
+    check(len(ans7) == 2 and ans7[0].startswith("00001000: 41424344 41424345 41424346 41424347  DCBA")
+          and ans7[1].startswith("00001010: 41424348 41424349 4142434a ")
+          and md_words("\n".join(ans7), 0x1000, 7) is not None, "FakeBoard: md.l of 7 words is two lines, 4 + 3")
+    u2 = fb.answer("md.l 0xfeb5000c 1")
+    check(md_word(u2, UART2_LCR) is None and "not in fixture" in u2 and uart2_decode({md(UART2_LCR): u2}) == [],
+          "FakeBoard: a missing UART2 word reads as not read, not 0")
 
     # 12. UART2's reads and their decode. Only reads with no side effect; the
     # divisor is not read; DLAB, the clock source and the computed rate.
