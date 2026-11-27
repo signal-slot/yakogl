@@ -28,6 +28,7 @@ use core::ffi::c_void;
 use crate::backend::*;
 use crate::draw_steps::{Step, Timer};
 use crate::ds_retention;
+use crate::msaa_hw;
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::shaderc::{
     ShcShader, SHC_BF_CONST_ALPHA, SHC_BF_CONST_COLOR, SHC_BF_DST_ALPHA, SHC_BF_DST_COLOR, SHC_BF_INV_CONST_ALPHA,
@@ -67,7 +68,7 @@ fn clear_ps() -> &'static ShcShader {
 /* Device-VA heaps. The GC7000's MMU addresses 32 bits, so the bases are low
  * and far enough apart for the pools the GL core allocates in. */
 /// Buffers, textures, render targets.
-const GC_HEAP_DATA: u64 = 0x4000_0000;
+pub(super) const GC_HEAP_DATA: u64 = 0x4000_0000;
 
 /// The data heap's base (the tiled copies live there too).
 pub(super) const fn heap_data() -> u64 {
@@ -173,6 +174,10 @@ pub(crate) struct GcState {
     /// The destination's row pitch in bytes (`draw_pitch` x bpp: a window
     /// that is a view into a wider buffer keeps its own).
     ms_dest_stride: u32,
+    /// The scratch the multisampled target renders into and the resolve
+    /// reads: `msaa` for the window, the target's own slot for a 4x
+    /// framebuffer object (msaa_fbo.rs).
+    ms_dest_scratch: u64,
 
     /* the clear quad's two shaders, uploaded once; the mipmap quad draws
      * with the same vertex shader (mipmap.rs) */
@@ -237,6 +242,7 @@ impl GcState {
         ms_dest_bpp: 0,
         ms_dest_surf: 0,
         ms_dest_stride: 0,
+        ms_dest_scratch: 0,
         clear_vs_code: OsalGpuMem::ZERO,
         clear_ps_code: OsalGpuMem::ZERO,
         mipgen_ps_code: OsalGpuMem::ZERO,
@@ -715,7 +721,7 @@ fn flat_shade_model(fs: &ShcShader) -> bool {
 /// (PS_INPUT_COUNT_MSAA, PS_TEMP_REGISTER_CONTROL_MSAA: "MSAA adds another
 /// input", etnaviv_shader.c). Mesa, MIT; read and transcribed.
 pub fn msaa_extras(gl: &GlesDraw) -> bool {
-    ms_scale(gl) > 1 && msaa_bits() & 2 != 0
+    ms_scale(gl) > 1 && (msaa_bits() & 2 != 0 || fbo_draw(gl))
 }
 
 /// Does this draw render into the tiled shadow of its colour target
@@ -958,7 +964,7 @@ fn fs_discards(fs: &ShcShader) -> bool {
 fn single_buffer(gl: &GlesDraw, wide: bool) -> u32 {
     if wide {
         2
-    } else if ms_scale(gl) > 1 && msaa_bits() & 16 != 0 {
+    } else if ms_scale(gl) > 1 && (msaa_bits() & 16 != 0 || fbo_draw(gl)) {
         if gles_surf_bytes_per_pixel(gl.target_format) <= 2 {
             3
         } else {
@@ -1120,9 +1126,31 @@ fn ms_scale(gl: &GlesDraw) -> u32 {
     }
 }
 
-/// Whether this draw renders into the scratch surface instead of the target.
+/// Whether this draw renders into the scratch surface instead of the target:
+/// a 4x framebuffer object the store keeps ([`fbo_draw`], [`fbo_4x`]), or,
+/// with the knob, the window (and any other draw of more than one sample).
 fn ms_via_scratch(gl: &GlesDraw) -> bool {
+    if fbo_draw(gl) {
+        return fbo_4x(gl);
+    }
     msaa_on() && gl.samples > 1 && ms_resolvable(gl)
+}
+
+/// A draw into a multisampled framebuffer object in a `msaa-fbo` build: more
+/// than one sample and not mirrored (`flip_y` is the window's, never an
+/// FBO's; gl/framebuffer.rs `fb_flip_y`). Such a draw renders 4x into its
+/// target's own scratch (msaa_fbo.rs) with the whole of arm 19's state
+/// (bits 1 and 4 of `gc_debug_msaa`: [`msaa_extras`], [`single_buffer`];
+/// docs/notes/es3-msaa-renderbuffers.md (c3) "Gate", the one measured arm),
+/// whatever the knob says; or single-sampled when [`fbo_4x`] says it cannot.
+/// The window keeps the knob's rule.
+fn fbo_draw(gl: &GlesDraw) -> bool {
+    super::msaa_fbo::ON && gl.samples > 1 && !gl.flip_y
+}
+
+/// Can this FBO draw keep its samples ([`super::msaa_fbo::unsupported`])?
+fn fbo_4x(gl: &GlesDraw) -> bool {
+    super::msaa_fbo::unsupported(gl, hw_target_list(gl).n).is_none()
 }
 
 /// The scratch surface's pitch in bytes: twice the target's width, padded to
@@ -1436,8 +1464,101 @@ fn emit_resolve(c: &mut GcCmd) {
      * (TS mode 0: this backend runs no tile status); the window is in
      * source samples */
     let src_stride = (src_pitch << 2) | GC_RS_SOURCE_STRIDE_TILING | GC_RS_SOURCE_STRIDE_SUPER_TILED_NEW;
-    let (src, dst) = (g.msaa.gpu as u32, g.ms_dest_gpu as u32);
+    let (src, dst) = (g.ms_dest_scratch as u32, g.ms_dest_gpu as u32);
     emit_rs(c, &RsBlit { config, src, src_stride, dst, dst_stride, w: sw, h: sh });
+}
+
+/// The reload quad's corners in clip space (x, y, z, w): a triangle strip
+/// over the whole target, as the mipmap quad's (mipmap.rs `QUAD`).
+static RELOAD_QUAD: [f32; 16] = [-1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 0.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0];
+
+/// The draw that starts a 4x framebuffer object's job from its resolved
+/// storage in every sample (`msaa_hw::gc::SampleLoad::Broadcast`): the RS
+/// has no upsample (`msaa_hw::gc::RS_CAN_UPSAMPLE`), so the storage
+/// (`target_gpu`, which the job before resolved into) is drawn as a texture
+/// into the target's scratch at 4x, one fragment a pixel writing all four of
+/// its samples, as Mesa's blitter does for a single-sampled source. Built as
+/// mipmap.rs's `record_level` (the quad vertex program, `mipgen.frag`
+/// sampling at `gl_FragCoord.xy * u_scale`, `scale` = 1 / the target's size)
+/// with the forms of `msaa_hw::gc::reload_draw`: a nearest one-level
+/// CLAMP_TO_EDGE sampler, so each pixel reads its own texel back; no depth,
+/// stencil, blend or scissor, every channel. `None` without the programs.
+/// Recorded by `record` directly, never through `draw_one`: it takes the
+/// depth surface and the frame of the draw it comes before.
+fn reload_draw(gl: &GlesDraw, scale: &[f32; 2]) -> Option<GlesDraw> {
+    let r = msaa_hw::gc::reload_draw(gl.target_format)?;
+    let g = g();
+    if g.mipgen_ps_code.impl_.is_null() || g.clear_vs_code.impl_.is_null() {
+        return None;
+    }
+    let vs = clear_vs();
+    let (w, h) = (gl.target_w, gl.target_h);
+    let pitch = crate::backend::draw_pitch(gl);
+    let bpp = gles_surf_bytes_per_pixel(gl.target_format);
+    let mut d = GlesDraw::ZERO;
+    d.target_gpu = gl.target_gpu;
+    d.target_w = w;
+    d.target_h = h;
+    d.target_format = r.target_format;
+    d.target_alpha_bits = 8;
+    d.target_pitch = gl.target_pitch;
+    d.target_cpu = gl.target_cpu;
+    d.targets[0] = GlesDrawTarget { gpu: gl.target_gpu, w, h, format: r.target_format, out_shift: 0 };
+    d.num_targets = 1;
+    d.samples = r.samples;
+    d.sample_mask = 0xf;
+    d.prim = GLES_PRIM_TRI_STRIP;
+    d.index_count = 4;
+    d.instance_count = 1;
+    d.vs = vs;
+    d.fs = super::mipmap::mipgen_ps();
+    d.vs_usc_gpu = g.clear_vs_code.gpu;
+    d.fs_usc_gpu = g.mipgen_ps_code.gpu;
+    d.attribs[0] = GlesAttrib {
+        vi_reg: vs.viv.in_[0].reg,
+        components: 4,
+        format: GLES_ATTRIBF_FLOAT32,
+        normalized: 0,
+        stride: 16,
+        offset: 0,
+        buffer_gpu: 0,
+        cpu: RELOAD_QUAD.as_ptr() as *const c_void,
+        cpu_bytes: core::mem::size_of_val(&RELOAD_QUAD) as u32,
+        per_instance: 0,
+        divisor: 0,
+        buffer_bytes: 0,
+    };
+    d.num_attribs = 1;
+    d.fs_uniform_cpu = scale.as_ptr() as *const c_void;
+    d.fs_uniform_dwords = 2;
+    d.textures[0] = GlesTextureBind {
+        unit: 0,
+        format: r.tex_format,
+        type_: GLES_TEXTYPE_2D,
+        layers: 1,
+        base_gpu: gl.target_gpu,
+        width: w,
+        height: h,
+        stride_texels: pitch,
+        bytes: pitch.wrapping_mul(h).wrapping_mul(bpp),
+        linear_filter: msaa_hw::gc::RELOAD_LINEAR_FILTER,
+        min_linear: msaa_hw::gc::RELOAD_LINEAR_FILTER,
+        mip_filter: 0,
+        mip_levels: 1,
+        wrap_s: GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: GLES_WRAP_CLAMP_TO_EDGE,
+        bgra: r.bgra,
+        ..GlesTextureBind::ZERO
+    };
+    d.num_textures = 1;
+    d.viewport = msaa_hw::gc::reload_viewport(w, h);
+    d.depth_range = [0.0, 1.0];
+    d.depth_func = GLES_CMP_ALWAYS;
+    d.cull = GLES_CULL_NONE;
+    d.color_mask = 0xf;
+    d.color_write = true;
+    d.line_width = 1.0;
+    Some(d)
 }
 
 /// The depth canary: what the pixel engine actually writes, read back.
@@ -2174,7 +2295,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     let color_gpu = if gl.target_gpu == 0 {
         g().no_colour.gpu as u32
     } else if ms_via_scratch(gl) {
-        g().msaa.gpu as u32
+        g().ms_dest_scratch as u32
     } else if let Some(gpu) = shadow {
         gpu as u32
     } else if let Some(gpu) = trt {
@@ -2542,7 +2663,7 @@ fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) ->
         k.u32(u32::from(t.format));
     }
     k.u32(g().no_colour.gpu as u32);
-    k.u32(g().msaa.gpu as u32);
+    k.u32(g().ms_dest_scratch as u32);
     k.u32(depth_stride);
     k.u32(depth_addr);
     k.u32(single_buffer(gl, trt.is_some()));
@@ -2868,6 +2989,9 @@ fn frame_submit() -> i32 {
     g.trt = Track::NONE;
     if g.ms_dest_gpu != 0 {
         emit_resolve(&mut f.w);
+        /* a 4x framebuffer object's scratch now holds every sample of the
+         * job, and the stream resolves it into the storage (msaa_fbo.rs) */
+        super::msaa_fbo::stored(g.ms_dest_gpu);
         g.ms_dest_gpu = 0;
     }
     if flip_mode() == FLIP_STUDY_RS_COPY {
@@ -3329,6 +3453,8 @@ pub extern "C" fn gc_shutdown() {
         osal::gpu_free(&mut g.mipgen_ps_code);
     }
     super::mipmap::reset();
+    /* the kept samples of every 4x framebuffer object (msaa_fbo.rs) */
+    super::msaa_fbo::release_all();
     if !g.black_tex.impl_.is_null() {
         osal::gpu_free(&mut g.black_tex);
     }
@@ -3607,7 +3733,11 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         return -crate::util::ENOTSUP;
     }
     let ms = ms_scale(gl);
-    if msaa_on() && gl.samples > 1 && ms == 1 {
+    if fbo_draw(gl) && ms == 1 {
+        if let Some(why) = super::msaa_fbo::unsupported(gl, n) {
+            glog_once!("yakogl/vivante: a 4x framebuffer object drawn single-sampled: {}", why);
+        }
+    } else if msaa_on() && gl.samples > 1 && ms == 1 {
         glog_once!(
             "yakogl/vivante: a {}x{} target is not a resolve size (width a multiple of 16, height of 4); drawing single-sampled",
             gl.target_w,
@@ -3744,12 +3874,47 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * that target's own storage, not into this draw's (C3). The submits
      * before the decision (`ds_cache::select`'s and `prepare`'s finish) also
      * resolve the destination before this one. */
+    /* A 4x framebuffer object renders into its own scratch (msaa_fbo.rs);
+     * the first of its draws in this job starts from the samples kept, from
+     * its whole clear, or from the resolved storage drawn into every sample
+     * (`reload`, recorded before the draw). */
+    let began_4x = ms_via_scratch(gl) && g().ms_dest_gpu != gl.target_gpu;
+    let mut reload = None;
+    let reload_scale = msaa_hw::gc::reload_scale(gl.target_w, gl.target_h).unwrap_or([0.0; 2]);
     if ms_via_scratch(gl) {
         let bpp = gles_surf_bytes_per_pixel(gl.target_format);
-
-        if ensure_msaa(gl.target_w, gl.target_h, bpp) != 0 {
-            return -ENOMEM;
-        }
+        let scratch = if fbo_draw(gl) {
+            let kept = super::msaa_fbo::slot(gl, GC_HEAP_DATA);
+            if kept.is_none() {
+                glog_once!(
+                    "yakogl/vivante: no memory to keep the samples of a {}x{} 4x target; this job's are its own",
+                    gl.target_w,
+                    gl.target_h
+                );
+            }
+            let load = msaa_hw::gc::sample_load(kept.map(|k| k.1), clears_whole_colour(gl));
+            if began_4x && load == msaa_hw::gc::SampleLoad::Broadcast {
+                match reload_draw(gl, &reload_scale) {
+                    Some(r) => reload = Some(r),
+                    None => {
+                        glog_once!(
+                            "yakogl/vivante: a 4x target's samples cannot be reloaded (no program); draw refused"
+                        );
+                        return -crate::util::ENOTSUP;
+                    }
+                }
+            }
+            match kept {
+                Some((gpu, _)) => gpu,
+                None if ensure_msaa(gl.target_w, gl.target_h, bpp) == 0 => g().msaa.gpu,
+                None => return -ENOMEM,
+            }
+        } else {
+            if ensure_msaa(gl.target_w, gl.target_h, bpp) != 0 {
+                return -ENOMEM;
+            }
+            g().msaa.gpu
+        };
         let g = g();
         g.ms_dest_gpu = gl.target_gpu;
         g.ms_dest_w = gl.target_w;
@@ -3757,6 +3922,14 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         g.ms_dest_bpp = bpp;
         g.ms_dest_surf = gl.target_format;
         g.ms_dest_stride = crate::backend::draw_pitch(gl) * bpp;
+        g.ms_dest_scratch = scratch;
+    } else {
+        /* written without its samples: what a 4x target kept of them no
+         * longer matches its storage (msaa_fbo.rs) */
+        for t in hw.list() {
+            let gpu = if t.slot == 0 { gl.target_gpu } else { gl.targets[t.slot as usize].gpu };
+            super::msaa_fbo::touched(gpu);
+        }
     }
 
     /* The stream has no room check before a draw, and a draw's size is not
@@ -3802,10 +3975,27 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
             unsafe { record(gl, clock) }
         }
     };
+    /* the reload of a 4x target's samples first (`reload` above) */
+    let record_ms = |clock: &mut Timer| {
+        // SAFETY: `reload` is a draw of the backend's own quad and program
+        // into this draw's target; its array and block outlive the call.
+        let rc = reload.as_ref().map_or(0, |r| unsafe { record(r, clock) });
+        if rc != 0 {
+            rc
+        } else {
+            record_all(clock)
+        }
+    };
     let mark = Mark::take();
-    let mut rc = record_all(&mut clock);
+    let mut rc = record_ms(&mut clock);
     if g().frames[g().cur].w.overflow {
         mark.restore();
+        /* a 4x target this draw began holds nothing of this job yet: the
+         * submit does not resolve its scratch over the storage the reload
+         * reads (restore_ms_dest below sets it again) */
+        if began_4x {
+            g().ms_dest_gpu = 0;
+        }
         frame_submit();
         if frame_open(gl.target_gpu, gl.target_w, gl.target_h) != 0 {
             return -1;
@@ -3816,7 +4006,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
         clock.lap(Step::GcFrame);
         mark.restore_ms_dest();
         let again = Mark::take();
-        rc = record_all(&mut clock);
+        rc = record_ms(&mut clock);
         if g().frames[g().cur].w.overflow {
             again.restore();
             glog_once!("yakogl/vivante: a draw does not fit an empty command buffer ({} words)", GC_CMD_WORDS);
@@ -3902,7 +4092,7 @@ struct Mark {
     arena_used: u32,
     extra_used: u32,
     component_use_marked: bool,
-    ms_dest: (u64, u32, u32, u32, u32, u8),
+    ms_dest: (u64, u32, u32, u32, u32, u8, u64),
     /// The tiled shadow the stream tracked.
     trt: Track,
     /// The occlusion counter's state and the stream's capacity (the armed
@@ -3922,7 +4112,15 @@ impl Mark {
             arena_used: f.arena_used,
             extra_used: f.extra_used,
             component_use_marked: g.component_use_marked,
-            ms_dest: (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride, g.ms_dest_surf),
+            ms_dest: (
+                g.ms_dest_gpu,
+                g.ms_dest_w,
+                g.ms_dest_h,
+                g.ms_dest_bpp,
+                g.ms_dest_stride,
+                g.ms_dest_surf,
+                g.ms_dest_scratch,
+            ),
             trt: g.trt,
             oq: *oq(),
             cap: f.w.cap,
@@ -3949,7 +4147,8 @@ impl Mark {
     /// the draw about to be recorded again still renders into it.
     fn restore_ms_dest(&self) {
         let g = g();
-        (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride, g.ms_dest_surf) = self.ms_dest;
+        (g.ms_dest_gpu, g.ms_dest_w, g.ms_dest_h, g.ms_dest_bpp, g.ms_dest_stride, g.ms_dest_surf, g.ms_dest_scratch) =
+            self.ms_dest;
     }
 }
 
@@ -4189,6 +4388,8 @@ fn retire_wide_targets() {
 pub extern "C" fn gc_texture_released(base: u64, bytes: u64) {
     super::wide_target::released(base, bytes);
     tiled_rt_released(base, bytes);
+    /* and the kept samples of a 4x target in it (msaa_fbo.rs) */
+    super::msaa_fbo::released(base, bytes);
 }
 
 pub extern "C" fn gc_heap_base(heap: GlesHeap) -> u64 {
@@ -4274,6 +4475,15 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
+    /* 4x framebuffer objects: one scratch per live 4x colour target, kept
+     * across jobs and resolved by the RS into the renderbuffer's storage at
+     * every job end (msaa_fbo.rs, docs/notes/es3-msaa-renderbuffers.md (a),
+     * (c3)). Host-tested (tests/es3_msaa_gc.rs), BOARD-UNVERIFIED: only the
+     * window's arm 19 has run on the i.MX8MP, so the `msaa-fbo` feature turns
+     * it on and a build without it reports no multisample FBOs, as before */
+    #[cfg(feature = "msaa-fbo")]
+    max_samples: 4,
+    #[cfg(not(feature = "msaa-fbo"))]
     max_samples: 0,
     /* the array's own divisor in the stream's divisor state (0x14680 + 4i),
      * as Mesa etnaviv programs it on every HALTI2+ part (this GPU is HALTI5):
