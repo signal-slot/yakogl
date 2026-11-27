@@ -23,6 +23,10 @@ mod mali_ref;
 /// prefix: each has a byte-compare test below, not ignored.
 const LOWERED: &[&str] = &[
     "alg_constmat_fs",
+    /* its constant `ffma`s and `sqrt` fold, and the fragment shader's one
+     * fp16 `abs(b)` stands at its first reader's place (the defect of
+     * deqp_irindex_val16_abs_fold) */
+    "fma_foldcall_acos_vs",
     "fma_foldcall_atan_vs",
     "fma_foldcall_reflect_vs",
     "fma_foldcall_refract_vs",
@@ -67,10 +71,6 @@ const REFUSED: &[(&str, &str)] = &[
         "constchain_loop_vs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
-    /* its constant `ffma`s and `sqrt` fold now; the constant varying of
-     * 0.0 it leaves meets the fragment shader's defect, which `out0 =
-     * 0.0;` meets alone too */
-    ("fma_foldcall_acos_vs", "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)"),
     (
         "fma_foldcall_mod_vs",
         "Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet",
@@ -179,7 +179,6 @@ fn constchain_loop_vs() {
 }
 
 #[test]
-#[ignore = "refused: constant_expressions.builtin_functions.trigonometry.acos_float_vertex (pinned by refusals_pinned)"]
 fn fma_foldcall_acos_vs() {
     mali_ref::assert_matches("deqp_constprod_fma_foldcall_acos_vs");
 }

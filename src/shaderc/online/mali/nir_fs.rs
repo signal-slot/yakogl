@@ -5179,9 +5179,16 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
      * first in program order, so it stands at its first reader's place
      * (deqp_constop_ce_asin_fs: `abs(b)` of `eps * abs(b) + eps`, made by
      * the `abs(a - b)` of `a` 0.0 that the compare emits after it). Users
-     * first, so an operand follows a user that moved */
+     * first, so an operand follows a user that moved. A one-lane fp16
+     * operation likewise (deqp_irindex_val16_abs_fold, the same `isOk` in
+     * a mediump shader: `FADD.v2f16 r0, u2.w0.abs.h00, 0x0.neg` before the
+     * `FMA.v2f16` that reads it; left at the compare's place the sum read
+     * a value not yet made, `Defect(IrIndex)`) */
     for c in (0..f.nir.n).rev() {
-        if !matches!(f.nir.nodes[c], NirNode { kind: Kind::Alu(_), bits: 32, .. }) {
+        if !matches!(
+            f.nir.nodes[c],
+            NirNode { kind: Kind::Alu(_), bits: 32, .. } | NirNode { kind: Kind::Alu(_), bits: 16, width: 1, .. }
+        ) {
             continue;
         }
         let first = f.nir.uses(c as u16).map(|(u, _)| f.origin[u as usize]).min_by_key(|&o| f.keys[o as usize]);

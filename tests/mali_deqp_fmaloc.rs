@@ -92,11 +92,10 @@ fn fmaloc_fma_reflect_float() {
 /// `const float cval = asin(vec2(0.0)).y`: a constant expression; Mesa's
 /// GLSL front end folds it and the link moves `out0` into the fragment
 /// shader.
-/// Its constant `ffma`s and `sqrt` fold now; the constant varying of 0.0
-/// meets the fragment shader's defect, which a vertex shader of `out0 =
-/// 0.0;` meets alone too (it predates the fold).
+/// Its constant `ffma`s and `sqrt` fold; the fragment shader's one fp16
+/// `abs(b)` of the constant varying 0.0 stands at its first reader's place
+/// (the defect of deqp_irindex_val16_abs_fold). Byte-equal.
 #[test]
-#[ignore = "refused: Valhall back end defect (IrIndex) of the fragment shader reading a constant varying"]
 fn fmaloc_fma_const_asin() {
     mali_ref::assert_matches("deqp_fmaloc_fma_const_asin");
 }
@@ -206,7 +205,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_fmaloc_fma_atan", FMA),
     ("deqp_fmaloc_fma_atan2", FMA),
     ("deqp_fmaloc_fma_reflect_float", FMA),
-    ("deqp_fmaloc_fma_const_asin", "an invariant of the pipeline did not hold (IrIndex)"),
     ("deqp_fmaloc_tc_cube_face", TEX_COORD),
     ("deqp_fmaloc_tc_cube_const", TEX_COORD),
     ("deqp_fmaloc_tc_cube_rnd_sub", TEX_COORD),
