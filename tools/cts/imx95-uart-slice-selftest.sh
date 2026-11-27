@@ -57,9 +57,15 @@ EOF
 S=$t/log/2026-11-25-imx95-gles2-S1a-00000000
 mkdir -p "$S/console"
 B="vi95_deqp: build v0.1.0-1-g0000000"
+# The console's "dEQP Core" line has two forms (S2: the raw token, S3b: the
+# token with <> around its tail); the slicer reads neither, and both must
+# leave the slice the same. boot takes the form: raw (default) or angle.
+CORE_RAW="dEQP Core vulkan-cts-1.4.6.2-555-g0000000000000000000000000000000000000000 (0x00000000) starting.."
+CORE_ANGLE="dEQP Core vulkan-cts-<1.4.6-2>-555-g0000000000000000000000000000000000000000 (0x00000000) starting.."
 boot() {
 	printf 'U-Boot 2024.04 (board console)\r\nNet:   eth0: ethernet@4ca0000 192.0.2.10\r\n'
 	printf '=> go 0xd0000000\r\n*** Booting Zephyr OS build v4.3 ***\r\n%s\r\n' "$B"
+	case "${1:-raw}" in angle) echo "$CORE_ANGLE" ;; *) echo "$CORE_RAW" ;; esac
 }
 {
 	boot
@@ -78,7 +84,7 @@ boot() {
 	echo "verdin_imx95: board: run over: PSCI SYSTEM_RESET at 5123 ms"
 } > "$S/console/VS9R01.log"
 {
-	boot
+	boot angle
 	echo "12:00:01 deqp: Pass $P.b.four"
 	echo "12:01:10 verdin_imx95: WDOG3 feeding stopped at 70000 ms after 69 feeds (no progress): it resets the board within 60000 ms"
 } > "$S/console/VS9R02.log"
@@ -148,6 +154,10 @@ has "meta.txt: os=zephyr" "$S/meta.txt" "os=zephyr"
 has "meta.txt: the commit" "$S/meta.txt" "commit=$Z"
 has "meta.txt: session from the name" "$S/meta.txt" "session=S1a"
 has "meta.txt: rows" "$S/meta.txt" "rows=1-6"
+has "the raw dEQP Core form is in a console" "$S/console/VS9R01.log" "$CORE_RAW"
+has "the angle dEQP Core form is in a console" "$S/console/VS9R02.log" "$CORE_ANGLE"
+hasnt "no dEQP Core token leaks into meta.txt" "$S/meta.txt" "vulkan-cts"
+hasnt "no dEQP Core line becomes a case" "$R" "vulkan-cts"
 has "meta.txt: the build" "$S/meta.txt" "lib=vi95_deqp v0.1.0-1-g0000000"
 for f in meta.txt chunks.tsv results.tsv refusals.tsv refusals/VS9R01.txt; do
 	[ -f "$S/$f.license" ] || bad "licence beside $f"
