@@ -378,7 +378,7 @@ five_ja = r'必須 [0-9,]+ 件中 合格 [0-9,]+ / 失敗 [0-9,]+ / 未対応 [0
 check('STATUS: the Pi 4 sentence of STATUS.md has the five-number form', bool(re.search(five_ja + r'.*リセット 0', S)))
 line = sta.splitlines()[0]
 check('STATUS: the draft has the same form ("必須 N 件中 合格 ... / 結果なし N、... リセット 0")',
-      bool(re.search(five_ja + r'リセット 0', line)))
+      bool(re.search(five_ja + r'(?:リセット 0|リセットまたはハング \d+ 件)', line)))
 check('STATUS: the commit is written as in STATUS.md (sha8 without backticks, date in full-width parentheses)',
       '`' not in line and bool(re.search(r' [0-9a-f]{8}（\d{4}-\d{2}-\d{2}）で実行し', line))
       and bool(re.search(r' [0-9a-f]{8}（\d{4}-\d{2}-\d{2}）で実行し', S)))
@@ -461,6 +461,39 @@ expect "mixed: the ROADMAP.md bullet names both boards" $?
 for f in RESULTS.md STATUS.md ROADMAP.md; do
 	sec "$work/full.out" "$f" | grep -qE 'Armadillo|Verdin|measured on'; [ $? = 1 ]; expect "all-Verdin: the $f draft names no board (as before)" $?
 done
+
+echo "== a WDOG1 end and a hang that read verdict=done are counted from the records"
+wd="$work/wdog"; mkdir "$wd"
+for i in 0 1 2; do cp -r "${S[$i]}" "$wd/"; done
+w0="$wd/$(basename "${S[0]}")"; w1="$wd/$(basename "${S[1]}")"
+python3 - "$w0" "$w1" <<'PY'
+import sys
+# slice 0: entry 3 ends short (shortfall) and its README names the WDOG1 reset; slice 1: a README line names a hang
+# at entry 50 whose row is complete; a line that denies a reset must not count.
+d0, d1 = sys.argv[1:3]
+rows = open(d0 + '/results.tsv').read().split('\n')
+for k, l in enumerate(rows):
+    f = l.split('\t')
+    if f[0] == '3':
+        f[2] = str(max(1, int(f[2]) - 1)); f[3] = str(max(0, int(f[3]) - 1)); rows[k] = '\t'.join(f)
+open(d0 + '/results.tsv', 'w').write('\n'.join(rows))
+open(d0 + '/README.md', 'a').write('\nWDOG1 e03 ended on the watchdog reset after 600 s, the run returned to Linux\nThe watchdog did not reset the other entries.\n')
+open(d1 + '/README.md', 'a').write('\nHang: e50 on its last case; the board was power-cycled\n')
+PY
+python3 "$REPORT" --date 2026-11-10 "$w0" "$w1" "$wd/$(basename "${S[2]}")" > "$wd.out" 2>&1
+grep -q '2 resets or hangs counted from the records (1 reset line, 1 hang line; entries begun short: 3)' "$wd.out"
+expect "a WDOG1 end and a hang counted (1 reset line, 1 hang line, shortfall entry 3)" $?
+grep -q '0 resets' "$wd.out"; [ $? = 1 ]; expect "no '0 resets' when a WDOG1 end is recorded" $?
+grep -q 'リセットまたはハング 2 件' "$wd.out"; expect "the STATUS line counts them in Japanese" $?
+grep -q '2 resets or hangs at\|2 resets or hangs, ' "$wd.out" || grep -q '2 resets or hangs (#24)' "$wd.out"; expect "the ROADMAP line counts them" $?
+# the shortfall alone (no README line) is one hang or reset of unknown kind
+python3 - "$w0" <<'PY'
+import sys
+t = open(sys.argv[1] + '/README.md').read().replace('WDOG1 e03', 'e03')
+open(sys.argv[1] + '/README.md', 'w').write(t)
+PY
+python3 "$REPORT" --date 2026-11-10 "$w0" "$w1" "$wd/$(basename "${S[2]}")" 2>&1 | grep -q '1 shortfall entry no README line names (3)'
+expect "a shortfall no README line names still counts" $?
 
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
