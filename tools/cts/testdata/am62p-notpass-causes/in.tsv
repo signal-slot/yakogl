@@ -12,3 +12,5 @@ NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_isenabledi	Extensio
 NoResult	dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear	
 NotSupported	dEQP-GLES3.functional.fbo.multiview.samples_1	Multiview is not supported
 Fail	dEQP-GLES3.functional.brand_new.family.case	something new
+NotSupported	dEQP-GLES3.functional.fbo.msaa.2_samples.rgba16f	Sample count not supported
+NotSupported	dEQP-GLES3.functional.multisample.default_framebuffer.depth	No multisample buffers
