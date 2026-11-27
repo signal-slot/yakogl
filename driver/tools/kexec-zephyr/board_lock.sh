@@ -7,7 +7,7 @@
 #
 #   -exec 9>"$LOCK"
 #   -flock 9
-#   +. "$REPO/tools/kexec-zephyr/board_lock.sh"
+#   +. "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
 #
 # and the runner keeps its own $LOCK, which is picked up as the default.
 #
