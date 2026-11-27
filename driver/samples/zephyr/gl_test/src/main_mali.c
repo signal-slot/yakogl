@@ -17,9 +17,10 @@
  * -DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y). Then, after the suite (the same
  * cases, the same lines), this file draws three colour bars into a 1280x800
  * window of its own, board_show()s it and holds it for a camera
- * (VI95_PANEL_HOLD_S). gl_test_run()'s `panel` argument is not that: it
- * replaces the suite by the AM62P's demo scene at a compile-time address, so
- * it stays 0 here. The NanoPC-T6 has no such step.
+ * (CONFIG_GL_TEST_VI95_PANEL_HOLD_S, 30 s); a panel step that fails prints
+ * "gl_test: panel: FAIL (...)" and fails the run. gl_test_run()'s `panel`
+ * argument is not that: it replaces the suite by the AM62P's demo scene at a
+ * compile-time address, so it stays 0 here. The NanoPC-T6 has no such step.
  *
  * What this file adds to the suite is the board's part only:
  *
@@ -131,28 +132,30 @@ static int run(void)
 }
 
 #ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
-/* the X12 panel's size (the board layer's SCREEN_W x SCREEN_H) and how long
- * the picture stays for a camera, fed so the watchdog's alive window holds */
-#define VI95_PANEL_W      1280
-#define VI95_PANEL_H      800
-#define VI95_PANEL_HOLD_S 30
+/* the X12 panel's size (the board layer's SCREEN_W x SCREEN_H); how long the
+ * picture stays for a camera is CONFIG_GL_TEST_VI95_PANEL_HOLD_S, fed each
+ * second so the watchdog's alive window holds */
+#define VI95_PANEL_W 1280
+#define VI95_PANEL_H 800
 
 static struct board_window s_panel_win;
+static int s_panel_win_rc = -1;
 
 /* before the suite: the window memory is the board's */
 static void panel_window(void)
 {
-	int ret = board_window(VI95_PANEL_W, VI95_PANEL_H, &s_panel_win);
-
-	if (ret)
+	s_panel_win_rc = board_window(VI95_PANEL_W, VI95_PANEL_H, &s_panel_win);
+	if (s_panel_win_rc)
 		printk("gl_test: panel: board_window(%d, %d) = %d (no picture)\n", VI95_PANEL_W,
-		       VI95_PANEL_H, ret);
+		       VI95_PANEL_H, s_panel_win_rc);
 }
 
 /* after the suite: three colour bars (scissored clears, no shader) in the
- * window, board_show(), the hold. A failure here is printed and does not
- * change the suite's verdict. */
-static void panel_show(void)
+ * window, board_show(), the hold. 0 when the panel showed them for the
+ * whole hold; otherwise "gl_test: panel: FAIL (...)" and non-zero, which
+ * fails the run (the suite's own lines and "gl_test: OK|FAILED" are already
+ * printed). */
+static int panel_show(void)
 {
 	static const EGLint single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_BUFFER, EGL_NONE };
 	static const EGLint cfg_attribs[] = {
@@ -170,8 +173,10 @@ static void panel_show(void)
 	EGLint n = 0;
 	int ret;
 
-	if (s_panel_win.phys == 0)
-		return;
+	if (s_panel_win_rc || s_panel_win.phys == 0) {
+		printk("gl_test: panel: FAIL (no window: board_window = %d)\n", s_panel_win_rc);
+		return -1;
+	}
 	nw = (struct gles_native_window){
 		.phys = s_panel_win.phys, .width = s_panel_win.w, .height = s_panel_win.h,
 		.stride_bytes = s_panel_win.stride, .format = s_panel_win.format,
@@ -179,15 +184,15 @@ static void panel_show(void)
 	dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 	if (!eglInitialize(dpy, NULL, NULL) || !eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &n) ||
 	    n != 1) {
-		printk("gl_test: panel: EGL config failed (0x%x)\n", eglGetError());
-		return;
+		printk("gl_test: panel: FAIL (EGL config: 0x%x)\n", eglGetError());
+		return -1;
 	}
 	surf = eglCreateWindowSurface(dpy, cfg, &nw, single_buffer);
 	ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
 	if (surf == EGL_NO_SURFACE || ctx == EGL_NO_CONTEXT ||
 	    !eglMakeCurrent(dpy, surf, surf, ctx)) {
-		printk("gl_test: panel: EGL surface/context failed (0x%x)\n", eglGetError());
-		return;
+		printk("gl_test: panel: FAIL (EGL surface/context: 0x%x)\n", eglGetError());
+		return -1;
 	}
 	glClearColor(0.f, 0.f, 0.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -198,19 +203,24 @@ static void panel_show(void)
 		glClear(GL_COLOR_BUFFER_BIT);
 	}
 	if (!eglSwapBuffers(dpy, surf)) {
-		printk("gl_test: panel: eglSwapBuffers failed (0x%x)\n", eglGetError());
-		return;
+		printk("gl_test: panel: FAIL (eglSwapBuffers: 0x%x)\n", eglGetError());
+		return -1;
 	}
 	ret = board_show(&s_panel_win);
 	printk("gl_test: panel: board_show = %d (%dx%d colour bars)\n", ret, VI95_PANEL_W,
 	       VI95_PANEL_H);
-	if (ret)
-		return;
-	for (int t = 0; t < VI95_PANEL_HOLD_S; t += 5) {
+	if (ret) {
+		printk("gl_test: panel: FAIL (board_show = %d)\n", ret);
+		return -1;
+	}
+	printk("gl_test: panel: holding %d s\n", CONFIG_GL_TEST_VI95_PANEL_HOLD_S);
+	for (int t = 0; t < CONFIG_GL_TEST_VI95_PANEL_HOLD_S; t++) {
 		osal_zephyr_mali_board_feed();
-		k_sleep(K_SECONDS(5));
+		k_sleep(K_SECONDS(1));
 	}
 	osal_zephyr_mali_board_feed();
+	printk("gl_test: panel: OK\n");
+	return 0;
 }
 #endif /* CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY */
 
@@ -238,7 +248,8 @@ int main(void)
 	osal_mali_diag_print();
 	printk("gl_test: %s (rc=%d)\n", rc ? "FAILED" : "OK", rc);
 #ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
-	panel_show();
+	if (panel_show() != 0 && rc == 0)
+		rc = -1; /* the suite passed, the panel did not: the run fails */
 #endif
 #if defined(CONFIG_YAKOGL_NANOPC_T6)
 	t6_reset_to_linux("gl_test done");

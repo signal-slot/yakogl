@@ -363,7 +363,11 @@ example's), then `verdin_imx95.conf` here
 the image never brings the panel up unless asked
 (`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`): then, after the suite (same
 cases, same lines), `src/main_mali.c` draws three colour bars into a
-1280x800 window, `board_show()`s it and holds it 30 s for a camera. The
+1280x800 window, `board_show()`s it and holds it for a camera
+(`CONFIG_GL_TEST_VI95_PANEL_HOLD_S`, 30 s by default, 0 to 120; the console
+prints `gl_test: panel: holding N s`, then `gl_test: panel: OK`). A panel
+step that fails prints `gl_test: panel: FAIL (...)` and makes the run's
+`gl_test: PASS|FAIL` line FAIL even when the suite passed. The
 runner's `panel` argument is not used (it replaces the suite by the AM62P's
 demo scene). It sets the
 board layer's lifetime to 300 s and its alive window to 30 s, as the T6's
