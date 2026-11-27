@@ -10,10 +10,16 @@
 //! (`src/shaderc/online/v3d/sched.rs`) moves these pins; re-pin them with the
 //! values printed under `--nocapture`.
 //!
-//! Targets, not pins (the note's section 5 floors: a perfect pairing of the
-//! add and mul halves, data dependences allowing): the noise FS about 872 to
-//! 900 words (1495 today), the terrain VS about 115 (172), the terrain FS
-//! about 125 (160).
+//! The counts before the pairing change of plan #419's item sched-pair
+//! (`chain.rs` `PAIRING`: the accumulators kept for short-lived values, the
+//! program allocated again on the list order, the shorter packing kept), now,
+//! and Mesa 26.2.1's for V3D 4.2 on the same texts: the noise FS 1495, 1090,
+//! 1161; the terrain VS 172, 156, 154 (Mesa at 4 threads, ours at 2); the
+//! terrain CS 97, 87, 92; the terrain FS 160, 146, 153. The add and mul
+//! operation counts did not move: the same operations, packed tighter. The
+//! note's section 5 floors (the bottleneck unit's operation count: 872 to
+//! 900, 115, 125) are not reachable on V3D 4.2, whose two register-file read
+//! ports serve both halves of a word.
 //!
 //! The programs are compiled as the note's section 1 and
 //! `tests/v3d_varyings_compile.rs` do: `lower::compile_to_ir` per stage, then
@@ -132,8 +138,8 @@ fn own(wrong: &mut Vec<String>) {
 }
 
 /// 24 add and 24 mul steps in two independent chains; a perfect pairing is
-/// about 30 words (target, not a pin).
-const CHAINS: Stage = (54, 4, 38, 37);
+/// about 30 words (target, not a pin). 54 words before `PAIRING`.
+const CHAINS: Stage = (46, 4, 38, 37);
 const HASH: Stage = (181, 4, 166, 68);
 
 #[test]
@@ -168,8 +174,9 @@ fn terrain_sched_words() {
     assert!(wrong.is_empty(), "counts moved; re-pin:\n{}", wrong.join("\n"));
 }
 
-// glmark2's programs (words, threads, add words, mul words); floors in the header.
-const NOISE_FS: Stage = (1495, 2, 872, 830);
-const TERRAIN_VS: Stage = (172, 2, 109, 98);
-const TERRAIN_CS: Stage = (97, 4, 60, 54);
-const TERRAIN_FS: Stage = (160, 4, 89, 119);
+// glmark2's programs (words, threads, add words, mul words); the counts
+// before and Mesa's in the header.
+const NOISE_FS: Stage = (1090, 2, 872, 830);
+const TERRAIN_VS: Stage = (156, 2, 109, 98);
+const TERRAIN_CS: Stage = (87, 4, 60, 54);
+const TERRAIN_FS: Stage = (146, 4, 89, 119);

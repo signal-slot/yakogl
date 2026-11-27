@@ -21,7 +21,7 @@
 //! and has passed [`super::verify`]. Anything the chain does not build yet is
 //! refused by name ([`V3dError::NotYet`]), never emitted wrong.
 
-use super::alloc::{allocate, AllocError};
+use super::alloc::{allocate, allocate_by, AllocError, Rule};
 use super::encode::{encode_program, ProgramEncodeError};
 use super::isa::Instr;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, PrepError, SOp};
@@ -295,41 +295,151 @@ fn vertex<'a>(
 /// is shared by the threads (`select::tmu_input_writes`, Mesa's
 /// v3d_vir_emit_tex). Nothing else in the program depends on the count; the
 /// shader record's 4-way flag carries it.
+///
+/// The count, and whether the program fits at all, is [`Rule::PLAIN`]'s
+/// answer and nothing else's. The words are the shortest of the packings
+/// [`walk`] makes by `Rule::PLAIN` and by [`PAIRING`]: the first of them
+/// when several are as short, so a program [`PAIRING`] does not shorten
+/// keeps the words it had.
 fn build<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code<'a>, u32), V3dError> {
     let four = super::select::tmu_input_writes(sel.ops) <= 16 / 4;
-    let (al, threads) = match if four { allocate(sel, 4, a) } else { Err(AllocError::DoesNotFit) } {
-        Ok(al) => (al, 4),
-        Err(AllocError::DoesNotFit) => (allocate(sel, 2, a)?, 2),
+    let mark = a.used();
+    let threads = match if four { allocate(sel, 4, a) } else { Err(AllocError::DoesNotFit) } {
+        Ok(_) => 4,
+        Err(AllocError::DoesNotFit) => allocate(sel, 2, a).map(|_| 2)?,
         Err(e) => return Err(e.into()),
     };
-    let mut s = schedule(sel, &al, a)?;
-    if super::order::on() {
-        /* the list scheduler's order (order.rs), kept when it packs
-         * shorter: its model of a word is not the packer's, and on some
-         * programs (femtovg's fill_color: the mul slot given to the longer
-         * chain delays the next varying) the selected order packs one to
-         * four words shorter */
-        let ordered = Selected { ops: super::order::reorder(sel, &al, a)?, ..*sel };
-        let t = schedule(&ordered, &al, a)?;
-        if t.instrs.len() < s.instrs.len() {
-            s = t;
-        }
-    }
-    let words = a.alloc_filled(s.instrs.len(), 0u64)?;
-    encode_program(s.instrs, words).map_err(V3dError::Encode)?;
-    verify(s.instrs, single_seg).map_err(V3dError::Verify)?;
-    registers_fit_threads(s.instrs, threads).map_err(V3dError::Verify)?;
-    branches_are_structured(s.instrs, s.back_edges, s.fwd_branches).map_err(V3dError::Verify)?;
-    let code = Code {
-        words,
-        instrs: s.instrs,
-        uniforms: s.uniforms,
-        back_edges: s.back_edges,
-        fwd_branches: s.fwd_branches,
-        hoists: s.hoists,
-        window_cuts: s.window_cuts,
+    // SAFETY: the allocation above is dropped; only the count is kept.
+    unsafe { a.reset_to(mark) };
+    let way = Way { single_seg, threads, rule: Rule::PLAIN, rounds: 0 };
+    let Walked::Best(plain) = walk(sel, way, None, a)? else { return Err(V3dError::OutOfScratch) };
+    // SAFETY: a walk that measures returns numbers only.
+    unsafe { a.reset_to(mark) };
+    let paired = Way { rule: PAIRING.0, rounds: PAIRING.1, ..way };
+    /* an error of this walk (the scratch too small for its rounds, say) is
+     * not the program's: the plain packing stands */
+    let (way, step) = match if super::order::on() { walk(sel, paired, None, a) } else { Ok(Walked::Best(None)) } {
+        Ok(Walked::Best(Some((step, n)))) if plain.is_none_or(|(_, m)| n < m) => (paired, step),
+        _ => (way, plain.map_or(0, |(step, _)| step)),
     };
-    Ok((code, threads))
+    // SAFETY: as above.
+    unsafe { a.reset_to(mark) };
+    match walk(sel, way, Some(step), a)? {
+        Walked::Code(code) => Ok((code, threads)),
+        Walked::Best(_) => Err(V3dError::OutOfScratch),
+    }
+}
+
+/// The second way to the words ([`build`]), for the pairing of the add and
+/// the mul halves. A word has two register-file read ports, and an
+/// operation that reads two register-file registers, or one and a small
+/// immediate, fills both: no other operation that reads the register file
+/// shares its word. [`Rule::PLAIN`] gives the accumulators to the values
+/// defined first, which in a long program are the long-lived ones, so most
+/// operands come from the register file (glmark2 terrain's noise fragment
+/// shader: 925 of 1702 operations read two register-file registers, and
+/// 623 of its 1495 words had an empty add half). This rule keeps the
+/// accumulators for values read for the last time within 16 operations
+/// (Mesa's v3d_ra_favor_accum, vir_register_allocate.c:876-917, whose
+/// threshold is 20; 8, 12, 16, 20, 24 and 32 measured on that shader and
+/// the 198-program corpus, 16 the least), lets a vertex shader's short
+/// uniform load take r5, and allocates again on the list order three times
+/// (each round gives the allocator the order the packer will see, so its
+/// "last read" is exact again, and the list scheduler the registers of that
+/// order; 1, 2, 3 and 5 rounds measured: the noise shader 1110, 1096, 1090,
+/// 1076 words). Measured 2026-11-27: noise FS 1495 -> 1090 words (Mesa
+/// 1161), terrain VS 172 -> 156 (154), CS 97 -> 87 (92), FS 160 -> 146
+/// (153); the corpus 21_329 -> 20_340 words, no stage longer, which the
+/// choice in [`build`] makes so by construction.
+const PAIRING: (Rule, u32) = (Rule { acc_span: 16, vertex_r5: true }, 3);
+
+/// One way to the words: the allocator's rule and how many times the
+/// program is allocated again on its list order.
+#[derive(Clone, Copy)]
+struct Way {
+    single_seg: bool,
+    threads: u32,
+    rule: Rule,
+    rounds: u32,
+}
+
+/// What [`walk`] found.
+enum Walked<'a> {
+    /// The shortest packing as (step, words), the first when several are as
+    /// short; `None` when no step gave one.
+    Best(Option<(u32, usize)>),
+    /// The asked step's code, verified.
+    Code(Code<'a>),
+}
+
+/// The packings of one [`Way`], as numbered steps: step 0 the selected
+/// order under the first allocation; step 1 its list order (order.rs) under
+/// the same allocation; then per round, the last list order under a new
+/// allocation made on it, and that allocation's list order. With `only`,
+/// that step's code and nothing else packed. Without, each step is packed,
+/// measured and forgotten, so the scratch holds one packing at a time, and
+/// the shortest is named: under [`Rule::PLAIN`] as the chain always chose
+/// it (by length alone, an error an error), under another rule among the
+/// packings that verify, an error ending the walk with what it has.
+fn walk<'a>(sel: &Selected<'_>, way: Way, only: Option<u32>, a: &Arena<'a>) -> Result<Walked<'a>, V3dError> {
+    let strict = way.rule == Rule::PLAIN;
+    let mut best: Option<(u32, usize)> = None;
+    let mut cur = *sel;
+    let mut al = allocate_by(sel, way.threads, way.rule, a)?;
+    let steps = if super::order::on() { 2 + 2 * way.rounds } else { 1 };
+    for step in 0..steps {
+        let r: Result<(), V3dError> = (|| {
+            if step % 2 == 1 {
+                cur = Selected { ops: super::order::reorder(&cur, &al, a)?, ..*sel };
+            } else if step > 0 {
+                al = allocate_by(&cur, way.threads, way.rule, a)?;
+            }
+            Ok(())
+        })();
+        match r {
+            Ok(()) => {}
+            Err(e) if strict || only.is_some() => return Err(e),
+            Err(_) => break,
+        }
+        if only.is_some_and(|k| k != step) {
+            continue;
+        }
+        let mark = a.used();
+        let packed = schedule(&cur, &al, a).map_err(V3dError::from).and_then(|s| {
+            if only.is_none() && (strict || best.is_some_and(|(_, n)| s.instrs.len() >= n)) {
+                return Ok((s.instrs.len(), None));
+            }
+            let words = a.alloc_filled(s.instrs.len(), 0u64)?;
+            encode_program(s.instrs, words).map_err(V3dError::Encode)?;
+            verify(s.instrs, way.single_seg).map_err(V3dError::Verify)?;
+            registers_fit_threads(s.instrs, way.threads).map_err(V3dError::Verify)?;
+            branches_are_structured(s.instrs, s.back_edges, s.fwd_branches).map_err(V3dError::Verify)?;
+            let code = Code {
+                words,
+                instrs: s.instrs,
+                uniforms: s.uniforms,
+                back_edges: s.back_edges,
+                fwd_branches: s.fwd_branches,
+                hoists: s.hoists,
+                window_cuts: s.window_cuts,
+            };
+            Ok((s.instrs.len(), Some(code)))
+        });
+        match packed {
+            Ok((_, Some(code))) if only.is_some() => return Ok(Walked::Code(code)),
+            Ok((n, _)) => {
+                if best.is_none_or(|(_, m)| n < m) {
+                    best = Some((step, n));
+                }
+            }
+            Err(e) if strict || only.is_some() => return Err(e),
+            Err(_) => {}
+        }
+        // SAFETY: the packing is dropped; only its length is kept. `cur`
+        // and `al` were made before `mark`.
+        unsafe { a.reset_to(mark) };
+    }
+    Ok(Walked::Best(best))
 }
 
 /// v3d_vs_set_prog_data's VPM arithmetic (vir.c:896-937): the sizes in
@@ -1466,7 +1576,9 @@ mod tests {
          * It must be what the chain produces now, or a board run would test
          * a compiler that no longer exists. Regenerate with
          *   V3D_WRITE_OURS_JSON=1 cargo test --no-default-features \
-         *     --features host-test,gpu-powervr,shaderc-online --lib samples_json */
+         *     --features host-test,gpu-v3d,shaderc-online,no-shader-table --lib samples_json
+         * (the V3D lib tests' feature set; with gpu-powervr in its place
+         * the filter matches no test and nothing is written) */
         sample_json_is_current(PASSTHROUGH_VS, INTERP_FS, OURS_JSON);
     }
 
@@ -1807,11 +1919,15 @@ mod tests {
          * 0xd705_1e75_32ff_19e7, 21_006 words (measured by skipping those
          * five pairs): no word of an existing program changed.
          * 2026-11-16 (v3d-shout4): a one- or two-component float output writes
-         * its own size and one word, 16 words fewer (21_345 to 21_329; report-es2 18_702 to 18_686). */
+         * its own size and one word, 16 words fewer (21_345 to 21_329; report-es2 18_702 to 18_686).
+         * 2026-11-27 (plan #419 sched-pair, `PAIRING`): the shorter of the
+         * packing before and the one with the accumulators kept for short
+         * values, 989 words fewer (21_329 to 20_340; report-es2 18_686 to
+         * 17_839), no stage of any program longer. */
         let want: (usize, u64) = if cfg!(feature = "report-es2") {
-            (18_686, 0x0d56_9f4e_cfea_e68c)
+            (17_839, 0x25af_2696_e5c5_fd7a)
         } else {
-            (21_329, 0xe054_93bb_c039_a267)
+            (20_340, 0xa520_306c_9ab3_b5b6)
         };
         assert_eq!((words, h), want, "the words the compiler emits changed");
     }
@@ -4646,7 +4762,9 @@ mod tests {
 
     /// sched.rs hoist, an A/B in one process (its switch is per thread):
     /// femtovg's fill_color.nodiscard is shorter with operations moved into
-    /// earlier free units than without, and both pass check_all. The
+    /// earlier free units than without, and both pass check_all; in the
+    /// selected order alone (2026-11-27: with the list order and `PAIRING`
+    /// tried, the packing without the hoist is as short, 59 words). The
     /// values are v3d_sim_mesa's to vouch for (every pair agrees with the IR
     /// with the hoist on).
     #[test]
@@ -4655,6 +4773,7 @@ mod tests {
         static FS: &str = include_str!("../../../../tools/shaders/femtovg/fill_color.nodiscard.frag");
         let len = |off: bool| {
             super::super::sched::HOIST_OFF.with(|h| h.set(off));
+            super::super::order::ORDER_OFF.with(|h| h.set(true));
             let mut n = 0;
             with_program(VS, FS, Prim::Triangles, |p| {
                 let p = p.expect("compiles");
@@ -4662,6 +4781,7 @@ mod tests {
                 n = p.fs.code.instrs.len();
             });
             super::super::sched::HOIST_OFF.with(|h| h.set(false));
+            super::super::order::ORDER_OFF.with(|h| h.set(false));
             n
         };
         let (off, on) = (len(true), len(false));
@@ -4934,7 +5054,10 @@ mod tests {
     /// the loop's test and the break take one branch (select.rs
     /// merge_exits: the break's FCMP folds into flag A, `fcmp.andnc`), 4
     /// words a pass and on the path that leaves at once: 49 + 36, against
-    /// Mesa's 57 + 41. Revert checks: with uniform_break returning None, no forward
+    /// Mesa's 57 + 41; 2026-11-27 (`PAIRING`: the accumulators kept for
+    /// short values, allocated again on the list order): 47 + 34, the push
+    /// two words before the branch and work in all three delay slots
+    /// (47 / 115 / 829 / 863). Revert checks: with uniform_break returning None, no forward
     /// branch leaves the loop and this fails; with select.rs issue_order
     /// returning p's own order, the body has two switches; with the push on
     /// t (the value before the Copy), the counter has a move and a `sub r0`;
@@ -4997,13 +5120,11 @@ mod tests {
             let ctr = sub[0].trim_start_matches("sub ").split(',').next().unwrap_or("");
             assert!(sub[0].starts_with(&std::format!("sub {ctr}, {ctr}, 1")), "the decrement in place: {text:#?}");
             assert!(!text.iter().any(|t| t.contains(&std::format!("mov {ctr},"))), "no move of the counter: {text:#?}");
-            let push = &text[text.len() - 5];
-            assert!(
-                push.contains(&std::format!("mov.pushz -, {ctr}")) && !push.starts_with("nop "),
-                "a shared push word: {text:#?}"
-            );
+            let push = text.iter().rfind(|t| t.contains(&std::format!("mov.pushz -, {ctr}")));
+            assert!(push.is_some_and(|t| !t.starts_with("nop ")), "a shared push word: {text:#?}");
             let slots = &text[text.len() - 3..];
-            assert!(slots[..2].iter().all(|t| t.contains("; fmul ")), "work in the first two delay slots: {text:#?}");
+            let works = |t: &&std::string::String| !t.starts_with("nop ") || t.contains("; fmul ");
+            assert!(slots.iter().filter(works).count() >= 2, "work in two of the delay slots: {text:#?}");
             let mut runs = Vec::new();
             for (sigma, n) in [(0.0f32, 0usize), (1.0, 2), (8.0, 23), (9.0, 24)] {
                 /* frag[14]: extent (9.xy), texType 0 (10.z), direction
@@ -5055,7 +5176,7 @@ mod tests {
             }
             assert_eq!(runs.iter().map(|r| r.1).collect::<Vec<_>>(), vec![1, 5, 47, 49], "look-ups: {runs:?}");
             let executed: Vec<usize> = runs.iter().map(|r| r.0).collect();
-            assert_eq!(executed, vec![49, 121, 877, 913], "executed per sigma: {runs:?}");
+            assert_eq!(executed, vec![47, 115, 829, 863], "executed per sigma: {runs:?}");
         });
     }
 
