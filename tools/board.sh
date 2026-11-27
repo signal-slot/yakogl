@@ -1665,8 +1665,8 @@ pi4_undo() {
     b "sudo rm -f /boot/firmware/$STAGED"
     # pi5: a card with no tryboot.txt before the run gets none after it (the
     # put-back below would leave an empty file the board never had; seen on
-    # the Pi 5's stock card, 2026-11-19). The pi4 is as it was.
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    # the Pi 5's stock card, 2026-11-19; the Pi 4's card has none either, 2026-11-27).
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         b 'sudo rm -f /boot/firmware/tryboot.txt && sync'
         return
     fi
@@ -1684,7 +1684,7 @@ pi4_undo() {
 pi4_try_backup() {
     local got
     TRY_SHA=
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         note "UNDO, from Linux (if the run stops before its clean-up): sudo rm -f /boot/firmware/$STAGED /boot/firmware/tryboot.txt"
         return 0
     fi
@@ -1705,7 +1705,7 @@ pi4_try_backup() {
 # (or no tryboot.txt, when the pi5's card had none)
 pi4_try_check() {
     local left
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         # no tryboot.txt before: none after, so neither file may be listed
         left=$(b "ls /boot/firmware/$STAGED /boot/firmware/tryboot.txt 2>/dev/null")
         [ -z "$left" ]
@@ -1718,10 +1718,8 @@ pi4_try_check() {
 pi4_stage() {
     local tmpd got gottry
     TRY_HAD=1
-    if [ "$BOARD" = pi5 ]; then
-        bget TRY_HAD 'test -e /boot/firmware/tryboot.txt && echo 1 || echo 0' 1
-        [ "$TRY_HAD" = 0 ] || TRY_HAD=1
-    fi
+    bget TRY_HAD 'test -e /boot/firmware/tryboot.txt && echo 1 || echo 0' 1
+    [ "$TRY_HAD" = 0 ] || TRY_HAD=1
     pi4_try_backup
     TRY="# tools/board.sh: $NAME, one-shot boot (reboot \"0 tryboot\"); config.txt stays the Linux default
 $(pi4_config "$STAGED")"
