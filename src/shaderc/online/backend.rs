@@ -1972,8 +1972,14 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
             }
         }
         let _restore = Restore(crate::shaderc::set_compile_lod_key(fr.lod_key));
+        /* A gpu-v3d71 build links through the 7.1 chain (link71), every other
+         * build through codegen's, as before. */
+        #[cfg(feature = "gpu-v3d71")]
+        let link_sources = crate::shaderc::online::v3d::link71::link_sources71;
+        #[cfg(not(feature = "gpu-v3d71"))]
+        let link_sources = codegen::link_sources;
         let built = store::with_scratch(|a| {
-            codegen::link_sources(vr.source, vr.attrib_map, vr.lod_key, fr.source, names, a, store::keep()).and_then(
+            link_sources(vr.source, vr.attrib_map, vr.lod_key, fr.source, names, a, store::keep()).and_then(
                 |(sh, b)| {
                     /* Copied out of the scratch while it is still lent, as in
                      * `compile_and_publish_linked`. */
