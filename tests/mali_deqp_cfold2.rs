@@ -18,8 +18,9 @@
 //! - `rcp`/`rsq` of 0.0, an infinity Mesa clamps or folds away
 //!   (`nir.rs:2274`, `:2214`): `zero_operand_rcp_inf`, `random_mixed_rcp_inf`,
 //!   `random_mixed_rsq_inf`;
-//! - a mediump `rcp` of a constant not exact in fp16 (`nir_fs.rs:6104`):
-//!   `zero_operand_rcp16`, `const_other_rcp16`, `random_mixed_rcp16`.
+//! - a mediump `rcp` of a constant not exact in fp16 (`nir_fs.rs`
+//!   `fold_rcp16`, CONST_RCP16): `zero_operand_rcp16`, `const_other_rcp16`,
+//!   `random_mixed_rcp16`.
 //!
 //! The dEQP pairs are verbatim from the `.qpa` of
 //! `tools/mali/deqp-host-measure.sh` (VK-GL-CTS 93bca018); the references
@@ -28,7 +29,9 @@
 //! `const_other_ior` compiles byte-equal (the constrnd lowering's `ior` of
 //! constants), and so do `random_mixed_f2i` (its constants fold, and its
 //! mediump int uniform is the unitype lowering's) and `zero_operand_rcp_inf`
-//! (the viewport transform's clamp of `1/w` of a constant zero w);
+//! (the viewport transform's clamp of `1/w` of a constant zero w), and so do
+//! `zero_operand_rcp16` and `const_other_rcp16` (plan #367 CONST_RCP16: the
+//! 16-bit fold of the reciprocal of the rounded half);
 //! `random_mixed_rcp_inf` and `random_mixed_rsq_inf` fold their constants and
 //! refuse later. `random_mixed_rcp16` compiles since its `rcp` is dead and
 //! left out of the walk (`nir_fs.rs` `ir_live`), but its vertex program keeps
@@ -66,8 +69,6 @@ macro_rules! cfold_ref {
 }
 
 cfold_ref! {
-    cfold2_zero_operand_rcp16 => "deqp_cfold2_zero_operand_rcp16",
-    cfold2_const_other_rcp16 => "deqp_cfold2_const_other_rcp16",
     cfold2_const_call_transcendental_log2 => "deqp_cfold2_const_call_transcendental_log2",
     cfold2_const_call_transcendental_pow => "deqp_cfold2_const_call_transcendental_pow",
     cfold2_const_call_transcendental_atan => "deqp_cfold2_const_call_transcendental_atan",
@@ -171,6 +172,21 @@ fn cfold2_zero_operand_rcp_inf() {
     mali_ref::assert_matches("deqp_cfold2_zero_operand_rcp_inf");
 }
 
+/// A mediump `mat3 / mat3` of constants: each `rcp` of a constant not exact
+/// in fp16 is NIR's 16-bit fold of the rounded half (CONST_RCP16,
+/// docs/notes/mali-const-rcp16.md), the colour a constant: byte-equal.
+#[test]
+fn cfold2_zero_operand_rcp16() {
+    mali_ref::assert_matches("deqp_cfold2_zero_operand_rcp16");
+}
+
+/// A mediump `mat2 / mat2` of constants, `fmul(a, frcp(b))` at fp16 with
+/// each op rounded: lanes `bccd 4100 37fe 3c00` (CONST_RCP16): byte-equal.
+#[test]
+fn cfold2_const_other_rcp16() {
+    mali_ref::assert_matches("deqp_cfold2_const_other_rcp16");
+}
+
 /// Its `rcp` is dead and left out of the walk (`nir_fs.rs` `ir_live`); the
 /// vertex program keeps a varying Mesa's link removes.
 #[test]
@@ -189,14 +205,12 @@ const CONSTANT_PRODUCT: &str = "a constant product in a shape Mesa's algebraic r
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_cfold2_zero_operand_inot", CONSTANT_PRODUCT),
-    ("deqp_cfold2_zero_operand_rcp16", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_icmp", ARITH),
     ("deqp_cfold2_random_mixed_inot", ARITH),
     ("deqp_cfold2_random_mixed_rcp_inf", "a fused multiply-add other than a matrix product's (a built-in function's)"),
     ("deqp_cfold2_random_mixed_rsq_inf", ARITH),
     ("deqp_cfold2_const_other_inot", CONSTANT_PRODUCT),
     ("deqp_cfold2_const_other_iabs", "an integer or boolean value"),
-    ("deqp_cfold2_const_other_rcp16", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_log2", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_pow", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_atan", CONSTANT_FOLD),
@@ -209,6 +223,8 @@ const MATCHED: &[&str] = &[
     "deqp_cfold2_const_other_ior",
     "deqp_cfold2_random_mixed_f2i",
     "deqp_cfold2_zero_operand_rcp_inf",
+    "deqp_cfold2_zero_operand_rcp16",
+    "deqp_cfold2_const_other_rcp16",
 ];
 
 /// The references that compile with other words than Mesa's: the vertex

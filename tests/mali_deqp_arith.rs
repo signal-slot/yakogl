@@ -296,9 +296,13 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.geometric.reflect fs mediump: 1 cases of shaders.operator.geometric.reflect.mediump_vec3_fragment */
     ("op_geometric_reflect_fs_mediump", OPERAND),
     /* op.geometric.refract fs highp: 4 cases of shaders.operator.geometric.refract.highp_float_float_fragment */
-    ("op_geometric_refract_fs_highp", ARITH),
+    /* the select of `k < 0.0` lowered by plan #367 lower-train-2 FS_REFRACT
+     * (docs/notes/mali-fs-refract.md): the scalar colour lane is next */
+    ("op_geometric_refract_fs_highp", FORM),
     /* op.geometric.refract fs mediump: 4 cases of shaders.operator.geometric.refract.mediump_float_float_fragment */
-    ("op_geometric_refract_fs_mediump", ARITH),
+    /* the select of `k < 0.0` lowered by plan #367 lower-train-2 FS_REFRACT
+     * (docs/notes/mali-fs-refract.md): the scalar colour lane is next */
+    ("op_geometric_refract_fs_mediump", FORM),
     /* op.selection.select fs highp: 8 cases of shaders.operator.selection.highp_float_fragment */
     ("op_selection_select_fs_highp", ARITH),
     /* op.selection.select fs mediump: 16 cases of shaders.operator.selection.mediump_float_fragment */
@@ -986,13 +990,13 @@ fn op_geometric_reflect_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.geometric.refract, fs, highp; 4 cases)"]
+#[ignore = "refused: a gl_FragColor lane (op.geometric.refract, fs, highp; 4 cases)"]
 fn op_geometric_refract_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_geometric_refract_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.geometric.refract, fs, mediump; 4 cases)"]
+#[ignore = "refused: a gl_FragColor lane (op.geometric.refract, fs, mediump; 4 cases)"]
 fn op_geometric_refract_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_geometric_refract_fs_mediump");
 }

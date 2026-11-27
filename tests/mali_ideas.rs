@@ -15,8 +15,9 @@
 //!   (docs/notes/mali-control-flow.md).
 //!
 //! fs c565 and 1aca (the same function of two varying or uniform vec4s, Mesa's
-//! fp16 and fp32 selects, and 1aca's loop over a struct array) stay refused
-//! at INT_VALUE: pinned below, so the item that lowers them updates this file.
+//! fp16 and fp32 selects, and 1aca's loop over a struct array) are past
+//! INT_VALUE (plan #367 lower-train-2): `tests/mali_int_value_ideas.rs` pins
+//! their next refusals, so the item that lowers them updates that file.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_ideas
@@ -62,19 +63,6 @@ fn gm2_cf_earlyret_vs_the_vertex_programs_match_their_reference() {
 #[test]
 fn gm2_cf_earlyret_vs_fragment_shader_stays_refused() {
     mali_ref::assert_refused_ref("gm2_cf_earlyret_vs", "a fragment varying load or conversion of a form");
-}
-
-/// ideas fs c565 and 1aca: `a.w == 0.0 && b.w == 0.0` of two run-time vec4s
-/// is an `iand` of two masks, which Mesa's flattened function selects with at
-/// fp16 (`LSHIFT_AND.v2i16`, `MUX.v2i16`) beside the fp32 `CSEL.u32.eq` of the
-/// return value (gm2_ideas_2's fs.fragment). Not lowered: when they move,
-/// make these [`mali_ref::assert_matches`].
-#[test]
-fn gm2_ideas_2_and_3_stay_refused_at_their_int_values() {
-    let int = "an integer or boolean value is not lowered yet";
-    let moved: Vec<String> =
-        ["gm2_ideas_2", "gm2_ideas_3"].iter().filter_map(|n| mali_ref::refusal_change(n, int)).collect();
-    assert!(moved.is_empty(), "{}", moved.join("\n"));
 }
 
 const VS_HEAD: &str = "attribute vec4 p; attribute vec4 a; varying vec4 v; ";
