@@ -1,0 +1,18 @@
+varying highp vec4 v_in0;
+varying highp vec4 v_in1;
+varying highp vec4 v_in2;
+
+void main()
+{
+	highp vec3 in0 = v_in0.zxy;
+	highp vec3 in1 = v_in1.yzx;
+	highp vec3 in2 = v_in2.wyz;
+	highp vec3 res = vec3(0.0);
+
+	res = smoothstep(in0, in1, in2);
+
+	mediump vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+	color.xyz = res;
+	color = color * 0.50 + 0.50;
+    gl_FragColor = color;
+}
