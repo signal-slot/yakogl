@@ -1412,3 +1412,210 @@ fn the_femtovg_list_is_the_directory() {
 fn the_loose_list_is_the_directory() {
     list_is_the_directory(&SETS[4]);
 }
+
+// ---------------------------------------------------------------------------
+// The comparison helpers' own branches.
+// ---------------------------------------------------------------------------
+
+fn tlb(config: Option<u32>, first: Option<u32>) -> sim::TlbWrite {
+    let mut value = [None; LANES];
+    value[0] = first;
+    sim::TlbWrite { config, value }
+}
+
+fn fs_outcome(first: Option<u32>) -> Outcome {
+    Outcome { tlb: vec![tlb(Some(1), first)], msf: [1; LANES], ..Outcome::default() }
+}
+
+fn vpm_outcome(rows: &[Option<u32>]) -> Outcome {
+    Outcome { vpm_out: rows.iter().map(|r| r.map(|w| [w; LANES])).collect(), ..Outcome::default() }
+}
+
+/// Equal FS outputs agree and are counted: defined lanes, discarded lanes.
+#[test]
+fn equal_fragment_outputs_agree_and_are_counted() {
+    let mut a = fs_outcome(Some(5));
+    a.msf[3] = 0;
+    a.tmu_lookups = 2;
+    let b = a.clone();
+    let mut st = Stats::default();
+    assert!(fs_compare(&a, &b, &mut st).is_ok());
+    assert_eq!((st.tlb_lanes, st.discarded, st.tmu_lookups), (1, 1, 2));
+}
+
+/// A different TLB value, configuration, write count or flag is a mismatch
+/// that prints both sides, and counts nothing.
+#[test]
+fn fragment_outputs_that_differ_are_a_mismatch() {
+    let mut st = Stats::default();
+    let a = fs_outcome(Some(5));
+    let err = fs_compare(&a, &fs_outcome(Some(6)), &mut st).unwrap_err();
+    assert!(err.contains("4.2 ") && err.contains("7.1 "), "{err}");
+    let mut cfg = fs_outcome(Some(5));
+    cfg.tlb[0].config = Some(2);
+    assert!(fs_compare(&a, &cfg, &mut st).is_err());
+    let mut extra = fs_outcome(Some(5));
+    extra.tlb.push(tlb(None, None));
+    assert!(fs_compare(&a, &extra, &mut st).is_err());
+    let mut flags = fs_outcome(Some(5));
+    flags.msf[0] = 0;
+    assert!(fs_compare(&a, &flags, &mut st).is_err());
+    assert_eq!((st.tlb_lanes, st.discarded), (0, 0));
+}
+
+/// An undefined lane is not the same as a defined zero.
+#[test]
+fn an_undefined_lane_differs_from_a_defined_zero() {
+    let mut st = Stats::default();
+    assert!(fs_compare(&fs_outcome(None), &fs_outcome(Some(0)), &mut st).is_err());
+    assert!(fs_compare(&fs_outcome(None), &fs_outcome(None), &mut st).is_ok());
+    assert_eq!(st.tlb_lanes, 0);
+}
+
+/// Equal VPM rows agree; the words are counted per defined row.
+#[test]
+fn equal_vpm_rows_agree_and_are_counted() {
+    let a = vpm_outcome(&[Some(1), None, Some(3)]);
+    let mut st = Stats::default();
+    assert!(vpm_compare(&a, &a.clone(), [0, 1], &mut st).is_ok());
+    assert_eq!((st.vpm_words, st.screen_off_by_one), (2 * LANES, 0));
+}
+
+/// Programs that differ in the number of VPM rows are named by the counts.
+#[test]
+fn vpm_row_counts_that_differ_are_named() {
+    let mut st = Stats::default();
+    let err = vpm_compare(&vpm_outcome(&[Some(1)]), &vpm_outcome(&[Some(1), Some(2)]), [0, 1], &mut st).unwrap_err();
+    assert_eq!(err, "1 VPM rows at 4.2, 2 at 7.1");
+}
+
+/// A row written by one side only is a mismatch, as is a differing value in
+/// a row that is not a screen row.
+#[test]
+fn vpm_rows_that_differ_are_a_mismatch() {
+    let mut st = Stats::default();
+    let a = vpm_outcome(&[Some(1), Some(2), Some(3)]);
+    let err = vpm_compare(&a, &vpm_outcome(&[Some(1), Some(2), Some(4)]), [0, 1], &mut st).unwrap_err();
+    assert!(err.starts_with("VPM row 2:"), "{err}");
+    assert!(vpm_compare(&a, &vpm_outcome(&[Some(1), None, Some(3)]), [0, 1], &mut st).is_err());
+}
+
+/// Only the screen rows may be 1 higher at 7.1, and only by exactly 1.
+#[test]
+fn a_screen_word_may_be_one_higher_at_7_1_and_nothing_else() {
+    let mut st = Stats::default();
+    let a = vpm_outcome(&[Some(10), Some(20), Some(30)]);
+    assert!(vpm_compare(&a, &vpm_outcome(&[Some(11), Some(20), Some(30)]), [0, 1], &mut st).is_ok());
+    assert_eq!(st.screen_off_by_one, LANES);
+    // 1 lower, 2 higher, and 1 higher in a non-screen row
+    assert!(vpm_compare(&a, &vpm_outcome(&[Some(9), Some(20), Some(30)]), [0, 1], &mut st).is_err());
+    assert!(vpm_compare(&a, &vpm_outcome(&[Some(12), Some(20), Some(30)]), [0, 1], &mut st).is_err());
+    assert!(vpm_compare(&a, &vpm_outcome(&[Some(10), Some(20), Some(31)]), [0, 1], &mut st).is_err());
+    // the word wraps: u32::MAX at 4.2 and 0 at 7.1 is 1 apart
+    let w = vpm_outcome(&[Some(u32::MAX)]);
+    assert!(vpm_compare(&w, &vpm_outcome(&[Some(0)]), [0, 1], &mut st).is_ok());
+}
+
+/// A vertex-pipeline stage that wrote the TLB is refused.
+#[test]
+fn a_vertex_stage_that_wrote_the_tlb_is_refused() {
+    let mut st = Stats::default();
+    let mut a = vpm_outcome(&[Some(1)]);
+    a.tlb.push(tlb(None, None));
+    let err = vpm_compare(&a, &vpm_outcome(&[Some(1)]), [0, 1], &mut st).unwrap_err();
+    assert_eq!(err, "a vertex-pipeline stage wrote the TLB");
+    assert_eq!(st.vpm_words, 0);
+}
+
+/// `judge` maps the four result pairs to a verdict and runs the comparison
+/// only when both runs produced an outcome.
+#[test]
+fn judge_maps_each_pair_of_results() {
+    let ok = || Ok(Outcome::default());
+    let no = |s: &str| Err::<Outcome, String>(s.to_string());
+    assert!(matches!(judge(ok(), ok(), |_, _| Ok(())), Verdict::Agree));
+    assert!(matches!(judge(ok(), ok(), |_, _| Err("x".into())), Verdict::Mismatch(m) if m == "x"));
+    assert!(matches!(judge(no("a"), ok(), |_, _| panic!("compared")), Verdict::Skip(m) if m == "4.2 does not run: a"));
+    assert!(matches!(judge(ok(), no("b"), |_, _| panic!("compared")), Verdict::Skip(m) if m == "7.1 does not run: b"));
+    assert!(matches!(
+        judge(no("a"), no("b"), |_, _| panic!("compared")),
+        Verdict::Skip(m) if m == "neither runs: 4.2 a; 7.1 b"
+    ));
+}
+
+/// `exact` prints a NEW line and a stale line together, and one listed key
+/// that is also run raises nothing.
+#[test]
+fn exact_names_new_and_stale_entries_together() {
+    let got: BTreeMap<String, String> =
+        [("a fs", "m1"), ("b vs", "m2")].into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    let bad = exact("mismatch", &got, &[("a fs", "r"), ("c cs", "r")]);
+    assert_eq!(bad, ["NEW mismatch, not listed: b vs: m2", "listed mismatch that no longer is one (remove it): c cs"]);
+}
+
+/// A key listed twice is a defect of the list, not of the run.
+#[test]
+#[should_panic(expected = "a key is listed twice")]
+fn exact_refuses_a_key_listed_twice() {
+    exact("skip", &BTreeMap::new(), &[("a fs", "r"), ("a fs", "s")]);
+}
+
+/// Equal programs: the stub shaders of `varyings` round trip, and comments
+/// (and `varying` inside a longer word) are not declarations.
+#[test]
+fn varyings_read_declarations_and_not_comments_or_longer_words() {
+    let src = "// varying vec4 gone;\n/* varying vec2 gone2; */\nvarying highp vec3 a, b[2];\n\
+               varying mat2 m; float varyingx; varying float f;\nvarying int nope;\nvoid main(){}";
+    let got = varyings(src);
+    let want: Vec<(String, String, usize)> = [("vec3", "a", 0), ("vec3", "b", 2), ("mat2", "m", 0), ("float", "f", 0)]
+        .into_iter()
+        .map(|(t, n, k)| (t.to_string(), n.to_string(), k))
+        .collect();
+    assert_eq!(got, want);
+    assert_eq!(strip_comments("a//b\nc/*d*/e"), "a \nc e");
+    // an unterminated block comment ends the text
+    assert_eq!(strip_comments("a/*b"), "a ");
+}
+
+/// The stubs write and read exactly the listed varyings.
+#[test]
+fn the_stubs_mention_every_listed_varying() {
+    let list = vec![
+        ("vec2".to_string(), "p".to_string(), 0),
+        ("mat2".to_string(), "m".to_string(), 0),
+        ("float".to_string(), "q".to_string(), 2),
+    ];
+    let vs = stub_vs(&list);
+    assert!(vs.contains("p = u_stub.xy;") && vs.contains("q[1] = u_stub.x;"), "{vs}");
+    assert!(vs.contains("m = mat2(u_stub.x, u_stub.x, u_stub.x, u_stub.x);"), "{vs}");
+    let fs = stub_fs(&list);
+    assert!(fs.contains("c += vec4(p, 0.0, 0.0);") && fs.contains("c.x += m[0].x + m[1].x;"), "{fs}");
+    assert!(fs.contains("c += vec4(q[0]);") && fs.contains("gl_FragColor = c;"), "{fs}");
+    assert_eq!(value("vec4", "s"), "vec4(s)");
+}
+
+/// The input patterns: distinct for 32 consecutive keys, an odd number of
+/// 32nds, and the dEQP integer uniforms take their dEQP values.
+#[test]
+fn the_input_patterns_are_distinct_odd_32nds_and_the_deqp_ints() {
+    let v: Vec<f32> = (0..32).map(pattern).collect();
+    let mut s: Vec<u32> = v.iter().map(|f| f.to_bits()).collect();
+    s.sort();
+    s.dedup();
+    assert_eq!(s.len(), 32);
+    assert!(v.iter().all(|f| ((f * 32.0) as u32) % 2 == 1 && *f > 0.0 && *f < 2.0));
+    let ints: Vec<u32> =
+        ["ui_zero", "ui_one", "ui_two", "ui_three", "ui_four", "u_i"].iter().map(|n| int_value(n, 7)).collect();
+    assert_eq!(ints, [0, 1, 2, 3, 4, 1]);
+    assert_eq!((int_value("other", 0), int_value("other", 1), int_value("other", 3)), (1, 2, 1));
+}
+
+/// An FS output is the TLB writes then the flags, as text.
+#[test]
+fn an_fs_output_is_the_tlb_writes_then_the_flags() {
+    let o = fs_outcome(Some(0xab));
+    let t = fs_output(&o);
+    assert_eq!(t.len(), 2);
+    assert!(t[0].starts_with("tlb config Some(1) values") && t[0].contains("ab"), "{t:?}");
+    assert!(t[1].starts_with("msf "));
+}
