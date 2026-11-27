@@ -991,6 +991,7 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
     let pr = r.cfg.partial_render != 0;
     if pr {
         let s = &mut r.hwrt[hs];
+        let counts_new = s.rta_partial_off == 0;
         for off in [&mut s.rta_valid_off, &mut s.rta_partial_off] {
             if *off == 0 {
                 *off = fw_alloc(k, 4 * RTA_MAX_RTS as u32);
@@ -999,8 +1000,18 @@ pub fn hwrt_get(k: &mut YdPvrKm, r: &mut YdPvrRender, w: u32, h: u32, samples: u
                 k.flush(k.heap_cpu(*off), 4 * RTA_MAX_RTS);
             }
         }
+        // The partial-render counts start at zero for every build: a
+        // rebuilt slot is a new dataset to the firmware (the DDK creates
+        // each from zeroed memory), so the counts the firmware left in it
+        // for the slot's previous target go (just allocated: zero already).
+        if !counts_new {
+            let p = k.heap_cpu(s.rta_partial_off);
+            // SAFETY: the RTA_MAX_RTS dwords of the slot's count array.
+            unsafe { core::ptr::write_bytes(p, 0, 4 * RTA_MAX_RTS) };
+            k.flush(p, 4 * RTA_MAX_RTS);
+        }
         // Valid render targets: the index array. The partial-render counts
-        // stay zero; the firmware counts them.
+        // are the firmware's to count from there.
         let v = k.heap_cpu(s.rta_valid_off);
         // SAFETY: RTA_MAX_RTS dwords.
         unsafe {
@@ -4614,5 +4625,83 @@ mod submit_tests {
             assert_eq!(t.words(rtav as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
             assert_eq!(t.words(rtap as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
         }
+    }
+
+    /// Kicks 1 and 2 build the 8x8 pair; then every other pair is taken by
+    /// another size with later kicks, both 8x8 kicks complete (the fragment
+    /// UFO at 2), and kick 3, at 16x16, recycles pair 0: member 0 is built
+    /// again (the slot's HWRT data, common and RTA arrays already exist).
+    /// Between the builds, `seed` writes into the carveout what the
+    /// firmware left there. Returns the geometry commands' HWRT data of the
+    /// three kicks.
+    fn rebuild_member0(t: &mut Rig, seed: impl FnOnce(&mut Rig)) -> [u32; 3] {
+        let mut f = [0u32; 3];
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(1), &mut f[0]), 0, "log:\n{}", t.log());
+        assert_eq!(submit(&mut t.k, &mut t.r, &kick(2), &mut f[1]), 0, "log:\n{}", t.log());
+        seed(t);
+        for s in &mut t.r.hwrt[2..HWRT_SETS] {
+            (s.used, s.w, s.h, s.samples, s.last_seq) = (1, 99, 99, 1, 100);
+        }
+        // SAFETY: the UFO word of the rig's carveout, written as the GPU
+        // writes it.
+        unsafe { (t.k.cpu.wrapping_add(FUFO as usize) as *mut u32).write_volatile(2) };
+        let mut c = kick(3);
+        (c.width, c.height) = (2 * KICK_W, 2 * KICK_H);
+        assert_eq!(submit(&mut t.k, &mut t.r, &c, &mut f[2]), 0, "log:\n{}", t.log());
+        assert_eq!(f, [1, 2, 3]);
+        assert!(t.log().contains("HWRT pair 0 (8x8) recycled for 16x16"), "log:\n{}", t.log());
+        let g = t.cmds(GCCCB, t.r.gwo);
+        let per_kick = g.len() / 3;
+        [0, 1, 2].map(|n| g[per_kick * n].2[1])
+    }
+
+    /// With the knob, a rebuilt slot's partial-render count array is zero
+    /// again: counts the firmware left for the slot's previous dataset do
+    /// not carry over (pvr-pr-landed open item 4). The valid array is the
+    /// index array again, and sRTACtl names both.
+    #[test]
+    fn with_the_knob_a_rebuilt_hwrt_slot_zeroes_its_partial_render_counts() {
+        let mut t = rig(1);
+        let hrts = rebuild_member0(&mut t, |t| {
+            for i in 0..RTA_MAX_RTS {
+                t.mem[RTA0P as usize / 4 + i] = 5 + i as u32;
+                t.mem[RTA0V as usize / 4 + i] = 0xDEAD_0000 + i as u32;
+            }
+        });
+        let fa = |o: u32| t.k.heap_fwaddr(o);
+        assert_eq!(hrts, [fa(HRT0), fa(HRT1), fa(HRT0)], "kick 3 rebuilds member 0; log:\n{}", t.log());
+        assert_eq!(t.words(RTA0P as usize, RTA_MAX_RTS), [0; RTA_MAX_RTS]);
+        assert_eq!(t.words(RTA0V as usize, RTA_MAX_RTS), [0, 1, 2]);
+        let ctl = HRT0 as usize + HWRTDATA_RTA_CTL;
+        assert_eq!(t.word(ctl + RTA_CTL_VALID_RENDER_TARGETS), fa(RTA0V));
+        assert_eq!(t.word(ctl + RTA_CTL_NUM_PARTIAL_RENDERS), fa(RTA0P));
+        assert_eq!(t.word(ctl + RTA_CTL_MAX_RTS), RTA_MAX_RTS as u32);
+    }
+
+    /// Without the knob, the rebuild writes none of it: whatever the RTA
+    /// regions and sRTACtl held stays, byte for byte, and the rings are the
+    /// ones of a knob-off rig that saw no such words.
+    #[test]
+    fn without_the_knob_a_rebuilt_hwrt_slot_leaves_the_rta_words_alone() {
+        let seeded: Vec<u32> = (0..RTA_MAX_RTS as u32).map(|i| 5 + i).collect();
+        let mut t = rig(0);
+        let hrts = rebuild_member0(&mut t, |t| {
+            for i in 0..RTA_MAX_RTS {
+                t.mem[RTA0P as usize / 4 + i] = seeded[i];
+                t.mem[RTA0V as usize / 4 + i] = seeded[i];
+            }
+        });
+        let fa = |o: u32| t.k.heap_fwaddr(o);
+        assert_eq!(hrts, [fa(HRT0), fa(HRT1), fa(HRT0)], "kick 3 rebuilds member 0; log:\n{}", t.log());
+        assert_eq!(t.words(RTA0P as usize, RTA_MAX_RTS), seeded);
+        assert_eq!(t.words(RTA0V as usize, RTA_MAX_RTS), seeded);
+        assert_eq!(t.words(HRT0 as usize + HWRTDATA_RTA_CTL, HWRTDATA_RTA_CTL_SIZE / 4), [0; 8]);
+        let mut z = rig(0);
+        rebuild_member0(&mut z, |_| {});
+        assert_eq!(t.cmds(GCCCB, t.r.gwo), z.cmds(GCCCB, z.r.gwo), "knob off: the geometry CCB");
+        assert_eq!(t.cmds(FCCCB, t.r.fwo), z.cmds(FCCCB, z.r.fwo), "knob off: the fragment CCB");
+        // The HWRT data and common of the rebuilt member, the same bytes.
+        let n = (RTA0V - HC0) as usize / 4;
+        assert_eq!(t.words(HC0 as usize, n), z.words(HC0 as usize, n));
     }
 }
