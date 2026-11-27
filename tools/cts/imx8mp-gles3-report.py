@@ -62,6 +62,43 @@ def commit_of(d):
     return m.group(1) if m else None
 
 
+X2_NAME = 'Armadillo-X2'
+X2_LONG = 'Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
+
+
+def board_of(d):
+    """'x2' or 'verdin': the board a slice was measured on. First from the records: a README's
+    `board.sh <board> e<NN> rc=..` lines (x2 for the Armadillo-X2), else results.tsv rows with '-' in begun
+    (a three-word record, which only `board.sh x2 tree` writes); then a README line containing
+    'Armadillo-X2'. Anything else is the Verdin."""
+    if not os.path.isdir(d):
+        return 'verdin'
+    boards, dash, rows, readmes = set(), 0, 0, []
+    for name in sorted(os.listdir(d)):
+        path = os.path.join(d, name)
+        if name.lower().startswith('readme'):
+            txt = open(path, errors='replace').read()
+            readmes.append(txt)
+            boards.update(m.group(1).lower() for m in re.finditer(
+                r'\bboard\.sh\s+(\S+)\s+[A-Za-z_-]*\d+\s+rc=', txt))
+        elif name == 'results.tsv':
+            for l in open(path, errors='replace'):
+                f = l.rstrip('\n').split('\t')
+                if l.startswith('#') or len(f) < 8 or all(x == '-' for x in f[2:8]):
+                    continue
+                rows += 1
+                dash += f[2] == '-'
+    if 'x2' in boards:
+        return 'x2'
+    if rows and dash == rows:
+        return 'x2'
+    if boards:
+        return 'verdin'
+    if any(X2_NAME in t for t in readmes):
+        return 'x2'
+    return 'verdin'
+
+
 def expand(c):
     """A short hash as the full one when this checkout knows it."""
     if len(c) == 40:
@@ -324,6 +361,12 @@ def main():
     print('%s**i.MX8MP dEQP-GLES3, %s**' % (partial, args.date))
     print()
     print('- Commit: %s.' % full_txt)
+    boards = {d: board_of(d) for d in args.dirs}
+    if boards and set(boards.values()) == {'x2'}:
+        print('- Board: measured on the %s.' % X2_LONG)
+    elif 'x2' in boards.values():
+        print('- Boards: %s.' % '; '.join('`%s/`: %s' % (rel(d), X2_LONG if boards[d] == 'x2' else 'Verdin iMX8M Plus')
+                                        for d in shown))
     print('- Entries: %s.' % entries_txt)
     print('- Records: %s.' % dirs_txt)
     print('- Resets: %s.' % reset_txt)

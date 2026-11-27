@@ -355,6 +355,47 @@ sys.exit(1 if fails else 0)
 PY
 expect "the drafts match RESULTS.md, STATUS.md and ROADMAP.md" $?
 
+echo "== board named from the records"
+mkx() {   # mkx DEST SRC [readme]: copy of a slice as an X2 record (three-word rows, '-' in begun and noresult)
+	cp -r "$2" "$1"
+	python3 - "$1" "${3:-}" <<'PY'
+import os, sys
+d, mode = sys.argv[1:3]
+if mode != 'readme':
+    t = os.path.join(d, 'README.md')
+    s = open(t).read().replace('board.sh imx8mp', 'board.sh x2')
+    open(t, 'w').write(s)
+else:
+    with open(os.path.join(d, 'README.md'), 'a') as f:
+        f.write('\nMeasured on the Armadillo-X2.\n')
+p = os.path.join(d, 'results.tsv')
+out = []
+for l in open(p):
+    f = l.rstrip('\n').split('\t')
+    if not l.startswith('#') and len(f) >= 8:
+        f[2] = f[7] = '-'
+    out.append('\t'.join(f))
+open(p, 'w').write('\n'.join(out) + '\n')
+PY
+}
+blk() { sed -n '/^--- GitHub issue #24/,/^--- anchors/p' "$1"; }
+mkdir "$work/bx2" "$work/bmx"
+X=()
+for i in 0 1 2; do mkx "$work/bx2/$(basename "${S[$i]}")" "${S[$i]}"; X+=("$work/bx2/$(basename "${S[$i]}")"); done
+python3 "$REPORT" --date 2026-11-10 "${X[@]}" > "$work/bx2.out" 2>&1; rc=$?
+expect "all-X2: exit 0" "$rc"
+blk "$work/bx2.out" | grep -q 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)'; expect "all-X2: the #24 block says measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" $?
+blk "$work/bx2.out" | grep -q 'Boards:'; [ $? = 1 ]; expect "all-X2: no per-slice board list" $?
+mkx "$work/bmx/$(basename "${S[0]}")" "${S[0]}" readme
+mkdir "$work/brd"; cp -r "${S[1]}" "${S[2]}" "$work/brd/"
+python3 "$REPORT" --date 2026-11-10 "$work/bmx/$(basename "${S[0]}")" "$work/brd/$(basename "${S[1]}")" "$work/brd/$(basename "${S[2]}")" > "$work/brd.out" 2>&1
+blk "$work/brd.out" | grep -q 'Boards:.*rows001-045.*Armadillo-X2.*rows046-090.*Verdin'; expect "mixed: the #24 block names each slice's board" $?
+blk "$work/brd.out" | grep -q 'measured on the Armadillo-X2'; [ $? = 1 ]; expect "mixed: no blanket X2 claim" $?
+mkdir "$work/bro"; ro="$work/bro/$(basename "${S[0]}")"; cp -r "${S[0]}" "$ro"
+grep -v 'board\.sh' "$ro/README.md" > "$ro/R" && mv "$ro/R" "$ro/README.md"; echo 'Board: Armadillo-X2' >> "$ro/README.md"
+python3 "$REPORT" --date 2026-11-10 "$ro" 2>&1 | sed -n '/^--- GitHub issue #24/,/^--- anchors/p' | grep -q 'Armadillo-X2'; expect "a README line 'Armadillo-X2' alone names the X2" $?
+blk "$work/full.out" | grep -qE 'Armadillo|Board'; [ $? = 1 ]; expect "all-Verdin: the #24 block names no board" $?
+
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
 if [ "$fails" = 0 ]; then echo "report selftest: OK"; exit 0; fi
