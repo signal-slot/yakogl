@@ -71,9 +71,15 @@
 # development run; BOARD_UART and BOARD_HOST from the environment, never a
 # file). RUN_BOUND/RETURN_BOUND are the same 720/600: the image ends itself
 # after ~410 s and WDOG1 resets at 660 s at the latest, inside board.sh's
-# kexec-dev defaults (1500/600). Each record's meta.txt gains board=x2 and
-# measured_on=..., so every record says it was measured on the X2. The record
-# stays <records-dir>/<YYYYMMDD-HHMM>-<label>-<sha8>/.
+# kexec-dev defaults (1500/600). board.sh itself writes board=x2 and
+# board_measured=Armadillo-X2 ... into every x2 record's meta.txt (so every
+# record says it was measured on the X2; this script adds only commit=).
+# X2_STOP_CONTAINERS (board.sh: 1 stops the running podman containers for the
+# run, each UNDO line printed first; 0 refuses a run while one runs) is passed
+# through; default 1 for x2 here, since a jump over a running container is
+# refused. The record is <records-dir>/<YYYYMMDD-HHMM>-<name>-<sha8>/, name =
+# the label, or IMX8MP_DUMP_NAME for a one-scene run (the mipmap dump:
+# mipmap-dump, records-dir records/imx8mp). The PNG stays <label>.png.
 #
 # The watchdog numbers. The image feeds WDOG1 only until
 # CONFIG_GC_BOARD_WDOG_SECONDS of uptime (gc_wdog_arm.c); WDOG1 then resets the
@@ -106,7 +112,10 @@ verdin) ZBOARD=verdin_imx8mp/mimx8ml8/a53; BTARGET=imx8mp; BBOOT=uboot-mmc ;;
 x2) ZBOARD=armadillo_x2/mimx8ml8/a53; BTARGET=x2; BBOOT=kexec-dev ;;
 *) echo "imx8mp-glmark2-dumps: IMX8MP_DUMP_BOARD must be verdin or x2" >&2; exit 2 ;;
 esac
-X2_MEASURED='Armadillo-X2 (i.MX8MP, GC7000UL), kexec-dev development run'
+RNAME=${IMX8MP_DUMP_NAME:-}
+[ -z "$RNAME" ] || [[ $RNAME =~ ^[A-Za-z0-9._-]+$ ]] || { echo "imx8mp-glmark2-dumps: IMX8MP_DUMP_NAME: letters, digits, . _ - only" >&2; exit 2; }
+X2ENV=
+[ "$BTARGET" != x2 ] || X2ENV="X2_STOP_CONTAINERS=${X2_STOP_CONTAINERS:-1}"
 WDOG_S=${WDOG_S:-600}
 RUN_BOUND=${RUN_BOUND:-$((WDOG_S + 120))}
 RETURN_BOUND=${RETURN_BOUND:-600}
@@ -255,9 +264,10 @@ stored_commit() {
 
 cmd_run() {
     [ $# -ge 2 ] || die "usage: $0 [--dry-run] run <img-dir> <records-dir> [SCENE...]"
-    local img=$1 rec=$2 sel rc=0 l arg r c
+    local img=$1 rec=$2 sel rc=0 l arg r c rn
     shift 2
     sel=$(selected "$@") || exit 2
+    [ -z "$RNAME" ] || [ "$(wc -l <<< "$sel")" = 1 ] || die "IMX8MP_DUMP_NAME names one record: select one scene"
     [ "$DRY" = 1 ] || : "${BOARD_UART:?set BOARD_UART to the serial bridge of the console (host:port)}"
     # every image needs its stored 40-hex build commit before anything runs
     while IFS=$'\t' read -r l arg; do
@@ -265,21 +275,25 @@ cmd_run() {
     done <<< "$sel"
     while IFS=$'\t' read -r l arg; do
         c=$(stored_commit "$img" "$l")
+        rn=${RNAME:-$l}
         if [ "$DRY" = 1 ]; then
-            echo "BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh $BTARGET run $img/$l/zephyr/zephyr.bin $rec $l   # BOARD_UART from the environment"
+            echo "${X2ENV:+$X2ENV }BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh $BTARGET run $img/$l/zephyr/zephyr.bin $rec $rn   # BOARD_UART${X2ENV:+ and BOARD_HOST} from the environment"
             echo "echo commit=$c >> $rec/<record of $l>/meta.txt"
-            [ "$BTARGET" = x2 ] && echo "printf 'board=x2\\nmeasured_on=%s\\n' '$X2_MEASURED' >> $rec/<record of $l>/meta.txt"
+            [ "$BTARGET" = x2 ] && echo "# board.sh writes board=x2 and board_measured=Armadillo-X2 ... into meta.txt itself"
             echo "awk '/board: record/ { exit } { print }' $rec/<record of $l>/console.txt > $rec/<record of $l>/console-live.txt"
             echo "tools/cts/glmark2-fb.py $rec/<record of $l>/console-live.txt $rec/<record of $l>/$l.png --scene $(scene_name "$arg")"
             continue
         fi
         [ -s "$img/$l/zephyr/zephyr.bin" ] || { echo "$l: no image $img/$l/zephyr/zephyr.bin" >&2; rc=1; continue; }
-        BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND \
-            "$REPO/tools/board.sh" "$BTARGET" run "$img/$l/zephyr/zephyr.bin" "$rec" "$l" || { echo "$l: board run failed" >&2; rc=1; continue; }
-        r=$(ls -d "$rec"/*-"$l"-* 2> /dev/null | tail -1)
+        env ${X2ENV:+"$X2ENV"} BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND \
+            "$REPO/tools/board.sh" "$BTARGET" run "$img/$l/zephyr/zephyr.bin" "$rec" "$rn" || { echo "$l: board run failed" >&2; rc=1; continue; }
+        r=$(ls -d "$rec"/*-"$rn"-* 2> /dev/null | tail -1)
         [ -s "$r/meta.txt" ] || { echo "$l: no meta.txt in the record" >&2; rc=1; continue; }
         echo "commit=$c" >> "$r/meta.txt"
-        [ "$BTARGET" = x2 ] && printf 'board=x2\nmeasured_on=%s\n' "$X2_MEASURED" >> "$r/meta.txt"
+        if [ "$BTARGET" = x2 ]; then
+            grep -q '^board=x2$' "$r/meta.txt" && grep -q '^board_measured=Armadillo-X2' "$r/meta.txt" ||
+                { echo "$l: meta.txt lacks board=x2 / board_measured=Armadillo-X2" >&2; rc=1; continue; }
+        fi
         [ -s "$r/console.txt" ] || { echo "$l: no console.txt in the record" >&2; rc=1; continue; }
         decode_live "$r" "$l" "$arg" || { echo "$l: damaged or missing dump, rerun it ($r)" >&2; rc=1; }
     done <<< "$sel"
@@ -400,7 +414,7 @@ self_test() {
     x2out=${x2out//"$ci"//img}
     rm -rf "$ci"
     case $x2out in
-    "BOARD_BOOT=kexec-dev RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh x2 run /img/gm05-texture/zephyr/zephyr.bin /rec gm05-texture"*"echo commit=$cm >>"*"board=x2"*"measured_on=%s"*"$X2_MEASURED"*) ;;
+    "X2_STOP_CONTAINERS=1 BOARD_BOOT=kexec-dev RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh x2 run /img/gm05-texture/zephyr/zephyr.bin /rec gm05-texture"*"echo commit=$cm >>"*"board.sh writes board=x2 and board_measured=Armadillo-X2"*) ;;
     *) echo "self-test: x2 run line: $x2out" >&2; return 1 ;;
     esac
     case $x2out in *uboot-mmc* | *"board.sh imx8mp"*) echo "self-test: x2 run line names the verdin route: $x2out" >&2; return 1 ;; esac
