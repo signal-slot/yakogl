@@ -149,19 +149,19 @@ malformed "unknown imx95 result" 'a.b\tPass\tpass\n' "line 1: imx95_result 'pass
 malformed "empty case" '\tPass\tFail\n' 'line 1: empty case name'
 malformed "bad line after good ones" 'a.b\tPass\tFail\na.c\tPass\n' 'line 2:'
 
-# The shipped case list: 392 distinct cases (S1a's and those of sessions S1b,
-# S2, S3a and S4), every line three fields, each case a compiler-commit for a
+# The shipped case list: 638 distinct cases (S1a's and those of sessions S1b,
+# S2, S3a, S3b and S4), every line three fields, each case a compiler-commit for a
 # Fail-to-Pass pair.
 cc="$here/imx95-g310-cause-commits.tsv"
 grep -v '^#' "$cc" | cut -f1 | sort -u | awk -v OFS='\t' '{print $0, "Fail", "Pass"}' > "$t/cc.in"
 python3 -I "$tool" --commit-cases "$cc" "$t/cc.in" > "$t/cc.out" 2>&1
 cc_rc=$?
 if [ "$cc_rc" -eq 0 ] \
-	&& [ "$(wc -l < "$t/cc.in")" -eq 392 ] \
+	&& [ "$(wc -l < "$t/cc.in")" -eq 638 ] \
 	&& [ "$(grep -v '^#' "$cc" | awk -F'\t' 'NF != 3' | wc -l)" -eq 0 ] \
-	&& [ "$(wc -l < "$t/cc.out")" -eq 392 ] \
+	&& [ "$(wc -l < "$t/cc.out")" -eq 638 ] \
 	&& ! awk -F'\t' '$4 != "compiler-commit"' "$t/cc.out" | grep -q . ; then
-	ok "commit list: 392 cases, three fields, all compiler-commit"
+	ok "commit list: 638 cases, three fields, all compiler-commit"
 else
 	bad "commit list (rc $cc_rc, $(wc -l < "$t/cc.in") cases)"; head -5 "$t/cc.out"
 fi
