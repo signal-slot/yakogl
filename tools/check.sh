@@ -2809,6 +2809,74 @@ mali_isa_regenerate() {
 }
 scope mali
 step "gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py on third_party" mali_isa_regenerate
+# gate-coverage-audit: the Mali test files no row above runs (plan #395,
+# cov-run-mali and cov-run-other), each with its header's feature set; every
+# file passes. Some tests of each file are #[ignore]d twins that hold what a
+# working back end leaves; --no-fail-fast runs the rest of the files after a
+# red one. The families are the dEQP-GLES2 compile pins (tests/mali_deqp_*),
+# the other Mali compile and GL-on-mock pins, and the Mali counterparts of the
+# ES 3.0 blit, depth-switch and uniform-limit tests.
+scope mali local
+step "test    $MALI_CONFIG (tests/mali_deqp_*.rs not run above: 53 files)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_deqp_arith --test mali_deqp_audit --test mali_deqp_cfold2 \
+    --test mali_deqp_constprod --test mali_deqp_ctrlflow \
+    --test mali_deqp_defects --test mali_deqp_fclane \
+    --test mali_deqp_fclane2 --test mali_deqp_fmaloc --test mali_deqp_fsint \
+    --test mali_deqp_fsint2 --test mali_deqp_fsunif \
+    --test mali_deqp_fsunif2 --test mali_deqp_fsunif3 --test mali_deqp_gaps \
+    --test mali_deqp_highpfs --test mali_deqp_idxloc \
+    --test mali_deqp_intrnd --test mali_deqp_intval3 \
+    --test mali_deqp_intval4 --test mali_deqp_intval5 \
+    --test mali_deqp_irindex --test mali_deqp_irindex2 \
+    --test mali_deqp_irindex3 --test mali_deqp_kfold \
+    --test mali_deqp_loops2 --test mali_deqp_loops3 --test mali_deqp_loops4 \
+    --test mali_deqp_misc2 --test mali_deqp_misc3 --test mali_deqp_missing \
+    --test mali_deqp_mixcol --test mali_deqp_mixprec2 \
+    --test mali_deqp_mixprec4 --test mali_deqp_negzero \
+    --test mali_deqp_nonfin --test mali_deqp_opform \
+    --test mali_deqp_posvary --test mali_deqp_structmember \
+    --test mali_deqp_t3gap --test mali_deqp_texmisc --test mali_deqp_unif2 \
+    --test mali_deqp_unifmp --test mali_deqp_varylink2 \
+    --test mali_deqp_varyload --test mali_deqp_vs16ref \
+    --test mali_deqp_vsloop --test mali_deqp_vsloop2 --test mali_deqp_vsmix \
+    --test mali_deqp_vsuarr --test mali_deqp_vsuniarr \
+    --test mali_deqp_vsuniarr2 --test mali_deqp_vsunif
+step "test    $MALI_CONFIG (the other tests/mali_*.rs not run above)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_3d_levels --test mali_api_stub \
+    --test mali_attr_inactive_loc --test mali_attr_records_gl \
+    --test mali_blend_words --test mali_bool_and --test mali_bool_uniform \
+    --test mali_const_fold --test mali_depthonly_gl --test mali_depthtex_gl \
+    --test mali_depth_texture --test mali_draw_inval \
+    --test mali_draw_inval_rest --test mali_effect2d_tex \
+    --test mali_fragcoord16 --test mali_fragment_random_cases \
+    --test mali_fs_operand --test mali_glmark2_corpus \
+    --test mali_glmark2_scene_draw --test mali_ideas --test mali_int_loops \
+    --test mali_libm_fold --test mali_link_varying_offsets \
+    --test mali_mploop --test mali_nonfinite_const --test mali_npot_mip_gl \
+    --test mali_rebind_stencil_gl --test mali_recreate_colour \
+    --test mali_texcoord_425b --test mali_texcoord_lane \
+    --test mali_tex_multi --test mali_tex_vertex --test mali_vcube_lod \
+    --test mali_vs_arith --test mali_vs_cube_edge \
+    --test mali_vs_cube_edge_gl --test mali_vs_fma \
+    --test mali_vsmin_compile --test mali_vs_tex2d_cube \
+    --test mali_vs_tex2d_cube_gl --test mali_zs_fidelity
+step "test    $MALI_CONFIG (tests/es3_{blit_ds_layers_mali,blit_ds_mali,blit_ds_window_mali,depth_image_switch_mali,limits_ubo_unchanged}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test es3_blit_ds_layers_mali --test es3_blit_ds_mali \
+    --test es3_blit_ds_window_mali --test es3_depth_image_switch_mali \
+    --test es3_limits_ubo_unchanged
+# The files whose header names report-es2 (their ES 2.0 cases; mali_depth_texture
+# and mali_vs_cube_edge_gl also run in the plain set above).
+step "test    $MALI_CONFIG,report-es2 (tests/mali_{blend_states,blend_words,cube_samplers,draw_inval,draw_oom,fragment_random,rgb565_stencil}_es2.rs and three more)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
+    --test mali_blend_states_es2 --test mali_blend_words_es2 \
+    --test mali_cube_samplers_es2 --test mali_depth_texture \
+    --test mali_draw_inval_es2 --test mali_draw_oom_es2 \
+    --test mali_fragment_random_es2 --test mali_rgb565_stencil_es2 \
+    --test mali_vs_cube_edge_gl --test mali_zs_words
+scope mali
 
 # The FFI pins of src/v3d/ffi.rs, asserted against the real headers, and the
 # job builder the image links, both with the host C compiler: a header that
