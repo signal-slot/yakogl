@@ -42,9 +42,9 @@
 18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true fs 9fe6: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: ok
-20 ideas:speed=duration fs 1aca: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration fs 1aca: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 20 ideas:speed=duration fs 23c8: ok
-20 ideas:speed=duration fs c565: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration fs c565: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 20 ideas:speed=duration fs df64: ok
 20 ideas:speed=duration fs e6a9: ok
 20 ideas:speed=duration vs 038e: ok
@@ -59,19 +59,19 @@
 21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
 22 terrain fs 1637: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
-22 terrain fs 4d26: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+22 terrain fs 4d26: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs 895a: ok
 22 terrain fs 8c86: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs bbba: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs bdfd: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
-22 terrain fs c549: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+22 terrain fs c549: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs d697: ok
 22 terrain fs e043: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain vs 18bc: ok
 22 terrain vs 8b69: ok
 23 shadow fs 4748: ok
 23 shadow fs 928e: ok
-23 shadow fs cf4b: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+23 shadow fs cf4b: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 23 shadow vs 37f4: ok
 23 shadow vs 6964: ok
 23 shadow vs b9d1: ok

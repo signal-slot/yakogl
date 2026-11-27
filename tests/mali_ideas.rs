@@ -67,13 +67,14 @@ fn gm2_cf_earlyret_vs_fragment_shader_stays_refused() {
 /// ideas fs c565 and 1aca: `a.w == 0.0 && b.w == 0.0` of two run-time vec4s
 /// is an `iand` of two masks, which Mesa's flattened function selects with at
 /// fp16 (`LSHIFT_AND.v2i16`, `MUX.v2i16`) beside the fp32 `CSEL.u32.eq` of the
-/// return value (gm2_ideas_2's fs.fragment). Not lowered: when they move,
-/// make these [`mali_ref::assert_matches`].
+/// return value (gm2_ideas_2's fs.fragment). The `iand` is lowered (plan #377
+/// report-draft-2); the function's `if` is not: when they move, make these
+/// [`mali_ref::assert_matches`].
 #[test]
-fn gm2_ideas_2_and_3_stay_refused_at_their_int_values() {
-    let int = "an integer or boolean value is not lowered yet";
+fn gm2_ideas_2_and_3_stay_refused_at_their_control_flow() {
+    let cf = "control flow (if, a loop, a return before the end) is not lowered yet";
     let moved: Vec<String> =
-        ["gm2_ideas_2", "gm2_ideas_3"].iter().filter_map(|n| mali_ref::refusal_change(n, int)).collect();
+        ["gm2_ideas_2", "gm2_ideas_3"].iter().filter_map(|n| mali_ref::refusal_change(n, cf)).collect();
     assert!(moved.is_empty(), "{}", moved.join("\n"));
 }
 

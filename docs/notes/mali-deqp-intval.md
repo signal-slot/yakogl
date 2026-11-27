@@ -1045,3 +1045,79 @@ refusals at de2f2c10, before the later lowerings moved some of them.
 - `||` of two fp32 compares (`FCMP_OR.f32` with a third source) and `&&`
   of two 32-bit integer compares outside `all()` are not taken: no
   reference.
+
+## 10. The fragment `&&` / `||`, an int's `-1`, and the uniform `bool(float)` (report-draft-2), done
+
+Plan #377 item report-draft-2 (HOST-ONLY). It redoes the read-only spike
+spike-intval-rest2 at the tip b6280bdd. The tip already held M1 of
+`docs/notes/mali-intval-rest-lowering.md` (`!=` and `bool()` of run-time
+ints), which took part of that spike's result. All the changes are in
+`nir_fs.rs` (`Fs::int_lane`, `Fs::mask_op`, `select_highp`). Each step
+takes Mesa's form from the `deqp_intval3/4/5_*` references
+(`mali-intval-rest-lowering.md` sections 4.4, 7 and 12):
+
+- **`&&` / `||` of two fp16 compares** (M2): `Fs::logic_masks`. With the
+  constant first, `flt(c, a) & flt(c, b)` is `flt(c, fmin(a, b))` and `|`
+  takes `fmax`. With the constant second, it is `Fs::and_masks` and its
+  `fmin` mirror for `ior`. Of two 32-bit booleans (int compares, bool
+  words), it is a 32-bit `iand` / `ior`, which `va_fuse_cmp` makes the
+  `ICMP_AND` accumulator or `LSHIFT_AND.i32`.
+- **A 16-bit mask `&&` a 32-bit compare of two ints**:
+  `LSHIFT_AND.v2i16 r0, m16.h00, 0x0.b00, m32` (`deqp_intval5_mask1632`).
+  Its two compares keep the order one `move_compares` run leaves (the
+  32-bit one first), so `select_highp` runs that pass once for such an
+  `iand`. Why Mesa ends there was read off the reference only, not off
+  its per-pass NIR. A 32-bit side of another kind (a compare of booleans,
+  a bool word) and the `||` of the mix are still refused.
+  `deqp_fsint_conv_*_to_bvec*` would compile with other words than
+  Mesa's, so they stay refused. The unit test's gap probe is now the `||`.
+- **`!=` / `==` of two bool uniforms' words**: `ICMP_OR.u32.ne.m1` of the
+  two words.
+- **`inot(fneu)` is `feq`, and the reverse**, for a 16-bit mask
+  (`reslib_func_bool_fs`).
+- **A constant is an int operand**. The `~0` of `in0 - 1` is no boolean,
+  so it becomes `IADD_IMM.i32 #0xFFFFFFFF` (pre- and post-decrement).
+  `imul(a, -1)` is `ineg(a)` and `imul(a, 1)` is `a` (`ISUB.s32 0, a`,
+  `reslib_inout_int_fs`).
+- **`bool(uniform float)`** of a mediump shader is the fp16 compare of the
+  uniform's lane (`FCMP_OR.v2f16.ne.f1 r0, u2.w0.h00`, `rsg_sconv72_fs`).
+
+Byte-equal now, with their `#[ignore]` dropped:
+
+- `deqp_intval3`: `opfs_logical_and_bool`,
+  `opfs_post_decrement_effect_ivec2_highp`,
+  `opfs_pre_decrement_result_int_mediump`, `reslib_func_bool_fs`,
+  `reslib_inout_int_fs`, `rsg_sconv72_fs`.
+- `deqp_intval4`: `and_icmp_fs`, `logical_or_fs`.
+- `deqp_intval5`: `mask1632`.
+- `deqp_fsint`: `postdec_result_ivec3_mediump`, `predec_effect_ivec4_lowp`.
+
+Ignored across intval3, intval4 and intval5: 43 before, 34 after.
+
+These moved to a later refusal and were re-pinned:
+
+- To control flow: intval3 `cond_complex_fs`, `rsg_cond12_fs`; intrnd
+  `bool_uniform_select_comb`; `tests/mali_ideas.rs` gm2_ideas_2 and 3.
+- To arithmetic: intval3 `idx_tmp_vec3_dynwrite_fs`, `rsg_exp76_fs`;
+  intrnd `trunc_atan_fs`; fsint2 `rnd_trig93`.
+- To the gl_FragColor lane text: intval4 `uni_bool_and_or_fs`; intval5
+  `c_bool3`, `c_bool_not`, `c_int3`, `c_int_two`; intrnd `trunc_lane_fs`.
+  These need fclane's `float(mask32) * varying` form, with `v_vtxOut`
+  folded by the link.
+
+`tools/mali/corpus-verdicts.txt` moves `cond_complex.frag`, `loop_full.frag`
+and `tri_discard.frag` past the integer text.
+`tests/fixtures/mali_glmark2_verdicts.txt` moves ideas fs 1aca, c565 and
+shadow fs cf4b to the control-flow text. It also takes up terrain fs 4d26 /
+c549 and shadow cf4b's earlier move, which was already unrecorded at the
+base. No verdict goes from ok to refused.
+
+Not taken here:
+
+- The integer select (`deqp_intval4_sel_int_fs`, `sel_ivec2_fs`: M4,
+  `CSEL.u32.eq` of the widened mask). With a 32-bit `bcsel` of the int arms,
+  the colour path (`int_colour16`) still refuses the fp16 compare of a
+  varying lane, and letting that through reaches a `Defect(IrIndex)`.
+- `step`, `cond_compound_fs`, `reslib_const_int_vs` (the link's constant
+  varying), `rsg_swizzle12_fs` (a uniform form), `light_amount_0_16`
+  (UBO), `bvec4_cmp_fs` (IrIndex), and the colour-lane references.
