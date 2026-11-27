@@ -27,11 +27,16 @@
 //! - the COLOR_WRITE_MASKS word the real job builder (driver/src/v3d/
 //!   v3d_job.c, built here as a shared object) writes for the job state of
 //!   such a draw, decoded with Mesa's packet XML;
-//! - what stays refused by name: glEnable(GL_BLEND) with uneven masks and
-//!   both integer and non-integer targets (the V3D has one blend enable for
-//!   every RT, v3d_job.c emit_blend): GL_INVALID_OPERATION, nothing handed
-//!   to the back end. Beside an RGBA32UI target (both integer) blending is
-//!   ignored (ES 3.0 4.1.8) and the draw is taken.
+//! - glEnable(GL_BLEND) with uneven masks and both integer and non-integer
+//!   targets: taken, a blend enable per RT (BLEND_ENABLES "Mask",
+//!   v3d_job.c emit_blend, draw.rs `PER_TARGET_BLEND_ENABLE`), the integer
+//!   RT left out, the integer texture at attachment 0 or 1; the
+//!   BLEND_ENABLES and BLEND_CFG the real job builder writes, decoded. A
+//!   blend factor reading the destination alpha with target 0 not blending
+//!   is refused by name (`state::job_state`). Beside an RGBA32UI target
+//!   (both integer) blending is ignored (ES 3.0 4.1.8) and the draw is
+//!   taken. An integer target 0 beside an RGBA8 target 1, even masks: RT 1
+//!   blends (it was drawn unblended before).
 //!
 //! What it cannot see: the GPU. The back end here is a stand-in that records
 //! what `state::refusal`, `state::unsupported` and `state::job_state` make of
@@ -508,13 +513,14 @@ fn the_texture_at_attachment_0_beside_rgba8_takes_its_own_mask() {
     }
 }
 
-/// glEnable(GL_BLEND) with uneven masks: beside RGBA8 the V3D's one blend
-/// enable would blend the integer store or not blend the RGBA8 target, so
-/// the draw is refused by name (GL_INVALID_OPERATION, nothing handed to the
-/// back end). Beside RGBA32UI every target is integer, blending is ignored
-/// (ES 3.0 4.1.8), and the draw is taken with a mask per target.
+/// glEnable(GL_BLEND) with uneven masks beside a non-integer target: the
+/// V3D takes a blend enable per RT (BLEND_ENABLES "Mask", {XML}:773-775;
+/// draw.rs `PER_TARGET_BLEND_ENABLE`), so the draw is taken, the integer
+/// RT left out of BLEND_ENABLES and the RGBA8 one blended. Beside RGBA32UI
+/// every target is integer, blending is ignored (ES 3.0 4.1.8), and the
+/// draw is taken with a mask per target.
 #[test]
-fn blending_beside_a_non_integer_target_stays_refused_by_name() {
+fn blending_beside_a_non_integer_target_is_drawn_with_a_blend_enable_per_rt() {
     let _g = context();
     for r in ROWS {
         {
@@ -522,18 +528,44 @@ fn blending_beside_a_non_integer_target_stays_refused_by_name() {
             program(&["vec4", r.ty()]);
             // SAFETY: plain GL call.
             unsafe { glEnable(GL_BLEND) };
-            let (seen, e) = draw();
-            assert_eq!(e, GL_INVALID_OPERATION, "{} beside RGBA8, blending: refused", r.name);
-            assert!(seen.is_none(), "{} beside RGBA8, blending: the back end saw a draw", r.name);
-            /* within the format's channels the mask is one for both: taken
-             * as before (one mask, one blend state for every RT) */
+            let what = format!("{} at 1 beside RGBA8, blending", r.name);
+            let st = expect_taken(&what, &[0xf, r.own()]);
+            assert!(st.blend_enabled, "{what}: RGBA8 blends");
+            assert_eq!((st.rt_blend_own, st.rt_blend_mask), (true, 0b0001), "{what}: RT 0 alone blends");
+            assert_eq!(blend_enables(&st), Some(0b0001), "{what}: BLEND_ENABLES");
+            /* within the format's channels the mask is one for both: one
+             * mask, the same per-RT blend enables */
             color_mask(0b0001);
-            let (seen, e) = draw();
-            assert_eq!(e, GL_NO_ERROR, "{} beside RGBA8, blending, R alone", r.name);
-            assert!(seen.is_some_and(|s| !s.per_target_mask), "{} beside RGBA8, blending, R alone", r.name);
+            let st = expect_taken(&format!("{what}, R alone"), &[0b0001, 0b0001]);
+            assert_eq!(blend_enables(&st), Some(0b0001), "{what}, R alone: BLEND_ENABLES");
             color_mask(0xf);
             // SAFETY: plain GL call.
             unsafe { glDisable(GL_BLEND) };
+        }
+        {
+            /* the integer texture at attachment 0: RT 1 still blends */
+            let _f = fbo(&[Att::Texture(r.ifmt), Att::Renderbuffer(GL_RGBA8)]);
+            program(&[r.ty(), "vec4"]);
+            // SAFETY: plain GL call.
+            unsafe { glEnable(GL_BLEND) };
+            let what = format!("{} at 0 beside RGBA8 at 1, blending", r.name);
+            let st = expect_taken(&what, &[r.own(), 0xf]);
+            assert!(st.blend_enabled, "{what}: RGBA8 blends");
+            assert_eq!((st.rt_blend_own, st.rt_blend_mask), (true, 0b0010), "{what}: RT 1 alone blends");
+            assert_eq!(blend_enables(&st), Some(0b0010), "{what}: BLEND_ENABLES");
+            /* a factor reading the destination alpha: the one BLEND_CFG
+             * would take target 0's alpha width, refused by name */
+            // SAFETY: plain GL call.
+            unsafe { glBlendFunc(GL_DST_ALPHA, GL_ZERO) };
+            let (seen, e) = draw();
+            assert_eq!(e, GL_NO_ERROR, "{what}, DST_ALPHA");
+            let s = seen.unwrap_or_else(|| panic!("{what}, DST_ALPHA: no draw"));
+            assert!(s.job.is_err_and(|why| why.contains("destination alpha")), "{what}, DST_ALPHA: refused by name");
+            // SAFETY: plain GL calls.
+            unsafe {
+                glBlendFunc(GL_ONE, GL_ZERO);
+                glDisable(GL_BLEND);
+            }
         }
         let _f = fbo(&[Att::Renderbuffer(GL_RGBA32UI), Att::Texture(r.ifmt)]);
         program(&["uvec4", r.ty()]);
@@ -541,9 +573,27 @@ fn blending_beside_a_non_integer_target_stays_refused_by_name() {
         unsafe { glEnable(GL_BLEND) };
         let st = expect_taken(&format!("{} beside RGBA32UI, blending", r.name), &[0xf, r.own()]);
         assert!(!st.blend_enabled, "{} beside RGBA32UI: no blending of integer targets", r.name);
+        assert_eq!(blend_enables(&st), Some(0), "{} beside RGBA32UI: BLEND_ENABLES", r.name);
         // SAFETY: plain GL call.
         unsafe { glDisable(GL_BLEND) };
     }
+}
+
+/// Even masks, an integer target 0 and an RGBA8 target 1 under
+/// glEnable(GL_BLEND): before the blend enable per RT the draw's one enable
+/// was target 0's and the RGBA8 target was drawn unblended; now RT 1 blends.
+#[test]
+fn an_integer_target_0_does_not_keep_target_1_from_blending() {
+    let _g = context();
+    let _f = fbo(&[Att::Renderbuffer(GL_RGBA32UI), Att::Renderbuffer(GL_RGBA8)]);
+    program(&["uvec4", "vec4"]);
+    // SAFETY: plain GL call.
+    unsafe { glEnable(GL_BLEND) };
+    let st = expect_taken("RGBA32UI at 0, RGBA8 at 1, blending", &[0xf, 0xf]);
+    assert!(st.blend_enabled && st.rt_blend_own && st.rt_blend_mask == 0b0010, "RT 1 blends");
+    assert_eq!(blend_enables(&st), Some(0b0010), "BLEND_ENABLES");
+    // SAFETY: plain GL call.
+    unsafe { glDisable(GL_BLEND) };
 }
 
 /* ---- the COLOR_WRITE_MASKS word of the real job builder ------------------ */
@@ -697,10 +747,9 @@ fn sym(name: &str) -> *mut c_void {
 type BeginFn = unsafe extern "C" fn(*mut V3dJob, *const V3dJobTarget, *mut V3dCl, *mut V3dCl, *mut V3dCl) -> bool;
 type DrawFn = unsafe extern "C" fn(*mut V3dJob, *const V3dJobDraw, *mut c_void) -> i32;
 
-/// The COLOR_WRITE_MASKS "Mask" the job builder writes for one triangle
-/// drawn with `st` in a four-RT RGBA8 job (the packet's word does not depend
-/// on the RTs' formats).
-fn color_write_masks(st: &V3dJobState) -> u32 {
+/// The BCL bytes the job builder writes for one triangle drawn with `st` in
+/// a four-RT RGBA8 job.
+fn job_bcl(st: &V3dJobState) -> Vec<u8> {
     const LIST_BYTES: usize = 16 * 1024;
     let mut bufs = [vec![0u8; LIST_BYTES], vec![0u8; LIST_BYTES], vec![0u8; LIST_BYTES]];
     let [b, r, i] = &mut bufs;
@@ -797,7 +846,31 @@ fn color_write_masks(st: &V3dJobState) -> u32 {
         draw(&mut job, &d, core::ptr::null_mut())
     };
     assert_eq!(res, V3D_JOB_OK, "the draw goes in");
-    let masks = fields_of(&bufs[0][..bcl.used as usize], "Color Write Masks", "Mask");
+    bufs[0].truncate(bcl.used as usize);
+    core::mem::take(&mut bufs[0])
+}
+
+/// The COLOR_WRITE_MASKS "Mask" the job builder writes for one triangle
+/// drawn with `st` in a four-RT RGBA8 job (the packet's word does not depend
+/// on the RTs' formats).
+fn color_write_masks(st: &V3dJobState) -> u32 {
+    let masks = fields_of(&job_bcl(st), "Color Write Masks", "Mask");
     assert_eq!(masks.len(), 1, "one COLOR_WRITE_MASKS in the draw ({XML}:804)");
     masks[0] as u32
+}
+
+/// The BLEND_ENABLES "Mask" of that job (bit n: RT n blends; {XML}:773-775),
+/// None without the packet; with blending, one BLEND_CFG for every RT
+/// ("Render Target Mask" 0xf, {XML}:777-785).
+fn blend_enables(st: &V3dJobState) -> Option<u32> {
+    let bcl = job_bcl(st);
+    let en = fields_of(&bcl, "Blend Enables", "Mask");
+    assert!(en.len() <= 1, "at most one BLEND_ENABLES in the draw");
+    let cfg = fields_of(&bcl, "Blend Cfg", "Render Target Mask");
+    if st.blend_enabled {
+        assert_eq!(cfg, [0xf], "one BLEND_CFG for every RT");
+    } else {
+        assert!(cfg.is_empty(), "no BLEND_CFG without blending");
+    }
+    en.first().map(|&m| m as u32)
 }

@@ -13,24 +13,32 @@
 //!
 //! The GL core is driven through the API into a stand-in back end, which at
 //! the draw runs the V3D's own `state::job_state` on what it was handed. The
-//! job state has ONE blend flag (`V3dJobState::blend_enabled`), and
-//! `driver/src/v3d/v3d_job.c` `emit_blend` turns it into BLEND_ENABLES
-//! `mask = 1`: RT 0 alone. The GL core sets `GlesDraw::blend` from attachment
-//! 0's format alone (`src/gl/draw.rs:3433`). So today:
+//! job state carries the blend flag (`V3dJobState::blend_enabled`) and the
+//! RTs that blend (`rt_blend_own`, `rt_blend_mask`: `state::rt_masks` leaves
+//! the integer and 32F targets out), which `driver/src/v3d/v3d_job.c`
+//! `emit_blend` writes as BLEND_ENABLES. The GL core's `GlesDraw::blend` is
+//! "some written target is not integer" on the V3D 4.2 (src/gl/draw.rs
+//! `draw_blends_a_target`, `PER_TARGET_BLEND_ENABLE`). So:
 //!
-//! - {RGBA8, RGBA32UI}: right (RT 0 blends, the integer RT 1 does not);
-//! - {RGBA16F, RG16I, RGBA8}: RT 2 should blend and does not (mask 0b001);
-//! - {RGBA32UI, RGBA8}: RT 1 should blend and nothing does (`blend` false).
+//! - {RGBA8, RGBA32UI}: RT 0 blends, the integer RT 1 does not (0b01);
+//! - {RGBA16F, RG16I, RGBA8}: RT 0 and RT 2 blend (0b101);
+//! - {RGBA32UI, RGBA8}: RT 1 blends (0b10), the integer attachment 0 no
+//!   longer turns blending off for it.
 //!
-//! The last two are pinned as they are; the expected mask is the `#[ignore]`d
-//! test of each, waiting on a per-RT enable mask in `V3dJobState` and
-//! `emit_blend`, and on the GL core's `blend` being per target.
+//! The 7.1 build (`gpu-v3d71`) gives every target one enable and keeps the
+//! attachment-0 answer: this file is not built there.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt_blend_v3d
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
+#![cfg(all(
+    feature = "host-test",
+    feature = "shaderc-online",
+    feature = "gpu-v3d",
+    not(feature = "gpu-v3d71"),
+    not(feature = "report-es2")
+))]
 
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
@@ -326,10 +334,16 @@ fn expected_mask(s: &Seen) -> u32 {
     s.targets.iter().enumerate().filter(|(_, t)| t.0 != 0 && !gles_surf_is_integer(t.1)).fold(0, |m, (i, _)| m | 1 << i)
 }
 
-/// The mask the job builder writes: `emit_blend` (driver/src/v3d/v3d_job.c)
-/// puts `mask = 1` when the one blend flag is set, and writes nothing else.
+/// The mask the job builder writes: `emit_blend` (driver/src/v3d/v3d_job.c
+/// `blend_enables`) puts `rt_blend_mask & 0xf` with `rt_blend_own`, every RT
+/// (0xf) without it, and nothing when the blend flag is off.
 fn carried_mask(s: &Seen) -> u32 {
-    u32::from(s.job.as_ref().expect("the V3D takes the draw").blend_enabled)
+    let j = s.job.as_ref().expect("the V3D takes the draw");
+    match (j.blend_enabled, j.rt_blend_own) {
+        (false, _) => 0,
+        (true, true) => j.rt_blend_mask & 0xf,
+        (true, false) => 0xf,
+    }
 }
 
 const F_AND_UI: [GLenum; 2] = [GL_RGBA8, GL_RGBA32UI];
@@ -345,7 +359,7 @@ fn mixed(formats: &[GLenum], outs: &[&str]) -> Seen {
     s
 }
 
-/* ---- {RGBA8, RGBA32UI}: right today ------------------------------------- */
+/* ---- {RGBA8, RGBA32UI}: RT 0 blends ------------------------------------- */
 
 /// The back end gets both targets in their formats and the V3D takes the
 /// draw: no refusal, a job state.
@@ -358,9 +372,8 @@ fn rgba8_and_rgba32ui_are_taken() {
     assert!(s.job.is_some(), "job_state accepts the blended mixed draw");
 }
 
-/// Blending on for the float RT 0 only: the GL core's `blend` (attachment
-/// 0's format) is on and the job's single flag is RT 0's, which is the mask
-/// Mesa has (0b01) because RT 1 is integer.
+/// Blending on for the float RT 0 only: the mask Mesa has (0b01) because RT
+/// 1 is integer.
 #[test]
 fn rgba8_and_rgba32ui_blend_rt0_only() {
     let _g = context();
@@ -398,48 +411,33 @@ fn blend_off_is_mask_zero() {
     assert_eq!(carried_mask(&s), 0);
 }
 
-/* ---- {RGBA16F, RG16I, RGBA8}: RT 2 is not blended ------------------------ */
+/* ---- {RGBA16F, RG16I, RGBA8}: the two float RTs blend -------------------- */
 
-/// Today's state, pinned: RT 0 blends (mask 0b001), the float RT 2 does not.
+/// Blending on for the two float RTs, off for the integer one (Mesa
+/// BLEND_ENABLES 0b101): `state::job_state` (`rt_masks`) leaves RT 1 out of
+/// `rt_blend_mask`.
 #[test]
-fn rgba16f_rg16i_rgba8_blend_only_rt0_today() {
+fn rgba16f_rg16i_rgba8_blend_the_float_rts() {
     let _g = context();
     let s = mixed(&F_I_F, &["vec4", "ivec4", "vec4"]);
     assert_eq!(s.refused, None);
     assert!(s.blend);
     assert_eq!(expected_mask(&s), 0b101);
-    assert_eq!(carried_mask(&s), 0b001, "emit_blend: BLEND_ENABLES mask = 1 (v3d_job.c:621-623)");
-}
-
-/// The expected state: blending on for the two float RTs, off for the
-/// integer one (Mesa BLEND_ENABLES 0b101).
-#[test]
-#[ignore = "V3dJobState has one blend flag and emit_blend writes BLEND_ENABLES mask = 1 (driver/src/v3d/v3d_job.c:621-623)"]
-fn rgba16f_rg16i_rgba8_blend_the_float_rts() {
-    let _g = context();
-    let s = mixed(&F_I_F, &["vec4", "ivec4", "vec4"]);
     assert_eq!(carried_mask(&s), 0b101);
 }
 
-/* ---- {RGBA32UI, RGBA8}: nothing blends ------------------------------- */
+/* ---- {RGBA32UI, RGBA8}: the float RT 1 blends ---------------------------- */
 
-/// Today's state, pinned: the GL core's `blend` follows attachment 0, an
-/// integer one, so it is off and the float RT 1 is not blended either.
+/// An integer attachment 0 no longer turns blending off for the others: the
+/// GL core's `blend` is "some written target is not integer" (draw.rs
+/// `draw_blends_a_target`, `PER_TARGET_BLEND_ENABLE`) and RT 1 alone blends
+/// (BLEND_ENABLES 0b10).
 #[test]
-fn rgba32ui_rgba8_blend_nothing_today() {
-    let _g = context();
-    let s = mixed(&UI_AND_F, &["uvec4", "vec4"]);
-    assert_eq!(s.refused, None);
-    assert!(!s.blend, "src/gl/draw.rs:3433 tests the format of target 0 only");
-    assert_eq!(expected_mask(&s), 0b10);
-    assert_eq!(carried_mask(&s), 0);
-}
-
-/// The expected state: RT 1 blends (BLEND_ENABLES 0b10).
-#[test]
-#[ignore = "GlesDraw::blend follows attachment 0 (src/gl/draw.rs:3433) and emit_blend enables RT 0 only (driver/src/v3d/v3d_job.c:621-623)"]
 fn rgba32ui_rgba8_blend_the_float_rt() {
     let _g = context();
     let s = mixed(&UI_AND_F, &["uvec4", "vec4"]);
+    assert_eq!(s.refused, None);
+    assert!(s.blend, "target 1 is not integer");
+    assert_eq!(expected_mask(&s), 0b10);
     assert_eq!(carried_mask(&s), 0b10);
 }

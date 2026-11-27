@@ -20,11 +20,10 @@
 //!   RGBA8 at 0 and the integer texture (plain, layer 1, level 1) at 2: each
 //!   RT's nibble in its place, the GL_NONE slot (RT 1) writes nothing (its
 //!   four disable bits are set in COLOR_WRITE_MASKS);
-//! - (d) the remaining refusal, for the layer and level cases too:
-//!   glEnable(GL_BLEND) with uneven masks and an integer beside a
-//!   non-integer target is GL_INVALID_OPERATION and nothing reaches the back
-//!   end; beside an RGBA32UI target (both integer) blending is ignored and
-//!   the draw is taken.
+//! - (d) for the layer and level cases too: glEnable(GL_BLEND) with uneven
+//!   masks and an integer beside a non-integer target is taken with a blend
+//!   enable per RT (the integer RT does not blend); beside an RGBA32UI
+//!   target (both integer) blending is ignored and the draw is taken.
 //!
 //! Host-only: the back end is a stand-in recording what `state::refusal`,
 //! `state::unsupported` and `state::job_state` make of each draw; nothing is
@@ -601,11 +600,13 @@ fn a_colour_mask_subset_with_a_none_slot_limits_the_written_targets() {
 }
 
 /// glEnable(GL_BLEND) with uneven masks, for the layer and level cases (and
-/// beside a NONE slot): beside RGBA8 refused by name, nothing handed to the
-/// back end; within the format's channels (R alone) taken with one mask;
-/// beside RGBA32UI (all integer) taken, no blending.
+/// beside a NONE slot): beside RGBA8 taken with a blend enable per RT, the
+/// RGBA8 RT alone blending (draw.rs `PER_TARGET_BLEND_ENABLE`,
+/// `V3dJobState::rt_blend_mask`); within the format's channels (R alone)
+/// taken with one mask, the same enables; beside RGBA32UI (all integer)
+/// taken, no blending.
 #[test]
-fn blending_beside_a_non_integer_target_stays_refused_for_a_layer_and_a_level() {
+fn blending_beside_a_non_integer_target_is_drawn_for_a_layer_and_a_level() {
     let _g = context();
     for r in ROWS {
         for (kind, kn) in KINDS {
@@ -614,9 +615,9 @@ fn blending_beside_a_non_integer_target_stays_refused_for_a_layer_and_a_level() 
                 program(&["vec4", r.ty()]);
                 // SAFETY: plain GL call.
                 unsafe { glEnable(GL_BLEND) };
-                let (seen, e) = draw();
-                assert_eq!(e, GL_INVALID_OPERATION, "{} {kn} beside RGBA8, blending: refused", r.name);
-                assert!(seen.is_none(), "{} {kn} beside RGBA8, blending: the back end saw a draw", r.name);
+                let what = format!("{} {kn} beside RGBA8, blending", r.name);
+                let st = expect_taken(&what, &[0xf, r.own()]);
+                assert!(st.blend_enabled && st.rt_blend_own && st.rt_blend_mask == 0b0001, "{what}: RT 0 alone blends");
                 color_mask(0b0001);
                 let (seen, e) = draw();
                 assert_eq!(e, GL_NO_ERROR, "{} {kn} beside RGBA8, blending, R alone", r.name);
@@ -630,9 +631,13 @@ fn blending_beside_a_non_integer_target_stays_refused_for_a_layer_and_a_level() 
                 program(&["vec4", "vec4", r.ty()]);
                 // SAFETY: plain GL call.
                 unsafe { glEnable(GL_BLEND) };
+                let what = format!("{} {kn} RGBA8, NONE, texture, blending", r.name);
                 let (seen, e) = draw();
-                assert_eq!(e, GL_INVALID_OPERATION, "{} {kn} RGBA8, NONE, texture, blending: refused", r.name);
-                assert!(seen.is_none(), "{} {kn} RGBA8, NONE, texture, blending: the back end saw a draw", r.name);
+                assert_eq!(e, GL_NO_ERROR, "{what}");
+                let s = seen.unwrap_or_else(|| panic!("{what}: the back end saw no draw"));
+                assert_eq!(s.refused, None, "{what}");
+                let st = s.job.unwrap_or_else(|why| panic!("{what}: job_state refuses: {why}"));
+                assert!(st.blend_enabled && st.rt_blend_own && st.rt_blend_mask == 0b0001, "{what}: RT 0 alone blends");
                 // SAFETY: plain GL call.
                 unsafe { glDisable(GL_BLEND) };
             }
