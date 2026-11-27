@@ -6847,8 +6847,10 @@ fn tex_desc_sampler_lod(w: &mut [u32], t: &GlesTextureBind, levels: u32, lod: Op
 /// docs/es3/pvr-2darray.md section 7.2), over the `levels` levels the
 /// sampler walks. Bit 0: compare per texel -- some filter of the sampler
 /// blends texels or levels; 0 for NEAREST both ways with no mipmap filter
-/// or NEAREST_MIPMAP_NEAREST, where the TPU's one texel compared is the
-/// whole filter, and then the word is 0. With bit 0: bit 1 the
+/// over a chain that is not walked, where the TPU's one texel compared is
+/// the whole filter, and then the word is 0. NEAREST_MIPMAP_NEAREST over a
+/// chain is not that: the level is the program's pick (bit 3, dEQP's
+/// ceil(lambda + 0.5) - 1), not the TPU's rounding, so it is `1|2|4|8`. With bit 0: bit 1 the
 /// magnification filter is NEAREST, bit 2 the minification filter's
 /// within-level filter is NEAREST, bit 3 the level is the nearest one
 /// (`*_MIPMAP_NEAREST`), bit 4 two levels are blended (`*_MIPMAP_LINEAR`),
@@ -6857,7 +6859,8 @@ fn tex_desc_sampler_lod(w: &mut [u32], t: &GlesTextureBind, levels: u32, lod: Op
 fn shadow_filter_word(t: &GlesTextureBind, levels: u32) -> u32 {
     let chain = levels > 1;
     let mip_linear = chain && t.mip_filter == 2;
-    if t.linear_filter == 0 && t.min_linear == 0 && !mip_linear {
+    let mip_nearest = chain && t.mip_filter == 1;
+    if t.linear_filter == 0 && t.min_linear == 0 && !mip_linear && !mip_nearest {
         return 0;
     }
     let mut m = 1;
@@ -6867,7 +6870,7 @@ fn shadow_filter_word(t: &GlesTextureBind, levels: u32) -> u32 {
     if t.min_linear == 0 {
         m |= 4;
     }
-    if chain && t.mip_filter == 1 {
+    if mip_nearest {
         m |= 8;
     }
     if mip_linear {
@@ -11575,8 +11578,8 @@ mod tests {
         assert_eq!(desc(&nearest)[13], 0, "NEAREST both ways: the filtered compare");
         assert_eq!(
             desc(&GlesTextureBind { mip_filter: 1, mip_levels: 6, ..nearest })[13],
-            0,
-            "NEAREST_MIPMAP_NEAREST: one texel, the filtered compare"
+            1 | 2 | 4 | 8 | 5 << 8,
+            "NEAREST_MIPMAP_NEAREST: the program picks the level"
         );
         assert_eq!(
             desc(&GlesTextureBind { mip_filter: 2, mip_levels: 6, ..nearest })[13],
