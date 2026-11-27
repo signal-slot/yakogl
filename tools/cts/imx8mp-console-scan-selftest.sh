@@ -252,6 +252,68 @@ if [ "$trc" = 1 ] && grep -qE '^!! NO FINISH row 95 \(hang\) .*last result dEQP-
     okn "two runs, last hung: the last run's case is named, exit 1"
 else bad "two runs, last hung (exit $trc)"; printf '%s\n' "$tout" | sed 's/^/        /'; fi
 
+# (5) Armadillo-X2 console (UART2). Marker sources: SPL at31, BOOTROM and BL31 lines from
+# docs/notes/x2-direct-boot.md; "Bye!" and "Starting kernel ..." are assumed (not in the tree).
+cat > "$D/x2-hang.txt" <<'EOF'
+17:00:00 Armadillo Base OS 3.24-at.3 armadillo-x2 ttymxc1
+17:00:05 Bye!
+17:00:06 *** Booting Zephyr OS build v4.1.0 ***
+17:00:06 gc_wdog_arm: armed WCR 0x0000 -> 0x0f84 (was stopped), WMCR 0x0000, flags 0x1: expiry 600000 ms, fed for 590 s
+17:00:07 deqp: selector 13
+17:00:08 qpa: #beginTestCaseResult dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.src_color
+17:00:09 deqp: Pass dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.src_color
+17:00:10 qpa: #beginTestCaseResult dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.add.dst_color
+EOF
+xout=$(python3 -I "$SCAN" --watch 13 "$D/x2-hang.txt" 2>&1)
+xrc=$?
+[ "$xrc" = 1 ] && okn "x2 hang: exit 1" || bad "x2 hang: exit $xrc"
+if grep -qE '^!! NO FINISH row 13 \(hang\) .*last result .*add\.src_color; case begun, no result: dEQP-GLES3\.functional\.fragment_ops\.blend\.fbo_srgb\.add\.dst_color;' <<<"$xout" &&
+    grep -qE '^17:00:05 KEXEC +Bye!' <<<"$xout" && grep -qE '^== .* 1 boot banner' <<<"$xout"; then
+    okn "x2 hang: names the begun case; the kexec line is listed, one boot banner"
+else bad "x2 hang"; printf '%s\n' "$xout" | sed 's/^/        /'; fi
+
+cat > "$D/x2-wdog.txt" <<'EOF'
+18:00:00 Bye!
+18:00:01 *** Booting Zephyr OS build v4.1.0 ***
+18:00:01 gc_wdog_arm: armed WCR 0x0000 -> 0x0f84 (was stopped), WMCR 0x0000, flags 0x1: expiry 600000 ms, fed for 590 s
+18:00:02 deqp: selector 57
+18:00:03 qpa: #beginTestCaseResult dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest
+18:10:00 gc_wdog_arm: feeding bound of 590 s over; WDOG1 resets the SoC within 10000 ms
+U-Boot SPL 2020.04-at31 (Nov 01 2025 - 00:00:00 +0000)
+DDR Training
+Trying to boot from BOOTROM
+image offset 0x8000, pagesize 0x200, ivt offset 0x0
+NOTICE:  BL31: v2.4(release):2020.04-at28
+U-Boot 2020.04-at31 (Nov 01 2025 - 00:00:00 +0000)
+Hit any key to stop autoboot:  0
+Starting kernel ...
+Booting Linux on physical CPU 0x0000000000 [0x410fd034]
+Linux version 6.12.105-at (build@host) #1 SMP
+18:12:00 Bye!
+18:12:01 *** Booting Zephyr OS build v4.1.0 ***
+18:12:01 gc_wdog_arm: armed WCR 0x0000 -> 0x0f84 (was stopped), WMCR 0x0000, flags 0x1: expiry 600000 ms, fed for 590 s
+18:12:02 deqp: selector 58
+18:12:05 deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_mipmap
+18:12:06 deqp: summary: 1 cases begun, 1 with a result, 0 without
+EOF
+xout=$(python3 -I "$SCAN" --watch 57,58 "$D/x2-wdog.txt" 2>&1)
+xrc=$?
+[ "$xrc" = 1 ] && okn "x2 wdog: exit 1" || bad "x2 wdog: exit $xrc"
+if grep -qE '^!! NO FINISH row 57 \(watchdog end\) .*case begun, no result: dEQP-GLES3\.functional\.texture\.filtering\.3d\.formats\.rgba8_nearest;' <<<"$xout" &&
+    grep -qE '^row +58 .* +4s .*finish' <<<"$xout" && grep -qE '^== .* 6 boot banner' <<<"$xout"; then
+    okn "x2 wdog: row 57 watchdog end naming the case, row 58 finishes, 6 banners"
+else bad "x2 wdog"; printf '%s\n' "$xout" | sed 's/^/        /'; fi
+# the SPL banner lost: the BOOTROM/BL31 lines alone close the row
+printf '%s\n' '19:00:00 deqp: selector 20' '19:00:01 qpa: #beginTestCaseResult dEQP-GLES3.functional.shaders.x' \
+    'Trying to boot from BOOTROM' 'NOTICE:  BL31: v2.4(release):2020.04-at28' > "$D/x2-lost.txt"
+python3 -I "$SCAN" -q "$D/x2-lost.txt" 2>&1 | grep -qE '^!! NO FINISH row 20 \(reset\) .*begun, no result: dEQP-GLES3\.functional\.shaders\.x' &&
+    okn "x2 reset with the SPL banner lost: BOOTROM/BL31 line closes the row" || bad "x2 lost banner"
+# the image's start inside an open row, no banner at all
+printf '%s\n' '19:00:00 deqp: selector 20' '19:00:01 qpa: #beginTestCaseResult dEQP-GLES3.functional.shaders.x' \
+    '19:09:00 gc_wdog_arm: armed WCR 0x0000 -> 0x0f84 (was stopped), WMCR 0x0000, flags 0x1: expiry 600000 ms, fed for 590 s' > "$D/x2-armed.txt"
+python3 -I "$SCAN" -q "$D/x2-armed.txt" 2>&1 | grep -qE '^!! NO FINISH row 20 \(reset\)' &&
+    okn "armed inside an open row: a reset" || bad "armed inside an open row"
+
 # bad input
 python3 -I "$SCAN" "$D/missing.txt" > /dev/null 2>&1
 [ "$?" = 2 ] && ok "missing file: exit 2" || bad "missing file"

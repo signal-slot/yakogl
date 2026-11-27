@@ -118,6 +118,20 @@ WDOG_OTHER = re.compile(r'RTI feeder lifetime over|rti_arm: feeding bound of')
 BOOT = re.compile(r'Booting Zephyr OS|U-Boot SPL \d|^U-Boot \d{4}\.|\bU-Boot \d{4}\.\d\d|'
                   r'Booting Linux on physical CPU|^Linux version \d')
 
+# Armadillo-X2 (UART2; ABOS, crash-route kexec; docs/notes/x2-direct-boot.md "What to look for
+# on the console", driver/tools/kexec-zephyr/README.md "The Armadillo-X2"). A reset there goes
+# through U-Boot SPL 2020.04-at31 (matched by BOOT above), "Trying to boot from BOOTROM" and TF-A's
+# "NOTICE:  BL31: v2.4(release):2020.04-at28" (both from x2-direct-boot.md, step 3), U-Boot
+# 2020.04-at31 (BOOT), then Linux (BOOT). BOOT_BACK lines are boot-back markers that are not a
+# banner of their own: they close an open row as a reset when the banner line itself was lost
+# (a garbled or dropped first line after the reset), and are not counted as boot banners.
+# "Starting kernel ..." is U-Boot's line before Linux (am62p notes, assumed the same on at31).
+BOOT_BACK = re.compile(r'Trying to boot from BOOTROM|NOTICE:\s+BL31: v|^Starting kernel \.\.\.')
+# The outgoing side of the kexec route (the jump from ABOS into the image): the kernel's arm64
+# machine_kexec prints "Bye!" (ASSUMED: not in the tree). It is listed as KEXEC and changes
+# no row: the image's own start ("Booting Zephyr OS" and "gc_wdog_arm: armed") follows it.
+KEXEC = re.compile(r'^Bye!|kexec_zephyr: ')
+
 # Zephyr's fatal handler: ">>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0"
 # (tools/board.sh finds it in the image's console), the AArch64 dump lines
 # "ESR_ELn: 0x..." / "ELR_ELn: 0x...", dEQP's main.cpp:69 "deqp: fatal: dEQP ended
@@ -251,6 +265,14 @@ def scan(lines, watch, out, partial=False):
             if cur is not None and cur.how is None:
                 close('watchdog end' if cur.wdog_end else 'reset', t)
             tag = 'WDOG '
+        elif BOOT_BACK.search(text) or KEXEC.search(text):
+            tag = 'WDOG ' if BOOT_BACK.search(text) else 'KEXEC'
+            if cur is not None and cur.how is None and BOOT_BACK.search(text):
+                close('watchdog end' if cur.wdog_end else 'reset', t)
+        elif WDOG_ARMED.search(text) and cur is not None and cur.how is None:
+            # the image's start inside an open row: a boot whose banner was lost
+            tag = 'WDOG '
+            close('watchdog end' if cur.wdog_end else 'reset', t)
         elif WDOG_ARMED.search(text) or WDOG_END.search(text) or WDOG_OTHER.search(text):
             tag = 'WDOG '
             if cur is not None and WDOG_END.search(text) and 'proof: sample' not in text:
