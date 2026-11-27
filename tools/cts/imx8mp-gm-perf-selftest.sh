@@ -67,6 +67,50 @@ scene: shadow page 4
 glmark2-perf: shadow: page 0: 594b0c00 00640014 00190032 00000000
 glmark2-perf: shadow: page 4: 594b0c04 00000000 00070000 00000000"
 
+# X2 records keep w0..w2 only: v4/v5 are not in them.  shadow ~ 100 ms a frame (v0=100)
+run_stdin x2-shadow 0 "scene: shadow page 0 (measured on the Armadillo-X2)
+  ms a frame: 100.000
+  frames: 100 saturated=no
+  frame us: >= 65535 saturated=yes (65.5 ms or more)
+  gl us: 90 saturated=no
+  swap us: 12 saturated=no
+  show us: not in an X2 record
+  frame-to-frame us: not in an X2 record
+scene: shadow page 4 (measured on the Armadillo-X2)
+  GPU mipmap chains /100: 0 saturated=no
+  CPU mipmap fallbacks /100: 0 saturated=no
+  CPU GPU-waits /100: 0 saturated=no
+  KiB of CPU passes: 2400 saturated=no" "glmark2-perf: shadow: page 0: 594b0c00 ffff0064 000c005a
+glmark2-perf: shadow: page 4: 594b0c04 00000000 09600000"
+# refract-like, with the flag
+run_args x2-refract-flag 0 "scene: refract page 0 (measured on the Armadillo-X2)
+  ms a frame: 27.027
+  frames: 370 saturated=no
+  frame us: 27000 saturated=no
+  gl us: 26000 saturated=no
+  swap us: 900 saturated=no
+  show us: not in an X2 record
+  frame-to-frame us: not in an X2 record" --board x2 --scene refract 594b0c00 69780172 03846590
+# terrain-like, saturated v0
+run_args x2-terrain-sat 0 "scene: terrain page 0 (measured on the Armadillo-X2)
+  ms a frame: <= 0.153 (bound: page 0 v0 saturated at 65535)
+  frames: >= 65535 saturated=yes
+  frame us: 10 saturated=no
+  gl us: >= 65535 saturated=yes (65.5 ms or more)
+  swap us: 1 saturated=no
+  show us: not in an X2 record
+  frame-to-frame us: not in an X2 record" --board x2 --scene terrain 594b0c00 000affff 0001ffff
+run_args x2-page3 0 "scene: ? page 3 (measured on the Armadillo-X2)
+  v0..v5 = 1 2 3 4 not in an X2 record not in an X2 record (not decoded)" --board x2 594b0c03 00020001 00040003
+# --board verdin keeps the full reading with three words
+run_args verdin-flag 0 "scene: ? page 0
+  ms a frame: 1000.000
+  frames: 10 saturated=no
+  frame us: 500 saturated=no
+  gl us: 300 saturated=no
+  swap us: 200 saturated=no" --board verdin 594b0c00 01f4000a 00c8012c
+run_args bad-board 2 "usage: --board x2|verdin [--scene NAME] W0 W1 W2 [W3]" --board pi
+
 # malformed
 run_args bad-short 1 "imx8mp-gm-perf: need w0 w1 w2 [w3] (3 or 4 hex words), got 2" 594b0c00 ffffffff
 run_args bad-hex 1 "imx8mp-gm-perf: not a 32-bit hex word: 'zzzz'" 594b0c00 zzzz 0
