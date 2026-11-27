@@ -80,7 +80,7 @@ is from the two-row set.
 
 | Board | glmark2-es2 | gl_test | GPU resets |
 |---|---|---|---:|
-| AM62P | 468, 33 scenes, 0 failed, 0 GL errors; `6a7021ec` (#42's path B, off by default, and the case 216 kick count; built before its rebase onto main `561bad55`, as `e4819b69` on main `61ad38a1`), 2026-11-01 (`records/am62p/common-e4819b69/20261101-1935-GM-4bcd9ff3/`, `verdict=done`, resets 0; the first run since `ce3354ac`, the HWRT second pair); **shadow 10.62 ms a frame (95 FPS), refract 35.09 ms (29 FPS), terrain 83.06 ms (13 FPS)** (10.63, 37.05, 90.94 at `86d0b482`); per-scene ms/frame below; pictures against `tools/cts/glmark2-pictures.txt` column `am62p` (the `445c5653` run's): 33 scenes, match 28, mismatch 5, each one probe of an animated scene (desktop blur tr, buffer map and interleaved map c, terrain c off 10, refract c — sampled at a different frame count), shadow a match, none black | 49 of 50 (rerun at `6a7021ec`, GT `20261101-1943-GT-0225c49e`, as at `86d0b482`): case 20 `etc` fails its first check alone — it wants 3 compressed formats, the build stores 5, the intended ES 3.0 list on the PowerVR (`tests/es3_caps.rs` `known_gaps`); the test's expectation is stale, its other 16 checks pass (below); `445c5653` read 50 of 50; case 215 `shadowmap` PASS on its own, below) | 0 |
+| AM62P | 489, 33 scenes, 0 failed, 0 GL errors; main `b884868c`, 2026-11-27 (`records/am62p/common-b884868c/20261127-0216-GM-781c08be/`, `verdict=done`, resets 0, record words `594b1201,fc3f01e9,6184003f,00258320`); **shadow 10.56 ms a frame (95 FPS), refract 34.83 ms (29 FPS), terrain 79.90 ms (13 FPS)** (10.62, 35.09, 83.06 at `6a7021ec`); per-scene ms/frame below; pictures: the stage's compare against `tools/cts/glmark2-pictures.txt` column `am62p` listed mismatches in the animated scenes desktop blur, buffer (3), jellyfish, terrain and refract (single probes; the first scenes' lines were not kept in the stage's tail) | 50 of 50 (GT `20261127-0225-GT-9dbe642a`, 0 failed, 0 timed out; case 20 `etc` passes now) | 0 |
 | i.MX8MP | 42, 33 scenes, 0 failed, 0 GL errors (#814 fixed by #922); main `445c5653`, 2026-10-20, 1 screen buffer (the default); re-run from main `a917d123` (holds the GC mipmap offer `dc033dc44`, #1106) the same day: score 42 (`records/imx8mp/common-a917d123`, GM `verdict=done`, words `fc3f002a`); re-run from main `f87dde43` on 2026-11-07 (`tools/cts/board-stage.sh imx8mp common`, `uboot-mmc`, `records/imx8mp/common-f87dde43/`): score 42, 33 scenes, 0 failed, 0 GL errors, words `fc3f002a` again, gl_test 49 of 49 run, case 16 skipped, both rows `verdict=done`, resets absent (no per-scene record: the board has no console); per-scene record `records/imx8mp/20261020-2100-glmark2-a917d123/` (66 boots, ms a frame = 1000 / the integer FPS): **terrain 250 ms (4 FPS), shadow 500 ms (2 FPS), refract 500 ms (2 FPS)**, the other 30 scenes 16.95 to 35.71 ms; 1934.56 ms summed (1932.65 at `445c5653`), so the offer moved no scene at this resolution; all 33 pictures match the `imx8mp` column, none black, terrain and refract means equal to the `445c5653` ones (not looked at by eye); per-scene FPS and picture values from the SNVS record (below: terrain 4, shadow 2, refract 2 FPS), pictures in `tools/cts/glmark2-pictures.txt` column `imx8mp` (33 from this run, none black, not looked at by eye); 49 at 3 buffers, 46 at 2 (`bebce725`, below) | 49 of 49 run, case 16 skipped (#4); cases 10 and 17 nondeterministic (#5, #3: 11 boots of `work/egl-double-buffer`'s code, case 17 failed 3, case 10 failed 1; main `0247ac665`, 10 boots: case 17 failed 3, case 10 failed 3, case 44 once) | 0 where counted |
 | Pi 4 | 195, 33 scenes, 0 failed, 0 unsupported, 0 GL errors, 0 out-of-memory scenes; main `bdd2ba1c`, 2026-11-25 (`board-stage.sh pi4 common`, tryboot; GM `verdict=done`, resets 0, record words `594b1201,fc3f00c3,6184003f,00258320` (the same four words as the run of `87881c78`, 3 of 3 records); `records/pi4/common-bdd2ba1c/`); 195 also at `950a5652`, `87881c78`, `c4af4917` and `f784bfab`, 193 at `445c5653`; **terrain about 34.5 ms a frame (29 fps), shadow about 7.3 ms (137 fps), refract about 17.2 ms (58 fps)**, from the console's glmark2-list fps, whole fps only (terrain 161.79 ms at `c4af4917`; slow-scene time recorded, not judged, #1209); pictures against `tools/cts/glmark2-pictures.txt` column `pi4`: 28 of 33 match, 4 differ in a probe (desktop blur, jellyfish, terrain, refract), 1 unreadable (loop fragment-uniform=true); the per-scene ms table below is of `c4af4917` | 13 of 13 (`bdd2ba1c`, GT `verdict=done`, resets 0) | 0 |
 | NanoPC-T6 (Mali) | no score (1 of 33 scenes has an FPS), 33 of 33 scenes ran, 32 failed, 80 GL error lines, 0 out of GPU memory; main `a57d8104`, 2026-11-11 (the same outcome as the first record, main `da65355e` 2026-11-10), on the board's own Armbian trixie (kernel 6.18.55-current-rockchip64, panthor), `tools/cts/mali-glmark2-session.sh` over the `tools/cts/mali-glmark2-build.sh` tree (`dev=no`; one glmark2-es2 process a scene, 800x600 on an EGL pbuffer of the `tools/mali/panthor-gles` pair, libGLESv2.so.2 sha256 `283d99138184a8692cb09a24f194d2dc3b01bc43f43e63947bba1ee8a3383583`); **desktop shadow 0.96 ms a frame (1042 FPS), picture match; 31 scenes refused at `glCompileShader` by the online compiler (plan #309, #33); terrain aborts in glmark2 itself after its refusals**; per scene under "Mali: NanoPC-T6 ... glmark2-es2" below | see "Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep" | 0 (0 panthor kernel lines in every scene; same boot_id before and after; /boot and loaded modules unchanged, U-Boot env not compared: no fw_printenv on the board) |
@@ -215,50 +215,50 @@ is from the two-row set.
 - The README glmark2 table's runs: the GM row of the common set on the
   i.MX8MP from main `445c5653` (2026-10-20); the README's AM62P score is the
   run of main `86d0b482` (2026-10-28) until a main commit is measured, and
-  the AM62P column below is the run of `6a7021ec` (2026-11-01, the row
+  the AM62P column below is the run of `b884868c` (2026-11-27, the row
   above); the Pi 4 column is the run of
   main `c4af4917` (2026-10-22, below). Per scene, ms/frame. The AM62P and Pi 4 columns are
   `glmark2-ms.py` / `common-tally.py --gm-table` (from `FrameTime`). The
   i.MX8MP column is 1000 / the integer FPS of its SNVS record, with the FPS
-  in brackets. The earlier columns are the AM62P's 467 run of `86d0b482`
+  in brackets. The earlier columns are the AM62P's 468 run of `6a7021ec`
   (this table before) and the Pi 4's 193 run of `445c5653`.
 
-  | Scene | AM62P | AM62P `86d0b482` | Pi 4 `c4af4917` | Pi 4 `445c5653` | i.MX8MP (FPS) |
+  | Scene | AM62P `b884868c` | AM62P `6a7021ec` | Pi 4 `c4af4917` | Pi 4 `445c5653` | i.MX8MP (FPS) |
   |---|---:|---:|---:|---:|---:|
-  | build use-vbo=false | 5.79 | 5.81 | 4.75 | 6.42 | 33.33 (30) |
-  | build use-vbo=true | 1.14 | 1.14 | 3.64 | 3.61 | 16.95 (59) |
-  | texture nearest | 1.07 | 1.07 | 3.78 | 3.74 | 16.95 (59) |
-  | texture linear | 1.08 | 1.08 | 3.72 | 3.70 | 16.95 (59) |
+  | build use-vbo=false | 5.95 | 5.79 | 4.75 | 6.42 | 33.33 (30) |
+  | build use-vbo=true | 1.11 | 1.14 | 3.64 | 3.61 | 16.95 (59) |
+  | texture nearest | 0.95 | 1.07 | 3.78 | 3.74 | 16.95 (59) |
+  | texture linear | 0.97 | 1.08 | 3.72 | 3.70 | 16.95 (59) |
   | texture mipmap | 1.09 | 1.09 | 3.70 | 3.67 | 16.95 (59) |
-  | shading gouraud | 1.42 | 1.42 | 3.69 | 3.66 | 16.95 (59) |
-  | shading blinn-phong-inf | 1.66 | 1.66 | 4.43 | 4.42 | 16.95 (59) |
-  | shading phong | 2.07 | 2.07 | 4.49 | 4.46 | 16.95 (59) |
-  | shading cel | 2.42 | 2.43 | 4.43 | 4.43 | 16.95 (59) |
-  | bump high-poly | 3.03 | 3.03 | 4.66 | 4.62 | 16.95 (59) |
-  | bump normals | 1.19 | 1.19 | 4.42 | 4.42 | 16.95 (59) |
-  | bump height | 1.41 | 1.42 | 4.48 | 4.46 | 16.95 (59) |
-  | effect2d edge (3x3) | 5.81 | 5.82 | 4.46 | 4.46 | 25.00 (40) |
-  | effect2d 5x5 | 8.99 | 8.98 | 4.47 | 4.47 | 35.71 (28) |
-  | pulsar | 1.13 | 1.14 | 4.54 | 4.52 | 18.18 (55) |
-  | desktop blur | 21.58 | 21.31 | 11.18 | 13.06 | 33.33 (30) |
-  | desktop shadow | 6.80 | 6.92 | 6.51 | 6.87 | 33.33 (30) |
-  | buffer map | 16.20 | 16.20 | 10.12 | 10.14 | 33.33 (30) |
-  | buffer subdata | 11.43 | 11.42 | 8.97 | 10.03 | 33.33 (30) |
-  | buffer interleaved map | 14.51 | 14.56 | 8.80 | 8.76 | 33.33 (30) |
-  | ideas | 5.60 | 5.77 | 12.40 | 11.85 | 33.33 (30) |
-  | jellyfish | 6.30 | 6.30 | 4.50 | 4.50 | 33.33 (30) |
-  | **terrain** | **83.06** | 90.94 | 161.79 | 179.26 | 250.00 (4) |
-  | **shadow** | **10.62** | 10.63 | 7.34 | 7.32 | 500.00 (2) |
-  | **refract** | **35.09** | 37.05 | 17.27 | 18.72 | 500.00 (2) |
-  | conditionals 0/0 | 1.06 | 1.07 | 4.37 | 4.36 | 17.54 (57) |
-  | conditionals frag 5 | 1.83 | 1.84 | 4.36 | 4.36 | 19.61 (51) |
-  | conditionals vtx 5 | 1.06 | 1.06 | 4.36 | 4.36 | 17.54 (57) |
-  | function low | 1.27 | 1.27 | 4.36 | 4.37 | 19.61 (51) |
-  | function medium | 1.79 | 1.79 | 4.37 | 4.37 | 19.61 (51) |
-  | loop fragment-loop=false | 1.35 | 1.35 | 4.37 | 4.37 | 17.54 (57) |
+  | shading gouraud | 1.30 | 1.42 | 3.69 | 3.66 | 16.95 (59) |
+  | shading blinn-phong-inf | 1.61 | 1.66 | 4.43 | 4.42 | 16.95 (59) |
+  | shading phong | 2.04 | 2.07 | 4.49 | 4.46 | 16.95 (59) |
+  | shading cel | 2.40 | 2.42 | 4.43 | 4.43 | 16.95 (59) |
+  | bump high-poly | 2.98 | 3.03 | 4.66 | 4.62 | 16.95 (59) |
+  | bump normals | 1.17 | 1.19 | 4.42 | 4.42 | 16.95 (59) |
+  | bump height | 1.41 | 1.41 | 4.48 | 4.46 | 16.95 (59) |
+  | effect2d edge (3x3) | 5.79 | 5.81 | 4.46 | 4.46 | 25.00 (40) |
+  | effect2d 5x5 | 8.96 | 8.99 | 4.47 | 4.47 | 35.71 (28) |
+  | pulsar | 1.03 | 1.13 | 4.54 | 4.52 | 18.18 (55) |
+  | desktop blur | 21.53 | 21.58 | 11.18 | 13.06 | 33.33 (30) |
+  | desktop shadow | 6.79 | 6.80 | 6.51 | 6.87 | 33.33 (30) |
+  | buffer map | 16.52 | 16.20 | 10.12 | 10.14 | 33.33 (30) |
+  | buffer subdata | 11.75 | 11.43 | 8.97 | 10.03 | 33.33 (30) |
+  | buffer interleaved map | 14.48 | 14.51 | 8.80 | 8.76 | 33.33 (30) |
+  | ideas | 5.87 | 5.60 | 12.40 | 11.85 | 33.33 (30) |
+  | jellyfish | 6.29 | 6.30 | 4.50 | 4.50 | 33.33 (30) |
+  | **terrain** | **79.90** | **83.06** | 161.79 | 179.26 | 250.00 (4) |
+  | **shadow** | **10.56** | **10.62** | 7.34 | 7.32 | 500.00 (2) |
+  | **refract** | **34.83** | **35.09** | 17.27 | 18.72 | 500.00 (2) |
+  | conditionals 0/0 | 0.90 | 1.06 | 4.37 | 4.36 | 17.54 (57) |
+  | conditionals frag 5 | 1.83 | 1.83 | 4.36 | 4.36 | 19.61 (51) |
+  | conditionals vtx 5 | 0.92 | 1.06 | 4.36 | 4.36 | 17.54 (57) |
+  | function low | 1.25 | 1.27 | 4.36 | 4.37 | 19.61 (51) |
+  | function medium | 1.80 | 1.79 | 4.37 | 4.37 | 19.61 (51) |
+  | loop fragment-loop=false | 1.36 | 1.35 | 4.37 | 4.37 | 17.54 (57) |
   | loop uniform=false | 1.36 | 1.36 | 4.37 | 4.37 | 19.61 (51) |
-  | loop uniform=true | 3.88 | 3.88 | 4.37 | 4.37 | 19.61 (51) |
-  | sum | 264.09 | 274.07 | 347.45 | 370.50 | 1932.65 |
+  | loop uniform=true | 4.55 | 3.88 | 4.37 | 4.37 | 19.61 (51) |
+  | sum | 261.23 | 264.09 | 347.45 | 370.50 | 1932.65 |
 
 - The AM62P row is from `6a7021ec` (2026-11-01, `records/am62p/common-e4819b69/`,
   GM `20261101-1935-GM-4bcd9ff3`, GT `20261101-1943-GT-0225c49e`), built
