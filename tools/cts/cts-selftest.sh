@@ -1181,6 +1181,37 @@ else
     printf '%s\n' "$cr_out" | tail -8 | sed 's/^/        | /'
 fi
 
+# 69-71: the pr-session and mip3 record-reader selftests, each its own exit
+# status. 69 pr-session-selftest.sh (pr-session.sh --dry-run output and
+# refusals), 70 mip3-ab-verdict-selftest.sh (arm A / arm E confirmation lines),
+# 71 mip3-deqp-diff-selftest.sh (per-case dEQP mipmap.2d verdict diff).
+echo
+echo "== 69. pr-session-selftest.sh"
+if prs_out=$(bash "$HERE/pr-session-selftest.sh" 2>&1); then
+    ok "pr-session.sh --dry-run output and refusals"
+else
+    bad "pr-session-selftest.sh failed"
+    printf '%s\n' "$prs_out" | tail -8 | sed 's/^/        | /'
+fi
+
+echo
+echo "== 70. mip3-ab-verdict-selftest.sh"
+if m3v_out=$(bash "$HERE/mip3-ab-verdict-selftest.sh" 2>&1); then
+    ok "mip3-ab-verdict: arm A / arm E confirmation lines and refusals"
+else
+    bad "mip3-ab-verdict-selftest.sh failed"
+    printf '%s\n' "$m3v_out" | tail -8 | sed 's/^/        | /'
+fi
+
+echo
+echo "== 71. mip3-deqp-diff-selftest.sh"
+if m3d_out=$(bash "$HERE/mip3-deqp-diff-selftest.sh" 2>&1); then
+    ok "mip3-deqp-diff: per-case dEQP mipmap.2d verdict diff between two arms"
+else
+    bad "mip3-deqp-diff-selftest.sh failed"
+    printf '%s\n' "$m3d_out" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
