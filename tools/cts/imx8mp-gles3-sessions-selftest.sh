@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Self-test of imx8mp-gles3-sessions.py on a small synthetic table, mustpass list and Pi 4 record:
+# Self-test of imx8mp-gles3-sessions.py on a small synthetic table, mustpass list, Pi 4 record and board slices
+# of both GC7000UL boards (Verdin 'board.sh imx8mp' lines and Armadillo-X2 'board.sh x2' lines):
 # sh tools/cts/imx8mp-gles3-sessions-selftest.sh   (host only, exit 0 when every check holds)
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -147,6 +148,63 @@ python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "
 grep -q '^# note: skipped 2026-11-imx8mp-gles3-rows00-02: ' "$tmp/skipout" || fail "no skip note for the unparseable name"
 [ "$(awk -F'\t' '$1 == 0 {print $3}' "$tmp/skipout")" = 2.0 ] || fail "the skipped slice still gave a measured rate"
 [ "$(awk -F'\t' '$1 == 0 {print $4}' "$tmp/skipout")" = pi4:LT ] || fail "the skipped slice changed the rate source"
+# Armadillo-X2 slices: 'board.sh x2 e<NN> ...' verdict lines (the crash-route kexec words; a 'lost' line with no
+# back_after; a page line; an uptime that must NOT be subtracted) in a slice named with slice.py's 'x2-' form
+# 2026-11-imx8mp-gles3-x2-<hex8>-rowsAA-BB: read like the Verdin slices, the rate source names the board
+# ('x2:rows00-02'), and the results.tsv three-word rows ('-' in begun and noresult, as 'board.sh x2 tree'
+# writes them) still give a fail fraction with begun derived from the counts
+sxx="$tmp/x2/2026-11-imx8mp-gles3-x2-05769bf2-rows00-02"
+mkdir -p "$sxx"
+cat > "$sxx/verdicts.txt" <<EOF
+# synthetic Armadillo-X2 slice
+board.sh x2 e00 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent back_after=44s (kexec-dev: a development run, never a row)
+board.sh x2 e00-p0 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP_FAILS resets=absent back_after=999s (kexec-dev)
+board.sh x2 e01 rc=5 verdict=lost boot=kexec-dev DEV boot_verdict=none result=none resets=absent
+board.sh x2 e02 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent back_after=33s uptime=250s (kexec-dev)
+EOF
+printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tnames\n0\tx\t-\t3\t1\t0\t0\t-\tdEQP-GLES3.functional.lifetime.c1\n2\tx\t-\t3\t0\t0\t0\t-\t-\n' > "$sxx/results.tsv"
+runx2() { python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+          --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/x2/*" "$@"; }
+runx2 > "$tmp/outx.tsv" 2> "$tmp/errx.txt" || fail "the x2 slice run exited nonzero: $(cat "$tmp/errx.txt")"
+rowx() { awk -F'\t' -v i="$1" '$1 == i' "$tmp/outx.tsv" | cut -f"$2"; }
+[ -z "$(grep '^# note: skipped' "$tmp/outx.tsv")" ] || fail "the x2-named slice was skipped: $(grep '^# note: skipped' "$tmp/outx.tsv")"
+[ "$(rowx 0 3)" = 44.0 ] || fail "x2 measured lifetime seconds: $(rowx 0 3)"
+[ "$(rowx 0 4)" = x2:rows00-02 ] || fail "the x2 rate source names the board: $(rowx 0 4)"
+[ "$(rowx 2 3)" = 33.0 ] || fail "x2 seconds use back_after, uptime not subtracted: $(rowx 2 3)"
+[ "$(rowx 2 4)" = x2:rows00-02 ] || fail "the x2 shader source: $(rowx 2 4)"
+[ "$(rowx 1 3)" = 44.0 ] || fail "the x2 verdict=lost entry reads as measured: $(rowx 1 3)"
+rowx 1 4 | grep -q '^assumed:' || fail "the x2 verdict=lost source: $(rowx 1 4)"
+grep -q '^# rate functional.lifetime = 11.0000 s/case (x2:rows00-02' "$tmp/outx.tsv" || fail "header lacks the x2 measured rate"
+grep -q '^# rate functional.shaders = 11.0000 s/case (x2:rows00-02' "$tmp/outx.tsv" || fail "header lacks the x2 shader rate"
+# --pages on the three-word rows: fraction 1 / (3 + 1 derived begun) over 4 cases = 1 expected fail = 1 page of 90 s
+runx2 --pages --page-seconds 90 | awk -F'\t' '$1 == 0 {print $3}' | grep -qx 134.0 || fail "--pages with an x2 slice (begun derived from the counts)"
+runx2 --pages --page-seconds 90 | awk -F'\t' '$1 == 2 {print $3}' | grep -qx 33.0 || fail "--pages changed a passing x2 row"
+# an 'x2-' name without a commit hash is skipped with a note, like the other unparseable names
+mkdir -p "$tmp/slices4/2026-11-imx8mp-gles3-x2-rows00-02"
+cp "$sl/verdicts.txt" "$sl/results.tsv" "$tmp/slices4/2026-11-imx8mp-gles3-x2-rows00-02/"
+python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+         --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/slices4/*" \
+         > "$tmp/skip4out" 2> "$tmp/skip4err" || fail "a run with an unparseable x2 name exited nonzero: $(cat "$tmp/skip4err")"
+grep -q '^# note: skipped 2026-11-imx8mp-gles3-x2-rows00-02: ' "$tmp/skip4out" || fail "no skip note for the x2 name without a hash"
+[ "$(awk -F'\t' '$1 == 0 {print $3}' "$tmp/skip4out")" = 2.0 ] || fail "the skipped x2-named slice still gave a measured rate"
+# a group measured on both boards at one commit (imx8mp-gles3-merge.py --check accepts a Verdin and an X2 slice
+# of one commit): the pool names the board per slice in the rate source; a single-board group keeps its one label
+mkdir -p "$tmp/mixb"
+cp -r "$sl2" "$tmp/mixb/"
+mkdir -p "$tmp/mixb/2026-11-imx8mp-gles3-x2-05769bf2-rows03-04"
+cat > "$tmp/mixb/2026-11-imx8mp-gles3-x2-05769bf2-rows03-04/verdicts.txt" <<EOF
+# synthetic
+board.sh x2 e03 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent back_after=12s (kexec-dev)
+EOF
+printf '# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tnames\n3\tx\t-\t3\t0\t0\t0\t-\t-\n' \
+  > "$tmp/mixb/2026-11-imx8mp-gles3-x2-05769bf2-rows03-04/results.tsv"
+python3 "$py" --table "$tmp/table.txt" --mustpass "$tmp/mustpass.txt" --record "$tmp/rec" \
+         --pi4-table "$tmp/pi4.txt" --gles2-results /nonexistent --board-slices "$tmp/mixb/*" \
+         > "$tmp/mixbout" 2> "$tmp/mixberr" || fail "a Verdin + X2 slice glob exited nonzero: $(cat "$tmp/mixberr")"
+[ "$(awk -F'\t' '$1 == 2 {print $3}' "$tmp/mixbout")" = 22.5 ] || fail "both-board shader seconds: $(awk -F'\t' '$1 == 2 {print $3}' "$tmp/mixbout")"
+[ "$(awk -F'\t' '$1 == 2 {print $4}' "$tmp/mixbout")" = imx8mp:rows00-02+x2:rows03-04 ] || fail "the both-board rate source: $(awk -F'\t' '$1 == 2 {print $4}' "$tmp/mixbout")"
+grep -q '^# rate functional.shaders = 7.5000 s/case (imx8mp:rows00-02+x2:rows03-04' "$tmp/mixbout" || fail "header lacks the both-board rate label"
+[ "$(awk -F'\t' '$1 == 0 {print $4}' "$tmp/mixbout")" = imx8mp:rows00-02 ] || fail "the Verdin-only group lost its label: $(awk -F'\t' '$1 == 0 {print $4}' "$tmp/mixbout")"
 # --rows: only the named entries are listed, with the numbers they have without --rows; ranges stay inside
 run --rows 1..3 | grep -v '^#' | awk -F'\t' '$1 ~ /^[0-9]+$/ {printf "%s ", $1}' | grep -qx '1 2 3 ' || fail "--rows 1..3 lists other entries"
 [ "$(run --rows 3 | awk -F'\t' '$1 ~ /^[0-9]+$/' | cut -f1-4)" = "$(row 3 | cut -f1-4)" ] || fail "--rows 3 changes entry 3's numbers"

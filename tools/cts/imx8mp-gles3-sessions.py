@@ -27,27 +27,35 @@ file per entry when its header has a seconds or ms column (source 'imx8mp-gles2:
 none today), else they are assumed (marked 'assumed', half of 600 s over the group's table budget, as for GLES3).
 The 29 rows are the whole table: '--gles2 --rows 0..28' equals '--gles2'.
 
-Rate order, per dEQP group (group_key): 1. measured on the GC7000UL (rate_source 'imx8mp:<slice>'), 2. Pi 4,
-3. assumed. The GC7000UL rate comes from the committed slices (--board-slices, default
-log/*-imx8mp-gles3-*-rows*, slices of any campaign commit): the 'back_after=Ns' of an entry's 'board.sh imx8mp eNN
-... verdict=done' line in the slice's verdicts.txt (the first line of each entry; the e<NN>-p<page> lines are not
-entries), divided over the entry's mustpass cases. A slice directory is named
-'<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD; the name carries the campaign commit) and
-the rate source is 'imx8mp:rows<AA>-<BB>'. Slices naming more than one commit are refused with exit 2 and a
-message, never mixed (imx8mp-gles3-merge.py --check refuses them the same way): pass an explicit --board-slices
-glob for one commit when the default reaches two campaigns. A matched directory whose name does not follow this
-pattern is skipped with a note. Entries whose cases are all of one group are pooled per group (sum of seconds / sum of
+Rate order, per dEQP group (group_key): 1. measured on the GC7000UL (rate_source 'imx8mp:<slice>' for a Verdin
+slice, 'x2:<slice>' for an Armadillo-X2 one), 2. Pi 4, 3. assumed. The GC7000UL rate comes from the committed
+slices (--board-slices, default log/*-imx8mp-gles3-*-rows*, slices of any campaign commit, on either board): the
+'back_after=Ns' of an entry's 'board.sh imx8mp eNN ... verdict=done' line (the Verdin i.MX8MP) or 'board.sh x2
+eNN ...' line (the Armadillo-X2, same i.MX 8M Plus and GC7000UL) in the slice's verdicts.txt (the first line of
+each entry; the e<NN>-p<page> lines are not entries), divided over the entry's mustpass cases. A slice directory
+is named '<date>-imx8mp-gles3-[x2-]<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD; the name carries the
+campaign commit; 'x2-' is the form imx8mp-gles3-slice.py gives an Armadillo-X2 slice) and the rate source names
+the board each entry was measured on: 'imx8mp:rows<AA>-<BB>' or 'x2:rows<AA>-<BB>' (a group pooled from both
+boards names the board per slice). Slices naming more than one commit are refused with exit 2 and a message,
+never mixed (imx8mp-gles3-merge.py --check refuses them the same way): pass an explicit --board-slices glob for
+one commit when the default reaches two campaigns; Verdin and Armadillo-X2 slices of one commit are not mixed
+that way (merge --check accepts them together too). A matched directory whose name does not follow this pattern
+is skipped with a note. Entries whose cases are all of one group are pooled per group (sum of seconds / sum of
 cases); entries of mixed groups give every group still without a rate their pooled per-case rate. back_after is
-reboot to ssh and so INCLUDES the per-entry boot (Linux's 19-37 s plus the Zephyr boot, about 45-50 s) and the
-failure-name pages are not in it: the measured rate already carries the boot, so with a measured rate do not also
-pass --overhead for boot (the estimate of an entry of few cases is high, of many cases about right). --scale does
-not apply to measured rates. --no-board-rates drops this step (the Pi 4 model as before).
+reboot to ssh and so INCLUDES the per-entry boot (Linux's 19-37 s plus the Zephyr boot, about 45-50 s); on a
+'board.sh x2' line it is the crash-route kexec jump to ssh answering in the new Linux (the wait for Linux is
+bounded by 1500 s) and it carries the boot the same way; either way the failure-name pages are not in it: the
+measured rate already carries the boot, so with a measured rate do not also pass --overhead for boot (the
+estimate of an entry of few cases is high, of many cases about right). --scale does not apply to measured rates.
+--no-board-rates drops this step (the Pi 4 model as before).
 
 --pages adds the page cost to every estimate: a failing entry is run again once per page of 6 failing-case CRCs
 (imx8mp-gles3-board.sh), each page boot costing --page-seconds (default 91.8, the mean page time of the three
 slices). Expected pages of an entry = ceil(cases x the group's measured fail fraction / 6), the fraction from the
-slice's results.tsv (failed + noresult over begun, pure entries pooled per group); a group without a measured
-fail fraction gets 0 pages. Without --pages no page time is in the numbers.
+slice's results.tsv (failed + noresult over begun — an Armadillo-X2 three-word row writes '-' in begun and
+noresult, so begun is derived from the passed/failed/notsup/other counts as imx8mp-gles3-merge.py derives it —
+pure entries pooled per group); a group without a measured fail fraction gets 0 pages. Without --pages no page
+time is in the numbers.
 
 Model: seconds = sum over the entry's cases of a seconds-per-case rate by group. Measured rate: the Pi 4
 GLES3 record (log/2026-10-31-pi4-gles3-a, cycles.txt: cases and run ms per image, images = rows 9-20 of
@@ -63,9 +71,37 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PI4_LABELS = 'FO2 FO3 FO4 FO5 FO6 FR1 FR2 LT M1 PR R1 SQ'.split()
 PI4_FIRST_ROW = 9
 
-# board slice directory name '<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD)
-# groups: 1 date, 2 campaign commit (8 hex), 3 'AA-BB'
-SLICE_NAME = re.compile(r'(\d{4}-\d{2}(?:-\d{2})?)-imx8mp-gles3-([0-9a-f]{8})-rows(\d+-\d+)$')
+# board slice directory name '<date>-imx8mp-gles3-[x2-]<hex8>-rows<AA>-<BB>' (date YYYY-MM or YYYY-MM-DD;
+# the optional 'x2-' is the name imx8mp-gles3-slice.py gives an Armadillo-X2 slice)
+# groups: 1 date, 2 board tag 'x2-' (empty for the Verdin), 3 campaign commit (8 hex), 4 'AA-BB'
+SLICE_NAME = re.compile(r'(\d{4}-\d{2}(?:-\d{2})?)-imx8mp-gles3-(x2-)?([0-9a-f]{8})-rows(\d+-\d+)$')
+
+# an entry's verdict line: 'board.sh imx8mp e<NN> ... verdict=done ... back_after=<n>s' (the Verdin i.MX8MP) or
+# 'board.sh x2 e<NN> ...' (the Armadillo-X2; board.sh's X2 targets are x2, x2-console, x2-display, as in
+# imx8mp-gles3-merge.py's board_of). An e<NN>-p<page> page line does not match: the digits are followed by '-'.
+# Groups: 1 board name, 2 entry index, 3 back_after seconds.
+VERDICT_LINE = re.compile(r'^board\.sh (imx8mp\S*|x2\S*) e(\d+) .*verdict=done.* back_after=(\d+)s')
+
+
+def board_tag(name):
+    """the board a verdict line came from, as a rate source names it: 'x2' for the Armadillo-X2 (same i.MX 8M
+    Plus and GC7000UL; board.sh's first argument x2, x2-console, x2-display), 'imx8mp' for the Verdin i.MX8MP"""
+    return 'x2' if name.startswith('x2') else 'imx8mp'
+
+
+def num(x):
+    """a results.tsv column as an int, None for '-' (the three-word record that only 'board.sh x2 tree' writes)"""
+    return int(x) if x.isdigit() else None
+
+
+def rate_label(comps):
+    """the rate source label of a pooled group from its (slice, board) components: a group measured on one board
+    names the board once ('imx8mp:rows00-02+rows03-04', 'x2:rows14-16'); a group pooled from both boards names
+    the board per slice ('imx8mp:rows00-13+x2:rows14-16')"""
+    boards = {bd for _, bd in comps}
+    if len(boards) == 1:
+        return next(iter(boards)) + ':' + '+'.join(sl for sl, _ in comps)
+    return '+'.join('%s:%s' % (bd, sl) for sl, bd in comps)
 
 # (prefix after "dEQP-GLES3.", seconds per case, why): first match wins; the rest is budget-derived
 ASSUMED = [
@@ -164,12 +200,15 @@ def pi4_rates(rec, cases, pi4_table):
 def board_rates(glob_pat, entry_groups):
     """group key -> (s/case, source), group key -> fail fraction, notes, from the committed board slices.
     entry_groups: index -> {group: cases}
-    Slices are named '<date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' (any campaign commit); the rate source labels
-    them 'rows<AA>-<BB>'. Slices naming more than one commit raise ValueError (two builds' rates must not be
-    pooled, as imx8mp-gles3-merge.py --check refuses them); a matched directory whose name does not follow the
+    Slices are named '<date>-imx8mp-gles3-[x2-]<hex8>-rows<AA>-<BB>' (any campaign commit, the Verdin or the
+    Armadillo-X2); each entry's board comes from its verdict line ('board.sh imx8mp' or 'board.sh x2') and the
+    rate source labels it 'imx8mp:rows<AA>-<BB>' or 'x2:rows<AA>-<BB>' (rate_label names the board per slice
+    when a group is pooled from both). Slices naming more than one commit raise ValueError (two builds' rates
+    must not be pooled, as imx8mp-gles3-merge.py --check refuses them; Verdin and X2 slices of one commit are
+    accepted the same way merge --check accepts them); a matched directory whose name does not follow the
     pattern is skipped with a note."""
     import glob
-    sec, fail = {}, {}   # entry index -> (back_after, slice); entry index -> (fails, begun)
+    sec, fail = {}, {}   # entry index -> (back_after, slice, board tag); entry index -> (fails, begun)
     notes = []
     dirs, commits = [], {}   # (dir, 'rowsAA-BB'); commit -> [slice names]
     for d in sorted(glob.glob(glob_pat)):
@@ -178,10 +217,10 @@ def board_rates(glob_pat, entry_groups):
             continue
         m = SLICE_NAME.search(os.path.basename(d))
         if not m:
-            notes.append('skipped %s: the name is not <date>-imx8mp-gles3-<hex8>-rows<AA>-<BB>' % os.path.basename(d))
+            notes.append('skipped %s: the name is not <date>-imx8mp-gles3-[x2-]<hex8>-rows<AA>-<BB>' % os.path.basename(d))
             continue
-        dirs.append((d, 'rows' + m.group(3)))
-        commits.setdefault(m.group(2), []).append(os.path.basename(d))
+        dirs.append((d, 'rows' + m.group(4)))
+        commits.setdefault(m.group(3), []).append(os.path.basename(d))
     if len(commits) > 1:
         raise ValueError('the board slices under %s name %d campaign commits: %s; pass --board-slices with a glob '
                          'naming the slices of one commit (imx8mp-gles3-merge.py --check refuses mixed commits too)'
@@ -191,39 +230,45 @@ def board_rates(glob_pat, entry_groups):
         mine = set()
         v = os.path.join(d, 'verdicts.txt')
         for l in open(v):
-            m = re.match(r'^board\.sh imx8mp e(\d+) .*verdict=done.* back_after=(\d+)s', l)
-            if m and int(m.group(1)) not in sec:
-                sec[int(m.group(1))] = (int(m.group(2)), sl)
-                mine.add(int(m.group(1)))
+            m = VERDICT_LINE.match(l)
+            if m and int(m.group(2)) not in sec:
+                i = int(m.group(2))
+                sec[i] = (int(m.group(3)), sl, board_tag(m.group(1)))
+                mine.add(i)
         r = os.path.join(d, 'results.tsv')
         if os.path.exists(r):
             for l in open(r):
                 f = l.rstrip('\n').split('\t')
-                if len(f) >= 8 and f[0].isdigit() and f[2].isdigit() and int(f[0]) in mine:
-                    fail[int(f[0])] = (int(f[4]) + int(f[7]), int(f[2]))
+                if len(f) >= 8 and f[0].isdigit() and int(f[0]) in mine:
+                    vals = [num(x) for x in f[2:8]]   # begun, passed, failed, notsup, other, noresult
+                    # an Armadillo-X2 three-word row writes '-' in begun and noresult: derive begun from the
+                    # counts, as imx8mp-gles3-merge.py does
+                    begun = vals[0] if vals[0] is not None else sum(v for v in vals[1:5] if v is not None)
+                    if begun:   # an all-'-' row (nothing recorded) has no fraction to pool
+                        fail[int(f[0])] = ((vals[2] or 0) + (vals[5] or 0), begun)
     if not sec:
         return {}, {}, notes + ['no board slice with verdicts.txt under %s: no measured rates' % glob_pat]
     pool, fpool = {}, {}
-    for i, (t, sl) in sec.items():
+    for i, (t, sl, bd) in sec.items():
         g = entry_groups.get(i, {})
         if len(g) == 1:
             k = next(iter(g))
             a = pool.setdefault(k, [0, 0, []])
             a[0] += t
             a[1] += g[k]
-            if sl not in a[2]:
-                a[2].append(sl)
+            if (sl, bd) not in a[2]:
+                a[2].append((sl, bd))
             if i in fail:
                 b = fpool.setdefault(k, [0, 0])
                 b[0] += fail[i][0]
                 b[1] += fail[i][1]
-    rates = {k: (t / c, 'imx8mp:' + '+'.join(sls)) for k, (t, c, sls) in pool.items() if c}
-    for i, (t, sl) in sorted(sec.items()):   # mixed entries: groups without a rate share the entry's per-case time
+    rates = {k: (t / c, rate_label(sls)) for k, (t, c, sls) in pool.items() if c}
+    for i, (t, sl, bd) in sorted(sec.items()):   # mixed entries: groups without a rate share the entry's per-case time
         g = entry_groups.get(i, {})
         if len(g) > 1:
             for k in sorted(g):
                 if k not in rates:
-                    rates[k] = (t / sum(g.values()), 'imx8mp:' + sl)
+                    rates[k] = (t / sum(g.values()), bd + ':' + sl)
     return rates, {k: f / b for k, (f, b) in fpool.items() if b}, notes
 
 
@@ -320,7 +365,8 @@ def main():
     ap.add_argument('--gles2-results', default=os.path.join(HERE, 'imx8mp-full-tree-29460f96.results.tsv'))
     ap.add_argument('--board-slices', default=os.path.join(HERE, 'log', '*-imx8mp-gles3-*-rows*'),
                     help='glob of the committed board slice directories (verdicts.txt, results.tsv) for the measured '
-                         'rates; slices of any campaign commit, but more than one commit among them is refused')
+                         'rates; slices of any campaign commit and of either GC7000UL board (board.sh imx8mp or '
+                         'board.sh x2), but more than one commit among them is refused')
     ap.add_argument('--no-board-rates', action='store_true', help='ignore the board slices (Pi 4 and assumed rates only)')
     ap.add_argument('--pages', action='store_true', help='add the expected failure-name page cost to every estimate')
     ap.add_argument('--page-seconds', type=float, default=91.8, help='seconds per page boot (default 91.8, the measured mean)')
