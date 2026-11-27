@@ -535,5 +535,13 @@ console figure is an observation, not a board.sh row:
 | b947cc22 | off | shadow | - | - | verdict= stop: not run (same) | - |
 | b947cc22 | off | refract | - | - | verdict= stop: not run (same) | - |
 
+Board checked afterwards, same day, from the same worker at its next turn.
+connected installs the key again when a turn starts, so ssh logged in:
+uptime 5116 s (the boot after this run's reset), `podman ps` 0 containers,
+`kexec_crash_loaded 0`. The board is as found. No further jump was made: it
+would lose the key the same way and end `not_back` again, a retry under the
+stop rule. With the key installed once a turn, a task machine gets at most
+one jump a turn, and board.sh can never read that jump's record.
+
 To run it next time: the same commands, with ssh that survives the run's
 reboot. The loader and the readiness checks no longer stop it.
