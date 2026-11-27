@@ -473,14 +473,91 @@ replaces it.
   (shard 10), colour-texture class (b). Each run took 4.1 to 19.6 s of
   image time. Shard 13 is the exception at 159.5 s (`flush_finish.*`),
   26.6 % of the lifetime.
+- Slice 2 (shards 23..45, 2,875 cases, 2026-11-26): 2,741 Pass, 105 Fail,
+  26 NotSupported, 3 QualityWarning, every shard returned with all 125 of its
+  cases: no hang, no refusal and no lifetime cut-off. The 26 NotSupported are
+  `multisample.*` (16), `multisampled_render_to_texture.readpixels` (1) and
+  `negative_api.texture.compressedtexsubimage2d_*` (9), the same names the
+  i.MX8MP reports. The 3 QualityWarning are the `rasterization.interpolation`
+  line names the i.MX8MP fails: they are the cumulative diff's 3 `fixed`. The
+  105 Fail are all new against the i.MX8MP: class (a) 91
+  (`constant_expressions` 40, `indexing` 27, `functions` 13, `conversions` 9,
+  `algorithm` 1, `builtin_variable` 1) and class (c) 14
+  (`fragment_ops.interaction.basic_shader`, shards 26 and 27). Each run took
+  3.5 to 17.6 s of image time, at most 2.9 % of the lifetime.
 - Slice 3 (shards 46..68, 2,875 cases, 2026-11-26): 2,718 Pass, 157 Fail,
   0 NotSupported, 0 QualityWarning, 0 other, every shard returned with all
   125 of its cases: no hang, no refusal and no lifetime cut-off, and at most
-  3.8 % of the lifetime (4.7 to 23.0 s of image time).
+  3.8 % of the lifetime (4.7 to 23.0 s of image time). The 157 Fail are all
+  class (a): `binary_operator` 70, `indexing` 43, `matrix` 30,
+  `angle_and_trigonometry` 14.
+- Slice 4 (shards 69..91, 2,875 cases, 2026-11-27): 2,614 Pass, 261 Fail,
+  0 NotSupported, 0 QualityWarning, 0 other, every shard returned with all
+  125 of its cases: no hang, no refusal and no lifetime cut-off, and at most
+  3.2 % of the lifetime (4.4 to 19.1 s of image time, shard 77). The 261 Fail
+  are all class (a): `common_functions` 65, `unary_operator` 58,
+  `binary_operator` 32, `shaders.random` 46, `exponential` 22, `sequence` 21,
+  `geometric` 14, `selection` 3 — 229 `*_fragment` and `random.all_features.fragment.*`
+  cases, 30 vec3/vec4 `*_vertex` cases and 2 `random.basic_expression.combined`
+  fragment cases.
+- Slice 5 (shards 92..114, 2,875 cases, 2026-11-27): 2,497 Pass, 378 Fail,
+  0 NotSupported, 0 QualityWarning, 0 other, every shard returned with all
+  125 of its cases (`deqp: summary: 125 cases begun, 125 with a result, 0
+  without`, `yakogl: draws refused 0` in all 23): no hang, no refusal and no
+  lifetime cut-off, and at most 1.6 % of the lifetime (3.8 to 9.6 s of image
+  time, shard 92). Shard 92 gave 49 Fail in its run, not compared with
+  another run.
 
 `mp2-p9-diff: shared 0, new 913, fixed 3, missing 0, excluded 21`
 
 This line covers slices 1-5 (shards 0-114, image `66fcaa3a`) and is replaced as later slices land.
+(The same tool over s5 alone reads `new 378, missing 14269`: slice 5's logs are
+console excerpts with no `deqp: case filter` line, so the run's scope cannot be
+narrowed to its cases. It is a scope artifact, not cases without a result: every
+slice-5 log ends `125 cases begun, 125 with a result, 0 without`.)
+
+Slice 5's 378 new Fails, triaged by the failure classes of the `a5f1dc8e`
+sweep above ((a) fragment arithmetic, (b) colour-texture sampling, (c)
+`fragment_ops.interaction`, and unclassified):
+
+- class (a) 365: `shaders.random` 300 (`basic_expression` 73,
+  `comparison_ops` 19 of which 7 `comparison_ops.vertex`, `conditionals` 32,
+  `exponential` 34, `scalar_conversion` 68, `swizzle` 14, `trigonometric` 60;
+  fragment and `combined` variants), `shaders.swizzles` 63 (`vector_swizzles`
+  `mediump_ivec3`/`mediump_ivec4` `*_fragment`) and `shaders.struct` 2
+  (`uniform.loop_nested_struct_array_fragment`,
+  `uniform.dynamic_loop_nested_struct_array_fragment`, `Fail (Fail)`,
+  shard 107);
+- class (b) 13: `shaders.random.texture.fragment.*`;
+- class (c) 0; unclassified 0.
+
+Cumulative over slices 1-5: class (a) 874, class (b) 25 (slice 1's 12 `fbo`
+and slice 5's 13 `shaders.random` texture cases), class (c) 14 (slice 2),
+unclassified 0 — 913, the line's new count. The cumulative diff lists no
+accepted name that changed state, and the cumulative is the number to read:
+slice 1 alone listed 26 accepted names as `NotSupported -> NoResult` only
+because slice 1 had not run them yet, and slice 2 ran all 26 as
+`NotSupported`.
+
+Against the forecast for slice 5 — the `a5f1dc8e` group counts minus what
+slices 1-4 already found, for the three groups whose remaining cases sit in
+slice 5's shards (`shaders.random` 345 − 46 = 299, `shaders.swizzles` 45,
+`shaders.struct` 3: 347 in all) — slice 5 found 378, with the groups 10 or
+more off being `shaders.random` 313 against 299 (+14) and `shaders.swizzles`
+63 against 45 (+18); `shaders.struct` 2 against 3 is 1 under. In slices 1-5
+as a whole these two groups are already over their `a5f1dc8e` counts (359
+against 345, 63 against 45), while the groups fully run in slices 1-4 mostly
+found less than forecast (`shaders.operator.binary_operator` 102 against 153,
+`shaders.operator.unary_operator` 58 against 110,
+`shaders.operator.common_functions` 65 against 103, `shaders.matrix` 30
+against 39, `shaders.operator.sequence` 21 against 32) and some found more
+(`shaders.indexing` 70 against 44, `shaders.constant_expressions` 40 against
+35, `fragment_ops.interaction` 14 against 10, and 12 `fbo.render.color.mix`
+and 1 `shaders.algorithm` name that the `a5f1dc8e` build passed). What the
+forecast still owes belongs to slice 6, where the class (b)
+texture groups sit whole: `texture.filtering.2d` 136, `texture.filtering.cube`
+112, `texture.size` 80, `texture.wrap` 58, `texture.format` 32,
+`texture.mipmap` 66 new (484 of the 1,496), plus 12 shared mipmap names.
 
 ### Q11: the measured line width
 
