@@ -1917,6 +1917,16 @@ check "pi5 dEQP image ending DONE: verdict=done, result legacy:v3d_deqp_DONE" sa
 check "pi5 dEQP image ending INCOMPLETE: verdict=failed, named" says pi5 "$S/pi5/deqpINCOMPLETE/20261127-1200-deqpINCOMPLETE-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_INCOMPLETE"
 check "pi5 dEQP image ending STOPPED: verdict=failed, named" says pi5 "$S/pi5/deqpSTOPPED/20261127-1200-deqpSTOPPED-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_STOPPED"
 check "pi5 dEQP console with no end line: no_end_line" says pi5 "$S/pi5/deqpNONE/20261127-1200-deqpNONE-0123abcd" "verdict=no_end_line"
+echo "== 3i2b. Pi 4 dEQP tree image: DONE is done, INCOMPLETE and STOPPED are failed, named"
+for e in DONE INCOMPLETE STOPPED; do
+    d="$S/pi4/deqp$e/20261127-1200-deqp$e-0123abcd"
+    mkrun "$d" board=pi4 boot=tryboot "name=deqp$e" probe=0 back=1
+    printf '12:00:00 v3d_deqp: build abc\n12:00:09 deqp: done: 10 passed, 0 failed, 0 not supported, 0 warnings, complete=1\n' > "$d/console.txt"
+    printf '12:00:10 v3d_deqp: build abc %s: 10 cases, P 10 F 0 R 0 N 0 other 0\n' "$e" >> "$d/console.txt"
+done
+check "pi4 dEQP image ending DONE: verdict=done" says pi4 "$S/pi4/deqpDONE/20261127-1200-deqpDONE-0123abcd" "verdict=done .*result=legacy:v3d_deqp_DONE"
+check "pi4 dEQP image ending INCOMPLETE: verdict=failed, named" says pi4 "$S/pi4/deqpINCOMPLETE/20261127-1200-deqpINCOMPLETE-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_INCOMPLETE"
+check "pi4 dEQP image ending STOPPED: verdict=failed, named" says pi4 "$S/pi4/deqpSTOPPED/20261127-1200-deqpSTOPPED-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_STOPPED"
 echo "== 3i. Pi 5 gl_test image: the record's end, the per-case verdicts, the scrub (board71's six cases 5 58 59 66 67 102)"
 # a synthetic list run in the shape of the Pi 4's (tools/testdata/pi4-tryboot-GT21-*:
 # "gl_test: start (case=-1 ...)", one "gl_test: case N name: PASS|FAIL" per case,

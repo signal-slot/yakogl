@@ -944,12 +944,10 @@ legacy_result() {
     "deqp: summary: "*) echo deqp_summary ;;
     "gl_test: all: "*) echo gl_test_all ;;
     *"RECORD end"*) echo gl_test_record_end ;;
-    # the pi5's tree image: the state word after the build id, not the line's last word
+    # a tree image (pi4 and pi5): the state word after the build id, not the line's last word
     "v3d_deqp: build "*)
-        if [ "${BOARD:-}" = pi5 ]; then
-            st=$(sed -nE 's/^v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)[: ].*/\1/p' <<<"$l")
-            echo "v3d_deqp_${st:-${l##* }}"
-        else echo "v3d_deqp_${l##* }"; fi ;;
+        st=$(sed -nE 's/^v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)[: ].*/\1/p' <<<"$l")
+        echo "v3d_deqp_${st:-${l##* }}" ;;
     v3d_deqp:*) echo "v3d_deqp_${l##* }" ;;
     # the Pi 5 probes (only the pi5's LEGACY_RE has them): a label ending in
     # _fail is the verdict failed (verdict_line)
@@ -1215,11 +1213,9 @@ verdict_line() {
                         # a probe's own FAIL line (pi5); every other label: the set's rule
                         case "$result" in
                         *_fail) verdict=failed ;;
-                        # the pi5's dEQP tree image ends on 'v3d_deqp: build B
-                        # DONE|INCOMPLETE|STOPPED: ...': only DONE is a finished
-                        # tree (the Pi 4's rule is unchanged)
-                        v3d_deqp_INCOMPLETE | v3d_deqp_STOPPED)
-                            if [ "$BOARD" = pi5 ]; then verdict=failed; else verdict=$(gl_test_set_verdict "$console"); fi ;;
+                        # a dEQP tree image (pi4, pi5) ends on 'v3d_deqp: build B
+                        # DONE|INCOMPLETE|STOPPED: ...': only DONE is a finished tree
+                        v3d_deqp_INCOMPLETE | v3d_deqp_STOPPED) verdict=failed ;;
                         *) verdict=$(gl_test_set_verdict "$console") ;;
                         esac
                         result="legacy:$result"
