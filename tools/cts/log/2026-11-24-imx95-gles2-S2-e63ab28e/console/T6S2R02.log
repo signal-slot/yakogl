@@ -1,0 +1,1167 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/184015 in 27608 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_zero,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_alpha,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_color,dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_zero,dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 26 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_dst_color'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+mali: blend shader of Key { rgb: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: Fa
+mali arena 'desc': high-water 1904 of 1048576 bytes
+mali arena 'data': high-water 284 of 262144 bytes
+mali arena 'code': high-water 896 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 696 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: Fa
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: ReverseSubtract, src: Factor { base: SrcColor, invert: false }, dst: F
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_src_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: ReverseSubtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: ReverseSubtract, src: Factor { base: One, invert: true }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: ReverseSubtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: ReverseSubtract, src: Factor { base: One, invert: true }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.reverse_subtract_zero_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { b
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: One, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: O
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { b
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { b
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_zero'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: One, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: false }, dst: Factor { base: On
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_constant_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_dst_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: One, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: One, invert: false }, dst: Factor { base: ConstCol
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstAlpha, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { ba
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: One, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: One
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { bas
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_zero'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: One, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: ConstColor, invert: true }, dst: Factor { base: One,
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_constant_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstAlpha, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: DstColor, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_dst_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: C
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Src
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: true }, dst: Factor { base: Sr
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_minus_src_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: One, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: One, invert: false }, dst: Factor { base: ConstColo
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_one_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, ds
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: One, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Fact
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: SrcColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_zero'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Factor { base: One, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlphaSaturate, invert: false }, dst: Facto
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_saturate_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: SrcColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcAlpha, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: ConstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: DstAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: DstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: ConstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base:
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: DstAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: DstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: D
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: SrcAlpha, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: S
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_alpha'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: SrcAlpha, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: SrcColor, invert: false }, dst: Factor { base: 
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_color_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor, invert: false } }, alpha: Channel { func: Subtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_color'..
+mali: blend shader of Key { rgb: Channel { func: Subtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor, invert: true } }, alpha: Channel { func: Subtract, src: Factor { base: One, invert: true }, dst: Factor { base: ConstColor,
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_constant_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_dst_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_one_minus_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_alpha'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_alpha
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_color'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_src_color
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_zero'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_zero_zero
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_add'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_add
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_reverse_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_reverse_subtract
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.add_subtract
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_add'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_add
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_reverse_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_reverse_subtract
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.reverse_subtract_subtract
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_add'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_add
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_reverse_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_reverse_subtract
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_subtract'..
+deqp: Pass dEQP-GLES2.functional.fragment_ops.blend.rgb_equation_alpha_equation.subtract_subtract
+  Pass (Passed)
+
+DONE!
+
+Test run totals:
+  Passed:        239/239 (100.0%)
+  Failed:        0/239 (0.0%)
+  Not supported: 0/239 (0.0%)
+  Warnings:      0/239 (0.0%)
+  Waived:        0/239 (0.0%)
+deqp: done: 239 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 239 cases begun, 239 with a result, 0 without
+osal(mali): kicks 240, completed 240; pages 941 (high-water 1011) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: OK (rc=0)
+shaderc: keep high-water 11840 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 16563 ms
+�\x00
