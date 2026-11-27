@@ -379,6 +379,19 @@ separate item, because it edits `board-stage.sh`, `deps.toml`,
   `pi5` image that cannot arm it refuses its GPU init,
   `zephyr_v3d71.c:201-205`). Addresses and UART paths come from the
   environment, never a file.
+- Console capture (what a tree run reads for its verdicts). On the tip
+  `board.sh` reads the Pi 5 console only from `BOARD_UART`, the debug
+  connector, read only (`tools/board.sh:267-273`), through the bridge
+  capture into `console.raw` and `console.ts` (`board.sh:731-736`). The
+  bridge holds one client (`board.sh:733-734`): when an MCP connection holds
+  the console, that capture cannot connect. The `BOARD_CONSOLE_LOG` mode
+  (item `boardmcp71`, `[ready]` and not merged: `grep -rn BOARD_CONSOLE_LOG
+  tools` finds nothing on the tip) is the way out. The agent fills a log
+  file from the MCP console, and `board.sh pi5 run` reads that log instead
+  of opening the bridge. Until it lands, a 240 s dEQP block or a glmark2 run
+  has no console record on a leased console, so P13's board items (section 7)
+  wait for `boardmcp71`. The path of the log, like `BOARD_UART`, comes from
+  the environment and never goes into a file.
 - `tools/check.sh` rows (P12, `gate71plan`): `zephyr rpi5 deqp image,
   -Werror` and `rpi5 glmark2 image, -Werror` next to the `rpi4 gl_test`
   row (`check.sh:4937`; the `rpi_5` probe-image row is `:5026`), with the stage-1 build as a `gap` until
