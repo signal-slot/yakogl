@@ -24,8 +24,10 @@
 //! Packets of the dumps the modules do not model are in
 //! [`KNOWN_WORD_GAPS`], each with its reason. `LINE_WIDTH`, `POINT_SIZE` and
 //! `BLEND_CCOLOR` have a `PacketSpec` in `draw71` (the `gap_*` tests assert
-//! it); the shape tests hold the reference's values. `gap_depth_equal_z_updates` holds Mesa's
-//! Z updates 0 under GL_EQUAL.
+//! it); the shape tests hold the reference's values. `draw71::translate`
+//! packs `Z updates enable` 0 under GL_EQUAL, as Mesa does (draw71eq), so
+//! `depth_equal_z_updates_off` runs the draw with the depth mask on, as GL
+//! has it, and matches the reference.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_compose5
@@ -890,7 +892,7 @@ fn gl_depthfuncs() {
     assert_eq!(jobs.len(), 1);
     assert_no_silent_kinds("gl_depthfuncs", &jobs);
     // the reference itself: the seven functions in the shape's order, Z
-    // updates on for all but EQUAL (see gap_depth_equal_z_updates) and the
+    // updates on for all but EQUAL (see depth_equal_z_updates_off) and the
     // last draw (glDepthMask(GL_FALSE))
     let want = [("0", "1"), ("2", "0"), ("3", "1"), ("4", "1"), ("5", "1"), ("7", "1"), ("1", "0")];
     let got = dump_depth_cfg(&jobs[0]);
@@ -909,11 +911,12 @@ fn gl_depthfuncs() {
 
 /// (draw71, `CFG_BITS` / `Z updates enable` under GL_EQUAL): with the GL
 /// state as the application set it (depth mask on, glDepthFunc(GL_EQUAL)),
-/// Mesa packs `Z updates enable` 0 (gl_depthfuncs.clif, the second draw);
-/// `draw71::translate` packs 1. A passing EQUAL test writes the value
-/// already there, so the pixels are the same; the word differs.
+/// Mesa packs `Z updates enable` 0 (gl_depthfuncs.clif, the second draw) and
+/// `draw71::translate` packs 0 as well (draw71eq): a passing EQUAL test
+/// writes the value already there, so the update is off whatever the mask
+/// is. The word matches the reference.
 #[test]
-fn gap_depth_equal_z_updates() {
+fn depth_equal_z_updates_off() {
     let jobs = gl_jobs("gl_depthfuncs");
     check_job(
         "gl_depthfuncs as GL sets it",

@@ -3,8 +3,9 @@
 /*
  * Zephyr's rpi_5 takes zephyr,sram from the SoC's sram0
  * (dts/arm64/broadcom/bcm2712.dtsi: 512 KiB at 0x200000, two address cells).
- * This image carries the V3D's 96 MiB carve-out, the compiler's 2 MiB
- * scratch, the 96 MiB C heap (prj.conf) and glmark2's ~9.4 MB of data files,
+ * This image carries the V3D's 96 MiB carve-out, the compiler's 4 MiB
+ * scratch (the Kconfig default; the conf sets none), 24 MiB of tiled copies,
+ * the 96 MiB C heap (prj.conf) and glmark2's ~9.4 MB of data files,
  * so it gets 288 MiB from 0x200000, to 0x12200000, as the Pi 4's glmark2
  * does (boards/rpi_4b.overlay; an estimate there too). The range stays below
  * 4 GiB, so the V3D's page table entries and the mailbox's buffer address fit
