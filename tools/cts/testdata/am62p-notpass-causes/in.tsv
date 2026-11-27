@@ -1,0 +1,14 @@
+# synthetic not-pass TSV for am62p-notpass-causes-selftest.sh
+Fail	dEQP-GLES3.functional.texture.specification.basic_teximage2d.r8ui_cube	Compile failed at sglrGLContext.cpp:863
+Fail	dEQP-GLES3.functional.texture.specification.basic_teximage2d.rgba32f_cube	Image comparison failed
+Fail	dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgba8_cube	Image comparison failed
+Fail	dEQP-GLES3.functional.texture.specification.texstorage3d.size.2d_array_64x32x3_7_levels	Image comparison failed
+Fail	dEQP-GLES3.functional.fbo.color.tex3d.r8i	Image comparison failed
+Fail	dEQP-GLES3.functional.fbo.color.tex2d.r8i	Image comparison failed
+Fail	dEQP-GLES3.functional.fbo.color.tex3d.rgba8	Image comparison failed
+QualityWarning	dEQP-GLES3.functional.texture.shadow.2d.nearest.depth_component16	Low-quality result
+NotSupported	dEQP-GLES3.functional.texture.compressed.astc.void_extent.ldr_4x4	not supported
+NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_isenabledi	Extension GL_EXT_draw_buffers_indexed not supported.
+NoResult	dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear	
+NotSupported	dEQP-GLES3.functional.fbo.multiview.samples_1	Multiview is not supported
+Fail	dEQP-GLES3.functional.brand_new.family.case	something new
