@@ -8,8 +8,9 @@
 //! (`tools/mali/deqp-host-measure.sh`) logged them, drawn once on Mesa's
 //! drm-shim with `--uniform-values`.
 //!
-//! No reference is byte-compared yet: `refusals_pinned` asserts the exact
-//! `MaliError` text of each refused one (the vertex shader's when it
+//! [`MATCHED`] is byte-compared (plan #402 `lower-vsloop`), [`DIFFERS`]
+//! pinned as compiling with other words. For the rest `refusals_pinned`
+//! asserts the exact `MaliError` text of each refused one (the vertex shader's when it
 //! refuses, else the fragment shader's), and `compiled_pinned` that each of
 //! [`COMPILED`] (the mediump kept loops of plan #377, docs/notes/
 //! mali-deqp-loops.md section 10) compiles. The lowering that
@@ -35,6 +36,9 @@ const LOOP_MEDIUMP: &str =
 const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16)";
 /// `MaliError::GuardMediump`.
 const GUARD_MEDIUMP: &str = "a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects)";
+/// `MaliError::ConstantProduct`: the `invariance.*.loop_*` pairs once their
+/// constant loop is unrolled (plan #402 `lower-vsloop`).
+const CONST_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)";
 /// `MaliError::LoopForm`.
 const LOOP_FORM: &str = "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,";
 
@@ -84,7 +88,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_wh_dyn_basic_highp_float", MIXED),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
-    ("vs_do_con_nested", LOOP_VERTEX),
     ("vs_do_dyn_conditional_body", LOOP_VERTEX),
     ("vs_do_dyn_conditional_break", LOOP_VERTEX),
     ("vs_do_dyn_nested_sequence", LOOP_VERTEX),
@@ -95,7 +98,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_do_uni_nested", LOOP_VERTEX),
     ("vs_fn_after_seq", LOOP_VERTEX),
     ("vs_fn_mixed", LOOP_VERTEX),
-    ("vs_fn_return_in_loop", LOOP_VERTEX),
     ("vs_for_dyn_conditional_body", LOOP_VERTEX),
     ("vs_for_dyn_conditional_break", LOOP_VERTEX),
     ("vs_for_dyn_nested", LOOP_VERTEX),
@@ -107,7 +109,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_for_uni_nested_sequence", LOOP_VERTEX),
     ("vs_for_uni_nested_tricky_dataflow_1", LOOP_VERTEX),
     ("vs_for_uni_nested_tricky_dataflow_2", LOOP_VERTEX),
-    ("vs_for_uni_unconditional_break", LOOP_VERTEX),
     ("vs_idx_mat4_dldl", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("vs_idx_tmp_vec4_dd", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("vs_idx_tmp_vec4_dldl", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
@@ -116,17 +117,13 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_idx_vec_dldl", LOOP_VERTEX),
     ("vs_idx_vec_w_direct", LOOP_VERTEX),
     ("vs_idx_vec_w_dynsub", LOOP_VERTEX),
-    ("vs_inv_highp_1", LOOP_VERTEX),
-    ("vs_inv_lowp_loop_1", LOOP_VERTEX),
-    ("vs_inv_mediump_1", LOOP_VERTEX),
-    ("vs_inv_mediump_2", LOOP_VERTEX),
+    ("vs_inv_highp_1", CONST_PRODUCT),
+    ("vs_inv_lowp_loop_1", CONST_PRODUCT),
+    ("vs_inv_mediump_1", CONST_PRODUCT),
+    ("vs_inv_mediump_2", CONST_PRODUCT),
     ("vs_ret_dyn", LOOP_VERTEX),
     ("vs_ret_dynamic_loop_never", LOOP_VERTEX),
-    ("vs_ret_infinite", LOOP_VERTEX),
-    ("vs_ret_static", LOOP_VERTEX),
     ("vs_ret_static_dyn", LOOP_VERTEX),
-    ("vs_ret_static_loop_always", LOOP_VERTEX),
-    ("vs_ret_static_loop_never", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_body", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_break", LOOP_VERTEX),
     ("vs_wh_dyn_nested_sequence", LOOP_VERTEX),
@@ -210,6 +207,42 @@ const COMPILED: &[(&str, bool)] = &[
     ("vs_wh_dyn_basic_highp_float", true),
 ];
 
+/// The vertex loops plan #402's `lower-vsloop` (step 1, `nir.rs`
+/// `vs_put_jloop`) unrolls with their jumps, byte-equal to Mesa's words:
+/// the constant `do_while` nest, and the inlined `return`s in a constant or
+/// infinite loop, each folded once its pass is known.
+const MATCHED: &[&str] = &[
+    "vs_do_con_nested",
+    "vs_fn_return_in_loop",
+    "vs_ret_infinite",
+    "vs_ret_static",
+    "vs_ret_static_loop_always",
+    "vs_ret_static_loop_never",
+];
+
+/// The vertex loops `lower-vsloop` takes whose words differ from Mesa's
+/// only in the fp16 narrowing: `for (i = 0; i < ui_three; i++) { res =
+/// res.yzwx; break; }` is one guarded pass, ours fp32 `CSEL.u32` selects,
+/// Mesa's `V2F32_TO_V2F16` and `MUX.v2i16` (deqp_vsmix_dyn_unconditional_break's
+/// form).
+const DIFFERS: &[&str] = &["vs_for_uni_unconditional_break"];
+
+#[test]
+fn matched() {
+    for name in MATCHED {
+        mali_ref::assert_matches(&format!("deqp_loops2_{name}"));
+    }
+}
+
+#[test]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_loops2_{name}"));
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; move it to MATCHED");
+    }
+}
+
 #[test]
 fn refusals_pinned() {
     for (name, text) in REFUSALS {
@@ -247,8 +280,12 @@ fn references_listed() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSALS.iter().map(|(n, _)| n.to_string()).chain(COMPILED.iter().map(|(n, _)| n.to_string())).collect();
+    let mut listed: Vec<String> = REFUSALS
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .chain(COMPILED.iter().map(|(n, _)| n.to_string()))
+        .chain(MATCHED.iter().chain(DIFFERS).map(|n| n.to_string()))
+        .collect();
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops2_* reference is not in REFUSALS, or the other way round");
 }

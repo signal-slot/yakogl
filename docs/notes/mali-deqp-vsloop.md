@@ -2,8 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall, v10): the dEQP-GLES2 vertex-shader loops left at 8ff01055
 
-Plan #402 item `ref-vsloop` (issue #20, ROADMAP stage 5). This item adds
-references only. It changes no compiler code. The refusal is
+Plan #402 item `ref-vsloop` (issue #20, ROADMAP stage 5). That item added
+references only and changed no compiler code; sections 1 to 5 are its
+record. Section 6 is the status since plan #402 `lower-vsloop` (step 1 of
+the lowering), which makes all eight references byte-equal. The refusal is
 `MaliError::LoopVertex`, "Valhall: a loop in a vertex shader is not lowered
 yet" (`src/shaderc/online/mali/mod.rs:509`). In the whole-tree NanoPC-T6 run
 at `8ff01055` (`docs/es2-cts-failures.md` section M; the slices
@@ -168,3 +170,94 @@ count, fold the guards, then drop the loop" (as Mesa's `simple_unroll` and
 
 When a lowering takes a shape, it removes the `#[ignore]` and the
 `REFUSED` entry and adds the name to `MATCHED` in the same commit.
+
+## 6. Status since lower-vsloop (step 1: unrolling)
+
+Plan #402 item `lower-vsloop` lowers the loops of section 5 in
+`src/shaderc/online/mali/nir.rs`. Every `deqp_vsloop_*` reference is
+byte-equal: all eight are in `MATCHED` of `tests/mali_deqp_vsloop.rs`, with
+no `#[ignore]` and no pin left.
+
+- **Unrolling with jumps** (`vs_put_jloop`, `vs_put_jnodes`). A loop that
+  `vs_loop_shape` does not take is walked pass by pass. Its body may hold
+  instructions, `break`, `continue`, `if`s and nested loops. An `if` that
+  holds a jump becomes a `Step::JIf`, and its condition must fold to a
+  constant in every pass (`Step::JElse`, `Step::Brk` and `Step::Cont` carry
+  the jumps). An `if` with no jump is flattened as at the top (`vs_side`).
+  The pass limit (`MAX_UNROLL_ITERATIONS`) and the cost bound are those of
+  the counted loops. A jump condition that does not fold is a loop Mesa
+  keeps. It stays refused with LoopVertex where the walk meets it: that is
+  step 2 (`lower-vsloop2`, `deqp_vsloop2_*`).
+- **Dead loops** (`vs_dead_loop`, after `nir_opt_dead_cf.c:172`
+  `node_is_dead`). A loop is removed when it stores no output, discards
+  nothing, holds no `return`, and nothing outside it reads a value it makes
+  or a local it stores. This is `uni_only_continue`.
+- **One guarded pass.** A body whose first jump is its head test
+  `if (c) {} else break;` and whose second jump is an unconditional
+  `break` becomes `if (c) { .. }`, flattened. These compile, but differ from
+  Mesa's words in the fp16 narrowing: ours are fp32 `CSEL.u32` selects,
+  Mesa's are `V2F32_TO_V2F16` and `MUX.v2i16`. They are pinned in `DIFFERS`:
+  `deqp_vsmix_dyn_unconditional_break` and
+  `deqp_loops2_vs_for_uni_unconditional_break`.
+- **Two forms are refused as loops Mesa keeps.** These rules are fitted to
+  the references, not derived from a Mesa pass:
+  - a jump three or more `if`s deep (`deqp_loops3_vs_fn_mixed`);
+  - a loop whose jump conditions read a local that an earlier loop of the
+    same list stores (`deqp_loops3_vs_fn_after_seq`).
+
+  A `return` in the body is refused as well.
+
+Other references this moves:
+
+- **Byte-equal (6):** `deqp_loops2_vs_{do_con_nested, fn_return_in_loop,
+  ret_infinite, ret_static, ret_static_loop_always, ret_static_loop_never}`.
+  They are in `MATCHED` of `tests/mali_deqp_loops2.rs`.
+- **Refusal moved (4):** `deqp_loops2_vs_inv_*` now stop at the
+  constant-product refusal instead of the loop one.
+- **Compiles, with words not checked against Mesa:**
+  `tools/shaders/es100/ret_nested.vert`. Its verdict in
+  `tools/mali/corpus-verdicts.txt` is `ok`.
+
+No glmark2 verdict moves.
+
+**HOST-ONLY measure.** Both runs used `tools/mali/deqp-host-measure.sh
+--cases`, VK-GL-CTS `93bca01`, on the same host. The case list was the 380
+cases below, taken from the four 8ff01055 slices' `refusals.tsv`:
+
+- the 340 distinct `shaders.loops.*` cases, whatever their refusal;
+- the 40 cases outside `shaders.loops.*` whose board text is the vertex-loop
+  refusal.
+
+The tip is `f3f3dc52`. The counts are the cases whose first host refusal is
+"a loop in a vertex shader":
+
+| cases | at the tip | with lower-vsloop |
+|---|---:|---:|
+| `shaders.loops.*` (340) | 139 | **78** |
+| outside `shaders.loops.*` (40) | 39 | **25** |
+
+The 75 cases that leave the refusal are all Fail on the board:
+
+- **61 in `loops.*`, all of which now compile:**
+  - constant bound: every `conditional_*`, `double_continue`,
+    `infinite_with_*`, `mixed_break_continue`, `only_continue` and
+    `unconditional_*` case;
+  - the four constant `do_while` `nested*` cases;
+  - for uniform and dynamic bounds: `infinite_with_unconditional_break_{first,last}`,
+    `only_continue` and `unconditional_break`.
+- **8 outside `loops.*` now compile:** 5 `functions.control_flow`
+  and 3 `return`.
+- **6 `invariance.*.loop_{1,2}` cases** now stop at the constant-product
+  refusal.
+
+The 103 cases still at the loop refusal (83 Fail and 20 NotSupported) are
+all loops Mesa keeps:
+
+- 78 uniform- and dynamic-bound `loops.*` cases;
+- 18 `indexing.vector_subscript` cases;
+- 4 `return` cases;
+- 2 `functions.control_flow` cases;
+- 1 `struct.uniform` case.
+
+These are step 2. Four case processes exited with `exit=1` in both runs.
+The output of both runs is not committed.
