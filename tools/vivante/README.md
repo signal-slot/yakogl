@@ -764,8 +764,11 @@ comparison against `testdata/hwdb-compare-st-6205.txt`, and the signature of
 modes 1, 8 and 15 on the two shim rows. Exit 0 pass, 1 mismatch, 2 gap (no
 tree: the check was not run), 64 usage. `gate_st_selftest.sh` checks the
 script without a tree. The gate (`tools/check.sh`, Vivante scope) runs the
-self-test only: the dependency layout carries no etnaviv Mesa tree, so the
-two checks would be a gap on every runner, and they are run by hand.
+self-test and both checks as rows: `mesa-etna-build.sh` makes the tree under
+the dependency layout (the gate workflow runs it on every runner, a no-op
+once the tree matches the checkout's inputs) and `tools/cts/deps-env.sh
+--present` exports it. Without the tree each check row is a gap naming
+`MESA_ETNA_TREE`, and so is the script's exit 2.
 
 `gate_st_table.sh` (no arguments) is the third host check of the ST row: it
 runs `gen_shader_table.py --st --check`, which regenerates

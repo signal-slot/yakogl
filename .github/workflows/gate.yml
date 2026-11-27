@@ -228,12 +228,26 @@ jobs:
         # built without root with the build tools its entry names (the
         # package step above installs any the runner lacks); about 7 minutes
         # on 4 cores, once per runner, and never again while its binary is
-        # there. Every other entry is a tree a host is prepared with, never
+        # there. So is MESA_ETNA_TREE (issues #7, #1281), the Mesa 26.2.1
+        # etnaviv tree of the ST Vivante rows (tools/vivante/gate_st.sh hwdb
+        # and golden): tools/vivante/mesa-etna-build.sh makes it under the
+        # layout's mesa-etna-26.2.1 from the Mesa tarball PCO_SHC's entry
+        # already downloaded (five Python sdists are fetched, sha256 pinned),
+        # with the packages PCO_SHC and MESA_PAN_TREE need; it does nothing
+        # when its marker matches this checkout's inputs and starts again
+        # when an input moved. Without it both rows were a gap on every
+        # runner. Every other entry is a tree a host is prepared with, never
         # built here. The LLVM directories go on PATH first: that build runs
         # clang and llvm-spirv.
         run: |
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
           tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU
+          mesa_tar="$(tools/cts/deps-env.sh --layout)/downloads/mesa-26.2.1.tar.xz"
+          if [ -f "$mesa_tar" ]; then
+            tools/vivante/mesa-etna-build.sh --tarball "$mesa_tar"
+          else
+            tools/vivante/mesa-etna-build.sh
+          fi
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {
