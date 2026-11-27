@@ -56,8 +56,7 @@
 //! the draws and a new job wherever a whole clear follows queued draws.
 //! `assemble_filled` admits the framebuffer again for limits71's tile size,
 //! turns each `FilledDraw` into a [`Draw71`] ([`draw_of`]: arrays or u16
-//! indices, one instance, no point size; the rest is refused by name,
-//! [`FILLED_REFUSALS`])
+//! indices, one instance; the rest is refused by name, [`FILLED_REFUSALS`])
 //! and runs steps 4 to 6 with fill71's `V3dJob71Clear`. The six gl_test
 //! shapes and the 4- and 8-target clears assemble this way
 //! (tests/v3d71_backend71_shapes.rs against tools/v3d/pi5/gl_*.clif).
@@ -250,6 +249,12 @@ pub struct Draw71<'a> {
     /// coordinate shader reads the vertex stage's).
     pub fs_gl: &'a [u32],
     pub vs_gl: &'a [u32],
+    /// The vertex program writes gl_PointSize: the shader record's `Point
+    /// size in shaded vertex data` (v3d_job71's `vs_writes_psiz`), as Mesa
+    /// sets it for a GL_POINTS draw whose VS writes it. The fixed-function
+    /// `POINT_SIZE` packet stays 1.0 and CFG_BITS has no point-size bit at
+    /// 7.1 (tools/v3d/pi5/gl_prims.clif).
+    pub vs_writes_psiz: bool,
     /// Vertex attribute arrays (float), record i is the programs'
     /// `vattr_sizes[i]`.
     pub attrs: &'a [ffi71::V3dVertexAttr],
@@ -375,7 +380,7 @@ pub fn plan_draw(table: &Table71, d: &Draw71<'_>, dummy_addr: u32) -> Result<Dra
         },
         vs: vertex_desc(&d.vs),
         cs: vertex_desc(&d.cs),
-        point_size: false,
+        point_size: d.vs_writes_psiz,
     };
     let admitted = admit71::admit_draw(
         table.rev,
@@ -557,7 +562,7 @@ impl Builder71 for CBuilder71<'_> {
                 num_tmu: 0,
                 vs_tmu: core::ptr::null(),
                 num_vs_tmu: 0,
-                vs_writes_psiz: false,
+                vs_writes_psiz: d.vs_writes_psiz,
                 instances: d.instances,
             };
             let mut lo = ffi71::V3dJob71DrawLayout::ZERO;
@@ -696,23 +701,19 @@ pub fn assemble(
 /// The refusals of the fill71 path that this module names itself (module
 /// `backend71`): what fill71 can describe but [`Draw71`] (and so the
 /// [`Builder71`] calls) does not carry yet.
-pub const FILLED_REFUSALS: [&str; 3] = [REF_INDEX_TYPE, REF_PSIZ, REF_TARGET];
+pub const FILLED_REFUSALS: [&str; 2] = [REF_INDEX_TYPE, REF_TARGET];
 
 /// An indexed draw of 8-bit or 32-bit indices. The GL core widens both to
 /// u16 before the back end (src/gl/draw.rs `draw_elements`), so only a
 /// GlesDraw that bypasses it reaches this.
 pub const REF_INDEX_TYPE: &str =
     "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only";
-const REF_PSIZ: &str = "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records";
 const REF_TARGET: &str = "fill71's target descriptor is not the framebuffer's (size or render target count)";
 
 /// A fill71 draw as the builder takes it. The views point into `fd`.
 pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
     if fd.indexed && fd.index_type != ffi71::V3D_INDEX_TYPE_16 {
         return Err(own(REF_INDEX_TYPE));
-    }
-    if fd.vs_writes_psiz {
-        return Err(own(REF_PSIZ));
     }
     Ok(Draw71 {
         st: fd.state,
@@ -725,6 +726,7 @@ pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
         cs_uniforms: &fd.cs_uniforms,
         fs_gl: &fd.fs_words,
         vs_gl: &fd.vs_words,
+        vs_writes_psiz: fd.vs_writes_psiz,
         attrs: &fd.attrs,
         prim: fd.prim,
         count: fd.count,

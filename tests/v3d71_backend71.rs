@@ -216,7 +216,7 @@ impl Builder71 for Harness {
             inp.extend(raw(&d.fs));
             inp.extend(raw(&d.vs));
             inp.extend(raw(&d.cs));
-            for x in [d.prim, d.count, d.first] {
+            for x in [d.prim, d.count, d.first, d.vs_writes_psiz as u32] {
                 w(&mut inp, x);
             }
             for n in [d.fs_uniforms.len(), d.vs_uniforms.len(), d.cs_uniforms.len(), d.fs_gl.len(), d.vs_gl.len()] {
@@ -885,6 +885,7 @@ fn triangle_job_is_mesas() {
         cs_uniforms: &prog.cs_u,
         fs_gl: &[],
         vs_gl: &[],
+        vs_writes_psiz: false,
         attrs: &prog.attrs,
         prim: ffi71::V3D_PRIM_TRIANGLES,
         count: 3,
@@ -1069,6 +1070,7 @@ fn draw_refusals_are_named() {
         cs_uniforms: &prog.cs_u,
         fs_gl: &[],
         vs_gl: &[],
+        vs_writes_psiz: false,
         attrs: &prog.attrs,
         prim: ffi71::V3D_PRIM_TRIANGLES,
         count: 3,

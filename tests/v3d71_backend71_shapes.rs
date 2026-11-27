@@ -403,7 +403,7 @@ impl Builder71 for Harness {
             inp.extend(raw(&d.fs));
             inp.extend(raw(&d.vs));
             inp.extend(raw(&d.cs));
-            for x in [d.prim, d.count, d.first] {
+            for x in [d.prim, d.count, d.first, d.vs_writes_psiz as u32] {
                 w(&mut inp, x);
             }
             for n in [d.fs_uniforms.len(), d.vs_uniforms.len(), d.cs_uniforms.len(), d.fs_gl.len(), d.vs_gl.len()] {
@@ -1543,8 +1543,9 @@ fn what_draw71_does_not_carry_is_refused_by_name() {
     assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[0]));
     // an instanced draw is Draw71's own (VERTEX_ARRAY_INSTANCED_PRIMS)
     one_job(|d| d.instances = 2).expect("an instanced draw");
-    let e = one_job(|d| d.vs_writes_psiz = true).unwrap_err();
-    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[1]));
+    // a vertex program writing gl_PointSize is drawn, not refused
+    // (tests/v3d71_table_points.rs compares its record with Mesa's)
+    one_job(|d| d.vs_writes_psiz = true).expect("a sized-point draw");
     // every draw is planned before the builder runs: a uniform the 7.1 table
     // does not fill yet is uniform71's named refusal
     let e = one_job(|d| d.vs_uniforms[0].contents = uniform71::TMU_CONFIG_P0).unwrap_err();
@@ -1561,5 +1562,5 @@ fn a_target_other_than_the_framebuffer_is_refused() {
     let fb = Framebuffer { width: G_SIZE, height: G_SIZE, tile_alloc: G_TILE, flip_y: false, colors: &colors, ds };
     let mut h = Harness { gpu: [G_BCL, G_RCL, G_IND], lists: Default::default() };
     let e = backend71::assemble_filled(&table(), &fb, &job, &mut h).unwrap_err();
-    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[2]));
+    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[1]));
 }

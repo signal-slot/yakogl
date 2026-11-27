@@ -12,7 +12,7 @@
  *   struct v3d_job71_target, struct v3d_job71_clear
  *   u32 bcl_gpu, rcl_gpu, ind_gpu, cl_size, page_size
  *   per draw: struct v3d_job71_state, struct v3d_fs_prog, struct
- *     v3d_vs_prog vs, cs; u32 prim, count, first; u32 n_fs_u, n_vs_u,
+ *     v3d_vs_prog vs, cs; u32 prim, count, first, vs_writes_psiz; u32 n_fs_u, n_vs_u,
  *     n_cs_u, n_fs_gl, n_vs_gl, n_attrs; then the arrays in that order
  *     (struct v3d_uniform, u32 words, struct v3d_vertex_attr)
  * stdout:
@@ -74,9 +74,9 @@ int main(void)
 		return 2;
 	for (uint32_t i = 0; i < n; i++) {
 		struct in_draw *x = &draws[i];
-		uint32_t prim, count, first, nfu, nvu, ncu, nfg, nvg, na;
+		uint32_t prim, count, first, psiz, nfu, nvu, ncu, nfg, nvg, na;
 		if (!get(&x->st, sizeof x->st) || !get(&x->fs, sizeof x->fs) || !get(&x->vs, sizeof x->vs) ||
-		    !get(&x->cs, sizeof x->cs) || !get(&prim, 4) || !get(&count, 4) || !get(&first, 4) ||
+		    !get(&x->cs, sizeof x->cs) || !get(&prim, 4) || !get(&count, 4) || !get(&first, 4) || !get(&psiz, 4) ||
 		    !get(&nfu, 4) || !get(&nvu, 4) || !get(&ncu, 4) || !get(&nfg, 4) || !get(&nvg, 4) || !get(&na, 4))
 			return 2;
 		if (nfu > MAX_WORDS || nvu > MAX_WORDS || ncu > MAX_WORDS || nfg > MAX_WORDS || nvg > MAX_WORDS ||
@@ -104,6 +104,7 @@ int main(void)
 		x->d.prim = prim;
 		x->d.count = count;
 		x->d.first = first;
+		x->d.vs_writes_psiz = psiz != 0;
 	}
 
 	uint8_t *mem = calloc(3, cl_size);
