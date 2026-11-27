@@ -42,14 +42,21 @@ const UNIFORM_ARRAY: &str = "a uniform array is not lowered yet";
 /// The references the compiler makes byte-equal. None yet.
 const MATCHED: &[&str] = &[];
 
+/// The arithmetic refusal (the vertex shader's), without the `Valhall: ` prefix.
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
+
+/// The references that compile now and still differ from Mesa's words:
+/// `init_bool` (our `.not` ORs and `LSHIFT_AND` against Mesa's OR chain, 9
+/// words to 7) and `init_int` (the FAU words of the first two elements are
+/// swapped).
+const DIFFERS: &[&str] = &["init_bool", "init_int"];
+
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("init_bool", UNIFORM_ARRAY),
-    ("init_int", UNIFORM_ARRAY),
-    ("init_bvec4", UNIFORM_ARRAY),
-    ("init_ivec4", UNIFORM_ARRAY),
+    ("init_bvec4", ARITH),
+    ("init_ivec4", ARITH),
     ("init_mat4", UNIFORM_ARRAY),
-    ("init_multi", UNIFORM_ARRAY),
+    ("init_multi", ARITH),
     ("init_struct_mat", UNIFORM_ARRAY),
     ("init_nested_mat", UNIFORM_ARRAY),
 ];
@@ -72,8 +79,13 @@ fn on_disk() -> Vec<String> {
 /// a `.license` beside each shader.
 #[test]
 fn references_load() {
-    let mut listed: Vec<String> =
-        REFUSED.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).map(str::to_string).collect();
+    let mut listed: Vec<String> = REFUSED
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(MATCHED.iter().copied())
+        .chain(DIFFERS.iter().copied())
+        .map(str::to_string)
+        .collect();
     listed.sort();
     assert_eq!(on_disk(), listed, "every deqp_vsuarr_* reference has a test and a pin");
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
@@ -95,10 +107,21 @@ fn references_load() {
 /// varying alone).
 #[test]
 fn refusals_pinned() {
-    let changed: Vec<String> = REFUSED
+    let mut changed: Vec<String> = REFUSED
         .iter()
         .filter_map(|(name, text)| mali_ref::refusal_change(&format!("deqp_vsuarr_{name}"), text))
         .collect();
+    for name in DIFFERS {
+        let n = format!("deqp_vsuarr_{name}");
+        let r = mali_ref::Reference::load(&n);
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) if mali_ref::differences(&r, &pair).is_empty() => {
+                changed.push(format!("{n}: now byte-equal; move it to MATCHED and remove its #[ignore]"))
+            }
+            Ok(_) => {}
+            Err(e) => changed.push(format!("{n}: now refused: {e}")),
+        }
+    }
     assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
 
@@ -106,7 +129,7 @@ fn refusals_pinned() {
 /// (`MOV.i32`, two `LSHIFT_OR.i32`) and selects 1.0 where the OR is 0
 /// (`CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`). FAU 11 to 13.
 #[test]
-#[ignore = "refused: a uniform array (uniform bool u_var[3])"]
+#[ignore = "differs: our OR chain is 9 words against Mesa's 7 (uniform bool u_var[3]); pinned by refusals_pinned"]
 fn init_bool() {
     mali_ref::assert_matches("deqp_vsuarr_init_bool");
 }
@@ -115,7 +138,7 @@ fn init_bool() {
 /// three words (`CSEL.u32.gt` twice), one `ICMP_OR.u32.eq.m1 r0, r0^, 0x0,
 /// 0x0`, then the 1.0 / 0 select.
 #[test]
-#[ignore = "refused: a uniform array (uniform mediump int u_var[3])"]
+#[ignore = "differs: the first two elements' FAU words are swapped (uniform mediump int u_var[3]); pinned by refusals_pinned"]
 fn init_int() {
     mali_ref::assert_matches("deqp_vsuarr_init_int");
 }
@@ -124,7 +147,7 @@ fn init_int() {
 /// the twelve words (FAU 11 to 22), its leaves regrouped across elements,
 /// one `CSEL.u32.eq` at the end.
 #[test]
-#[ignore = "refused: a uniform array (uniform bvec4 u_var[3])"]
+#[ignore = "refused: arithmetic beyond +, -, * (uniform bvec4 u_var[3])"]
 fn init_bvec4() {
     mali_ref::assert_matches("deqp_vsuarr_init_bvec4");
 }
@@ -132,7 +155,7 @@ fn init_bvec4() {
 /// `mediump ivec4 u_var[3]`, every lane `== 0`: one `CSEL.u32.gt` (umax)
 /// tree over the twelve words, one `ICMP_OR.u32.eq.m1` with 0.
 #[test]
-#[ignore = "refused: a uniform array (uniform mediump ivec4 u_var[3])"]
+#[ignore = "refused: arithmetic beyond +, -, * (uniform mediump ivec4 u_var[3])"]
 fn init_ivec4() {
     mali_ref::assert_matches("deqp_vsuarr_init_ivec4");
 }
@@ -151,7 +174,7 @@ fn init_mat4() {
 /// the bvec2 words with a `.not`, joined by `LSHIFT_AND.i32`. FAU 11 to 28
 /// in the order of first use.
 #[test]
-#[ignore = "refused: a uniform array (the ivec3 and bvec2 arrays beside a float array)"]
+#[ignore = "refused: arithmetic beyond +, -, * (the ivec3 and bvec2 arrays beside a float array)"]
 fn init_multi() {
     mali_ref::assert_matches("deqp_vsuarr_init_multi");
 }
