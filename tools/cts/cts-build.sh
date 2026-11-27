@@ -12,7 +12,7 @@
 # dlopen()s libGLESv2.so.2 and libEGL.so.1 at run time.
 #
 # Environment:
-#   CTS           VK-GL-CTS checkout   (default ~/com/github/KhronosGroup/VK-GL-CTS)
+#   CTS           VK-GL-CTS checkout   (required, no default)
 #   BUILD         build directory      (default <repo>/build/cts/aarch64)
 #   BOOTLIN_ROOT  aarch64 SDK root     (default <repo>/build/cts/toolchain/...)
 #   BOOTLIN_TARBALL  a local copy of the SDK tarball, so the build needs no network
@@ -24,12 +24,13 @@ set -eu
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-CTS=${CTS:-$HOME/com/github/KhronosGroup/VK-GL-CTS}
+CTS=${CTS:-}
 BUILD=${BUILD:-$REPO/build/cts/aarch64}
 TCDIR=${TCDIR:-$REPO/build/cts/toolchain}
 SDK=aarch64--glibc--stable-2024.05-1
 SDK_URL=https://toolchains.bootlin.com/downloads/releases/toolchains/aarch64/tarballs/$SDK.tar.xz
 
+[ -n "$CTS" ] || { echo "CTS is not set: export CTS=<VK-GL-CTS checkout>" >&2; exit 1; }
 [ -d "$CTS" ] || { echo "no VK-GL-CTS checkout at $CTS (set CTS=)" >&2; exit 1; }
 
 # --- 1. the toolchain -------------------------------------------------------
