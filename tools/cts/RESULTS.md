@@ -585,7 +585,10 @@ nothing in the boot partitions was changed. The images are those of
 (`-DYAKOGL_WERROR=ON`, display off), built from main `bd6cd44938a7`
 (`v0.1.0-3407-gbd6cd44938a7`) with the pinned `MALI_CSFFW`. All five runs
 ended by themselves and the board came back to its Linux login each time.
-The display (the 10.1" LVDS panel on X12) is not part of these runs.
+The first five rows do not use the display (the 10.1" LVDS panel on X12). The
+last three rows are the display session of 2026-11-27: images built from main
+`472630df`, started through the U-Boot prompt route of
+`docs/standalone-boot.md` as above.
 
 | Step | Image | Result | Image sha256 | Run | Record |
 |---|---|---|---|---|---|
@@ -594,6 +597,9 @@ The display (the 10.1" LVDS panel on X12) is not part of these runs.
 | The GPU's identity after our power-on over SCMI | `imx95_ident` | **PASS**: `imx95_ident: PASS GPU_ID 0xac740001, SHADER_PRESENT 0x00000001, 1 of 9 mock.rs words differ` (the assumed `SHADER_PRESENT` was 0x3; `L2_FEATURES 0x07110306`, `TILER_FEATURES 0x00000809`, `MMU_FEATURES 0x00002830`, `AS_PRESENT 0xff`, `CORE_FEATURES 0x1`, `COHERENCY_FEATURES 0x0`); domain 14 on at perf level 2 (800 MHz), off again at the end | `9734aab313e3dcba` | 2026-11-25 01:27 JST | `records/verdin-imx95/20261125-0127-imx95_ident-9734aab3` |
 | The CSF firmware boots from our side | `imx95_fw` | **PASS**: `imx95_fw: PASS GLB 1.5.0, 8 groups, CS features 0x0007085f, suspend 21120/21120`; `MCU_STATUS 0 before, 1 after, booted in 21 us`; the file is the T6's (sha256 `a27847ea…405b`) | `3b1c3a4f1c9fb6a9` | 2026-11-25 01:29 JST | `records/verdin-imx95/20261125-0129-imx95_fw-3b1c3a4f` |
 | gl_test, the regression set, on the GL back end over our kernel side (read-back) | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...; 0 skipped ...); precompiled hits 0, compiler runs 529`, `gl_test: PASS`, `yk-record: 594b0201 00000001 00000000 00000000`; 166 kicks, 0 restarts, 0 tiler OOMs; `run over: PSCI SYSTEM_RESET at 15677 ms` | `7b3fd24ec664bd07` | 2026-11-25 01:35 JST | `records/verdin-imx95/20261125-0135-gl_test-7b3fd24e` |
+| The X12 LVDS path at reset (read only, DISPLAY on and off) | `imx95_lvds_ids` | **PASS**: `imx95_lvds_ids: PASS lvds csr 0x00000000 0x00000000 0x00000000 0x00000000, dpu id 0x21260400 (the dump's), LDB PLL and TPM5 permitted`; clocks 37/38/80/154 permissions 0xe0000000, 75 none; DISPLAY off at entry; display CSR +0x14/+0x18 reset values, +0x1C 0 (Linux writes 0x33); burst words 0x7fe00204 at reset; U2 (display clocks), U23, U26, U27 answered; U19 not used on X12 | `079c50c9ba66c113` | 2026-11-27 18:01 JST | `records/verdin-imx95/20261127-1801-imx95_lvds_ids-472630df` |
+| First clear and first triangle on the X12 LVDS panel | `examples/triangle` | **PASS**: `display up: 1280x800 XRGB8888 …, pixel clock 71100000 Hz (DISP level 3), FrameGen0 in sync after 49800 us, LDB 0x00000014 0x00082221 0x00001075 0x00000000, backlight 119/255`; `triangle: PASS`; camera: the triangle (red top, green bottom-left, blue bottom-right) on grey 0x20 in the 1024x600 window at the panel's top-left; `display down: -5` (FrameGen0 not stopped), `run over: PSCI SYSTEM_RESET at 61349 ms` | `8a200a1041ea262e` | 2026-11-27 18:05 JST | `records/verdin-imx95/20261127-1806-triangle-472630df` |
+| gl_test with the display code in the image | `gl_test` (`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`) | **50 of 50** (two runs): `gl_test: all: 0 of 50 cases failed (50 passed; …); precompiled hits 0, compiler runs 529`, `gl_test: PASS`; 166 kicks, 0 restarts; `run over … 15501 ms`; the panel is not lit (the Mali main passes panel=0, no `board_show`; camera dark mid-run) | `df6e66e87940c548` | 2026-11-27 18:08 JST | `records/verdin-imx95/20261127-1808-gl_test-panel-472630df` |
 
 What these runs do not show:
 
@@ -602,7 +608,9 @@ What these runs do not show:
   verdicts above are the console's.
 - `tools/board.sh imx95` has not run, nor has U-Boot started an image from
   its boot command; the direct route has not been tried.
-- No picture: the display path for the X12 LVDS panel is not in main.
+- The 2026-11-27 session has the X12 picture (the triangle, camera-confirmed),
+  but `display down` returned -5 and gl_test never lit the panel; both are
+  open defects.
 
 The module's own Linux and U-Boot, read the same night (read only): the
 stock Linux drives the G310 with `mali_kbase` r50p0 (`arch 10.12.7 r0p0`)
