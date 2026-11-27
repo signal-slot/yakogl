@@ -54,12 +54,11 @@ py $C/imx8mp-gles3-redact.py --check $C/log/*-imx8mp-gles3-* $C/log/*-imx8mp-es2
 out=$(py $C/imx8mp-es2-regress.py $C/log/2026-11-imx8mp-es2-9bc82915 2>&1); echo "$out" | tail -1
 echo "$out" | grep -q '29/29 entries, 0 worse, 0 missing' || fail "es2-regress"
 
-acc=$(bash $C/imx8mp-gles3-acceptance.sh --date 2026-11-14 "$T" 2>&1); echo "$acc"
-if ! echo "$acc" | grep -q '^summary: 8 ok, 0 FAIL of 8$'; then
-	# acceptance may need a git root
-	git init -q "$T" >/dev/null 2>&1
-	acc=$(bash $C/imx8mp-gles3-acceptance.sh --date 2026-11-14 "$T" 2>&1); echo "$acc"
-	echo "$acc" | grep -q '^summary: 8 ok, 0 FAIL of 8$' || fail "acceptance"
-fi
+# p1 needs a git root with a base commit: the scratch tree is committed once
+git init -q "$T" >/dev/null 2>&1
+git -C "$T" add -A >/dev/null 2>&1
+git -C "$T" -c user.name=t -c user.email=t@t.invalid commit -q -m base >/dev/null 2>&1
+acc=$(bash $C/imx8mp-gles3-acceptance.sh --date 2026-11-14 --since HEAD "$T" 2>&1); echo "$acc"
+echo "$acc" | grep -q '^summary: 9 ok, 0 FAIL of 9$' || fail "acceptance"
 [ $fails -eq 0 ] && echo "e2e selftest: ok" || echo "e2e selftest: $fails FAIL"
 [ $fails -eq 0 ]

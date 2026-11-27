@@ -52,6 +52,13 @@ OK"
 		i=$((i + 1))
 	done
 	echo "ok log" >"$R/tools/cts/log/2026-11-12-imx8mp-gles3-0123abcd-rows01-13/README.md"
+	stub imx8mp-gles3-redact.py "redact: clean"
+	mkdir -p "$R/third_party" "$R/driver/src/v3d/generated" "$R/driver/src/pvr/generated" "$R/driver/src/fw"
+	echo v >"$R/third_party/f"; echo g >"$R/driver/src/v3d/generated/f"; echo g >"$R/driver/src/pvr/generated/f"
+	echo b >"$R/driver/src/fw/pvr_fw_blob.h"
+	git -C "$R" init -q . && git -C "$R" add -A &&
+		git -C "$R" -c user.name=t -c user.email=t@t.invalid commit -q -m base &&
+		git -C "$R" tag base
 }
 # The stub merge prints the not-pass list as 'entry' for --notpass.
 patch_notpass() {
@@ -66,11 +73,11 @@ PYEOF
 # expect <case> <expected exit> <expected FAIL list, space separated or ''>
 run_case() {
 	local name=$1 want_rc=$2 want_fail=$3 out rc got
-	out=$(sh "$ACC" ${ARGS:-} "$R" 2>"$WORK/stderr")
+	out=$(sh "$ACC" --since base ${ARGS:-} "$R" 2>"$WORK/stderr")
 	rc=$?
-	got=$(printf '%s\n' "$out" | sed -n 's/^\(c[0-9]\) FAIL.*/\1/p' | tr '\n' ' ' | sed 's/ $//')
-	lines=$(printf '%s\n' "$out" | grep -Ec '^c[0-9] (ok|FAIL) ')
-	if [ "$rc" = "$want_rc" ] && [ "$got" = "$want_fail" ] && [ "$lines" = 8 ] &&
+	got=$(printf '%s\n' "$out" | sed -n 's/^\([cp][0-9]\) FAIL.*/\1/p' | tr '\n' ' ' | sed 's/ $//')
+	lines=$(printf '%s\n' "$out" | grep -Ec '^[cp][0-9] (ok|FAIL) ')
+	if [ "$rc" = "$want_rc" ] && [ "$got" = "$want_fail" ] && [ "$lines" = 9 ] &&
 		printf '%s\n' "$out" | grep -q '^summary: ' && ! grep -Eiq 'not found|syntax|unbound|: line [0-9]|Traceback' "$WORK/stderr"; then
 		echo "ok   $name"
 	else
@@ -153,6 +160,34 @@ fresh c8b
 # this file too): the fixture address is joined at run time.
 printf 'host %s.%s.%s.%s:22\n' 192 168 1 5 >"$R/tools/cts/log/2026-11-12-imx8mp-es2-0123abcd/x.txt"
 run_case "c8 address in an es2 log" 1 "c8"
+
+fresh c8c
+touch "$R/fail-imx8mp-gles3-redact.py"
+run_case "c8 redact --check fails" 1 "c8"
+
+fresh p1
+run_case "p1 ok when no protected path changed" 0 ""
+
+fresh p1b
+echo x >>"$R/third_party/f"
+run_case "p1 third_party touched" 1 "p1"
+
+fresh p1c
+echo x >>"$R/driver/src/fw/pvr_fw_blob.h"
+run_case "p1 pvr_fw_blob.h touched" 1 "p1"
+
+fresh p1d
+echo x >"$R/driver/src/pvr/generated/new.rs"
+git -C "$R" add driver/src/pvr/generated/new.rs
+run_case "p1 new staged generated file" 1 "p1"
+
+fresh p1e
+echo x >>"$R/docs/es3-cts-failures.md"
+run_case "p1 other path touched: ok" 0 ""
+
+fresh p1f
+ARGS="--since nosuchrev" run_case "p1 unknown base: cannot tell, FAIL" 1 "p1"
+ARGS=
 
 fresh empty
 rm -r "$R"/tools/cts/log/*
