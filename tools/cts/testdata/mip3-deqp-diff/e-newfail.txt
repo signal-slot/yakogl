@@ -1,0 +1,5 @@
+deqp: Pass dEQP-GLES2.functional.texture.mipmap.2d.basic.a
+deqp: Fail dEQP-GLES2.functional.texture.mipmap.2d.generate.rgba8888_nearest
+deqp: Pass dEQP-GLES2.functional.texture.mipmap.2d.generate.rgb565_linear
+deqp: Fail dEQP-GLES2.functional.texture.mipmap.2d.bias.x
+deqp: Pass dEQP-GLES2.functional.texture.mipmap.2d.projected.y
