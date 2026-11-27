@@ -1,0 +1,37 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# x2-ping/ping - a stand-in for ping(8) for tools/board.sh x2 on a host that reaches the Armadillo-X2 by ssh only.
+#
+#   ping [-c N] [-W S] [other ping options] <host>
+#
+# tools/board.sh x2 waits for the board after a crash-route jump with `ping -c1 -W1 <host>` (kexec_wait_back: ping
+# lost, ping back, then ssh). A host that reaches the board through an ssh forward (a ProxyCommand, a jump host) gets
+# no ICMP answer at all, so board.sh would see "ping back" never and end every row rc 5 after 1500 s.
+# tools/cts/imx8mp-gles3-board.sh puts this directory first in PATH for such a host (X2_PING=ssh, or X2_PING=auto
+# when the real ping gets no answer and ssh does). The host answers when its sshd answers: ssh exits 0, or it
+# is refused at authentication ("Permission denied": Linux is up, the key is the next question, which
+# kexec_wait_back's own ssh asks). Anything else (timeout, connection refused or closed, no route) is no answer.
+#
+# BOARD_HOST (user@host) supplies the user when its host part is <host>; options are accepted and ignored except
+# -W (the ssh connect timeout, at least 1 s). Exit 0 answer, 1 no answer, 2 usage. Prints nothing on stdout.
+set -u
+w=1 host=
+while [ $# -gt 0 ]; do
+	case $1 in
+		-W) w=${2:-1}; shift 2 ;;
+		-W*) w=${1#-W}; shift ;;
+		-[cist]) shift 2 ;;
+		-*) shift ;;
+		*) host=$1; shift ;;
+	esac
+done
+[ -n "$host" ] || { echo "usage: ping [-c N] [-W S] <host>" >&2; exit 2; }
+[[ $w =~ ^[0-9]+$ ]] && [ "$w" -ge 1 ] || w=1
+dest=$host
+if [ -n "${BOARD_HOST:-}" ] && [ "${BOARD_HOST#*@}" = "$host" ]; then dest=$BOARD_HOST; fi
+err=$(timeout $((w + 4)) ssh -o BatchMode=yes -o ConnectTimeout="$((w + 2))" "$dest" true < /dev/null 2>&1 >/dev/null)
+rc=$?
+[ "$rc" = 0 ] && exit 0
+case $err in *"Permission denied"*) exit 0 ;; esac
+exit 1

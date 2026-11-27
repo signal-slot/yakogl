@@ -141,6 +141,99 @@ env -u TREE_IMAGE IMX8MP_BOARD=pi4 IMX8MP_OUT="$out" "$w" tree "$outdir" > "$tmp
 if [ $rc -eq 2 ] && grep -q "is imx8mp or x2, not 'pi4'" "$tmp/e"; then ok "IMX8MP_BOARD=pi4: exit 2 naming the two boards"
 else bad "IMX8MP_BOARD=pi4: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
 
+# ---- (A3) the X2 knobs for a host that reaches the board by ssh only: X2_PING (tools/cts/x2-ping/ping) and
+# X2_KEEP_KEY (persist the live authorized_keys for the session, put the persisted copy back after board.sh). A fake
+# ssh runs the board side under $tmp/board (paths /root, /live and /tmp mapped there); a fake persist_file copies
+# the live file to the persisted one. The real ssh and the real board are never used.
+mkdir -p "$root/tools/cts/x2-ping" "$tmp/bin"
+cp "$here/x2-ping/ping" "$root/tools/cts/x2-ping/ping"; chmod +x "$root/tools/cts/x2-ping/ping"
+fb=$tmp/board
+cat > "$tmp/bin/ssh" <<STUB
+#!/bin/bash
+# fake ssh: FAKE_SSH=down (no route), denied (sshd up, key refused), else run the command under $fb
+while [ \$# -gt 0 ]; do case \$1 in -o) shift 2 ;; -*) shift ;; *) break ;; esac; done
+echo "\$1" >> "$tmp/ssh-dest"; shift
+case \${FAKE_SSH:-up} in
+	down) echo "ssh: connect to host: Connection timed out" >&2; exit 255 ;;
+	denied) echo "root@board: Permission denied (publickey)." >&2; exit 255 ;;
+esac
+[ -f "$tmp/ssh-fail-restore" ] && [[ \$* == *orig* ]] && { echo "Connection closed" >&2; exit 255; }
+cmd=\$(printf '%s' "\$*" | sed -E "s#(^|[ ;=<>])/(root|live|tmp)/#\\1$fb/\\2/#g")
+PATH="$tmp/bin:\$PATH" exec sh -c "\$cmd"
+STUB
+cat > "$tmp/bin/persist_file" <<STUB
+#!/bin/sh
+cp "\$1" "$fb/live/rootfs\${1#$fb}"
+STUB
+chmod +x "$tmp/bin/ssh" "$tmp/bin/persist_file"
+pg=$root/tools/cts/x2-ping/ping
+PATH="$tmp/bin:$PATH" FAKE_SSH=up "$pg" -c1 -W1 board > "$tmp/o" 2>&1 && [ ! -s "$tmp/o" ] && ok "x2-ping: sshd answers -> 0, nothing printed" \
+	|| bad "x2-ping up: $(cat "$tmp/o")"
+PATH="$tmp/bin:$PATH" FAKE_SSH=denied "$pg" -c1 -W1 board && ok "x2-ping: refused at authentication is an answer (Linux is up)" \
+	|| bad "x2-ping: Permission denied not taken as up"
+PATH="$tmp/bin:$PATH" FAKE_SSH=down "$pg" -c1 -W1 board && bad "x2-ping: a timeout taken as an answer" || ok "x2-ping: no route -> 1"
+"$pg" -c1 -W1 > /dev/null 2>&1; [ $? = 2 ] && ok "x2-ping: no host -> 2" || bad "x2-ping: no host"
+: > "$tmp/ssh-dest"
+PATH="$tmp/bin:$PATH" BOARD_HOST=root@board "$pg" -c1 -W1 board; PATH="$tmp/bin:$PATH" BOARD_HOST=root@board "$pg" other
+[ "$(tr '\n' ' ' < "$tmp/ssh-dest")" = "root@board other " ] && ok "x2-ping: BOARD_HOST's user for its own host only" \
+	|| bad "x2-ping: destinations $(cat "$tmp/ssh-dest")"
+# the stub board.sh says which ping it would run and what the persisted keys hold while it runs
+cat > "$root/tools/board.sh" <<STUB
+#!/bin/bash
+echo "ARGS: \$*"
+echo "PING: \$(command -v ping)"
+[ -f "$fb/live/rootfs/root/.ssh/authorized_keys" ] && echo "PERSISTED-DURING: \$(grep -c . "$fb/live/rootfs/root/.ssh/authorized_keys")"
+exit \${STUB_RC:-0}
+STUB
+chmod +x "$root/tools/board.sh"
+xrun() { env -u IMX8MP_BOARD TMPDIR="$tmp" TREE_IMAGE=$tmp/mine.bin PATH="$tmp/bin:$PATH" BOARD_HOST=root@board "$@"; }
+xrun X2_PING=ssh "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+[ $rc = 0 ] && grep -qxF "PING: $root/tools/cts/x2-ping/ping" "$tmp/o" && grep -q 'X2_PING=ssh' "$tmp/e" \
+	&& ok "X2_PING=ssh: board.sh x2 runs with tools/cts/x2-ping/ping" || bad "X2_PING=ssh: exit $rc: $(cat "$tmp/o" "$tmp/e")"
+xrun X2_PING=icmp "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"
+grep -q "PING: $root/tools/cts/x2-ping/ping" "$tmp/o" && bad "X2_PING=icmp: the stand-in was used" || ok "X2_PING=icmp: PATH left alone"
+xrun X2_PING=ssh "$w" --board imx8mp tree "$outdir" > "$tmp/o" 2> "$tmp/e"
+grep -q "PING: $root/tools/cts/x2-ping/ping" "$tmp/o" && bad "X2_PING on the Verdin: the stand-in was used" \
+	|| ok "X2_PING is not read for the Verdin"
+xrun X2_PING=bogus "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+[ $rc = 2 ] && [ ! -s "$tmp/o" ] && grep -q "auto, icmp or ssh, not 'bogus'" "$tmp/e" && ok "X2_PING=bogus: exit 2, board.sh not run" \
+	|| bad "X2_PING=bogus: exit $rc: $(cat "$tmp/o" "$tmp/e")"
+mkboard() {
+	rm -rf "$fb"; mkdir -p "$fb/root/.ssh" "$fb/live/rootfs/root/.ssh" "$fb/tmp"
+	printf 'ssh-ed25519 AAAAfarm1 node1\nssh-ed25519 AAAAfarm2 node2\n' > "$fb/live/rootfs/root/.ssh/authorized_keys"
+	cp "$fb/live/rootfs/root/.ssh/authorized_keys" "$fb/root/.ssh/authorized_keys"
+	sha0=$(sha256sum < "$fb/live/rootfs/root/.ssh/authorized_keys")
+}
+mkboard; echo 'no-port-forwarding ssh-ed25519 AAAAlease lease' >> "$fb/root/.ssh/authorized_keys"; live0=$(sha256sum < "$fb/root/.ssh/authorized_keys")
+xrun X2_PING=icmp X2_KEEP_KEY=1 "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc = 0 ] && grep -qxF 'PERSISTED-DURING: 3' "$tmp/o" && [ "$(sha256sum < "$fb/live/rootfs/root/.ssh/authorized_keys")" = "$sha0" ] \
+	&& [ "$(sha256sum < "$fb/root/.ssh/authorized_keys")" = "$live0" ] && grep -q 'is back as it was' "$tmp/e" \
+	&& [ -z "$(ls "$fb/tmp")" ]; then
+	ok "X2_KEEP_KEY=1: the lease key persisted while board.sh ran; the persisted copy back byte for byte, the live file kept"
+else bad "X2_KEEP_KEY=1: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+mkboard; echo 'ssh-ed25519 AAAAlease lease' >> "$fb/root/.ssh/authorized_keys"
+xrun X2_PING=icmp X2_KEEP_KEY=1 STUB_RC=5 "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+[ $rc = 5 ] && [ "$(sha256sum < "$fb/live/rootfs/root/.ssh/authorized_keys")" = "$sha0" ] \
+	&& ok "X2_KEEP_KEY=1: board.sh's rc 5 is kept and the copy still goes back" || bad "X2_KEEP_KEY rc 5: exit $rc: $(cat "$tmp/e")"
+mkboard
+xrun X2_PING=icmp X2_KEEP_KEY=1 "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+[ $rc = 0 ] && grep -q 'nothing to keep' "$tmp/e" && [ "$(sha256sum < "$fb/live/rootfs/root/.ssh/authorized_keys")" = "$sha0" ] \
+	&& ok "X2_KEEP_KEY=1 with every key persisted already: nothing written" || bad "X2_KEEP_KEY nothing to keep: exit $rc: $(cat "$tmp/e")"
+mkboard; echo 'ssh-ed25519 AAAAlease lease' >> "$fb/root/.ssh/authorized_keys"; : > "$tmp/ssh-fail-restore"
+xrun X2_PING=icmp X2_KEEP_KEY=1 "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+rm -f "$tmp/ssh-fail-restore"
+[ $rc = 7 ] && grep -q 'NOT restored' "$tmp/e" && grep -q 'persist_file' "$tmp/e" \
+	&& ok "X2_KEEP_KEY=1: a restore that cannot run exits 7 and prints the undo" || bad "X2_KEEP_KEY failed restore: exit $rc: $(cat "$tmp/e")"
+kept=$(ls -d "$tmp"/x2-keep-key.* 2>/dev/null)
+[ -n "$kept" ] && [ "$(sha256sum < "$kept/persisted")" = "$sha0" ] \
+	&& ok "X2_KEEP_KEY: after a failed restore the copy the undo names is kept" || bad "X2_KEEP_KEY: no copy kept after a failed restore"
+rm -rf "$tmp"/x2-keep-key.*
+xrun X2_PING=icmp X2_KEEP_KEY=1 "$w" --dry-run --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+[ $rc = 0 ] && grep -q '^DRY board\$ cat /live/rootfs/root/.ssh/authorized_keys' "$tmp/e" && grep -q '^DRY board\$ the kept copy' "$tmp/e" \
+	&& ok "X2_KEEP_KEY=1 --dry-run: the keep and restore steps printed, nothing run" || bad "X2_KEEP_KEY dry run: exit $rc: $(cat "$tmp/e")"
+ls -d "$tmp"/x2-keep-key.* > /dev/null 2>&1 && bad "X2_KEEP_KEY: a kept-copy directory left behind after a restore" \
+	|| ok "X2_KEEP_KEY: no kept-copy directory left behind"
+
 # ---- (B) check-imx8mp-gles3-tree.py
 chk=$here/check-imx8mp-gles3-tree.py
 table=$here/imx8mp-gles3-tree.txt

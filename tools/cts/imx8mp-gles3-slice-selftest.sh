@@ -187,6 +187,10 @@ cp "$slice/x2-results.tsv" "$tmp/x/slice/results.tsv"
 x=$tmp/x/slice/README.md
 grep -qF 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)' "$x" \
 	&& ok "x2: the README says measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" || bad "x2: no measured-on line"
+grep -qx 'Measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), not the Verdin i.MX8MP.' "$x" \
+	&& ok "x2: the README states the board, not the Verdin" || bad "x2: no 'not the Verdin i.MX8MP' line"
+grep -q 'not the Verdin i.MX8MP' "$tmp/a/slice/README.md" && bad "verdin: the X2 board line was written" \
+	|| ok "verdin: no X2 board line"
 grep -q "owner's decision of 2026-11-27" "$x" && ok "x2: the owner's decision named" || bad "x2: no owner's decision"
 grep -q 'Toradex Verdin iMX8M Plus (GC7000UL): the slice' "$x" && bad "x2: the Verdin sentence was written" \
 	|| ok "x2: no Verdin run sentence"
