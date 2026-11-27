@@ -42,7 +42,9 @@ on counts. Per entry:
     WORSE    fewer passed or more failed/other/noresult, or the row is not
              clean (rc != 0, verdict other than done, resets present)
     missing  no verdict line (or no usable record) for the entry
-Last line: 'es2 regress: <n>/29 entries, <w> worse, <m> missing'. Exit 0 only
+The first line names the board(s) of the verdict lines (board.sh imx8mp =
+Verdin i.MX8MP, board.sh x2 = Armadillo-X2); both are read and judged the same
+way, the board does not change any verdict. Last line: 'es2 regress: <n>/29 entries, <w> worse, <m> missing'. Exit 0 only
 if all 29 entries are present and none is worse; 1 otherwise; 2 bad input.
 """
 import os
@@ -51,11 +53,15 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINE = os.path.join(HERE, "imx8mp-full-tree-29460f96.results.tsv")
-LINE = re.compile(r"board\.sh imx8mp e(\d+)(-p\d+)? rc=(-?\d+)(.*)")
+LINE = re.compile(r"board\.sh (imx8mp|x2) e(\d+)(-p\d+)? rc=(-?\d+)(.*)")
 REC = re.compile(r"\brecord=(\S*)")
 WORDS = re.compile(r"[0-9a-fA-F]{1,8}(?:,[0-9a-fA-F]{1,8}){2,3}$")
 KIND = re.compile(r"\bresult=record:(\S+)")
 MAGIC, DEQP = 0x594B, 8
+# the board a verdict line came from: board.sh's first argument (imx8mp is the
+# Verdin; x2 is the Armadillo-X2, same i.MX 8M Plus and GC7000UL). The judging
+# does not look at it; only the header line names it.
+BOARDS = {"imx8mp": "Verdin i.MX8MP", "x2": "Armadillo-X2"}
 
 
 def counts(tb, tp, tf, tn, to):
@@ -119,11 +125,11 @@ def read_text(path, bl=None):
     out = {}
     for ln in open(path, errors="replace"):
         m = LINE.search(ln)
-        if not m or m.group(2):
+        if not m or m.group(3):
             continue
         rest = m.group(0)
-        i = int(m.group(1))
-        clean = m.group(3) == "0" and "verdict=done" in rest and \
+        i = int(m.group(2))
+        clean = m.group(4) == "0" and "verdict=done" in rest and \
             re.search(r"resets=(absent|0)\b", rest) is not None
         r = REC.search(rest)
         if not r or r.group(1) == "absent":
@@ -142,6 +148,7 @@ def read_text(path, bl=None):
             # a stale or breadcrumb record on a failed row: no tally, all lost
             c = counts(b["begun"] if b else 0, 0, 0, 0, 0)
         c["clean"] = clean
+        c["board"] = BOARDS[m.group(1)]
         out[i] = c
     return out
 
@@ -189,6 +196,9 @@ def main(argv):
         print("es2 regress: baseline has %d entries, not 29" % len(bl),
               file=sys.stderr)
         return 2
+    names = sorted({r["board"] for r in got.values() if "board" in r})
+    print("es2 regress: board %s (baseline: Verdin i.MX8MP stage 1)" %
+          (", ".join(names) if names else "not named by the records"))
     n = w = m = 0
     for i in sorted(bl):
         b, r = bl[i], got.get(i)
