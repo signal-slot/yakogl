@@ -92,8 +92,8 @@ the results are in `tools/cts/RESULTS.md`):
   refract (2 of 33) are "Unsupported". glmark2's shadow also needs a
   depth-only framebuffer on the V3D (`DRAWS_WITHOUT_COLOUR`, gl_test case 177).
 - terrain needs vertex texture units. YakoGL reports 16
-  (`src/backend.rs:220-252`), except on the GC7000 when its `vs_units16`
-  switch is off.
+  (`GLES_VS_TEX_UNITS` in `src/backend.rs`, 16 on the GC7000 too; the
+  `gc_debug_vs_units16` switch that selected 8 is gone).
 
 ### The score
 
@@ -421,7 +421,7 @@ fixes:
 | Board | RAM region the image sits in |
 |---|---|
 | Verdin AM62P | the 96 MiB heap, the window buffer (up to `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB=8100`) and the 1 MiB stack, `driver/samples/zephyr/glmark2/boards/verdin_am62p_am62p54_a53.conf` |
-| Verdin iMX8M Plus | the 256 MiB RAM region; no UART: the GLMARK2 record carries the numbers (section 2) |
+| Verdin iMX8M Plus | the 256 MiB RAM region; no UART: the GLMARK2 record carries the numbers (section 2) Today's i.MX8MP board runs are measured on the Armadillo-X2 (`tools/board.sh x2`, same SoC and GPU), the Verdin being off the farm. |
 | Raspberry Pi 4 | `&sram0` of 288 MiB from 0x200000 (`driver/samples/zephyr/glmark2/boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000); the V3D carve-out is 96 MiB (refract's peak and terrain's NPOT chains); kernel VM 512 MiB. The earlier 224 MiB region at a 48 MiB carve-out took 194,192 KiB |
 | NanoPC-T6 | Linux, not this image for the stage-2 benchmark (section 4); `driver/samples/zephyr/glmark2/boards/nanopc_t6.conf` is the 96 MiB Mali carve-out of the Zephyr image that ran on the display |
 

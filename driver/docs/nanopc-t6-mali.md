@@ -4,8 +4,7 @@
 
 **Z1 PASS 2026-10-19 00:57 JST, build 576065151**: `t6_hello`, kexec'd out of
 Armbian, ran on the board (console, WDT0 armed, 10 s on the system timer) and
-returned through PSCI `SYSTEM_RESET` in 45 s (records:
-`0dce654a8:tools/mali/board-ref/2026-10-19-z1/`). The watchdog reset path was
+returned through PSCI `SYSTEM_RESET` in 45 s (the record is no longer kept in the tree). The watchdog reset path was
 measured the same day: a WDT0 timeout brings the SoC back into Armbian ("The
 watchdog proof and the trap").
 
@@ -107,7 +106,7 @@ granule, 4 levels, 48-bit VA. `TRANSCFG` = 0x420001C6 (live: AS0 and AS1) and
 `MEMATTR` = 0x8F8F8F8F8C4C8F4C **live** (a read-only `/dev/mem` read of
 `0xfb000000 + 0x2400 + 0x40·n + 0x8` with the GPU runtime-active; AS0, the MCU's,
 and AS1, a GL client's, give the same word, 2026-10-26, record
-`e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/regread.out`). Bytes 0-3, the
+the 2026-10-26 open-questions record (no longer kept in the tree)). Bytes 0-3, the
 four attributes the page tables use (PTE attribute index 0-3), are what
 `mair_to_memattr` gives for the non-coherent case (`panthor_mmu.c:785-790,
 1990-2030`: 0x4C non-cacheable, 0x8F write-back with read/write allocate, 0x4C
@@ -355,7 +354,7 @@ walking right, adding one is the first experiment, recorded as such.
 The interface (linux:`panthor_fw.h:15-269`): a **global** block (GLB) at 0x04000000
 with input/output pages; 8 **command stream groups** (CSG, stride 0xa0), each with 8
 **command streams** (CS, stride 0xc). **Runtime values** after the firmware boots
-under panthor (2026-10-26, record `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/`,
+under panthor (2026-10-26, record of 2026-10-26 open-questions (no longer kept in the tree),
 `panthor-query.out`, `gems.during`): `DEV_QUERY_CSIF_INFO` gives `csg_slot_count` 8,
 `cs_slot_count` 8 (per group), `cs_reg_count` 96 work registers, `unpreserved_cs_reg_count`
 4 (92 for a stream), `scoreboard_slot_count` 8; the same as the image's. The suspend
@@ -407,8 +406,7 @@ is the system package, 26.2.1 a build from the release tarball in
 `/root/mesa-26.2.1-build` used through `LD_LIBRARY_PATH` only (`-Dgallium-drivers=panfrost
 -Dplatforms= -Dglvnd=disabled -Dllvm=enabled`, native, 7 minutes; nothing installed
 over the system Mesa), both with `PAN_MESA_DEBUG=trace,sync`; both read 2048 red,
-2048 blue, 0 misplaced. Records `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/
-mesa-25.0.7.pandecode` and `mesa-26.2.1.pandecode`. The three open choices:
+2048 blue, 0 misplaced. Records: the 2026-10-26 open-questions Mesa 25.0.7 and 26.2.1 decodes (no longer kept in the tree). The three open choices:
 
 | Choice | 25.0.7 (board) | 26.2.1 (source) |
 |---|---|---|
@@ -578,26 +576,25 @@ on main; S6 remains (#31).
   - S1b: the fragment stage on the graph (`nir_fs.rs`, selecting through
     `select.rs`), beside `frag.rs`; every fragment population byte-equal on
     it.
-  - S1c: the switch-over (`da18ff68`, from `work/mali-lower-s1c` 1aef2adb8),
+  - S1c: the switch-over (from `work/mali-lower-s1c`),
     then the deletion of `frag.rs`'s plan (`FsPlan`, `REFERENCED`) and the
-    comparison scaffolding (`2db7bfbd`).
-- **S2** highp fragment arithmetic. Landed (`302f0604`): a highp fragment
+    comparison scaffolding.
+- **S2** highp fragment arithmetic. Landed: a highp fragment
   shader compiles to fp32; `fvgtest_ftcoord` and `fvgtest_green` are
   byte-equal to Mesa. Cases 28 and 29 stay PASS. The precision rule and the
-  fp16 hazard are in `docs/notes/mali-highp-fragcoord.md` (`cf0710e0`).
-- **S3** the fragment uniform block. Landed (`b181ad67`): a highp fragment
+  fp16 hazard are in `docs/notes/mali-highp-fragcoord.md`.
+- **S3** the fragment uniform block. Landed: a highp fragment
   shader's block is pushed to the FAU, `fvgtest_inner` byte-equal. Case 30
-  PASSes on the board; record `0dce654a8:tools/mali/board-ref/2026-10-21-s3-ubo/`
-  (`c2890b3d`).
-- **S4** the ALU rows femtovg needs. Landed (`6deda2ee`, with the link's
-  code motion, `motion.rs`, tightened in `ed47c4c9`): each row is pinned by
+  PASSes on the board; record of 2026-10-21 s3-ubo (no longer kept in the tree).
+- **S4** the ALU rows femtovg needs. Landed (with the link's
+  code motion, `motion.rs`, tightened later): each row is pinned by
   a shim reference (`tools/mali/testdata/s4_*`).
   `fill_color.nodiscard.noscissor` is byte-equal to the shim, and its
   picture matches Mesa's read-back on the board; record
-  `0dce654a8:tools/mali/board-ref/2026-10-21-s4-alu/` (`c233faf1`). `gl_FragCoord`
+  the 2026-10-21 s4-alu record (no longer kept in the tree). `gl_FragCoord`
   (the r59 preload, `U16_TO_F32`, the y transform's FAU words) followed
-  (`a52638c5`), byte-equal to the shim; record
-  `0dce654a8:tools/mali/board-ref/2026-10-22-s4-fragcoord/` (`64bb7fff`).
+  byte-equal to the shim; record
+  the 2026-10-22 s4-fragcoord record (no longer kept in the tree).
 - **S5** `if`: `peephole_select` first, then blocks. Landed 2026-10-22:
   both peephole passes (the GL front end's, limit 8; bifrost's,
   limit 64, which may not speculate a uniform read) and real BIR blocks
@@ -606,7 +603,7 @@ on main; S6 remains (#31).
   byte-equal to the shim (3 of the 35 femtovg programs with
   `fill_color.nodiscard.noscissor`); the scissor `if` keeps real blocks
   and both of its sides draw Mesa's picture on the board; record
-  `0dce654a8:tools/mali/board-ref/2026-10-22-s5-if/`. The sweep's PASS set grew by
+  the 2026-10-22 s5-if record (no longer kept in the tree). The sweep's PASS set grew by
   case 31 fvgcov. What stops the next femtovg programs: `discard` (S6),
   `mix` (a fused multiply-add of a built-in, the gradient programs), the
   texture look-up.
@@ -710,8 +707,8 @@ milestones (Zephyr booted by U-Boot), as on every board.
   mediump vec4 uniform in a fragment shader, byte-equal to the shim on 25
   programs (`tools/mali/testdata/sel_u_*`); the frame builder fills their
   push words from the GL uniform storage.
-  gl_test on the board, 2026-10-19 (`panthor-gltest`, tree 7912553d9,
-  record `0dce654a8:tools/mali/board-ref/2026-10-19-l3-gltest/`): of the 162 case
+  gl_test on the board, 2026-10-19 (`panthor-gltest`,
+  record of 2026-10-19 l3-gltest (no longer kept in the tree)): of the 162 case
   numbers this build has, 1 PASS (case 85, cubetail: colour clears into
   the 1x1 faces of a cube level through an FBO, twelve read-backs exact),
   149 REFUSED, 7 SKIP (gl_test's own, by name) and 5 FAULT (SIGSEGV:
@@ -731,11 +728,10 @@ milestones (Zephyr booted by U-Boot), as on every board.
   beyond +, * and products (11); in the frame, a depth or stencil clear or
   a masked clear (8) and a draw that writes depth (5).
   Depth, stencil and clears, 2026-10-19 (record
-  `0dce654a8:tools/mali/board-ref/2026-10-19-frame-depth/`). The reference is the
+  the 2026-10-19 frame-depth record (no longer kept in the tree)). The reference is the
   board's own Mesa 25.0.7 on `zs.c` (`tools/mali/mesa-board-ref.sh`; five
   modes, each 0 pixels off its prediction, 0 kernel messages). What its
-  two-draw frame shows (`0dce654a8:tools/mali/board-ref/2026-10-19-frame-depth/mesa/
-  mesa-depth.pandecode`): both draws in one RUN_FRAGMENT with one
+  two-draw frame shows (the 2026-10-19 frame-depth record (no longer kept in the tree)): both draws in one RUN_FRAGMENT with one
   VERTEX_TILER_STARTED; the FBD with Z clear 1.0, S clear 90, Z Write
   Enable and the ZS/CRC extension (a linear D24S8, row stride 256, written
   back, clean tile write on), the render target at +0xC0; Force Early for a
@@ -786,7 +782,7 @@ milestones (Zephyr booted by U-Boot), as on every board.
   uniform and constants, vectorised in fp16 pairs as Mesa's NIR has it;
   byte-equal to the shim on 13 vertex and 20 whole programs
   (`tools/mali/testdata/sel_v_*`). On the board (record
-  `0dce654a8:tools/mali/board-ref/2026-10-19-l3-varyings/`): gl_test's own
+  the 2026-10-19 l3-varyings record (no longer kept in the tree)): gl_test's own
   color_uv pair, with both varyings affine in the window position, read
   back every one of 4096 pixels equal to the per-pixel prediction written
   before the run, twice; this is the first measure of interpolation
@@ -1290,7 +1286,7 @@ compatible, root, kexec allowed and nothing loaded, the window, the GIC
 tables, the watchdog's Linux state, GPU users, remote sessions) and prints
 the plan. On the board today every check passes and it prints the plan.
 
-**The first jump (2026-10-19 00:26, `t6_hello` at 4a9b40c46, without
+**The first jump (2026-10-19 00:26, `t6_hello`, without
 `--linux-wdt`).** The recipe read `GLB_RST_ST` 0x2, `GLB_RST_CON` 0xffdf,
 WDT0 `CR` 0x8 (stopped), `TORR` 0xe and jumped; `kexec_zephyr` printed
 "jumping to it". Then nothing: 0 bytes on the UART for 263 s, no ping, no
@@ -1343,7 +1339,7 @@ jump shows (the early banner below):
 
 **Z1 PASS: the second jump (2026-10-19 00:56:31, `t6_hello` at 576065151,
 zephyr.bin sha256 f7db69a2…, Linux's watchdog open; record
-`0dce654a8:tools/mali/board-ref/2026-10-19-z1/20261019-005631-t6/`).** The board read `WDT0 CR
+the 2026-10-19 z1 record (no longer kept in the tree)).** The board read `WDT0 CR
 0x00000009 TORR 0x0000000e after the open: WDT_EN 1` and jumped. On the
 UART: `T6:A EL2 HCR_EL2 0x000000048800003a -> 0x0000000080000002`
 (E2H, TGE, AMO, IMO, FMO set as found, plus bit 1, which reads back as 1
@@ -1364,12 +1360,12 @@ the two images differ only by the `HCR_EL2` write, the banner, and the
 `VBAR_EL2` reporter, which acts only on a trap. The recipe differs by
 Linux's watchdog, which takes no part before the image's output. The
 first jump's
-record is `0dce654a8:tools/mali/board-ref/2026-10-19-z1/20261019-002640-t6/` (0-byte
+record is the 2026-10-19 z1 record (no longer kept in the tree) (0-byte
 `uart.log`), next to the power-on capture `uart-powercycle.log`.
 
 **The watchdog proof and the trap (2026-10-19 03:01 and 03:03, both
-`t6_hello` at 37b4c0ff2 with Linux's watchdog open; records
-`0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/`).**
+`t6_hello` with Linux's watchdog open; records
+the 2026-10-19 z1-gpu record (no longer kept in the tree)).**
 
 - The proof image (`WDT_PROOF=y`): every tag to `T6:C`, `WDT0 armed ...
   TORR 0x0000000e -> 0x0000000d ... never fed (proof)`, the ten counts,
@@ -1679,7 +1675,7 @@ The stop numbers are `board::nanopc_t6_gpu::Stop`, in C `YD_T6_GPU_STOP_*`
 (driver/rust/include/yakogl_drivers.h), with the refusals of stop 14 as
 `YD_MALI_*`.
 
-**Measured, 2026-10-19 (records `0dce654a8:tools/mali/board-ref/2026-10-19-z1-gpu/`,
+**Measured, 2026-10-19 (records of 2026-10-19 z1-gpu (no longer kept in the tree),
 three jumps; the recipe now records the GPU's power under Linux before
 the jump and after the return).**
 
@@ -1731,7 +1727,7 @@ the jump and after the return).**
   saved); read again on 2026-10-26 under Armbian with `power/control` on
   (restored to `auto`), a `/dev/mem` read of `0xfdf35000 + {0, 0x200, 0x400, 0x600}
   + 0x08..0x18` (`regread.py qos`, record
-  `e3d9b7470:tools/mali/board-ref/2026-10-26-open-questions/regread.out`): `PRIORITY`
+  the 2026-10-26 open-questions record (no longer kept in the tree)): `PRIORITY`
   0x80000000, `MODE` 0, `BANDWIDTH` 0, `SATURATION` 0, `EXTCONTROL` 0 in all four
   blocks. The image of that run left them; `gpu_up` has since applied
   `GPU_QOS_POLICY` after the power-on (step 5, and "Open").
