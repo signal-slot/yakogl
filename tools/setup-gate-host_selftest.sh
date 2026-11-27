@@ -88,5 +88,18 @@ lc4=$(run "$t/loc" LC_ALL= LC_CTYPE= LANG=xx_YY.UTF-8)
 want "uninstalled LANG" '^missing +locale +LANG=xx_YY.UTF-8 ' "$lc4"
 lc5=$(run "$t/loc" LC_ALL= LC_CTYPE=xx_YY.UTF-8 LANG=en_US.utf8)
 want "LC_CTYPE before LANG" '^missing +locale +LC_CTYPE=xx_YY.UTF-8 ' "$lc5"
+# free-disk threshold: the four cases (docs/ci.md 3.8)
+dk0=$(run "$t/full" YAKOGL_CHECK_PRUNE=)
+want "disk, no prune: 220 GB" '^[a-z]+ +disk +.*(need|needs about) 220 GB without pruning' "$dk0"
+dk1=$(run "$t/full" YAKOGL_CHECK_PRUNE=1)
+want "disk, prune: pruned default 50 GB" '^[a-z]+ +disk +.*(need|needs about) 50 GB with YAKOGL_CHECK_PRUNE=1' "$dk1"
+dk2=$(run "$t/full" YAKOGL_CHECK_PRUNE=1 YAKOGL_GATE_MIN_FREE_GB=99999999)
+want "disk, explicit overrides the pruned default, missing" '^missing +disk +.*99999999 GB with YAKOGL_CHECK_PRUNE=1' "$dk2"
+dk2b=$(run "$t/full" YAKOGL_GATE_MIN_FREE_GB=99999999)
+want "disk, explicit without prune, missing" '^missing +disk +.*99999999 GB without pruning' "$dk2b"
+dk3=$(run "$t/full" YAKOGL_CHECK_PRUNE=1 GATE_FULL_RUN=1 YAKOGL_GATE_MIN_FREE_GB_PRUNED=99999999)
+want "disk, GATE_FULL_RUN=1 is missing" '^missing +disk +.*99999999 GB with YAKOGL_CHECK_PRUNE=1' "$dk3"
+dk4=$(run "$t/full" YAKOGL_CHECK_PRUNE=1 YAKOGL_GATE_MIN_FREE_GB_PRUNED=99999999)
+want "disk, pruned default alone stays warn" '^warn +disk +.*99999999 GB with YAKOGL_CHECK_PRUNE=1' "$dk4"
 echo "setup-gate-host_selftest: $((checks - fails))/$checks ok"
 [ "$fails" -eq 0 ]

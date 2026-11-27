@@ -697,13 +697,23 @@ check_gate_disk() {
 # Free disk for a full gate (docs/ci.md 3.8): the filesystem of CARGO_TARGET_DIR
 # (default ~/.cache/yakogl/ci-target) and of the repository's build/ directory
 # each need YAKOGL_GATE_MIN_FREE_GB (default 220, measured by walk-fit and
-# disk-map without pruning). A shortfall is `warn` unless the threshold is set
-# explicitly or GATE_FULL_RUN=1, then `missing`.
+# disk-map without pruning). With YAKOGL_CHECK_PRUNE=1 (tools/check.sh prunes
+# each row's private directories) the default is YAKOGL_GATE_MIN_FREE_GB_PRUNED
+# (default 50: walk-final's peak of about 37 GB at 84841e6d plus a 13 GB
+# margin). An explicit YAKOGL_GATE_MIN_FREE_GB overrides both defaults. A
+# shortfall is `warn` unless YAKOGL_GATE_MIN_FREE_GB is set or GATE_FULL_RUN=1,
+# then `missing`; picking the pruned default is not an explicit setting.
 check_disk() {
-  local min=${YAKOGL_GATE_MIN_FREE_GB:-220} bad=warn d probe kb gb name root
+  local def=220 how="without pruning" min bad=warn d probe kb gb name root
+  if [ "${YAKOGL_CHECK_PRUNE-}" = 1 ]; then
+    def=${YAKOGL_GATE_MIN_FREE_GB_PRUNED:-50}
+    case $def in ''|*[!0-9]*) def=50 ;; esac
+    how="with YAKOGL_CHECK_PRUNE=1"
+  fi
+  min=${YAKOGL_GATE_MIN_FREE_GB:-$def}
   [ -n "${YAKOGL_GATE_MIN_FREE_GB-}" ] && bad=missing
   [ "${GATE_FULL_RUN-}" = 1 ] && bad=missing
-  case $min in ''|*[!0-9]*) min=220 ;; esac
+  case $min in ''|*[!0-9]*) min=$def ;; esac
   root=$(cd "$(dirname "$0")/.." && pwd)
   for d in "${CARGO_TARGET_DIR:-$HOME/.cache/yakogl/ci-target}" "$root/build"; do
     probe=$d
@@ -718,9 +728,9 @@ check_disk() {
       *)
         gb=$((kb / 1048576))
         if [ "$gb" -ge "$min" ]; then
-          line ok "$name" "$gb GB free ($d)"
+          line ok "$name" "$gb GB free, need $min GB $how ($d)"
         else
-          line "$bad" "$name" "$gb GB free on the filesystem of $d, a full gate needs about $min GB without pruning (YAKOGL_GATE_MIN_FREE_GB)"
+          line "$bad" "$name" "$gb GB free on the filesystem of $d, a full gate needs about $min GB $how (YAKOGL_GATE_MIN_FREE_GB)"
         fi ;;
     esac
   done
