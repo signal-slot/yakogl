@@ -6,6 +6,12 @@
 # gcc, dtc, V3D_SHC and ZEPHYR_SDK_INSTALL_DIR, present and missing, with a
 # fake PATH and environment. Nothing is installed; only --check runs.
 set -u
+# The host's locale must not reach the checked children: with LC_ALL naming
+# a locale the host has not installed, every bash child prints a setlocale
+# warning into the output the checks compare (the same family as the glmark2
+# selftests' LC_ALL=C). The locale checks below name their own LC_ALL, so
+# they are unaffected.
+export LC_ALL=C LANG=C
 cd "$(dirname "$0")/.." || exit 2
 t=$(mktemp -d) || exit 2
 trap 'rm -rf "$t"' EXIT
@@ -61,5 +67,26 @@ e1=$(run "$t/hide" MESA_ETNA_TREE="$t/etna/mesa-26.2.1")
 want "etna incomplete is a gap" '^warn +MESA_ETNA_TREE +missing: .*not a complete tree.*gap: MESA_ETNA_TREE' "$e1"
 checks=$((checks + 1))
 if printf '%s\n' "$e1" | grep -Eq '^ok +MESA_ETNA_TREE'; then echo "FAIL etna incomplete reported ok"; fails=$((fails + 1)); fi
+# an uninstalled locale in LC_ALL, else LC_CTYPE, else LANG is a missing
+# line naming the variable and the fix; C, C.* and an installed name are
+# silent. A fake locale command on the PATH makes the installed list the
+# same on every host.
+mkdir -p "$t/loc"
+printf '#!/bin/sh\nprintf "C\\nC.utf8\\nPOSIX\\nen_US.utf8\\n"\n' >"$t/loc/locale"
+chmod +x "$t/loc/locale"
+lc0=$(run "$t/loc" LC_ALL=C)
+checks=$((checks + 1))
+if printf '%s\n' "$lc0" | grep -Eq '^[a-z]+ +locale '; then echo "FAIL LC_ALL=C reported a locale line"; fails=$((fails + 1)); fi
+lc1=$(run "$t/loc" LC_ALL=C.UTF-8)
+checks=$((checks + 1))
+if printf '%s\n' "$lc1" | grep -Eq '^[a-z]+ +locale '; then echo "FAIL LC_ALL=C.UTF-8 reported a locale line"; fails=$((fails + 1)); fi
+lc2=$(run "$t/loc" LC_ALL=xx_YY.UTF-8)
+want "uninstalled LC_ALL" '^missing +locale +LC_ALL=xx_YY.UTF-8 .*export LC_ALL=C.*install the locale' "$lc2"
+lc3=$(run "$t/loc" LC_ALL=EN_us.UTF-8)
+want "installed locale, case and utf8 spelling" '^ok +locale +LC_ALL=EN_us.UTF-8' "$lc3"
+lc4=$(run "$t/loc" LC_ALL= LC_CTYPE= LANG=xx_YY.UTF-8)
+want "uninstalled LANG" '^missing +locale +LANG=xx_YY.UTF-8 ' "$lc4"
+lc5=$(run "$t/loc" LC_ALL= LC_CTYPE=xx_YY.UTF-8 LANG=en_US.utf8)
+want "LC_CTYPE before LANG" '^missing +locale +LC_CTYPE=xx_YY.UTF-8 ' "$lc5"
 echo "setup-gate-host_selftest: $((checks - fails))/$checks ok"
 [ "$fails" -eq 0 ]
