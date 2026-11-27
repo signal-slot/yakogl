@@ -1,0 +1,613 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//! dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.rebind_{rbo_rgb565,
+//! tex2d_rgb}_{stencil_index8,depth_component16_stencil_index8}: the pixels'
+//! alpha through the GL core on the Mali mock (recreate-colour, plan #373).
+//!
+//! The case (es2fFboRenderTest.cpp `RecreateBuffersTest<GL_COLOR_BUFFER_BIT>`
+//! with `rebind`) draws, deletes the colour buffer and makes it anew, clears
+//! it to (0, 0, 1, 0), draws a stencil-tested quad and reads the image back.
+//! A colour format without alpha (GL_RGB565, GL_RGB) reads alpha 1
+//! (ES 2.0 4.3.1), and dEQP's reference has alpha 1; the board read alpha 0
+//! in every inner pixel (issue #11329).
+//!
+//! The GL core keeps such a format in RGBA8 storage. Mesa 26.2.1 panfrost
+//! draws GL_RGB565 into an R5G6B5 target, which stores no alpha, so its
+//! blend descriptors leave alpha out and its frame never reads a stored
+//! alpha. Here the storage has an alpha byte, so the frame must make it 1:
+//! either the clear is the frame's clear value (alpha 1), or the frame
+//! preloads the new storage with the alpha read as 1 (`SWIZZLE_RGB1`) and no
+//! draw writes alpha (colour mask 0x7, `TargetFormat::draw_mask`) - then the
+//! clear quad, which is such a draw, keeps the 1. A preload that reads the
+//! stored alpha (zero in new storage) with those masks was the defect.
+//!
+//! The test replays the sequence into the real back end over a mock OSAL,
+//! decodes each frame from the command stream (clear words, the colour
+//! preload's texture swizzle, each draw's blend colour mask) and evaluates
+//! the alpha the second frame's pixels hold before and after its draws. It
+//! must read 1 where dEQP's reference does. Without the preload's alpha-1
+//! swizzle (frame.rs `TargetFormat::preload_swizzle`) it fails.
+//!
+//! The D16 + S8 variants are GL_FRAMEBUFFER_UNSUPPORTED in the ES 3.0 build
+//! (as in Mesa's ES 3 context): pinned, no frame. A `report-es2` build
+//! replays them.
+//!
+//! ```text
+//! cargo test --test mali_recreate_colour --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table
+//! ```
+
+#![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-mali"))]
+
+use core::ffi::{c_char, c_void};
+use std::ffi::CString;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::Mutex;
+use yakogl::backend;
+use yakogl::gl::buffer::glBindBuffer;
+use yakogl::gl::consts::*;
+use yakogl::gl::draw::*;
+use yakogl::gl::framebuffer::*;
+use yakogl::gl::program::*;
+use yakogl::gl::shader::*;
+use yakogl::gl::state::*;
+use yakogl::gl::texture::*;
+use yakogl::gl::types::*;
+use yakogl::gl::vertex::{glDisableVertexAttribArray, glEnableVertexAttribArray, glVertexAttribPointer};
+use yakogl::mali::cs::Instr;
+use yakogl::mali::frame::SWIZZLE_RGB1;
+use yakogl::mali::genxml::v10::*;
+use yakogl::osal::mali::{OsalMaliGpu, OsalMaliHeap, OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
+use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
+use yakogl::util::ENOTSUP;
+
+/* ---- the Mali over a mock OSAL ------------------------------------------ */
+
+/// The OSAL's answers: the board's (panthor-frame on the T6).
+const GPU: OsalMaliGpu = OsalMaliGpu::T6;
+const HEAP: OsalMaliHeap =
+    OsalMaliHeap { ctx_gpu: 0x8000_0001_5000, first_chunk_gpu: 0x8000_00a0_0000, chunk_size: 2 << 20, reserved: 0 };
+
+/// Buffers made so far: each one's GPU VA is its number times 16 MiB, far
+/// from any CPU address. Nothing is given back (a few MiB for the run).
+static ALLOCS: AtomicU64 = AtomicU64::new(0);
+static FENCES: AtomicI64 = AtomicI64::new(0);
+/// Every buffer: (GPU VA, CPU address, size).
+static BUFFERS: Mutex<Vec<(u64, usize, usize)>> = Mutex::new(Vec::new());
+/// Every submit: the stream's GPU VA and length in bytes.
+static KICKS: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
+/// One replay at a time: the context and the kick log are shared.
+static ONE: Mutex<()> = Mutex::new(());
+
+unsafe extern "C" fn m_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+    let n = ALLOCS.fetch_add(1, Ordering::Relaxed) + 1;
+    assert!(size <= 16 << 20);
+    let cpu = Box::leak(vec![0u64; size.div_ceil(8)].into_boxed_slice()).as_mut_ptr().cast::<c_void>();
+    let gpu = 0x40_0000_0000 + n * (16 << 20);
+    BUFFERS.lock().unwrap().push((gpu, cpu as usize, size));
+    *out = OsalGpuMem { cpu, gpu, phys: 0, size, impl_: n as *mut c_void };
+    0
+}
+unsafe extern "C" fn m_free(mem: *mut OsalGpuMem) -> i32 {
+    *mem = OsalGpuMem::ZERO;
+    0
+}
+unsafe extern "C" fn m_cache(_cpu: *mut c_void, _n: usize) {}
+unsafe extern "C" fn m_init(_arg: *mut c_void) -> i32 {
+    0
+}
+unsafe extern "C" fn m_submit(kick: *const c_void, len: usize) -> i64 {
+    assert_eq!(len, core::mem::size_of::<OsalMaliKick>());
+    let k = &*kick.cast::<OsalMaliKick>();
+    KICKS.lock().unwrap().push((k.stream_gpu, k.stream_bytes as usize));
+    FENCES.fetch_add(1, Ordering::Relaxed) + 1
+}
+unsafe extern "C" fn m_wait(_fence: i64, _timeout_us: i64) -> i32 {
+    0
+}
+unsafe extern "C" fn m_completed() -> i64 {
+    FENCES.load(Ordering::Relaxed)
+}
+unsafe extern "C" fn m_query(what: u32, out: *mut c_void, sz: usize) -> i32 {
+    match what {
+        OSAL_QUERY_MALI_GPU if sz == core::mem::size_of::<OsalMaliGpu>() => *out.cast::<OsalMaliGpu>() = GPU,
+        OSAL_QUERY_MALI_TILER_HEAP if sz == core::mem::size_of::<OsalMaliHeap>() => *out.cast::<OsalMaliHeap>() = HEAP,
+        _ => return -ENOTSUP,
+    }
+    0
+}
+
+/// The OSAL's log hook: the library only calls it as `log("%s", line)`, so a
+/// two-pointer function takes its place (the same calling convention for
+/// these arguments).
+unsafe extern "C" fn m_log(_fmt: *const c_char, line: *const c_char) {
+    eprintln!("osal log: {}", core::ffi::CStr::from_ptr(line).to_string_lossy());
+}
+
+static OSAL: OsalOps = OsalOps {
+    init: Some(m_init),
+    shutdown: None,
+    gpu_alloc: Some(m_alloc),
+    gpu_free: Some(m_free),
+    mmu_map: None,
+    map_phys: None,
+    gpu_write: None,
+    gpu_read: None,
+    cache_flush: Some(m_cache),
+    cache_invd: Some(m_cache),
+    submit: Some(m_submit),
+    wait: Some(m_wait),
+    completed: Some(m_completed),
+    reg_read: None,
+    reg_write: None,
+    query: Some(m_query),
+    // SAFETY: see `m_log`.
+    log: Some(unsafe {
+        core::mem::transmute::<
+            unsafe extern "C" fn(*const c_char, *const c_char),
+            unsafe extern "C" fn(*const c_char, ...),
+        >(m_log)
+    }),
+    wait_vblank: None,
+    present: None,
+    lock: None,
+    unlock: None,
+    thread_id: None,
+    display_busy: None,
+};
+
+/// `len` bytes of the buffer holding GPU address `gpu`.
+fn mem(gpu: u64, len: usize) -> Vec<u8> {
+    let b = BUFFERS.lock().unwrap();
+    let &(base, cpu, _) = b
+        .iter()
+        .find(|&&(base, _, size)| gpu >= base && gpu + len as u64 <= base + size as u64)
+        .unwrap_or_else(|| panic!("no buffer holds 0x{gpu:x}+{len}"));
+    // SAFETY: the buffer is leaked, `size` bytes long, and the range is inside it.
+    unsafe { core::slice::from_raw_parts((cpu + (gpu - base) as usize) as *const u8, len).to_vec() }
+}
+
+/* ---- what the back end built --------------------------------------------- */
+
+#[derive(Debug)]
+struct DrawOut {
+    zsd: DepthStencil,
+    /// The Blend's equation colour mask.
+    colour_mask: u32,
+}
+
+#[derive(Debug)]
+struct FrameOut {
+    draws: Vec<DrawOut>,
+    params: FramebufferParameters,
+    /// The ZS/CRC extension, when the framebuffer has one.
+    zs: Option<ZsCrcExtension>,
+    rt: RgbRenderTarget,
+    /// The colour preload texture's swizzle, when the frame preloads colour.
+    preload_swizzle: Option<u32>,
+}
+
+/// The ZS/CRC extension's members of linear (not AFBC) depth/stencil planes.
+const LINEAR_ZS: [&str; 13] = [
+    "ZS.Write Format",
+    "ZS.Block Format",
+    "ZS.MSAA",
+    "ZS.Clean Tile Write Enable",
+    "ZS.Base",
+    "ZS.Row Stride",
+    "ZS.Surface Stride",
+    "S.Write Format",
+    "S.Block Format",
+    "S.MSAA",
+    "S.Base",
+    "S.Row Stride",
+    "S.Surface Stride",
+];
+
+/// The frames of the kicks since `from`, read as the GPU would: the stream's
+/// register moves are followed, each RUN_IDVS reads the Depth/stencil and the
+/// Blend pointers, and RUN_FRAGMENT the framebuffer descriptor.
+fn frames(from: usize) -> Vec<FrameOut> {
+    let kicks = KICKS.lock().unwrap()[from..].to_vec();
+    let mut out = Vec::new();
+    for (gpu, bytes) in kicks {
+        let raw = mem(gpu, bytes);
+        let mut regs = [0u32; 128];
+        let reg64 = |regs: &[u32; 128], r: usize| u64::from(regs[r]) | u64::from(regs[r + 1]) << 32;
+        let mut draws = Vec::new();
+        for w in raw.as_chunks::<8>().0 {
+            match Instr::decode(u64::from_le_bytes(*w)) {
+                Ok(Instr::Move48(m)) => {
+                    regs[m.destination as usize] = m.immediate as u32;
+                    regs[m.destination as usize + 1] = (m.immediate >> 32) as u32;
+                }
+                Ok(Instr::Move32(m)) => regs[m.destination as usize] = m.immediate,
+                Ok(Instr::RunIdvs(_)) => {
+                    let zsd = reg64(&regs, 52);
+                    let blend = reg64(&regs, 50) & !0xf;
+                    let zsd = DepthStencil::unpack(&mem(zsd, DepthStencil::LENGTH).try_into().unwrap()).unwrap();
+                    /* the Blend's `Equation` is bits 32..=63 */
+                    let eq = BlendEquation::unpack(&mem(blend + 4, 4).try_into().unwrap()).unwrap();
+                    draws.push(DrawOut { zsd, colour_mask: eq.color_mask });
+                }
+                Ok(Instr::RunFragment(_)) => {
+                    let p = reg64(&regs, 40);
+                    let fbd = p & !0x3f;
+                    let params = FramebufferParameters::unpack(&mem(fbd, 64).try_into().unwrap()).unwrap();
+                    /* the framebuffer, its ZS/CRC extension, the render target */
+                    let ext = fbd + Framebuffer::LENGTH as u64;
+                    let zs = (p & 2 != 0).then(|| {
+                        ZsCrcExtension::unpack_as(&mem(ext, ZsCrcExtension::LENGTH).try_into().unwrap(), &LINEAR_ZS)
+                            .unwrap()
+                    });
+                    let rt_at = ext + if p & 2 != 0 { 64 } else { 0 };
+                    let rt = RgbRenderTarget::unpack_as(
+                        &mem(rt_at, RgbRenderTarget::LENGTH).try_into().unwrap(),
+                        &["Writeback Format"],
+                    )
+                    .unwrap();
+                    let preload_swizzle = (params.pre_frame_0 != PrePostFrameShaderMode::NEVER).then(|| {
+                        let dcd = mem(params.frame_shader_dcds, Draw::LENGTH);
+                        let dcd = Draw::unpack(&dcd[..].try_into().unwrap()).unwrap();
+                        let table = dcd.shader.resources & !63;
+                        let entry = mem(table + 3 * Resource::LENGTH as u64, Resource::LENGTH);
+                        let tex = Resource::unpack(&entry[..].try_into().unwrap()).unwrap().address;
+                        Texture::unpack(&mem(tex, Texture::LENGTH).try_into().unwrap()).unwrap().swizzle
+                    });
+                    out.push(FrameOut { draws: core::mem::take(&mut draws), params, zs, rt, preload_swizzle });
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/* ---- the case -------------------------------------------------------------- */
+
+/// dEQP's SingleTex2DShader, as zs_seq.py has it.
+const VS: &str = "attribute vec4 a_position;\nattribute vec2 a_coord;\nvarying vec2 v_coord;\n\
+                  void main() { gl_Position = a_position; v_coord = a_coord; }\n";
+const FS: &str = "precision mediump float;\nvarying vec2 v_coord;\nuniform sampler2D u_sampler0;\n\
+                  void main() { gl_FragColor = texture2D(u_sampler0, v_coord); }\n";
+
+static COORD: [f32; 8] = [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
+static INDICES: [u16; 6] = [0, 2, 1, 2, 1, 3];
+const W: GLsizei = 128;
+
+fn shader(ty: GLenum, text: &str) -> GLuint {
+    let text = CString::new(text).unwrap();
+    // SAFETY: plain GL calls; one NUL-terminated source.
+    unsafe {
+        let s = glCreateShader(ty);
+        let p: [*const c_char; 1] = [text.as_ptr()];
+        glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+        glCompileShader(s);
+        let mut ok: GLint = 0;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+        assert_eq!(ok, 1, "the shader does not compile");
+        s
+    }
+}
+
+fn setup() -> std::sync::MutexGuard<'static, ()> {
+    let guard = ONE.lock().unwrap_or_else(|e| e.into_inner());
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        backend::HOST_DRAW_TARGETS.store(1, Ordering::Relaxed);
+        // SAFETY: static tables and one context, made once for the file's tests.
+        unsafe {
+            osal_set_ops(&OSAL);
+            backend::g_backend = &yakogl::mali::backend::yakogl_backend_mali;
+            assert_eq!(yakogl::mali::backend::mali_init(), 0);
+            yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
+            assert!(!yakogl::gl::context::gl_context_create(W as u32, W as u32).is_null());
+        }
+    });
+    guard
+}
+
+/// A 64x64 GL_RGB texture of a ramp, LINEAR and CLAMP_TO_EDGE (zs_seq.py's
+/// stand-in for dEQP's metaballs and quads patterns).
+///
+/// # Safety
+/// Plain GL calls on the current context.
+unsafe fn ramp_texture() -> GLuint {
+    let mut t = 0;
+    let texels: Vec<u8> = (0..3 * 64 * 64).map(|i| i as u8).collect();
+    glGenTextures(1, &mut t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB as GLint, 64, 64, 0, GL_RGB, GL_UNSIGNED_BYTE, texels.as_ptr().cast());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR as GLint);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
+    t
+}
+
+/// The colour attachment under name `name` (0: a new one): a GL_RGB565
+/// renderbuffer or a GL_RGB texture of 128x128, attached to the bound
+/// framebuffer.
+///
+/// # Safety
+/// Plain GL calls on the current context.
+unsafe fn colour(texture: bool, name: GLuint) -> GLuint {
+    let mut n = name;
+    if texture {
+        if n == 0 {
+            glGenTextures(1, &mut n);
+        }
+        glBindTexture(GL_TEXTURE_2D, n);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB as GLint, W, W, 0, GL_RGB, GL_UNSIGNED_BYTE, core::ptr::null());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, n, 0);
+    } else {
+        if n == 0 {
+            glGenRenderbuffers(1, &mut n);
+        }
+        glBindRenderbuffer(GL_RENDERBUFFER, n);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB565, W, W);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, n);
+    }
+    n
+}
+
+/// sglr::drawQuad of the program `p` from (-1,-1,z0) to (1,1,z1).
+///
+/// # Safety
+/// Plain GL calls on the current context; the vertex data outlives the
+/// draw, which the caller's glFinish completes.
+unsafe fn quad(p: GLuint, z0: f32, z1: f32, keep: &mut Vec<Box<[f32]>>) {
+    let mid = 0.5 * (z0 + z1);
+    let pos: Box<[f32]> = Box::new([-1.0, -1.0, z0, 1.0, -1.0, 1.0, mid, 1.0, 1.0, -1.0, mid, 1.0, 1.0, 1.0, z1, 1.0]);
+    glUseProgram(p);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, pos.as_ptr().cast::<c_void>());
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, 0, 0, COORD.as_ptr().cast::<c_void>());
+    glEnableVertexAttribArray(1);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, INDICES.as_ptr().cast::<c_void>());
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    keep.push(pos);
+}
+
+/// Replay one case; the frames it made, and the status
+/// `glCheckFramebufferStatus` gave.
+fn replay(texture: bool, depth16: bool) -> (Vec<FrameOut>, GLenum) {
+    let kicks_before = KICKS.lock().unwrap().len();
+    let refused_before = backend::draws_refused();
+    let mut keep = Vec::new();
+    // SAFETY: plain GL calls; the vertex data is kept until after glFinish.
+    let status = unsafe {
+        let p = glCreateProgram();
+        glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+        glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+        glBindAttribLocation(p, 0, c"a_position".as_ptr());
+        glBindAttribLocation(p, 1, c"a_coord".as_ptr());
+        glLinkProgram(p);
+        let mut ok: GLint = 0;
+        glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+        assert_eq!(ok, 1, "the program does not link");
+        glUseProgram(p);
+        glUniform1i(glGetUniformLocation(p, c"u_sampler0".as_ptr()), 0);
+        let (metaballs, quads) = (ramp_texture(), ramp_texture());
+
+        /* es2fFboRenderTest.cpp's Framebuffer: colour, (depth,) stencil */
+        let mut fb = 0;
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        let cb = colour(texture, 0);
+        let mut rb = [0; 2];
+        glGenRenderbuffers(2, rb.as_mut_ptr());
+        if depth16 {
+            glBindRenderbuffer(GL_RENDERBUFFER, rb[0]);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, W, W);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rb[0]);
+        }
+        glBindRenderbuffer(GL_RENDERBUFFER, rb[1]);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, W, W);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rb[1]);
+        let status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if status != GL_FRAMEBUFFER_COMPLETE {
+            /* dEQP's checkCompleteness: NotSupported, nothing is drawn */
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            assert_eq!(glGetError(), GL_NO_ERROR, "a GL error in the case");
+            return (frames(kicks_before), status);
+        }
+
+        /* the first quad */
+        glViewport(0, 0, W, W);
+        glClearColor(1.0, 0.0, 0.0, 1.0);
+        glClearStencil(0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glBindTexture(GL_TEXTURE_2D, quads);
+        quad(p, 0.0, 0.0, &mut keep);
+        /* the stencil of the middle quarter to 1 */
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(W / 4, W / 4, W / 2, W / 2);
+        glClearStencil(1);
+        glClear(GL_STENCIL_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+
+        /* the colour recreated while bound, and attached again */
+        if texture {
+            glDeleteTextures(1, &cb);
+        } else {
+            glDeleteRenderbuffers(1, &cb);
+        }
+        assert_eq!(colour(texture, cb), cb);
+        let status2 = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        assert_eq!(status2, GL_FRAMEBUFFER_COMPLETE, "the framebuffer after the rebind");
+
+        /* the recreated colour cleared, the second quad stencil-tested */
+        glClearColor(0.0, 0.0, 1.0, 0.0);
+        glClearStencil(0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_EQUAL, 0, 0xff);
+        glBindTexture(GL_TEXTURE_2D, metaballs);
+        quad(p, 1.0, -1.0, &mut keep);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glFinish();
+        assert_eq!(glGetError(), GL_NO_ERROR, "a GL error in the case");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        status
+    };
+    drop(keep);
+    assert_eq!(backend::draws_refused(), refused_before, "a draw was refused");
+    (frames(kicks_before), status)
+}
+
+/// The four cases: name, colour is a texture, a depth renderbuffer too.
+const CASES: [(&str, bool, bool); 4] = [
+    ("rebind_rbo_rgb565_stencil_index8", false, false),
+    ("rebind_tex2d_rgb_stencil_index8", true, false),
+    ("rebind_rbo_rgb565_depth_component16_stencil_index8", false, true),
+    ("rebind_tex2d_rgb_depth_component16_stencil_index8", true, true),
+];
+
+/// The frames of one case, or None for a D16 + S8 case the ES 3.0 build
+/// reports unsupported (pinned here).
+fn case_frames(name: &str, texture: bool, depth16: bool) -> Option<Vec<FrameOut>> {
+    let (frames, status) = replay(texture, depth16);
+    if depth16 && !cfg!(feature = "report-es2") {
+        assert_eq!(status, GL_FRAMEBUFFER_UNSUPPORTED, "{name}: glCheckFramebufferStatus");
+        assert!(frames.is_empty(), "{name}: a frame was built");
+        return None;
+    }
+    assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{name}");
+    for (i, f) in frames.iter().enumerate() {
+        let p = &f.params;
+        eprintln!(
+            "{name} frame {}: pre_frame_0 {:?} s_clear {} s w/p/u {}/{}/{} z w/p/u {}/{}/{} zs {} rt fmt {:?}/{:?} \
+             swz {} we {} clear 0x{:08x} wb 0x{:x}",
+            i + 1,
+            p.pre_frame_0,
+            p.s_clear,
+            p.s_write_enable,
+            p.s_preload_enable,
+            p.s_unload_enable,
+            p.z_write_enable,
+            p.z_preload_enable,
+            p.z_unload_enable,
+            f.zs.as_ref().map_or("none".into(), |z| format!("s 0x{:x} zs 0x{:x}", z.s.base, z.zs.base)),
+            f.rt.internal_format,
+            f.rt.writeback_format,
+            f.rt.swizzle,
+            f.rt.write_enable,
+            f.rt.clear.color_0,
+            f.rt.writeback_buffer.base,
+        );
+        for d in &f.draws {
+            let z = &d.zsd;
+            eprintln!(
+                "  draw: mask 0x{:x} stencil {} func {:?} ref {} pass {:?} depth {:?} zw {}",
+                d.colour_mask,
+                z.stencil_test_enable,
+                z.front_compare_function,
+                z.front_reference_value,
+                z.front_depth_pass,
+                z.depth_function,
+                z.depth_write_enable
+            );
+        }
+    }
+    assert_eq!(frames.len(), 2, "{name}: one frame before the rebind and one after");
+    Some(frames)
+}
+
+/// The scissored stencil clear's quad: ALWAYS, REPLACE with reference 1,
+/// no colour.
+fn is_stencil_clear_to_1(d: &DrawOut) -> bool {
+    let z = &d.zsd;
+    z.stencil_test_enable
+        && z.front_compare_function == Func::ALWAYS
+        && z.front_depth_pass == StencilOp::REPLACE
+        && z.front_reference_value == 1
+}
+
+#[test]
+fn the_colour_rebind_beside_a_stencil_buffer_keeps_its_frames() {
+    let _one = setup();
+    for (name, texture, depth16) in CASES {
+        let Some(f) = case_frames(name, texture, depth16) else { continue };
+        let (a, b) = (&f[0], &f[1]);
+        /* frame 1: cleared to (1, 0, 0, 1), alpha 1, no colour preload; the
+         * quad writes RGB (the format has no alpha, 0c3a7729) */
+        assert_eq!(a.params.pre_frame_0, PrePostFrameShaderMode::NEVER, "{name}: frame 1 colour preload");
+        assert_eq!(a.rt.clear.color_0, 0xff00_00ff, "{name}: frame 1 clear colour (red, alpha 1)");
+        let q = &a.draws[0];
+        assert_eq!(q.colour_mask, 0x7, "{name}: frame 1 quad colour mask (RGB)");
+        assert!(!q.zsd.stencil_test_enable, "{name}: frame 1 quad has no stencil test");
+        /* frame 2: the recreated colour object, with frame 1's format */
+        assert_ne!(a.rt.writeback_buffer.base, b.rt.writeback_buffer.base, "{name}: the recreated colour object");
+        assert_eq!(b.rt.internal_format, a.rt.internal_format, "{name}: internal format");
+        assert_eq!(b.rt.writeback_format, a.rt.writeback_format, "{name}: writeback format");
+        assert_eq!(b.rt.swizzle, a.rt.swizzle, "{name}: swizzle");
+        assert!(b.rt.write_enable, "{name}: frame 2 writes its colour back");
+        /* its last draw is the case's quad: stencil EQUAL 0, RGB */
+        let last = b.draws.last().unwrap_or_else(|| panic!("{name}: frame 2 has no draw"));
+        assert!(last.zsd.stencil_test_enable, "{name}: frame 2 quad is stencil-tested");
+        assert_eq!(last.zsd.front_compare_function, Func::EQUAL, "{name}: frame 2 quad stencil EQUAL");
+        assert_eq!(last.zsd.front_reference_value, 0, "{name}: frame 2 quad reference 0");
+        assert_eq!(last.colour_mask, 0x7, "{name}: frame 2 quad colour mask (RGB)");
+        /* a stencil clear's quad writes no colour (e918e015, st_cb_clear.c:224-240) */
+        for d in a.draws.iter().chain(&b.draws).filter(|d| is_stencil_clear_to_1(d)) {
+            assert_eq!(d.colour_mask, 0, "{name}: the scissored stencil clear writes colour");
+        }
+        /* the plane the quad tests holds 1 in the middle quarter, 0 around
+         * it: either frame 2 starts from the stencil clear of 0 and draws the
+         * held scissored clear (as it does at e918e015), or frame 1 drew it,
+         * wrote the plane back, and frame 2 preloads it (as Mesa's batches do) */
+        let held = b.draws[..b.draws.len() - 1].iter().any(is_stencil_clear_to_1)
+            && !(b.params.s_preload_enable || b.params.z_preload_enable)
+            && b.params.s_clear == 0;
+        let kept = a.draws.iter().any(is_stencil_clear_to_1)
+            && (a.params.s_unload_enable || a.params.z_unload_enable)
+            && (b.params.s_preload_enable || b.params.z_preload_enable);
+        assert!(held || kept, "{name}: the stencil plane under frame 2's quad");
+        assert!(b.zs.is_some() && b.params.has_zs_crc_extension, "{name}: frame 2 has its stencil plane");
+    }
+}
+
+#[test]
+fn the_recreated_colour_reads_alpha_1_after_the_case() {
+    let _one = setup();
+    for (name, texture, depth16) in CASES {
+        let Some(f) = case_frames(name, texture, depth16) else { continue };
+        let b = &f[1];
+        /* the alpha byte every pixel of the new object holds when the frame
+         * starts drawing: the clear words' alpha when the frame clears with
+         * them, else what the preload reads (the new storage holds 0) */
+        let mut alpha = match (b.params.pre_frame_0 == PrePostFrameShaderMode::NEVER, b.preload_swizzle) {
+            (true, _) => b.rt.clear.color_0 >> 24,
+            (false, Some(s)) if s == SWIZZLE_RGB1 => 255,
+            (false, Some(_)) => 0,
+            (false, None) => unreachable!(),
+        };
+        /* a draw that writes alpha (mask bit 3) stores its own: the colour
+         * clear is (0, 0, 1, 0) and the case's quad is opaque; only the
+         * first matters here, and it is not 1, so count it as 0 */
+        for d in &b.draws {
+            if d.colour_mask & 0x8 != 0 {
+                alpha = 0;
+            }
+        }
+        assert_eq!(
+            alpha,
+            255,
+            "{name}: frame 2's pixels read alpha {alpha} (pre_frame_0 {:?}, preload swizzle {:?}, clear words \
+             0x{:08x}, draw masks {:x?}); dEQP's reference has alpha 1",
+            b.params.pre_frame_0,
+            b.preload_swizzle,
+            b.rt.clear.color_0,
+            b.draws.iter().map(|d| d.colour_mask).collect::<Vec<_>>()
+        );
+    }
+}
