@@ -1,4 +1,4 @@
-# one row per run shard, measured on the DK (slices 1-3 so far, shards 0..68; each later slice appends its rows with the same header and columns); run_ms is the layer's 'PSCI SYSTEM_RESET at <n> ms' (uptime of the image), lifetime_ms the image's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, back_after_s the runner's reboot-to-ssh time
+# one row per run shard, measured on the DK (slices 1-4 so far, shards 0..91; each later slice appends its rows with the same header and columns); run_ms is the layer's 'PSCI SYSTEM_RESET at <n> ms' (uptime of the image), lifetime_ms the image's CONFIG_YAKOGL_STM32MP2_LIFETIME_S, back_after_s the runner's reboot-to-ssh time
 index	slice	cases	est_ms	run_ms	lifetime_ms	lifetime_used_pct	back_after_s	pass	fail	notsupported	other	noresult	verdict
 0	1	125	12500	7446	600000	1.2	49	117	0	8	0	0	rc=0 verdict=done result=pass:deqp
 1	1	125	12500	5583	600000	0.9	62	125	0	0	0	0	rc=0 verdict=done result=pass:deqp
@@ -69,3 +69,26 @@ index	slice	cases	est_ms	run_ms	lifetime_ms	lifetime_used_pct	back_after_s	pass	
 66	3	125	12500	11315	600000	1.9	57	125	0	0	0	0	rc=0 verdict=done result=none
 67	3	125	12500	23011	600000	3.8	83	77	48	0	0	0	rc=0 verdict=done result=none
 68	3	125	12500	13594	600000	2.3	58	108	17	0	0	0	rc=0 verdict=done result=none
+69	4	125	12500	10069	600000	1.7	73	124	1	0	0	0	rc=4 verdict=failed result=record:APP
+70	4	125	12500	12417	600000	2.1	57	113	12	0	0	0	rc=4 verdict=failed result=record:APP
+71	4	125	12500	11744	600000	2.0	71	111	14	0	0	0	rc=4 verdict=failed result=record:APP
+72	4	125	12500	10936	600000	1.8	52	125	0	0	0	0	rc=0 verdict=done result=record:APP
+73	4	125	12500	10968	600000	1.8	70	120	5	0	0	0	rc=4 verdict=failed result=record:APP
+74	4	125	12500	10622	600000	1.8	58	125	0	0	0	0	rc=0 verdict=done result=record:APP
+75	4	125	12500	15657	600000	2.6	71	125	0	0	0	0	rc=0 verdict=done result=record:APP
+76	4	125	12500	17881	600000	3.0	59	94	31	0	0	0	rc=4 verdict=failed result=record:APP
+77	4	125	12500	19056	600000	3.2	76	87	38	0	0	0	rc=4 verdict=failed result=record:APP
+78	4	125	12500	11527	600000	1.9	57	107	18	0	0	0	rc=4 verdict=failed result=record:APP
+79	4	125	12500	8775	600000	1.5	64	121	4	0	0	0	rc=4 verdict=failed result=record:APP
+80	4	125	12500	11881	600000	2.0	57	115	10	0	0	0	rc=4 verdict=failed result=record:APP
+81	4	125	12500	15074	600000	2.5	62	108	17	0	0	0	rc=4 verdict=failed result=record:APP
+82	4	125	12500	15048	600000	2.5	58	118	7	0	0	0	rc=4 verdict=failed result=record:APP
+83	4	125	12500	16948	600000	2.8	74	109	16	0	0	0	rc=4 verdict=failed result=record:APP
+84	4	125	12500	17131	600000	2.9	59	107	18	0	0	0	rc=4 verdict=failed result=record:APP
+85	4	125	12500	18384	600000	3.1	83	101	24	0	0	0	rc=4 verdict=failed result=record:APP
+86	4	125	12500	4412	600000	0.7	44	125	0	0	0	0	rc=0 verdict=done result=record:APP
+87	4	125	12500	4795	600000	0.8	57	125	0	0	0	0	rc=0 verdict=done result=record:APP
+88	4	125	12500	5229	600000	0.9	46	125	0	0	0	0	rc=0 verdict=done result=record:APP
+89	4	125	12500	4439	600000	0.7	61	125	0	0	0	0	rc=0 verdict=done result=record:APP
+90	4	125	12500	12664	600000	2.1	57	92	33	0	0	0	rc=4 verdict=failed result=record:APP
+91	4	125	12500	9328	600000	1.6	71	112	13	0	0	0	rc=4 verdict=failed result=record:APP
