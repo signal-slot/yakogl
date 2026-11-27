@@ -72,6 +72,8 @@ pub mod sampler71;
 #[cfg(feature = "gpu-v3d71")]
 pub mod table71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
+pub mod table71tex;
+#[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod texfill71;
 #[cfg(all(feature = "gpu-v3d71", feature = "host-test"))]
 pub mod texglue71;
