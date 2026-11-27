@@ -73,3 +73,97 @@ Tallies: `tools/cts/pi4-session-tally.sh <this directory>` with the tree and mus
 - `<LABEL>.tally.txt`: `deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt --label <LABEL> <LABEL>.console.txt`, through `pi4-session-tally.sh`.
 - `table.txt`: `--table` over the twenty consoles, with every mustpass case that is not a Pass named (63 `Fail`).
 - `cycles.txt`: per image in run order: the sha256, the Linux boot id before and after, the reboot time, the seconds to Linux, the clean-up read-back, and the `cases in`, `carve-out`, `slow jobs` and end lines.
+
+## Report texts (for plans #387, #389 and issue #1261)
+
+Drafted from the merged state: `docs/es3/pi4-gles3-fails.tsv` (header "images run (151 of 151)"), `tools/cts/pi4-gles3-tree.txt` (151 images), the records `tools/cts/log/2026-11-pi4-gles3-*/` and `docs/notes/v3d-refusals.md`. The totals are the tsv's: 3,291 not-Pass rows (1,399 Fail, 1,877 NotSupported, 4 QualityWarning, 11 ResourceError); Pass is the rest, 42,810 - 3,291 = 39,519. 39,519 + 1,399 + 1,877 + 15 + 0 = 42,810. Nothing here edits `RESULTS.md`, `STATUS.md` or `ROADMAP.md`; plans #387 and #389 apply the texts.
+
+### (a) tools/cts/RESULTS.md, 'Pi 4, whole tree'
+
+Replace the span from `**Pi 4, whole tree**` up to, not including, `**Host, ES 3.0 back-end`, with:
+
+```
+**Pi 4, whole tree** on `b1b5b845`, `87881c78` and `02a2ed23` (`02a2ed238208ec2e1534fe642f7c39b517c886fa`;
+all on origin/main; tryboot, console through the UART bridge; `tools/cts/pi4-gles3-tree.txt`,
+151 images: the 91 images, re-split so that every aborting case sits in its own image;
+recipe `docs/es3/board-recipe-pi4.md`), 2026-11-25 to 2026-11-27: 151 of 151 images run,
+42,810 mustpass cases (each counted once, under the label the tree gives it, the newest
+record of a case wins): 39,519 Pass / 1,399 Fail / 1,877 NotSupported / 15 other
+(4 QualityWarning, 11 ResourceError) / 0 without a result, which adds up to 42,810.
+Every case has a result. Commits: 76 images at `87881c78` (fbo, fragment_ops, fragment_out,
+draw and colour-clear, texture T01-T13, T14b-T17b, and the aborted images S07, T17a, TF1a,
+TF1b, TF2a, TF2b, TF2c), 20 at `02a2ed23` (S03a1 to S03a7b and T14, T14a1, T14aa, T14aa1,
+the last four built with `texture-2048.conf`), 55 not rerun from `b1b5b845`. The nine images
+that aborted at `b1b5b845` (S03a, S07, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c) no longer
+abort: S07, T17a, TF1a, TF1b, TF2a, TF2b and TF2c pass all their 871 mustpass cases, the
+S03a family has 1,087 Pass and 54 Fail of 1,141, the T14 family 233 Pass and 9 Fail of 242.
+0 GPU recoveries, 0 hung jobs, 0 MMU faults. ES 2.0 regression rows (D, FB1, T1, T3, TF) at
+`87881c78`: 1,184 of 1,184 mustpass Pass (1,245 of 1,245 begun), unchanged. Records:
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts,aborts2,aborts3}/`,
+`tools/cts/log/2026-11-pi4-gles3-87881c78-{fbo,tex1,tex2,aborts-a,es2}/` and
+`tools/cts/log/2026-11-pi4-gles3-02a2ed23-aborts-b/`. Every case that is not Pass:
+`docs/es3/pi4-gles3-fails.tsv` (3,291 rows). Remaining: no abort on the V3D 4.2 board. The
+refusals that are left are Fails, not aborts: the 3 draw targets of the V3D (54 S03a
+`precision.{matrixcompmult,outerproduct,transpose}` mat4, mat4x2 and mat4x3 link fails and 26
+`fragment_out.random` cases, `docs/notes/v3d-refusals.md` G); `-E2BIG` for the texture units of
+T14a on `rpi_4b.conf` (with `texture-2048.conf` it runs); the six T09 `size.2d.2048x2048_*`
+cases refused under `rpi_4b.conf`'s tiled-copy budget; ASTC (T01, T15, T16, T17: not advertised).
+The largest groups of Fail still open: fbo 370 (FB3 50, FB4 317, FB2 3), `fragment_out` 31, A1 2;
+see the issue texts below.
+```
+
+### (b) tools/cts/STATUS.md, the Japanese Pi 4 line
+
+Replace the span from `Pi 4 は全ツリー` up to, not including, `i.MX8MP はまだボー`, with:
+
+```
+Pi 4 は全ツリー（151 画像。中断した 9 画像を、中断するケースごとに分けて再分割したもの）を b1b5b845、87881c78、02a2ed23（いずれも origin/main、2026-11-25〜27）で実行し、必須 42,810 件中 合格 39,519 / 失敗 1,399 / 未対応 1,877 / その他 15 / 結果なし 0（全ケースに結果がある。GPU 復旧 0、ハング 0、MMU フォールト 0）。b1b5b845 で中断した S03a S07 T14a T17a TF1a TF1b TF2a TF2b TF2c はもう中断しない（S07 T17a TF1a TF1b TF2a TF2b TF2c は 871 件すべて合格、S03a は 1,141 件中 合格 1,087 / 失敗 54、T14 系は 242 件中 合格 233 / 失敗 9）。残る拒否は失敗であって中断ではない（V3D の描画ターゲットが 3 つのため S03a の mat4 系 54 件と fragment_out.random 26 件、rpi_4b.conf での T09 の 2048x2048 の 6 件、ASTC は未対応）。ES 2.0 の回帰行（D FB1 T1 T3 TF）は 87881c78 で必須 1,184 件すべて合格。失敗の一覧は docs/es3/pi4-gles3-fails.tsv、記録は tools/cts/log/2026-11-pi4-gles3-*/。
+```
+
+### (c) ROADMAP.md stage 4, the Pi 4 bullet
+
+Replace the bullet that begins `- Raspberry Pi 4: the whole tree (131 rows` and ends at `need a rerun.` with:
+
+```
+- Raspberry Pi 4: the whole tree (151 images, the nine aborted images re-split so that
+  each aborting case is isolated) at `b1b5b845`, `87881c78` and `02a2ed23`
+  (2026-11-25 to 27): 42,810 cases, 39,519 pass / 1,399 fail / 1,877 NotSupported /
+  15 other / 0 without a result, 0 GPU recoveries (#1261). Every case has a result: the
+  nine images that aborted on a refused draw no longer abort. The fails left are
+  not aborts: the V3D's 3 draw targets (80 cases in FR2 and S03a), the fbo groups
+  of `docs/es3/pi4-gles3-fails.tsv`, ASTC (not advertised) and the 2048x2048
+  textures under `rpi_4b.conf`'s budget.
+```
+
+### (d) comment for issue #1261
+
+```
+Pi 4 (V3D 4.2) dEQP-GLES3: every one of the 42,810 mustpass cases now has a result.
+
+Commits (all on origin/main): b1b5b845 (the whole tree, 2026-11-23/25), 87881c78 (fbo, fragment_ops, fragment_out, draw, colour clear, texture T01-T17b and the seven aborted images that the tip frees, the ES 2.0 regression rows), 02a2ed23 (the S03a family and T14, T14a1, T14aa, T14aa1 with texture-2048.conf).
+Records: tools/cts/log/2026-11-pi4-gles3-b1b5b845-*/, tools/cts/log/2026-11-pi4-gles3-87881c78-{fbo,tex1,tex2,aborts-a,es2}/, tools/cts/log/2026-11-pi4-gles3-02a2ed23-aborts-b/. Fails: docs/es3/pi4-gles3-fails.tsv; tree: tools/cts/pi4-gles3-tree.txt (151 images, 151 of 151 run).
+
+Totals out of 42,810: 39,519 Pass / 1,399 Fail / 1,877 NotSupported / 15 other (4 QualityWarning, 11 ResourceError) / 0 without a result. At b1b5b845 it was 35,922 / 2,683 / 2,197 / 29 / 1,979 without a result. 0 GPU recoveries, 0 hung jobs, 0 MMU faults.
+
+Refusals removed: the nine aborts (S03a, S07, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c) are gone. A5 (4096 targets, 6d2e7d0d), ETC2 sampling (455c3bb5), the job-builder input cap and -ENOTSUP for every refusal of legal state (6581f22b, b7c1484e) took them out: S07, T17a, TF1a, TF1b, TF2a, TF2b, TF2c pass all 871 cases; S03a has 1,087 Pass and 54 Fail of 1,141.
+Refusals that remain (Fails, not aborts): the 3 draw targets (54 S03a mat4 link fails, 26 fragment_out.random); T14a's lost draw (-E2BIG) on rpi_4b.conf, fitted by texture-2048.conf (T14 family: 233 Pass, 9 Fail of 242); the six T09 size.2d.2048x2048 cases under rpi_4b.conf's tiled-copy budget; ASTC not advertised (T01, T15, T16, T17).
+New defect issues are listed in the report: R/RG integer texture sampling (48), R8/RG8 blend read-back (2), msaa with max_samples 0 (42), three draw targets (26 + 54), 5 fragment_out.random seeds, the unexplained FB4 fails (275).
+ES 2.0 regression rows (D, FB1, T1, T3, TF) at 87881c78: 1,184 of 1,184 Pass. The ES 3.0 gl_test cases that b1b5b845 left out have no record directory in the tree at this commit; they are not counted here.
+```
+
+### (e) new defect issues
+
+1. **Title:** `gl: R and RG integer textures sampled through a colour fbo give wrong pixels (fbo.color.tex2d, tex2darray, tex3d, texcube; Pi 4, 48 cases)`
+   Text: image FB3 at 87881c78, `fbo.color.{tex2d,tex2darray,tex3d,texcube}`: 12 cases each, 48 Fail ("Image comparison failed") of FB3's 50 Fail. They are the R and RG integer formats (R8I to RG32UI class). The fix is in `src/gl/draw.rs` (the GL core's sampling of R/RG integer textures); it is outside plan #399, which only names it. Records: `tools/cts/log/2026-11-pi4-gles3-87881c78-fbo/FB3.*`. Test: a host test of the sampled texel of an R8I and an RG32UI texture, then FB3 on the Pi 4.
+2. **Title:** `gl: R8 and RG8 colour blend read-back differs (fbo.color.blend.r8_src_over, rg8_src_over; Pi 4, 2 cases)`
+   Text: FB3 at 87881c78: `fbo.color.blend.r8_src_over` and `fbo.color.blend.rg8_src_over` Fail, the other 48 FB3 Fails being the issue above. The read-back of an R8 or RG8 colour is the GL core's. Record: `87881c78-fbo/FB3.*`.
+3. **Title:** `v3d: GL_MAX_SAMPLES is 0, so fbo.msaa and its renderbuffer cases fail (Pi 4, 42 cases)`
+   Text: FB4 at 87881c78: `fbo.msaa.{2,4,8}_samples.*` give 42 Fail; the back end's `max_samples` is 0 (`docs/notes/es3-msaa-renderbuffers.md`, `msaa-fbo` feature). Back end: the 4x framebuffer objects of `7f72cb46` are the start; the Pi 4 image must be built with `msaa-fbo` and rerun. Record: `87881c78-fbo/FB4.*`.
+4. **Title:** `v3d: only 3 draw targets; ES 3.0 asks for 4 (fragment_out.random 26 cases, S03a precision mat4 54 cases; Pi 4)`
+   Text: `DRAW_TARGETS` is 3 for `gpu-v3d` (`src/backend.rs`), so `GL_MAX_DRAW_BUFFERS` and `GL_MAX_COLOR_ATTACHMENTS` are 3, below ES 3.0's minimum of 4 (`docs/notes/v3d-refusals.md` G). FR2 at 87881c78 has 26 `fragment_out.random.*` link fails; S03a (02a2ed23: S03a4b, S03a5b, S03a7b) has 54 `precision.{matrixcompmult,outerproduct,transpose}` mat4, mat4x2 and mat4x3 link fails ("fragment output at location 3 ends at 4, beyond the 3 draw buffers"); A1's 2 Fails (`implementation_limits.max_color_attachments`, `max_draw_buffers`) are the same limit. A fourth target reaches fbo, fragment_out, draw_buffers and the 4096 memory budget (mrt4 design).
+5. **Title:** `v3d: 5 fragment_out.random seeds fail for a cause other than the 3-target limit (FR2-b; Pi 4)`
+   Text: FR2 at 87881c78: 31 Fail, all `fragment_out.random.N`; 26 are the 3-target limit (issue above), the other 5 are not explained by it. Name the seeds from the host run first (`fr2b-cause`), then the fix. Record: `87881c78-fbo/FR2.*`.
+6. **Title:** `v3d: 275 fbo.render and fbo.invalidate Fails of Pi 4 image FB4 are unexplained`
+   Text: FB4 at 87881c78: 317 Fail, 42 of them msaa (issue above). The other 275 are `fbo.render.{resize 94, shared_colorbuffer 84, recreate_color 69, shared_colorbuffer_clear 34, recreate_depth_stencil 11, shared_depth_stencil 10, stencil_clear 3}` and `fbo.invalidate.{whole, sub, format}` (4 each, including those that a wide store may move, `docs/notes/v3d-fbo-render.md`). Cause not found; first step is to keep the first message of each not-pass case (the board console), then a host reproduction. Records: `87881c78-fbo/FB4.*`.
+7. **Title:** `v3d: the T09 size.2d.2048x2048 cases are refused under rpi_4b.conf's tiled-copy budget (Pi 4, 6 cases)`
+   Text: T09 at 87881c78: six cases (`rgb888`, `rgba4444`, `rgba8888`, plain and `_mipmap`), a refused draw (Fail). The tree builds T09 with `texture-2048.conf`; that was not run by this plan. Run it and record. Record: `87881c78-tex2/`.
