@@ -121,6 +121,26 @@ want tests/mali_deqp_colourpair.rs "mali treekey"
 # plan #402's additions to the same row
 want tests/mali_deqp_vsconst.rs "mali treekey"
 want tests/mali_deqp_mixprec3.rs "mali treekey"
+want tests/mali_deqp_vsunif.rs "mali treekey"
+want tests/mali_deqp_vsloop.rs "mali treekey"
+want tests/mali_deqp_fsunif.rs "mali treekey"
+want tests/mali_deqp_vsuniarr.rs "mali treekey"
+want tests/mali_deqp_fsint.rs "mali treekey"
+want tests/mali_deqp_fsint2.rs "mali treekey"
+want tests/mali_deqp_vsloop2.rs "mali treekey"
+want tests/mali_deqp_fsunif2.rs "mali treekey"
+want tests/mali_deqp_varyload.rs "mali treekey"
+want tests/mali_deqp_vsmix.rs "mali treekey"
+want tools/mali/testdata/deqp_vsunif_x.expect.json mali
+want tools/mali/testdata/deqp_vsloop_x.expect.json mali
+want tools/mali/testdata/deqp_fsunif_x.expect.json mali
+want tools/mali/testdata/deqp_vsuniarr_x.expect.json mali
+want tools/mali/testdata/deqp_fsint_x.expect.json mali
+want tools/mali/testdata/deqp_fsint2_x.expect.json mali
+want tools/mali/testdata/deqp_vsloop2_x.expect.json mali
+want tools/mali/testdata/deqp_fsunif2_x.expect.json mali
+want tools/mali/testdata/deqp_varyload_x.expect.json mali
+want tools/mali/testdata/deqp_vsmix_x.expect.json mali
 want tests/mali_ref_selftest.rs "mali treekey"
 want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
