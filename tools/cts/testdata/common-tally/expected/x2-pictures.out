@@ -1,0 +1,3 @@
+rc 1
+glmark2 pictures against column imx8mp: 4 scenes, match 3, black 1
+scene [texture] texture-filter=linear: picture black (all black, the reference is not)

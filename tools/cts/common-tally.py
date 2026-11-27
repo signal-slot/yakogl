@@ -85,7 +85,10 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 BOARD_SH = os.path.join(REPO, "tools", "board.sh")
-BOARDS = ("am62p", "pi4", "imx8mp")
+BOARDS = ("am62p", "pi4", "imx8mp", "x2")
+# The Armadillo-X2 carries the i.MX8MP's GC7000UL: its glmark2 pictures are judged against the
+# imx8mp column of glmark2-pictures.txt (a column named x2 maps there too)
+PICTURE_COLUMN = {"x2": "imx8mp"}
 RUN_RE = re.compile(r"^[0-9]{8}-[0-9]{4}-(.+)-([0-9a-f]{8}|probe)$")
 
 # The glmark2 console lines that say a scene drew wrong while its record stays green: one row
@@ -183,7 +186,8 @@ def kv(line):
 
 # ---- the details per kind ---------------------------------------------------------
 
-GLMARK2_RE = re.compile(r"score (\d+) status (\d+) \(([^)]*)\) scenes ran (\d+) failed (\d+) unsupported (\d+)")
+# the X2 stores three record words: its describe line has no "(name)" after the status number
+GLMARK2_RE = re.compile(r"score (\d+) status (\d+)(?: \(([^)]*)\))? scenes ran (\d+) failed (\d+) unsupported (\d+)")
 # a GLMARK2 record with GLMARK2_SCENES (record.rs) also names its entries
 GLMARK2_SCENES_RE = re.compile(r"; first failed: (.*?); unsupported: (.*)$")
 PROBES_RE = re.compile(r"PROBES \(\d+\) tag \d+: status (\S+)")
@@ -444,6 +448,7 @@ def gm_pictures_main(argv):
     as table lines for COLUMN (to review and paste into glmark2-pictures.txt). SRC is a console
     file or a run directory"""
     mode, src, column = argv[:3]
+    column = PICTURE_COLUMN.get(column, column)
     table_path = argv[4] if len(argv) == 5 else PICTURE_TABLE
     text = read_text(os.path.join(src, "console.txt") if os.path.isdir(src) else src)
     pictures = glmark2_pictures(text) if text is not None else None
@@ -795,6 +800,8 @@ def detail_from_record(decoded):
     m = GLMARK2_RE.search(decoded)
     if m:
         score, st, stname, ran, failed, unsup = m.groups()
+        if stname is None:
+            stname = {"1": "pass", "2": "fail"}.get(st, "invalid")  # record.rs status(): 1 pass, 2 fail
         d = {"kind": "glmark2", "score": int(score), "status": stname, "ran": int(ran),
              "failed": int(failed), "unsupported": int(unsup),
              "text": "glmark2 score %s; scenes ran %s, failed %s, unsupported %s; status %s (%s)"
@@ -904,22 +911,25 @@ def row_summary(board, label, rundir):
              result=v.get("result", "none"), resets=v.get("resets", "absent"),
              record=v.get("record", "absent"), differs=differs)
     console = read_text(os.path.join(rundir, "console.txt"))
+    column = PICTURE_COLUMN.get(board, board)
     record_resets = None
     if s["record"] != "absent":
-        p = subprocess.run([ytools(), "record"] + s["record"].split(","), capture_output=True, text=True)
+        words = s["record"].split(",")
+        w3 = ["--words", "3"] if len(words) == 3 else []  # the X2's record has three words
+        p = subprocess.run([ytools(), "record"] + w3 + words, capture_output=True, text=True)
         s["detail"] = detail_from_record(p.stdout + p.stderr)
-        p = subprocess.run([ytools(), "record", "--line"] + s["record"].split(","), capture_output=True, text=True)
+        p = subprocess.run([ytools(), "record", "--line"] + w3 + words, capture_output=True, text=True)
         record_resets = kv(p.stdout).get("resets")
         if s["detail"]["kind"] == "glmark2":
             # the per-scene verdict from the console (the AM62P and the Pi 4; the i.MX8MP has none)
             sc = glmark2_scenes(console) if console is not None else None
             # the pictures are judged against the board's column of glmark2-pictures.txt
-            pics = judge_pictures(glmark2_pictures(console), read_picture_table(), board) \
+            pics = judge_pictures(glmark2_pictures(console), read_picture_table(), column) \
                 if console is not None else None
             pages = read_pages(rundir) if console is None else None
             if pages is not None:
                 # the i.MX8MP: no console, the speed and the pictures come from the page records
-                pics = judge_pictures(glmark2_pictures(pages[1]), read_picture_table(), board)
+                pics = judge_pictures(glmark2_pictures(pages[1]), read_picture_table(), column)
                 s["detail"]["speed"] = glmark2_speed(pages[1])
             s["detail"]["scenes"] = sc
             s["detail"]["pictures"] = pics
@@ -1057,7 +1067,7 @@ def diff(prev, now):
     return lines
 
 
-USAGE = ("usage: common-tally.py <am62p|pi4|imx8mp> <outdir> | --row LABEL=<rundir>... "
+USAGE = ("usage: common-tally.py <am62p|pi4|imx8mp|x2> <outdir> | --row LABEL=<rundir>... "
          "[--prev <outdir> | --prev-row LABEL=<rundir>...] | --self-test | "
          "--gm-table <console|rundir> | --gm-diff <A> <B> | "
          "--gm-pictures <console|rundir> <column> [--table <file>] | "

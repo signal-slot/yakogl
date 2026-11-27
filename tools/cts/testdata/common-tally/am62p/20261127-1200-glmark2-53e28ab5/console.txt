@@ -1,0 +1,12 @@
+12:00:00 glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+12:00:01 [build] use-vbo=false: FPS: 250 FrameTime: 4.000 ms
+12:00:01 glmark2-picture: [build] use-vbo=false: 800x600; probes c a0a0a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 8225, crc16q d802; mean 12 12 12; black no
+12:00:02 [build] use-vbo=true: FPS: 181 FrameTime: 5.500 ms
+12:00:02 glmark2-picture: [build] use-vbo=true: 800x600; probes c a0a4a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 9e96, crc16q c9d4; mean 12 12 12; black no
+12:00:03 [texture] texture-filter=nearest: FPS: 142 FrameTime: 7.000 ms
+12:00:03 glmark2-picture: [texture] texture-filter=nearest: 800x600; probes c 38383800, tl 181c1800, tr 00000000, bl 00040000, br 00000000; crc16 1651, crc16q 1926; mean 14 14 14; black no
+12:00:04 [texture] texture-filter=linear: FPS: 117 FrameTime: 8.500 ms
+12:00:04 glmark2-picture: [texture] texture-filter=linear: 800x600; probes c 00000000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 0000, crc16q 0000; mean 0 0 0; black yes
+12:00:05 glmark2: score 42
+12:00:06 yk-record: 594b120e 0000002a 01210000 03200258
+12:00:07 yakogl: end
