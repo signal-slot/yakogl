@@ -303,3 +303,17 @@ gm2_mploop_3  gm2_mploop_3.vert gm2_mploop_3.frag triangles vs.position=equal fs
 gm2_fx2d_1  gm2_fx2d_1.vert gm2_fx2d_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:0ed6c5778673
 gm2_fx2d_2  gm2_fx2d_2.vert gm2_fx2d_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:a2a53c22716d
 gm2_fx2d_3  gm2_fx2d_3.vert gm2_fx2d_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:64:53e53836e370
+# #367 lower-nonfinite-const step 7 (fsoperand): jellyfish fs 8ee5's gradient, `mix` of two vec3 uniforms (a uniform first
+# in a sum and under the negation; docs/notes/mali-fs-operand.md), drawn with --uniform-values. Our compiler is byte-equal
+# to gm2_fsop_2..4 and _6..9 (tests/mali_fs_operand.rs); _1 differs in the order of independent instructions, _5 stays
+# refused. pan_shc's SPIR-V path has no lower_precision (`mediump`); _2 and _6, _9 are equal; _4's varying program keeps
+# the dead lane (`unanalysed`).
+gm2_fsop_1  gm2_fsop_1.vert gm2_fsop_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:ba10b424d7e3
+gm2_fsop_2  gm2_fsop_2.vert gm2_fsop_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fsop_3  gm2_fsop_3.vert gm2_fsop_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:4:5cae2d8a6897
+gm2_fsop_4  gm2_fsop_4.vert gm2_fsop_4.frag triangles vs.position=equal vs.varying=differs:unanalysed:7:b7de6440f312 fs.fragment=differs:mediump:16:a2a94689ed3a
+gm2_fsop_5  gm2_fsop_5.vert gm2_fsop_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:14:9d6c95f064fb
+gm2_fsop_6  gm2_fsop_6.vert gm2_fsop_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fsop_7  gm2_fsop_7.vert gm2_fsop_7.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:15:dc1ee4ad5593
+gm2_fsop_8  gm2_fsop_8.vert gm2_fsop_8.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:2:e437ec4172ec
+gm2_fsop_9  gm2_fsop_9.vert gm2_fsop_9.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
