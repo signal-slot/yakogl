@@ -251,6 +251,7 @@ const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, format) == 1);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, type_) == 2);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, base_level) == 3);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, layers) == 4);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, lod_set) == 6);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, base_gpu) == 8);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, width) == 16);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, height) == 20);
@@ -273,6 +274,8 @@ const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, target_kick) =
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, depth_id) == 52);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, cpu) == 56);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, swizzle) == 64);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, min_lod) == 68);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, max_lod) == 70);
 const _: () = assert!(size_of::<crate::backend::GlesDrawTarget>() == 24);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, gpu) == 0);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, w) == 8);

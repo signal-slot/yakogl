@@ -5124,9 +5124,10 @@ fn build_common(
             }
             /* A sampler object bound to the unit replaces the texture's own
              * filters and wraps (ES 3.0 3.8.2), completeness included; the
-             * texture's are put back below. Its LOD range is not applied;
-             * its compare mode and function are (`compare_op`). The swizzle
-             * is the texture's alone (3.8.2 lists it under texture state). */
+             * texture's are put back below. Its LOD range and its compare
+             * mode and function are applied too (`lod_range`, `compare_op`).
+             * The swizzle is the texture's alone (3.8.2 lists it under
+             * texture state). */
             let own = (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r);
             if let Some(s) = sampler {
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
@@ -5203,6 +5204,12 @@ fn build_common(
             tb.wrap_r = map_wrap(t.wrap_r);
             tb.swizzle = bind_swizzle(t);
             tb.base_level = bind_base_level(t);
+            /* GL_TEXTURE_MIN_LOD and MAX_LOD, the sampler object's when one
+             * is bound (ES 3.0.6 3.8.2); GL_TEXTURE_MAX_LEVEL is in
+             * `mip_levels` (`sampling_fields`). A backend that does not read
+             * them samples as before (the PowerVR does: pvr::texture). */
+            let (min_lod, max_lod) = super::es3::sampler_lod(c.index, unit).unwrap_or((t.min_lod, t.max_lod));
+            tb.set_lod_range(min_lod, max_lod);
             let incomplete = incomplete_reason(t);
             (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = own;
             if let Some(why) = incomplete {
