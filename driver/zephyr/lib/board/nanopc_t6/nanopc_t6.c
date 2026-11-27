@@ -314,7 +314,11 @@ static void gic_active_report(void)
 {
 	const struct yd_gic_active_reset *a = &s_gic_active;
 
-	if (a->flags & YD_GIC_RDIST_FOUND) {
+	if (a->flags & YD_GIC_RDIST_WAKE_TIMEOUT) {
+		printk("t6: GIC active state: GICD_TYPER 0x%08x, gic: redistributor at frame %u "
+		       "did not wake (ChildrenAsleep still set): SGIs and PPIs not scanned, ",
+		       a->gicd_typer, a->frames - 1);
+	} else if (a->flags & YD_GIC_RDIST_FOUND) {
 		printk("t6: GIC active state: GICD_TYPER 0x%08x GICR_TYPER 0x%016llx "
 		       "GICR_ISACTIVER0 0x%08x as found, ",
 		       a->gicd_typer, (unsigned long long)a->gicr_typer, a->isactiver0);

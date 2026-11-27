@@ -329,6 +329,9 @@ pub unsafe extern "C" fn yd_gic_cpuif_reset(out: *mut YdGicCpuifReset) {
 
 /// `flags` of [`YdGicActiveReset`].
 pub const YD_GIC_RDIST_FOUND: u32 = 1 << 0;
+/// `flags` of [`YdGicActiveReset`]: the redistributor matched but did not
+/// wake (ChildrenAsleep stayed set); [`YD_GIC_RDIST_FOUND`] is clear.
+pub const YD_GIC_RDIST_WAKE_TIMEOUT: u32 = 1 << 1;
 
 /// `struct yd_gic_active_reset`: what [`crate::aarch64::gic_active_reset`]
 /// found and did.
@@ -355,7 +358,7 @@ pub struct YdGicActiveReset {
     pub intids: [u32; crate::aarch64::GIC_ACTIVE_LISTED],
     /// The INTIDs still Active after the clear.
     pub still_active: u32,
-    /// [`YD_GIC_RDIST_FOUND`].
+    /// [`YD_GIC_RDIST_FOUND`], [`YD_GIC_RDIST_WAKE_TIMEOUT`].
     pub flags: u32,
 }
 
@@ -372,6 +375,7 @@ impl YdGicActiveReset {
     pub fn from_reset(r: crate::aarch64::GicActiveReset, gicr: usize) -> Self {
         let (flags, rd_offset) = match r.rdist.rd_base {
             Some(rd) => (YD_GIC_RDIST_FOUND, (rd - gicr) as u32),
+            None if r.wake_timed_out => (YD_GIC_RDIST_WAKE_TIMEOUT, 0),
             None => (0, 0),
         };
         YdGicActiveReset {
@@ -3533,6 +3537,7 @@ mod gic_tests {
     fn the_c_header_has_the_active_record() {
         const H: &str = include_str!("../../include/yakogl_drivers.h");
         assert!(H.contains("#define YD_GIC_RDIST_FOUND   (1u << 0)"));
+        assert!(H.contains("#define YD_GIC_RDIST_WAKE_TIMEOUT (1u << 1)"));
         assert!(H.contains(&format!("#define YD_GIC_ACTIVE_LISTED {}", crate::aarch64::GIC_ACTIVE_LISTED)));
         assert!(H.contains("_Static_assert(sizeof(struct yd_gic_active_reset) == 88,"));
         assert!(H.contains("_Static_assert(offsetof(struct yd_gic_active_reset, intids) == 48,"));
@@ -3555,6 +3560,7 @@ mod gic_tests {
             active: 2,
             intids: [27, 511, 0, 0, 0, 0, 0, 0],
             still_active: 0,
+            wake_timed_out: false,
         };
         let c = YdGicActiveReset::from_reset(r, gicr);
         assert_eq!((c.flags, c.rd_offset, c.frames, c.gicr_typer), (YD_GIC_RDIST_FOUND, 0x4_0000, 3, 0x200_0000_0200));
@@ -3564,5 +3570,9 @@ mod gic_tests {
         let none = GicActiveReset { rdist: GicrFound { rd_base: None, typer: 0x10, frames: 4 }, ..r };
         let c = YdGicActiveReset::from_reset(none, gicr);
         assert_eq!((c.flags, c.rd_offset, c.frames, c.gicr_typer), (0, 0, 4, 0x10));
+        // matched but did not wake: its own flag
+        let slept = GicActiveReset { wake_timed_out: true, ..none };
+        let c = YdGicActiveReset::from_reset(slept, gicr);
+        assert_eq!((c.flags, c.rd_offset, c.frames), (YD_GIC_RDIST_WAKE_TIMEOUT, 0, 4));
     }
 }

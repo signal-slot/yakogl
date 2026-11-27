@@ -443,6 +443,7 @@ _Static_assert(offsetof(struct yd_gic_cpuif_reset, ap1r_cleared) == 32, "rk3588.
 void yd_gic_cpuif_reset(struct yd_gic_cpuif_reset *out);
 
 #define YD_GIC_RDIST_FOUND   (1u << 0) /* this CPU's redistributor was found */
+#define YD_GIC_RDIST_WAKE_TIMEOUT (1u << 1) /* matched, did not wake: ChildrenAsleep still set */
 #define YD_GIC_ACTIVE_LISTED 8         /* the INTIDs listed in intids[] at most */
 
 struct yd_gic_active_reset {
@@ -459,7 +460,7 @@ struct yd_gic_active_reset {
 	uint32_t active;        /* INTIDs Active as found */
 	uint32_t intids[YD_GIC_ACTIVE_LISTED]; /* the first of them, the lowest first */
 	uint32_t still_active;  /* INTIDs Active when read again after the clear */
-	uint32_t flags;         /* YD_GIC_RDIST_FOUND */
+	uint32_t flags;         /* YD_GIC_RDIST_FOUND, YD_GIC_RDIST_WAKE_TIMEOUT */
 };
 _Static_assert(sizeof(struct yd_gic_active_reset) == 88, "rk3588.rs pins it");
 _Static_assert(offsetof(struct yd_gic_active_reset, intids) == 48, "rk3588.rs pins it");
