@@ -20,6 +20,17 @@
 //! `tests/mali_deqp_loops.rs` says). `references_listed` keeps the table and
 //! the directory in step.
 //!
+//! [`OPEN_STEPS`] (plan #387 item loops2-refs,
+//! `docs/notes/mali-loops2-lowering.md`) holds 80 more references of this
+//! prefix: one per dEQP shape of each open loop step (LP1-LP8 and IDX of
+//! that note) that no reference pinned before. Their sources are the dEQP
+//! generators' output rebuilt line for line (each `.license` says which).
+//! `open_steps_refused` asserts each one's exact first refusal at the tip;
+//! `open_steps_compares` is the byte compare, `#[ignore]`d while they are
+//! refused. The step that lifts one moves it out of [`OPEN_STEPS`] (into
+//! [`COMPILED`], or a `mali_ref::assert_matches` / `CapEdit` compare for a
+//! loop Mesa keeps) in the same commit.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_loops2
 //! ```
@@ -235,6 +246,128 @@ fn compiled_pinned() {
     }
 }
 
+/// The fragment walk's control-flow refusal (`MaliError::ControlFlow`).
+const CONTROL_FLOW: &str = "control flow (if, a loop, a return before the end)";
+
+/// The references of `docs/notes/mali-loops2-lowering.md` (without the
+/// `deqp_loops2_` prefix), each with its step there and the first refusal of
+/// its pair at the tip, without the "Valhall: " prefix and the " is not
+/// lowered yet" suffix. Mesa keeps a loop in the `LP1`
+/// `*_unconditional_continue`, `LP2`, `LP3`, `LP6`, `LP7`, `LP8` and
+/// `vs_idx_vec3_dynsubw_dlr` references (compare those with `CapEdit`); the
+/// `LP1` `*_only_continue`, `LP4`, `LP5` and other `IDX` ones have no loop
+/// in Mesa's words (plain `mali_ref::assert_matches`).
+const OPEN_STEPS: &[(&str, &str, &str)] = &[
+    ("fs_for_uni_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_for_dyn_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_wh_uni_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_wh_dyn_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_do_uni_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_do_dyn_only_continue", "LP1", CONTROL_FLOW),
+    ("fs_for_uni_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_for_dyn_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_wh_uni_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_wh_dyn_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_do_uni_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_do_dyn_unconditional_continue", "LP1", CONTROL_FLOW),
+    ("fs_do_dyn_conditional_continue", "LP2", GUARD_MEDIUMP),
+    ("fs_do_dyn_double_continue", "LP2", GUARD_MEDIUMP),
+    ("fs_do_uni_double_continue", "LP2", GUARD_MEDIUMP),
+    ("fs_do_dyn_infinite_with_conditional_break", "LP2", GUARD_MEDIUMP),
+    ("fs_do_uni_infinite_with_conditional_break", "LP2", GUARD_MEDIUMP),
+    ("fs_wh_dyn_infinite_with_conditional_break", "LP2", GUARD_MEDIUMP),
+    ("fs_wh_uni_infinite_with_conditional_break", "LP2", GUARD_MEDIUMP),
+    ("fs_do_dyn_mixed_break_continue", "LP2", CONTROL_FLOW),
+    ("fs_for_dyn_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_wh_uni_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_do_uni_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_for_dyn_nested_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_wh_uni_nested_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_do_uni_nested_sequence", "LP3", LOOP_MEDIUMP),
+    ("fs_for_dyn_nested_tricky_dataflow_1", "LP3", LOOP_MEDIUMP),
+    ("fs_wh_uni_nested_tricky_dataflow_1", "LP3", LOOP_MEDIUMP),
+    ("fs_wh_uni_nested_tricky_dataflow_2", "LP3", LOOP_MEDIUMP),
+    ("fs_do_uni_nested_tricky_dataflow_1", "LP3", CONTROL_FLOW),
+    ("fs_do_uni_nested_tricky_dataflow_2", "LP3", CONTROL_FLOW),
+    ("fs_do_dyn_nested_tricky_dataflow_2", "LP3", CONTROL_FLOW),
+    ("vs_for_con_conditional_continue", "LP4", LOOP_VERTEX),
+    ("vs_for_con_double_continue", "LP4", LOOP_VERTEX),
+    ("vs_for_con_unconditional_break", "LP4", LOOP_VERTEX),
+    ("vs_for_con_conditional_body", "LP4", LOOP_VERTEX),
+    ("vs_wh_con_conditional_break", "LP4", LOOP_VERTEX),
+    ("vs_wh_con_mixed_break_continue", "LP4", LOOP_VERTEX),
+    ("vs_wh_con_infinite_with_conditional_break", "LP4", LOOP_VERTEX),
+    ("vs_do_con_unconditional_continue", "LP4", LOOP_VERTEX),
+    ("vs_do_con_only_continue", "LP4", LOOP_VERTEX),
+    ("vs_do_con_nested_sequence", "LP4", LOOP_VERTEX),
+    ("vs_do_con_nested_tricky_dataflow_2", "LP4", LOOP_VERTEX),
+    ("vs_for_con_infinite_with_unconditional_break_first", "LP4", LOOP_VERTEX),
+    ("vs_for_uni_infinite_with_unconditional_break_last", "LP5", LOOP_VERTEX),
+    ("vs_wh_dyn_infinite_with_unconditional_break_first", "LP5", LOOP_VERTEX),
+    ("vs_do_uni_infinite_with_unconditional_break_first", "LP5", LOOP_VERTEX),
+    ("vs_do_dyn_infinite_with_unconditional_break_last", "LP5", LOOP_VERTEX),
+    ("vs_do_dyn_unconditional_break", "LP5", LOOP_VERTEX),
+    ("vs_wh_uni_unconditional_break", "LP5", LOOP_VERTEX),
+    ("vs_wh_uni_only_continue", "LP5", LOOP_VERTEX),
+    ("vs_for_dyn_only_continue", "LP5", LOOP_VERTEX),
+    ("vs_for_uni_function_call_inout", "LP6", LOOP_VERTEX),
+    ("vs_wh_dyn_function_call_inout", "LP6", LOOP_VERTEX),
+    ("vs_do_uni_function_call_inout", "LP6", LOOP_VERTEX),
+    ("vs_for_uni_unconditional_continue", "LP6", LOOP_VERTEX),
+    ("vs_do_uni_unconditional_continue", "LP6", LOOP_VERTEX),
+    ("vs_wh_dyn_unconditional_continue", "LP6", LOOP_VERTEX),
+    ("vs_for_dyn_sequence", "LP7", LOOP_VERTEX),
+    ("vs_wh_uni_sequence", "LP7", LOOP_VERTEX),
+    ("vs_do_dyn_sequence", "LP7", LOOP_VERTEX),
+    ("vs_for_dyn_nested_sequence", "LP7", LOOP_VERTEX),
+    ("vs_wh_uni_nested_sequence", "LP7", LOOP_VERTEX),
+    ("vs_wh_dyn_nested", "LP7", LOOP_VERTEX),
+    ("vs_do_dyn_nested", "LP7", LOOP_VERTEX),
+    ("vs_do_uni_nested_tricky_dataflow_1", "LP7", LOOP_VERTEX),
+    ("vs_wh_dyn_nested_tricky_dataflow_1", "LP7", LOOP_VERTEX),
+    ("vs_for_dyn_nested_tricky_dataflow_2", "LP7", LOOP_VERTEX),
+    ("vs_for_uni_double_continue", "LP8", LOOP_VERTEX),
+    ("vs_wh_dyn_conditional_continue", "LP8", LOOP_VERTEX),
+    ("vs_do_dyn_conditional_continue", "LP8", LOOP_VERTEX),
+    ("vs_wh_uni_mixed_break_continue", "LP8", LOOP_VERTEX),
+    ("vs_do_dyn_mixed_break_continue", "LP8", LOOP_VERTEX),
+    ("vs_for_dyn_infinite_with_conditional_break", "LP8", LOOP_VERTEX),
+    ("vs_wh_uni_infinite_with_conditional_break", "LP8", LOOP_VERTEX),
+    ("vs_wh_dyn_double_continue", "LP8", LOOP_VERTEX),
+    ("vs_idx_tmp_float_dynw_dlr", "IDX", LOOP_VERTEX),
+    ("vs_idx_tmp_vec4_dynw_dlr", "IDX", LOOP_VERTEX),
+    ("vs_idx_mat3_dynw_dlr", "IDX", LOOP_VERTEX),
+    ("vs_idx_vec3_dynsubw_dlr", "IDX", LOOP_VERTEX),
+];
+
+#[test]
+fn open_steps_refused() {
+    for (name, step, text) in OPEN_STEPS {
+        let r = mali_ref::Reference::load(&format!("deqp_loops2_{name}"));
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(_) => panic!(
+                "{name} now compiles: step {step} lifted it; add its byte compare and drop its entry in OPEN_STEPS"
+            ),
+            Err(e) => assert_eq!(
+                e.strip_prefix("Valhall: ").and_then(|e| e.strip_suffix(" is not lowered yet")),
+                Some(*text),
+                "{name} ({step}): the refusal moved: {e}"
+            ),
+        }
+    }
+}
+
+/// The byte compares that become the gate once a step lifts its refusals
+/// (`--ignored`). Each fails at the tip with its refusal; a loop Mesa keeps
+/// also needs `CapEdit` (see [`OPEN_STEPS`]).
+#[test]
+#[ignore = "refused at the tip: steps LP1-LP8 and IDX of docs/notes/mali-loops2-lowering.md"]
+fn open_steps_compares() {
+    for (name, _, _) in OPEN_STEPS {
+        mali_ref::assert_matches(&format!("deqp_loops2_{name}"));
+    }
+}
+
 #[test]
 fn references_listed() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tools/mali/testdata");
@@ -249,6 +382,7 @@ fn references_listed() {
     on_disk.sort();
     let mut listed: Vec<String> =
         REFUSALS.iter().map(|(n, _)| n.to_string()).chain(COMPILED.iter().map(|(n, _)| n.to_string())).collect();
+    listed.extend(OPEN_STEPS.iter().map(|(n, _, _)| n.to_string()));
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops2_* reference is not in REFUSALS, or the other way round");
 }
