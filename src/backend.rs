@@ -1027,6 +1027,12 @@ pub struct GlesTextureBind {
     pub base_level: u8,
     /// Images in the stack: 6 for a cube, 1 for plain 2D.
     pub layers: u16,
+    /// 1: [`min_lod`](Self::min_lod) and [`max_lod`](Self::max_lod) hold
+    /// GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD; 0: GL's defaults (-1000,
+    /// 1000), which a zeroed bind keeps. Offset 6, what was padding; read
+    /// and written through [`lod_range`](Self::lod_range) and
+    /// [`set_lod_range`](Self::set_lod_range).
+    pub lod_set: u8,
     pub base_gpu: u64,
     pub width: u32,
     pub height: u32,
@@ -1104,6 +1110,21 @@ pub struct GlesTextureBind {
     /// a swizzle), as Mesa composes a view's swizzle with the format's
     /// (`util_format_compose_swizzles`). All zero is the identity.
     pub swizzle: [u8; 4],
+    /// GL_TEXTURE_MIN_LOD under [`lod_set`](Self::lod_set): the sampler
+    /// object's when one is bound to the unit, else the texture's (ES 3.0.6
+    /// 3.8.2), in 1/[`LOD_ONE`](Self::LOD_ONE) of a level, rounded down and
+    /// saturated to +-127 levels (offset 68, what was padding). A level
+    /// past the 15th or a LOD below 0 clamps the same as GL's value; the
+    /// PowerVR's u4.6 clamp reads the same 1/64 steps.
+    pub min_lod: i16,
+    /// GL_TEXTURE_MAX_LOD, as [`min_lod`](Self::min_lod) (offset 70).
+    ///
+    /// GL_TEXTURE_MAX_LEVEL has no field: [`mip_levels`](Self::mip_levels)
+    /// counts the levels from level 0 up to it already
+    /// (`gl::draw::sampling_fields`), and [`base_level`](Self::base_level)
+    /// is the effective GL_TEXTURE_BASE_LEVEL. A backend that applies none
+    /// of them samples from level 0 as before.
+    pub max_lod: i16,
 }
 
 /// GL's texture wrap modes, one per axis. The values are GL's three modes,
@@ -1188,7 +1209,37 @@ impl GlesTextureBind {
         depth_id: 0,
         cpu: core::ptr::null(),
         swizzle: [GLES_SWIZZLE_SAME; 4],
+        lod_set: 0,
+        min_lod: 0,
+        max_lod: 0,
     };
+
+    /// One level in [`min_lod`](Self::min_lod) and
+    /// [`max_lod`](Self::max_lod).
+    pub const LOD_ONE: f32 = 256.0;
+
+    /// GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD of this bind: GL's defaults
+    /// (-1000, 1000) unless [`lod_set`](Self::lod_set).
+    pub fn lod_range(&self) -> (f32, f32) {
+        if self.lod_set == 0 {
+            return (-1000.0, 1000.0);
+        }
+        (f32::from(self.min_lod) / Self::LOD_ONE, f32::from(self.max_lod) / Self::LOD_ONE)
+    }
+
+    /// Store GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD (any floats GL
+    /// accepted): in 1/[`LOD_ONE`](Self::LOD_ONE) of a level, rounded down,
+    /// saturated to +-127 levels, a NaN 0.
+    pub fn set_lod_range(&mut self, min: f32, max: f32) {
+        fn fixed(v: f32) -> i16 {
+            if v.is_nan() {
+                0
+            } else {
+                (v.clamp(-127.0, 127.0) * GlesTextureBind::LOD_ONE).floor() as i16
+            }
+        }
+        (self.lod_set, self.min_lod, self.max_lod) = (1, fixed(min), fixed(max));
+    }
 }
 
 /// `struct gles_draw`: the fully resolved draw the backend renders. Field

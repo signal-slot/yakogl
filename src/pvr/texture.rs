@@ -41,7 +41,7 @@
 //! [`TexLod::DEFAULT`] is GL's default state (base 0, max level 1000, LOD
 //! -1000..1000): with it every word is the word the backend packed before
 //! these fields were encoded (tests/pvr_tex_lod_words.rs).
-use crate::backend::{gles_texfmt_bytes, GlesTextureBind};
+use crate::backend::{gles_texfmt_bytes, GlesTextureBind, GLES_TEXTYPE_3D, GLES_TEXTYPE_3D_TWIDDLED};
 
 /// GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL, GL_TEXTURE_MIN_LOD and
 /// GL_TEXTURE_MAX_LOD of one sampled texture (the sampler object's LODs
@@ -67,6 +67,22 @@ impl TexLod {
     /// GL's initial state (ES 3.0.6 table 6.10): base level 0, max level
     /// 1000, min LOD -1000, max LOD 1000.
     pub const DEFAULT: TexLod = TexLod { base_level: 0, max_level: 1000, min_lod: -1000.0, max_lod: 1000.0 };
+
+    /// The parameters the GL core handed over in bind `t` (a draw's): the
+    /// effective GL_TEXTURE_BASE_LEVEL (`GlesTextureBind::base_level`),
+    /// MIN_LOD and MAX_LOD (`GlesTextureBind::lod_range`, the sampler
+    /// object's when one is bound). GL_TEXTURE_MAX_LEVEL is the default
+    /// here: `mip_levels` already stops at it (`gl::draw::sampling_fields`).
+    /// A 3D texture keeps [`TexLod::DEFAULT`]: the stacked grid keeps one
+    /// level, and the native volume's copy carries its own view of the
+    /// parameters (`gl::native_vol::View`). A zeroed bind is the default.
+    pub fn of_bind(t: &GlesTextureBind) -> TexLod {
+        if matches!(t.type_, GLES_TEXTYPE_3D | GLES_TEXTYPE_3D_TWIDDLED) {
+            return TexLod::DEFAULT;
+        }
+        let (min_lod, max_lod) = t.lod_range();
+        TexLod { base_level: u32::from(t.base_level), min_lod, max_lod, ..TexLod::DEFAULT }
+    }
 }
 
 impl Default for TexLod {
