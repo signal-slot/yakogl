@@ -23,6 +23,11 @@
 //! - `InStep`: shadow and storage hold the same pixels; a draw that takes the
 //!   shadow again needs no tile-in. A draw that writes the storage in linear
 //!   form drops the shadow.
+//! - `Sampled` (W10, `gc_tiled_sample`, off by default): draws sample the
+//!   shadow straight ([`sampler_words_of`]) and the storage is stale. The copy
+//!   back left out before them is owed: the stream ends with it, or the next
+//!   draw that does not sample the shadow that way, or that draws into the
+//!   storage, is preceded by it ([`needs_copy_back`]), as for `Active`.
 //! - Nothing else carries over a kick: the next stream's first shadow draw
 //!   tiles the storage in with the RS (linear to tiled), unless that draw
 //!   opens with a whole colour clear.
@@ -38,7 +43,7 @@
 use super::backend::RsBlit;
 use super::layout::{self, Layout};
 use super::regs::*;
-use crate::backend::{GlesDraw, GlesTextureBind, GLES_TEXFMT_RGBA8};
+use crate::backend::{GlesDraw, GlesTextureBind, GLES_TEXFMT_RGBA8, GLES_TEXTYPE_2D};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
 
@@ -82,6 +87,17 @@ pub enum Phase {
     Active,
     /// Shadow and storage hold the same pixels.
     InStep,
+    /// Draws sample the shadow straight (W10); the storage is stale and the
+    /// copy back is owed, its words kept free as for `Active`.
+    Sampled,
+}
+
+impl Phase {
+    /// Does the stream owe this shadow's copy back (and keep
+    /// [`RESERVE_WORDS`] free for it)?
+    pub const fn owes_copy_back(self) -> bool {
+        matches!(self, Phase::Active | Phase::Sampled)
+    }
 }
 
 /// The shadow the open stream tracks.
@@ -255,9 +271,6 @@ pub struct SamplerWords {
 /// (16x4-padded, HALIGN SIXTEEN). Everything but `lod0` equals the words
 /// `texture.rs` writes for a tiled copy of the same size. `None` for a target
 /// [`spec_of`] would refuse (`w % 16 != 0` or `h % 4 != 0`).
-// Nothing calls it until W10 wires texture binding; the dead_code allow goes
-// with that wiring.
-#[allow(dead_code)]
 pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
     if spec.w == 0 || spec.h == 0 || !spec.w.is_multiple_of(16) || !spec.h.is_multiple_of(4) {
         return None;
@@ -275,6 +288,74 @@ pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
         slice: linear_stride * spec.h,
         lod0: shadow,
     })
+}
+
+/// The sampler words that read binding `t` straight from `shadow`, the
+/// shadow of `spec` (W10): [`sampler_words`], with CONFIG0 and CONFIG1 the
+/// binding's own tiled words (its swizzle, BGRA order and alpha rule; the
+/// shadow holds the storage's bytes, the RS copies them unchanged) under
+/// HALIGN SIXTEEN. `None` unless `t` is the whole storage of `spec` as one
+/// complete RGBA8 2D level at the base: then today's descriptor reads the
+/// storage, which the caller keeps current.
+pub fn sampler_words_of(t: &GlesTextureBind, spec: &Spec, shadow: u64) -> Option<SamplerWords> {
+    if !samples_whole(t, spec) {
+        return None;
+    }
+    let mut w = sampler_words(spec, shadow)?;
+    let [config0, config1, _] = super::texture::format_words(t, true);
+    w.config0 = config0;
+    w.config1 = config1 | texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN);
+    Some(w)
+}
+
+/// Is `t` the whole storage of `spec`, one complete RGBA8 2D level from its
+/// base, which [`sampler_words_of`] reads from the shadow?
+fn samples_whole(t: &GlesTextureBind, spec: &Spec) -> bool {
+    spec.gpu != 0
+        && t.base_gpu == spec.gpu
+        && t.type_ == GLES_TEXTYPE_2D
+        && t.format == GLES_TEXFMT_RGBA8
+        && t.incomplete == 0
+        && t.depth_id == 0
+        && t.base_level == 0
+        && t.mip_levels <= 1
+        && t.layers <= 1
+        && (t.width, t.height) == (spec.w, spec.h)
+        && t.stride_texels * BPP == spec.pitch
+}
+
+/// Bytes past a binding's base its storage may span, for [`needs_copy_back`]:
+/// level 0 (every layer) twice over, which holds a whole mip chain, and a
+/// page. Generous on purpose: a wrong "far" would let a draw read stale
+/// storage, a wrong "near" only costs the copy back W10 leaves out.
+fn span_of(t: &GlesTextureBind) -> u64 {
+    let level0 = u64::from(t.stride_texels.max(t.width)) * u64::from(t.height) * 16 * u64::from(t.layers.max(1));
+    (u64::from(t.bytes).max(level0)) * 2 + 4096
+}
+
+/// W10's rule for a draw into another target while the stream owes the copy
+/// back of the shadow of `spec`: does the draw need the storage current
+/// first? Yes unless at least one of its fragment-stage bindings (`fs`)
+/// samples the shadow straight ([`sampler_words_of`] has words for it), and
+/// no other binding's storage reaches `spec`'s: a mip chain, a layer or
+/// another format of it, and every vertex-stage binding (`vs`), whose tiled
+/// copy the resolve engine makes from the storage (`tiled_copy.rs`).
+/// `writes` is whether the draw writes the storage itself (one of its colour
+/// targets is `spec.gpu`): then the copy back goes first too.
+pub fn needs_copy_back(fs: &[GlesTextureBind], vs: &[GlesTextureBind], spec: &Spec, writes: bool) -> bool {
+    let reaches = |t: &GlesTextureBind| t.base_gpu <= spec.gpu && spec.gpu < t.base_gpu.saturating_add(span_of(t));
+    if writes || vs.iter().any(reaches) {
+        return true;
+    }
+    let mut straight = false;
+    for t in fs {
+        if samples_whole(t, spec) && !super::tiled_copy::wanted(t) {
+            straight = true;
+        } else if reaches(t) {
+            return true;
+        }
+    }
+    !straight
 }
 
 /// Default threshold of [`long_program`], in instructions: a fragment
@@ -352,6 +433,74 @@ mod tests {
         /* tiled_copy's descriptor: align4(w) * bpp, and align4(w) * align4(h) * bpp */
         assert_eq!(a.linear_stride, 64 * 4);
         assert_eq!(a.slice, 64 * 32 * 4);
+    }
+
+    /// A binding that is the whole storage of `spec` as one RGBA8 level.
+    fn whole(spec: &Spec) -> GlesTextureBind {
+        GlesTextureBind {
+            format: GLES_TEXFMT_RGBA8,
+            base_gpu: spec.gpu,
+            width: spec.w,
+            height: spec.h,
+            stride_texels: spec.pitch / BPP,
+            bytes: spec.pitch * spec.h,
+            mip_levels: 1,
+            layers: 1,
+            ..GlesTextureBind::ZERO
+        }
+    }
+
+    #[test]
+    fn a_whole_single_level_binding_samples_the_shadow_with_its_own_format_words() {
+        let spec = Spec { gpu: 0x10_0000, w: 256, h: 256, pitch: 1024 };
+        let t = whole(&spec);
+        let w = sampler_words_of(&t, &spec, 0x20_0000).expect("the whole storage");
+        assert_eq!(Some(w), sampler_words(&spec, 0x20_0000), "an RGBA8 binding: the note's words");
+        let bgra = GlesTextureBind { bgra: 1, ..t };
+        let wb = sampler_words_of(&bgra, &spec, 0x20_0000).unwrap();
+        let [c0, c1, _] = super::super::texture::format_words(&bgra, true);
+        assert_eq!((wb.config0, wb.config1), (c0, c1 | texdesc_halign(GC_TEXTURE_HALIGN_SIXTEEN)));
+        assert_eq!((wb.linear_stride, wb.slice, wb.lod0), (w.linear_stride, w.slice, w.lod0));
+        for (what, o) in [
+            ("mipmapped", GlesTextureBind { mip_levels: 9, ..t }),
+            ("another base", GlesTextureBind { base_gpu: spec.gpu + 0x40, ..t }),
+            ("another size", GlesTextureBind { width: 128, ..t }),
+            ("another pitch", GlesTextureBind { stride_texels: 512, ..t }),
+            ("a cube", GlesTextureBind { layers: 6, type_: crate::backend::GLES_TEXTYPE_CUBE, ..t }),
+            ("incomplete", GlesTextureBind { incomplete: 1, ..t }),
+            ("a depth view", GlesTextureBind { depth_id: 3, ..t }),
+            ("a base level", GlesTextureBind { base_level: 1, ..t }),
+            ("RGBA16F", GlesTextureBind { format: crate::backend::GLES_TEXFMT_RGBA16F, ..t }),
+        ] {
+            assert_eq!(sampler_words_of(&o, &spec, 0x20_0000), None, "{what}");
+        }
+    }
+
+    #[test]
+    fn only_a_draw_that_samples_the_shadow_straight_and_nothing_else_of_it_skips_the_copy_back() {
+        let spec = Spec { gpu: 0x10_0000, w: 64, h: 64, pitch: 256 };
+        let t = whole(&spec);
+        let far = GlesTextureBind { base_gpu: 0x80_0000, ..t };
+        assert!(!needs_copy_back(&[t], &[], &spec, false), "sampled straight");
+        assert!(!needs_copy_back(&[far, t], &[], &spec, false), "and another texture far away");
+        assert!(needs_copy_back(&[], &[], &spec, false), "samples nothing of it");
+        assert!(needs_copy_back(&[far], &[], &spec, false), "samples something else");
+        assert!(needs_copy_back(&[t], &[], &spec, true), "draws into the storage");
+        assert!(needs_copy_back(&[t], &[t], &spec, false), "the vertex stage's copy is made from the storage");
+        let chain = GlesTextureBind { mip_levels: 7, ..t };
+        assert!(needs_copy_back(&[t, chain], &[], &spec, false), "a mip chain of the same storage");
+        let below = GlesTextureBind { base_gpu: spec.gpu - 0x1000, layers: 6, ..t };
+        assert!(needs_copy_back(&[t, below], &[], &spec, false), "a stack whose layer is the storage");
+    }
+
+    #[test]
+    fn a_shadow_owes_its_copy_back_while_drawn_into_or_sampled() {
+        assert!(Phase::Active.owes_copy_back());
+        assert!(Phase::Sampled.owes_copy_back());
+        assert!(!Phase::InStep.owes_copy_back());
+        assert!(!Phase::None.owes_copy_back());
+        let t = Track { spec: Spec { gpu: 0x1000, w: 16, h: 4, pitch: 64 }, shadow: 0x9000, phase: Phase::Sampled };
+        assert_eq!(t.takes(0x1000), None, "a sampled shadow is no draw target");
     }
 
     #[test]

@@ -484,6 +484,50 @@ fn tiled_rt_on() -> bool {
     }
 }
 
+/// W10 (docs/notes/gc-tiled-wire.md): a single-level RGBA8 texture whose
+/// storage has a TILED shadow in the open stream is sampled straight from the
+/// shadow, and a draw that samples it so needs no RS copy back before it
+/// (`tiled_rt.rs`, [`Phase::Sampled`]). Off unless this is set, and it needs
+/// [`gc_debug_tiled_rt`] on too. A test knob, as that one.
+#[cfg(feature = "test-knobs")]
+#[no_mangle]
+pub static mut gc_debug_tiled_sample: i32 = 0;
+
+/// Set [`gc_debug_tiled_sample`].
+#[cfg(feature = "test-knobs")]
+#[no_mangle]
+pub extern "C" fn gc_debug_set_tiled_sample(on: i32) {
+    // SAFETY: single-threaded by contract; a plain store of an int.
+    unsafe { core::ptr::addr_of_mut!(gc_debug_tiled_sample).write(on) }
+}
+
+/// `gc_debug_tiled_sample` and `gc_debug_tiled_rt` are both set; false in a
+/// build without `test-knobs`.
+fn tiled_sample_on() -> bool {
+    #[cfg(feature = "test-knobs")]
+    {
+        // SAFETY: as in `tiled_rt_on`.
+        tiled_rt_on() && unsafe { core::ptr::addr_of!(gc_debug_tiled_sample).read() != 0 }
+    }
+    #[cfg(not(feature = "test-knobs"))]
+    {
+        false
+    }
+}
+
+/// The sampler words that read `t` straight from the open stream's shadow
+/// (W10), or `None` for today's descriptor: the knob is on, the stream
+/// tracks a shadow of `t`'s storage that holds its newest pixels and is not
+/// being drawn into ([`Phase::InStep`] or [`Phase::Sampled`]), and `t` is
+/// that whole storage as one level ([`tiled_rt::sampler_words_of`]).
+pub(super) fn tiled_rt_sample(t: &GlesTextureBind) -> Option<tiled_rt::SamplerWords> {
+    let trt = g().trt;
+    if !tiled_sample_on() || !matches!(trt.phase, Phase::InStep | Phase::Sampled) {
+        return None;
+    }
+    tiled_rt::sampler_words_of(t, &trt.spec, trt.shadow)
+}
+
 /// GL_LUMINANCE, GL_ALPHA and GL_LUMINANCE_ALPHA textures are stored narrow
 /// (one and two bytes a texel: GLES_TEXFMT_L8 / A8 / LA8) and sampled with
 /// the texture unit's own L8 / A8 / A8L8 formats, as Mesa does, instead of
@@ -2997,7 +3041,7 @@ fn frame_submit() -> i32 {
      * being written. The resolve runs at the end of the stream only, so a
      * draw that leaves the 4x target ends the stream (`draw_one`,
      * docs/notes/gc-kick-continue.md D2). */
-    if g.trt.phase == Phase::Active {
+    if g.trt.phase.owes_copy_back() {
         tiled_rt_untile(&mut f.w, &g.trt);
     }
     g.trt = Track::NONE;
@@ -3088,8 +3132,13 @@ pub(super) fn rs_resolve_and_finish(b: &RsBlit) -> i32 {
 ///   sample the storage, or draw into it) finds it current. A draw into the
 ///   storage itself leaves nothing in step.
 ///
-/// While a shadow is `Active` the stream keeps [`tiled_rt::RESERVE_WORDS`]
-/// free for its write-back.
+/// - Into none, with `gc_tiled_sample` on (W10): a draw that samples the
+///   shadow straight and reads and writes nothing else of its storage
+///   (`tiled_rt::needs_copy_back`) leaves the copy back owed
+///   ([`Phase::Sampled`]) instead.
+///
+/// While a shadow is `Active` or `Sampled` the stream keeps
+/// [`tiled_rt::RESERVE_WORDS`] free for its write-back.
 fn tiled_rt_enter(gl: &GlesDraw, want: Option<(Spec, u64)>) {
     let g = g();
     let cur = g.trt;
@@ -3099,11 +3148,13 @@ fn tiled_rt_enter(gl: &GlesDraw, want: Option<(Spec, u64)>) {
             if cur.phase != Phase::None && cur.spec == spec && cur.shadow == shadow {
                 if cur.phase == Phase::InStep {
                     w.cap = w.cap.saturating_sub(tiled_rt::RESERVE_WORDS);
-                    g.trt.phase = Phase::Active;
                 }
+                /* a `Sampled` shadow holds the newest pixels: drawn into
+                 * again with no tile-in, its reserve already kept */
+                g.trt.phase = Phase::Active;
                 return;
             }
-            if cur.phase == Phase::Active {
+            if cur.phase.owes_copy_back() {
                 tiled_rt_untile(w, &cur);
             }
             if !clears_whole_colour(gl) {
@@ -3113,7 +3164,11 @@ fn tiled_rt_enter(gl: &GlesDraw, want: Option<(Spec, u64)>) {
             g.trt = Track { spec, shadow, phase: Phase::Active };
         }
         None => {
-            if cur.phase == Phase::Active {
+            if cur.phase.owes_copy_back() {
+                if tiled_sample_on() && !tiled_rt_needs_copy_back(gl, &cur.spec) {
+                    g.trt.phase = Phase::Sampled;
+                    return;
+                }
                 tiled_rt_untile(w, &cur);
                 g.trt.phase = Phase::InStep;
             }
@@ -3124,13 +3179,23 @@ fn tiled_rt_enter(gl: &GlesDraw, want: Option<(Spec, u64)>) {
     }
 }
 
+/// [`tiled_rt::needs_copy_back`] of draw `gl`: its bindings of both stages,
+/// and whether one of its colour targets is the shadow's storage.
+fn tiled_rt_needs_copy_back(gl: &GlesDraw, spec: &Spec) -> bool {
+    let fs = &gl.textures[..(gl.num_textures as usize).min(gl.textures.len())];
+    let vs = &gl.vs_textures[..(gl.num_vs_textures as usize).min(gl.vs_textures.len())];
+    let n = (gl.num_targets as usize).min(gl.targets.len());
+    let writes = gl.target_gpu == spec.gpu || gl.targets[..n].iter().any(|t| t.gpu == spec.gpu);
+    tiled_rt::needs_copy_back(fs, vs, spec, writes)
+}
+
 /// The GL core drops the storage `[base, base + bytes)`: a shadow of it in
 /// the open stream is not written back, and goes.
 fn tiled_rt_released(base: u64, bytes: u64) {
     let g = g();
     let t = g.trt;
     if t.phase != Phase::None && t.spec.gpu >= base && t.spec.gpu < base.wrapping_add(bytes) {
-        if t.phase == Phase::Active {
+        if t.phase.owes_copy_back() {
             let w = &mut g.frames[g.cur].w;
             w.cap += tiled_rt::RESERVE_WORDS;
         }

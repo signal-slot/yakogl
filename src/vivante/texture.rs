@@ -452,6 +452,27 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
     let desc: &mut [u32] = unsafe { core::slice::from_raw_parts_mut(cpu as *mut u32, GC_TEXDESC_BYTES / 4) };
     desc.fill(0);
 
+    /* W10 (`gc_tiled_sample`): a single-level RGBA8 texture whose storage
+     * has a TILED shadow in the open stream is sampled from the shadow, with
+     * `tiled_rt::sampler_words_of`'s words (TILED, HALIGN SIXTEEN, level 0
+     * the shadow; TX_CTRL stays 0, no tile status). None: today's words. */
+    if let Some(sw) = super::backend::tiled_rt_sample(t) {
+        let [_, _, config2] = format_words(t, true);
+        desc[GC_TEXDESC_CONFIG0 as usize / 4] = sw.config0;
+        desc[GC_TEXDESC_CONFIG1 as usize / 4] = sw.config1;
+        desc[GC_TEXDESC_CONFIG2 as usize / 4] = config2;
+        desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4] = sw.linear_stride;
+        desc[GC_TEXDESC_SIZE as usize / 4] = texdesc_size_width(t.width) | texdesc_size_height(t.height);
+        desc[GC_TEXDESC_LOG_SIZE_EXT as usize / 4] =
+            texdesc_log_width(log2_fixp88(t.width)) | texdesc_log_height(log2_fixp88(t.height));
+        desc[GC_TEXDESC_BASELOD as usize / 4] = texdesc_baselod_base(0) | texdesc_baselod_max(0);
+        desc[GC_TEXDESC_VOLUME as usize / 4] = log2_fixp88(1);
+        desc[GC_TEXDESC_SLICE as usize / 4] = sw.slice;
+        desc[GC_TEXDESC_3D_CONFIG as usize / 4] = texdesc_3d_depth(1);
+        desc[texdesc_lod_addr(0) as usize / 4] = sw.lod0 as u32;
+        return gpu;
+    }
+
     /* dtpu mode 3's SUPER_TILED copy of a depth surface (depth_sample.rs
      * `copy_binding`): TILED addressing with HALIGN SUPER_TILED, the words of
      * `depth_sample::copy_sampler_words` */

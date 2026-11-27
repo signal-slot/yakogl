@@ -1856,6 +1856,18 @@ tests_row gc_kick_diff
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" knobs_file_tests gc_kick_diff
 tests_row gc_tiled_rt
 step "test    $KNOBS_CONFIG (tests/gc_tiled_rt.rs, every declared test)" knobs_file_tests gc_tiled_rt
+# W10, a single-level shadow sampled directly behind gc_tiled_sample
+# (tests/gc_tiled_sample.rs); glmark2's slow scenes with gc_tiled_rt off and
+# on beside the knob-off ceilings (tests/gc_scene_kicks_tiled.rs, the knobs
+# without report-es2); and the TS-sourced RS resolve run by rs_interp
+# (tests/gc_ts_resolve_interp.rs, no knob). Every #[test] of each must pass.
+tests_row gc_tiled_sample
+step "test    $KNOBS_CONFIG (tests/gc_tiled_sample.rs, every declared test)" knobs_file_tests gc_tiled_sample
+tests_row gc_scene_kicks_tiled
+step "test    $KNOBS_CONFIG (tests/gc_scene_kicks_tiled.rs, every declared test)" knobs_file_tests gc_scene_kicks_tiled
+tests_row gc_ts_resolve_interp
+step "test    host-test,gpu-vivante (tests/gc_ts_resolve_interp.rs, every declared test)" \
+  knobs_file_tests gc_ts_resolve_interp "host-test,gpu-vivante"
 # glmark2's terrain, shadow and refract with `gc_tiled_rt` off and on
 # (tests/gc_scene_kicks_tiled_rt.rs, plan #355): the scene harness needs
 # report-es2, so no other row compiles the file. Linted and run here; every
@@ -1865,6 +1877,11 @@ step "clippy  $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs)" \
   cargo clippy --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt
 step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declared test)" \
   knobs_file_tests gc_scene_kicks_tiled_rt "$KNOBS_ES2_CONFIG"
+# shadow and refract with the depth-sample knob on beside off
+# (tests/gc_scene_kicks_depth_tpu.rs): the same report-es2 harness.
+tests_row gc_scene_kicks_depth_tpu
+step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_depth_tpu.rs, every declared test)" \
+  knobs_file_tests gc_scene_kicks_depth_tpu "$KNOBS_ES2_CONFIG"
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
@@ -4088,7 +4105,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # them.
 KNOB_VIVANTE_SYMBOLS="gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_set_tiled_sample gc_debug_tiled_rt gc_debug_tiled_sample gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_draw_targets pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1
