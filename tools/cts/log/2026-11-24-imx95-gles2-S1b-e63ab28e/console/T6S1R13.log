@@ -1,0 +1,429 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/206754 in 31019 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.texture.format.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 27 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.texture.format.a8_2d_npot'..
+mali shaderc table 'IR values': high-water 4 of 2048
+mali shaderc table 'NIR instructions': high-water 28 of 1536
+mali shaderc table 'IR values': high-water 7 of 2048
+mali shaderc table 'uniform rows': high-water 2 of 256
+mali shaderc table 'fragment pair nodes': high-water 10 of 255
+mali arena 'desc': high-water 1264 of 1048576 bytes
+mali arena 'data': high-water 108 of 262144 bytes
+mali arena 'code': high-water 512 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.texture.format.a8_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.a8_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.a8_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.a8_cube_npot'..
+mali shaderc table 'NIR instructions': high-water 30 of 1536
+  cube-bind: 0x40003fa000 unit 0 kick 4 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+mali arena 'desc': high-water 1392 of 1048576 bytes
+mali arena 'data': high-water 124 of 262144 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+  cube-bind: 0x40003fa000 unit 0 kick 5 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 6 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 7 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 8 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 9 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.a8_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.a8_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 10 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 11 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 12 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 13 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 14 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 15 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.a8_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.etc1_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.etc1_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.etc1_2d_pot'..
+mali arena 'desc': high-water 1456 of 1048576 bytes
+deqp: Pass dEQP-GLES2.functional.texture.format.etc1_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.etc1_cube_npot'..
+  cube-bind: 0x40003ea000 unit 0 kick 18 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 19 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 20 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 21 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 22 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 23 (draw)
+  cube(draw) @0x40003ea000 61x61 x6: fmt 1, cpu 0xd37fe000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.etc1_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.etc1_cube_pot'..
+  cube-bind: 0x40003ea000 unit 0 kick 24 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+mali arena 'desc': high-water 2544 of 1048576 bytes
+  cube-bind: 0x40003ea000 unit 0 kick 25 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 26 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 27 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 28 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+  cube-bind: 0x40003ea000 unit 0 kick 29 (draw)
+  cube(draw) @0x40003ea000 64x64 x6: fmt 1, cpu 0xd37fe000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.etc1_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.l8_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.l8_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.l8_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.l8_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.l8_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 32 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 33 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 34 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 35 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 36 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 37 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.l8_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.l8_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 38 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 39 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 40 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 41 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 42 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 43 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.l8_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.la88_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.la88_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.la88_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.la88_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.la88_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 46 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 47 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 48 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 49 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 50 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 51 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.la88_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.la88_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 52 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 53 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 54 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 55 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 56 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 57 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.la88_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb565_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb565_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb565_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb565_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb565_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 60 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 61 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 62 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 63 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 64 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 65 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb565_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb565_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 66 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 67 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 68 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 69 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 70 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 71 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb565_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb888_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb888_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb888_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb888_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb888_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 74 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 75 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 76 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 77 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 78 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 79 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb888_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgb888_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 80 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 81 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 82 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 83 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 84 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 85 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgb888_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba4444_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba4444_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba4444_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba4444_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba4444_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 88 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 89 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 90 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 91 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 92 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 93 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba4444_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba4444_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 94 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 95 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 96 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 97 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 98 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 99 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba4444_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba5551_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba5551_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba5551_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba5551_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba5551_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 102 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 103 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 104 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 105 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 106 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 107 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba5551_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba5551_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 108 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 109 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 110 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 111 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 112 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 113 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba5551_cube_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba8888_2d_npot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba8888_2d_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba8888_2d_pot'..
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba8888_2d_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba8888_cube_npot'..
+  cube-bind: 0x40003fa000 unit 0 kick 116 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 117 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 118 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 119 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 120 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 121 (draw)
+  cube(draw) @0x40003fa000 57x57 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba8888_cube_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.format.rgba8888_cube_pot'..
+  cube-bind: 0x40003fa000 unit 0 kick 122 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 123 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 124 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 125 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 126 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+  cube-bind: 0x40003fa000 unit 0 kick 127 (draw)
+  cube(draw) @0x40003fa000 64x64 x6: fmt 0, cpu 0xd380e000 - not dumped
+deqp: Pass dEQP-GLES2.functional.texture.format.rgba8888_cube_pot
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        36/36 (100.0%)
+  Failed:        0/36 (0.0%)
+  Not supported: 0/36 (0.0%)
+  Warnings:      0/36 (0.0%)
+  Waived:        0/36 (0.0%)
+deqp: done: 36 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 36 cases begun, 36 with a result, 0 without
+osal(mali): kicks 127, completed 127; pages 941 (high-water 1059) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: OK (rc=0)
+shaderc: keep high-water 12480 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 3044 ms
+�\x00
