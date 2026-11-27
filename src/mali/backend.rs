@@ -745,19 +745,14 @@ struct BlendShaderProgram {
 
 const NO_BLEND_SHADER: BlendShaderProgram = BlendShaderProgram {
     eq: {
-        use crate::shaderc::online::mali::blend::{Base, Channel, Factor, Func, Key};
+        use crate::shaderc::online::mali::blend::{Base, Channel, Factor, Func, Key, Target};
         let zero = Factor { base: Base::One, invert: true };
         let c = Channel { func: Func::Add, src: zero, dst: zero };
-        Key { rgb: c, alpha: c, mask: 0, samples: 0, colour_f32: false }
+        Key { rgb: c, alpha: c, mask: 0, samples: 0, colour_f32: false, target: Target::Rgba8 }
     },
     n: 0,
     words: [0; BLEND_SHADER_WORDS],
 };
-
-/// The memory format of a blend shader's RGBA8 target, the conversion word
-/// of its internal descriptor (`pan_dithered_format_from_pipe_format`,
-/// not dithered: RGBA8_TB in RGBA order, the shim's `#0xED000`).
-const BLEND_SHADER_RGBA8: u32 = 0xed000;
 
 /// The blend shader of `eq`, from the cache or compiled now
 /// (src/shaderc/online/mali/blend.rs); None when it does not compile, which
@@ -768,7 +763,7 @@ fn blend_shader(g: &mut MaliState, eq: crate::shaderc::online::mali::blend::Key)
     }
     let mut out = [0u64; 2 * BLEND_SHADER_WORDS];
     let r = crate::shaderc::online::store::with_scratch(|sc| {
-        crate::shaderc::online::mali::blend::shader(&mut out, sc, eq, BLEND_SHADER_RGBA8).map(|b| b.code.len())
+        crate::shaderc::online::mali::blend::shader(&mut out, sc, eq, eq.target.conversion()).map(|b| b.code.len())
     });
     let n = match r {
         Some(Ok(n)) if n <= BLEND_SHADER_WORDS => n,
@@ -1671,14 +1666,19 @@ fn blending(d: &GlesDraw) -> Result<blend::Blending, FrameError> {
         s::SHC_BLEND_MAX => Ok(Func::Max),
         _ => Err(FrameError::Invalid(INVALID_BLEND_CODE)),
     };
-    Ok(blend::Blending {
+    let b = blend::Blending {
         rgb: Channel { func: func(d.blend_eq_rgb)?, src: factor(d.blend_src_rgb)?, dst: factor(d.blend_dst_rgb)? },
         alpha: Channel {
             func: func(d.blend_eq_alpha)?,
             src: factor(d.blend_src_alpha)?,
             dst: factor(d.blend_dst_alpha)?,
         },
-    })
+    };
+    /* a surface without alpha (the default RGB565 or XRGB8888 one, a
+     * single target): st/mesa's `fix_xrgb_alpha` */
+    let no_alpha =
+        matches!(surface_format(d.target_format), Ok(frame::TargetFormat::Rgb565 | frame::TargetFormat::Xrgb8888));
+    Ok(if no_alpha && d.num_targets <= 1 { blend::without_dst_alpha(&b) } else { b })
 }
 
 /// The GL core's cull winding (`GLES_CULL_*`) as the frame's.

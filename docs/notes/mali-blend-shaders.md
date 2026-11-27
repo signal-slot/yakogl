@@ -4,7 +4,8 @@
 
 Sections 1-5 are the study of gl_test cases 211 and 190 (item `study-blend`
 of plan 153); section 6 is how the blend shaders are built now, for every
-equation (dEQP-GLES2 `fragment_ops.blend`). Mesa is 26.2.1 (`MESA_PAN_TREE`);
+equation (dEQP-GLES2 `fragment_ops.blend`); section 9 the RGB565 and
+XRGB8888 targets (plan #373 item `blend565`). Mesa is 26.2.1 (`MESA_PAN_TREE`);
 `G/` is `src/gallium/drivers/panfrost/`, `L/` `src/panfrost/lib/`, `C/`
 `src/panfrost/compiler/`, `N/` `src/compiler/nir/`.
 
@@ -325,17 +326,19 @@ shader. The record's `colour_f16`, which `shader_key` reads, comes from one
 rule, `FsPrecision::colour_f16`.
 
 The frame side: `src/mali/blend.rs` `shader_key` maps a draw's equation,
-colour mask, sample count and colour type (the fragment record's
-`colour_f16`) to the key for an RGBA8 target at 1x or 4x, a MIN or MAX
+colour mask, sample count, colour type (the fragment record's
+`colour_f16`) and target to the key for an RGBA8 target at 1x or 4x or an
+RGB565 or XRGB8888 one at 1x (section 9), a MIN or MAX
 channel's factors as ONE, ONE (not read, so one shader);
 `src/mali/backend.rs` compiles it once per key (the 8 most recent kept) and
 the frame writes the descriptor in Shader mode (section 3), with
 `Evaluate per-sample` at 4x (DCD0 bit 11). The frame requires the address
 exactly when `needs_shader` holds for a draw that writes a channel
 (`check_draw`, `NOT_BUILT_BLEND_SHADER` without it, `INVALID_BLEND_SHADER`
-for an address given where none is needed). Any other target (RGB565,
-XRGB8888, RGBA16F) or a 2x one has no key, so the backend gives the frame no
-address and the draw stays `NOT_BUILT_BLEND_SHADER` / `NOT_BUILT_FLOAT_BLEND`.
+for an address given where none is needed). Any other target (RGBA16F, a
+4x RGB565 or XRGB8888 one) or a 2x one has no key, so the backend gives the
+frame no address and the draw stays `NOT_BUILT_BLEND_SHADER` /
+`NOT_BUILT_FLOAT_BLEND`.
 
 The Mesa 26.2.1 sources it follows (`MESA_PAN_TREE`): `pan_blend.c` and
 `pan_blend.h` (`L/`; `pan_blend_can_fixed_function`, `can_fixed_function_equation`,
@@ -351,10 +354,12 @@ from).
 
 | Test | What it pins |
 |---|---|
-| `src/mali/blend_choice_tests.rs` (`the_fixed_function_choice_is_mesa_s_over_every_gles2_state`) | `needs_shader` / `can_fixed_function` against a transcription of Mesa's rule over every GLES2 state (all fifteen factors, five equations, separate colour and alpha, homogeneous or not constants); RGBA8 and RGB565 the same path, RGBA16F the float one |
+| `src/mali/blend_choice_tests.rs` (`the_fixed_function_choice_is_mesa_s_over_every_gles2_state`, `the_choice_into_a_target_without_alpha_is_mesa_s_over_every_gles2_state`) | `needs_shader` / `can_fixed_function` against a transcription of Mesa's rule over every GLES2 state (all fifteen factors, five equations, separate colour and alpha, homogeneous or not constants); RGBA8 and RGB565 the same path, RGBA16F the float one; a target without alpha after `without_dst_alpha`, factor for factor st/mesa's `fix_xrgb_alpha` |
 | `src/mali/frame_blend_tests.rs` (`each_blend_mode_is_the_board_s`, `an_equation_mesa_runs_in_a_blend_shader_builds_with_its_shader`, `a_draw_that_writes_nothing_needs_no_blend_shader_for_any_equation`, `a_blend_shader_the_backend_does_not_build_is_still_refused_by_name`, `a_fixed_function_equation_keeps_its_fixed_function_descriptor`, `a_constant_colour_blend_runs_in_its_blend_shader_as_on_the_board`, `the_reference_blend_shaders_are_the_drm_shim_s_words`, `case_190_s_blend_shader_columns_are_the_board_s`, `a_blend_shader_out_of_place_is_refused`, `an_rgba16f_blend_that_needs_a_blend_shader_is_refused_by_name`) | the frame: fixed-function descriptors byte for byte against the board (ten modes) and the drm-shim (case 91); the `Shader`-mode descriptor of case 8 and case 190 against the board; every shader-needing equation builds into an RGBA8 target at 1x and 4x given an address (descriptor `01 02 00 00`, no equation, address in word 3; DCD0 per-sample at 4x only); every fixed-function equation keeps the fixed-function descriptor and refuses a shader; no channel written needs none; what stays refused by name (an unbuilt target or sample count: no key, no address, `NOT_BUILT_BLEND_SHADER`; RGBA16F outside the float set: `NOT_BUILT_FLOAT_BLEND`) |
 | `tests/mali_blend_states.rs` (`blend_states`) | every `fragment_ops.blend` state (the three families) through the GL core on the Mali mock: none refused |
-| `src/shaderc/online/mali/blend_tests.rs` (`the_builder_makes_mesa_s_blend_shaders_for_every_reference_state`), `tests.rs` (`a_uint32_colour_s_blend_shaders_are_mesa_s`) | the words: every dEQP state of the drm-shim reference (`tools/mali/testdata/pan_blend_ref`, RGBA8, 1x, fp16 colour) equals the builder's; `blend_random.sha` and `blend_u32.words` cover 4x and fp32 colours |
+| `src/shaderc/online/mali/blend_tests.rs` (`the_builder_makes_mesa_s_blend_shaders_for_every_reference_state`, `the_builder_makes_mesa_s_blend_shaders_into_rgb565_and_xrgb8888`), `tests.rs` (`a_uint32_colour_s_blend_shaders_are_mesa_s`) | the words: every dEQP state of the drm-shim reference (`tools/mali/testdata/pan_blend_ref`, RGBA8, 1x, fp16 colour) equals the builder's, and every shader state of its `rgb565/` and `xrgb8888/` targets (1121 each); `blend_random.sha` and `blend_u32.words` cover 4x and fp32 colours |
+| `src/shaderc/online/mali/blend_nir.rs` (`the_nir_mesa_s_passes_leave_for_an_rgb565_target_is_ours`) | one RGB565 key's final NIR against Mesa's print: the R5G6B5 PU tile read, alpha undefined then zero, the three-channel descriptor |
+| `src/mali/frame_blend_tests.rs` (`every_reference_state_into_rgb565_and_xrgb8888_is_mesa_s`), `src/mali/backend_tests.rs` (`a_surface_without_alpha_blends_with_mesa_s_shader_for_it`) | all 2205 states into each target: Mesa's choice (opaque, fixed function, shader), its equation word, its words and its Shader-mode descriptor word 0; the backend's `blending` rewriting the factors of an RGB565 or XRGB8888 surface and uploading Mesa's words |
 
 ## 7. Facts and open points, one line each
 
@@ -410,7 +415,7 @@ frame). The memory the writeback produces is the same halves either way.
 Still refused, `NOT_BUILT_FLOAT_BLEND`: an equation outside the float set
 into an RGBA16F target (a colour or destination-colour factor, the 2src
 form, a constant, min, max), which Mesa runs in a blend shader;
-`shader_key` builds RGBA8888 keys only.
+`shader_key` builds UNORM keys only (RGBA8888, RGB565, XRGB8888).
 
 Open, for the board: no dump shows `Internal Format` RGBA16F on the T6 (the
 board's Mesa 25.0.7 has no `BFMT_FLOAT` and keeps RAW64 with a blend shader
@@ -418,3 +423,70 @@ for a blended draw). A Mesa 26.2.1 board reference of case 91, or the case
 itself passing x2, confirms that the hardware blends in an RGBA16F tile
 buffer with these words; until then the RT words are 26.2.1's source and the
 drm-shim's RGBA8 frame with the format named.
+
+## 9. RGB565 and XRGB8888 targets (no alpha)
+
+The default surface can be RGB565 (`PIPE_FORMAT_B5G6R5_UNORM`) or XRGB8888
+(`PIPE_FORMAT_B8G8R8X8_UNORM`); `frame.rs` `TargetFormat::{Rgb565,
+Xrgb8888}`. Mesa 26.2.1 treats both in two places.
+
+**st/mesa rewrites the factors.** A colour buffer whose GL base format is
+GL_RGB sets `_BlendForceAlphaToOne` (`main/fbobject.c:1511-1515`, panfrost
+has `indep_blend_func`), and `st_update_blend`
+(`state_tracker/st_atom_blend.c:323-329`) passes every factor through
+`fix_xrgb_alpha` (:211-225): DST_ALPHA is ONE, ONE_MINUS_DST_ALPHA and
+SRC_ALPHA_SATURATE are ZERO. The driver only sees the rewritten equation,
+so the choice moves: of the 2205 reference states, 1404 are blend shaders
+into RGBA8 and 1121 into RGB565 or XRGB8888 (283 become fixed function, 10
+fixed-function ones opaque). Ours: `blend::without_dst_alpha`, applied by
+`src/mali/backend.rs` `blending` when the draw's surface is RGB565 or
+XRGB8888 and it is the only target, before the choice and the key.
+
+**The shader reads the format** (`pan_blend_create_shader`, `L/pan_blend.c:
+798-946`; `nir_color_blend`, `N/nir_lower_blend.c:911-989`), four things:
+
+| | RGBA8 | RGB565 | XRGB8888 |
+|---|---|---|---|
+| tile conversion (`LD_TILE` and the `BLEND` descriptor's high word; `pan_blend_get_internal_desc`, not dithered) | `0xED000` RGBA8_TB RGBA | `0xE3010` R5G6B5_PU RGB1 (`MALI_BLEND_PU_R5G6B5A0`) | `0xED000` |
+| descriptor low word (OPAQUE, `num_comps` = `nr_channels`) | `0x19` | `0x11` | `0x19` |
+| destination alpha (`channel_exists(desc, 3)`, :950-961) | the tile's | 1.0 | 1.0 |
+| colour written (`nir_color_mask` with `util_format_colormask`, pan_blend.c:919-921) | four channels | alpha undefined | alpha undefined |
+
+The undefined alpha is `nir_lower_undef_to_zero`'s zero (`bi_optimize_loop`,
+`C/bifrost/bifrost_nir.c:273`; `blend_nir.rs` `lower_undef_to_zero` at the
+end of each `optimize_loop`), and the word `MKVEC.v2i16 b, #0` it leaves is
+`U16_TO_U32 b` (`opt::lower_mkvec_swz`). RGB565's and XRGB8888's shaders
+differ in the two immediates only (`#0xE3010`/`#0xED000`, `#0x11`/`#0x19`).
+`blend_nir::Target` is in the key (`Key::target`), so the backend's cache
+holds a shader per target, and `blend::shader` refuses a conversion other
+than its target's.
+
+**The references.** `tools/mali/pan_blend_ref.py gen` draws every state into
+three targets on the drm-shim: the RGBA8 texture (the top directory), a
+GL_RGB565 renderbuffer (`rgb565/`) and a GL_RGB8_OES one (`xrgb8888/`), each
+with `blend.tsv` and `shaders/`. Mesa takes `PIPE_FORMAT_R8G8B8X8_UNORM` for
+GL_RGB8_OES (the NIR's name, `BIFROST_MESA_DEBUG=shaders,internal`); its
+blend formats, channel count and colour mask are B8G8R8X8's
+(`BFMT_SRGB(R8G8B8X8, R8G8B8A8)`, `pan_format.c:88, 93`), so the words are
+the XRGB8888 surface's. `pan_blend_ref.py --check` remakes all three and
+compares the bytes (2026-11-27, a `drm_shim_ref.sh build` of 26.2.1 with
+LLVM 21: the RGBA8 files are the committed ones unchanged).
+
+Not built, refused by name (`NOT_BUILT_BLEND_SHADER`): RGB565 or XRGB8888
+at 4x (no reference; MSAA blend shaders are other work).
+
+Open, found on the way, not changed here:
+
+- A GL_RGB colour buffer in RGBA8 storage (`TargetFormat::Rgba8888`,
+  `target_alpha_bits` 0) is GL_RGB to Mesa as well, so Mesa rewrites its
+  factors too; `blending` does not (one target with alpha bits 0 could take
+  the same rewrite). The pixels agree (the stored alpha reads 1:
+  `draw_mask`, `preload_swizzle`), the choice and the words do not.
+- The fixed-function descriptor into RGB565: the shim prints conversion
+  `R5G6B5 AU RGBA` for a fixed-function draw (`rgb565/blend.tsv`) and
+  `R5G6B5 AU RGB1` for an opaque one, where `frame.rs`
+  `blend_memory_format` writes RGB1 for both; and its constant is 26.2.1's
+  packing for 5-bit channels (`0xc666` for 0.8, `add_zero_constant_alpha`),
+  where `pack_constant` follows the board's 25.0.7 (`0xc000`; XRGB8888's
+  `0xcc00` is the same either way). The equation words are Mesa's
+  (`every_reference_state_into_rgb565_and_xrgb8888_is_mesa_s`).

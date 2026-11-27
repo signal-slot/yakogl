@@ -38,7 +38,7 @@
 //! blend_case*.words, the shim driver's; tests.rs).
 
 use super::bir::{clamp, Dest, Idx, Ins, Op, Prog, Src, Swz};
-pub use super::blend_nir::{Base, Channel, Factor, Func, Key};
+pub use super::blend_nir::{Base, Channel, Factor, Func, Key, Target};
 use super::blend_nir::{Intr, Kind, Nir, Op as N};
 use super::select::{alu, split};
 use super::{flow, opt, pack, ra, sched, MaliError};
@@ -206,15 +206,16 @@ fn compose(inner: Swz, outer: Swz) -> Swz {
 
 /// Build and compile the blend shader of `key` for a target whose memory
 /// format (the internal descriptor's conversion word) is `conversion`,
-/// into `out`. A shader this compiler does not build as Mesa does is
-/// refused (`BlendVariantNotLowered`), never approximated.
+/// into `out`: `conversion` is the key's target's ([`Target::conversion`]),
+/// any other is refused. A shader this compiler does not build as Mesa
+/// does is refused (`BlendVariantNotLowered`), never approximated.
 pub fn shader<'s>(
     out: &'s mut [u64],
     scratch: &Arena<'_>,
     key: Key,
     conversion: u32,
 ) -> Result<BlendShader<'s>, MaliError> {
-    if conversion != 0xed000 || !matches!(key.samples, 1 | 4) || key.mask & 0xf == 0 {
+    if conversion != key.target.conversion() || !matches!(key.samples, 1 | 4) || key.mask & 0xf == 0 {
         return Err(MaliError::BlendVariantNotLowered);
     }
     let mut nir = Nir::new(scratch)?;

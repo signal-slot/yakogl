@@ -10,14 +10,16 @@
 //! and constant colours that are homogeneous or not. RGBA8 and RGB565 take
 //! the same path (both are blendable UNORM formats,
 //! `blendable_formats[fmt].internal`; the rule reads no other property of the
-//! format) and RGBA16F takes the float one.
+//! format) and RGBA16F takes the float one. A target without alpha (RGB565,
+//! XRGB8888) gets the equation st/mesa's `fix_xrgb_alpha` leaves
+//! (`blend::without_dst_alpha`), then the UNORM rule.
 //!
 //! Feature set: host-test,gpu-mali,shaderc-online,no-shader-table
 //! (`cargo test --lib --no-default-features --features ... mali::blend_choice_tests`).
 
 use super::blend::{
-    can_fixed_function, can_fixed_function_float, constant, constant_mask, is_opaque, needs_shader, Base, Blending,
-    Channel, Factor, Func,
+    can_fixed_function, can_fixed_function_float, constant, constant_mask, is_opaque, needs_shader, without_dst_alpha,
+    Base, Blending, Channel, Factor, Func,
 };
 
 /// `enum pipe_blendfactor`, as a test-local mirror, so Mesa's rule is
@@ -243,4 +245,49 @@ fn the_fixed_function_choice_is_mesa_s_over_every_gles2_state() {
     }
     /* both outcomes occur: the comparison is not empty */
     assert!(shader > 0 && fixed > 0, "{shader} shader, {fixed} fixed");
+}
+
+/// `fix_xrgb_alpha` (src/mesa/state_tracker/st_atom_blend.c:211-225).
+fn m_fix_xrgb_alpha(f: Pf) -> Pf {
+    match f {
+        Pf::DstAlpha => Pf::One,
+        Pf::InvDstAlpha | Pf::SrcAlphaSaturate => Pf::Zero,
+        f => f,
+    }
+}
+
+/// An RGB565 or XRGB8888 target (GL base format GL_RGB): st/mesa rewrites
+/// every factor with `fix_xrgb_alpha` (`st_update_blend`, :323-329), then
+/// `panfrost_get_blend` decides as for RGBA8. Ours: `without_dst_alpha`,
+/// then the same choice; the rewritten equation is Mesa's factor for factor.
+#[test]
+fn the_choice_into_a_target_without_alpha_is_mesa_s_over_every_gles2_state() {
+    let channels = channels();
+    let fix = |(f, s, d): MesaChannel| (f, m_fix_xrgb_alpha(s), m_fix_xrgb_alpha(d));
+    let ours_of = |p: Pf| factors().into_iter().find(|x| x.0 == p).expect("a GLES2 factor").1;
+    let (mut shader, mut fixed, mut moved) = (0usize, 0usize, 0usize);
+    for (mrgb, rgb) in &channels {
+        for (malpha, alpha) in &channels {
+            let b = without_dst_alpha(&Blending { rgb: *rgb, alpha: *alpha });
+            let (frgb, falpha) = (fix(*mrgb), fix(*malpha));
+            for (m, c) in [(frgb, b.rgb), (falpha, b.alpha)] {
+                assert_eq!((c.src, c.dst), (ours_of(m.1), ours_of(m.2)), "the factors of {m:?}");
+            }
+            for k in &CONSTANTS {
+                let ours = !is_opaque(&b) && needs_shader(&b, k);
+                let want = m_needs_shader(frgb, falpha, false, k);
+                assert_eq!(ours, want, "no alpha {mrgb:?} {malpha:?} {k:?}");
+                if want != m_needs_shader(*mrgb, *malpha, false, k) {
+                    moved += 1;
+                }
+                if want {
+                    shader += 1;
+                } else {
+                    fixed += 1;
+                }
+            }
+        }
+    }
+    /* both outcomes occur, and the rewrite changes some choices */
+    assert!(shader > 0 && fixed > 0 && moved > 0, "{shader} shader, {fixed} fixed, {moved} moved");
 }

@@ -336,21 +336,26 @@ fn a_draw_that_writes_nothing_needs_no_blend_shader_for_any_equation() {
 
 /// What stays refused by name: a draw that needs a blend shader the backend
 /// does not build, so the frame is given none. `shader_key` builds RGBA8
-/// keys at 1x and 4x only: an RGB565 target and a 2x one have none, and the
-/// frame names the refusal rather than drawing with the wrong blend.
+/// keys at 1x and 4x and RGB565 and XRGB8888 ones at 1x: a 2x target and a
+/// 4x RGB565 or XRGB8888 one have none, and the frame names the refusal
+/// rather than drawing with the wrong blend, as it does for any target when
+/// no shader is given.
 #[test]
 fn a_blend_shader_the_backend_does_not_build_is_still_refused_by_name() {
     use super::blend::shader_key;
     let refused = Some(FrameError::NotBuilt(NOT_BUILT_BLEND_SHADER));
     for (name, b, colour) in shader_states() {
         assert_eq!(build(Some(b), colour).err(), refused, "{name}: no address given");
-        assert!(shader_key(&b, 0xf, 1, TargetFormat::Rgb565, true).is_none(), "{name}: RGB565 has no key");
         assert!(shader_key(&b, 0xf, 2, TargetFormat::Rgba8888, true).is_none(), "{name}: 2x has no key");
-        assert_eq!(
-            build_into(Some(b), colour, None, TargetFormat::Rgb565, 1, 0xf).err(),
-            refused,
-            "{name}: into RGB565"
-        );
+        for format in [TargetFormat::Rgb565, TargetFormat::Xrgb8888] {
+            assert!(shader_key(&b, 0xf, 1, format, true).is_some(), "{name}: {format:?} at 1x has a key");
+            assert!(shader_key(&b, 0xf, 4, format, true).is_none(), "{name}: {format:?} at 4x has none");
+            assert_eq!(
+                build_into(Some(b), colour, None, format, 1, 0xf).err(),
+                refused,
+                "{name}: into {format:?} without its shader"
+            );
+        }
     }
     let (c, _) = mode("const");
     assert!(build(Some(c), [0.5, 0.5, 0.5, 0.25]).is_ok(), "alpha is not read: one constant, fixed function");
@@ -469,7 +474,12 @@ fn the_reference_blend_shaders_are_the_drm_shim_s_words() {
     let one = shader_key(&c, 0xf, 1, rgba8, true).expect("1x: case 8's");
     assert_ne!(Some(one), shader_key(&c, 0xf, 4, rgba8, true), "the sample count");
     assert_ne!(shader_key(&case190(3), 0x7, 1, rgba8, true), shader_key(&case190(3), 0xf, 1, rgba8, true), "the mask");
-    assert!(shader_key(&case190(4), 0xf, 1, TargetFormat::Rgb565, true).is_none(), "column 4 into RGB565");
+    /* the target is in the key: RGB565 and XRGB8888 are other shaders */
+    let k565 = shader_key(&case190(3), 0xf, 1, TargetFormat::Rgb565, true);
+    let kxrgb = shader_key(&case190(3), 0xf, 1, TargetFormat::Xrgb8888, true);
+    assert_ne!(k565, shader_key(&case190(3), 0xf, 1, rgba8, true), "RGB565");
+    assert_ne!(kxrgb, shader_key(&case190(3), 0xf, 1, rgba8, true), "XRGB8888");
+    assert_ne!(k565, kxrgb, "RGB565 against XRGB8888");
     assert!(shader_key(&case190(4), 0, 1, rgba8, true).is_none(), "nothing written");
     assert!(shader_key(&case190(4), 0xf, 2, rgba8, true).is_none(), "2x");
     assert_ne!(shader_key(&c, 0xf, 1, rgba8, false), Some(one), "the colour's type");
@@ -1066,5 +1076,141 @@ fn an_rgba16f_blend_that_needs_a_blend_shader_is_refused_by_name() {
     for name in ["over", "add", "premul", "replace", "sub", "revsub", "sep"] {
         let d = [Draw91 { blend: Some(mode(name).0), mask: 0xf, scissor: None }];
         assert!(build_91(TargetFormat::Rgba16f, 8, 8, [0.0; 4], &d).is_ok(), "{name}");
+    }
+}
+
+/// One state of a target's drm-shim reference (tools/mali/testdata/
+/// pan_blend_ref/, tools/mali/pan_blend_ref.py): its name, GL equation and
+/// colour mask (states.tsv), Mesa's choice, descriptor word 0, equation
+/// word and blend shader file (blend.tsv).
+struct RefState {
+    name: String,
+    gl: Blending,
+    mask: u32,
+    choice: String,
+    word0: u32,
+    eq: u32,
+    file: String,
+}
+
+fn pan_blend_ref(sub: &str) -> Vec<RefState> {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata/pan_blend_ref");
+    let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let hex = |s: &str| u32::from_str_radix(s.trim_start_matches("0x"), 16).expect("a hex number");
+    let factor = |gl: u32| {
+        let (base, invert) = match gl {
+            0x0000 => (Base::One, true),
+            0x0001 => (Base::One, false),
+            0x0300 => (Base::SrcColor, false),
+            0x0301 => (Base::SrcColor, true),
+            0x0302 => (Base::SrcAlpha, false),
+            0x0303 => (Base::SrcAlpha, true),
+            0x0304 => (Base::DstAlpha, false),
+            0x0305 => (Base::DstAlpha, true),
+            0x0306 => (Base::DstColor, false),
+            0x0307 => (Base::DstColor, true),
+            0x0308 => (Base::SrcAlphaSaturate, false),
+            0x8001 => (Base::ConstColor, false),
+            0x8002 => (Base::ConstColor, true),
+            0x8003 => (Base::ConstAlpha, false),
+            0x8004 => (Base::ConstAlpha, true),
+            _ => panic!("GL factor {gl:#x}"),
+        };
+        Factor { base, invert }
+    };
+    let func = |gl: u32| match gl {
+        0x8006 => Func::Add,
+        0x800a => Func::Subtract,
+        0x800b => Func::ReverseSubtract,
+        0x8007 => Func::Min,
+        0x8008 => Func::Max,
+        _ => panic!("GL equation {gl:#x}"),
+    };
+    let states = read("states.tsv");
+    let blend = read(&format!("{sub}blend.tsv"));
+    states
+        .lines()
+        .zip(blend.lines())
+        .map(|(s, b)| {
+            let s: Vec<&str> = s.split('\t').collect();
+            let b: Vec<&str> = b.split('\t').collect();
+            assert_eq!(s[0], b[0], "the state ids");
+            let e: Vec<u32> = s[2].split(' ').map(hex).collect();
+            let m: Vec<u32> = s[3].split(' ').map(|v| v.parse().expect("a mask bit")).collect();
+            let ch = |i: usize| Channel { func: func(e[i]), src: factor(e[i + 1]), dst: factor(e[i + 2]) };
+            let mask = m[0] | m[1] << 1 | m[2] << 2 | m[3] << 3;
+            let file = if b[7] == "-" { String::new() } else { format!("{sub}{}", b[7]) };
+            RefState {
+                name: s[1].to_string(),
+                gl: Blending { rgb: ch(0), alpha: ch(3) },
+                mask,
+                choice: b[2].to_string(),
+                word0: hex(b[3]),
+                eq: hex(b[4]),
+                file,
+            }
+        })
+        .collect()
+}
+
+/// Every reference state drawn into Mesa's RGB565 and XRGB8888 targets
+/// (pan_blend_ref/rgb565/, xrgb8888/; dEQP's blend colour) goes the way
+/// Mesa's does once st/mesa's `fix_xrgb_alpha` (`blend::without_dst_alpha`,
+/// the backend's `blending`) has rewritten its factors: opaque, fixed
+/// function with Mesa's equation word, or a blend shader whose key
+/// (`shader_key` at 1x, fp16 colour) builds Mesa's words; the frame then
+/// builds the draw with Mesa's Shader-mode descriptor (its word 0: the
+/// destination loaded when the blend reads it, enabled; words 1 and 2
+/// zero), the address in word 3.
+#[test]
+fn every_reference_state_into_rgb565_and_xrgb8888_is_mesa_s() {
+    use super::blend::{equation, is_opaque, needs_shader, shader_key, without_dst_alpha};
+    use crate::shaderc::online::{mali::blend::shader, store};
+    const PC: u64 = 0x7fff_fffc_7000;
+    const COLOUR: [f32; 4] = [0.2, 0.4, 0.6, 0.8];
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata/pan_blend_ref");
+    for (sub, format) in [("rgb565/", TargetFormat::Rgb565), ("xrgb8888/", TargetFormat::Xrgb8888)] {
+        let (mut shaders, mut fixed, mut opaque) = (0, 0, 0);
+        for RefState { name, gl, mask, choice, word0, eq, file } in pan_blend_ref(sub) {
+            let b = without_dst_alpha(&gl);
+            let ours = if mask == 0xf && is_opaque(&b) {
+                "opaque"
+            } else if needs_shader(&b, &COLOUR) {
+                "shader"
+            } else {
+                "fixed-function"
+            };
+            assert_eq!(ours, choice, "{sub}{name}: the choice");
+            match ours {
+                "shader" => {
+                    shaders += 1;
+                    let key = shader_key(&b, mask, 1, format, true).expect("a built key");
+                    let mut words = store::with_scratch(|sc| {
+                        let mut out = [0u64; 64];
+                        shader(&mut out, sc, key, key.target.conversion()).map(|s| s.code.to_vec())
+                    })
+                    .expect("the scratch arena is free")
+                    .unwrap_or_else(|e| panic!("{sub}{name}: {e:?}"));
+                    while words.last() == Some(&0) {
+                        words.pop();
+                    }
+                    let text = std::fs::read_to_string(dir.join(format!("{file}.words"))).expect("the words");
+                    assert_eq!(words, testdata_words(&text), "{sub}{name}: the words");
+                    let (desc, regs) = build_into(Some(b), COLOUR, Some(PC), format, 1, mask as u8)
+                        .unwrap_or_else(|e| panic!("{sub}{name}: {e:?}"));
+                    let mut want = [0u8; 16];
+                    want[..4].copy_from_slice(&word0.to_le_bytes());
+                    want[12..].copy_from_slice(&(PC as u32).to_le_bytes());
+                    assert_eq!(blend_bytes(&desc, &regs), want, "{sub}{name}: the Shader-mode descriptor");
+                }
+                "fixed-function" => {
+                    fixed += 1;
+                    let ours = u32::from_le_bytes(equation(&b, mask).pack().expect("an equation"));
+                    assert_eq!(ours, eq, "{sub}{name}: the equation word");
+                }
+                _ => opaque += 1,
+            }
+        }
+        assert_eq!((shaders, fixed, opaque), (1121, 1072, 12), "{sub}");
     }
 }

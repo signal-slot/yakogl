@@ -8,12 +8,14 @@ fragment_ops.blend draws, written to tools/mali/testdata/pan_blend_ref/.
     pan_blend_ref.py states [--out DIR]
         write DIR/states.tsv only (the state list; needs no Mesa).
     pan_blend_ref.py gen [--out DIR]
-        draw every state on Mesa's drm-shim and write DIR/states.tsv,
-        DIR/blend.tsv and DIR/shaders/<sha>.{words,txt}.
+        draw every state on Mesa's drm-shim into each target and write
+        DIR/states.tsv, DIR/blend.tsv and DIR/shaders/<sha>.{words,txt} for
+        the RGBA8 one, DIR/rgb565/ and DIR/xrgb8888/ (blend.tsv, shaders/)
+        for the RGB565 and the XRGB one.
     pan_blend_ref.py --check
         gen into a scratch directory under $TMPDIR and compare it byte for
         byte with the committed tools/mali/testdata/pan_blend_ref/.
-    pan_blend_ref.py draw <libdir> <states.tsv>
+    pan_blend_ref.py draw <libdir> <states.tsv> <target>
         (internal) the GL calls, run under the shim by gen.
 
 DIR defaults to tools/mali/testdata/pan_blend_ref. `--shim WORK` before or
@@ -43,9 +45,10 @@ Inputs.
   once, in that order, with the first case that draws it. One more state,
   not in dEQP, puts glColorMask(1, 0, 1, 1) on the blend-shader state
   add constant_color/one_minus_constant_color.
-- The target: a 64x64 single-sampled GL_RGBA/GL_UNSIGNED_BYTE texture
-  framebuffer (the RGBA8 surface dEQP draws in; Mesa's blend key holds the
-  format and sample count, not the surface kind). The fragment shader writes
+- The targets (TARGETS): a 64x64 single-sampled GL_RGBA/GL_UNSIGNED_BYTE
+  texture framebuffer (the RGBA8 surface dEQP draws in; Mesa's blend key
+  holds the format and sample count, not the surface kind), and 64x64
+  GL_RGB565 and GL_RGB8_OES renderbuffers, each drawn with every state. The fragment shader writes
   a mediump varying, as dEQP's blend program does.
 
 Per state the draw is glClear (so no tile preload draw is made), the state,
@@ -90,6 +93,14 @@ ADD, ONE, ZERO, SRC_COLOR, DST_COLOR, SATURATE = 0x8006, 1, 0, 0x0300, 0x0306, 0
 BLEND_COLOR = (0.2, 0.4, 0.6, 0.8)
 MASK_STATE = ((ADD, 0x8001, 0x8002, ADD, 0x8001, 0x8002), (1, 0, 1, 1))
 GROUP = "dEQP-GLES2.functional.fragment_ops.blend."
+# The targets: (sub directory of DIR, GL renderbuffer format). rgba8 is a
+# GL_RGBA/GL_UNSIGNED_BYTE texture (PIPE_FORMAT_R8G8B8A8_UNORM); rgb565 a
+# GL_RGB565 renderbuffer (PIPE_FORMAT_B5G6R5_UNORM); xrgb8888 a GL_RGB8_OES
+# renderbuffer (PIPE_FORMAT_R8G8B8X8_UNORM: an 8-bit target whose fourth
+# channel is X, as DRM XRGB8888's PIPE_FORMAT_B8G8R8X8_UNORM is; the blend
+# shader reads the format's channels and the tile buffer format only, both
+# the same for the two).
+TARGETS = {"rgba8": ("", None), "rgb565": ("rgb565", 0x8D62), "xrgb8888": ("xrgb8888", 0x8051)}
 
 
 def states():
@@ -154,7 +165,7 @@ VS = (b"attribute highp vec4 a_position;\nattribute mediump vec4 a_color;\nvaryi
 FS = b"varying mediump vec4 v_color;\nvoid main() { gl_FragColor = v_color; }\n"
 
 
-def draw(libdir, states_path):
+def draw(libdir, states_path, target):
     import ctypes as C
     egl = C.CDLL(os.path.join(libdir, "libEGL.so.1"))
     gl = C.CDLL(os.path.join(libdir, "libGLESv2.so.2"))
@@ -176,12 +187,21 @@ def draw(libdir, states_path):
     gl.glGetString.restype = C.c_char_p
     print("pan_blend_ref: renderer %s" % gl.glGetString(0x1F01).decode())
     tex, fbo = C.c_uint(), C.c_uint()
-    gl.glGenTextures(1, C.byref(tex))
-    gl.glBindTexture(0x0DE1, tex)
-    gl.glTexImage2D(0x0DE1, 0, 0x1908, 64, 64, 0, 0x1908, 0x1401, None)
     gl.glGenFramebuffers(1, C.byref(fbo))
     gl.glBindFramebuffer(0x8D40, fbo)
-    gl.glFramebufferTexture2D(0x8D40, 0x8CE0, 0x0DE1, tex, 0)
+    if target == "rgba8":
+        gl.glGenTextures(1, C.byref(tex))
+        gl.glBindTexture(0x0DE1, tex)
+        gl.glTexImage2D(0x0DE1, 0, 0x1908, 64, 64, 0, 0x1908, 0x1401, None)
+        gl.glFramebufferTexture2D(0x8D40, 0x8CE0, 0x0DE1, tex, 0)
+    else:
+        gl.glGenRenderbuffers(1, C.byref(tex))
+        gl.glBindRenderbuffer(0x8D41, tex)
+        gl.glRenderbufferStorage(0x8D41, TARGETS[target][1], 64, 64)
+        gl.glFramebufferRenderbuffer(0x8D40, 0x8CE0, 0x8D41, tex)
+    if gl.glCheckFramebufferStatus(0x8D40) != 0x8CD5:
+        print("pan_blend_ref: the %s framebuffer is incomplete" % target)
+        return 1
 
     def shader(kind, src):
         sh = gl.glCreateShader(kind)
@@ -327,6 +347,15 @@ def gen(out):
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "states.tsv"), "w") as f:
         f.write(states_tsv())
+    for target, (sub, _) in TARGETS.items():
+        r = gen_target(os.path.join(out, sub) if sub else out, target, os.path.join(out, "states.tsv"))
+        if r:
+            return r
+    return 0
+
+
+def gen_target(out, target, states_path):
+    os.makedirs(out, exist_ok=True)
     st = states()
     lib = shim_libdir()
     scratch = tempfile.mkdtemp(prefix="pan_blend_ref.", dir=os.environ.get("TMPDIR"))
@@ -336,7 +365,7 @@ def gen(out):
                    PAN_MESA_DEBUG="trace", PANDECODE_DUMP_FILE=os.path.join(scratch, "t"))
         env.pop("BIFROST_MESA_DEBUG", None)
         r = subprocess.run([sys.executable, "-I", "-u", os.path.abspath(__file__), "draw", lib,
-                            os.path.join(out, "states.tsv")], env=env, capture_output=True, text=True)
+                            states_path, target], env=env, capture_output=True, text=True)
         if r.returncode:
             sys.exit("pan_blend_ref: the draw failed\n" + r.stdout + r.stderr[-2000:])
         files = sorted((f for f in os.listdir(scratch) if f.startswith("t.")),
@@ -369,7 +398,7 @@ def gen(out):
             f.write(words)
         with open(os.path.join(out, name + ".txt"), "w") as f:
             f.write(txt)
-    print("pan_blend_ref: %d states, %d blend shaders in %s" % (len(rows), len(shaders), out))
+    print("pan_blend_ref: %s: %d states, %d blend shaders in %s" % (target, len(rows), len(shaders), out))
     return 0
 
 
@@ -403,8 +432,8 @@ def main(argv):
         argv = argv[:i] + argv[i + 2:]
     if argv[:1] == ["--check"] and len(argv) == 1:
         return check()
-    if len(argv) == 3 and argv[0] == "draw":
-        return draw(argv[1], argv[2])
+    if len(argv) == 4 and argv[0] == "draw" and argv[3] in TARGETS:
+        return draw(argv[1], argv[2], argv[3])
     if argv[:1] in (["states"], ["gen"]):
         out = DEFAULT_OUT
         if len(argv) == 3 and argv[1] == "--out":

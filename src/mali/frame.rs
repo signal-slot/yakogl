@@ -213,11 +213,12 @@ pub const INVALID_OQ_ALIGN: &str = "mali frame: an occlusion counter not 8-byte 
 /// channels read, `pan_blend_is_homogenous_constant`, `panfrost_get_blend`)
 /// drawn without one ([`DrawCall::blend_shader`]): the backend builds the
 /// blend shader of any equation and colour mask into an RGBA8 target at 1x
-/// or 4x (src/mali/blend.rs `shader_key`) unless its compile refuses it
+/// or 4x and an RGB565 or XRGB8888 one at 1x (src/mali/blend.rs
+/// `shader_key`) unless its compile refuses it
 /// (src/shaderc/online/mali/blend_nir.rs: a transform or condition of
 /// Mesa's it does not build); no other target.
 pub const NOT_BUILT_BLEND_SHADER: &str =
-    "mali frame: a blend shader into a target other than RGBA8 at 1x or 4x, or one the blend shader compiler refuses, is not built yet";
+    "mali frame: a blend shader into a target other than RGBA8 at 1x or 4x or RGB565 or XRGB8888 at 1x, or one the blend shader compiler refuses, is not built yet";
 /// [`DrawCall::blend_shader`] not on 16 bytes, outside the fragment
 /// program's 4 GiB window (the descriptor holds its low 32 bits, Mesa
 /// 26.2.1 pan_cmdstream.c:365-377), or given for a draw whose blend the
