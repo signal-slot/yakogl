@@ -1227,15 +1227,16 @@ fn a_refused_state_is_a_named_refusal() {
     d.samples = 4;
     check(&d, ENOTSUP, "draw71: V3D 7.1: multisampled drawing (the 7.1 table has no 4x oversample state yet)");
 
-    /* backend71's: an indexed draw, from a buffer and from client memory */
+    /* backend71's: an indexed draw of 8-bit or 32-bit indices, from a
+     * buffer and from client memory (u16 draws: tests/v3d71_table_indexed.rs) */
+    let wide = "backend71: an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only";
     let mut d = c.draw(None);
-    (d.index_buf_gpu, d.index_size) = (u64::from(c.vbo), 2);
-    let indexed = "backend71: an indexed draw: the 7.1 table assembles glDrawArrays only (Draw71 has no index buffer)";
-    check(&d, ENOTSUP, indexed);
-    let idx = [0u16, 1, 2, 3, 4, 5];
+    (d.index_buf_gpu, d.index_size) = (u64::from(c.vbo), 4);
+    check(&d, ENOTSUP, wide);
+    let idx = [0u8, 1, 2, 3, 4, 5];
     let mut d = c.draw(None);
-    (d.index_cpu, d.index_bytes, d.index_size) = (idx.as_ptr() as *const c_void, 12, 2);
-    check(&d, ENOTSUP, indexed);
+    (d.index_cpu, d.index_bytes, d.index_size) = (idx.as_ptr() as *const c_void, 6, 1);
+    check(&d, ENOTSUP, wide);
 
     /* a malformed table: a program that is not linked */
     let mut unlinked = *color_uv();
