@@ -10,7 +10,7 @@
 The first three patterns are those of the plan's acceptance grep (grep -rEIn on tools/cts/log/*-imx8mp-gles3-* and
 *-imx8mp-es2-*). Dotted version strings such as 1.2.3.4 also match the address pattern: --check reports them
 and --fix replaces them too, so the writer of a summary rewords them.
-Armadillo-X2 patterns (EXTRA) also cover user@host without a dot, *.ts.net, IPv6, MAC addresses, USB serial
+Armadillo-X2 patterns (EXTRA) also cover /dev/ttymxc paths, container names, host-name prompts, user@host without a dot, *.ts.net, IPv6, MAC addresses, USB serial
 numbers, /dev/serial/ paths and rfc2217:// (socket, telnet, ssh, tcp) URLs. Binary files (a NUL byte) are skipped,
 as grep -I does. Each DIR may also be a single file.
 """
@@ -29,6 +29,9 @@ PATTERNS = [
 # through /dev/mem). These go beyond the acceptance grep; the three above stay byte-identical to it.
 # /tmp/yakogl-kexec, hex record words and image sha256 (64 hex digits, no colons) are not matched.
 HEX = r"[0-9A-Fa-f]"
+CONT = r"\bpodman\s+(start|stop|restart|kill|rm|logs|exec|inspect)\s+((-[A-Za-z-]+(\s+[0-9]+)?)\s+)*(?![0-9]+\b)[A-Za-z0-9_][A-Za-z0-9_.-]*"
+PROMPT = r"^\[?[A-Za-z0-9_][A-Za-z0-9_-]*:[~/][^\s]*[#$] "
+LOGINP = r"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_-]* login:"
 EXTRA = [
     # a login at a host name without a dot (root at the board's short name)
     ("login", r"(?<![A-Za-z0-9._-])[A-Za-z_][A-Za-z0-9._-]*@[A-Za-z0-9_][A-Za-z0-9_-]*", "<login>"),
@@ -43,6 +46,13 @@ EXTRA = [
                   r"|\biSerial\s+[0-9]+\s+\S"
                   r"|\b(i?SerialNumber|ID_SERIAL(_SHORT)?|serial_?number)\b\s*[:=]?\s*[0-9A-Za-z]", "<serial>"),
     ("url", r"\b(rfc2217|socket|telnet|ssh|tcp)://[^\s\"'<>]+", "<url>"),
+    # X2 runs: the i.MX UART device, a container name (undo / UNDO lines, containers_stopped=, app_back) and a
+    # host name in a shell or getty prompt. Placeholders such as "podman start <name>" are not matched.
+    ("ttymxc", r"/dev/ttymxc[0-9]*", "<tty>"),
+    ("container", CONT, "<container>"),
+    ("container", r"\bcontainers_stopped=[A-Za-z0-9_][^\s]*|\bapp_back[= ]+(?!not\b)[A-Za-z0-9_][A-Za-z0-9_.-]*", "<container>"),
+    ("prompt", PROMPT, "<host>"),
+    ("prompt", LOGINP, "<host>"),
 ]
 COMPILED = [(n, re.compile(p.encode()), r.encode()) for n, p, r in PATTERNS + EXTRA]
 # --fix extends the hit to the whole token (device number, full host name) so no tail is left behind.
@@ -53,6 +63,13 @@ FIX = [
     (re.compile(rb"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.ts\.net\b"), b"<host>"),
     (COMPILED[1][1], b"<addr>"),
     (re.compile(rb"[A-Za-z0-9._-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*"), b"<login>"),
+    (re.compile(rb"/dev/ttymxc[0-9]*"), b"<tty>"),
+    (re.compile(rb"(\bpodman\s+(?:start|stop|restart|kill|rm|logs|exec|inspect)\s+(?:-[A-Za-z-]+(?:\s+[0-9]+)?\s+)*)"
+                rb"[A-Za-z0-9_][A-Za-z0-9_.-]*"), rb"\1<container>"),
+    (re.compile(rb"(\bcontainers_stopped=)[A-Za-z0-9_][^\s]*"), rb"\1<container>"),
+    (re.compile(rb"(\bapp_back[= ]+)(?!not\b)[A-Za-z0-9_][A-Za-z0-9_.-]*"), rb"\1<container>"),
+    (re.compile(rb"^(\[?)[A-Za-z0-9_][A-Za-z0-9_-]*(:[~/][^\s]*[#$] )", re.M), rb"\1<host>\2"),
+    (re.compile(rb"^(?!Last\b)[A-Za-z0-9][A-Za-z0-9_-]* login:", re.M), b"<host> login:"),
 ] + [(rx, rep) for n, rx, rep in COMPILED[3:] if n in ("tailnet", "ipv6", "mac", "usbserial")]
 
 

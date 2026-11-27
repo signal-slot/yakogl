@@ -80,27 +80,43 @@ printf 'usb-FTDI_FT232R_A50285BI-''if00-port0\n'             > "$tmp/x2/usbname.
 printf 'iSerial 3 A50285BI\n'                                > "$tmp/x2/iserial.txt"
 printf 'ID_SERIAL_SHORT=A50285BI\n'                          > "$tmp/x2/idserial.txt"
 printf 'port rfc2217:''//console-host:4001\n'                > "$tmp/x2/rfc.txt"
+printf 'uart /dev/''ttymxc1 opened\n'                            > "$tmp/x2/mxc.txt"
+printf 'UNDO: podman start demo''-app-7\n'                    > "$tmp/x2/undo.txt"
+printf 'undo=podman stop -t 5 demo''-app-7\n'                 > "$tmp/x2/stop.txt"
+printf 'verdict=ok containers_stopped=demo''-a,demo-b\n'      > "$tmp/x2/cstop.txt"
+printf 'app_back=demo''-app-7 running again after the jump\n' > "$tmp/x2/back.txt"
+printf 'demohost''-x2:~# uname\n'                             > "$tmp/x2/prompt.txt"
+printf 'demohost''-x2 login: \n'                              > "$tmp/x2/getty.txt"
 out=$(python3 -I "$tool" --check "$tmp/x2" 2>&1); rc=$?
 if [ $rc -eq 1 ]; then ok "X2 tree exits 1"; else bad "X2 rc=$rc"; fi
 for want in "login.txt:1: login" "tailnet.txt:1: tailnet" "cgnat.txt:1: addr" "ipv6.txt:1: ipv6" "ipv6b.txt:1: ipv6" \
             "mac.txt:1: mac" "byid.txt:1: tty" "usbname.txt:1: usbserial" "iserial.txt:1: usbserial" \
-            "idserial.txt:1: usbserial" "rfc.txt:1: url"; do
+            "idserial.txt:1: usbserial" "rfc.txt:1: url" "mxc.txt:1: ttymxc" "undo.txt:1: container" \
+            "stop.txt:1: container" "cstop.txt:1: container" "back.txt:1: container" "prompt.txt:1: prompt" \
+            "getty.txt:1: prompt"; do
     if printf '%s\n' "$out" | grep -qF -- "$want"; then ok "X2 reports $want"; else bad "X2 missing $want"; fi
 done
-for leak in armadillo-x2 tail1a2b3c 100.64 fd7a 2001:db8 00:11:22 A50285BI console-host; do
+for leak in armadillo-x2 tail1a2b3c 100.64 fd7a 2001:db8 00:11:22 A50285BI console-host ttymxc1 demo-app demo-a demohost; do
     if printf '%s\n' "$out" | grep -qF -- "$leak"; then bad "X2 output leaks $leak"; else ok "X2 no leak of $leak"; fi
 done
 python3 -I "$tool" --fix "$tmp/x2" >/dev/null 2>&1
 if python3 -I "$tool" --check "$tmp/x2" >/dev/null 2>&1; then ok "X2 clean after --fix"; else bad "X2 still dirty after --fix"; fi
-if grep -rqE 'armadillo-x2|tail1a2b3c|A50285BI|console-host|fd7a|00:11:22' "$tmp/x2"; then bad "X2 --fix left a tail"; else ok "X2 --fix left no tail"; fi
+if grep -rqE 'armadillo-x2|tail1a2b3c|A50285BI|console-host|fd7a|00:11:22|demo-app|demohost|ttymxc1' "$tmp/x2"; then bad "X2 --fix left a tail"; else ok "X2 --fix left no tail"; fi
 cat > "$tmp/x2ok/a.txt" <<'EOT'
 staging in /tmp/yakogl-kexec, window 0x60000000 size 0x10000000
 record words 0xdeadbeef 00000000 ffffffff
 sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 time 12:34:56 std::vector dEQP-GLES3.functional.shaders.x
 console=ttymxc1,115200 root=/dev/mmcblk2p2
+UNDO: podman start <name>   # one line per name listed
+app_back not read: Linux did not come back
+Last login: Mon on ttyS0
 EOT
 if python3 -I "$tool" --check "$tmp/x2ok" >/dev/null 2>&1; then ok "legitimate X2 content not flagged"; else bad "legitimate X2 content flagged"; fi
+
+# the c8 grep finds nothing in a --fix output of the X2 samples
+if grep -rEIn '/dev/tty(USB|ACM)|([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]+)?|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.[A-Za-z]' "$tmp/x2" >/dev/null; then
+    bad "c8 grep finds a hit after --fix of X2 samples"; else ok "c8 grep clean after --fix of X2 samples"; fi
 
 # committed i.MX8MP logs, if any
 set -- "$here"/log/*-imx8mp-*
