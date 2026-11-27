@@ -1226,11 +1226,11 @@ fn the_edge_of_an_earlier_job_survives_a_later_one() {
 }
 
 /// A 4x depth attachment: the frame keeps its depth in the single-sampled
-/// D24S8 plane (one value a pixel, ZS.MSAA AVERAGE as the 4x window's, no
-/// surface stride), and the blit's depth goes through `depth_resolve`, which
-/// reads that plane. Which sample the G610's AVERAGE keeps for Z/S is
-/// BOARD-UNVERIFIED (note (f4): Mesa's newer path writes SAMPLE_0); the
-/// model does not execute depth, so the values are not checked here.
+/// D24S8 plane (one value a pixel, ZS.MSAA SINGLE: sample 0 is written back,
+/// as Mesa's newer path does, `00b3776d`; no surface stride), and the blit's
+/// depth goes through `depth_resolve`, which reads that plane. That the G610
+/// writes sample 0 under SINGLE is BOARD-UNVERIFIED (note (f4)); the model
+/// does not execute depth, so the values are not checked here.
 ///
 /// The destination's depth is a texture: the Mali has no `ds_write` entry,
 /// so a depth blit into a renderbuffer is `GL_INVALID_OPERATION` at any
@@ -1257,7 +1257,11 @@ fn depth_resolve_reads_one_sample_a_pixel() {
     assert_ne!(s.depth_id, 0);
     let frames = gpu::frames();
     let zs = frames[frames.len() - 2].zs.expect("the 4x frame writes its depth back");
-    assert_eq!((zs.msaa, zs.surface_stride, zs.row_stride), (Msaa::AVERAGE, 0, 4 * 8), "one D24S8 word a pixel");
+    assert_eq!(
+        (zs.msaa, zs.surface_stride, zs.row_stride),
+        (Msaa::SINGLE, 0, 4 * 8),
+        "one D24S8 word a pixel, sample 0"
+    );
     /* into a renderbuffer: refused, as from one sample */
     assert_eq!(resolve_blit(&fbo, true).0, GL_INVALID_OPERATION, "no ds_write on the Mali");
     let one = framebuffer(0, true).unwrap();
