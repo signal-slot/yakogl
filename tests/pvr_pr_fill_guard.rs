@@ -27,8 +27,13 @@
 //!   a mipmap-chain level's frame;
 //! - with the knob off every one of those frames carries an all-zero block.
 //!
+//! The 4x cases need the PowerVR's 4x framebuffer objects, kept only with the
+//! `msaa-fbo` feature (`max_samples` 4; 0 without it, where a pin says a
+//! request of 4 samples is refused and one of 1 sample gets the block).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_pr_fill_guard
+//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,msaa-fbo --test pvr_pr_fill_guard
 //! ```
 
 #![cfg(all(
@@ -716,6 +721,10 @@ fn ineligible_frames_carry_a_zero_block_knob_on_and_off() {
         ("two R16F attachments", &[GL_R16F, GL_R16F], 1),
     ];
     for (what, formats, samples) in cases {
+        /* the PowerVR keeps a 4x framebuffer object only with msaa-fbo */
+        if samples > 1 && !cfg!(feature = "msaa-fbo") {
+            continue;
+        }
         for knob in [1, 0] {
             for k in kicks_of(formats, samples, knob) {
                 assert!(is_zero(&k.frag_pr), "{what}, knob {knob}: {:?}", k.frag_pr);
@@ -736,6 +745,10 @@ fn the_block_follows_the_frame_not_the_previous_one() {
         (&[GL_RGBA8][..], 4, false),
         (&[GL_RGBA8][..], 1, true),
     ] {
+        /* the PowerVR keeps a 4x framebuffer object only with msaa-fbo */
+        if samples > 1 && !cfg!(feature = "msaa-fbo") {
+            continue;
+        }
         let k = kicks_of(formats, samples, 1);
         assert_eq!(!is_zero(&k.last().unwrap().frag_pr), want, "{formats:x?} x{samples}");
     }
@@ -780,6 +793,7 @@ fn a_mipmap_chain_levels_frame_gets_no_block() {
 /// A 4x frame that is not a sample-store one (the store's allocation is
 /// refused: it reloads its resolved colour) has one attachment and the
 /// one-dword clear program, so only `samples <= 1` refuses it.
+#[cfg(feature = "msaa-fbo")]
 #[test]
 fn a_4x_frame_without_a_sample_store_gets_no_block() {
     let _g = rig(4);
@@ -793,4 +807,41 @@ fn a_4x_frame_without_a_sample_store_gets_no_block() {
     for k in &k {
         assert!(is_zero(&k.frag_pr), "{:?}", k.frag_pr);
     }
+}
+
+/// Without `msaa-fbo` (the PowerVR's `max_samples` 0) there is no 4x frame:
+/// 4 samples are GL_INVALID_OPERATION, and a request of 1 sample is a
+/// one-sample frame that gets the block like a plain renderbuffer's.
+#[cfg(not(feature = "msaa-fbo"))]
+#[test]
+fn without_msaa_fbo_a_one_sample_request_gets_the_block() {
+    let _g = rig(4);
+    let mut rb = 0;
+    // SAFETY: plain GL calls; room for the name.
+    unsafe {
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, SIZE, HEIGHT);
+        assert_eq!(glGetError(), GL_INVALID_OPERATION, "4 samples without msaa-fbo");
+        glDeleteRenderbuffers(1, &rb);
+    }
+    pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, 1);
+    let mut fbo = 0;
+    // SAFETY: plain GL calls; room for the names.
+    unsafe {
+        glGenFramebuffers(1, &mut fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 1, GL_RGBA8, SIZE, HEIGHT);
+        assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, ATT[0], GL_RENDERBUFFER, rb);
+        glDrawBuffers(1, ATT.as_ptr());
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+    }
+    let f = clear_all();
+    pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, 0);
+    assert_eq!(f.kicks.len(), 1, "{:?}", logs());
+    assert!(f.kicks[0].samples <= 1, "a one-sample frame: {}", f.kicks[0].samples);
+    assert!(!is_zero(&f.kicks[0].frag_pr), "{:?}", f.kicks[0].frag_pr);
 }
