@@ -75,6 +75,26 @@ impl Default for TexLod {
     }
 }
 
+/// The level parameters a draw's descriptor takes from bind `t` itself
+/// (`pvr::backend::build_tex_desc`): a plain 2D bind's
+/// [`GlesTextureBind::base_level`], the effective GL_TEXTURE_BASE_LEVEL the
+/// GL core fills (`gl::draw::bind_base_level`), with GL's defaults for the
+/// rest (the bind carries no MAX_LEVEL, MIN_LOD or MAX_LOD). Every other
+/// kind keeps base level 0 here: the native cube and 2D array copies, the
+/// stacked images and the native volume are restated by the GL core, not by
+/// these words (docs/es3/shader-failure-map.md section 7).
+///
+/// Without it a 2D texture at GL_TEXTURE_BASE_LEVEL 1 was sampled and sized
+/// from level 0 (dEQP-GLES3 shaders.texture_functions.texturesize's "lod
+/// base" rows on the AM62P, tests/pvr_texsize_base_level.rs).
+pub fn bind_lod(t: &GlesTextureBind) -> TexLod {
+    if t.type_ == crate::backend::GLES_TEXTYPE_2D {
+        TexLod { base_level: u32::from(t.base_level), ..TexLod::DEFAULT }
+    } else {
+        TexLod::DEFAULT
+    }
+}
+
 /// The base level the words may name: GL_TEXTURE_BASE_LEVEL, but never past
 /// the last level the bind holds (a base level past it is GL's incomplete
 /// texture, which the GL core binds as its own black texture).
