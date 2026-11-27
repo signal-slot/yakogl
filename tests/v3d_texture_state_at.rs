@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `texture::state_at` (src/v3d/texture.rs) on the V3D 4.2 TMU texture state
-//! (plan #382 item stateatut, issue #1261; the helper is not wired yet, item
-//! basefix wires it in place of `texture::state`).
+//! (plan #382 item stateatut, issue #1261; item basefix wired it in place of
+//! `texture::state` in `tex_state_for`, src/v3d/backend.rs).
 //!
 //! Mesa's `v3d_setup_texture_shader_state` (v3dx_state.c:903-988; that file is
 //! not in the vendored third_party/mesa-26.2.1, the line range is the one

@@ -9,10 +9,10 @@
 //! levels). The draw hands the job builder the BASE level's sizes (words
 //! 44-47: `V3dJobTmu` width, height, depth, array_size, from `texture_units`
 //! in src/v3d/backend.rs at `GlesTextureBind::base_level`, which the draw
-//! fills since item basefield), but today `texture::state` builds the record
-//! with Base Level 0 and Max Level = levels - 1, whatever
-//! `GL_TEXTURE_BASE_LEVEL` says (tests/es3_sample_base_level_v3d.rs pins the
-//! same for `texture()`). The compiler writes no
+//! fills since item basefield), and `texture::state_at` builds the record
+//! with Base Level = that base level and Max Level = levels - 1 (item
+//! basefix; tests/es3_sample_base_level_v3d.rs checks the same for
+//! `texture()`). The compiler writes no
 //! uniform word for the lod itself: a literal lod goes into the TMU
 //! configuration as is, so the only lod-related words the stream carries are
 //! the size words, and those do not depend on the lod value (the lod 0 and
@@ -34,9 +34,9 @@
 //! docs/notes/v3d-texture-size-words.md and the sibling tests, which cite
 //! those lines of the Mesa tree; they are not re-read from source here.
 //!
-//! The BASE_LEVEL 0 controls assert the correct record and stay; each
-//! `..._flip_when_the_base_level_is_applied` test asserts today's record with
-//! BASE_LEVEL 1 and says in its doc comment what the correct record is.
+//! The BASE_LEVEL 0 controls assert the record at level 0; each BASE_LEVEL 1
+//! test asserts the record at the base level, TMU levels (1, 4) (item
+//! basefix: `texture::state_at` at the binding's base level).
 //!
 //! The textures are 16x16 (3D 8 deep, array 5 layers), five mip levels given
 //! level by level, NEAREST_MIPMAP_NEAREST, so they are complete at
@@ -713,37 +713,34 @@ macro_rules! cases {
             assert_eq!(unit0(Kind::$kind, Stage::$stage, 0, $lod), rec(level0_sizes(Kind::$kind), (0, 4)));
         }
 
-        #[doc = concat!("Pins today's behaviour: a ", $kname, " `textureLod` at lod ", stringify!($lod),
-            " in the ", $sname, " stage at BASE_LEVEL 1 hands TMU levels (0, 4): ",
-            "the TMU samples from level 0, so the lod is relative to level 0, not to the GL base level. ",
-            "The size words already are the base level's: ", $post, ". ",
-            "The post-fix TMU levels are (1, 4): Mesa programs Base Level = ",
-            "first_level and Max Level = last_level (absolute levels) while the lod is passed through ",
-            "unchanged and relative to the base, so the lod is not added to the base twice. Flip the ",
-            "assert when the base level is applied.")]
+        #[doc = concat!("A ", $kname, " `textureLod` at lod ", stringify!($lod),
+            " in the ", $sname, " stage at BASE_LEVEL 1 hands ", $post, " and TMU levels (1, 4): ",
+            "Mesa programs Base Level = first_level and Max Level = last_level (absolute levels) ",
+            "while the lod is passed through unchanged and relative to the base, so the lod is not ",
+            "added to the base twice.")]
         #[test]
         fn $pin() {
             let _g = rig();
-            assert_eq!(unit0(Kind::$kind, Stage::$stage, 1, $lod), rec(level1_sizes(Kind::$kind), (0, 4)));
+            assert_eq!(unit0(Kind::$kind, Stage::$stage, 1, $lod), rec(level1_sizes(Kind::$kind), (1, 4)));
         }
     )*};
 }
 
 cases! {
-    Tex2d "2D" Fragment "fragment" 0 a_2d_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_2d_lod_0_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
-    Tex2d "2D" Fragment "fragment" 1 a_2d_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_2d_lod_1_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
-    Tex2d "2D" Vertex "vertex" 0 a_2d_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_2d_lod_0_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
-    Tex2d "2D" Vertex "vertex" 1 a_2d_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_2d_lod_1_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
-    Tex3d "3D" Fragment "fragment" 0 a_3d_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_3d_lod_0_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
-    Tex3d "3D" Fragment "fragment" 1 a_3d_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_3d_lod_1_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
-    Tex3d "3D" Vertex "vertex" 0 a_3d_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_3d_lod_0_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
-    Tex3d "3D" Vertex "vertex" 1 a_3d_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_3d_lod_1_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
-    Array "2D-array" Fragment "fragment" 0 an_array_lod_0_fragment_at_base_level_0_has_levels_0_to_4 an_array_lod_0_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
-    Array "2D-array" Fragment "fragment" 1 an_array_lod_1_fragment_at_base_level_0_has_levels_0_to_4 an_array_lod_1_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
-    Array "2D-array" Vertex "vertex" 0 an_array_lod_0_vertex_at_base_level_0_has_levels_0_to_4 an_array_lod_0_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
-    Array "2D-array" Vertex "vertex" 1 an_array_lod_1_vertex_at_base_level_0_has_levels_0_to_4 an_array_lod_1_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
-    Cube "cube" Fragment "fragment" 0 a_cube_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_cube_lod_0_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
-    Cube "cube" Fragment "fragment" 1 a_cube_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_cube_lod_1_fragment_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
-    Cube "cube" Vertex "vertex" 0 a_cube_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_cube_lod_0_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
-    Cube "cube" Vertex "vertex" 1 a_cube_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_cube_lod_1_vertex_at_base_level_1_still_has_level_0_state_flip_when_the_base_level_is_applied "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
+    Tex2d "2D" Fragment "fragment" 0 a_2d_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_2d_lod_0_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
+    Tex2d "2D" Fragment "fragment" 1 a_2d_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_2d_lod_1_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
+    Tex2d "2D" Vertex "vertex" 0 a_2d_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_2d_lod_0_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
+    Tex2d "2D" Vertex "vertex" 1 a_2d_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_2d_lod_1_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (width and height minified, depth and layer words stay 1)";
+    Tex3d "3D" Fragment "fragment" 0 a_3d_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_3d_lod_0_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
+    Tex3d "3D" Fragment "fragment" 1 a_3d_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_3d_lod_1_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
+    Tex3d "3D" Vertex "vertex" 0 a_3d_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_3d_lod_0_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
+    Tex3d "3D" Vertex "vertex" 1 a_3d_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_3d_lod_1_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 4, 1) (width, height and depth minified by one level)";
+    Array "2D-array" Fragment "fragment" 0 an_array_lod_0_fragment_at_base_level_0_has_levels_0_to_4 an_array_lod_0_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
+    Array "2D-array" Fragment "fragment" 1 an_array_lod_1_fragment_at_base_level_0_has_levels_0_to_4 an_array_lod_1_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
+    Array "2D-array" Vertex "vertex" 0 an_array_lod_0_vertex_at_base_level_0_has_levels_0_to_4 an_array_lod_0_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
+    Array "2D-array" Vertex "vertex" 1 an_array_lod_1_vertex_at_base_level_0_has_levels_0_to_4 an_array_lod_1_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 5) (width and height minified, the layer count never)";
+    Cube "cube" Fragment "fragment" 0 a_cube_lod_0_fragment_at_base_level_0_has_levels_0_to_4 a_cube_lod_0_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
+    Cube "cube" Fragment "fragment" 1 a_cube_lod_1_fragment_at_base_level_0_has_levels_0_to_4 a_cube_lod_1_fragment_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
+    Cube "cube" Vertex "vertex" 0 a_cube_lod_0_vertex_at_base_level_0_has_levels_0_to_4 a_cube_lod_0_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
+    Cube "cube" Vertex "vertex" 1 a_cube_lod_1_vertex_at_base_level_0_has_levels_0_to_4 a_cube_lod_1_vertex_at_base_level_1_has_levels_1_to_4 "sizes (8, 8, 1, 1) (the face width and height minified, depth and layer words stay 1)";
 }

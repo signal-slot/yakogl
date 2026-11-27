@@ -9047,6 +9047,7 @@ fn a_tiling_that_writes_past_its_image_is_named() {
         layers: 1,
         type_: GLES_TEXTYPE_2D,
         depth_id: 0,
+        base_level: 0,
     };
     let inside = tiled_copy(g(), key, 1000, 1024, TILE_KEPT_AT_DRAW, |p, _| {
         // SAFETY: the image's 1000 bytes.
@@ -9089,6 +9090,7 @@ fn a_tiled_copy_without_a_cpu_view_is_refused_and_freed() {
         layers: 1,
         type_: GLES_TEXTYPE_2D,
         depth_id: 0,
+        base_level: 0,
     };
     let r = tiled_copy(g(), key, 1000, 1024, TILE_KEPT_AT_DRAW, |_, _| panic!("filled a copy with no CPU view"));
     assert_eq!(r, Err(KeptMiss::NoMemory));
