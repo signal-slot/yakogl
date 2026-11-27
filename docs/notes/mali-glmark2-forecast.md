@@ -154,10 +154,9 @@ From the all-scenes run at `eacc70f5` (section "How it was made"):
   SIGABRT (rc 134); the host reads out of range and gets signal 11. The
   refused program is the cause; the crash goes with scene 22's two families
   (step 9).
-- **Not reached on the host** because no scene gets there: `D-NPOTMIP`
-  (refract's 1600x1200 colour target keeps one mip level,
-  `npot_mip_chains` in `src/gl/texture.rs`: a picture risk, not a refusal)
-  and `D-DEPTHTEX` (the depth texture `refract` and `shadow` sample goes
+- **Fixed on the host:** `D-NPOTMIP` (refract's 1600x1200 colour target
+  now keeps all 11 mip levels, docs/notes/mali-npot-mip.md). **Not reached
+  on the host** because no scene gets there: `D-DEPTHTEX` (the depth texture `refract` and `shadow` sample goes
   through `mali_depth_resolve` to R32F; gl_test case 169 is the only board
   evidence). Both stay forecasts until scenes 23 and 24 compile. No
   texture-format or blend refusal is expected (unsized `GL_RGB`/`GL_RGBA`
