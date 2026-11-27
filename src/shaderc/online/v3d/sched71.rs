@@ -1412,4 +1412,286 @@ mod tests {
         let ld = find(&instrs, |a| a.sig.ldvary);
         assert!(find(&instrs, |a| a.sig.ldunif) >= ld + 2, "{}", listing(&instrs));
     }
+
+    fn must(r: Result<Word71, Refused>, what: &str) -> Word71 {
+        match r {
+            Ok(w) => w,
+            Err(_) => panic!("{what}"),
+        }
+    }
+    fn rfs(n: u8) -> Vec<Rf> {
+        (0..n).map(|r| Rf(4 + r)).collect()
+    }
+    fn fadd(d: u32, a: Src71, b: Src71) -> Op71 {
+        Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(V(d)), a, b }
+    }
+    fn fmul(d: u32, a: Src71, b: Src71) -> Op71 {
+        Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(d)), a, b }
+    }
+    fn to_tlb(n: u32) -> Op71 {
+        Op71::Mul { op: MulOp71::Mov, dst: Dst71::Tlb, a: v(n), b: Src71::None }
+    }
+    fn merged(w: &Word71, op: &Op71) -> bool {
+        merge(w, &rfs(8), op).is_ok()
+    }
+    fn word_with(op: &Op71) -> Word71 {
+        must(merge(&Word71::empty(), &rfs(8), op), "merges into an empty word")
+    }
+
+    /// One add and one mul operation with no dependence share a word; two
+    /// adds, or two muls, never do (one operation per unit per instruction).
+    #[test]
+    fn an_add_and_a_mul_pair_but_two_of_a_unit_do_not() {
+        let w = word_with(&fadd(0, Src71::Payload(2), Src71::Payload(3)));
+        assert!(merged(&w, &fmul(1, Src71::Payload(2), Src71::Payload(3))));
+        assert!(!merged(&w, &fadd(1, Src71::Payload(2), Src71::Payload(3))));
+        let w = word_with(&fmul(0, Src71::Payload(2), Src71::Payload(3)));
+        assert!(!merged(&w, &fmul(1, Src71::Payload(2), Src71::Payload(3))));
+        assert!(merged(&w, &fadd(1, Src71::Payload(2), Src71::Payload(3))));
+    }
+
+    /// can_do_mul_as_add (qpu_schedule.c:1174-1183): a mul MOV goes to the
+    /// add unit when the mul unit is taken; a mul FMUL has no add form.
+    #[test]
+    fn only_a_mul_move_falls_back_to_the_add_unit() {
+        let w = word_with(&fmul(0, Src71::Payload(2), Src71::Payload(3)));
+        let mov = Op71::Mul { op: MulOp71::Mov, dst: Dst71::V(V(1)), a: Src71::Payload(2), b: Src71::None };
+        let w2 = must(merge(&w, &rfs(8), &mov), "the move takes the add unit");
+        assert_eq!(w2.alu.add.op, AddOp71::Mov);
+        assert_eq!(w2.alu.mul.op, MulOp71::Fmul);
+        assert!(!merged(&w2, &mov), "both units are taken now");
+        /* a TLB write by a move stays on the mul unit: not a register move */
+        let tlb = to_tlb(0);
+        assert!(!merged(&w, &tlb));
+    }
+
+    /// Two small immediates, and two signals naming a register, do not share
+    /// a word.
+    #[test]
+    fn one_small_immediate_and_one_signal_address_per_word() {
+        let w = word_with(&Op71::Add { op: AddOp71::Add, dst: Dst71::V(V(0)), a: imm(1), b: Src71::Payload(2) });
+        let m2 = Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(1)), a: Src71::Payload(2), b: imm(2) };
+        assert!(!merged(&w, &m2), "a second small immediate");
+        let w = word_with(&Op71::Ldtmu { dst: V(0) });
+        assert!(!merged(&w, &Op71::Ldvary { dst: V(1) }));
+        assert!(!merged(&w, &Op71::Ldunif { dst: V(1), u: u(1.0) }), "ldunifrf names a register too");
+    }
+
+    /// The signals the scheduler merges into an ALU word: a register-file
+    /// ldunif and an ldvary exclude each other's uniform / rf0 uses; a
+    /// uniform is read once per word.
+    #[test]
+    fn signals_that_merge_and_signals_that_do_not() {
+        let plain = Op71::Ldunif { dst: V(0), u: u(1.0) }; // regs below: rf0
+        let al = [Rf(0), Rf(5), Rf(6)];
+        let pw = must(merge(&Word71::empty(), &al, &plain), "plain ldunif");
+        assert!(pw.alu.sig.ldunif && pw.uniform.is_some());
+        /* a second uniform, an ldvary beside a plain ldunif */
+        let other = Op71::Ldunif { dst: V(1), u: u(2.0) };
+        assert!(merge(&pw, &al, &other).is_err());
+        assert!(merge(&pw, &al, &Op71::Wrtmuc { u: u(0.0) }).is_err());
+        assert!(merge(&pw, &al, &Op71::Ldvary { dst: V(1) }).is_err());
+        /* and the ldvary first: the plain ldunif then refuses the same */
+        let vw = must(merge(&Word71::empty(), &al, &Op71::Ldvary { dst: V(1) }), "ldvary");
+        assert!(vw.alu.sig.ldvary);
+        assert!(merge(&vw, &al, &plain).is_err());
+        /* an ldunifrf into rf5 would share the signal address with the ldvary */
+        assert!(merge(&vw, &al, &Op71::Ldunif { dst: V(2), u: u(2.0) }).is_err());
+        /* ALU operations merge beside a signal */
+        assert!(merge(&vw, &al, &fadd(2, Src71::Payload(2), Src71::Payload(3))).is_ok());
+        /* two WRTMUCs: one uniform */
+        let wm = must(merge(&Word71::empty(), &al, &Op71::Wrtmuc { u: u(0.0) }), "wrtmuc");
+        assert!(wm.alu.sig.wrtmuc);
+        assert!(merge(&wm, &al, &Op71::Wrtmuc { u: u(0.0) }).is_err());
+    }
+
+    /// A flag push and a conditional write never share a word; a flag push,
+    /// or a conditional move, does not share one with a register-writing
+    /// signal (the condition field is the signal's address).
+    #[test]
+    fn flags_and_conditions_share_no_word() {
+        let push = Op71::Flags {
+            unit: FlagOp71::Add(AddOp71::Fcmp),
+            a: Src71::Payload(2),
+            b: Src71::Payload(3),
+            pf: Pf::PushN,
+            uf: Uf::None,
+        };
+        let cmov = Op71::CondMov { dst: V(0), src: Src71::Payload(2), cond: Cond::IfA };
+        let wp = word_with(&push);
+        assert!(!merged(&wp, &cmov));
+        let wc = word_with(&cmov);
+        assert!(!merged(&wc, &push));
+        assert!(wc.alu.flags.mc == Cond::IfA, "a free mul unit takes the conditional move");
+        let ld = Op71::Ldtmu { dst: V(1) };
+        assert!(!merged(&wp, &ld));
+        assert!(!merged(&wc, &ld));
+        /* a conditional move takes the add unit when the mul unit is taken */
+        let wm = word_with(&fmul(1, Src71::Payload(2), Src71::Payload(3)));
+        let w = must(merge(&wm, &rfs(8), &cmov), "add-unit conditional move");
+        assert_eq!(w.alu.flags.ac, Cond::IfA);
+    }
+
+    /// Nothing but a plain operation merges, and nothing merges into a branch
+    /// word.
+    #[test]
+    fn control_flow_and_thrsw_never_merge() {
+        let al = rfs(4);
+        for op in [Op71::Thrsw, Op71::LoopHead, Op71::Label(Label(0))] {
+            assert!(matches!(merge(&Word71::empty(), &al, &op), Err(Refused::Never)));
+        }
+        let mut w = Word71::empty();
+        use crate::shaderc::online::v3d::isa71::{BranchCond, BranchDest, Msfign};
+        w.branch = Some(Branch {
+            cond: BranchCond::Always,
+            msfign: Msfign::None,
+            bdi: BranchDest::Rel,
+            ub: true,
+            bdu: BranchDest::Rel,
+            raddr_a: 0,
+            offset: 0,
+        });
+        assert!(matches!(merge(&w, &al, &fadd(0, Src71::Payload(2), Src71::Payload(3))), Err(Refused::Full)));
+    }
+
+    /// Read-after-write latency: one word for an ALU result, two for an SFU
+    /// result (`latency`; the SFU's result is in r4 two instructions on,
+    /// qpu_schedule.c's latency tables).
+    #[test]
+    fn result_latencies() {
+        let alu_op = fadd(0, Src71::Payload(2), Src71::Payload(3));
+        assert_eq!(latency(&alu_op), 1);
+        assert_eq!(latency(&Op71::Ldunif { dst: V(0), u: u(1.0) }), 1);
+        assert_eq!(latency(&Op71::Ldtmu { dst: V(0) }), 1);
+        assert_eq!(latency(&Op71::Sfu { op: Sfu71::Recip, dst: V(0), a: Src71::Payload(3) }), 2);
+        assert_eq!(
+            latency(&Op71::Add { op: AddOp71::Recip, dst: Dst71::V(V(0)), a: Src71::Payload(3), b: Src71::None }),
+            2
+        );
+    }
+
+    /// A dependent operation is never in the producer's word, and an SFU's
+    /// consumer is two words on, whatever fills the gap.
+    #[test]
+    fn a_consumer_waits_for_its_producer() {
+        let ops = [
+            fmul(0, Src71::Payload(3), Src71::Payload(2)),
+            fadd(1, v(0), Src71::Payload(2)),
+            Op71::Sfu { op: Sfu71::Recip, dst: V(2), a: v(1) },
+            fmul(3, v(2), Src71::Payload(3)),
+            Op71::Thrsw,
+            Op71::Thrsw,
+            to_tlb(3),
+        ];
+        let (instrs, _) = pack(&ops, &[4, 5, 6, 7]).expect("packs");
+        let text = listing(&instrs);
+        let m = find(&instrs, |a| a.mul.op == MulOp71::Fmul && a.mul.waddr == 4);
+        let a = find(&instrs, |a| a.add.op == AddOp71::Fadd);
+        let r = find(&instrs, |a| a.add.op == AddOp71::Recip);
+        let m2 = find(&instrs, |a| a.mul.op == MulOp71::Fmul && a.mul.waddr == 7);
+        assert!(m < a && a < r, "{text}");
+        assert!(m2 >= r + 2, "{text}");
+    }
+
+    /// A TMU result waits for the thread switch: the LDTMU is after the
+    /// switch's delay slots, and an ldtmu is refused in them
+    /// (`ok_after_thrsw`, qpu_schedule.c:2132-2215).
+    #[test]
+    fn a_tmu_result_is_read_after_the_switch() {
+        assert!(!ok_after_thrsw(&Op71::Ldtmu { dst: V(0) }));
+        assert!(!ok_after_thrsw(&Op71::Sfu { op: Sfu71::Recip, dst: V(0), a: Src71::Payload(3) }));
+        assert!(!ok_after_thrsw(&Op71::Add {
+            op: AddOp71::Recip,
+            dst: Dst71::V(V(0)),
+            a: Src71::Payload(3),
+            b: Src71::None
+        }));
+        assert!(!ok_after_thrsw(&Op71::Thrsw));
+        assert!(!ok_after_thrsw(&Op71::Wrtmuc { u: u(0.0) }));
+        assert!(!ok_after_thrsw(&Op71::Add { op: AddOp71::Tmuwt, dst: Dst71::Nop, a: Src71::None, b: Src71::None }));
+    }
+
+    /// What may run in a thread switch's delay slots: register writes and
+    /// the signals that write a register; not the TLB, flags, a magic write.
+    #[test]
+    fn delay_slot_candidates() {
+        assert!(ok_after_thrsw(&fadd(0, Src71::Payload(2), Src71::Payload(3))));
+        assert!(ok_after_thrsw(&fmul(0, Src71::Payload(2), Src71::Payload(3))));
+        assert!(ok_after_thrsw(&Op71::Ldunif { dst: V(0), u: u(1.0) }));
+        assert!(ok_after_thrsw(&Op71::Ldvary { dst: V(0) }));
+        assert!(ok_after_thrsw(&Op71::Copy { dst: V(0), src: Src71::Payload(2) }));
+        assert!(!ok_after_thrsw(&to_tlb(0)));
+        assert!(!ok_after_thrsw(&Op71::Mul { op: MulOp71::Mov, dst: Dst71::Magic(33), a: v(0), b: Src71::None }));
+        assert!(!ok_after_thrsw(&Op71::CondMov { dst: V(0), src: v(1), cond: Cond::IfA }));
+        assert!(!ok_after_thrsw(&Op71::Setmsf { src: v(1), cond: Cond::None }));
+    }
+
+    /// The thread-end slots (`qpu_inst_valid_in_thrend_slot`,
+    /// qpu_schedule.c:1979-2061): no ldvary, no uniform after slot 0, no rf2
+    /// or rf3, no TLB write in slot 2, no register ALU write in slot 0.
+    #[test]
+    fn thread_end_slot_rules() {
+        let al = [Rf(4), Rf(5), Rf(2), Rf(3)];
+        let wo = |op: &Op71| must(merge(&Word71::empty(), &al, op), "merges");
+        let to_rf = fadd(0, v(1), v(1));
+        let tlbw = to_tlb(1);
+        for slot in 0..3 {
+            assert!(!ok_in_thrend71(&wo(&Op71::Ldvary { dst: V(0) }), slot));
+            assert!(!ok_in_thrend71(&wo(&fadd(2, v(1), v(1))), slot), "writes rf2");
+            assert!(!ok_in_thrend71(&wo(&fadd(0, v(3), v(1))), slot), "reads rf3");
+        }
+        assert!(!ok_in_thrend71(&wo(&to_rf), 0), "a register write in the end instruction");
+        assert!(ok_in_thrend71(&wo(&to_rf), 1));
+        assert!(ok_in_thrend71(&wo(&tlbw), 0));
+        assert!(ok_in_thrend71(&wo(&tlbw), 1));
+        assert!(!ok_in_thrend71(&wo(&tlbw), 2));
+        let un = Op71::Ldunif { dst: V(1), u: u(1.0) };
+        assert!(ok_in_thrend71(&wo(&un), 0));
+        assert!(!ok_in_thrend71(&wo(&un), 1));
+    }
+
+    /// The last instruction: the program ends with the last thread switch's
+    /// two delay slots and nothing after them.
+    #[test]
+    fn the_program_ends_in_the_last_switch_delay_slots() {
+        let ops = [
+            Op71::Ldunif { dst: V(0), u: u(1.0) },
+            fmul(1, v(0), Src71::Payload(3)),
+            Op71::Thrsw,
+            Op71::Thrsw,
+            to_tlb(1),
+        ];
+        let (instrs, _) = pack(&ops, &[4, 5]).expect("packs");
+        let text = listing(&instrs);
+        let sw: Vec<usize> = (0..instrs.len()).filter(|&k| alu(&instrs[k]).sig.thrsw).collect();
+        /* the pair's second switch, and the program-end one the packer adds */
+        assert!(sw.len() >= 2, "{text}");
+        let last = *sw.last().unwrap();
+        assert_eq!(instrs.len(), last + 3, "exactly two delay slots after the last switch\n{text}");
+        verify71(&instrs, false).unwrap_or_else(|e| panic!("{e:?}\n{text}"));
+    }
+
+    /// Scheduling the same input twice gives the same words and uniforms.
+    #[test]
+    fn scheduling_is_deterministic() {
+        let ops = [
+            Op71::Ldvary { dst: V(0) },
+            Op71::Ldunif { dst: V(1), u: u(1.0) },
+            fmul(2, v(0), Src71::Payload(3)),
+            fadd(3, v(2), Src71::LdvaryC),
+            Op71::Sfu { op: Sfu71::Recip, dst: V(4), a: v(3) },
+            fadd(5, v(4), v(1)),
+            Op71::Thrsw,
+            Op71::Thrsw,
+            to_tlb(5),
+        ];
+        let regs = [4, 5, 6, 7, 8, 9];
+        let (a, ua) = pack(&ops, &regs).expect("packs");
+        let (b, ub) = pack(&ops, &regs).expect("packs");
+        assert_eq!(a, b);
+        assert_eq!(ua, ub);
+        let wa: Vec<u64> = a.iter().map(|i| encode71(i).expect("encodes")).collect();
+        let wb: Vec<u64> = b.iter().map(|i| encode71(i).expect("encodes")).collect();
+        assert_eq!(wa, wb);
+    }
 }
