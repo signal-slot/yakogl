@@ -12,7 +12,9 @@
 //! note), the pair verbatim from the case's `.qpa`.
 //!
 //! `rsg_sconv55_fs` is byte-equal since its dead `bvec4` local is left out
-//! of the walk (`nir_fs.rs` `ir_live`). Every other reference is refused, so
+//! of the walk (`nir_fs.rs` `ir_live`); `opfs_logical_and_bool` since the
+//! `&&` of two fp16 `<` sharing their first operand is one compare of the
+//! `fmin` (`nir_fs.rs` `and_masks`). Every other reference is refused, so
 //! its byte-compare is `#[ignore]`d and `refusals_pinned` holds the refusal
 //! ([`REFUSED`]): the integer/boolean text, or for two the next one past
 //! their dead int and bool values. The lowering step that lifts one moves it to
@@ -37,6 +39,7 @@ mod mali_ref;
 /// The references a lowering step made byte-equal, without the
 /// `deqp_intval3_` prefix: each has a byte-compare test below.
 const LOWERED: &[&str] = &[
+    "opfs_logical_and_bool",
     "opfs_not_equal_int_highp",
     "opfs_notequal_ivec3_mediump",
     "reslib_int_to_bool_fs",
@@ -63,7 +66,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("cond_complex_fs", INT_VALUE),
     ("cond_compound_fs", INT_VALUE),
     ("idx_tmp_vec3_dynwrite_fs", INT_VALUE),
-    ("opfs_logical_and_bool", INT_VALUE),
     ("opfs_post_decrement_effect_ivec2_highp", INT_VALUE),
     ("opfs_pre_decrement_result_int_mediump", INT_VALUE),
     /* the sequence's first operand is dead: the colour's lanes next */
@@ -135,9 +137,10 @@ fn idx_tmp_vec3_dynwrite_fs() {
 }
 
 /// `shaders.operator.binary_operator.logical_and.bool_fragment`: `&&` of two
-/// `> 0.0` compares is `FMIN.v2f16` and one `FCMP_OR.v2f16.lt.f1`.
+/// `> 0.0` compares is `FMIN.v2f16` and one `FCMP_OR.v2f16.lt.f1`
+/// (`iand(flt(a, b), flt(a, c))`, nir_opt_algebraic.py:1157; `nir_fs.rs`
+/// `and_masks`, plan #367 lower-train-2 INT_VALUE ideas).
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn opfs_logical_and_bool() {
     mali_ref::assert_matches("deqp_intval3_opfs_logical_and_bool");
 }

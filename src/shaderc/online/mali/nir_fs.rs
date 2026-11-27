@@ -2723,6 +2723,19 @@ impl<'s> Fs<'s> {
                 return self.node(Alu::Fcmp(Cmpf::Lt), [m, c, u], at);
             }
         }
+        /* `iand(flt(a, b), flt(a, c))` is `flt(a, fmin(b, c))`
+         * (nir_opt_algebraic.py:1157, `nnan` in a GL shader):
+         * deqp_intval3_opfs_logical_and_bool's `v_in0.z > 0.0 && v_in1.x >
+         * 0.0`, `FMIN.v2f16 r0, r0^.h00, r1^.h00` then one
+         * `FCMP_OR.v2f16.lt.f1` against 0.0 */
+        if let (Some((Alu::Fcmp(Cmpf::Lt), [x, b0, _])), Some((Alu::Fcmp(Cmpf::Lt), [y, c0, _]))) =
+            (self.alu_of(a), self.alu_of(b))
+        {
+            if x == y && !matches!(b0, Val::Const(_)) && !matches!(c0, Val::Const(_)) {
+                let m = self.node(Alu::Fmin, [b0, c0, u], at)?;
+                return self.node(Alu::Fcmp(Cmpf::Lt), [x, m, u], at);
+            }
+        }
         self.mask_op(Alu::Iand, a, b, at)
     }
 
@@ -2843,10 +2856,24 @@ impl<'s> Fs<'s> {
         }
         if let (Some((Alu::Fcmp(c), [a, b, _])), Some((Alu::Fcmp(d), [x, y, _]))) = (self.alu_of(p), self.alu_of(q)) {
             if self.varying_cmp16(q).is_none() && (a == x || b == y) {
-                return match (c, d, b) {
-                    (Cmpf::Lt, Cmpf::Lt, Val::Const(_)) if b == y => self.and_masks(p, q, at),
-                    _ => Err(MaliError::IntValue),
-                };
+                match (c, d, b, y) {
+                    (Cmpf::Lt, Cmpf::Lt, Val::Const(_), _) if b == y => return self.and_masks(p, q, at),
+                    /* `flt(a, b) && flt(a, c)`, `b` and `c` not
+                     * constants: `flt(a, fmin(b, c))` (:1157,
+                     * [`Fs::and_masks`]; deqp_intval3_opfs_logical_and_bool,
+                     * plan #367 INT_VALUE ideas) */
+                    (Cmpf::Lt, Cmpf::Lt, _, _)
+                        if a == x && !matches!(b, Val::Const(_)) && !matches!(y, Val::Const(_)) =>
+                    {
+                        return self.and_masks(p, q, at)
+                    }
+                    /* two `feq` / `fneu` have no rule: the 16-bit `iand`
+                     * stays, as in Mesa (ideas c565 and 1aca's `v1.w == 0.0
+                     * && v2.w == 0.0`; gm2_ideas_2: `LSHIFT_AND.v2i16 r4,
+                     * r7^.h00, 0x0.b00, r4^` of two `FCMP_OR.v2f16.eq.m1`) */
+                    (Cmpf::Eq, Cmpf::Eq, ..) | (Cmpf::Ne, Cmpf::Ne, ..) => {}
+                    _ => return Err(MaliError::IntValue),
+                }
             }
         }
         /* the late rule rewrites the compare where it stands: the 16-bit

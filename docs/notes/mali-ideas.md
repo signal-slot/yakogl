@@ -11,8 +11,8 @@ mali_glmark2_verdicts.txt`):
 | --- | --- | --- | --- |
 | fs df64 | the alpha-tested glyph: `texture2D(tex, gl_FragCoord.xy / 32.0)`, `if (c.w < 0.5) discard;` | TEX_COORD | `ok`, byte-equal (gm2_ideas_1) |
 | vs 51b2 | the logo and lamp vertex shader: `unitvec(v1, v2)` with three early returns, called with `vec4(0.0, 0.0, 0.0, 1.0)` | CONTROL_FLOW | `ok`, vertex programs byte-equal (gm2_cf_earlyret_vs) |
-| fs c565 | the logo: the same function of a varying and a uniform, `pow(.., 30.0)` | INT_VALUE | INT_VALUE (open) |
-| fs 1aca | the lamp: three `Lamp` structs in a global array, a counted loop calling the function | INT_VALUE | INT_VALUE (open) |
+| fs c565 | the logo: the same function of a varying and a uniform, `pow(.., 30.0)` | INT_VALUE | INT_VALUE (open; FS_OPERAND after section 4) |
+| fs 1aca | the lamp: three `Lamp` structs in a global array, a counted loop calling the function | INT_VALUE | INT_VALUE (open; FRAGCOLOR_LANE after section 4) |
 
 The references are `tools/mali/testdata/gm2_ideas_1..3` (study-ideas,
 `7f730a6d`: df64 under mediump, c565 and 1aca whole, each paired with vs
@@ -125,3 +125,45 @@ would then need the mixed fp32/fp16 selects of a flattened `if` chain whose
 values cross precisions. fs 1aca adds the counted loop of three passes over a
 global struct array (gm2_cf_constloop_struct_fs is its smaller form, refused
 at INT_VALUE too). Neither fits this item; they are named in its report.
+
+## 4. INT_VALUE of fs c565 and 1aca: the `&&` of two fp16 masks
+
+Measured at `9a74631a` (plan #367 lower-train-2, from proto-int-value-ideas)
+over the corpus of `tools/hostharness/glmark2/run.sh` (glmark2 22c527cb).
+Both shaders reached INT_VALUE at one form, the only one either has:
+`v1.w == 0.0 && v2.w == 0.0` in `unitvec`, the `&&` of two
+`FCMP_OR.v2f16.eq.m1` masks. 1aca's loop counter (`k < 3`, a constant bound)
+unrolls before the walk and adds no integer form.
+
+BOOL_AND (`docs/notes/mali-bool-and.md`, `Fs::and16`) already takes the
+16-bit `iand` of two fp16 masks, but refused two compares sharing an
+operand in the same place unless they were nir_opt_algebraic.py:1158's
+`flt(a, #c) && flt(b, #c)` (`and_masks`' `fmax` fold). The two `== 0.0`
+share their constant. This step widens `and16`:
+
+- `feq && feq` and `fneu && fneu` sharing an operand: nir_opt_algebraic has
+  no rule for them, so the 16-bit `iand` stays, as in Mesa (gm2_ideas_2's
+  fs.fragment: `LSHIFT_AND.v2i16 r4, r7^.h00, 0x0.b00, r4^`).
+- `flt(a, b) && flt(a, c)`, `b` and `c` not constants: `flt(a, fmin(b, c))`
+  (nir_opt_algebraic.py:1157, `nnan`, which holds in a GL shader with no
+  `precise`), a new fold in `and_masks`.
+
+| reference | before | after | verdict |
+| --- | --- | --- | --- |
+| deqp_intval3_opfs_logical_and_bool (`v_in0.z > 0.0 && v_in1.x > 0.0`) | INT_VALUE | ok | byte-equal: `FMIN.v2f16 r0, r0^.h00, r1^.h00`, `FCMP_OR.v2f16.lt.f1` |
+| gm2_ideas_2 (c565), gm2_cf_earlyret_fs | INT_VALUE | FS_OPERAND | not comparable yet |
+| gm2_ideas_3 (1aca), gm2_cf_constloop_struct_fs | INT_VALUE | FRAGCOLOR_LANE | not comparable yet |
+
+A sweep of all 1,810 `tools/mali/testdata` pairs (`tests/mali_corpus_diff.rs`)
+moves nothing else. The `||` of two fp16 masks (deqp_intval4_logical_or_fs,
+Mesa's `fmax` rewrite) stays INT_VALUE.
+
+What stops c565 and 1aca next: the selects of the flattened function
+(section 3: fp32 `CSEL.u32.eq` of widened lanes for the return value, the
+fp16 `MUX.v2i16` of the `&&`), seen as FS_OPERAND in c565 and as
+FRAGCOLOR_LANE in 1aca, and the fp16 `frcp` of a run-time value
+(`b.xyz / b.w`, gm2_ideas_2: `FRCP.f16 r1, r2.h11`) behind them.
+
+The tests are `tests/mali_int_value_ideas.rs` (the pins, the 16-bit `iand`,
+the `fmin` fold, `||` still refused) and `tests/mali_deqp_intval3.rs`
+(`opfs_logical_and_bool` in `LOWERED`).
