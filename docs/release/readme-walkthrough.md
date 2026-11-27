@@ -50,9 +50,14 @@ are in `docs/release/checklist.md`; the walks decide, not this file.
 
 CONTRIBUTING.md's build, test and gate commands, walked on a gate host.
 
-**Not met.** The newest `--quick` walk is still the red one at `a06902bd`. `e52f2e3f` re-indents the list that made it red; its re-walk was not run (the host had 20 GB free against the 50 GB needed, and no `MP2_QEMU`).
+**Not met.** The release walk's pinned commit is `4f34ffb8` (lines 3, 6 and 12 are read there); its `--quick` is red on seven rows.
 
-**Fresh clone of `a06902bd` (2026-11-26), red on six clippy rows.** `env LC_ALL=C tools/check.sh --quick` in a fresh clone of the then-current integration tip (the walked commit `a06902bd` is itself the commit that fixed the two `nanopc_t6` clippy sites that made the walk before it red), started detached so the run outlives the 2 h command limit (`LANG=C` and `CARGO_INCREMENTAL=0` set too), ran on 2026-11-26 and ended with the summary line:
+**Fresh clone of `4f34ffb8` (2026-11-26), red.** README and then CONTRIBUTING were followed as written in a fresh clone, README step 4 (`west`) included. `tools/check.sh --quick` under `LC_ALL=C` ran to its summary line twice: the first read "487 ok, 8 failed, 0 gap(s)", the second (final) "488 ok, 7 failed, 0 gap(s)". The plan lists 495 rows, so green reads "495 ok, 0 failed, 0 gap(s)"; no row was a gap (the host carried `ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, an aarch64 compiler; `MESA_V3D_TREE` unset), and the Zephyr image rows were ok after step 4. A cache of 68 GB was pruned before the walk; the run needs about 50 GB free with `CARGO_INCREMENTAL=0`. The seven failed rows and their causes:
+
+- Six clippy rows, among the 14 clippy rows that are red at `4f34ffb8` in the full run (clippy 0.1.99; the row list is in the cell of line 12 of `docs/release/checklist.md`). The causes of the 14: `src/v3d/texstate71.rs:15` duplicated `allow(dead_code)`, `tests/v3d71_texfmt.rs:259` `type_complexity`, `tests/v3d71_gltest_rpi5_conf.rs:162` constant assertion, `tests/v3d_pi4_aborts2_refusals.rs:447` nested `format!` (fixed by `36c51e9a`), and in the Mali row `tests/mali_link_varying_offsets.rs:129-130`, `tests/mali_rebind_stencil_gl.rs:375`, `src/mali/frame_uniarray_tests.rs:388` (fixed by `6a54408d`). At `6a54408d` stable clippy 0.1.99 is clean on all 39 clippy rows; nightly clippy 0.1.101 flags 14 rows on `needless_range_loop`, so the reading depends on the host's clippy. Which six of the 14 the `--quick` plan reaches is not recorded per row.
+- `tools/cts/imx95-gles2-accept-selftest.sh`: its fixture records say `verdin_imx95` while the tally tool accepts only `verdin-imx95` (the fixture's board name), a two-file fix. It passes in the later `a06902bd` walk below.
+
+**Later walk, not at the pinned commit: fresh clone of `a06902bd` (2026-11-26), red on six clippy rows.** Kept because it is the newest `--quick` reading; `e52f2e3f` re-indents the list that made it red, and its re-walk was not run (the host had 20 GB free against the 50 GB needed, and no `MP2_QEMU`). `env LC_ALL=C tools/check.sh --quick` in a fresh clone of the then-current integration tip (the walked commit `a06902bd` is itself the commit that fixed the two `nanopc_t6` clippy sites that made the walk before it red), started detached so the run outlives the 2 h command limit (`LANG=C` and `CARGO_INCREMENTAL=0` set too), ran on 2026-11-26 and ended with the summary line:
 
 > check.sh: 553 ok, 6 failed, 0 gap(s) (a gap was not run: it is not a pass), 0 skipped (every row), 0 clippy rows left to the nightly, 2 not run (passed on main) in 7666s; test binaries: 2010 run, 0 skipped (passed on main); runner: cargo-nextest 0.9.148 (cd1d6d546 2026-10-07) (the rows that read libtest's output run the binaries concurrently)
 
@@ -60,13 +65,13 @@ after 7666 s (check.sh's own figure; 7667 s wall clock), exit 1. No row was a ga
 
 - Six clippy rows, all with the same two warnings: `doc list item without indentation` at `tests/depth_resolve_pvr_edges.rs:22:5` and `:23:5`. The file came in with `8748a5ca`; its `//!` bullet list at lines 20–25 has continuation lines that are not indented past the list marker. One small commit re-indenting that list closes all six rows; until it lands the tree is not green on `--quick`.
 
-The walk before this one, at `d13c9558` ("523 ok, 2 failed, 0 gap(s)" in 7501 s), was red only on the two `yakogl-drivers` clippy rows (`driver/rust/src/board/nanopc_t6_go.rs:700` `redundant_comparisons`, `driver/rust/src/board/nanopc_t6_frame_tests.rs:42` `assertions_on_constants`); `a06902bd` fixed both, and they are green in this walk. The `shaderc71_mali_testdata` pair count fixed by `8c4fae25` and the self-test rows red in the earlier walks (`tools/cts/imx95-gles2-accept-selftest.sh`, the kexec-zephyr `t6-verdict-test.sh` self-test, and `tools/cts/imx8mp-glmark2-wrongscene-selftest.sh`, fixed by `e758afdb`) pass at `a06902bd`: the walk's only failed rows are the six above.
+The walk before `a06902bd`, at `d13c9558` ("523 ok, 2 failed, 0 gap(s)" in 7501 s), was red only on the two `yakogl-drivers` clippy rows (`driver/rust/src/board/nanopc_t6_go.rs:700` `redundant_comparisons`, `driver/rust/src/board/nanopc_t6_frame_tests.rs:42` `assertions_on_constants`); `a06902bd` fixed both, and they are green in the `a06902bd` walk. The `shaderc71_mali_testdata` pair count fixed by `8c4fae25` and the self-test rows red in the earlier walks (`tools/cts/imx95-gles2-accept-selftest.sh`, the kexec-zephyr `t6-verdict-test.sh` self-test, and `tools/cts/imx8mp-glmark2-wrongscene-selftest.sh`, fixed by `e758afdb`) pass at `a06902bd`: the walk's only failed rows are the six above.
 
-Before the gate: at the same-day walk of `4f34ffb8`, every CONTRIBUTING command before the gate exited 0, apart from the first `tools/cts/deps-env.sh --check`, which exits 1 until the next command builds the missing entry. Nine `tools/` rows fail on a host that exports a locale it has not installed and pass under `LC_ALL=C`; the gate exports no locale, so export `LC_ALL=C` and keep `TMPDIR` outside every git checkout.
+Before the gate, in the `4f34ffb8` walk, every CONTRIBUTING command before the gate exited 0, apart from the first `tools/cts/deps-env.sh --check`, which exits 1 until the next command builds the missing entry. Nine `tools/` rows fail on a host that exports a locale it has not installed and pass under `LC_ALL=C`; the gate exports no locale, so export `LC_ALL=C` and keep `TMPDIR` outside every git checkout.
 
 The last green `--quick` is "181 ok, 0 failed, 0 gap(s)" at `570cd8c6` (2026-11-12, 3121 s). It is not a reading of the tip.
 
-To close line 3: a fresh-clone walk of `e52f2e3f` (which re-indents the `//!` bullet list at `tests/depth_resolve_pvr_edges.rs`) or later, `env LC_ALL=C tools/check.sh --quick` started detached with a wall budget above 7667 s, ending "N ok, 0 failed, 0 gap(s)" with N equal to the plan listing (`YAKOGL_CHECK_PLAN=1 tools/check.sh --quick`) at the walked commit (562 rows at `e52f2e3f`). For the next walk: `MP2_QEMU` is built in the host's dependency cache (`$CONNECTED_DEPS_DIR`), and the stale `ci-target/debug` cache is pruned (172 GB free), so it is a warm rebuild.
+To close line 3: `4f34ffb8` itself stays red, so the pin moves to a later commit. A fresh-clone walk of `e52f2e3f` (which re-indents the `//!` bullet list at `tests/depth_resolve_pvr_edges.rs`) or later, `env LC_ALL=C tools/check.sh --quick` started detached with a wall budget above 7667 s, ending "N ok, 0 failed, 0 gap(s)" with N equal to the plan listing (`YAKOGL_CHECK_PLAN=1 tools/check.sh --quick`) at the walked commit (562 rows at `e52f2e3f`). For the next walk: `MP2_QEMU` is built in the host's dependency cache (`$CONNECTED_DEPS_DIR`), and the stale `ci-target/debug` cache is pruned (172 GB free), so it is a warm rebuild.
 
 CONTRIBUTING's statements, checked at `4f34ffb8`:
 
@@ -79,7 +84,7 @@ CONTRIBUTING's statements, checked at `4f34ffb8`:
 
 README's host steps in order, then CONTRIBUTING, on a fresh clone.
 
-**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps and the API-coverage step are recorded below at `9f286b5e` (2026-11-26) — the cmake Linux build, the host tools test and the API-coverage step — and step 3's bare-metal forms in the `40b44800` re-walk below it; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading: "553 ok, 6 failed, 0 gap(s)" at `a06902bd`, red (section "Line 3"). Line 6 is not met: it is partial until line 3 is met.
+**At `4f34ffb8` (2026-11-26): step 4 (`west`) ran, exit 0.** In a fresh workspace all five README step-4 commands and the first `west build` exited 0 (`west init -m <repo> --mr main <workspace>` from the root manifest), and all 33 Zephyr image rows of the gate exit 0 with no gap. README's host steps and the API-coverage step are recorded below at `9f286b5e` (2026-11-26) — the cmake Linux build, the host tools test and the API-coverage step — and step 3's bare-metal forms in the `40b44800` re-walk below it; no README host-step change since is known to alter them. The last part of the criterion, a passing `tools/check.sh --quick` with no gap, is line 3's reading at the pinned commit: "488 ok, 7 failed, 0 gap(s)" at `4f34ffb8`, red, on six clippy rows and `tools/cts/imx95-gles2-accept-selftest.sh` (causes in section "Line 3"); the later walk of `a06902bd` is red too ("553 ok, 6 failed, 0 gap(s)"). Line 6 is not met: it is partial until line 3 is met.
 
 The `9f286b5e` walk (2026-11-26, the cmake Linux build, the host tools test and
 the API-coverage step; step 2's cross build was not re-run — no toolchain file
@@ -136,6 +141,7 @@ close the line" note of "Line 6: cross builds (2026-11-05)" in
 text in the checklist itself is not rewritten here.
 
 The criterion of line 6 ends in a passing `tools/check.sh --quick` with no gap.
-That part is line 3's newest reading: red at `a06902bd` ("553 ok, 6 failed,
-0 gap(s)"). The older readings at `8f1a5f71`, `4f34ffb8`, `4326fbd9`,
-`6a54408d` and `d13c9558` are superseded.
+That part is line 3's reading at the pinned commit: red at `4f34ffb8` ("488
+ok, 7 failed, 0 gap(s)"), with the later walk of `a06902bd` also red ("553
+ok, 6 failed, 0 gap(s)"). The readings at `4326fbd9`, `6a54408d`, `8f1a5f71`
+and `d13c9558` are superseded.
