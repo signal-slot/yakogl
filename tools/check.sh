@@ -1865,6 +1865,49 @@ step "clippy  $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs)" \
   cargo clippy --no-default-features --features "$KNOBS_ES2_CONFIG" --test gc_scene_kicks_tiled_rt
 step "test    $KNOBS_ES2_CONFIG (tests/gc_scene_kicks_tiled_rt.rs, every declared test)" \
   knobs_file_tests gc_scene_kicks_tiled_rt "$KNOBS_ES2_CONFIG"
+# Plan #417's dtpu depth-sample host tests (docs/notes/gc-depth-sample.md,
+# src/vivante/depth_sample.rs). The files that need `test-knobs` first: the
+# depth view with the tiled render targets on (tests/gc_depth_view_tiled_rt.rs),
+# the flushes in front of a draw that samples a depth view (tests/
+# gc_depth_view_flushes.rs), the CPU depth resolve adding its bytes to the
+# CPU-pass counter of glmark2's PERF page 4 v3 (tests/
+# gc_resolve_bytes_counter.rs, whose mode 1 pin needs the knob) and glmark2's
+# shadow pass in every dtpu mode (tests/gc_depth_sample_default.rs). No
+# configuration above carries `test-knobs`, so $KNOBS_CONFIG runs them and, as
+# for the rows above, every #[test] of each file must pass (tests_as_declared).
+tests_row gc_depth_view_tiled_rt
+step "test    $KNOBS_CONFIG (tests/gc_depth_view_tiled_rt.rs, every declared test)" knobs_file_tests gc_depth_view_tiled_rt
+tests_row gc_depth_view_flushes
+step "test    $KNOBS_CONFIG (tests/gc_depth_view_flushes.rs, every declared test)" knobs_file_tests gc_depth_view_flushes
+tests_row gc_resolve_bytes_counter
+step "test    $KNOBS_CONFIG (tests/gc_resolve_bytes_counter.rs, every declared test)" knobs_file_tests gc_resolve_bytes_counter
+tests_row gc_depth_sample_default
+step "test    $KNOBS_CONFIG (tests/gc_depth_sample_default.rs, every declared test)" knobs_file_tests gc_depth_sample_default
+# The two of the same work whose files hold a #[ignore]d test each, every one
+# with its reason in the attribute (the TARGET_USE marks gl_context_destroy
+# leaves; src/gl asking samples_rendered_depth with the compare binding, #397).
+# tests_as_declared refuses an ignored test, so these run as plain rows: they
+# still need `test-knobs` to compile the pins at all.
+tests_row gc_depth_sample_lifetime
+step "test    $KNOBS_CONFIG (tests/gc_depth_sample_lifetime.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_depth_sample_lifetime
+tests_row gc_depth_exact_readers
+step "test    $KNOBS_CONFIG (tests/gc_depth_exact_readers.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$KNOBS_CONFIG" --test gc_depth_exact_readers
+# And its three base-set files, each feature set from the header of its test:
+# the code-3 shadow compare bound (tests/gc_depth_view_precision.rs), the
+# outcome (b).2 GPU depth-resolve fragment program (tests/
+# gc_depth_resolve_shader.rs) and the (b).1 RS copy with its supertiled D24X8
+# decode at glmark2's sizes (tests/gc_depth_copy_rs.rs). A bulk row compiles
+# them with every other test; these name them, so each file of the depth-
+# sample work has its row and a log says which of them went red.
+scope vivante
+step "test    host-test,gpu-vivante,shaderc-online (tests/gc_depth_view_precision.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test gc_depth_view_precision
+step "test    host-test,gpu-vivante,shaderc-online (tests/gc_depth_resolve_shader.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test gc_depth_resolve_shader
+step "test    host-test,gpu-vivante,shaderc-online (tests/gc_depth_copy_rs.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test gc_depth_copy_rs
 scope pvr
 step "clippy  $KNOBS_POWERVR_CONFIG" cargo clippy --no-default-features --features "$KNOBS_POWERVR_CONFIG" --all-targets
 step "test    $KNOBS_POWERVR_CONFIG (--lib, ${#KNOBS_POWERVR_TESTS[@]} knob tests by name)" \
