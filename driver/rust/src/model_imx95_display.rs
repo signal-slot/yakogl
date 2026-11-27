@@ -50,6 +50,8 @@ use std::rc::Rc;
 
 pub const CSR: usize = 0x4B01_0000;
 pub const LDB: usize = 0x4B0C_0000;
+/// `LVDS_PHY_CLOCK_CONTROL` bits 1-4: all gated (`ldb::CLOCKS_ALL_GATED`).
+const LDB_CLOCKS_GATED: u32 = 0x1E;
 pub const IL: usize = 0x4B0D_0000;
 pub const DPU: usize = 0x4B40_0000;
 
@@ -102,6 +104,11 @@ pub struct Faults {
     pub no_shadow_load: bool,
     /// FrameGen0 keeps reading enabled after FGENABLE is cleared.
     pub fg_stuck: bool,
+    /// As the hardware: after FGENABLE is cleared FGENSTS reads 1 until the
+    /// running frame ends, and a frame ends only while the pixel clock
+    /// arrives (for the LDB route: the PLL runs and the LDB's
+    /// `LVDS_PHY_CLOCK_CONTROL` has not gated its clocks).
+    pub frame_end_needed: bool,
 }
 
 #[derive(Default)]
@@ -116,6 +123,8 @@ struct State {
     scanned: Option<u64>,
     sig_pending: bool,
     sig_valid: bool,
+    /// FGENABLE was cleared while running; the frame has not ended.
+    fg_ending: bool,
 }
 
 pub struct Display {
@@ -187,14 +196,20 @@ impl Display {
         self.sm.borrow().on(13)
     }
 
-    fn running(&self, st: &State) -> bool {
+    /// The pixel clock arrives at FrameGen0 (the LDB route also needs the
+    /// LDB's clocks ungated).
+    fn pixel_flows(&self, st: &State) -> bool {
         let sm = self.sm.borrow();
         let clocked = |c| sm.enabled(c) && sm.rate_of(c) > 0;
-        let pix = match Self::reg(st, "csr", 0x0) & 0x3 {
+        match Self::reg(st, "csr", 0x0) & 0x3 {
             0 => clocked(80),
-            2 => clocked(38),
+            2 => clocked(38) && Self::reg(st, "ldb", 0) & LDB_CLOCKS_GATED != LDB_CLOCKS_GATED,
             _ => false,
-        };
+        }
+    }
+
+    fn running(&self, st: &State) -> bool {
+        let pix = self.pixel_flows(st);
         let fgen = Self::reg(st, "dpu", o::FG_ENABLE) & 1 != 0;
         (fgen || self.faults.fg_stuck && st.frames_running > 0) && pix
     }
@@ -257,7 +272,12 @@ impl Display {
             return 0;
         }
         let v = match (b, off) {
-            ("dpu", o::FG_ENSTS) => u32::from(self.running(&st)),
+            ("dpu", o::FG_ENSTS) => {
+                if st.fg_ending && self.pixel_flows(&st) {
+                    st.fg_ending = false;
+                }
+                u32::from(self.running(&st) || st.fg_ending)
+            }
             ("dpu", o::FG_TIMESTAMP) => {
                 self.tick(&mut st);
                 st.frame << 14
@@ -314,6 +334,13 @@ impl Display {
                 }
             }
             ("dpu", o::FG_ENABLE) => {
+                if val & 1 == 0
+                    && self.faults.frame_end_needed
+                    && Self::reg(&st, "dpu", o::FG_ENABLE) & 1 != 0
+                    && st.frames_running > 0
+                {
+                    st.fg_ending = true;
+                }
                 st.regs.insert((b, off), val);
                 if val & 1 == 0 && !self.faults.fg_stuck {
                     st.frames_running = 0;

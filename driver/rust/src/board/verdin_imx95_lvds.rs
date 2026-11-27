@@ -50,7 +50,7 @@ use crate::ip::tpm_pwm::{self, Pwm};
 use crate::mmio::Mmio;
 use crate::soc::imx95::display::{self, Stream0, StreamConfig};
 use crate::soc::imx95::display_power;
-use crate::soc::imx95::dpu::{Form, Framebuffer, Route};
+use crate::soc::imx95::dpu::{self, Form, Framebuffer, Route};
 use crate::soc::imx95::ldb;
 use crate::soc::imx95::sm::{self, Fault};
 use crate::video::VideoMode;
@@ -203,8 +203,13 @@ pub fn display_up<T: Transport>(t: &mut T, m: &impl Mmio, env: &impl Env, cfg: &
     Ok(Up { stream, ldb, tpm_hz, backlight })
 }
 
-/// The backlight off, the LDB down, then stream 0 and the display's power
-/// (the LDB PLL and DISPLAY).
+/// The backlight off, FrameGen0 stopped, the LDB down, then stream 0 and the
+/// display's power (the LDB PLL and DISPLAY). FrameGen0's enable status
+/// clears only when the running frame ends, and the pixel clock comes through
+/// the LDB, so the LDB's clocks stay until FrameGen0 reads stopped (Linux's
+/// order: the DPU's CRTC disable, then the LDB's bridge disable). When the
+/// stop fails the LDB is still brought down and the first error is returned;
+/// the power stays on then.
 pub fn display_down<T: Transport>(
     t: &mut T,
     m: &impl Mmio,
@@ -213,7 +218,14 @@ pub fn display_down<T: Transport>(
     stream: &Stream0,
 ) -> Result<(), Error> {
     backlight_off(t, m, cfg)?;
-    ldb::down(m, cfg.ldb);
     let mut delay = |us: u32| env.busy_wait_us(us);
-    display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display)
+    dpu::stop(m, cfg.display.dpu);
+    let budget = 2 * display::frame_us(&stream.prepared.mode, stream.prepared.pix_hz);
+    let stopped = dpu::wait_stopped(m, cfg.display.dpu, budget, &mut delay).map_err(display::Error::NotStopped);
+    ldb::down(m, cfg.ldb);
+    // the pixel link off, the power; no second wait when the first failed
+    match stopped {
+        Ok(_) => display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display),
+        Err(e) => Err(Error::Display(e)),
+    }
 }
