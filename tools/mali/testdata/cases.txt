@@ -271,3 +271,12 @@ gm2_texmulti_6  gm2_texmulti_6.vert gm2_texmulti_6.frag triangles vs.position=eq
 # 87, the matrix order and the flattened function among them (`unanalysed`).
 gm2_ideas_1         gm2_ideas_1.vert        gm2_ideas_1.frag        triangles vs.position=equal fs.fragment=differs:mediump:16:2cf0e24d70a3
 gm2_cf_earlyret_vs  gm2_cf_earlyret_vs.vert gm2_cf_earlyret_vs.frag triangles vs.position=differs:unanalysed:117:6b6c72c35da2 vs.varying=differs:unanalysed:87:67e4a44355fb fs.fragment=differs:mediump:13:043920c93422
+# #367 lower-nonfinite-const: the lit fragment shaders' built-ins on constants (shading 994f/fea0, bump d442/487d/77c5;
+# docs/notes/mali-nonfinite-const.md), drawn with --uniform-values. Our compiler is byte-equal to gm2_nonfin_2 and _4
+# (tests/mali_nonfinite_const.rs); _1 is one instruction longer, _3 and _5 stop at later families. pan_shc's SPIR-V path
+# has no lower_precision: its constants are fp32 words and its arithmetic fp32 (`mediump`).
+gm2_nonfin_1  gm2_nonfin_1.vert gm2_nonfin_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:18:11292c2340f8
+gm2_nonfin_2  gm2_nonfin_2.vert gm2_nonfin_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:12:22abcc6dfcd8
+gm2_nonfin_3  gm2_nonfin_3.vert gm2_nonfin_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:36:30aa836b3b78
+gm2_nonfin_4  gm2_nonfin_4.vert gm2_nonfin_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:9:81841d85a38d
+gm2_nonfin_5  gm2_nonfin_5.vert gm2_nonfin_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:38:ba754e5020d5
