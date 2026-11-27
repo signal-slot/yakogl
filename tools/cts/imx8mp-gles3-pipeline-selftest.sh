@@ -218,7 +218,7 @@ grep -v '^#' "$work/xnp.tsv" | grep -Evq "$shape"; [ $? = 1 ]; expect "every X2 
 mp --totals "${XS[@]}" 2> /dev/null | tail -1 | grep -qxF "$XL"; expect "X2 totals end with the Armadillo-X2 line" $?
 mp --totals "${XS[@]}" 2> /dev/null | grep -q '^no record: 0 of 133 entries (none)'; expect "X2 totals: no missing entry" $?
 mp --check "${S[0]}" "${S[1]}" "${XS[2]}" > "$work/x3.out" 2>&1; rc=$?
-{ [ "$rc" = 0 ] && grep -q '^boards: .*rows001-045: Verdin iMX8M Plus; .*rows046-090: Verdin iMX8M Plus; 2026-11-imx8mp-gles3-x2-[0-9a-f]*-rows91-133: Armadillo-X2' "$work/x3.out" \
+{ [ "$rc" = 0 ] && grep -q '^boards: .*rows001-045: Verdin iMX8M Plus (entries [0-9-]*); .*rows046-090: Verdin iMX8M Plus (entries [0-9-]*); 2026-11-imx8mp-gles3-x2-[0-9a-f]*-rows91-133: Armadillo-X2 (i.MX 8M Plus, GC7000UL) (entries 90-132)' "$work/x3.out" \
 	&& ! grep -qxF "$XL" "$work/x3.out"; }; expect "Verdin + X2 slices merge and name each slice's board" $?
 mp --notpass "${S[@]}" 2> /dev/null | grep -q 'Armadillo\|boards:'; [ $? = 1 ]; expect "Verdin-only notpass names no board (unchanged)" $?
 mp --check "${XS[0]}" "${XS[1]}" > "$work/x4.out" 2>&1; rc=$?
