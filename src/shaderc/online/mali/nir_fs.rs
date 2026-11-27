@@ -5195,6 +5195,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     f.mixed |= !copies || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
+    bcsel_const_ops(&mut f);
     lone_negations(&mut f, m);
     /* a highp `log2` read by anything but a `pow` ([`Fs::lane32`]'s
      * `Flog2`, made for the `pow` that reads it): no reference */
@@ -5256,9 +5257,15 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
      * counter's store, which is no operation of several lanes
      * ([`Fs::wide`]; gm2_fcoord16_6's `d = fract(d * 1.7)` passes, one
      * lane each) */
+    /* nor does a built-in's step whose lanes all hold one scalar (the
+     * front end's lane table records 0 for it, ir.rs `Module::lanes`:
+     * `refract`'s `k` and `eta * dot(N, I) + sqrt(k)`), which Mesa's GLSL
+     * builtin computes as a `float` (builtin_functions.cpp `_refract`;
+     * gm2_nbshrf_6's one-lane `FMA.v2f16 r5, r4.neg.h00, r4.h00, ..`) */
     for (i, c) in f.ir_comps.iter_mut().enumerate().take(m.instrs.len()) {
         *c = match m.instrs[i] {
             ir::Op::StoreLocal { .. } | ir::Op::StoreOutput { .. } | ir::Op::Discard => 1,
+            ir::Op::Alu(..) if scalar_step(m, ir::ValueId(i as u32), 0) => 1,
             _ => width_of(m, ir::ValueId(i as u32)) as u8,
         };
     }
@@ -7529,6 +7536,20 @@ fn walk_nodes(
                                 }
                             }
                         }
+                        /* `eta * eta * b` of a built-in's expansion (the front
+                         * end folds `eta * eta` first, builtin_call.rs
+                         * `refract`) is Mesa's `eta * (eta * b)`, which GLSL's
+                         * `reassociate_constant` makes `b * (eta * eta)`, the
+                         * value first (opt_algebraic.cpp:175-202): gm2_nbshrf_6's
+                         * `FMA.v2f16 r5, r5^.neg.h00, u2.w0, 0x3C000000.h11` of
+                         * `1.0 - 2.25 * (1.0 - d * d)` */
+                        if a == AluOp::Fmul
+                            && matches!(x, Val::Const(_))
+                            && !matches!(y, Val::Const(_))
+                            && const_square_step(m, s[0])
+                        {
+                            (x, y) = (y, x);
+                        }
                         out[i] = f.op(a, x, y, at, rule, Some(vec_neg))?;
                         if split && f.nsplit < f.split.len() {
                             f.split[f.nsplit] = out[i];
@@ -7718,6 +7739,24 @@ fn walk_nodes(
                         if matches!(f.alu_of(fl), Some((Alu::Ffloor, _))) && !matches!(x[0], Val::Const(_)) {
                             let ny = f.neg(x[0], at)?;
                             *o = f.node(Alu::Ffma, [ny, fl, x[2]], at)?;
+                            continue;
+                        }
+                    }
+                    /* `refract`'s `ffma(fneg(t), N, eta * I)` (builtin_call.rs)
+                     * is Mesa's `eta * I - t * N` (builtin_functions.cpp
+                     * `_refract`), `fadd(fmul(eta, I), fneg(fmul(t, N)))`, whose
+                     * late fusion takes the first product (nir_opt_algebraic.py
+                     * :3817): gm2_nbshrf_6's `FMA.v2f16 r2, r4.h00, r2^, 0x0.neg`
+                     * of `t * N`, then `FMA.v2f16 r0, u2.w1, r0^, r2^.neg`. The
+                     * product is its own vector operation before the sum in
+                     * Mesa's program (both products, then both sums): it
+                     * stands where `fneg(t)` does */
+                    if refract_ffma(m, &s) {
+                        if let (Some((Alu::Fneg, [t, ..])), Some((Alu::Fmul, _))) = (f.alu_of(x[0]), f.alu_of(x[2])) {
+                            let before = s[0].val.0 as usize;
+                            let p = f.node(Alu::Fmul, [t, x[1], Val::Undef], before)?;
+                            let np = f.neg(p, before)?;
+                            *o = f.node(Alu::Fadd, [x[2], np, Val::Undef], at)?;
                             continue;
                         }
                     }
@@ -7940,6 +7979,15 @@ fn walk_nodes(
                             if f.bool32(c) && [y, z].iter().any(|&v| f.int_word(v)) =>
                         {
                             f.int32(Alu::Bcsel, [c, y, z], at)?
+                        }
+                        /* a constant and an fp16 lane on a mediump compare's
+                         * mask: a 16-bit `bcsel_pan` (`refract`'s `k < 0.0 ?
+                         * 0.0 : ..`, gm2_nbshrf_6; [`bcsel_const_ops`] moves
+                         * the colour's operations on it into its sides) */
+                        (_, Val::Const(_), _) | (_, _, Val::Const(_))
+                            if f.mask16(c) && (f.is_f16(y) || f.is_f16(z)) =>
+                        {
+                            f.node(Alu::Bcsel, [c, y, z], at)?
                         }
                         _ => return Err(MaliError::Arithmetic),
                     };
@@ -8753,6 +8801,46 @@ fn atan2_fneg(m: &Module<'_>, a: AluOp, id: usize) -> Option<(ir::ValueId, ir::S
     }
 }
 
+/// IR value `v` is a built-in's step whose lanes all hold one scalar: the
+/// front end's lane table records 0 for it (ir.rs `Module::lanes`), and
+/// every source it reads is a splat, a constant of one value in every lane
+/// read, or such a step (`refract`'s `k = 1.0 - eta * eta * (1.0 - d * d)`
+/// of the splat `d = dot(N, I)`, builtin_call.rs). A matrix product's
+/// steps record 0 too, but read the columns lane by lane: they are not.
+fn scalar_step(m: &Module<'_>, v: ir::ValueId, depth: u8) -> bool {
+    let i = v.0 as usize;
+    if depth > 16 || m.lanes.len() != m.instrs.len() || m.lanes.get(i) != Some(&0) {
+        return false;
+    }
+    let Some(ir::Op::Alu(a, srcs)) = m.def(v) else { return false };
+    srcs[..ir_arity(*a)].iter().all(|s| {
+        let splat = s.swizzle.iter().all(|&c| c == s.swizzle[0]);
+        let one_value = match m.def(s.val) {
+            Some(ir::Op::ConstF32(c)) => s.swizzle.iter().all(|&k| c[k as usize & 3] == c[s.swizzle[0] as usize & 3]),
+            _ => false,
+        };
+        splat || one_value || scalar_step(m, s.val, depth + 1)
+    })
+}
+
+/// IR source `s` is a built-in's scalar step ([`scalar_step`]) that
+/// multiplies two constants: `refract`'s `eta * eta` (builtin_call.rs),
+/// which Mesa's GLSL builtin leaves nested in `eta * (eta * b)`.
+fn const_square_step(m: &Module<'_>, s: ir::Src) -> bool {
+    let konst = |v: ir::ValueId| matches!(m.def(v), Some(ir::Op::ConstF32(_)));
+    scalar_step(m, s.val, 0)
+        && matches!(m.def(s.val), Some(ir::Op::Alu(AluOp::Fmul, x)) if konst(x[0].val) && konst(x[1].val))
+}
+
+/// `ffma(fneg(t), N, fmul(eta, I))` with `t` a built-in's scalar step
+/// ([`scalar_step`]): the front end's `refract` (builtin_call.rs), `eta * I
+/// - t * N`.
+fn refract_ffma(m: &Module<'_>, s: &[ir::Src; 3]) -> bool {
+    scalar_step(m, s[0].val, 0)
+        && matches!(m.def(s[0].val), Some(ir::Op::Alu(AluOp::Fneg, _)))
+        && matches!(m.def(s[2].val), Some(ir::Op::Alu(AluOp::Fmul, _)))
+}
+
 /// The reads of IR value `v` (an `If`'s condition is a bool, never a sum's).
 pub(super) fn ir_uses(m: &Module<'_>, v: ir::ValueId) -> usize {
     let mut n = 0;
@@ -9291,6 +9379,66 @@ fn zero_product(f: &Fs<'_>, m: &Module<'_>, vals: &[[Val; 4]], s: ir::Src, i: us
             (zero_product(f, m, vals, zs[1], c, depth + 1)? == p).then_some(p)
         }
         _ => None,
+    }
+}
+
+/// `op(bcsel(a, #b, c), #d)` is `bcsel(a, op(b, d), op(c, d))` for `op` an
+/// `fadd` or `fmul`, the operation's operands either way round (both
+/// commute), the select read once (nir_opt_algebraic.py:3429-3433, the `1 +
+/// mix(0, a - 1, cond)` rules): on the 16-bit selects of a mediump shader's
+/// compare mask, a constant first and a computed fp16 lane second, which
+/// the walk makes of
+/// `refract`'s `k < 0.0 ? 0.0 : eta * I - ..` (builtin_call.rs). A chain
+/// of such operations moves into the select one at a time:
+/// gm2_nbshrf_6's `refract(..) * 0.5 + 0.5` is `bcsel(k < 0, 0.5, ffma(r,
+/// 0.5, 0.5))`, `MUX.v2i16 r0, r0^, 0x38000000.h11, r2.h00` after the
+/// multiply-add (gm2_nbshrf_6.expect.json; docs/notes/mali-fs-refract.md).
+/// The select's node becomes the operation on its computed side and the
+/// operation's node the select, so the order of the nodes holds; the
+/// constant side is folded at fp16 ([`fold_const16`]), and a fold that
+/// does not hold leaves the shape as it is.
+fn bcsel_const_ops(f: &mut Fs<'_>) {
+    if f.prec.highp {
+        return;
+    }
+    let mut moved = false;
+    for k in 0..f.nir.n {
+        if f.live[k / 64] >> (k % 64) & 1 == 0 {
+            continue;
+        }
+        let NirNode { kind: Kind::Alu(op @ (Alu::Fadd | Alu::Fmul)), bits: 16, width: 1, src: [x, y, _] } =
+            f.nir.nodes[k]
+        else {
+            continue;
+        };
+        let (sel, d, sel_first) = match (x, y) {
+            (Val::Lane(j, 0), Val::Const(d)) => (j, d, true),
+            (Val::Const(d), Val::Lane(j, 0)) => (j, d, false),
+            _ => continue,
+        };
+        let NirNode { kind: Kind::Alu(Alu::Bcsel), bits: 16, width: 1, src: [c, t, e] } = f.nir.nodes[sel as usize]
+        else {
+            continue;
+        };
+        if !f.mask16(c) || !f.used_once(Val::Lane(sel, 0)) {
+            continue;
+        }
+        /* the rule's constant is the select's first side only (`bcsel(a,
+         * #b, c)`): `fmul(b2f(a), b)`'s `bcsel(a, b, 0.0)` stays */
+        let (Val::Const(b), other @ Val::Lane(..)) = (t, e) else { continue };
+        let a = if op == Alu::Fadd { AluOp::Fadd } else { AluOp::Fmul };
+        let Ok(folded) = fold_const16(a, b, d) else { continue };
+        let operands = if sel_first { [other, Val::Const(d), Val::Undef] } else { [Val::Const(d), other, Val::Undef] };
+        f.nir.nodes[sel as usize].kind = Kind::Alu(op);
+        f.nir.nodes[sel as usize].src = operands;
+        let side = Val::Lane(sel, 0);
+        f.nir.nodes[k].kind = Kind::Alu(Alu::Bcsel);
+        f.nir.nodes[k].src = [c, Val::Const(folded), side];
+        moved = true;
+    }
+    if moved {
+        f.live.iter_mut().for_each(|w| *w = 0);
+        f.mark_live();
     }
 }
 
@@ -10463,6 +10611,27 @@ fn lone_select(f: &Fs<'_>, v: Val) -> bool {
     }
 }
 
+/// `v` is a 16-bit select that [`bcsel_const_ops`] made: a mediump
+/// compare's mask with a computed operand, a constant on one side and a
+/// computed fp16 sum or product on the other (gm2_nbshrf_6's `refract`). As a lane
+/// alone it is [`lane_tree`]'s `Bcsel` arm, `MUX.v2i16 r1, r1^.h00,
+/// 0x38000000.h11, r2^.h00`, then packed with the constant beside it.
+fn computed_select(f: &Fs<'_>, v: Val) -> bool {
+    let Val::Lane(n, _) = v else { return false };
+    let Some((Alu::Bcsel, [m, t, e])) = f.alu_of(v) else { return false };
+    let Some((Alu::Fcmp(_), s)) = f.alu_of(m) else { return false };
+    let one_const = matches!(t, Val::Const(_)) != matches!(e, Val::Const(_));
+    /* the computed side an fp16 sum or product, not another select or a
+     * `b2f` (the `fmul(b2f(a), b)` selects of a compare's product,
+     * deqp_fclane_bcast_compare_array, are no such shape) */
+    let arith = |x: Val| f.is_f16(x) && matches!(f.alu_of(x), Some((Alu::Fadd | Alu::Fmul | Alu::Ffma, _)));
+    f.nir.nodes[n as usize].bits == 16
+        && f.mask16(m)
+        && one_const
+        && [t, e].iter().all(|&x| matches!(x, Val::Const(_)) || arith(x))
+        && s[..2].iter().any(|&x| f.alu_of(x).is_some())
+}
+
 /// `v` is the narrowed position's lane ([`Fs::frag16_lane`]) or a 16-bit
 /// operation reading one, through any depth.
 fn reaches_frag16(f: &Fs<'_>, v: Val, depth: u8) -> bool {
@@ -10781,7 +10950,7 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
          * then `MKVEC.v2i16 r2, r0^.h0, u4.w0.h0`) */
         (Some((op, _)), None)
             if matches!(b, Val::Const(_))
-                && (op != Alu::Bcsel || lone_select(f, a))
+                && (op != Alu::Bcsel || lone_select(f, a) || computed_select(f, a))
                 && (!is_transc(op) || raw_transc(f, a))
                 && !is_deriv(op) =>
         {
@@ -10856,6 +11025,20 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                 let x = select_lane(f, pr, a, pair, ubo)?;
                 let y = select_lane(f, pr, b, pair, ubo)?;
                 P::Leaf(Leaf::Pack { x, y })
+            } else if computed_select(f, a) && computed_select(f, b) {
+                /* a lane's own compare read by both selects of the pair
+                 * (`refract`'s `k < 0.0`, [`bcsel_const_ops`]): the compare
+                 * of one lane, its mask read through its low half by one
+                 * `bcsel_pan` of the pair's sides (gm2_nbshrf_6:
+                 * `FCMP_OR.v2f16.lt.m1 r2, r5^.h00, 0x0, 0x0`, then
+                 * `MUX.v2i16 r0, r0^, 0x38000000.h11, r2.h00`) */
+                let Some((c, s)) = f.alu_of(sa[0]) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                let x = lane_tree(f, pr, s[0], pair, ubo)?;
+                let y = lane_tree(f, pr, s[1], pair, ubo)?;
+                let mask = lone_node(pr, P::Op(c, [x, y, 0]), place)?;
+                let t = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
+                let e = vectorise(f, pr, sa[2], sb[2], pair, ubo)?;
+                P::Op(Alu::Bcsel, [mask, t, e])
             } else {
                 let c = cmp_node(f, pr, sa[0], ubo)?;
                 let t = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;

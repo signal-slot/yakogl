@@ -331,3 +331,8 @@ gm2_nbshrf_1  gm2_nbshrf_1.vert gm2_nbshrf_1.frag triangles vs.position=equal vs
 gm2_nbshrf_3  gm2_nbshrf_3.vert gm2_nbshrf_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:15:de82a9e31b23
 gm2_nbshrf_4  gm2_nbshrf_4.vert gm2_nbshrf_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:73057f2e03ea
 gm2_nbshrf_5  gm2_nbshrf_5.vert gm2_nbshrf_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:28:4f797beb8ad2
+# #367 lower-train-2 step FS_REFRACT: refract (24)'s front `refract()` of two normalized varyings by a constant ratio
+# (docs/notes/mali-fs-refract.md), drawn with --uniform-values (it has none). Our compiler is byte-equal to
+# gm2_nbshrf_6 (tests/mali_fs_refract.rs). pan_shc's SPIR-V path has no lower_precision (`mediump`), and it lays the
+# varyings out in another order, `vn` stored before `vp` (`unanalysed`).
+gm2_nbshrf_6  gm2_nbshrf_6.vert gm2_nbshrf_6.frag triangles vs.position=equal vs.varying=differs:unanalysed:32:7f2517ba7f5f fs.fragment=differs:mediump:46:a2dce3abd435
