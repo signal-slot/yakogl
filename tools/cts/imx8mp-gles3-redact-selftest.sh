@@ -87,21 +87,26 @@ printf 'verdict=ok containers_stopped=demo''-a,demo-b\n'      > "$tmp/x2/cstop.t
 printf 'app_back=demo''-app-7 running again after the jump\n' > "$tmp/x2/back.txt"
 printf 'demohost''-x2:~# uname\n'                             > "$tmp/x2/prompt.txt"
 printf 'demohost''-x2 login: \n'                              > "$tmp/x2/getty.txt"
+printf 'SerialNumber: ZQ9XR7T2\n'                           > "$tmp/x2/sn.txt"
+printf 'SerialNumber=ZQ9X''R7T2 next\n'                        > "$tmp/x2/sn2.txt"
+printf 'demohost.lab.example''.org login: \n'                  > "$tmp/x2/gettyfq.txt"
+printf 'demohost.lab.example''.org:~# uname\n'                 > "$tmp/x2/promptfq.txt"
 out=$(python3 -I "$tool" --check "$tmp/x2" 2>&1); rc=$?
 if [ $rc -eq 1 ]; then ok "X2 tree exits 1"; else bad "X2 rc=$rc"; fi
 for want in "login.txt:1: login" "tailnet.txt:1: tailnet" "cgnat.txt:1: addr" "ipv6.txt:1: ipv6" "ipv6b.txt:1: ipv6" \
             "mac.txt:1: mac" "byid.txt:1: tty" "usbname.txt:1: usbserial" "iserial.txt:1: usbserial" \
             "idserial.txt:1: usbserial" "rfc.txt:1: url" "mxc.txt:1: ttymxc" "undo.txt:1: container" \
             "stop.txt:1: container" "cstop.txt:1: container" "back.txt:1: container" "prompt.txt:1: prompt" \
-            "getty.txt:1: prompt"; do
+            "getty.txt:1: prompt" "sn.txt:1: usbserial" "sn2.txt:1: usbserial" "gettyfq.txt:1: prompt" "promptfq.txt:1: prompt"; do
     if printf '%s\n' "$out" | grep -qF -- "$want"; then ok "X2 reports $want"; else bad "X2 missing $want"; fi
 done
-for leak in armadillo-x2 tail1a2b3c 100.64 fd7a 2001:db8 00:11:22 A50285BI console-host ttymxc1 demo-app demo-a demohost; do
+for leak in armadillo-x2 tail1a2b3c 100.64 fd7a 2001:db8 00:11:22 A50285BI console-host ttymxc1 demo-app demo-a demohost ZQ9X lab.example; do
     if printf '%s\n' "$out" | grep -qF -- "$leak"; then bad "X2 output leaks $leak"; else ok "X2 no leak of $leak"; fi
 done
 python3 -I "$tool" --fix "$tmp/x2" >/dev/null 2>&1
+if grep -qxF 'SerialNumber: <serial>' "$tmp/x2/sn.txt" && grep -qxF 'SerialNumber=<serial> next' "$tmp/x2/sn2.txt"; then ok "--fix keeps the SerialNumber keyword, replaces the value"; else bad "SerialNumber --fix result"; fi
 if python3 -I "$tool" --check "$tmp/x2" >/dev/null 2>&1; then ok "X2 clean after --fix"; else bad "X2 still dirty after --fix"; fi
-if grep -rqE 'armadillo-x2|tail1a2b3c|A50285BI|console-host|fd7a|00:11:22|demo-app|demohost|ttymxc1' "$tmp/x2"; then bad "X2 --fix left a tail"; else ok "X2 --fix left no tail"; fi
+if grep -rqE 'armadillo-x2|tail1a2b3c|A50285BI|console-host|fd7a|00:11:22|demo-app|demohost|ttymxc1|ZQ9X|lab\.example' "$tmp/x2"; then bad "X2 --fix left a tail"; else ok "X2 --fix left no tail"; fi
 cat > "$tmp/x2ok/a.txt" <<'EOT'
 staging in /tmp/yakogl-kexec, window 0x60000000 size 0x10000000
 record words 0xdeadbeef 00000000 ffffffff
