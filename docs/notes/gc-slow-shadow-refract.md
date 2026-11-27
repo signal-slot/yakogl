@@ -345,9 +345,11 @@ at the first frame past that (`scene.cpp:116`).
 
 ## What the X2 baseline should record (item x2-gm-before)
 
-Kept for the X2; superseded for figures by "Verdin iMX8MP: glmark2 shadow,
-refract and terrain, before and after [plan #417]" at the end of this note
-(the X2 cannot run: `x2-glmark2-slow-scenes.md`, last section).
+Kept for the X2; the figures go in the before/after table of "glmark2
+shadow, refract and terrain, before and after, measured on the Armadillo-X2 in
+place of the Verdin iMX8MP [plan #417]" at the end of this note (the X2 runs
+only once its container is stopped: `x2-glmark2-slow-scenes.md`, last
+section).
 
 For each of shadow and refract, page 0, page 1, page 3 and, once on main,
 page 4, with v0..v3 decoded:
@@ -428,8 +430,8 @@ a job would be a tiled shadow the host does not show.
 
 ### Rows the X2 sessions fill
 
-Kept for the X2; superseded for figures by the Verdin section at the end of
-this note.
+Kept for the X2; the figures go in the Armadillo-X2 before/after table at the
+end of this note.
 
 Empty until a session runs; one table per scene (shadow, refract).
 
