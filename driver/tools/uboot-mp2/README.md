@@ -16,8 +16,8 @@ console helper (`tools/mp2_uboot_console.py`), the board backends
 | `mp2-net.cmd` | `setenv autoload no; dhcp`, then `tftpboot` of `${mp2z_file}` from `${mp2z_server}` |
 | `build.sh [OUTDIR]` | builds `mp2-mmc.scr` and `mp2-net.scr` |
 | `selftest.sh` | host check, no board, no network |
-| `oneshot.sh` | the runner: stages a script and an image, types the line, waits for ST's Linux, removes the files, diffs the environment and `/boot` |
-| `oneshot_selftest.sh` | the runner without a board: dry runs, refusals, a fake board and console (76 checks) |
+| `oneshot.sh` | the runner: stages a script and an image, types the line, waits for ST's Linux, removes the files, diffs the environment (read with `dd` from the card's u-boot-env and parsed by `tools/uboot_env.py`, raw sha256 compared before and after) and `/boot` |
+| `oneshot_selftest.sh` | the runner without a board: dry runs, refusals, a fake board, `lsblk` and `dd` (the board's real numbering and a renumbered card) and console (80 checks) |
 
 ## The runner: oneshot.sh
 
@@ -61,9 +61,9 @@ raw copies are not kept in the run directory; only their sha256 are. The
 description is in section 1 and sections 7 and 8 of
 `docs/notes/stm32mp257f-dk-uboot-boot.md`. `fw_printenv` is at most a
 secondary record: `tools/probes/stm32mp257f_dk/env_read/collect.sh` keeps its
-output when it runs, and tolerates its failure; nothing decides on it. (The
-header of `oneshot.sh` in this directory still names `fw_printenv` for its own
-read; that is the older runner, not the one `board.sh` uses.)
+output when it runs, and tolerates its failure; nothing decides on it. `oneshot.sh` in this
+directory reads the same way (the same device rule and the same `dd` read as
+the runner's), not with `fw_printenv`.
 
 **Which device is the card.** The card is the disk `/boot` is mounted from,
 and only if `/sys/block/<disk>/device/type` says `SD` (the eMMC says `MMC`);
