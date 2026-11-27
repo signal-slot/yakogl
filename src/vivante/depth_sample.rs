@@ -149,7 +149,8 @@ fn identity_swizzle(t: &GlesTextureBind) -> bool {
 
 /// The binding `emit_slot` describes instead of `t` (whose texels are
 /// stale) in `mode`, for the surface `v`. -ENOTSUP when there is no surface,
-/// the texture does not fit inside it, or the mode is not 1 or 2; and, in
+/// the texture does not fit inside it, or the mode is not 1, 2 or 4 (4 is
+/// mode 1's view); and, in
 /// either mode, for an [`exact_depth_reader`] (a shadow compare must read the
 /// resolve's 24 bits, not a view that may hold fewer), and in mode 2 for a
 /// non-identity swizzle (the raw view's channels are bytes of the word, not
@@ -194,8 +195,9 @@ pub fn view_binding(t: &GlesTextureBind, mode: i32, v: Option<DepthView>) -> Res
     };
     match mode {
         /* (d, d, d, 1): R in G and B (`depth_luminance`), A 1, with the
-         * texture's swizzle on top */
-        DEPTH_TPU_D24X8 => Ok(GlesTextureBind {
+         * texture's swizzle on top; mode 4 is the same view (its flush is
+         * in the stream, section "Mode 4") */
+        DEPTH_TPU_D24X8 | DEPTH_TPU_D24X8_FLUSH => Ok(GlesTextureBind {
             format: GC_TEXFMT_DEPTH_VIEW,
             depth_luminance: 1,
             no_alpha: 1,
@@ -243,6 +245,113 @@ pub fn binding(t: &GlesTextureBind, kick: u32) -> Result<GlesTextureBind, i32> {
         ),
     }
     b
+}
+
+/* ---- Mode 4: mode 1 with a flush in front of the sampling draw ---- */
+
+/// Knob mode 4, for verdict code 2 of gl_test `dtpu` (check 7 fails: the
+/// view reads stale depth; gc-depth-sample-wire.md (a).10, "Check 7 fails").
+/// Everything of [`DEPTH_TPU_D24X8`] (the answer, the D24X8 view, its
+/// refusals), and in front of the first draw that samples a depth view whose
+/// surface a draw wrote or cleared since the last such flush, the words of
+/// [`emit_view_flush`]. A board arm of case 222 that sets 4 tells whether
+/// that flush cures check 7 (gl_test does not set 4 today; the arm is
+/// driver/samples/zephyr's).
+pub const DEPTH_TPU_D24X8_FLUSH: i32 = 4;
+
+/// How many written depth objects [`Written`] names before it gives up and
+/// counts every one as written.
+const WRITTEN_MAX: usize = 8;
+
+/// The depth objects a recorded draw wrote or cleared since the last flush
+/// of [`emit_view_flush`] (mode 4 only). A flush writes every plane back, so
+/// it empties the whole set; `all` stands for a set that ran out of room.
+struct Written {
+    ids: [u32; WRITTEN_MAX],
+    n: usize,
+    all: bool,
+}
+
+static WRITTEN: crate::util::Global<Written> =
+    crate::util::Global::new(Written { ids: [0; WRITTEN_MAX], n: 0, all: false });
+
+fn written() -> &'static mut Written {
+    // SAFETY: single-threaded by contract; no caller holds a reference
+    // across a call that takes another.
+    unsafe { WRITTEN.get() }
+}
+
+/// Does draw `d` sample (in either stage) a depth view whose surface was
+/// written since the last flush? No in every mode but 4.
+fn needs_view_flush(d: &crate::backend::GlesDraw) -> bool {
+    if mode() != DEPTH_TPU_D24X8_FLUSH {
+        return false;
+    }
+    let w = written();
+    let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+    let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+    fs.iter().chain(vs).any(|t| t.depth_id != 0 && (w.all || w.ids[..w.n].contains(&t.depth_id)))
+}
+
+/// Mode 4: record into `c`, in front of draw `d`'s own state (after any
+/// restore clear `backend::draw_one` records for it), the flush that makes a
+/// depth write visible to the texture unit, when [`needs_view_flush`]:
+///
+/// 1. `FLUSH_CACHE DEPTH`: the PE's depth cache written back (the note's
+///    `FLUSH_DEPTH`; Mesa flushes DEPTH for a depth-state or framebuffer
+///    change, etnaviv_emit.c:264-265, :274-275);
+/// 2. the FE-PE semaphore and the front end's STALL: nothing behind it is
+///    fetched before the pixel engine drained (the note's FE-PE stall; Mesa's
+///    `stall_before_flush` of a texture-cache flush, etnaviv_emit.c:269-270,
+///    :284-285, as `etna_stall` writes it, :66-72);
+/// 3. `FLUSH_CACHE TEXTURE`, then 4. `FLUSH_CACHE TEXTUREVS` on its own:
+///    no texture line read before the write stays (Mesa's
+///    `ETNA_DIRTY_TEXTURE_CACHES`, etnaviv_emit.c:266-268, :287-290, and
+///    `etna_texture_barrier`, etnaviv_texture.c:414-418);
+/// 5. the RA-PE semaphore and stall token behind the flush (etnaviv_emit.c:291,
+///    etnaviv_texture.c:419).
+///
+/// The draw's own `emit_flushes` follows unchanged. Read-only on the set, so
+/// a draw recorded again after an overflow records the flush again;
+/// [`view_drawn`] empties it once the draw is in the stream.
+pub(super) fn emit_view_flush(d: &crate::backend::GlesDraw, c: &mut super::cmd::GcCmd) {
+    use super::regs::{
+        GC_FLUSH_DEPTH, GC_FLUSH_TEXTURE, GC_FLUSH_TEXTUREVS, GC_GL_FLUSH_CACHE, GC_SYNC_FE, GC_SYNC_PE, GC_SYNC_RA,
+    };
+    if !needs_view_flush(d) {
+        return;
+    }
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_DEPTH);
+    c.stall(GC_SYNC_FE, GC_SYNC_PE);
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTURE);
+    c.state(GC_GL_FLUSH_CACHE, GC_FLUSH_TEXTUREVS);
+    c.stall(GC_SYNC_RA, GC_SYNC_PE);
+}
+
+/// Mode 4: draw `d` is in the stream. If [`emit_view_flush`] recorded the
+/// flush for it, every write before is visible and the set is emptied; then
+/// depth object `depth_id` (the draw's depth attachment, 0 for none) joins
+/// it when the draw `wrote` its depth plane (a write, a clear or a restore).
+/// Nothing in any other mode.
+pub(super) fn view_drawn(d: &crate::backend::GlesDraw, depth_id: u32, wrote: bool) {
+    if mode() != DEPTH_TPU_D24X8_FLUSH {
+        return;
+    }
+    let flushed = needs_view_flush(d);
+    let w = written();
+    if flushed {
+        w.n = 0;
+        w.all = false;
+    }
+    if !wrote || depth_id == 0 || w.all || w.ids[..w.n].contains(&depth_id) {
+        return;
+    }
+    if w.n == WRITTEN_MAX {
+        w.all = true;
+    } else {
+        w.ids[w.n] = depth_id;
+        w.n += 1;
+    }
 }
 
 /* ---- Outcome (b).1: the RS copy into a supertiled depth view ---- */
