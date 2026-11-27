@@ -37,15 +37,19 @@
 #               of this call whose <LABEL>.built says rc=0 and whose image is
 #               not empty. A selected row that failed or came out empty is
 #               named on stderr and left out (preflight names it too). The
-#               file is rewritten, never merged: a later selective build into
-#               a directory that already holds images lists only its own
-#               labels, so a session cannot mix images of two commits
-#               without preflight saying so.
+#               file is merged: a later selective build into the same
+#               directory replaces only the lines of the labels it
+#               selected and keeps the others.
 #   COMMIT      the full hash of this checkout's HEAD, the commit built from.
+#               A directory whose COMMIT holds another commit than this
+#               checkout's HEAD is refused before building, exit 2 ("use a
+#               fresh directory"): images of two commits never mix.
 #               No git HEAD (a scratch copy of the scripts, as
 #               images-selftest.sh runs them): a warning on stderr, no file,
 #               the build's own exit code stands; preflight names it.
 #
+# --plan also says what a build would write (the SHA256SUMS lines it would
+# keep and replace, the COMMIT check). --dry-run stays the builder's bytes.
 # --plan and --dry-run write nothing: the dry run stays the builder's output
 # byte for byte (images-selftest.sh 7f compares it), so it prints no news of
 # what a build "would" write. T6_DEQP_BUILDER replaces the builder script;
@@ -56,6 +60,14 @@ if [ "${1:-}" = --dry-run ]; then
 	exec "$BUILDER" nanopc_t6 "$@"
 fi
 if [ "${1:-}" != --plan ]; then
+	# images of two commits never mix: an <img-dir> whose COMMIT names
+	# another commit than this checkout's HEAD is refused before building.
+	HEADSHA=$(git -C "$HERE/../.." rev-parse HEAD 2>/dev/null)
+	if [ $# -ge 2 ] && [ -n "$HEADSHA" ] && [ -s "$2/COMMIT" ] &&
+		[ "$(head -n1 "$2/COMMIT")" != "$HEADSHA" ]; then
+		echo "t6-deqp-images: $2/COMMIT is $(head -n1 "$2/COMMIT" | cut -c1-8), this checkout is ${HEADSHA:0:8}: use a fresh directory, images of two commits must not mix" >&2
+		exit 2
+	fi
 	"$BUILDER" nanopc_t6 "$@" || exit $?
 	# the builder exited 0 (a row may still have failed: its .built says
 	# so): resolve this call's labels through the builder's own --dry-run,
@@ -72,7 +84,18 @@ if [ "${1:-}" != --plan ]; then
 		exit 2
 	fi
 	SEL=$(printf '%s\n' "$SEL" | cut -d' ' -f1)
+	# keep the lines of the labels this call did not select; the lines of
+	# the selected ones are replaced by this call's result.
 	: > "$OUT/SHA256SUMS.new"
+	if [ -f "$OUT/SHA256SUMS" ]; then
+		while IFS= read -r line; do
+			[ -n "$line" ] || continue
+			k=${line#*  }
+			k=${k%%/*}
+			case " $(echo $SEL) " in *" $k "*) continue ;; esac
+			printf '%s\n' "$line" >> "$OUT/SHA256SUMS.new"
+		done < "$OUT/SHA256SUMS"
+	fi
 	for l in $SEL; do
 		img=$OUT/$l/zephyr/zephyr.bin
 		if ! grep -q "^$l rc=0 " "$OUT/$l.built" 2>/dev/null || [ ! -s "$img" ]; then
@@ -136,6 +159,12 @@ printf '%s\n' "$ROWS" | while IFS= read -r line; do
 	echo "  ninja -C $OUT/$l"
 	echo "  image: $OUT/$l/zephyr/zephyr.bin  .built: $OUT/$l.built  log: $OUT/$l.log"
 done
+HEADSHA=$(git -C "$HERE/../.." rev-parse HEAD 2>/dev/null)
+if [ -s "$OUT/COMMIT" ] && [ -n "$HEADSHA" ] && [ "$(head -n1 "$OUT/COMMIT")" != "$HEADSHA" ]; then
+	echo "t6-deqp-images: --plan: a build would be refused (exit 2): $OUT/COMMIT is $(head -n1 "$OUT/COMMIT" | cut -c1-8), HEAD is ${HEADSHA:0:8}; use a fresh directory"
+else
+	echo "t6-deqp-images: --plan: a build would write $OUT/SHA256SUMS: replace the lines of $(printf '%s\n' "$ROWS" | cut -d' ' -f1 | tr '\n' ' ')and keep every other line; COMMIT ${HEADSHA:+${HEADSHA:0:8}}${HEADSHA:-none (no git HEAD)}"
+fi
 echo "t6-deqp-images: --plan: the builder also exports ZEPHYR_BASE=\$ZEPHYR_WS/zephyr, unsets DEQP_GL_CONFIG_NAME and refuses an existing $OUT/<LABEL>/ (never reused)."
 [ "$DEQP_MODULE" = gles3 ] && echo "t6-deqp-images: --plan: after each image check-deqp-images.py runs with --gles3 (the context reports ES 3.0)."
 exit 0
