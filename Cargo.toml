@@ -119,6 +119,17 @@ gpu-mali = []
 # guard either side of the depth surface, filled with a pattern, so what the
 # pixel engine writes outside the surface can be read back. Bring-up only.
 vivante-depth-guard = ["gpu-vivante"]
+# The STM32MP257F's GPU, ST's `GCNANOULTRA31_VIP2` (model 0x8000, revision
+# 0x6205, product 0x80003; the STM32MP257F-DK, issue #1281), in place of the
+# i.MX8MP's GC7000UL: the same `vivante/` back end and shader table, built
+# with `vivante::profile::GCNANOULTRA31_VIP2_ST` as `profile::ACTIVE`. The
+# backend's name, its limits and the GL core's GL_ALIASED_LINE_WIDTH_RANGE
+# are that row's, and the line width the back end programs is clamped to it
+# ([1.0, 1.0], Q11 in docs/notes/pre-study-stm32mp257f-dk.md). It implies
+# `gpu-vivante`, so the exactly-one-GPU rule of src/lib.rs holds; nothing
+# reads the GPU's identity at run time. Without it the i.MX8MP's streams are
+# what they were (tests/vivante_st_profile.rs pins both).
+vivante-st = ["gpu-vivante"]
 # The test knobs: C entry points the on-silicon suites (gl_test.c, the dEQP
 # sample) set to run an experiment's arms or to probe the backend's state,
 # and the switches behind them. Without it none of them is in the build and

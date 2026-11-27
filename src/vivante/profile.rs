@@ -14,9 +14,10 @@
 //! the `GCNANOULTRA31_VIP2` entry at :4720. The comparison is section 3 of
 //! docs/notes/pre-study-stm32mp257f-dk.md.
 //!
-//! The backend is built for one part, [`ACTIVE`], which is the i.MX8MP's:
-//! nothing carries the GPU's identity to the backend at run time yet, so
-//! the ST profile is data and its test, not a path.
+//! The backend is built for one part, [`ACTIVE`]: the i.MX8MP's, or the
+//! STM32MP257F's with the `vivante-st` feature (Cargo.toml). Nothing carries
+//! the GPU's identity to the backend at run time yet, so the part is chosen
+//! when the library is built.
 
 use core::ffi::CStr;
 
@@ -168,8 +169,12 @@ pub const GCNANOULTRA31_VIP2_ST: ChipProfile = ChipProfile {
 /// Every part this backend knows.
 pub const PROFILES: [&ChipProfile; 2] = [&GC7000UL_IMX8MP, &GCNANOULTRA31_VIP2_ST];
 
-/// The part the backend is built for.
+/// The part the backend is built for: the i.MX8MP's GC7000UL by default.
+#[cfg(not(feature = "vivante-st"))]
 pub const ACTIVE: &ChipProfile = &GC7000UL_IMX8MP;
+/// The part the backend is built for: the STM32MP257F's GPU (`vivante-st`).
+#[cfg(feature = "vivante-st")]
+pub const ACTIVE: &ChipProfile = &GCNANOULTRA31_VIP2_ST;
 
 /// The profile of the part with these ids (`CHIP_MODEL`, `CHIP_REV`,
 /// `CHIP_PRODUCT_ID`), or `None` for a part this backend does not know.

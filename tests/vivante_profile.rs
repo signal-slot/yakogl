@@ -9,6 +9,11 @@
 //! ST's Linux (model 0x8000, revision 0x6205, product 0x80003, eco 0; issue
 //! #1281). Section 3 of docs/notes/pre-study-stm32mp257f-dk.md compares the
 //! two rows.
+//!
+//! Features: `cargo test --no-default-features --features
+//! host-test,gpu-vivante --test vivante_profile` (the i.MX8MP's build), and
+//! `--features host-test,vivante-st,shaderc-online` (the STM32MP257F's,
+//! tools/check.sh's `vivante-st` row).
 
 #![cfg(feature = "gpu-vivante")]
 
@@ -33,6 +38,8 @@ fn the_st_profile_is_the_gcnanoultra31_vip2_row() {
     assert_eq!(p.line_width_range, [1.0, 1.0]);
 }
 
+/// Without `vivante-st` the backend is built for the i.MX8MP.
+#[cfg(not(feature = "vivante-st"))]
 #[test]
 fn the_imx8mp_profile_is_what_the_backend_uses_today() {
     let p = &GC7000UL_IMX8MP;
@@ -56,6 +63,27 @@ fn the_imx8mp_profile_is_what_the_backend_uses_today() {
     /* src/gl/state.rs GL_ALIASED_LINE_WIDTH_RANGE; tests/es2_report_guard.rs
      * and tests/es3_caps.rs pin the GL core's answer to the same pair */
     assert_eq!(p.line_width_range, [1.0, 16.0]);
+}
+
+/// With `vivante-st` the backend is built for the STM32MP257F: its name and
+/// the limits the back end and the GL core read are the ST row's. The ST row
+/// has the i.MX8MP's instruction, constant, varying, stream and temp counts,
+/// so the constants derived from them hold the same numbers.
+#[cfg(feature = "vivante-st")]
+#[test]
+fn the_st_profile_is_what_the_backend_uses_with_vivante_st() {
+    let p = &GCNANOULTRA31_VIP2_ST;
+    assert_eq!(profile::ACTIVE, p, "the backend is built for the STM32MP257F");
+    // SAFETY: the backend's name is a static C string.
+    let name = unsafe { core::ffi::CStr::from_ptr(backend::yakogl_backend_vivante.name) };
+    assert_eq!(name, c"Vivante GCNANOULTRA31_VIP2 (STM32MP257F)");
+    assert_eq!(p.constants, regs::GC_NUM_CONSTANTS);
+    assert_eq!(p.constants as usize * 4, state::GC_MAX_UNIFORM_DWORDS);
+    assert_eq!(p.varyings as usize, state::GC_MAX_VARYINGS);
+    assert_eq!(p.streams as usize, state::GC_MAX_VERTEX_ELEMENTS);
+    assert_eq!(p.temp_registers - 1, yakogl::vivante::shader::GC_MAX_TEMPS);
+    assert_eq!(p.non_power_of_two, backend::NON_POWER_OF_TWO);
+    assert_eq!(backend::LINE_WIDTH_RANGE, [1.0, 1.0]);
 }
 
 #[test]
