@@ -442,6 +442,8 @@ still have no `mod` line; `shaders71tex`, `board71-tex`), `gate71plan`.
 | 13 | **Run GM and GT through `board-stage.sh pi5 common`** (off-screen first) | S (board) | 5, 6, 8 | RESULTS row | 33 scenes, failed 0 or named, GL errors named |
 | 14 | **The whole tree from one origin/main commit** and the Pi 5 rows of `RESULTS.md`, STATUS.md (Japanese Pi 5 line), `ROADMAP.md` stage 5 (the stage 5 bar), the comment for #7 | M | 10-13, P11 (for on-screen glmark2 only), P12 | docs only | stage 5 recorded |
 
+Items 1 and 3 are done as `35c98f25` (deqp `rpi_5` board files, `v3d71_board.c`, the V3D71 branch) and `95eb8c3b` (the `rpi_5` stage-1 case); the `rpi_5` gl_test image links with `-DYAKOGL_WERROR=ON` (`85afd0cf`; `link71chk` measured it at the tip).
+
 Sequence: 1 and 2 may start as soon as the cargo feature is in the tree
 (`feat71`; `backend71` itself is merged); 3 is a farm build and can run beside them; 5 and 6 follow 2;
 7 to 9 are the other plan items; the board runs 10 to 13 come last, in that
