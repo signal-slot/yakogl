@@ -1,0 +1,10 @@
+# what an X2-marked i.MX8MP record must make one-commit-docs.py --self-test find
+# (<file key> | <substring>); the marker is ./measured-on, copied into the record
+README | | i.MX8MP | 468 (main `
+README | measured on the Armadillo-X2) |
+RESULTS | measured on the Armadillo-X2 (same i.MX8MP SoC and GC7000UL GPU
+RESULTS | (not looked at by eye)
+STATUS | Armadillo-X2 で測定（同じ SoC・GPU）
+DATAJS | Measured on the Armadillo-X2 (same SoC and GPU).
+CHECKLIST | i.MX8MP 468 (measured on the Armadillo-X2)
+ROADMAP | measured on the Armadillo-X2
