@@ -224,7 +224,17 @@ shadow never had.
 The X2 stores w0..w2 of a record, so v0..v3 of each PERF page reach the
 board's verdict. Page 4 is the one item fb-counters is adding (selector
 `0x1004`). Its values here are as the plan names them: v0 GPU mipmap chains,
-v1 CPU mipmap fallbacks, v2 CPU waits outside the swap, v3 KiB of CPU passes.
+v1 CPU mipmap fallbacks, v2 CPU waits outside the swap, v3 KiB of the CPU
+passes over the carve-out that are counted today: the CPU mipmap filter
+(`mipmap.rs:341`) and the CPU tiled copy (`tiled_copy.rs:559`) only
+(`gm_perf_page.h:30-34`). **v3 does not count the CPU depth resolve**:
+`ds_cache.rs resolve_depth` adds no bytes, so v3 reads 0 in shadow and refract
+in every mode (the six cells of gm-x2-expect). A resolve-bytes counter does
+not exist yet; it would be one `fetch_add` in `resolve_depth` after
+`wait_kick` succeeds (not on its early returns, `ds_cache.rs:767-777`),
+owned by `src/vivante/**` (plans #400 and #410 serialize it), with its own
+test. Until it lands the resolve shows in page 0 v2 (gl ms), page 0 v5 (frame
+to frame) and page 1 v4 (kicks per 100 frames).
 They are given per frame; scale them to whatever unit fb-counters chooses
 (per frame or per 100 frames). Pages 0, 1 and 3 are `gm_perf_page.h:17-29`.
 Every value saturates at 0xffff = 65,535: page 0 v1 (frame) and v2 (gl), and
@@ -261,15 +271,15 @@ at the first frame past that (`scene.cpp:116`).
   `samples_rendered_depth` gets a GC arm (`src/backend.rs:1858-1872`). This
   removes the resolve, its two cache ranges and the resolve's `finish()`
   (cause 3).
-- **Confirms the cause (before any fix).** Page 4 v3 = 15,000 KiB a frame
-  (7,500 read plus 7,500 written; 7,500 if only reads are counted) in both
-  scenes. Page 0 v2 (gl) = 65,535 while page 1 v0 (wait us) is about 10,000
+- **Confirms the cause (before any fix).** Page 4 v3 would be 15,000 KiB a
+  frame (7,500 read plus 7,500 written) only once the resolve counter exists;
+  today it reads 0. Page 0 v2 (gl) = 65,535 while page 1 v0 (wait us) is about 10,000
   to 40,000. The CPU is busy inside GL calls, not waiting. Page 0 v0 = 10 to
   20 frames.
-- **Confirms the cheap fix.** Page 4 v3 unchanged (same bytes, other loads).
+- **Confirms the cheap fix.** Same bytes, other loads: no counter moves.
   Page 0 v0 rises to about 30 to 200 frames (50 to 350 ms a frame). Page 0
   v2 may fall below 65,535.
-- **Confirms the real fix.** Page 4 v3 = 0 and page 4 v2 drops by 1 in both
+- **Confirms the real fix.** Page 4 v2 drops by 1 in both
   scenes. Page 0 v2 (gl) drops to a few ms (well under 65,535). Page 0 v0
   rises to about 250 to 500 frames (20 to 40 ms a frame, GPU and present).
 
@@ -329,7 +339,7 @@ at the first frame past that (`scene.cpp:116`).
 - **Evidence.** The host made refract's chain on the GPU, 0 refused
   (`gc-mipmap-cpu-cases.md`; this run). Shadow has no mipmap.
 - **Confirms.** Page 4 v0 = 1 a frame (refract), 0 (shadow); page 4 v1 = 0.
-  If the board ever showed v1 = 1 for refract, its page 4 v3 would also grow
+  If the board ever showed v1 = 1 for refract, its page 4 v3 would grow
   by about 10,000 KiB (the box filter's 7,500 read plus 2,500 written).
 
 ### Ruled out
@@ -365,7 +375,7 @@ page 4, with v0..v3 decoded:
 Prediction for the baseline:
 
 - shadow and refract: page 0 v0 between 10 and 20, page 0 v2 = 65,535, page
-  1 v3 under 40,000, page 4 v3 about 15,000;
+  1 v3 under 40,000, page 4 v3 = 0 (the resolve is not counted);
 - refract: page 4 v0 = 1 and v1 = 0.
 
 A baseline outside these values rejects this note's ranking.
@@ -477,8 +487,12 @@ until its podman container is stopped for the run; that step is in
   (gitignored, redacted; no board address or UART path in it or here);
 - PERF page 0 v0, the frames in the 10 s scene, and the ms a frame,
   10 000 / v0 (page 0 v0 saturates at 65,535, so a value there is a bound);
-- PERF page 4 v3, the KiB of CPU passes a frame (the CPU depth resolve's
-  bytes; cause 1);
+- PERF page 4 v3, the KiB a frame of the counted CPU passes (CPU mipmap
+  filter and CPU tiled copy; not the depth resolve, so 0 for shadow and
+  refract until a resolve counter lands); the figure that shows the resolve
+  is page 0 v2, page 0 v5 and page 1 v4 (page 0 v5 and page 1 v4 are v5 and
+  v4, in w3, which the X2 does not store: read them from a host or
+  Verdin-style record, or leave the cell empty);
 - the pages are read at selectors `SEL=0x1000`, `0x1001`, `0x1003` and
   `0x1004` (page 4 is `0x1004`); the X2 stores w0..w2, so v0..v3 come from
   these pages;
@@ -490,10 +504,9 @@ until its podman container is stopped for the run; that step is in
 - **Before** (commit with `25fa1a96` and `e320630d`, CPU resolve with wide
   loads, cause 1 "Fix, cheap"): the byte loads are gone, so ms a frame falls
   from the 500 to 1000 ms of the 2 FPS baseline; how far is unknown until
-  measured. Page 4 v3 stays at the CPU passes' bytes (about 15,000 KiB
-  predicted), since the resolve still runs.
+  measured. The resolve still runs: page 0 v2 stays high.
 - **After** (depth-sample default, outcome (a) or (b) of
-  `gc-depth-sample-wire.md`): no CPU resolve, so page 4 v3 falls to 0 for
+  `gc-depth-sample-wire.md`): no CPU resolve, so page 0 v2 falls to a few ms for
   shadow and refract, and the frame falls to the GPU and wait costs (causes 3
   and 4, an estimated 10 to 40 ms), as the PowerVR got in `21099fcd`. Terrain
   is expected unchanged (`gc-slow-terrain.md`). If the verdict is (c), the CPU
@@ -501,11 +514,11 @@ until its podman container is stopped for the run; that step is in
 
 ### Table (empty; measured on the Armadillo-X2)
 
-| scene | when | origin/main commit | image sha256 | records/x2/ directory | page 0 v0 | page 4 v3 KiB | ms a frame |
-|---|---|---|---|---|---:|---:|---:|
-| shadow | before | — | — | records/x2/— | — | — | — |
-| shadow | after | — | — | records/x2/— | — | — | — |
-| refract | before | — | — | records/x2/— | — | — | — |
-| refract | after | — | — | records/x2/— | — | — | — |
-| terrain (control) | before | — | — | records/x2/— | — | — | — |
-| terrain (control) | after | — | — | records/x2/— | — | — | — |
+| scene | when | origin/main commit | image sha256 | records/x2/ directory | page 0 v0 | page 4 v3 KiB (CPU mip and tiled copy; not the resolve) | page 0 v2 (gl; shows the resolve) | page 0 v5 | page 1 v4 | ms a frame |
+|---|---|---|---|---|---:|---:|---:|---:|---:|---:|
+| shadow | before | — | — | records/x2/— | — | — | — | — | — | — |
+| shadow | after | — | — | records/x2/— | — | — | — | — | — | — |
+| refract | before | — | — | records/x2/— | — | — | — | — | — | — |
+| refract | after | — | — | records/x2/— | — | — | — | — | — | — |
+| terrain (control) | before | — | — | records/x2/— | — | — | — | — | — | — |
+| terrain (control) | after | — | — | records/x2/— | — | — | — | — | — | — |
