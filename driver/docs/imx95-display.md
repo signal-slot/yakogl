@@ -4,8 +4,23 @@
 
 Status: design (2026-11-20), the board's display fixed by the owner on
 2026-11-24, the board's own Linux read on 2026-11-25. Both cold paths are
-implemented and host-tested; **nothing of ours has run the display on the
-board.**
+implemented and host-tested. **The X12 LVDS path comes up from Zephyr on the
+board; it does not come down** (2026-11-27, main 70a3f06f, images started from
+U-Boot with `ext4load` and `go`; records
+`20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`
+under `records/verdin-imx95/`, gitignored). `examples/triangle` prints
+`verdin_imx95: display up: 1280x800 XRGB8888 ... pixel clock 71100000 Hz
+(DISP level 3), FrameGen0 in sync after 49800 us`, reads every pixel back
+(`triangle: PASS`), and the camera sees the triangle through its 60 s hold.
+`gl_test` with `CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y` passes 50 of 50 cases,
+then puts its colour bars on the panel (`gl_test: panel: OK`,
+`gl_test: PASS`), which the camera sees lit. The down fails in both images
+with `Display(NotStopped(FgStatus { fgenable: 0, fgensts: 1, fgchstat: 257
+}))` and `display down: -5`. It failed the same way at 472630df, before
+7790a11e moved the FrameGen0 stop ahead of the LDB clock gate, so the LDB
+clocks were not the cause (U28). The down returns early, so the LDB PLL and
+the display domain are not turned off by it; the PSCI reset follows, and the
+board returns to Linux.
 
 **The board** (owner, 2026-11-24; this replaces the statement of
 2026-11-21 the X4 work was built on): a Toradex Verdin iMX95 module ("Toradex
@@ -941,9 +956,10 @@ Which result picks which route:
 | U19 | Answered by the build at the workspace pin (zephyr af17c0c8aa2a): the A55's `nxp_mimx95_a55.dtsi` has LPI2C1-8 (`nxp,lpi2c`, clocks from the SCMI clock protocol) and the SCMI pin control (`nxp,imx95-pinctrl`), and `i2c_mcux_lpi2c.c`, `gpio_pca_series.c` (`nxp,pcal6416`, whose part table is the expander's register map) and `pinctrl_imx_scmi.c` build into the Verdin's image. Two gaps, handled in the board glue: the dtsi has no TPM node (the backlight is `ip::tpm_pwm`, only its pad is Zephyr's), and the LPI2C driver neither enables its SCMI clock nor waits for one, so the buses and the expander are `zephyr,deferred-init` and the first show turns LPI2C2/3 on over SCMI before it initialises them. Still open: that the SM leaves those clocks to AP-NS as read (`tsm:`), and the expander's answer on the board | Z2 (the first show's lines) |
 | U20 | Bridge `LVDS_FMT` (0x18): 0x18 (our plan; the i.MX8MP's Linux dump of the same panel) or 0x78 (NXP's driver from the panel's active-low syncs)? An LVDS panel with DE likely ignores it | M2 `i2cdump` of 0x2C |
 | U21 | The display's power-up after `GPIO_10_DSI` rises: how long until the bridge answers on I2C (the AM62P's adapter needed about 50 ms, `ip::sn65dsi8x` retries for a second) | Z2's ID retry count |
-| U22 | X12: which of the DPU words `fsl_dpu.c` and Linux disagree on matter: the primary kick point, the secondary kick, the panic mode and colour, FetchLayer0's burst word (`SetMaxBurstLength`, `CombinerTimeout`), `AlphaConstEnable0` (section 4(b')'s table). The path writes hal's (`dpu::Form::Hal`, also the X4 path's); `dpu::Form::Linux` writes the dump's | the probe `imx95_lvds_ids` reads the reset values (is 0x1FE7F010 FetchLayer0's reset burst word?); the first cold run with `Form::Hal` (`FGCHSTAT`, the picture), and with `Form::Linux` if it fails |
+| U22 | Half answered on the board (2026-11-27, 70a3f06f): with `Form::Hal` FrameGen0 is in sync after 49,800 us and the panel shows the picture, so hal's words are enough for the bring-up. Still open: which of the DPU words `fsl_dpu.c` and Linux disagree on matter: the primary kick point, the secondary kick, the panic mode and colour, FetchLayer0's burst word (`SetMaxBurstLength`, `CombinerTimeout`), `AlphaConstEnable0` (section 4(b')'s table). The path writes hal's (`dpu::Form::Hal`, also the X4 path's); `dpu::Form::Linux` writes the dump's | the probe `imx95_lvds_ids` reads the reset values (is 0x1FE7F010 FetchLayer0's reset burst word?); the first cold run with `Form::Hal` (`FGCHSTAT`, the picture), and with `Form::Linux` if it fails |
 | U23 | X12: Linux's Dither0 `POLARITYCTRL0` (0x4B711008) under the LVDS panel was not read. The path writes 0x4 (DE high, syncs low), consistent with the interleaver's 0x600 and the LDB's active-low DI0 syncs | the next `day_one.sh` run (the word is in the read list now); the probe `imx95_lvds_ids` reads its reset value |
 | U24 | X12: the panel's timing is FrameGen0's (H 60/40/60, V 7/9/7 around 1280x800); the totals and the sync-plus-back-porch sums are fixed by the words, the split into front porch, sync and back porch is the reading of the `Hsync`/`Vsync` fields (`fsl_dpu.c`'s: value = width - 1). Toradex's overlay's `panel-timing` (`tdx:...10inch-lvds.dtso:34-62`) was not re-read for this change (no network access) | read the overlay's panel-timing node, or `/sys/kernel/debug/dri/*/state` under Linux |
 | U25 | X12: the backlight pads' settings (GPIO_IO06, XSPI1_DATA4): the board devicetree uses TPM6's (FSEL "slightly fast", DSE x4); Linux's pinctrl words for them were not read | `/proc/device-tree` under Linux (the overlay's pinctrl group), or `ml:imx95-verdin.dtsi` |
-| U26 | X12: TPM5's SCMI clock (154): AP-NS's permission (Toradex's configuration gives AP-NS the LPTPM5 resource; the clock line was not found in `config_scmi.h` as read) and its rate (24 MHz assumed, as TPM6's); whether GPIO5's registers answer without a clock of ours (Linux drives the enable; our image does not turn any GPIO clock on) | `imx95_lvds_ids` (clock 154's state, rate, permissions); the first cold run (the backlight lights, the enable rises) |
+| U26 | Half answered on the board (2026-11-27, 70a3f06f): the up line reads `TPM5 at 24000000 Hz` and the camera sees the panel lit, so the clock is AP-NS's to enable and the enable on GPIO5_IO04 rises. Still open, as read: TPM5's SCMI clock (154): AP-NS's permission (Toradex's configuration gives AP-NS the LPTPM5 resource; the clock line was not found in `config_scmi.h` as read) and its rate (24 MHz assumed, as TPM6's); whether GPIO5's registers answer without a clock of ours (Linux drives the enable; our image does not turn any GPIO clock on) | `imx95_lvds_ids` (clock 154's state, rate, permissions); the first cold run (the backlight lights, the enable rises) |
 | U27 | X12: the display CSR's +0x14 (0x1A150A00, a reserved word in the header), `AXCACHE_CONTROL` 0x00330303 and `QOS_SETTING` 0x33 under Linux: written by Linux or reset values? The path writes none of them | `imx95_lvds_ids` reads them after DISPLAY comes on, before any write |
+| U28 | X12: why FrameGen0 does not stop. After `FGENABLE` = 0, `FGENSTS` still reads 1 (`FGCHSTAT` 0x101) when the two-frame wait (about 33 ms) runs out, with the LDB clocks still on (7790a11e's order, on the board 2026-11-27 at 70a3f06f: `display down: -5`, records `20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`). `dpu::stop` writes `FGENABLE` alone. `FGSTCTRL.SHDEN` is set, and Linux's CRTC disable follows the write with a FrameGen shadow token (`FGSLR.SHDTOKGEN`), so the write may wait in the shadow. Not tested | `FGSLR.SHDTOKGEN` after `FGENABLE` = 0 in `dpu::stop`, then the triangle run again (`display down: 0`); if it still fails, a 100 ms budget and a frame-counter read to tell a stuck frame generator from a slow one |
