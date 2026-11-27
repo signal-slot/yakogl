@@ -1,0 +1,253 @@
+13:58:52 [   94.278273] reboot: Restarting system
+13:58:52 \x00�
+13:58:52 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+13:58:52 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+13:58:52 SPL initial stack usage: 17088 bytes
+13:58:52 Trying to boot from MMC1
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Loading Environment from nowhere... OK
+13:58:52 init_env from device 9 not supported!
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Starting ATF on ARM64 core...
+13:58:52 
+13:58:52 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+13:58:52 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+13:58:52 
+13:58:52 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+13:58:52 SPL initial stack usage: 1920 bytes
+13:58:52 HW CFG: 0x00
+13:58:52 Trying to boot from MMC1
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 
+13:58:52 
+13:58:52 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 
+13:58:52 SoC:   AM62PX SR1.0 HS-FS
+13:58:52 DRAM:  2 GiB
+13:58:52 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+13:58:52 Core:  161 devices, 34 uclasses, devicetree: separate
+13:58:52 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+13:58:52 Loading Environment from MMC... OK
+13:58:52 In:    serial@2800000
+13:58:52 Out:   serial@2800000
+13:58:52 Err:   serial@2800000
+13:58:52 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+13:58:52 Serial#: 08641335
+13:58:52 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+13:58:52 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+13:58:52 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+13:58:52 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+13:58:52 
+13:58:52 Hit any key to stop autoboot:  0 
+13:58:52 yakogl-netboot: once=pr-regress-175R-off-3b5850fe74cf039d-1795787797
+13:58:52 Saving Environment to MMC... Writing to MMC(0)... OK
+13:58:52 yakogl-netboot: cleared
+13:58:52 3435936 bytes read in 41 ms (79.9 MiB/s)
+13:58:52 yakogl-netboot: go 0x82000000
+13:58:52 ## Starting application at 0x82000000 ...
+13:58:52 Hxsample: build tree=c8be59f6 table=6c5b8a70
+13:58:52 I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 150 s
+13:58:52 board: watchdog armed
+13:58:52 I: Cadence DSI id 0xcadd5131, IP_CONF 0x948490d0
+13:58:52 I: D-PHY: WIZ at +0xf00 (MOD_VER 0x69924881)
+13:58:52 I: VP clock source 51200000 Hz (pixel clock 51200000 Hz)
+13:58:52 I: DSS rev 0x64040901
+13:58:52 I: DSS ready: VP2 1024x600 @ 51200000 Hz, safety layer ARGB8888 at 0x84e199c0
+13:58:52 I: TISCI: power domain 237 on
+13:58:52 I: TISCI: power domain 242 on
+13:58:52 I: TISCI: GPU clock 237/3 = 800000000 Hz
+13:58:52 I: TISCI: GPU clock 237/3 runs at 800000000 Hz
+13:58:52 I: GPU regs 0xfd80000 (512 KiB) mapped at 0xfd80000
+13:58:52 I: CORE_ID = 0x002400350068031c -> BVNC 192.0.2.0
+13:58:52 I: PowerVR BXS-4-64 MC1 alive (BVNC 192.0.2.0)
+13:58:52 I: GPU bring-up milestone 1 complete (power + BVNC readback)
+13:58:52 I: GPU core clock measured: 800 MHz (CR_TIMER 31252 ticks in 10 ms)
+13:58:52 I: GPU carveout phys 0x97800000 (64 MiB) mapped at 0x8e000000
+13:58:52 I: DDK FW: code@0x0 (196608 B), data@0x80000 (135168 B), objs from 0xc0000
+13:58:52 I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+13:58:52 I: runtime cfg: ActivePMLatency 5 ms
+13:58:52 I: FWIF structs built (KCCB/FWCCB/sysinit/osinit); heap used to 0xd8d28
+13:58:52 I: MMU: FW heap mapped (4096 KiB main + 192 KiB config of the 32 MiB window), PC root phys=0x97c30000
+13:58:52 I: M3 complete (MMU + FW load + FWIF structs). Booting FW core...
+13:58:52 I: FW boot: firmware_started=0x1 after ~1 ms
+13:58:52 I: GPU bring-up milestone 4 complete (firmware booted)
+13:58:52 I: DDK FW: skipping open-FW healthcheck; render KICK drives the FW
+13:58:52 I: render: scaffolding built; awaiting final cmd_transfer regs (pvr_render_regs.h) before first GPU draw
+13:58:52 I: D-PHY: 307812500 bit/s per lane, band 5
+13:58:52 I: DSI link up: 4 lanes, sync events, line 4047 B, 307812500 bit/s per lane
+13:58:52 I: sn65dsi8x: ID "58ISD" rev 0x01 (attempt 1)
+13:58:52 I: sn65dsi8x: up, DSI 153600 kHz (range 0x1e), LVDS 51200 kHz = /3 (range 1), fmt 0x68
+13:58:52 I: sn65dsi8x: link clean (IRQ_STAT 0x00)
+13:58:52 W: bridge up, video on, IRQ_STAT 0x00, at 275 ms
+13:58:52 W: backlight on at 280 ms
+13:58:52 I: SN65DSI8x up: lvds range 1, dsi range 30, div 2, fmt 0x68, IRQ_STAT 0x00
+13:58:52 *** Booting Zephyr OS build af17c0c8aa2a ***
+13:58:52 I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+13:58:52 Secondary CPU core 1 (MPID:0x1) is up
+13:58:52 Secondary CPU core 2 (MPID:0x2) is up
+13:58:52 Secondary CPU core 3 (MPID:0x3) is up
+13:58:52 gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=0
+13:58:52 gl_test: the list 175 (1 cases) on one context
+13:58:52 gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)
+13:58:52 W: render: PROBE: the global freelists have no grow reserve: every grow is answered with zero pages, on purpose
+13:58:52 I: render: parameter buffer: carveout 64 MiB -> 448 pages listed, 4096 max, grow 256, pool 0 pages
+13:58:52 I: freelist id=1 np=512 max=4096 backing=512 fpm=0 ebase=3584 arr.gpu=0xfa00000000 pages_phys=0x98054000 cur_dev=0xfa00003800 pfn[3584]=0x00098054 pfn[4095]=0x00098253
+13:58:52 I: freelist id=2 np=512 max=4096 backing=512 fpm=0 ebase=3584 arr.gpu=0xfa00004000 pages_phys=0x98258000 cur_dev=0xfa00007800 pfn[3584]=0x00098258 pfn[4095]=0x00098457
+13:58:52 I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 arr.gpu=0xfa00008000 pages_phys=0x9845c000 cur_dev=0xfa00008010 pfn[4]=0x0009845c pfn[31]=0x00000000
+13:58:52 I: render: pds0: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 f4000002 | @0x80: f0080101 f0090201  usc0: 0580a044 ff000000 00000000 00000000
+13:58:52 I: render: init ok (PB@0x8000000000 border@0x8000200000 eot_usc_off=0x1000 gen_b=0x634000 pds_b=0x1000 usc_b=0xa000)
+13:58:52 I: osal(zephyr): ready (regs=0xfd80000)
+13:58:52 I: pvr_backend: init ok (pds arena off 0x1000, gen arena 0x8043f00000, vdm 0x8000634000, clear_fs off 0xc000)
+13:58:52 I: render: hc dwords: 00000000 03ff03ff 00000088 00000000 00000088 00000000 00000000 00002000 0003f03f 00000100 00000000 00400000 00400000 00000000 00000000 00000000
+13:58:52 I: render: hrt[0]: 0000c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[16]: 00000000 400e9d00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+13:58:52 I: render: hrt[24]: 00000000 00000000 0068f000 00000080 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[32]: 00000000 00000000 00000000 00000000 0068b000 00000080 006a1000 00000080
+13:58:52 I: render: hrt[40]: 00691000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+13:58:52 W: render: fence 1 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=finish last_posted=1
+13:58:52 I: render: hc dwords: 00000000 03ff03ff 00000088 00000000 00000088 00000000 00000000 00002000 0003f03f 00000100 00000000 00400000 00400000 00000000 00000000 00000000
+13:58:52 I: render: hrt[0]: 00010000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[16]: 00000000 400e9e80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+13:58:52 I: render: hrt[24]: 00000000 00000000 006a6000 00000080 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[32]: 00000000 00000000 00000000 00000000 006a2000 00000080 006b8000 00000080
+13:58:52 I: render: hrt[40]: 006a8000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+13:58:52 I: render: HWRT 1024x1024 x1 te_screen=0x0003f03f mtile1=0x00400000 mtile2=0x00400000 isp_mtile=0x00100010 stride=256 rgn=1024 tpc=8192 teaa=0
+13:58:52 W: render: fence 2 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (2 so far) site=finish last_posted=2
+13:58:52 W: render: fence 3 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (3 so far) site=finish last_posted=3
+13:58:52 W: render: fence 4 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (4 so far) site=finish last_posted=4
+13:58:52 W: render: fence 5 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (5 so far) site=finish last_posted=5
+13:58:52 W: render: fence 6 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (6 so far) site=finish last_posted=6
+13:58:52 W: render: fence 7 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (7 so far) site=finish last_posted=7
+13:58:52 W: render: fence 8 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (8 so far) site=finish last_posted=8
+13:58:52 W: FWCCB: FREELIST_GROW id=1 -> no grow (reserve 0, pool 0/0, 512/4096 pages)
+13:58:52 I: FWCCB: grow ack: KCCB r/w=35/35 after 1 ms; fl cur=512 top=483 ready=0 pending=0 alloc=28/0 base=0xfa00000000 cur_dev=0xfa00003800
+13:58:52 I: FWCCB: UPDATE_STATS element=2 (out of memory) adjust=1 (seen 1)
+13:58:52 I: render: at grow request 1 (sampled when the batch was first read): last submitted 15, last fragment done 14; 1 kicks in flight: 0 with TA done and 3D pending, 1 with TA pending
+13:58:52 E: render: stopped: a kick that did not complete in the stop's time (list 0, 0 KiB); no kick is waited for or taken from now on
+13:58:52 E: render: fence 15 (frame fence) cannot complete: the render service stopped (a kick that did not complete in the stop's time); not waited for
+13:58:52 I: render pool summary: 59200 KiB, bump 10288 KiB now, 10288 KiB high-water; top 11480 KiB now, 11480 KiB high-water
+13:58:52 I: render pool general: free 4 KiB in 1 ranges, largest 4 KiB; 4 reused, 30 bumped, 0 refused; 6 frees (32 KiB)
+13:58:52 I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+13:58:52 I: render pool usc: free 0 KiB in 0 ranges, largest none; 0 reused, 43 bumped, 0 refused; 0 frees (0 KiB)
+13:58:52 I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+13:58:52 I: render freelists: 1 grow requests, 0 served, 1 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+13:58:52 I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+13:58:52 I: pvr_backend: kick 15 did not complete (-110)
+13:58:52 I: yakogl: GPU work lost: backend finish returned -110; results that depended on it are withheld (yakogl_gpu_work_lost counts every loss)
+13:58:52 gl_test: refusehang: 15 frames, the last of 707 quads asked for a grow: requests 1 (served 0, refused 1), notices 1, re-posts 15, stop 4, partial renders 0
+13:58:52 gl_test: case 175: 1 fence wait(s) timed out; its checks are not a verdict
+13:58:52 gl_test: case 175 refusehang: TIMEOUT
+13:58:52 gl_test: all: 1 of 1 cases failed (0 passed; 1 timed out; first failure case 175 at index 0; second failure case -1; 0 skipped, first skip case -1); precompiled hits 0, compiler runs 3
+13:58:52 gl_test: done
+13:58:52 osal(zephyr): pending frees: high-water 3/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+13:58:52 osal(zephyr): at close: pending frees now 3 (7392 KiB), oldest fence 15, last submitted 15; reclaim on: 0 refusals, 0 served without a wait, 0 after a wait, 0 refused
+13:58:52 I: render pool summary: 59200 KiB, bump 10288 KiB now, 10288 KiB high-water; top 11480 KiB now, 11480 KiB high-water
+13:58:52 I: render pool general: free 4 KiB in 1 ranges, largest 4 KiB; 4 reused, 30 bumped, 0 refused; 6 frees (32 KiB)
+13:58:52 I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+13:58:52 I: render pool usc: free 0 KiB in 0 ranges, largest none; 0 reused, 43 bumped, 0 refused; 0 frees (0 KiB)
+13:58:52 I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+13:58:52 I: render freelists: 1 grow requests, 0 served, 1 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+13:58:52 I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 1, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+13:58:52 osal(zephyr): ds slots: none allocated, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 0 (refused 0)
+13:58:52 osal(zephyr): log: 1 causes logged once, 0 repeats not printed
+13:58:52 gl_test: FAILED (rc=-1)
+13:58:52 I: dss stats before hold t=14369 ms: vsyncs 829 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+13:58:52 I: dss stats after hold t=34381 ms: vsyncs 2007 app_frames 0 underflows 0 sync_lost 0 go_timeouts 0 go_waits 0 safety_flips 0 app 0
+13:58:52 I: sample done (-1): resetting the SoC
+13:58:52 \x00�
+13:58:52 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+13:58:52 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+13:58:52 SPL initial stack usage: 17088 bytes
+13:58:52 Trying to boot from MMC1
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Loading Environment from nowhere... OK
+13:58:52 init_env from device 9 not supported!
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 Starting ATF on ARM64 core...
+13:58:52 
+13:58:52 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+13:58:52 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+13:58:52 
+13:58:52 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+13:58:52 SPL initial stack usage: 1920 bytes
+13:58:52 HW CFG: 0x00
+13:58:52 Trying to boot from MMC1
+13:58:52 Authentication passed
+13:58:52 Authentication passed
+13:58:52 
+13:58:52 
+13:58:52 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+13:58:52 
+13:58:52 SoC:   AM62PX SR1.0 HS-FS
+13:58:52 DRAM:  2 GiB
+13:58:52 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+13:58:52 Core:  161 devices, 34 uclasses, devicetree: separate
+13:58:52 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+13:58:52 Loading Environment from MMC... OK
+13:58:52 In:    serial@2800000
+13:58:52 Out:   serial@2800000
+13:58:52 Err:   serial@2800000
+13:58:52 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+13:58:52 Serial#: 08641335
+13:58:52 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+13:58:52 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+13:58:52 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+13:58:52 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+13:58:52 
+13:58:52 Hit any key to stop autoboot:  0 
+13:58:52 6188160 bytes read in 55 ms (107.3 MiB/s)
+13:58:52 288 bytes read in 20 ms (13.7 KiB/s)
+13:58:52 Failed to load '/safeui/zephyr_a53.bin'
+13:58:52 SafeUI images not found, booting Linux
+13:58:52 \x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8MMC: no card present
+13:58:52 No EFI system partition
+13:58:52 No EFI system partition
+13:58:52 Failed to persist EFI variables
+13:58:52 No EFI system partition
+13:58:52 Failed to persist EFI variables
+13:58:52 No EFI system partition
+13:58:52 Failed to persist EFI variables
+13:58:52 ** Booting bootflow '<NULL>' with efi_mgr
+13:58:52 Loading Boot0000 'mmc 0' failed
+13:58:52 EFI boot manager: Cannot load any image
+13:58:52 Boot failed (err=-14)
+13:58:52 MMC: no card present
+13:58:52 MMC: no card present
+13:58:52 MMC: no card present
+13:58:52 MMC: no card present
+13:58:52 ** Booting bootflow 'mmc@fa10000.bootdev.part_1' with script
+13:58:52 6956 bytes read in 21 ms (323.2 KiB/s)
+13:58:52 75135 bytes read in 21 ms (3.4 MiB/s)
+13:58:52 65 bytes read in 21 ms (2.9 KiB/s)
+13:58:52 Working FDT set to 90200000
+13:58:52 Applying Overlay: <board-host>_panel-cap-touch-7inch-dsi_overlay.dtbo
+13:58:52 4693 bytes read in 22 ms (208 KiB/s)
+13:58:52 11272338 bytes read in 83 ms (129.5 MiB/s)
+13:58:52 13381763 bytes read in 95 ms (134.3 MiB/s)
+13:58:52    Uncompressing Kernel Image to 0
+13:58:52 ## Flattened Device Tree blob at 90200000
+13:58:52    Booting using the fdt blob at 0x90200000
+13:58:52 Working FDT set to 90200000
+13:58:52    Loading Ramdisk to fc1d3000, end fce96083 ... OK
+13:58:52    Loading Device Tree to 00000000fc19d000, end 00000000fc1d2fff ... OK
+13:58:52 Working FDT set to fc19d000
+13:58:52 
+13:58:52 Starting kernel ...

@@ -1,0 +1,20 @@
+# tools/board.sh run record (driver/docs/one-method.md section 4; records/README.md)
+runner: tools/board.sh build 713be963
+board: am62p
+boot: uboot-mmc (a row)
+name: pr-regress-175-off
+image: zephyr.bin sha256 f24a98f094a88f42b87c10cc4533c79f860d161c8f7d27627822435e62783fb6 size 3435936 footprint 51617792
+image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=c8be59f6
+image zephyr: af17c0c8aa2a
+build line printed at boot: H8sample: build tree=c8be59f6 table=6c5b8a70
+started: 2026-11-27 13:59:02
+ended: 2026-11-27 14:01:08
+verdict: board.sh am62p pr-regress-175-off rc=4 verdict=failed boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=105s
+phase scan: netboot-scan: verdict=done back=yes lines=227 hooks=pr-regress-175-off-f24a98f094a88f42-1795787942 fetched_bytes=3435936 spl1=+0.0s hook=+0.0s cleared=+0.0s fetched=+0.0s go=+0.0s zephyr=+0.0s rti_armed=+0.0s reset=+0.0s linux=+0.0s
+records:
+  none (the console has no yk-record line: the image prints none)
+files (sha256, lines):
+5f016a29b2e8447123a5215a7708dbfeca6798feeffdc1dfe606694586bf0d74  240  console.raw
+b61449100dd52ac54c4e936c6b1791c0b748e20505e289e8a996c5bda23c5d1b  240  console.ts
+579ffa42ac25916f272229ba26a775abab275a95a701ba4cb4df84d79d09d060  240  console.txt
+f46105e106e37e4de5f7fb3ce98f1d2bf550f804600e575311366e19547e2e0a  22  meta.txt
