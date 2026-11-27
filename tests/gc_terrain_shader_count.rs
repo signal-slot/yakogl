@@ -77,29 +77,35 @@ fn blur(file: &str, radius: i32, sigma: f64, horizontal: bool, step: f64, tilt: 
 
 /// (name, stage, ours: instructions and temps); etna_shc's and the count before the patch in the comment
 const GLMARK2: [(&str, u32, u32, u32); 10] = [
-    ("terrain.vert", SHC_STAGE_VERTEX, 44, 9), // etna 39, 9; before 56, 9; 48 before rank 4c
-    ("terrain.frag", SHC_STAGE_FRAGMENT, 80, 12), // etna 72, 11; before 127, 16 (sr patch), 148, 19; 81 before rank 4c
-    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 57, 12), // etna 46, 5; before 66, 12; 62 before rank 4
-    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 57, 12), // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4
-    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 32, 8), // etna 24, 5; before 42, 8; 38 before rank 4
-    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 32, 8), // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4
-    ("normalmap.frag", SHC_STAGE_FRAGMENT, 20, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T, 21 before rank 4
-    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2), // etna 2, 2; before 2, 2
-    ("quad.vert", SHC_STAGE_VERTEX, 7, 3),     // etna 4, 2; before 7, 3
-    ("luminance.frag", SHC_STAGE_FRAGMENT, 7, 4), // etna 3, 3; before 7, 4
+    ("terrain.vert", SHC_STAGE_VERTEX, 42, 9), // etna 39, 9; before 56, 9; 48 before rank 4c, 44 before cc-copies
+    ("terrain.frag", SHC_STAGE_FRAGMENT, 79, 12), // etna 72, 11; before 127, 16 (sr patch), 148, 19; 81 before rank 4c, 80 before cc-copies
+    ("tilt_h.frag", SHC_STAGE_FRAGMENT, 56, 12),  // etna 46, 5; before 66, 12; 62 before rank 4, 57 before cc-copies
+    ("tilt_v.frag", SHC_STAGE_FRAGMENT, 56, 12), // etna 46, 5; before 75, 12; 71 before rank T, 62 before rank 4, 57 before cc-copies
+    ("bloom_h.frag", SHC_STAGE_FRAGMENT, 31, 8), // etna 24, 5; before 42, 8; 38 before rank 4, 32 before cc-copies
+    ("bloom_v.frag", SHC_STAGE_FRAGMENT, 31, 8), // etna 24, 5; before 47, 8; 43 before rank T, 38 before rank 4, 32 before cc-copies
+    ("normalmap.frag", SHC_STAGE_FRAGMENT, 18, 6), // etna 21, 4; before 25, 5; 23, 5 before rank T, 21 before rank 4, 20 before cc-copies
+    ("overlay.frag", SHC_STAGE_FRAGMENT, 2, 2),    // etna 2, 2; before 2, 2
+    ("quad.vert", SHC_STAGE_VERTEX, 6, 3),         // etna 4, 2; before 7, 3; 7 before cc-copies
+    ("luminance.frag", SHC_STAGE_FRAGMENT, 6, 4),  // etna 3, 3; before 7, 4; 7 before cc-copies
 ];
-/// The ten's instructions: etna_shc 279; 343 before rank 4c (a constructor's
+/// The ten's instructions: etna_shc 279; 338 before rank 2's rest (plan #421
+/// item cc-copies: partial-mask copies read through, a producer writing its
+/// copy's lane, an output placed in the register of the value it copies);
+/// 343 before rank 4c (a constructor's
 /// constant lane read as the constant), 366 before rank 4 (float constant
 /// folding), 382 before rank T (the retarget past a constant lane), 428
 /// before the unroll, 475 before the patch.
-const GLMARK2_TOTAL: u32 = 338;
+const GLMARK2_TOTAL: u32 = 327;
 
 /// The noise height map, `terrain-noise.frag` (4 calls of `snoise`; glmark2's
 /// hash `terrain-1637be2eef2e8a5e`), as `ShaderSource` hands it over: instructions
 /// and temporaries. etna_shc 414. History: 840 in the note's first measure, 767
 /// modelled with the negate fold (rank 1's negate half, not landed), 556 at
-/// today's tree (the patch, the unroll and float constant folding).
-const NOISE: (u32, u32) = (556, 14);
+/// eae3ac95's tree (the patch, the unroll and float constant folding), 518
+/// with rank 2's rest (cc-copies: 36 copies go as a dot product writing the
+/// lane of `norm`, `m` or the final dot vector it was copied into, one partial
+/// copy `v = coord` is read through, the output copy goes).
+const NOISE: (u32, u32) = (518, 14);
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
     let rd = |n: &str| {
@@ -150,20 +156,22 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
             2,
         ),
         // t5, rank 5: two taps' offsets from one scalar; etnaviv one vec2 mul for both; before the patch 8,
-        // 8 before rank T (the first sum's store into the vec4 is retargeted past the second tap)
+        // 8 before rank T (the first sum's store into the vec4 is retargeted past the second tap),
+        // 7 before cc-copies (the colour is placed in the vec4's register, the output copy goes)
         (
             "t5",
             SHC_STAGE_FRAGMENT,
             fs("", "gl_FragColor = vec4(a.xy + vec2(-1.0 * b.x, 0.0), a.xy + vec2(1.0 * b.x, 0.0));"),
-            7,
+            6,
         ),
         // t5v, rank T: t5 with the lanes of each vec2 swapped, tilt_v's shape; the product is stored
-        // after the constant lane; 10 before rank T (`docs/notes/gc-compiler-ranks-3-5.md`)
+        // after the constant lane; 10 before rank T (`docs/notes/gc-compiler-ranks-3-5.md`), 7 before
+        // cc-copies (the output copy goes, as in t5)
         (
             "t5v",
             SHC_STAGE_FRAGMENT,
             fs("", "gl_FragColor = vec4(a.xy + vec2(0.0, -1.0 * b.x), a.xy + vec2(0.0, 1.0 * b.x));"),
-            7,
+            6,
         ),
     ]
 }

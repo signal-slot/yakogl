@@ -42,18 +42,19 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
 const GLMARK2: [(&str, &str, u32, u32); 8] = [
     ("37f46ae8961221f2", "vert", 4, 3), // depth vertex; etna 4, 3; before 6, 3; 5, 3 before rank 4c
-    ("928e172a68b7f175", "frag", 3, 3), // depth fragment; etna 2, 2; before 3, 3
+    ("928e172a68b7f175", "frag", 2, 3), // depth fragment; etna 2, 2; before 3, 3; 3, 3 before cc-copies
     ("b9d18073e5979540", "vert", 9, 4), // ground vertex; etna 7, 4; before 12, 4; 11, 5 before rank 4c
-    ("cf4bf899d84af04d", "frag", 13, 5), // ground fragment; etna 11, 4; before 16, 5
-    ("6964fcf6aaac9739", "vert", 19, 5), // horse vertex; etna 14, 4; before 23, 5; 21, 5 before rank 4c
-    ("474800a67afed087", "frag", 1, 2), // horse fragment; etna 1, 2; before 1, 2
+    ("cf4bf899d84af04d", "frag", 12, 5), // ground fragment; etna 11, 4; before 16, 5; 13, 5 before cc-copies
+    ("6964fcf6aaac9739", "vert", 17, 5), // horse vertex; etna 14, 4; before 23, 5; 21, 5 before rank 4c, 19, 5 before cc-copies
+    ("474800a67afed087", "frag", 1, 2),  // horse fragment; etna 1, 2; before 1, 2
     ("7215f4f5052a383c", "vert", 19, 5), // refract vertex; etna 19, 5; before 23, 5; 21, 5 before rank 4c
-    ("3fae89c9ab969ea3", "frag", 64, 11), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4
+    ("3fae89c9ab969ea3", "frag", 64, 10), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4; 64, 11 before cc-copies
 ];
 /// The eight's instructions: etna_shc 105; before the patch 170; 146 before
 /// rank 4 (float constant folding, `docs/notes/gc-compiler-ranks-3-5.md`),
-/// 139 before rank 4c (a constructor's constant lane read as the constant).
-const GLMARK2_TOTAL: u32 = 132;
+/// 139 before rank 4c (a constructor's constant lane read as the constant),
+/// 132 before rank 2's rest (plan #421 item cc-copies).
+const GLMARK2_TOTAL: u32 = 128;
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -63,21 +64,21 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
     vec![
         // m1: etna 2 (one rcp, one mul); before the patch 5
         ("m1", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a / a.w;"), 2),
-        // m1b: etna 3; before the patch 6
-        ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 4),
-        // m13: etna 3 (mad); before the patch 6 (the patch has no contraction)
-        ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 6),
-        // m9: etna 7; before the patch 17; 10 before rank 4 (`L.xyz / L.w` is a constant now)
+        // m1b: etna 3; before the patch 6; 4 before the output copy went (cc-copies)
+        ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 3),
+        // m13: etna 3 (mad); before the patch 6 (the patch has no contraction); 6 before cc-copies
+        ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 5),
+        // m9: etna 7; before the patch 17; 10 before rank 4 (`L.xyz / L.w` is a constant now); 8 before cc-copies
         (
             "m9",
             SHC_STAGE_FRAGMENT,
             fs("const vec4 L = vec4(1.0, 2.0, 3.0, 2.0); gl_FragColor = vec4(normalize(a.xyz / a.w - L.xyz / L.w), 1.0);"),
-            8,
+            7,
         ),
-        // m5: etna 10; before the patch 20; 17 before rank 4 (`1.0 - eta * eta` folds)
-        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 16),
-        // m8: etna 4; before the patch 8
-        ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 7),
+        // m5: etna 10; before the patch 20; 17 before rank 4 (`1.0 - eta * eta` folds); 16 before cc-copies
+        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 15),
+        // m8: etna 4; before the patch 8; 7 before cc-copies (two copies go)
+        ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 5),
         // m4 (vertex): etna 4; before the patch 6; 5 before rank 4c (the `1.0` lane read as the constant)
         (
             "m4",

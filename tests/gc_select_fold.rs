@@ -127,9 +127,12 @@ fn show(name: &str, prog: &[String]) {
 /// instruction when its lane is stored; `retarget_last_to` now looks past
 /// the constant lane's `mov` and the product writes the slot's lane itself.
 /// 10 before rank T (`mov t.x, 0.0; mul tmp; mov t.y, tmp` a tap; the note
-/// counted 8 after), 7 now: a tap is `mul t.y; mov t.x, 0.0; add`, and the
-/// sr patch's copy fold takes one of the vec4 assembly's two copies. No lane
-/// copy is left, and the swapped lanes cost nothing over t5.
+/// counted 8 after), 7 after it: a tap is `mul t.y; mov t.x, 0.0; add`, and
+/// the sr patch's copy fold takes one of the vec4 assembly's two copies. 6
+/// now: the colour is placed in the register of the vec4 it copies, which
+/// dies there (`alloc.rs` `copy_source_dying_here`, plan #421 item
+/// cc-copies), so the output copy is a self-copy and goes. No lane copy is
+/// left, and the swapped lanes cost nothing over t5.
 ///
 /// The taps here are `2.0 * b.x` and `-2.0 * b.x`, which stay products: the
 /// note's `1.0 * b.x` and `-1.0 * b.x` are `b.x` and `-b.x` since rank 4b,
@@ -141,10 +144,10 @@ fn t5v_a_product_stored_after_a_constant_lane_writes_the_lane_itself() {
         &fs("", "gl_FragColor = vec4(a.xy + vec2(0.0, -2.0 * b.x), a.xy + vec2(0.0, 2.0 * b.x));"),
     );
     show("t5v (k = 2)", &p);
-    assert_eq!(p.len(), 7, "t5v is 7 instructions (10 before rank T)");
+    assert_eq!(p.len(), 6, "t5v is 6 instructions (10 before rank T, 7 before the output copy went)");
     assert_eq!(count(&p, "mul"), 2, "the two products");
     assert_eq!(count(&p, "add"), 2, "the two sums");
-    assert_eq!(count(&p, "mov"), 3, "the two zero lanes and the output copy, no lane copy");
+    assert_eq!(count(&p, "mov"), 2, "the two zero lanes, no lane copy and no output copy");
     let t5 = compile(
         SHC_STAGE_FRAGMENT,
         &fs("", "gl_FragColor = vec4(a.xy + vec2(-2.0 * b.x, 0.0), a.xy + vec2(2.0 * b.x, 0.0));"),

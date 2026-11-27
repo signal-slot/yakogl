@@ -1654,8 +1654,20 @@ fn allocate<I: IntoIterator<Item = u8>>(
             whole_output || (kills(s, VReg(v as u32), r.comps) && !reads(s, VReg(v as u32)))
         });
         let free_before = if born_whole { r.first as i32 + 1 } else { r.first as i32 };
+        /* A value born by a plain copy of a value that dies there tries the
+         * source's register first: placed there, the copy is a `mov` of a
+         * register onto itself, which `drop_identity_movs` deletes. Only the
+         * order of the candidates changes, so the fit test below decides as
+         * it does for any register (loops included). */
+        let prefer = if lane.is_none() && born_whole {
+            sel.get(r.first).and_then(|s| copy_source_dying_here(s, r.first, v, ranges, &pseudo_of))
+        } else {
+            None
+        }
+        .filter(|&sv| moved[sv] == NOT_MOVED && phys[sv] != u16::MAX && !reserved[phys[sv] as usize])
+        .map(|sv| phys[sv] as usize);
         let mut placed = None;
-        'regs: for reg in 0..MAX_TEMPS as usize {
+        'regs: for reg in prefer.into_iter().chain(0..MAX_TEMPS as usize) {
             if reserved[reg] {
                 continue;
             }
@@ -1988,6 +2000,10 @@ pub fn eliminate_dead(
     let left = n - removed;
     super::peephole::mark_targets(&sel[..left], dead);
     let merged = super::peephole::merge_scalar_lanes(&mut sel[..left], dead);
+    /* And a copy that is its source's only reader is written by the source's
+     * producer instead (peephole.rs `retarget_producers`), emptied the same
+     * way. */
+    let merged = merged + super::peephole::retarget_producers(&mut sel[..left], dead);
     if merged != 0 {
         dead.fill(0);
         for (i, s) in sel[..left].iter().enumerate() {
@@ -2264,6 +2280,32 @@ fn kills(s: &SelInstr, v: VReg, comps: u8) -> bool {
 
 fn reads(s: &SelInstr, v: VReg) -> bool {
     s.srcs.iter().flatten().any(|x| matches!(*x, SelSrc::Virtual { v: u, .. } if u == v))
+}
+
+/// The value `s` (instruction `i`, where value `v` is born) copies into `v`
+/// unchanged, when that value's range ends at `i`: a `mov` with no guard,
+/// saturate or modifier, writing `v` (or the placeable output whose pseudo
+/// value `v` is) from another virtual register through the identity swizzle
+/// on its write mask. [`allocate`] tries that value's register first.
+fn copy_source_dying_here(
+    s: &SelInstr,
+    i: usize,
+    v: usize,
+    ranges: &[Range],
+    pseudo_of: &impl Fn(u8) -> Option<u32>,
+) -> Option<usize> {
+    if !s.op.is_mov() || !matches!(s.cond, None | Some(Cond::True)) || s.saturate || s.target.is_some() {
+        return None;
+    }
+    let write_mask = match s.dst {
+        Some(SelDst::Virtual { v: d, write_mask }) if d.0 as usize == v => write_mask,
+        Some(SelDst::Fixed { reg, write_mask }) if pseudo_of(reg) == Some(v as u32) => write_mask,
+        _ => return None,
+    };
+    let Some(SelSrc::Virtual { v: sv, swizzle, neg: false, abs: false }) = s.srcs[2] else { return None };
+    let sv = sv.0 as usize;
+    let identity = (0..4).all(|c| write_mask & (1 << c) == 0 || swizzle[c] as usize == c);
+    (sv != v && identity && ranges.get(sv).is_some_and(|r| r.used && r.last == i)).then_some(sv)
 }
 
 /// Widen every range to cover each point where its value is live, for a
@@ -5032,6 +5074,62 @@ mod loop_and_io_tests {
         )
         .expect("allocates");
         assert_ne!(placed2[0], placed2[3], "two outputs in one register at the end of the program");
+    }
+
+    /// An output that is a plain copy of a value dying at the copy is placed
+    /// in that value's register, so the copy is a self-copy
+    /// ([`copy_source_dying_here`]): `mul v0, a, u; mul v1, a, u; add v0, v0,
+    /// v1; mov o, v0` puts `o` where v0 is. Refused when the value is read
+    /// after the copy, when the copy swizzles, and when it negates.
+    #[test]
+    fn an_output_copied_from_a_value_dying_there_takes_its_register() {
+        let (mov, mul, add) = (op_id("mov").expect("mov"), op_id("mul").expect("mul"), op_id("add").expect("add"));
+        let inp = |reg| SelSrc::Input { reg, swizzle: XYZW, neg: false, abs: false };
+        let program = |copy: SelSrc, after: bool| {
+            let mut sel = vec![
+                SelInstr::new(mul, OpType::F32)
+                    .dst(SelDst::Virtual { v: VReg(0), write_mask: 0xf })
+                    .src(0, inp(1))
+                    .src(1, konst(0)),
+                SelInstr::new(mul, OpType::F32)
+                    .dst(SelDst::Virtual { v: VReg(1), write_mask: 0xf })
+                    .src(0, inp(1))
+                    .src(1, konst(1)),
+                SelInstr::new(add, OpType::F32)
+                    .dst(SelDst::Virtual { v: VReg(0), write_mask: 0xf })
+                    .src(0, vr(0, XYZW))
+                    .src(2, vr(1, XYZW)),
+                SelInstr::new(mov, OpType::F32).dst(SelDst::Fixed { reg: 1, write_mask: 0xf }).src(2, copy),
+            ];
+            if after {
+                sel.push(
+                    SelInstr::new(mov, OpType::F32).dst(SelDst::Fixed { reg: 2, write_mask: 0xf }).src(2, vr(0, XYZW)),
+                );
+            }
+            let mut out = built(sel.len());
+            let mut placed = [NOT_PLACED; MAX_TEMPS as usize];
+            let outs: &[u8] = if after { &[1, 2] } else { &[1] };
+            allocate_and_build_placed(
+                &Arena::new(&mut vec![0u8; 1 << 20]),
+                &sel,
+                &mut out,
+                Stage::Fragment,
+                [],
+                [1],
+                outs,
+                &mut placed,
+            )
+            .expect("allocates");
+            (out[2].dst().expect("dst").reg, placed[1], is_identity_mov(&out[3]))
+        };
+        let (sum, colour, gone) = program(vr(0, XYZW), false);
+        assert_eq!((colour, gone), (sum, true), "the colour in the sum's register, the copy a self-copy");
+        let (sum, colour, gone) = program(vr(0, XYZW), true);
+        assert!(colour != sum && !gone, "the sum is read after the copy");
+        let (sum, colour, gone) = program(vr(0, [3, 2, 1, 0]), false);
+        assert!(colour != sum && !gone, "a swizzling copy computes something");
+        let (sum, colour, gone) = program(SelSrc::Virtual { v: VReg(0), swizzle: XYZW, neg: true, abs: false }, false);
+        assert!(colour != sum && !gone, "a negating copy computes something");
     }
 
     /// A copy of a register onto itself goes, and every branch follows: one

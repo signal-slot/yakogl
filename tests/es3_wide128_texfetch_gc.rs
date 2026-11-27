@@ -169,10 +169,14 @@ fn check_join(what: &str, plain: &ShcShader, split: &ShcShader, op: &str, unit: 
     assert_ne!(lo.dst, hi.dst, "{what}: the planes land in two registers: {s:#?}");
     let join = format!("{}.__zw, void, void, {}.xyxy", lo.dst, hi.dst);
     assert!(s.iter().any(|t| t.starts_with("mov") && t.contains(&join)), "{what}: {join}: {s:#?}");
-    /* in the first look-up's own register, or copied there by a last mov */
+    /* in the first look-up's own register, or copied there by a last mov,
+     * or the joined register is the split program's own colour output (the
+     * allocator places an output in the register of the value it copies when
+     * that value dies there, so the copy goes) */
     let last = s.last().unwrap();
     assert!(
         lo.dst == pl[0].dst
+            || lo.dst == format!("t{}", split.viv.ps_color_out_reg)
             || (last.starts_with("mov") && last.contains(&format!("{}.xyzw", lo.dst)) && last.contains(&pl[0].dst)),
         "{what}: the joined vec4 goes where the plain look-up's result went ({}): {s:#?}",
         pl[0].dst
