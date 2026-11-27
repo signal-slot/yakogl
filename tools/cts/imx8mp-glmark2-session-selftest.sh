@@ -160,6 +160,24 @@ run a2 "$label" --dry-run --ref-dir "$work/ref" --record-dir "$rec"
 [ "$rc" = 0 ] && grep -q "^session: step judge: " "$work/a2.out"
 check "(a) by label, and --dry-run with a record redoes the checks (got $rc)"
 
+# (l) picdiff's line holds '|diff|': the printed lookedat-fill value says
+# 'abs diff' and has no '|', and the printed command is accepted on a copy of the note
+grep -q 'mean |diff| ' "$work/a.out"
+check "(l) the picdiff line shown holds '|diff|'"
+lcmd=$(grep -e 'imx8mp-glmark2-lookedat-fill.py' "$work/a.out" | sed 's/^ *//')
+[ "$(printf '%s\n' "$lcmd" | wc -l)" = 1 ] && [ -n "$lcmd" ]
+check "(l) one lookedat-fill command is printed"
+case "$lcmd" in *"--set picdiff='mean abs diff "*) true ;; *) false ;; esac
+check "(l) the value holds 'abs diff'"
+absent '|' <<< "${lcmd#*--set }"
+check "(l) no '|' in the printed value"
+cp "$here/../../docs/notes/imx8mp-glmark2-pictures-by-eye.md" "$work/note-l.md"
+lrun=${lcmd/--note docs\/notes\/imx8mp-glmark2-pictures-by-eye.md/--note $work/note-l.md}
+lrc=0
+(cd "$here/../.." && eval "$lrun") > "$work/l.out" 2>&1 || lrc=$?
+[ "$lrc" = 0 ] && ! cmp -s "$work/note-l.md" "$here/../../docs/notes/imx8mp-glmark2-pictures-by-eye.md"
+check "(l) the printed command is accepted on a copy of the note (got $lrc: $(head -c 200 "$work/l.out"))"
+
 # (k) the slug rules: the reference is <ref-dir>/<full host-ref slug>.png, the
 # board picture <label>.png; a short and a long (over 48 characters) slug, and
 # every scene's reference name equals the slug glmark2-host-ref.sh --list prints

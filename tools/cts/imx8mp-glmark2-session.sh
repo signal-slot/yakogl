@@ -242,8 +242,9 @@ if [ -z "$REFDIR" ]; then
 fi
 [ -n "$REFDIR" ] || step_fail compare "no reference directory (--ref-dir, or records/host/*-gmref-* of glmark2-host-ref.sh)"
 [ -s "$REFDIR/$SLUG.png" ] || step_fail compare "no reference picture $SLUG.png in the reference directory"
-python3 -I "$HERE/glmark2-picdiff.py" "$png" "$REFDIR/$SLUG.png" "$RECDIR/$LABEL.picdiff.png" ||
-    step_fail compare "glmark2-picdiff.py failed"
+pdline=$(python3 -I "$HERE/glmark2-picdiff.py" "$png" "$REFDIR/$SLUG.png" "$RECDIR/$LABEL.picdiff.png") ||
+    { printf '%s\n' "$pdline"; step_fail compare "glmark2-picdiff.py failed"; }
+printf '%s\n' "$pdline"
 python3 -I "$HERE/glmark2-sidebyside.py" "$png" "$REFDIR/$SLUG.png" "$RECDIR/$LABEL.sidebyside.png" \
     --label-board "IMX8MP $LABEL" --label-ref LLVMPIPE > /dev/null ||
     step_fail compare "glmark2-sidebyside.py failed"
@@ -270,4 +271,11 @@ for v in "${verdicts[@]}"; do
     [[ $v != *" "* ]] || q="'$v'"
     echo "  python3 tools/cts/imx8mp-glmark2-note-fill.py --note $NOTE --scene $LABEL --commit ${commit:-<the commit the image was built from>} --record $relrec --route $ROUTE --verdict $q --check-main --main $mainref"
 done
+# The picdiff line for lookedat-fill: its value may not hold '|' (a table row
+# splits on it): '|diff|' becomes 'abs diff', any other '|' becomes '/'.
+pdval=${pdline//|diff|/abs diff}
+pdval=${pdval//|//}
+sq="'"
+echo "  and, for the 'What was looked at' entry of the scene:"
+echo "  python3 tools/cts/imx8mp-glmark2-lookedat-fill.py --note $NOTE --scene $LABEL --set picdiff='${pdval//$sq/$sq\\$sq$sq}'"
 exit 0
