@@ -12,7 +12,7 @@ T-SHADOW	1	known	texture-failure-map.md 2.1 (shadow)	shadow look-ups: compare, s
 NS-ASTC	1	known	texture-failure-map.md 3	ASTC: not an ES 3.0 requirement
 NS-MSAA-RGBA16F	1	known	docs/notes/es3-msaa-renderbuffers.md (d), row fbo.msaa.{2,4}_samples colour	float multisample colour renderbuffer: stays NotSupported
 NS-MSAA-DEFAULT-FB	1	known	docs/notes/es3-msaa-renderbuffers.md (d), row multisample.default_framebuffer	no 4x EGL config on the dEQP image ("No multisample buffers")
-total	15	known	13	open	0
-unattributed	2
-	NotSupported	dEQP-GLES3.functional.fbo.multiview.samples_1	Multiview is not supported
+NS-MULTIVIEW	1	known	fbo-fix-designs.md 10	GL_OVR_multiview is an optional extension, not claimed; not ES 3.0
+total	15	known	14	open	0
+unattributed	1
 	Fail	dEQP-GLES3.functional.brand_new.family.case	something new
