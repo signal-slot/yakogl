@@ -5043,6 +5043,27 @@ zephyr_verdin_imx95_gltest_image() {
   n=$(strings -n 20 "$bin" | grep -cF 'verdin_imx95: display up: ') || true
   [ "${n:-0}" = 0 ] || { echo "zephyr.bin carries the display's bring-up line: the panel is in the image"; return 1; }
 }
+# glmark2-es2 for the Verdin iMX95 (driver/samples/zephyr/glmark2 with
+# boards/verdin_imx95_mimx9596_a55.conf): it builds with the firmware embedded
+# ($1) from the glmark2 checkout GLMARK2_SRC, for the Mali with the board layer
+# and the panel on, the RAM footprint inside zephyr,sram.
+zephyr_verdin_imx95_glmark2_image() {
+  local dir=build/zephyr-werror/verdin_imx95-glmark2 bin footprint window
+  mali_csffw_header "$1" verdin_imx95-glmark2 || return 1
+  zephyr_werror_image verdin_imx95/mimx9596/a55 glmark2 verdin_imx95-glmark2 "-DGLMARK2_SRC=$GLMARK2_SRC" || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_BOARD_VERDIN_IMX95=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no board layer (CONFIG_YAKOGL_BOARD_VERDIN_IMX95)"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
+    { echo "the glmark2 image runs on the panel: CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY is not y"; return 1; }
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+}
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
 # the runner's MP2_NO_WATCHDOG=1 step): it builds, and it carries the layer's
@@ -5199,6 +5220,17 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  verdin_imx95 gl_test image (Mali-G310, read-back, built only), -Werror on our C files" \
       zephyr_verdin_imx95_gltest_image "$mali_csffw"
+    # glmark2-es2 on the Verdin iMX95's Mali-G310 (driver/samples/zephyr/
+    # glmark2, boards/verdin_imx95_mimx9596_a55.conf): built only. It needs
+    # the same firmware and a glmark2 checkout (GLMARK2_SRC); without either
+    # the row is a gap naming it (one gap at a time: the glmark2 tree wins).
+    scope mali drivers samples
+    needs_mali_csffw
+    if [ ! -f "${GLMARK2_SRC-}/src/default-benchmarks.h" ]; then
+      needs "${GLMARK2_SRC-}/src/default-benchmarks.h" "no glmark2 checkout at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC; tools/cts/deps-env.sh --build GLMARK2_SRC)"
+    fi
+    step "zephyr  verdin_imx95 glmark2 image (Mali-G310, panel on, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_glmark2_image "$mali_csffw"
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
