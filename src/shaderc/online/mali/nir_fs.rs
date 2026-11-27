@@ -726,11 +726,20 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
             && matches!(m.instrs.get(src.val.0 as usize), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. }));
         let whole =
             write_mask == (1u8 << comps) - 1 && ((0..comps).all(|c| src.swizzle[c] as usize == c) || varying_lane);
+        /* (and of a 2D look-up whose lane a later look-up's coordinate
+         * reads, TEX_DEPENDENT: gm2_nbshrf_8's `float d = texture2D(m0,
+         * ..).x`, read once in `q = vp.xyz + vn * d`, so `vn`'s load and
+         * conversion stand before the look-up's coordinate,
+         * docs/notes/mali-tex-dependent.md; a 2D texel read by anything
+         * else keeps its statement, unmeasured) */
         let texel = write_mask.count_ones() == 1
-            && matches!(
-                m.instrs.get(src.val.0 as usize),
-                Some(ir::Op::Tex { dim: ir::TexDim::D2Array | ir::TexDim::D3, .. })
-            );
+            && match m.instrs.get(src.val.0 as usize) {
+                Some(ir::Op::Tex { dim: ir::TexDim::D2Array | ir::TexDim::D3, .. }) => true,
+                Some(ir::Op::Tex { dim: ir::TexDim::D2, shadow: false, proj: false, offset: None, .. }) => {
+                    feeds_coord(m, n, ld)
+                }
+                _ => false,
+            };
         if !whole && !texel {
             continue;
         }
@@ -798,6 +807,35 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
         }
     }
     out
+}
+
+/// The value of instruction `ld` reaches a later look-up's coordinate,
+/// through arithmetic and locals stored and read again ([`grafted_locals`],
+/// TEX_DEPENDENT).
+fn feeds_coord(m: &Module<'_>, n: usize, ld: usize) -> bool {
+    let mut reach = [false; MAX_VALUES];
+    let mut local = [false; MAX_LOCALS];
+    let Some(r) = reach.get_mut(ld) else { return false };
+    *r = true;
+    let hit = |reach: &[bool; MAX_VALUES], s: &ir::Src| reach.get(s.val.0 as usize).copied().unwrap_or(false);
+    for i in ld + 1..n.min(MAX_VALUES) {
+        let on = match m.instrs[i] {
+            ir::Op::Alu(a, srcs) => srcs.iter().take(ir_arity(a)).any(|s| hit(&reach, s)),
+            ir::Op::Tex { coord, .. } if hit(&reach, &coord) => return true,
+            ir::Op::StoreLocal { local: l, src, .. } => {
+                if hit(&reach, &src) {
+                    if let Some(x) = local.get_mut(l.0 as usize) {
+                        *x = true;
+                    }
+                }
+                false
+            }
+            ir::Op::LoadLocal { local: l, .. } => local.get(l.0 as usize).copied().unwrap_or(false),
+            _ => false,
+        };
+        reach[i] = on;
+    }
+    false
 }
 
 /// The operand of product `s` that is the `fneg` of a literal (GLSL's
@@ -14119,6 +14157,23 @@ fn coord_pair(
     let half = |v: u32| f16_rtne(v).map(u32::from).ok_or(MaliError::Fp16Inexact);
     match (a, b) {
         (Val::Const(p), Val::Const(q)) => return Ok(Some(Val::Const(half(p)? | half(q)? << 16))),
+        /* TEX_DEPENDENT (docs/notes/mali-tex-dependent.md): an fp16
+         * look-up's texel word read by a later coordinate, the word's
+         * halves (`FMA.v2f16 r0, r1^, r2^.h00, r0^` of gm2_nbshrf_8's
+         * `vn * d`) or the aligned pair (gm2_nbshrf_9's `n.xy * 0.75`) */
+        (Val::Lane(n, c), Val::Lane(m, d))
+            if n == m
+                && c / 2 == d / 2
+                && (c == d || (c % 2 == 0 && d == c + 1))
+                && matches!(f.nir.nodes[n as usize], NirNode { kind: Kind::Tex, bits: 16, .. }) =>
+        {
+            let swz = match (c == d, c % 2) {
+                (false, _) => Swz::H01,
+                (true, 0) => Swz::H00,
+                _ => Swz::H11,
+            };
+            return Ok(Some(Val::Pair(texel_word(f, n, c / 2, at)?, swz)));
+        }
         (Val::Lane(n, c), Val::Lane(m, d)) if n == m && c % 2 == 0 && d == c + 1 => {
             let nd = f.nir.nodes[n as usize];
             return Ok(match (nd.kind, nd.bits, nd.width) {
@@ -14150,6 +14205,107 @@ fn coord_pair(
     Ok(Some(Val::Pair(id, Swz::H01)))
 }
 
+/// Word `w` of the fp16 look-up `n` as one value: the `vec2` of its two
+/// texels ([`Fs::vec16`]'s form, no instruction), made once right after
+/// the look-up, `at` moved past it when it stands before.
+fn texel_word(f: &mut Fs<'_>, n: u16, w: u8, at: &mut usize) -> Result<u16, MaliError> {
+    let v = NirNode {
+        kind: Kind::Alu(Alu::Vec2),
+        src: [Val::Lane(n, 2 * w), Val::Lane(n, 2 * w + 1), Val::Undef],
+        bits: 16,
+        width: 2,
+    };
+    if let Some(i) = (0..f.nir.n).find(|&i| f.nir.nodes[i] == v) {
+        return Ok(i as u16);
+    }
+    let pos = f.nir.order[..f.nir.len].iter().position(|&o| o == n).ok_or(MaliError::Defect(Defect::IrIndex))?;
+    let id = f.nir.insert_before(pos + 1, v)?;
+    f.origin[id as usize] = f.origin[n as usize];
+    if pos < *at {
+        *at += 1;
+    }
+    Ok(id)
+}
+
+/// TEX_DEPENDENT (docs/notes/mali-tex-dependent.md): a live look-up's
+/// coordinate reads, through fp16 arithmetic, a texel of another
+/// (gm2_nbshrf_8's `texture2D(m1, (vp.xyz + vn * d).st * 0.5 + 0.5)`).
+pub fn tex_dependent(f: &Fs<'_>) -> bool {
+    fn reads_texel(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        match f.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Tex, .. } => true,
+            NirNode { kind: Kind::Alu(op), bits: 16, src, .. } if depth < 16 => {
+                src[..op.arity()].iter().any(|&s| reads_texel(f, s, depth + 1))
+            }
+            _ => false,
+        }
+    }
+    f.live_look_ups().any(|(_, t)| {
+        let nd = f.nir.nodes[t.node as usize];
+        t.coord == TexCoord::Computed && nd.src[..2].iter().any(|&v| reads_texel(f, v, 0))
+    })
+}
+
+/// The program order of a TEX_DEPENDENT shader ([`tex_dependent`]):
+/// GLSL's tree grafting moves each look-up read once into its reader
+/// (`opt_tree_grafting`, [`grafted_locals`]), and glsl_to_nir visits the
+/// tree's children first, left to right, so a varying read before the
+/// grafted look-up in the expression is loaded and converted before the
+/// look-up's coordinate (gm2_nbshrf_8: `vp`, `vn`, then the first
+/// coordinate's `FMA.v2f16`; gm2_nbshrf_9's `vp.xyz + vn * 1.5`: `vp`
+/// first). Each node stands at its first visit of a walk from the stores,
+/// sources in order; returns the position past the inputs and their
+/// conversions, which the TEX_MULTI rule ([`pair_coords`]) leaves there.
+fn tree_order(f: &mut Fs<'_>) -> Result<usize, MaliError> {
+    fn visit(f: &Fs<'_>, n: u16, rank: &mut [u16; MAX_NODES], next: &mut u16, depth: u8) -> Result<(), MaliError> {
+        if rank[n as usize] != u16::MAX {
+            return Ok(());
+        }
+        if depth > 64 {
+            return Err(MaliError::TexCount);
+        }
+        let nd = f.nir.nodes[n as usize];
+        let arity = match nd.kind {
+            Kind::Alu(op) => op.arity(),
+            Kind::Tex => 2,
+            Kind::Store { .. } => 1,
+            _ => 0,
+        };
+        for &v in &nd.src[..arity] {
+            if let Val::Lane(m, _) | Val::Pair(m, _) = v {
+                visit(f, m, rank, next, depth + 1)?;
+            }
+        }
+        rank[n as usize] = *next;
+        *next += 1;
+        Ok(())
+    }
+    let mut rank = [u16::MAX; MAX_NODES];
+    let mut next = 0u16;
+    for k in 0..f.nir.len {
+        let id = f.nir.order[k];
+        if matches!(f.nir.nodes[id as usize].kind, Kind::Store { .. }) {
+            visit(f, id, &mut rank, &mut next, 0)?;
+        }
+    }
+    let len = f.nir.len;
+    let mut key = [0u32; MAX_NODES];
+    for (k, &id) in f.nir.order[..len].iter().enumerate() {
+        let r = rank[id as usize];
+        key[id as usize] = if r == u16::MAX { 0xffff_0000 | k as u32 } else { u32::from(r) };
+    }
+    f.nir.order[..len].sort_unstable_by_key(|&id| key[id as usize]);
+    Ok(f.nir.order[..len]
+        .iter()
+        .position(|&id| {
+            let nd = f.nir.nodes[id as usize];
+            let conv = nd.kind == Kind::Alu(Alu::F2f16);
+            !matches!(nd.kind, Kind::Input { .. }) && !conv
+        })
+        .unwrap_or(len))
+}
+
 /// TEX_MULTI's coordinates ([`multi16`]): each computed coordinate of two
 /// fp16 lanes is the look-up's own operation of two lanes, as NIR keeps the
 /// GLSL vector operation (`nir_lower_alu_width` leaves a 16-bit vec2,
@@ -14165,7 +14321,8 @@ fn pair_coords(f: &mut Fs<'_>) -> Result<(), MaliError> {
      * that reads the lane, so a look-up at the varying itself before it
      * reads the load as it is first (gm2_texmulti_1: `TEX_SINGLE ...
      * @r0:r1`, then `V2F32_TO_V2F16 r0, r0, r1`) */
-    let mut k = 0;
+    /* TEX_DEPENDENT: glsl_to_nir's walk of the grafted tree instead */
+    let mut k = if tex_dependent(f) { tree_order(f)? } else { 0 };
     while k < f.nir.len {
         let id = f.nir.order[k];
         let nd = f.nir.nodes[id as usize];
@@ -14207,6 +14364,36 @@ fn pair_coords(f: &mut Fs<'_>) -> Result<(), MaliError> {
     Ok(())
 }
 
+/// A TEX_DEPENDENT coordinate's operand `v` ([`multi_forms`]): a constant
+/// pair, a converted varying pair, an fp16 look-up's texel word (the
+/// `vec2` [`texel_word`] made), or an fp16 sum or product of two lanes
+/// over those. Some(whether a texel is under it), each node marked in
+/// `seen`; None for any other operand.
+fn dep_coord(f: &Fs<'_>, v: Val, seen: &mut [bool; MAX_NODES], depth: u8) -> Option<bool> {
+    let n = match v {
+        Val::Const(_) => return Some(false),
+        Val::Pair(n, _) if depth < 16 => n,
+        _ => return None,
+    };
+    let nd = f.nir.nodes[n as usize];
+    let tex = |s: Val| matches!(s, Val::Lane(m, _) if f.nir.nodes[m as usize].kind == Kind::Tex);
+    let input = |s: Val| matches!(s, Val::Lane(m, _) if matches!(f.nir.nodes[m as usize].kind, Kind::Input { .. }));
+    let texel = match nd {
+        NirNode { kind: Kind::Alu(Alu::F2f16), bits: 16, width: 2, src } if input(src[0]) => {
+            matches!(v, Val::Pair(_, Swz::H01)).then_some(false)?
+        }
+        NirNode { kind: Kind::Alu(Alu::Vec2), bits: 16, width: 2, src } if tex(src[0]) => true,
+        NirNode { kind: Kind::Alu(Alu::Fadd | Alu::Fmul), bits: 16, width: 2, src } => {
+            let a = dep_coord(f, src[0], seen, depth + 1)?;
+            let b = dep_coord(f, src[1], seen, depth + 1)?;
+            a || b
+        }
+        _ => return None,
+    };
+    seen[n as usize] = true;
+    Some(texel)
+}
+
 /// The forms of TEX_MULTI ([`multi16`]) measured byte-equal to Mesa 26.2.1's
 /// drm-shim (tools/mali/testdata/gm2_texmulti_1..3), checked once
 /// [`pair_coords`] made the coordinates pairs: each computed coordinate
@@ -14241,10 +14428,26 @@ fn multi_forms(f: &Fs<'_>) -> Result<(), MaliError> {
             if matches!(node(src[0]), Some(NirNode { kind: Kind::Tex, .. })))
     };
     let colour = |v: Val| colour1(v) || neg_texel(v);
+    /* TEX_DEPENDENT (gm2_nbshrf_8, _9; docs/notes/mali-tex-dependent.md):
+     * when a coordinate reads an earlier look-up's texel, every coordinate
+     * of fp16 pair sums and products over the converted varyings, constant
+     * pairs and texel words is the chain Mesa draws */
+    let mut dep = [false; MAX_NODES];
+    let mut dependent = false;
+    for (_, t) in f.live_look_ups() {
+        let Val::Lane(root, 0) = f.nir.nodes[t.node as usize].src[0] else { continue };
+        if let Some(texel) = dep_coord(f, Val::Pair(root, Swz::H01), &mut dep, 0) {
+            dependent |= texel;
+        }
+    }
+    if !dependent {
+        dep = [false; MAX_NODES];
+    }
     for &id in &f.nir.order[..f.nir.len] {
         let nd = f.nir.nodes[id as usize];
         let read_by_tex = f.nir.uses(id).any(|(u, _)| f.nir.nodes[u as usize].kind == Kind::Tex);
         let ok = match nd.kind {
+            _ if dep[id as usize] => true,
             Kind::Input { .. } | Kind::Store { .. } | Kind::Tex => true,
             Kind::Alu(Alu::F2f16) => conv(Val::Lane(id, 0)),
             /* a coordinate: `FADD_IMM.v2f16` of the converted pair */
