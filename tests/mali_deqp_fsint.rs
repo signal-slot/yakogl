@@ -24,7 +24,10 @@
 //! | `conv_vec2_ivec2_to_bvec4` | `conversions.vector_combine.vec2_ivec2_to_bvec4_fragment` | 5 (a float operand) | `intval3_reslib_ivec4_to_bvec4_fs` | `bool(vec2)` as `FCMP_OR.v2f16.ne.m1` of an fp16 pair, its lanes against the `uniform bvec4` at 16 bits (`ICMP_OR.v2u16.eq`, `S16_TO_S32`) | 26 |
 //! | `conv_bool_float_int_to_bvec3` | `conversions.vector_combine.bool_float_int_to_bvec3_fragment` | (same 5) | `intval_reslib_mixed_fs` | the bool and the float lane in one `FCMP_OR.v2f16.ne.m1` (`.h10`), the int lane `F16_TO_S32` + `ICMP_OR.u32.ne` | 23 |
 //!
-//! At the tip every reference is refused, so each byte-compare is
+//! `postdec_result_ivec3_mediump` and `predec_effect_ivec4_lowp` are
+//! byte-equal since plan #377 item report-draft-2 (an int's `- 1` with the
+//! constant as an integer operand, `IADD_IMM.i32 #0xFFFFFFFF`). Of the rest,
+//! each byte-compare is
 //! `#[ignore]`d and `refusals_pinned` holds the refusal ([`REFUSED`]): the
 //! integer/boolean text, or for `sequence_bool_vec2_highp` the next one (its
 //! `in0 && in1` is dead, as in `intval3_opfs_sequence_bool_vec2_mediump`;
@@ -44,7 +47,8 @@ const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet
 
 /// The references the lowering makes byte-equal, without the `deqp_fsint_`
 /// prefix: each has a running byte-compare test below.
-const MATCHED: &[&str] = &["ne_ivec4_highp", "notequal_ivec4_highp"];
+const MATCHED: &[&str] =
+    &["ne_ivec4_highp", "notequal_ivec4_highp", "postdec_result_ivec3_mediump", "predec_effect_ivec4_lowp"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -58,8 +62,6 @@ const VARYING_LOAD: &str = "Valhall: a fragment varying load or conversion of a 
 const REFUSED: &[(&str, &str)] = &[
     ("conv_bool_float_int_to_bvec3", INT_VALUE),
     ("conv_vec2_ivec2_to_bvec4", INT_VALUE),
-    ("postdec_result_ivec3_mediump", INT_VALUE),
-    ("predec_effect_ivec4_lowp", INT_VALUE),
     ("sequence_bool_vec2_highp", VARYING_LOAD),
     ("step_float_lowp", INT_VALUE),
 ];
@@ -149,13 +151,11 @@ fn notequal_ivec4_highp() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (four lowp int decrements); pinned by refusals_pinned"]
 fn predec_effect_ivec4_lowp() {
     mali_ref::assert_matches("deqp_fsint_predec_effect_ivec4_lowp");
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (f2i then i2f, no integer op); pinned by refusals_pinned"]
 fn postdec_result_ivec3_mediump() {
     mali_ref::assert_matches("deqp_fsint_postdec_result_ivec3_mediump");
 }

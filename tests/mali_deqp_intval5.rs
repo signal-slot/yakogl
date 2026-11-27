@@ -28,28 +28,26 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal when
 /// drawn), without the `deqp_intval5_` prefix.
-const LOWERED: &[&str] = &["light_amount_2_2"];
+const LOWERED: &[&str] = &["light_amount_2_2", "mask1632"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("c_bool3", TEXT_INT),
-    ("c_bool_not", TEXT_INT),
+    ("c_bool3", TEXT_LANE),
+    ("c_bool_not", TEXT_LANE),
     ("c_bvec2", TEXT_LANE),
     ("c_bvec3", TEXT_LANE),
     ("c_bvec4", TEXT_LANE),
-    ("c_int3", TEXT_INT),
+    ("c_int3", TEXT_LANE),
     ("c_int_k", TEXT_LANE),
     ("c_int_lt", TEXT_LANE),
-    ("c_int_two", TEXT_INT),
+    ("c_int_two", TEXT_LANE),
     ("c_ivec4", TEXT_LANE),
     ("light_amount_0_16", TEXT_UBO),
-    ("mask1632", TEXT_INT),
 ];
 
-const TEXT_INT: &str = "Valhall: an integer or boolean value is not lowered yet";
 const TEXT_LANE: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 const TEXT_UBO: &str = "Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO) is not lowered yet";
@@ -158,7 +156,6 @@ fn light_amount_2_2() {
 
 /// `(v.x > 0.0) && (int(v.y) < 1)`: a 16-bit compare mask with a 32-bit one.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn mask1632() {
     mali_ref::assert_matches("deqp_intval5_mask1632");
 }

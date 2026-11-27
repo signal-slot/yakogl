@@ -27,21 +27,19 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal when
 /// drawn), without the `deqp_intval4_` prefix.
-const LOWERED: &[&str] = &["bvec2_of_ivec2_fs", "bvec3_cmp_fs", "ne_int_fs", "ne_ivec2_fs", "not_eq_int_fs"];
+const LOWERED: &[&str] =
+    &["and_icmp_fs", "bvec2_of_ivec2_fs", "bvec3_cmp_fs", "logical_or_fs", "ne_int_fs", "ne_ivec2_fs", "not_eq_int_fs"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
 
 const TEXT0: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
 const TEXT1: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
-const TEXT2: &str = "Valhall: an integer or boolean value is not lowered yet";
 const TEXT3: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("and_icmp_fs", TEXT2),
     ("bvec4_cmp_fs", TEXT0),
-    ("logical_or_fs", TEXT2),
     ("sel_int_fs", TEXT3),
     ("sel_ivec2_fs", TEXT3),
     ("uapi_bool_fs", TEXT1),
@@ -52,7 +50,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("uapi_ivec2_fs", TEXT1),
     ("uapi_ivec3_fs", TEXT1),
     ("uapi_ivec4_fs", TEXT1),
-    ("uni_bool_and_or_fs", TEXT2),
+    ("uni_bool_and_or_fs", TEXT1),
 ];
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
@@ -81,7 +79,6 @@ const FS_WORDS: &[(&str, usize)] = &[
 
 /// `(i > 1) && (i < 3)` of a run-time mediump int (a `random` shape, the smallest pair with the form).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn and_icmp_fs() {
     mali_ref::assert_matches("deqp_intval4_and_icmp_fs");
 }
@@ -107,7 +104,6 @@ fn bvec4_cmp_fs() {
 
 /// `binary_operator.logical_or.bool_fragment`: `||` of two `> 0.0` compares.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn logical_or_fs() {
     mali_ref::assert_matches("deqp_intval4_logical_or_fs");
 }
