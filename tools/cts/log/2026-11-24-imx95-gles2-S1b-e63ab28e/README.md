@@ -47,10 +47,12 @@ its `.license` sidecar). The `fatload`/`md5sum` lines before it and the
 next boot's U-Boot output after it are not part of the capture; U-Boot's
 `md5sum` result per row is in the table under "The captures".
 `rows.tsv` is built from them by `python3 -I tools/cts/imx95-rows-tsv.py
---out rows.tsv --lifetime-s 600 console/T6S1R*.log`
+--out rows.tsv --lifetime-s 600 --bbm-dir bbm console/T6S1R*.log`
 (the files, not the directory, which would read the sidecars as captures)
-and passes its `--check`. No `--bbm-dir`: every read-back exited 3 with
-no record words (below), which the tool reads as `not-read` either way.
+and passes its `--check` with 12 rows (13 to 24, the session-wide row
+numbers). `bbm/<LABEL>.txt` is the BBM read-back of the row (below); every
+one exited 3 with no record words, so the `bbm` column is `not-read`, the
+same bytes as the first build of `rows.tsv` without `--bbm-dir`.
 
 | row | cases | Pass | Fail | status | run (console) | of the 600 s lifetime | bbm |
 |---|---|---|---|---|---|---|---|
@@ -92,7 +94,13 @@ mustpass names they select (74 and 15).
 
 Not read back on any row: the module's kernel (Toradex BSP 6.6.157) has no
 SCMI raw interface, so `tools/imx95_bbm_record.sh read` exits 3 ("no SCMI
-raw interface ... the record cannot be read from Linux"). The console's
+raw interface ... the record cannot be read from Linux"). The session's own
+reads after each row were not kept; `bbm/<LABEL>.txt` holds a read on the
+module on 2026-11-27 (`ssh ... sh -s -- read < tools/imx95_bbm_record.sh`:
+stdout, stderr, exit code), for T6S1R13-R18 by the first fill and for
+T6S1R19-R24 by the second, each after S1b's run of the row and with the
+same exit 3. The kernel did not change between the session and these
+reads, so they stand for the reads after each row. The console's
 `yk-record:` line stands for the record: `594b0201 00000001 00000000
 00000000` on the PASS rows, `594b0201 00000002 00000000 00000000` on the
 FAIL rows.

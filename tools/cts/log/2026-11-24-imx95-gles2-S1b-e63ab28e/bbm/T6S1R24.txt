@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# T6S1R24: tools/imx95_bbm_record.sh read on the module on 2026-11-27 (S1b fill 2), after S1b's run of the row (stdout, stderr, exit code); S1b's own read after the row was not kept
+imx95_bbm_record: no SCMI raw interface (no /sys/kernel/debug/scmi/*/raw/message): this kernel lacks CONFIG_ARM_SCMI_RAW_MODE_SUPPORT(_COEX), or debugfs is not mounted; the record cannot be read from Linux
+exit 3
