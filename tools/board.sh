@@ -1718,10 +1718,11 @@ TRY_DRY_SHA=0000000000000000000000000000000000000000000000000000000000000000
 
 pi4_undo() {
     b "sudo rm -f /boot/firmware/$STAGED"
-    # pi5: a card with no tryboot.txt before the run gets none after it (the
-    # put-back below would leave an empty file the board never had; seen on
-    # the Pi 5's stock card, 2026-11-19). The pi4 is as it was.
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    # pi4 and pi5: a card with no tryboot.txt before the run gets none after
+    # it (the put-back below would leave an empty file the board never had;
+    # seen on the Pi 5's stock card, 2026-11-19, and on a Pi 4 card,
+    # 2026-11-27).
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         b 'sudo rm -f /boot/firmware/tryboot.txt && sync'
         return
     fi
@@ -1734,12 +1735,12 @@ pi4_undo() {
 
 # pi4_try_backup: before the run changes anything, the undo printed, then the
 # stock tryboot.txt copied to TRY_BAK (cp -p) and the copy read back by its
-# sha256 (TRY_SHA: the sha256sum line of tryboot.txt). A pi5 card without one
-# (TRY_HAD=0) gets none back, as before.
+# sha256 (TRY_SHA: the sha256sum line of tryboot.txt). A card without one
+# (TRY_HAD=0, pi4 or pi5) gets none back.
 pi4_try_backup() {
     local got
     TRY_SHA=
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         note "UNDO, from Linux (if the run stops before its clean-up): sudo rm -f /boot/firmware/$STAGED /boot/firmware/tryboot.txt"
         return 0
     fi
@@ -1757,10 +1758,10 @@ pi4_try_backup() {
 
 # pi4_try_check: after the clean-up, 0 when it read back as it should: neither
 # the image nor the backup left, and tryboot.txt's sha256 as before the run
-# (or no tryboot.txt, when the pi5's card had none)
+# (or no tryboot.txt, when the card had none)
 pi4_try_check() {
     local left
-    if [ "$BOARD" = pi5 ] && [ "${TRY_HAD:-1}" = 0 ]; then
+    if [ "${TRY_HAD:-1}" = 0 ]; then
         # no tryboot.txt before: none after, so neither file may be listed
         left=$(b "ls /boot/firmware/$STAGED /boot/firmware/tryboot.txt 2>/dev/null")
         [ -z "$left" ]
@@ -1773,10 +1774,8 @@ pi4_try_check() {
 pi4_stage() {
     local tmpd got gottry
     TRY_HAD=1
-    if [ "$BOARD" = pi5 ]; then
-        bget TRY_HAD 'test -e /boot/firmware/tryboot.txt && echo 1 || echo 0' 1
-        [ "$TRY_HAD" = 0 ] || TRY_HAD=1
-    fi
+    bget TRY_HAD 'test -e /boot/firmware/tryboot.txt && echo 1 || echo 0' 1
+    [ "$TRY_HAD" = 0 ] || TRY_HAD=1
     pi4_try_backup
     TRY="# tools/board.sh: $NAME, one-shot boot (reboot \"0 tryboot\"); config.txt stays the Linux default
 $(pi4_config "$STAGED")"
