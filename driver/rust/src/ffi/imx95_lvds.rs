@@ -13,7 +13,8 @@
 //!   serves only the waits and the log: the X12 path has no I2C and drives
 //!   its one GPIO (the backlight enable) as a register.
 //! - flip: `soc::imx95::display::flip`, as the X4 path's.
-//! - down: `display_down`: the backlight, the LDB, stream 0 and the power.
+//! - down: `display_down`: the backlight, FrameGen0 (its sequence complete
+//!   waited for), the LDB, stream 0 and the power.
 //!
 //! The state the C side keeps is [`YdImx95Lvds`]; `Stream0` is rebuilt
 //! from it for each call (the panel's mode, [`Route::Lvds`] with the pixel
@@ -122,7 +123,7 @@ fn stream(d: &YdImx95Lvds, cfg: &Config) -> Stream0 {
 
 fn side(e: &lv::Error) -> u32 {
     match e {
-        lv::Error::Display(_) => STOP_DISPLAY,
+        lv::Error::Display(_) | lv::Error::SeqTimeout { .. } => STOP_DISPLAY,
         _ => STOP_BACKLIGHT,
     }
 }
@@ -217,7 +218,12 @@ pub fn down_on<T: Transport>(
         Err(e) => {
             d.stop = side(&e);
             ylog!(env, Err, "verdin-imx95 X12: the down stopped: {:?}", e);
-            -EIO
+            // FrameGen0's sequence never completed: its own code, apart
+            // from a stop that failed after it (-EIO)
+            match e {
+                lv::Error::SeqTimeout { .. } => -ETIMEDOUT,
+                _ => -EIO,
+            }
         }
     }
 }
@@ -271,7 +277,9 @@ pub unsafe extern "C" fn yd_imx95_lvds_flip(
 }
 
 /// The picture down: the backlight (enable low, PWM, TPM5's clock), the LDB,
-/// then stream 0, the LDB PLL and DISPLAY. 0, `-EIO` (logged), `-ENODEV`.
+/// then stream 0, the LDB PLL and DISPLAY. 0, `-ETIMEDOUT` (FrameGen0's
+/// sequence complete never set: the LDB and the power left on; logged),
+/// `-EIO` (any other stop; logged), `-ENODEV`.
 ///
 /// # Safety
 /// As [`yd_imx95_lvds_up`].
@@ -371,6 +379,17 @@ mod tests {
         assert!(!r.sm.sm.borrow().on(13) && !r.sm.sm.borrow().enabled(38));
         assert_eq!(flip_on(&r.m, &r.env, &PHYS, FB.addr, &mut d), -ENODEV);
         assert!(r.m.display.refused().is_empty());
+    }
+
+    #[test]
+    fn a_down_whose_sequence_never_completes_is_etimedout_not_eio() {
+        let mut r = rig();
+        let mut d = YdImx95Lvds::default();
+        assert_eq!(up_on(&mut r.sm, &r.m, &r.env, &PHYS, FB.addr, FB.stride, &mut d), 0);
+        r.m.seq.borrow_mut().after = None;
+        assert_eq!(down_on(&mut r.sm, &r.m, &r.env, &PHYS, &mut d), -ETIMEDOUT);
+        assert_eq!((d.state, d.stop), (STATE_DOWN, STOP_DISPLAY));
+        assert!(r.env.lines.borrow().iter().any(|l| l.contains("the down stopped: SeqTimeout")));
     }
 
     #[test]
