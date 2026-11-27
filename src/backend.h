@@ -163,6 +163,9 @@ struct gles_texture_bind {
 	uint8_t  type;           /* enum gles_textype */
 	uint8_t  base_level;     /* GL_TEXTURE_BASE_LEVEL */
 	uint16_t layers;         /* images in the stack: 6 for a cube, 1 for plain 2D */
+	/* 1: min_lod and max_lod hold GL_TEXTURE_MIN_LOD and _MAX_LOD; 0: GL's
+	 * defaults (-1000, 1000), which a zeroed bind keeps */
+	uint8_t  lod_set;
 	uint64_t base_gpu;       /* GPU VA of the texels (level 0) */
 	uint32_t width, height, stride_texels;
 	uint32_t bytes;          /* size of the level-0 storage (compressed: the block grid) */
@@ -225,6 +228,11 @@ struct gles_texture_bind {
 	 * format's own channel mapping (no_alpha, depth_luminance, an L8/A8/LA8
 	 * storage). All zero is the identity. */
 	uint8_t  swizzle[4];
+	/* GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD under lod_set (the bound
+	 * sampler object's, else the texture's), in 1/256 of a level, rounded
+	 * down, saturated to +-127 levels. GL_TEXTURE_MAX_LEVEL has no field:
+	 * mip_levels counts the levels from level 0 up to it already. */
+	int16_t  min_lod, max_lod;
 };
 
 /* One component of gles_texture_bind.swizzle: 0 "itself" (the identity),
