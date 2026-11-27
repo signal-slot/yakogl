@@ -391,12 +391,14 @@ pub fn pack_indexed(
 
 /// [`base_packed`] as a `Vec`.
 #[cfg(feature = "host-test")]
+#[allow(dead_code)] // tests that include this file by path do not all call it
 pub fn pack_base(base_vertex: i64, base_instance: u64) -> Result<Vec<u8>, Refusal71> {
     base_packed(base_vertex, base_instance).map(|p| p.as_slice().to_vec())
 }
 
 /// [`index_buffer_packed`] as a `Vec`.
 #[cfg(feature = "host-test")]
+#[allow(dead_code)] // tests that include this file by path do not all call it
 pub fn pack_index_buffer(addr: u32, size: u64) -> Result<Vec<u8>, Refusal71> {
     index_buffer_packed(addr, size).map(|p| p.as_slice().to_vec())
 }
