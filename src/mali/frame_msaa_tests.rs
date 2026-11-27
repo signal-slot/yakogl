@@ -587,6 +587,12 @@ fn zs_target_of(m: &BTreeMap<u64, [u8; 16]>) -> ZsTarget {
     ZsTarget::unpack(&arr(&b)).unwrap()
 }
 
+/// Our ZS Target of a 4x case-207 frame.
+fn our_zs_target(draws: &[ZsDraw]) -> ZsTarget {
+    let (desc, ..) = build_207(draws);
+    ZsTarget::unpack(&arr(&desc[0x80..0xc0])).unwrap()
+}
+
 /// Case 207's frame against the board's, `source` in the excerpt, and the
 /// differences only that source has.
 fn check_207(source: &str, draws: &[ZsDraw], extra: Vec<Difference>) {
@@ -609,6 +615,14 @@ fn check_207(source: &str, draws: &[ZsDraw], extra: Vec<Difference>) {
             ours: vec![0; 8],
             cause: "S target base: Mesa 25.0.7 also writes the ZS base there with the S block format No Write \
                     (unused); Mesa 26.2.1 merges no S part for a D24S8 view (pan_job.c:596-612, pan_desc.c:540-550)",
+        },
+        Difference {
+            block: "ZS CRC Extension",
+            at: 0x01,
+            dump: vec![0x01],
+            ours: vec![0x00],
+            cause: "ZS Target MSAA: Mesa 25.0.7 writes AVERAGE; Mesa 26.2.1's Z/S supports only SAMPLE_0 \
+                    (pan_fb.c:178-179), which is MALI_MSAA_SINGLE (translate_msaa_copy_op :378-381, cfg.zs.msaa :488)",
         },
         Difference {
             block: "Framebuffer Parameters",
@@ -698,7 +712,11 @@ fn a_4x_depth_frame_is_the_board_s() {
         (4, SamplePattern::ROTATED_4X_GRID, 1024, 16384, 1.0)
     );
     let ext = zs_target_of(&m);
-    assert_eq!((ext.msaa, ext.write_format, ext.base), (Msaa::AVERAGE, ZsFormat::D24S8, ZS_BUF));
+    /* the dump's ZS Target is AVERAGE (the named difference); ours is SINGLE */
+    assert_eq!(ext.msaa, Msaa::AVERAGE, "the 25.0.7 dump's ZS Target MSAA");
+    assert_eq!(our_zs_target(&[(less, 0, 12)]).msaa, Msaa::SINGLE, "26.2.1: Z/S keeps sample 0 (pan_fb.c:178-179)");
+    assert_eq!((ext.write_format, ext.base), (ZsFormat::D24S8, ZS_BUF));
+    /* the colour target stays AVERAGE: the Render Target block equals the dump's with no named difference */
     let words: Vec<u64> = trace::cs_words(MSAA_ZS, "mesa-msrtt").iter().map(|w| w.word).collect();
     assert!(DcdFlags0::unpack(&regs_at_each_idvs(&words)[0][&57].to_le_bytes()).unwrap().multisample_enable);
 }
@@ -738,5 +756,7 @@ fn a_4x_stencil_frame_is_the_board_s() {
         }],
     );
     let m = trace::memory_of(MSAA_ZS, "mesa-msrtts");
-    assert_eq!(zs_target_of(&m).msaa, Msaa::AVERAGE);
+    assert_eq!(zs_target_of(&m).msaa, Msaa::AVERAGE, "the 25.0.7 dump's ZS Target MSAA");
+    let ours = our_zs_target(&[(stencil(Func::ALWAYS, StencilOp::REPLACE, 1), 12, 3)]);
+    assert_eq!(ours.msaa, Msaa::SINGLE, "26.2.1: Z/S keeps sample 0 (pan_fb.c:178-179)");
 }

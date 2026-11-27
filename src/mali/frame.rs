@@ -2346,12 +2346,14 @@ pub fn end_frame(
          * clear values, off when it is preloaded (`pan_get_clean_tile_info`,
          * :1281-1290: `force_clean_write` is the clear). A 4x frame's
          * single-sampled D24S8 is a view of 4 samples on an image of 1
-         * (EXT_multisampled_render_to_texture, pan_job.c:571): AVERAGE
-         * (`mali_sampling_mode`, pan_desc.c:26-48), as the colour's */
+         * (EXT_multisampled_render_to_texture, pan_job.c:571), but Z/S
+         * supports only SAMPLE_0 (pan_fb.c:178-179), which
+         * `translate_msaa_copy_op` maps to MALI_MSAA_SINGLE (:378-381,
+         * `cfg.zs.msaa` :488): SINGLE for any frame; the colour's is AVERAGE */
         let ext = ZsTarget {
             write_format: ZsFormat::D24S8,
             block_format: BlockFormat::LINEAR,
-            msaa: if t.samples > 1 { Msaa::AVERAGE } else { Msaa::SINGLE },
+            msaa: Msaa::SINGLE,
             clean_tile_write_enable: open.zs_preload.is_none_or(|p| p.cleared),
             base: z.gpu,
             row_stride: z.row_stride,
