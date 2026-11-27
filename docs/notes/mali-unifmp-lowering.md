@@ -225,3 +225,25 @@ step that also needs the vertex families to reach its other 137.
   clone) changes `src/shaderc/online/mali/**`. The line numbers above are
   `8133663c`'s. Re-probe the sites after it lands. Its intval steps may
   move some `select.rs:628` integer reads to other texts.
+
+## 8. Landed (plan #387, item `mali-train-3a`)
+
+Re-probed at `5fd5bf43` with the recipe of section 1 (line numbers of that
+commit): `select.rs:628` stops 8 references (every one a matrix array;
+the int and bool arrays have had rows since plan #377), `nir_fs.rs:11122`
+(the `10805` site) 6, `nir_fs.rs:11100` (the `10792` site) 4,
+`nir_fs.rs:10616` 4, `mod.rs:1689` 3, `nir_fs.rs:10633` and `:10658` one each.
+
+- **U1** (`select.rs`, `UboLayout::fs16`): a `mat2`, `mat3` or `mat4`
+  array has rows, one a column, element after element (fp16: a `mat4`
+  element 8 words, a `mat3`'s 6, a `mat2`'s 2; a struct member's fp32, one
+  word a component). No reference becomes byte-equal by it: the 8 leave
+  this text and stop at the next one. `deqp_fsunif_arr_mat4`,
+  `deqp_fsunif3_random_{4,9,80}` stop at "a gl_FragColor lane other than
+  the varying's own lane or a constant" (the compare chain of
+  `docs/notes/mali-fclane-lowering.md`), `deqp_fsunif2_{struct_mat_array,
+  struct_mat_nested,random_13}` and `deqp_fsunif3_random_81` at "a fragment
+  colour of more than 255 vectorised operations and operands". The rows
+  are checked against the FAU word indices of `deqp_fsunif_arr_mat4`
+  (`u2.w0` to `u13.w1`) only: no reference of a matrix array compiles to
+  the end yet.

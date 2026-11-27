@@ -619,12 +619,12 @@ impl UboLayout {
                  * load of its own (gm2_fsarith_1's `nm`: `FMA.v2f16 r2,
                  * u2.w0, r0.h11, u2.w1`), as the vertex stage's fp16 matrix
                  * ([`UboLayout::vs`]) */
-                GL_FLOAT_MAT4 if u.array_len <= 1 => (16, true),
+                GL_FLOAT_MAT4 => (16, true),
                 /* a mat2 one word a column, a mat3 two (its third half
                  * alone, a zero pad half): fsmat2_mediump, fsmat3_mediump
                  * ([`UboLayout::push_uniform`]) */
-                GL_FLOAT_MAT2 if u.array_len <= 1 => (4, true),
-                GL_FLOAT_MAT3 if u.array_len <= 1 => (9, true),
+                GL_FLOAT_MAT2 => (4, true),
+                GL_FLOAT_MAT3 => (9, true),
                 _ => return Err(MaliError::FsUniform),
             };
             /* a float uniform Mesa keeps fp32 (declared highp, a struct's
@@ -642,6 +642,20 @@ impl UboLayout {
             } else {
                 halves
             };
+            /* a matrix array: an element's columns as the matrix's own
+             * rows, element after element (deqp_fsunif_arr_mat4's `mediump
+             * mat4 u_var[3]`: `u2.w0` to `u13.w1`, a column two words) */
+            if let (Some((cols, rows, stride)), true) = (nir::matrix_cols(u.gl_type), u.array_len > 1) {
+                let n = u16::from(u.array_len);
+                if u.dwords != n * cols * stride && u.dwords != (n * cols - 1) * stride + rows {
+                    return Err(MaliError::FsUniform);
+                }
+                for c in 0..n * cols {
+                    l.push(u.dword_off + c * stride, rows, halves)?;
+                    l.split_last();
+                }
+                continue;
+            }
             if is_matrix(u.gl_type) || (u.array_len > 1 && !halves) {
                 l.push_uniform(
                     u,

@@ -31,10 +31,6 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The refusal, without the `Valhall: ` prefix and the ` is not lowered yet`
-/// suffix.
-const FS_UNIFORM: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
-
 /// The references the compiler makes byte-equal: none yet.
 const MATCHED: &[&str] = &[];
 
@@ -42,13 +38,18 @@ const MATCHED: &[&str] = &[];
 /// arrays stand since plan #377 spike-uniform-rest3 laid their rows.
 const COLOUR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 
+/// Where the matrix-array shapes stand once their rows are laid (plan #387
+/// item mali-train-3a, unifmp U1, select.rs `UboLayout::fs16`): the compare
+/// chain of every element is more than the pair graph holds.
+const TOO_LARGE: &str = "a fragment colour of more than 255 vectorised operations and operands";
+
 /// Every refused reference with its refusal.
 const REFUSED: &[(&str, &str)] = &[
-    ("struct_mat_array", FS_UNIFORM),
-    ("struct_mat_nested", FS_UNIFORM),
+    ("struct_mat_array", TOO_LARGE),
+    ("struct_mat_nested", TOO_LARGE),
     ("multi_basic_array", COLOUR_LANE),
     ("multi_nested", COLOUR_LANE),
-    ("random_13", FS_UNIFORM),
+    ("random_13", TOO_LARGE),
 ];
 
 /// [`mali_ref::assert_matches`] of a reference whose struct members
@@ -86,14 +87,14 @@ fn refusals_pinned() {
 /// A struct of `mat4`, `mat2` and arrays of both; Mesa's FAU holds each
 /// leaf's words in member order (gl_ref.py set the members).
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (matrices and arrays in a struct)"]
+#[ignore = "refused: a fragment colour of more than 255 vectorised operations and operands (matrices and arrays in a struct; its rows are laid, unifmp U1)"]
 fn struct_mat_array() {
     assert_matches_members("deqp_fsunif2_struct_mat_array");
 }
 
 /// The same members in nested structs.
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (matrices and arrays in nested structs)"]
+#[ignore = "refused: a fragment colour of more than 255 vectorised operations and operands (matrices and arrays in nested structs; its rows are laid, unifmp U1)"]
 fn struct_mat_nested() {
     assert_matches_members("deqp_fsunif2_struct_mat_nested");
 }
@@ -115,7 +116,7 @@ fn multi_nested() {
 /// `uniform_api.random.13`: structs of bool, mat, sampler and arrays; every
 /// uniform word is 0 (the reference was drawn with `--zero-uniforms`).
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (random structs with arrays, matrices and a sampler)"]
+#[ignore = "refused: a fragment colour of more than 255 vectorised operations and operands (random structs with arrays, matrices and a sampler; its rows are laid, unifmp U1)"]
 fn random_13() {
     mali_ref::assert_matches("deqp_fsunif2_random_13");
 }
