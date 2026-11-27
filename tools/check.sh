@@ -2749,15 +2749,34 @@ mali_corpus_diff_selftest() {
 step "test    $MALI_CONFIG (tests/mali_corpus_diff.rs)" \
   cargo_test --no-default-features --features "$MALI_CONFIG" --test mali_corpus_diff
 step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mali_corpus_diff_selftest
-# Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
-# shader shapes (Mesa 26.2.1 references where the record has one) and pins the
-# program or the refusal. Feature sets are those of each file's header.
-step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
+# Plan #367's glmark2 pins, in one row (the --local set stays as small as it
+# was). The compile pins: each file compiles reductions of glmark2's shader
+# shapes (Mesa 26.2.1 references where the record has one) and pins the
+# program or the refusal. The GL-level pins, through the GL core on the Mali
+# mock: the depth-only framebuffer (D-DEPTHONLY, mali_depthonly_gl), a depth
+# texture sampled after its depth-only pass (D-DEPTHTEX: mali_depthtex_gl the
+# draws, mali_depth_texture the texel values), refract's NPOT mip chain
+# (D-NPOTMIP, mali_npot_mip_gl), and three compile-clean glmark2-style
+# programs linked and drawn (mali_glmark2_scene_draw). Feature sets are those
+# of each file's header; mali_depth_texture's header names two, so it also
+# runs in the report-es2 row below, glmark2-es2's ES 2.0 report (as
+# mali_vcube_magswitch does). Some files hold an #[ignore]d test (a reference
+# the program does not equal yet, or what panfrost does and the Mali does not
+# yet; its reason in the attribute), so they run as-is, like the dEQP files
+# above. tests/mali_glmark2_corpus.rs needs the generated corpus: its own row,
+# beside the glmark2 corpus row.
+step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle,bool_and,const_fold,effect2d_tex,fragcoord16,fs_operand,ideas,int_loops,locals,mploop,nonfinite_const,tex_multi,tex_vertex,texcoord_425b,texcoord_lane,vs_arith,vs_fma,depthonly_gl,depthtex_gl,depth_texture,npot_mip_gl,glmark2_scene_draw}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
-step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
+    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle \
+    --test mali_bool_and --test mali_const_fold --test mali_effect2d_tex --test mali_fragcoord16 \
+    --test mali_fs_operand --test mali_ideas --test mali_int_loops --test mali_locals \
+    --test mali_mploop --test mali_nonfinite_const --test mali_tex_multi --test mali_tex_vertex \
+    --test mali_texcoord_425b --test mali_texcoord_lane --test mali_vs_arith --test mali_vs_fma \
+    --test mali_depthonly_gl --test mali_depthtex_gl --test mali_depth_texture \
+    --test mali_npot_mip_gl --test mali_glmark2_scene_draw
+step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs, mali_depth_texture.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
-    --test mali_zs_sharing --test mali_vcube_magswitch
+    --test mali_zs_sharing --test mali_vcube_magswitch --test mali_depth_texture
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.
@@ -5545,6 +5564,48 @@ if [ "$QUICK" -eq 0 ]; then
     step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
   else
     gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"
+  fi
+fi
+
+# The same corpus through the Mali's online compiler
+# (tests/mali_glmark2_corpus.rs, plan #367): the first refusal of every
+# glmark2 shader, per scene, against tests/fixtures/mali_glmark2_verdicts.txt,
+# which only moves forward. The row generates the corpus itself, with the
+# line of the row above (the PowerVR and GC7000 runs write the shader texts),
+# so that a Mali change alone can run it; it is named in GLMARK2_CORPUS, where
+# the test fails on a missing corpus instead of printing SKIP. Without
+# GLMARK2_SRC the row is a gap. The test passes when a refusal became `ok`
+# ("now ok" lines, printed here): MALI_GLMARK2_WRITE=1 then rewrites the
+# fixture (the test's header).
+mali_glmark2_corpus_tests() {
+  local out rc
+  GM2_WRITE=0 tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host powervr vivante \
+    >build/glmark2-host-mali.log 2>&1 || { tail -20 build/glmark2-host-mali.log; return 1; }
+  [ -s build/glmark2-host/shaders/index.txt ] ||
+    { echo "run.sh left no build/glmark2-host/shaders/index.txt"; return 1; }
+  # Plain `cargo test`, as in glmark2_corpus_tests: the corpus is outside git.
+  out=$(GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features \
+    --features "$MALI_CONFIG" --test mali_glmark2_corpus -- --nocapture 2>&1)
+  rc=$?
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" | tail -60; return 1; }
+  printf '%s\n' "$out" | grep -E '^(SKIP|test result|mali:| *now ok)'
+  # a run that compiled nothing is not a pass
+  ! printf '%s\n' "$out" | grep -q '^SKIP' || { echo "the Mali corpus test skipped: no corpus read"; return 1; }
+  printf '%s\n' "$out" | grep -q '^test result: ok\. 1 passed; 0 failed' ||
+    { echo "tests/mali_glmark2_corpus.rs: not its one test, passed"; return 1; }
+}
+if [ "$QUICK" -eq 0 ]; then
+  # mali: the compiler and the test (tests/mali_* is scope mali); tools: the
+  # harness script that generates the corpus.
+  scope mali tools
+  if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
+    mkdir -p build
+    # It regenerates build/glmark2-host/shaders, as the row above (w:tree).
+    uses w:tree
+    tests_row mali_glmark2_corpus
+    step "test    glmark2 corpus through the Mali compiler, per-scene verdicts (tests/mali_glmark2_corpus.rs)" mali_glmark2_corpus_tests
+  else
+    gap "glmark2 corpus through the Mali compiler: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): tests/mali_glmark2_corpus.rs was NOT run"
   fi
 fi
 
