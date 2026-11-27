@@ -1076,7 +1076,7 @@ A console lease's serial MCP server holds the board's serial bridge for the whol
 FEED=$PWD/build/am62p-console                      # any path outside git
 python3 tools/am62p_netboot_uart.py feed "$FEED" <free local port> &   # SIGTERM stops it
 FEED_PID=$!
-export BOARD_UART=127.0.0.1:<free local port>      # board.sh and cts-common.sh read it
+export BOARD_UART=<local-host>:<free local port>      # board.sh and cts-common.sh read it
 # ... run board.sh / cts-common.sh as usual (BOARD_HOST, BOARD_BOOT, ...)
 kill "$FEED_PID"
 ```
@@ -1182,7 +1182,7 @@ layout):
 export BOARD_HOST=<user>@<pi4>                 # key login, passwordless sudo (PI4_HOST is read too)
 # the Raspberry Pi Debug Probe; its tty number changes when USB re-enumerates,
 # the by-id name does not
-export BOARD_UART=/dev/serial/by-id/usb-Raspberry_Pi_Debug_Probe__CMSIS-DAP__<serial>-if01
+export BOARD_UART=<probe by-id device path>
 # or the probe behind a serial bridge: its host:port
 # export BOARD_UART=<bridge>:<port>
 # the 1920x720 bar panel (17 fields, as the board's own tryboot.txt had them)
