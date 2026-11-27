@@ -285,7 +285,14 @@ DSIM register equals the board's Linux): TIMEOUT (reset value kept),
 MHPORCH (HBP 43 vs 42), PLLTMR (250 000 vs 0x8000), PHYTIMING x 3 (the table
 above). R4 adds PLLCTRL (439.5 MHz; HBP is 43 there too).
 
-## Board plan (a follow-up task; the Verdin is busy today)
+## Board plan (a follow-up task)
+
+The Verdin i.MX8MP is off the farm since 2026-11-16 (no return date); the
+same i.MX8MP work runs on the Armadillo-X2 (same SoC and GPU), with
+`tools/board.sh x2` (a kexec development run). The X2 has no DSI panel, so
+only the LCDIF half of this plan (step 5) can be
+measured there; the DSI chain (steps 1-4, 6, 7; R1 too, it reads the panel path) needs the Verdin's panel and
+waits for it. A record measured on the X2 says so.
 
 1. Images: gc_slint and gc_display_raw with both switches on, FORCE_COLD +
    FORCE_COLD_POWER_OFF; the same with the switches off as control.

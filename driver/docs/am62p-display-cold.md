@@ -274,8 +274,7 @@ bits, and this project's choices, each with its reason).
 
 ## What the board settled (2026-10-02)
 
-The staged runs are in `ab43a20c5:tools/cts/log/board-sessions/am62p-display-rust-2026-10-02.md`.
-What they settled:
+The staged runs' session log is not kept; what they settled:
 
 - **The WIZ offset.** MOD_VER (MODULE_ID 992h, 69924881h on this silicon)
   reads at +F00h, and 0h..14h read 0. TI's driver is right; the SPRUJ83D
@@ -307,9 +306,8 @@ What they settled:
   IRQ_STAT 0 with video flowing. The picture is still unseen. The
   C-vs-Rust differences that a register image cannot show, the
   known-colour fill (`CONFIG_YAKOGL_SAMPLE_DISPLAY_FILL`), the register dump
-  (`CONFIG_YAKOGL_SAMPLE_DISPLAY_DUMP`), the board readings and the
-  procedure are in
-  `ab43a20c5:tools/cts/log/board-sessions/am62p-display-black-2026-10-15.md`.
+  (`CONFIG_YAKOGL_SAMPLE_DISPLAY_DUMP`) and the board procedure were
+  recorded in a session log that is not kept; this paragraph is its finding.
 - The WIZ offset is answered (above); the TRM summary could be reported to TI.
 - The DSS and DSI Kconfig symbols now depend on ARM64 (the Rust staticlib is
   built for aarch64-unknown-none-softfloat); an R5F/M4 build that compiled the
