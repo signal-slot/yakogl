@@ -153,10 +153,19 @@ mod tests {
     }
 
     #[test]
+    fn float_classes_are_a_mix() {
+        let k = [tk(GLES_SURF_RGBA8888), tk(GLES_SURF_RGBA16F)];
+        assert_eq!(
+            draw_mixed_key(&draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA16F])),
+            Ok(shc_blend_key_mixed(&k).unwrap())
+        );
+    }
+
+    #[test]
     fn not_a_mix() {
         assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_R32UI])), Err(REFUSE_NOT_A_MIX));
         assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_R32UI, GLES_SURF_R32UI])), Err(REFUSE_NOT_A_MIX));
-        assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA16F])), Err(REFUSE_NOT_A_MIX));
+        assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888])), Err(REFUSE_NOT_A_MIX));
         // a format with no per-target key (past RGB10_A2)
         assert_eq!(draw_mixed_key(&draw(&[GLES_SURF_RGB10_A2 + 1, GLES_SURF_R32UI])), Err(REFUSE_NOT_A_MIX));
     }

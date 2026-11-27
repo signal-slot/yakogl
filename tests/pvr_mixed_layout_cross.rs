@@ -52,7 +52,6 @@ fn check(fmts: &[u8], keys: &[u32], seen: &mut Seen) {
     let is_int = |k: u32| ShcIntRt::of_key(k).is_some();
     let any_int = keys.iter().any(|&k| is_int(k));
     let any_other = keys.iter().any(|&k| !is_int(k));
-    let same_int = keys.iter().all(|&k| k == keys[0] && is_int(k));
     seen.lists += 1;
 
     // (a)
@@ -87,7 +86,10 @@ fn check(fmts: &[u8], keys: &[u32], seen: &mut Seen) {
     }
 
     // (d)
-    let expect = keys.len() >= 2 && any_int && !same_int && shc.is_some();
+    /* any list of differing classes is a mix, with or without an integer
+     * layout (item fix-float-mix) */
+    let all_same = keys.iter().all(|&k| k == keys[0]);
+    let expect = keys.len() >= 2 && !all_same && shc.is_some();
     assert_eq!(mixed.is_some(), expect, "{ctx}: mixed key presence");
 }
 

@@ -114,30 +114,29 @@ pub const fn shc_mixed_out_layout(targets: &[u32]) -> Option<([u8; SHC_MIXED_MAX
 }
 
 /// The mixed key of draw buffers 0.. (one per-target key each, dense), or
-/// `None` when the list is not a mix (section 2.2, conditions 2-5).
+/// `None` when the list is not a mix (section 2.2, conditions 2-5). A list
+/// of differing classes is a mix with or without an integer layout: RGBA8
+/// beside RGBA16F or R16F gets its key too; one class everywhere keeps its
+/// own key.
 pub const fn shc_blend_key_mixed(targets: &[u32]) -> Option<u32> {
     if targets.len() < 2 || targets.len() > SHC_MIXED_MAX_TARGETS {
         return None;
     }
     let mut key = SHC_BLEND_KEY_MIXED_TAG;
-    let mut any_int = false;
-    let mut all_same_int = true;
+    let mut all_same = true;
     let mut i = 0;
     while i < targets.len() {
         let code = match slot_code(targets[i]) {
             Some(c) => c,
             None => return None,
         };
-        if ShcIntRt::of_key(targets[i]).is_some() {
-            any_int = true;
-        }
-        if ShcIntRt::of_key(targets[i]).is_none() || targets[i] != targets[0] {
-            all_same_int = false;
+        if targets[i] != targets[0] {
+            all_same = false;
         }
         key |= code << (10 + 5 * i);
         i += 1;
     }
-    if !any_int || all_same_int || shc_mixed_out_layout(targets).is_none() {
+    if all_same || shc_mixed_out_layout(targets).is_none() {
         return None;
     }
     Some(key)
@@ -412,7 +411,9 @@ mod tests {
         let u = tk(GLES_SURF_R32UI);
         assert_eq!(shc_blend_key_mixed(&[]), None);
         assert_eq!(shc_blend_key_mixed(&[u]), None);
-        assert_eq!(shc_blend_key_mixed(&[RGBA8, F16X4]), None);
+        assert_eq!(shc_blend_key_mixed(&[RGBA8, RGBA8]), None);
+        assert_eq!(shc_blend_key_mixed(&[F16X4, F16X4, F16X4]), None, "six registers");
+        assert!(shc_blend_key_mixed(&[RGBA8, F16X4]).is_some(), "a mix of float classes");
         assert_eq!(shc_blend_key_mixed(&[u, u]), None);
         assert_eq!(shc_blend_key_mixed(&[u, u, u]), None);
         assert_eq!(shc_blend_key_mixed(&[u, u, RGBA8, u]), None);

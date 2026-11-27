@@ -112,11 +112,11 @@ fn model_layout(t: &[Class]) -> Option<(Vec<u8>, u8)> {
 /// Section 2.2's mixed key, or `None` when the list is not a mix
 /// (conditions 3-5 of the note).
 fn encode(t: &[Class]) -> Option<u32> {
-    if !(2..=3).contains(&t.len()) || !t.iter().any(|&c| is_int(c)) {
+    if !(2..=3).contains(&t.len()) {
         return None;
     }
     if t.iter().all(|&c| c == t[0]) {
-        return None; // one layout everywhere keeps today's key (2.4)
+        return None; // one class everywhere keeps today's key (2.4)
     }
     model_layout(t)?;
     let mut key = 1u32 << 25;
@@ -132,6 +132,23 @@ fn worked_keys_of_section_2_2() {
     assert_eq!(encode(&[R32UI, R32I]), Some(0x020C_A400));
     assert_eq!(encode(&[Rgba8, R32I, Rgba16f]), Some(0x034C_C000));
     assert_eq!(encode(&[Rgba8, RG32UI]), Some(0x0205_4000));
+}
+
+/// A mix of float classes (no integer layout) has a key of its own: the
+/// slot codes 0x10 RGBA8, 0x14 RGBA16F, 0x18 R16F, 0x1C R32F at bit 10 + 5 i.
+#[test]
+fn float_mixes_have_keys() {
+    use yakogl::target_key::*;
+    let want = |c: &[u32]| (1u32 << 25) | c.iter().enumerate().fold(0, |a, (i, &x)| a | x << (10 + 5 * i));
+    assert_eq!(encode(&[Rgba8, Rgba16f]), Some(want(&[0x10, 0x14])));
+    assert_eq!(encode(&[Rgba8, R16f]), Some(want(&[0x10, 0x18])));
+    assert_eq!(encode(&[Rgba16f, Rgba8, R32f]), Some(want(&[0x14, 0x10, 0x1C])));
+    for t in [vec![Rgba8, Rgba16f], vec![Rgba8, R16f], vec![Rgba16f, Rgba8, R32f], vec![R16f, Rgba8, Rgba16f]] {
+        let k = keys(&t);
+        let key = shc_blend_key_mixed(&k).unwrap_or_else(|| panic!("{t:?}: no key"));
+        assert_eq!(Some(key), encode(&t), "{t:?}");
+        assert!(shc_blend_key_is_mixed(key), "{t:?}");
+    }
 }
 
 #[test]
@@ -158,8 +175,9 @@ fn worked_registers_of_section_3() {
 #[test]
 fn none_where_the_note_says_none() {
     assert_eq!(encode(&[R32UI]), None, "one target");
-    assert_eq!(encode(&[Rgba8, Rgba16f, R32f]), None, "no integer target");
-    assert_eq!(encode(&[Rgba8, Rgba8]), None, "no integer target");
+    assert_eq!(encode(&[Rgba8, Rgba8]), None, "one class everywhere");
+    assert_eq!(encode(&[R16f, R16f, R16f]), None, "one class everywhere");
+    assert_eq!(encode(&[Rgba16f, Rgba16f, Rgba16f]), None, "six registers");
     assert_eq!(encode(&[R32UI, R32UI]), None, "one layout everywhere");
     assert_eq!(encode(&[RG32I, RG32I, RG32I]), None, "one layout everywhere");
     assert_eq!(encode(&[Rgba8, RGBA32UI]), None, "five registers");
@@ -359,7 +377,9 @@ fn production_refuses_what_the_model_refuses() {
     use yakogl::target_key::*;
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[])), None);
-    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba16f, R32f])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba8])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba16f, Rgba16f, Rgba16f])), None);
+    assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, Rgba16f, R32f, R16f])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, R32UI])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[Rgba8, RGBA32UI])), None);
     assert_eq!(shc_blend_key_mixed(&keys(&[R32UI, Rgba8, Rgba8, Rgba8])), None);
