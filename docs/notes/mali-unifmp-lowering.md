@@ -247,3 +247,28 @@ the int and bool arrays have had rows since plan #377), `nir_fs.rs:11122`
   are checked against the FAU word indices of `deqp_fsunif_arr_mat4`
   (`u2.w0` to `u13.w1`) only: no reference of a matrix array compiles to
   the end yet.
+- **U2** (`nir_fs.rs`, `vectorise`'s fp16-block arm): one half of the
+  block beside a varying's or a computed lane, as a word of the colour, is
+  `MKVEC.v2i16 <lane>.h0, uN.wM.hX` in either order with the half read in
+  place, and ATEST reads the uniform's half in place when it is the
+  alpha. `dot(v, vec4(1.0))` is the lanes' sum (`fmul(a, 1.0)` is `a`).
+  Byte-equal: `deqp_unifmp_interaction_16`, `deqp_misc2_invariant_cse`.
+  `deqp_unifmp_inv_mediump_cse2`'s fragment program is byte-equal too, but
+  the pair is in `DIFFERS`: its vertex shader, which compiled before the
+  step, builds its mediump arithmetic at fp32 where Mesa's is fp16
+  (`V2F32_TO_V2F16` of the attribute, then `FADD.v2f16`/`FMA.v2f16`). That
+  is a vertex-walk hazard of `shaders.invariance.{mediump,lowp}.
+  common_subexpression_*`, not of this family.
+  Still refused with this text: `deqp_unifmp_rsg_expr10` and
+  `deqp_unif2_fs_other` (a uniform half beside a constant's half as an
+  operation's operand, `MKVEC.v2i16 r1, u2.w0.h0, u2.w1.h0`; with the arm
+  opened to operands both stop at "a gl_FragColor lane other than ..."),
+  and `deqp_intval3_rsg_swizzle12_fs` (then `Mk@AddA`, opform O1). The arm
+  is kept to the forms the references draw: a colour word, the other lane
+  not a constant.
+- **Not landed:** U3 (c) and (d) (`deqp_unifmp_{mat4_sub_mat4,
+  vec4_mat4_mul}`, `deqp_fsunif_{mat4_add_float,mat2_mul_mat2}` still stop
+  at `nir_fs.rs:11100`; `rsg_sconv12`, U3 (b), was lowered by plan #377).
+  They need single uniform halves as `.h00`/`.h11` operands of
+  `FADD/FMA.v2f16` with Mesa's regrouping of the result lanes, the same
+  pair-graph rebuild as opform O1/O2.

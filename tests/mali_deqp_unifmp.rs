@@ -33,18 +33,25 @@ mod mali_ref;
 /// `deqp_unifmp_` prefix.
 /// `rsg_sconv12` since plan #377 spike-uniform-rest3: two float uniforms'
 /// halves of two words as one `MKVEC.v2i16` (nir_fs.rs `vectorise`).
-const LOWERED: &[&str] = &["rsg_sconv12"];
+/// `interaction_16` since plan #387 mali-train-3a (unifmp U2): one uniform
+/// half beside a varying's or a computed lane as a word of the colour
+/// (nir_fs.rs `vectorise`).
+const LOWERED: &[&str] = &["rsg_sconv12", "interaction_16"];
 
 /// The references that compile with other words than Mesa's (hazards).
-const DIFFERS: &[&str] = &[];
+/// `inv_mediump_cse2` since unifmp U2: its fragment program is byte-equal
+/// (`inv_mediump_cse2_fragment`), its vertex shader is not. That shader
+/// compiled before the step too (the program stopped at the fragment
+/// shader): its mediump arithmetic on a mediump attribute is built at fp32
+/// (`FADD.f32 r4, r0, r1`), Mesa's at fp16 (`V2F32_TO_V2F16` of the
+/// attribute, then `FADD.v2f16`, `FMA.v2f16`).
+const DIFFERS: &[&str] = &["inv_mediump_cse2"];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("highp_mat3_mul", TEXT_FSU),
     ("highp_vec3_mat3", TEXT_FSU),
-    ("interaction_16", TEXT_FSU),
     ("interaction_88", TEXT_FSU),
-    ("inv_mediump_cse2", TEXT_FSU),
     ("mat4_sub_mat4", TEXT_FSU),
     ("rsg_expr10", TEXT_FSU),
     ("struct_array", TEXT_FSU),
@@ -112,7 +119,6 @@ fn highp_vec3_mat3() {
 /// float(a))` of a `uniform mediump float a` (one half beside a computed
 /// lane; site `nir_fs.rs:10805`).
 #[test]
-#[ignore = "refused (FsUniform: a uniform half beside a computed lane); pinned by refusals_pinned"]
 fn interaction_16() {
     assert_matches("interaction_16");
 }
@@ -129,9 +135,21 @@ fn interaction_88() {
 /// `shaders.invariance.mediump.common_subexpression_2`: `vec4(u_color.r,
 /// u_color.g, blue, u_color.a)` (a uniform half beside a computed lane).
 #[test]
-#[ignore = "refused (FsUniform: a uniform half beside a computed lane); pinned by refusals_pinned"]
+#[ignore = "compiles, not Mesa's: the vertex shader's mediump arithmetic is fp32 here, fp16 in Mesa (DIFFERS; the fragment program is byte-equal, inv_mediump_cse2_fragment)"]
 fn inv_mediump_cse2() {
     assert_matches("inv_mediump_cse2");
+}
+
+/// `inv_mediump_cse2`'s fragment program alone is byte-equal: the uniform's
+/// aligned pair as the first word, `MKVEC.v2i16 r2, r0^.h0, u2.w1.h1` of
+/// the sum and the uniform's high half as the second, ATEST reading
+/// `u2.w1.h1` (the vertex regions differ, [`DIFFERS`]).
+#[test]
+fn inv_mediump_cse2_fragment() {
+    let r = mali_ref::Reference::load("deqp_unifmp_inv_mediump_cse2");
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("refused: {e}"));
+    let d: Vec<String> = mali_ref::differences(&r, &pair).into_iter().filter(|d| d.starts_with("fs")).collect();
+    assert!(d.is_empty(), "the fragment program differs from deqp_unifmp_inv_mediump_cse2:\n{}", d.join("\n"));
 }
 
 /// `shaders.matrix.sub.uniform_mediump_mat4_mat4_fragment`: two mediump
