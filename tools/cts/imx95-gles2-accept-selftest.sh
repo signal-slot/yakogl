@@ -60,7 +60,10 @@ L="$R/tools/cts/log"
 
 # One slice per session: one case per row, the first row's case Fail.
 slice() { # session prefix first last
-	d="$L/2026-11-25-imx95-gles2-$1-$SHA8"
+	# Mixed dates, as on the real tree: S4 is dated a day after the others.
+	dt=2026-11-24
+	[ "$1" = S4 ] && dt=2026-11-25
+	d="$L/$dt-imx95-gles2-$1-$SHA8"
 	mkdir -p "$d"
 	printf 'commit=%s\nsession=%s\nrows=%s-%s\ntree=tools/cts/mali-gles2-tree.txt\nboot_id_before=-\nboot_id_after=-\nkernel=zephyr\nlib=yakogl-mali\nstarted=2026-11-25T01:00:00Z\nended=2026-11-25T02:00:00Z\nboard=verdin-imx95\n' \
 		"$BASE" "$1" "$3" "$4" >"$d/meta.txt"
@@ -86,7 +89,7 @@ slice S2 T6S2R 1 14
 slice S3a T6S3R 1 15
 slice S3b T6S3R 16 30
 S4="$L/2026-11-25-imx95-gles2-S4-$SHA8"
-S3B="$L/2026-11-25-imx95-gles2-S3b-$SHA8"
+S3B="$L/2026-11-24-imx95-gles2-S3b-$SHA8"
 
 doc_head() {
 	printf '# ES 2.0 CTS failure inventory\n\n## M. Mali-G610 (NanoPC-T6)\n\nNothing here.\n\n## N. Mali-G310 (Verdin iMX95): the whole tree\n\nThe block:\n\n'
@@ -202,7 +205,7 @@ printf '%s\n' "$out" | grep -qF -e "$T" && bad "c2: the verdict names the scratc
 fresh
 printf '# ES 2.0 CTS failure inventory\n\n## M. Mali-G610 (NanoPC-T6)\n\nVerdin iMX95 is only named in the text.\n' >"$R/docs/es2-cts-failures.md"
 run
-expect "c2: no Verdin iMX95 part" 1 PASS FAIL PASS "no heading naming Verdin iMX95"
+expect "c2: no Verdin iMX95 part" 1 PASS FAIL PASS "not yet: docs/es2-cts-failures.md has no part with a heading naming Verdin iMX95"
 {
 	doc_head
 	printf '| Status | Cases |\n| --- | ---: |\n| Pass | 70 |\n| Fail | 6 |\n| **Total** | **76** |\n'
@@ -264,6 +267,43 @@ g commit -q -m leak
 run
 expect "c5: redact-diff-scan.py reports a hit" 1 PASS PASS FAIL "reports 1 hit(s), first: tools/cts/log/note.txt:1: tty: "
 printf '%s\n' "$out" | grep -qF -e "$TTY" && bad "c5: the hit is printed in full"
+fresh
+
+# c5: the marker is per line. A marked line is skipped by the scanner; an
+# unmarked real-looking line next to it still FAILs, in a log, a doc, a tool
+# and in a fixture-named file alike, unless that fixture file carries the
+# marker (then only its own hits are left out).
+leak() { # path, then the lines
+	f=$1; shift
+	mkdir -p "$R/$(dirname "$f")"
+	printf '%s\n' "$@" >"$R/$f"
+	g add -A
+	g commit -q -m leak
+	run
+}
+MARK="redact-scan"": ok"
+for f in tools/cts/log/note.txt docs/note.md tools/cts/README.md tools/cts/some.sh; do
+	leak "$f" "marked $TTY # $MARK" "real $TTY"
+	expect "c5: $f: one marked line, one unmarked: FAIL" 1 PASS PASS FAIL "reports 1 hit(s)"
+	fresh
+done
+leak tools/cts/fix-selftest.sh "marked $TTY # $MARK" "fixture value $TTY"
+expect "c5: a selftest file that carries the marker: its unmarked hits are left out" 0 PASS PASS PASS
+fresh
+leak tools/cts/fix-selftest.sh "fixture value $TTY"
+expect "c5: a selftest file without the marker: FAIL" 1 PASS PASS FAIL "reports 1 hit(s)"
+fresh
+leak tools/cts/testdata/x/in.txt "fixture value $TTY" "# $MARK"
+expect "c5: a testdata file that carries the marker: left out" 0 PASS PASS PASS
+fresh
+
+# c1/c2: a session directory that is no slice yet is named, c2 says not yet
+rm -f "$S4/meta.txt" "$S4/chunks.tsv" "$S4/results.tsv"
+g add -A
+g commit -q -m noslice
+run
+expect "c1: a session without slice files is named" 1 FAIL FAIL PASS "is not a slice yet: no meta.txt chunks.tsv results.tsv"
+printf '%s\n' "$out" | grep -q '^c2: FAIL not yet: ' && ok "c2: says not yet" || bad "c2: says not yet"
 fresh
 
 # the base, and usage

@@ -12,7 +12,9 @@
 #   --base REV      the commit the images were built from (default e63ab28e);
 #                   its first 8 hex digits end the session directories' names
 #   --main-ref REF  passed to mali-deqp-tally.py --check-cover: the ref the
-#                   slices' commits must be ancestors of (default origin/main)
+#                   slices' commits must be ancestors of (default origin/main,
+#                   or refs/connected/origin/remotes/origin/main in a clone
+#                   that keeps the origin's refs there)
 #   MUSTPASS        the mustpass list, relative to DIR or absolute (default
 #                   tools/cts/gles2-mustpass.txt, the list the T6 tree's
 #                   --check-cover takes)
@@ -46,6 +48,9 @@
 #     tools/cts/STATUS.md, README.md and ROADMAP.md. That diff also holds
 #     what --main-ref changed since the base; the FAIL line says how many of
 #     the paths it names differ between the base and --main-ref as well.
+#     The scanner's marker `redact-scan: ok` is per line. Only a hit in a
+#     synthetic fixture (*-selftest.sh, *_selftest.sh, testdata/) whose file
+#     carries the marker is left out; a log, a doc or a tool never is.
 #
 # Only the tools' existing command lines are used; the tools are the ones
 # beside this script, the checked tree is DIR.
@@ -64,7 +69,7 @@ main_ref=origin/main
 mustpass=
 
 usage() {
-	sed -n '5,22p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n "5,26p" "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
@@ -79,6 +84,8 @@ while [ $# -gt 0 ]; do
 	esac
 done
 [ -n "$mustpass" ] || mustpass=tools/cts/gles2-mustpass.txt
+# The default ref is origin/main; in a clone that keeps the origin's refs
+# under refs/connected/origin/ it is only found there.
 
 # The scratch directory, made before the cd below and named in full: TMPDIR
 # may be relative to the caller's directory.
@@ -91,6 +98,11 @@ cd "$root" 2>/dev/null || { echo "imx95-gles2-accept: $root: not a directory" >&
 # this repository's work tree and is no repository of its own).
 top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$(pwd -P)" ] ||
 	{ echo "imx95-gles2-accept: $root: not the top of a git work tree" >&2; exit 2; }
+
+if ! git rev-parse --verify -q "$main_ref^{commit}" >/dev/null 2>&1 &&
+	git rev-parse --verify -q "refs/connected/origin/remotes/$main_ref^{commit}" >/dev/null 2>&1; then
+	main_ref=refs/connected/origin/remotes/$main_ref
+fi
 
 rc=0
 why=
@@ -159,7 +171,21 @@ else
 	done
 fi
 if [ $# -gt 0 ]; then
-	if [ ! -f "$mustpass" ]; then
+	# A session directory is a slice only with meta.txt, chunks.tsv and
+	# results.tsv: name each one that lacks them (the tools would stop at
+	# the first) and leave the tally and the cover check out for them.
+	noslice=0
+	for d in "$@"; do
+		miss=
+		for f in meta.txt chunks.tsv results.tsv; do
+			[ -f "$d/$f" ] || miss="$miss $f"
+		done
+		[ -z "$miss" ] || { add "$d is not a slice yet: no$miss"; noslice=1; }
+	done
+	[ "$noslice" -eq 0 ] || slices_ok=0
+	if [ "$noslice" -eq 1 ]; then
+		:
+	elif [ ! -f "$mustpass" ]; then
 		add "the mustpass list $mustpass is not a file"
 	else
 		python3 -I "$TALLY" --check-cover --main-ref "$main_ref" "$mustpass" "$@" >"$tmp/cover.out" 2>&1
@@ -244,9 +270,9 @@ else
 		}
 		inpart { print }' "$doc" >"$tmp/part.md"
 	if [ ! -s "$tmp/part.md" ]; then
-		add "$doc has no heading naming Verdin iMX95"
+		add "not yet: $doc has no part with a heading naming Verdin iMX95 (the analysis part, written by vi95-analysis)"
 	elif [ "$slices_ok" -ne 1 ]; then
-		add "$doc has a Verdin iMX95 part, but the six session slices to tally are not all there (see c1)"
+		add "not yet: $doc has a Verdin iMX95 part, but the six session slices to tally are not all there (see c1), so its totals cannot be checked"
 	elif ! python3 -I "$TALLY" --tally "$@" >"$tmp/tally.txt" 2>"$tmp/tally.err"; then
 		cat "$tmp/tally.err" >&2
 		add "mali-deqp-tally.py --tally over the six slices fails: $(sed -n '1p' "$tmp/tally.err" | cut -c1-160)"
@@ -300,6 +326,27 @@ else
 	# each; its stderr holds its own summary and is not counted.
 	python3 -I "$SCAN" "$base..HEAD" >"$tmp/scan.out" 2>"$tmp/scan.err"
 	r=$?
+	# The scanner skips a line that carries the marker itself. A made-up
+	# value in a synthetic fixture (a *-selftest.sh, *_selftest.sh or a
+	# testdata/ file) that has no marker on its line is the only hit left
+	# out here, and only in a file that carries the marker somewhere; no
+	# log, doc, tool or other file is exempt.
+	if [ "$r" -eq 1 ]; then
+		: >"$tmp/scan.kept"
+		while IFS= read -r hit; do
+			f=${hit%%:*}
+			case $f in
+			*-selftest.sh | *_selftest.sh | testdata/* | */testdata/*)
+				if git show "HEAD:$f" 2>/dev/null | grep -qF 'redact-scan: ok'; then
+					continue
+				fi
+				;;
+			esac
+			printf '%s\n' "$hit" >>"$tmp/scan.kept"
+		done <"$tmp/scan.out"
+		mv "$tmp/scan.kept" "$tmp/scan.out"
+		[ -s "$tmp/scan.out" ] || r=0
+	fi
 	case $r in
 	0) ;;
 	1)
