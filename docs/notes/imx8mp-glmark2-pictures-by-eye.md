@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# i.MX8MP (Verdin iMX8M Plus, Vivante GC7000UL): the 33 glmark2-es2 pictures, looked at by eye
+# i.MX8MP (Armadillo-X2, Vivante GC7000UL): the 33 glmark2-es2 pictures, looked at by eye
 
 **Skeleton: no scene has been looked at yet.** Every commit, record and route
 cell below is a placeholder (`-`) and every verdict is `not yet looked at`; the
@@ -14,21 +14,35 @@ scene pictures. It closes the i.MX8MP part of "Pictures by eye" ("Left"), issue
 #1196. The Pi 4 part is `docs/notes/pi4-glmark2-pictures-by-eye.md`; the AM62P
 part was done on its panel.
 
+## Which board
+
+The Verdin iMX8M Plus is away (off the farm since 2026-11-16, no return
+date). The owner's decision of 2026-11-27: the i.MX8MP board work is done on the
+Armadillo-X2 instead (same i.MX8MP SoC and GC7000UL GPU). Every row and every
+record of this note was therefore measured on the X2, and each says so: the
+records are under `records/imx8mp/` and carry `board=x2` in their `meta.txt`.
+The X2 runs are kexec-dev runs out of Armadillo Base OS
+(`docs/notes/x2-glmark2-slow-scenes.md`). The earlier stopped X2 attempts, and
+why they stopped, are in `docs/notes/x2-glmark2-pictures-by-eye.md`.
+
 ## How
 
 - Images are built only from origin/main commits; the commit of each row is in
   the table.
 - `tools/cts/imx8mp-glmark2-dumps.sh` builds and runs them (its `scenes`
-  subcommand lists the scenes): an i.MX8MP GM image with
+  subcommand lists the scenes): an i.MX8MP (X2) GM image with
   `CONFIG_GLMARK2_FRAME_DUMP=y` and one scene in `CONFIG_GLMARK2_ARGS`
   (`driver/samples/zephyr/glmark2/Kconfig`; `driver/docs/glmark2.md`, "The frame
   dump"). The 800x600 window is printed as `glmark2-fb:` lines on the UART and
   decoded with `tools/cts/glmark2-fb.py`, which checks the row crc16s, the frame
   crc32 and the scene's `glmark2-picture` line.
-- The board boots through `tools/board.sh imx8mp` /
-  `tools/cts/board-stage.sh imx8mp` (uboot-mmc). The image feeds the WDOG for a
-  bounded time, so a scene's run has a window: the slow scenes (terrain, shadow
-  and refract, 1 to 4 FPS) are the first to be checked against it.
+- The board is the Armadillo-X2, run through `tools/board.sh x2 run`
+  (kexec-dev out of Armadillo Base OS; the image is jumped to and the result
+  is read back after the reset). The console is the X2's UART2, through the
+  farm's console resource; the screen is seen through the farm's HDMI KVM
+  resource. The image feeds the WDOG for a bounded time, so a scene's run has
+  a window: the slow scenes (terrain, shadow and refract, 1 to 4 FPS) are the
+  first to be checked against it.
 - A dump is about 1.9 MB, one scene per image; a damaged dump is rerun, pixels
   are never patched.
 - Each decoded picture is compared with the upstream glmark2 picture on Mesa
