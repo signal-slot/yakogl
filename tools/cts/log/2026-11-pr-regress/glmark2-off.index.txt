@@ -1,0 +1,22 @@
+# tools/board.sh run record (driver/docs/one-method.md section 4; records/README.md)
+runner: tools/board.sh build eeb2c2cb
+board: am62p
+boot: uboot-mmc (a row)
+name: pr-regress-GM-off
+image: zephyr.bin sha256 5590e5ba9650232eea234dac5661b9711a128e68fe9d917a6245b82e7a725cf4 size 13694688 footprint 157519872
+image build: YAKOGL_SAMPLE_TABLE=6c5b8a70 YAKOGL_SAMPLE_TREE=c8be59f6
+image zephyr: af17c0c8aa2a
+build line printed at boot: sample: build tree=c8be59f6 table=6c5b8a70
+started: 2026-11-27 14:09:18
+ended: 2026-11-27 14:16:50
+verdict: board.sh am62p pr-regress-GM-off rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=record:GLMARK2 resets=0 record=594b1201,fc3f01e9,6184003f,00258320 back_after=425s unsupported=0
+phase scan: netboot-scan: verdict=done back=yes lines=740 hooks=pr-regress-GM-off-5590e5ba9650232e-1795788558 fetched_bytes=13694688 spl1=+0.0s hook=+0.0s cleared=+0.0s fetched=+0.0s go=+0.0s zephyr=+0.0s rti_armed=+0.0s reset=+173.5s linux=+173.5s
+records:
+  record 1/1: 594b1201 fc3f01e9 6184003f 00258320
+  GLMARK2 (18) seq 1: score 489 status 1 (pass) scenes ran 33 failed 0 unsupported 0 size 800x600 on-screen; first failed: none; unsupported: none, none; GL errors raised 0, draws that sampled an incomplete texture 0
+  verdict record: 594b1201 fc3f01e9 6184003f 00258320
+files (sha256, lines):
+5678a57ccf8df60f27b21c5830f91d7c726c56350abe2d616a46423ccd8a2929  754  console.raw
+ac02e30f92c31bf0f6dbbc2bdb2959757652e48adf9434efe50d32147819250c  754  console.ts
+0af68afe0b3ef0ec4b6d27415a5c75c529adefd9a820059e3a96aab1fdda7b4d  754  console.txt
+e5a8c430b3f264c6daff0a510108ecdcb28800a1e1899b0acc89324edeca29ef  22  meta.txt
