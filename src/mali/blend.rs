@@ -10,9 +10,11 @@
 //! UNORM targets (`is_float` false) and, by [`can_fixed_function_float`],
 //! the RGBA16F one (`is_float` true). An equation Mesa
 //! runs in a blend shader when src/shaderc/online/mali/blend.rs builds it
-//! ([`shader_key`]: an RGBA8 target at 1x or 4x, any equation and colour
-//! mask its compile does not refuse), and is refused by the frame builder
-//! by name otherwise.
+//! ([`shader_key`]: an RGBA8 target at 1x or 4x, an RGB565 or XRGB8888 one
+//! at 1x, any equation and colour mask its compile does not refuse), and is
+//! refused by the frame builder by name otherwise. A target without alpha
+//! takes its equation through [`without_dst_alpha`] first, as st/mesa
+//! hands it to the driver.
 
 use super::genxml::v10::{BlendEquation, BlendFunction, BlendOperandA, BlendOperandB, BlendOperandC};
 
@@ -172,6 +174,25 @@ pub fn pack_constant(cons: f32, chan_size: u32) -> u32 {
     (unorm << (16 - chan_size)) & 0xffff
 }
 
+/// `fix_xrgb_alpha` (src/mesa/state_tracker/st_atom_blend.c:211-225),
+/// which `st_update_blend` (:323-329) applies to every factor of a colour
+/// buffer whose GL base format is GL_RGB (`_BlendForceAlphaToOneDraw`,
+/// main/fbobject.c:1511-1515, panfrost having `indep_blend_func`): the
+/// destination's alpha is 1, so DST_ALPHA is ONE, ONE_MINUS_DST_ALPHA
+/// ZERO, and SRC_ALPHA_SATURATE (`min(As, 1 - Ad)`) ZERO. The RGB565 and
+/// XRGB8888 targets are such buffers (tools/mali/testdata/pan_blend_ref/
+/// rgb565/, xrgb8888/: Mesa's choice and words are those of the fixed
+/// equation). A MIN or MAX channel's factors are not read and stay.
+pub fn without_dst_alpha(b: &Blending) -> Blending {
+    let fix = |f: Factor| match (f.base, f.invert) {
+        (Base::DstAlpha, false) => Factor::ONE,
+        (Base::DstAlpha, true) | (Base::SrcAlphaSaturate, _) => Factor::ZERO,
+        _ => f,
+    };
+    let ch = |c: Channel| Channel { func: c.func, src: fix(c.src), dst: fix(c.dst) };
+    Blending { rgb: ch(b.rgb), alpha: ch(b.alpha) }
+}
+
 /// `pan_blend_is_opaque` (:430-458) for an unmasked target: ONE, ZERO with
 /// add or subtract on both channel groups.
 pub fn is_opaque(b: &Blending) -> bool {
@@ -294,9 +315,10 @@ pub fn needs_shader(b: &Blending, colour: &[f32; 4]) -> bool {
 /// `colour_f16`, else fp32 (Mesa's cache key without the constants,
 /// G/pan_blend_cso.c:59-98, `src0_type` the program's `blend[0].type`,
 /// G/pan_context.c:210-216), for the targets src/shaderc/online/mali/
-/// blend.rs builds: RGBA8, 1x or 4x. None for any other target, which stays
-/// refused; a key the compiler does not build as Mesa does is refused by
-/// its compile. A MIN or MAX channel's factors are not read
+/// blend.rs builds: RGBA8 at 1x or 4x, RGB565 and XRGB8888 at 1x (their
+/// equation already [`without_dst_alpha`]'s). None for any other target,
+/// which stays refused; a key the compiler does not build as Mesa does is
+/// refused by its compile. A MIN or MAX channel's factors are not read
 /// (`nir_blend_factored`): the key holds ONE, ONE for them, so the GL
 /// factors left behind do not make another shader of the same words.
 pub fn shader_key(
@@ -306,8 +328,15 @@ pub fn shader_key(
     format: super::frame::TargetFormat,
     colour_f16: bool,
 ) -> Option<crate::shaderc::online::mali::blend::Key> {
+    use super::frame::TargetFormat as F;
     use crate::shaderc::online::mali::blend as sb;
-    if color_mask & 0xf == 0 || format != super::frame::TargetFormat::Rgba8888 || !matches!(samples, 1 | 4) {
+    let target = match (format, samples) {
+        (F::Rgba8888, 1 | 4) => sb::Target::Rgba8,
+        (F::Rgb565, 1) => sb::Target::Rgb565,
+        (F::Xrgb8888, 1) => sb::Target::Xrgb8888,
+        _ => return None,
+    };
+    if color_mask & 0xf == 0 {
         return None;
     }
     let factor = |f: Factor| sb::Factor {
@@ -343,6 +372,7 @@ pub fn shader_key(
         mask: (color_mask & 0xf) as u8,
         samples: samples as u8,
         colour_f32: !colour_f16,
+        target,
     })
 }
 

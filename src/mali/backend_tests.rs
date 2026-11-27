@@ -942,6 +942,8 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         let rgba16f_masked = state(|d| (d.target_format, d.color_mask) = (backend::GLES_SURF_RGBA16F, 0x7));
         let mut rgb565_min = min_blend;
         rgb565_min.target_format = backend::GLES_SURF_RGB565;
+        let mut rgb565_min_4x = rgb565_min;
+        rgb565_min_4x.samples = 4;
         let mut rgba16f_min = min_blend;
         rgba16f_min.target_format = backend::GLES_SURF_RGBA16F;
         let mut bad_blend = blend;
@@ -1056,9 +1058,10 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
             ("a D24S8 smaller than the target", why(&small_ds), not_built(NOT_BUILT_ZS_SIZE)),
             ("a fixed-function blend is built", why(&blend), built),
             ("a min blend runs in Mesa's blend shader", why(&min_blend), built),
+            ("a min blend into RGB565 runs in its blend shader", why(&rgb565_min), built),
             (
-                "a min blend into RGB565 needs a blend shader not built",
-                why(&rgb565_min),
+                "a min blend into RGB565 at 4x needs a blend shader not built",
+                why(&rgb565_min_4x),
                 not_built(frame::NOT_BUILT_BLEND_SHADER),
             ),
             ("a constant colour of three values runs in a blend shader", why(&const_blend), built),
@@ -1529,6 +1532,75 @@ fn a_highp_colour_s_blend_shader_reads_it_as_fp32() {
         .expect("a buffer at the shader's address");
         let got: Vec<u64> = code.chunks(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect();
         assert_eq!(got, want, "the fp32 colour's blend shader");
+    });
+}
+
+/// An RGB565 and an XRGB8888 surface (no alpha): a constant colour blend
+/// whose channels differ draws with Mesa's blend shader for that target
+/// (tools/mali/testdata/pan_blend_ref/rgb565/, xrgb8888/, state 151), word
+/// for word at the address the descriptor names; and case 190's column 4
+/// (ONE_MINUS_DST_ALPHA, a blend shader into RGBA8) runs in the blend unit
+/// as Mesa's does once st/mesa's `fix_xrgb_alpha` makes the factor ZERO
+/// (`blend::without_dst_alpha`).
+#[test]
+fn a_surface_without_alpha_blends_with_mesa_s_shader_for_it() {
+    use crate::mali::genxml::v10::Blend;
+    use crate::shaderc::{
+        SHC_BF_CONST_COLOR, SHC_BF_INV_CONST_COLOR, SHC_BF_INV_DST_ALPHA, SHC_BF_INV_SRC_ALPHA, SHC_BF_ONE, SHC_BF_ZERO,
+    };
+    let words_of = |text: &str| -> Vec<u64> {
+        text.lines().map(|l| u64::from_str_radix(l.trim(), 16).expect("a hex word")).collect()
+    };
+    let _rig = Rig::new(true);
+    assert_eq!(mali_init(), 0);
+    let t = target();
+    with_programs(TRI_VS, TRI_FS, |vs, fs| {
+        for (format, text) in [
+            (
+                backend::GLES_SURF_RGB565,
+                include_str!("../../tools/mali/testdata/pan_blend_ref/rgb565/shaders/0347f4e59d1faa22.words"),
+            ),
+            (
+                backend::GLES_SURF_XRGB8888,
+                include_str!("../../tools/mali/testdata/pan_blend_ref/xrgb8888/shaders/9a9eaf603164ac14.words"),
+            ),
+        ] {
+            let want = words_of(text);
+            let mut d = triangle(t, &VERTICES);
+            (d.vs, d.fs, d.blend, d.target_format) = (vs, fs, true, format);
+            (d.blend_src_rgb, d.blend_dst_rgb) = (SHC_BF_CONST_COLOR as u8, SHC_BF_INV_CONST_COLOR as u8);
+            (d.blend_src_alpha, d.blend_dst_alpha) = (SHC_BF_CONST_COLOR as u8, SHC_BF_INV_CONST_COLOR as u8);
+            d.blend_color = [0.2, 0.4, 0.6, 0.8];
+            let before = with(|m| m.submits.len());
+            assert_eq!(draw_flush(&d), 0, "format {format}");
+            let stream = with(|m| m.submits[before..].last().expect("a frame").1.clone());
+            let blend_va = reg_at_idvs(&stream, 50).expect("a blend descriptor") & !63;
+            let bd = with(|m| m.read(blend_va, Blend::LENGTH));
+            assert_eq!(bd[..12], [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "format {format}: mode Shader");
+            let pc = u64::from(u32::from_le_bytes(bd[12..16].try_into().unwrap()));
+            let code = with(|m| {
+                m.bufs
+                    .iter()
+                    .map(|b| (b.gpu & !0xffff_ffff) | pc)
+                    .find(|&va| m.find(va, 8 * want.len()).is_some())
+                    .map(|va| m.read(va, 8 * want.len()))
+            })
+            .expect("a buffer at the shader's address");
+            let got: Vec<u64> = code.chunks(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect();
+            assert_eq!(got, want, "format {format}: Mesa's blend shader");
+            /* case 190 column 4: ONE_MINUS_DST_ALPHA is ZERO, fixed function */
+            let mut c4 = d;
+            c4.blend_src_rgb = SHC_BF_INV_DST_ALPHA as u8;
+            c4.blend_dst_rgb = SHC_BF_INV_SRC_ALPHA as u8;
+            (c4.blend_src_alpha, c4.blend_dst_alpha) = (SHC_BF_ONE as u8, SHC_BF_ZERO as u8);
+            let before = with(|m| m.submits.len());
+            assert_eq!(draw_flush(&c4), 0, "format {format}: column 4");
+            let stream = with(|m| m.submits[before..].last().expect("a frame").1.clone());
+            let blend_va = reg_at_idvs(&stream, 50).expect("a blend descriptor") & !63;
+            let bd = with(|m| m.read(blend_va, Blend::LENGTH));
+            assert_ne!(bd[8..12], [0; 4], "format {format}: column 4 is not in mode Shader");
+            assert_ne!(bd[4..8], [0; 4], "format {format}: column 4 has an equation");
+        }
     });
 }
 

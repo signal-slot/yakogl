@@ -5128,6 +5128,7 @@ fn blend_key(text: &str) -> super::blend::Key {
         /* a uint32 colour (a highp `out uvec4`) takes the fp32 key: the
          * record's colour_f16 is false for both (FsPrecision::colour_f16) */
         colour_f32: w.len() == 9,
+        target: super::blend::Target::Rgba8,
     }
 }
 

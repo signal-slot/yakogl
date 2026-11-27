@@ -483,7 +483,8 @@ pub struct Channel {
 /// Mesa's blend shader key without the constants
 /// (`pan_blend_shader_key`, pan_blend.h): the colour's and the alpha's
 /// equations, the colour mask, the sample count, the fragment colour's type
-/// (`src0_type`: fp16, or fp32 with `colour_f32`); an RGBA8 UNORM target.
+/// (`src0_type`: fp16, or fp32 with `colour_f32`) and the UNORM target's
+/// format.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Key {
     pub rgb: Channel,
@@ -493,6 +494,51 @@ pub struct Key {
     /// The fragment program writes the colour as fp32 (a highp ES 3.00
     /// `out vec4`), read from r0-r3 and converted (pan_blend.c:847-851).
     pub colour_f32: bool,
+    pub target: Target,
+}
+
+/// The target's pipe format (`rt_state->format`), the UNORM ones a blend
+/// shader is built for: what the shader reads of it is whether it has an
+/// alpha channel (`channel_exists`, `util_format_colormask`), its channel
+/// count (`nr_channels`) and its tile buffer format
+/// ([`Target::conversion`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Target {
+    /// `PIPE_FORMAT_R8G8B8A8_UNORM`.
+    Rgba8,
+    /// `PIPE_FORMAT_B5G6R5_UNORM`: three channels, no alpha.
+    Rgb565,
+    /// `PIPE_FORMAT_B8G8R8X8_UNORM` (DRM XRGB8888; `R8G8B8X8` builds the
+    /// same words): four channels, the fourth X.
+    Xrgb8888,
+}
+
+impl Target {
+    /// The memory format of the internal descriptor the blend shader's
+    /// `LD_TILE` and `BLEND` take (`pan_blend_get_internal_desc` with
+    /// `dithered` false, pan_blend.c:976-998): RGBA8_TB in RGBA order, and
+    /// R5G6B5 PU in RGB1 order (`MALI_BLEND_PU_R5G6B5A0`, pan_format.c:31).
+    pub const fn conversion(self) -> u32 {
+        match self {
+            Target::Rgba8 | Target::Xrgb8888 => 0xed000,
+            Target::Rgb565 => 0xe3010,
+        }
+    }
+
+    /// The internal descriptor's low word: mode OPAQUE (1), `num_comps`
+    /// (the format's `nr_channels`) less one in bits 3-4, RT 0.
+    const fn desc_low(self) -> u64 {
+        match self {
+            Target::Rgba8 | Target::Xrgb8888 => 0x19,
+            Target::Rgb565 => 0x11,
+        }
+    }
+
+    /// Whether the format has an alpha channel (`channel_exists(desc, 3)`,
+    /// nir_lower_blend.c:331-336; bit 3 of `util_format_colormask`).
+    pub const fn has_alpha(self) -> bool {
+        matches!(self, Target::Rgba8)
+    }
 }
 
 const ONE16: u64 = 0x3c00;
@@ -517,7 +563,7 @@ pub fn build(n: &mut Nir<'_>, key: Key) -> R<()> {
      * right to left */
     let sample = if key.samples > 1 { n.intr(Intr::SampleId, 1, 32, &[])? } else { n.konst(32, &[0])? };
     n.push(sample)?;
-    let conv = n.konst(32, &[0xed000])?;
+    let conv = n.konst(32, &[u64::from(key.target.conversion())])?;
     n.push(conv)?;
     let cov = n.intr(Intr::Coverage, 1, 32, &[])?;
     n.push(cov)?;
@@ -557,9 +603,14 @@ pub fn build(n: &mut Nir<'_>, key: Key) -> R<()> {
     let one = n.konst(16, &[ONE16])?;
     n.push(one)?;
     let _ = (zero, one);
-    /* dst = vec4(channel 0..3), its arguments right to left */
+    /* dst = vec4(channel 0..3), its arguments right to left; a format
+     * without alpha reads 1 (nir_lower_blend.c:950-961) */
     let mut m = [0u16; 4];
     for ch in (0..4).rev() {
+        if ch == 3 && !key.target.has_alpha() {
+            m[ch] = one;
+            continue;
+        }
         m[ch] = n.alu(Op::Mov, 1, 16, &[(dest, sw(ch as u8))])?;
         n.push(m[ch])?;
     }
@@ -598,7 +649,20 @@ pub fn build(n: &mut Nir<'_>, key: Key) -> R<()> {
         color = n.alu(Op::Vec4, 4, 16, &[(mm[0], ID), (mm[1], ID), (mm[2], ID), (mm[3], ID)])?;
         n.push(color)?;
     }
-    let desc = n.konst(64, &[0x000e_d000_0000_0019])?;
+    if !key.target.has_alpha() {
+        /* nir_color_mask with the undef and `util_format_colormask`
+         * (pan_blend.c:919-921): the channels the format has, alpha
+         * undefined; its arguments right to left */
+        let mut mm = [0u16; 4];
+        for ch in (0..4).rev() {
+            let from = if ch < 3 { color } else { undef };
+            mm[ch] = n.alu(Op::Mov, 1, 16, &[(from, sw(ch as u8))])?;
+            n.push(mm[ch])?;
+        }
+        color = n.alu(Op::Vec4, 4, 16, &[(mm[0], ID), (mm[1], ID), (mm[2], ID), (mm[3], ID)])?;
+        n.push(color)?;
+    }
+    let desc = n.konst(64, &[u64::from(key.target.conversion()) << 32 | key.target.desc_low()])?;
     n.push(desc)?;
     let cov2 = n.intr(Intr::Coverage, 1, 32, &[])?;
     n.push(cov2)?;
@@ -2677,9 +2741,28 @@ impl Nir<'_> {
             progress |= self.algebraic(&blend_nir_rules::OPT)?;
             progress |= self.constant_folding()?;
             if !progress {
-                return Ok(());
+                return self.lower_undef_to_zero();
             }
         }
+    }
+
+    /// `nir_lower_undef_to_zero` (nir_lower_undef_to_zero.c), which
+    /// `bi_optimize_loop` runs after its loop (bifrost_nir.c:273): each
+    /// undef a zero constant of its size, in its place (the alpha a target
+    /// without one leaves undefined, pan_blend.c:919-921).
+    fn lower_undef_to_zero(&mut self) -> R<()> {
+        for k in 0..self.len {
+            let i = self.order[k];
+            let ins = self.ins[i as usize];
+            if ins.kind != Kind::Undef {
+                continue;
+            }
+            let zero = self.konst(ins.bits, &[0; 4][..ins.comps as usize])?;
+            self.insert(zero, k)?;
+            self.rewrite_uses(i, zero);
+            self.remove(i)?;
+        }
+        Ok(())
     }
 
     fn late_loop(&mut self) -> R<()> {
@@ -2839,6 +2922,7 @@ mod tests {
             mask: 11,
             samples: 1,
             colour_f32: false,
+            target: Target::Rgba8,
         };
         let mesa = "16x4 %0 = @load_blend_input_pan
 32 %1 = @load_cumulative_coverage_pan
@@ -2863,6 +2947,48 @@ mod tests {
 16x4 %20 = vec4 %18.x, %18.y, %6.z, %19
 64 %21 = load_const (0x000ed00000000019)
 @blend_pan (%1, %21, %20)
+@blend_return_pan";
+        let ours = crate::shaderc::online::store::with_scratch(|sc| {
+            let mut n = Nir::new(sc).expect("the scratch arena holds a blend shader's NIR");
+            build(&mut n, key).expect("the build");
+            n.optimize().expect("Mesa's passes");
+            n.dump().join("\n")
+        })
+        .expect("the scratch arena is free");
+        assert_eq!(ours, mesa);
+    }
+
+    /// An RGB565 target's NIR after Mesa's passes (`BIFROST_MESA_DEBUG=
+    /// shaders,internal` on the drm-shim, tools/mali/pan_blend_ref.py's draw
+    /// of state 10 into its rgb565 target, normalised as above): the tile
+    /// read as R5G6B5 PU, the alpha written undefined (a zero after
+    /// `nir_opt_undef`), the descriptor's three channels; add ZERO,
+    /// CONSTANT_COLOR on both channel groups.
+    #[test]
+    fn the_nir_mesa_s_passes_leave_for_an_rgb565_target_is_ours() {
+        let zero = Factor { base: Base::One, invert: true };
+        let cc = Factor { base: Base::ConstColor, invert: false };
+        let c = Channel { func: Func::Add, src: zero, dst: cc };
+        let key = Key { rgb: c, alpha: c, mask: 0xf, samples: 1, colour_f32: false, target: Target::Rgb565 };
+        let mesa = "32 %0 = @load_cumulative_coverage_pan
+32 %1 = load_const (0x0000001f)
+32 %2 = iand %0, %1
+32 %3 = load_const (0x000e3010)
+32 %4 = load_const (0xff000000)
+16x4 %5 = @load_tile_pan (%4, %2, %3)
+32 %6 = load_const (0x00000000)
+32 %7 = load_const (0x00000001)
+32x4 %8 = @load_ubo (%7, %6)
+16x2 %9 = f2f16 %8.xy
+16 %10 = f2f16 %8.z
+16x2 %11 = fsat %9
+16 %12 = fsat %10
+16x2 %13 = fmul %5.xy, %11
+16 %14 = fmul %5.z, %12
+16 %15 = load_const (0x0000)
+16x4 %16 = vec4 %13.x, %13.y, %14, %15
+64 %17 = load_const (0x000e301000000011)
+@blend_pan (%0, %17, %16)
 @blend_return_pan";
         let ours = crate::shaderc::online::store::with_scratch(|sc| {
             let mut n = Nir::new(sc).expect("the scratch arena holds a blend shader's NIR");
