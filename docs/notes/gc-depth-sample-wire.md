@@ -38,14 +38,10 @@ need it. If the customer id is read later and differs, recheck the outcome
 on that board. A second board session (the (b) arms, knobs 3 and 4) is also
 on the X2. Where a section below says "board session", it means the X2's.
 
-**Status 2026-11-27: no verdict is recorded yet.** That day's `dtpu`
-session on the X2 never reached the page: the crash loader refused the jump
-because `crash_irq_chips` accepts no interrupt on the X2's chips
-(`gc-depth-sample.md`, "The X2 session of 2026-11-27"). Until a page whose
-check 3 passed exists there is no code for wire-verdict to take, and the
-11-11 record's prediction of code 3 is a prediction, not a result. Once the
-loader accepts the X2 and the page is recorded, the carry-over stated above
-applies to its code.
+**Status 2026-11-27:** the verdict is recorded: the second `dtpu` session
+measured on the Armadillo-X2 reached the page and gave code 3 (see "The X2
+verdict" below and `gc-depth-sample.md`, "The X2 session of 2026-11-27,
+second run").
 
 ## The three outcomes, read from case `dtpu`
 
@@ -67,7 +63,7 @@ does not apply until check 3 passes.
 ### The X2 verdict: (a) plus the texture-cache flush, mode 4
 
 Case 222 `dtpu` ran **measured on the Armadillo-X2 in place of the Verdin
-iMX8MP** (record: `records/imx8mp/—`, commit —). Check 3 passed, so the
+iMX8MP** (record: `records/x2/20261127-0752-dtpu-x2-c8be59f6-786dca85/`, image built from origin/main `c8be59f6`, page words w1 `0x00003091`, w2 `0x10000001`, w3 `0x00201000`). Check 3 passed, so the
 record is a verdict. The code is **3**, and **check 7 failed**: with no wait
 and no flush between the depth pass and the sampling draw, the first stale
 texel is at index 32. Check 4 first failed at index 1 with P1 `0xfffeff81`,
@@ -87,9 +83,9 @@ and commits of the after measurement: —.
 Which sections now apply: the "(a)" sections with "(a).9"'s flush and
 "(a).10"'s code-3 variant. The (b) sections (GPU copy) and (c)'s CPU fixes
 are not the default; (b) stays behind knob mode 3 and (c)'s fixes are
-already on main. The record directory, commit and page words are in
-`gc-depth-sample.md`'s session section (the "—" above is not yet filled
-there either).
+already on main. The record directory, commit and page words are also in
+`gc-depth-sample.md`'s session section; the full image sha256 is missing
+from history (it begins `786dca85`).
 
 ## What holds for every outcome
 
@@ -466,9 +462,7 @@ from a CPU model that counts every ground fragment, including the ones the
 horse later covers, so they are upper bounds, and `horse.3ds` is not in the
 tree to re-run it; refract carries an analytic bound, not a pixel count. The
 verdict code itself is measured on the Armadillo-X2 in place of the Verdin
-iMX8MP, as "Where the verdict comes from" above records — and, as of
-2026-11-27, still awaits the rerun recorded there: no verdict code exists
-yet, code 3 included.
+iMX8MP, as "The X2 verdict" above records (code 3, check 7 failing).
 
 ### (a) Host test: a new test file for the sample path (never committed)
 
