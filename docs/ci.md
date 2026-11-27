@@ -590,6 +590,14 @@ directories warm between runs) and only the value `1` turns it on. With it:
   `build/precompiled`, `build/glmark2-host`. A check.sh started from a row (a
   self-test) never prunes.
 
+With `--jobs 1` (the default) and `CARGO_TARGET_DIR` set, check.sh also runs
+`tools/env/gate_prune.sh $CARGO_TARGET_DIR --incremental --artefacts
+--if-free-below <GiB>` after each row: the compiled test executables go only
+when the target's disk has less than `YAKOGL_CHECK_PRUNE_FREE_BELOW` GiB free
+(default 40). Later rows relink what they need; no row is skipped or turned
+into a gap. With `--jobs` above 1 rows share the target, so the script is not
+called. The test-ok store lies outside the target and is never touched.
+
 Whether a pruned run fits a 193 GB host has not been measured yet. Without
 pruning a full gate needs about 220 GB free (3.8).
 

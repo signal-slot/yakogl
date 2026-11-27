@@ -728,7 +728,7 @@ check_disk() {
       *)
         gb=$((kb / 1048576))
         if [ "$gb" -ge "$min" ]; then
-          line ok "$name" "$gb GB free, need $min GB $how ($d)"
+          line ok "$name" "$gb GB free, need $min GB $how ($d); a full gate needs about ${YAKOGL_GATE_MIN_FREE_GB:-220} GB without pruning, about ${YAKOGL_GATE_MIN_FREE_GB_PRUNED:-50} GB with YAKOGL_CHECK_PRUNE=1"
         else
           line "$bad" "$name" "$gb GB free on the filesystem of $d, a full gate needs about $min GB $how (YAKOGL_GATE_MIN_FREE_GB)"
         fi ;;
