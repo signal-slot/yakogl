@@ -820,6 +820,7 @@ pub(crate) fn bind_base_level(t: &GlTexture) -> u8 {
 
 pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
     let (linear_filter, min_linear, mip_filter, mip_levels) = sampling_fields(t);
+    let (min_lod, max_lod) = bind_lod_range((t.min_lod, t.max_lod));
     GlesTextureBind {
         format: t.texfmt,
         type_: GLES_TEXTYPE_2D,
@@ -846,8 +847,20 @@ pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
         depth_luminance: texture_depth_luminance(t) as u8,
         swizzle: bind_swizzle(t),
         base_level: bind_base_level(t),
+        min_lod,
+        max_lod,
         ..GlesTextureBind::ZERO
     }
+}
+
+/// [`GlesTextureBind::min_lod`] and [`GlesTextureBind::max_lod`] of
+/// GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD `(min, max)` (the bound sampler
+/// object's, else the texture's; ES 3.0.6 3.8.10): 1/64 levels, the maximum
+/// plus one. GL's defaults (-1000, 1000) are (0, 0), a zeroed bind's, and
+/// so is every ES 2.0 texture, whose glTexParameter has neither.
+pub(crate) fn bind_lod_range((min, max): (f32, f32)) -> (u16, u16) {
+    let max_lod = if max >= 15.0 { 0 } else { backend::gles_lod_q6(max) + 1 };
+    (backend::gles_lod_q6(min), max_lod)
 }
 
 /// [`GlesTextureBind::swizzle`] of texture `t`: GL_TEXTURE_SWIZZLE_R .. _A
@@ -5104,8 +5117,9 @@ fn build_common(
             }
             /* A sampler object bound to the unit replaces the texture's own
              * filters and wraps (ES 3.0 3.8.2), completeness included; the
-             * texture's are put back below. Its LOD range is not applied;
-             * its compare mode and function are (`compare_op`). The swizzle
+             * texture's are put back below. Its LOD range (`sampler_lod`)
+             * and its compare mode and function (`compare_op`) are applied
+             * below. The swizzle
              * is the texture's alone (3.8.2 lists it under texture state). */
             let own = (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r);
             if let Some(s) = sampler {
@@ -5167,6 +5181,10 @@ fn build_common(
             tb.wrap_r = map_wrap(t.wrap_r);
             tb.swizzle = bind_swizzle(t);
             tb.base_level = bind_base_level(t);
+            /* the sampler object's LOD range replaces the texture's (ES 3.0
+             * 3.8.2), as its filters and compare do above */
+            (tb.min_lod, tb.max_lod) =
+                bind_lod_range(super::es3::sampler_lod(c.index, unit).unwrap_or((t.min_lod, t.max_lod)));
             let incomplete = incomplete_reason(t);
             (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = own;
             if let Some(why) = incomplete {

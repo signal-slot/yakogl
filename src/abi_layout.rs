@@ -273,6 +273,8 @@ const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, target_kick) =
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, depth_id) == 52);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, cpu) == 56);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, swizzle) == 64);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, min_lod) == 68);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, max_lod) == 70);
 const _: () = assert!(size_of::<crate::backend::GlesDrawTarget>() == 24);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, gpu) == 0);
 const _: () = assert!(offset_of!(crate::backend::GlesDrawTarget, w) == 8);

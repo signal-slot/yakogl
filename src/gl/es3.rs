@@ -146,6 +146,14 @@ pub(super) fn sampler_compare(index: u8, unit: usize) -> Option<(GLenum, GLenum)
     Some((s.compare_mode, s.compare_func))
 }
 
+/// GL_TEXTURE_MIN_LOD and GL_TEXTURE_MAX_LOD of the sampler object bound to
+/// texture unit `unit`, if any: they replace the texture's (ES 3.0 3.8.2).
+pub(super) fn sampler_lod(index: u8, unit: usize) -> Option<(GLfloat, GLfloat)> {
+    let h = *bound_sampler(index).get(unit)? as usize;
+    let s = samplers(index).get(h).filter(|s| h != 0 && s.n.used)?;
+    Some((s.min_lod, s.max_lod))
+}
+
 /// GL_SAMPLER_BINDING of the active texture unit, for glGetIntegerv.
 pub(super) fn sampler_binding(c: &GlContext) -> GLuint {
     bound_sampler(c.index).get(c.active_texture as usize).copied().unwrap_or(0)

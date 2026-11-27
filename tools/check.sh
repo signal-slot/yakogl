@@ -2244,6 +2244,12 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
 # draw's bind gets. Compiles to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_texsize
+# PowerVR GL_TEXTURE_BASE_LEVEL, MAX_LEVEL, MIN_LOD and MAX_LOD of a 2D and a
+# native cube texture (the texture's or the sampler object's) in the words
+# the draw's bind gets: SAMPLER_WORD0 minlod/maxlod, the cube's
+# IMAGE_WORD1.baselevel. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_base_lod.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_base_lod
 # PowerVR gl_FragDepth (the dEQP fbo.depth clamp cases): the written depth
 # clamped by a saturating fadd, fed to the ISP by depthf, and the record's
 # writes_depth kept apart from its sampler flavours (native_cube). Compiles

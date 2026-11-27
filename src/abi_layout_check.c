@@ -302,6 +302,8 @@ _Static_assert(offsetof(struct gles_texture_bind, target_kick) == 48, "struct gl
 _Static_assert(offsetof(struct gles_texture_bind, depth_id) == 52, "struct gles_texture_bind.depth_id");
 _Static_assert(offsetof(struct gles_texture_bind, cpu) == 56, "struct gles_texture_bind.cpu");
 _Static_assert(offsetof(struct gles_texture_bind, swizzle) == 64, "struct gles_texture_bind.swizzle");
+_Static_assert(offsetof(struct gles_texture_bind, min_lod) == 68, "struct gles_texture_bind.min_lod");
+_Static_assert(offsetof(struct gles_texture_bind, max_lod) == 70, "struct gles_texture_bind.max_lod");
 _Static_assert(sizeof(struct gles_draw_target) == 24, "struct gles_draw_target");
 _Static_assert(offsetof(struct gles_draw_target, gpu) == 0, "struct gles_draw_target.gpu");
 _Static_assert(offsetof(struct gles_draw_target, w) == 8, "struct gles_draw_target.w");

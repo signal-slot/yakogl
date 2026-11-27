@@ -36,7 +36,7 @@
 //!
 //! Not here: cube, 2D array and 3D textures (their base level is the GL
 //! core's to apply, docs/es3/shader-failure-map.md section 7) and
-//! GL_TEXTURE_MAX_LEVEL / MIN_LOD / MAX_LOD, which the bind does not carry.
+//! GL_TEXTURE_MAX_LEVEL / MIN_LOD / MAX_LOD (tests/es3_pvr_base_lod.rs).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_texsize_base_level
