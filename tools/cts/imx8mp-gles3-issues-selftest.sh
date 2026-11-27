@@ -83,3 +83,20 @@ cmp -s "$tmp/vd.md" "$tmp/nos.md" || fail "Verdin slices changed the text"
 if grep -q Armadillo "$tmp/vd.md"; then fail "Verdin draft names the X2"; fi
 if run --slices "$x2d" >/dev/null 2>&1; then fail "x2 draft without a commit"; fi
 echo "ok: Armadillo-X2 drafts, Verdin text unchanged"
+
+# Hang / abort / WDOG1 event ids: an event title, cause id, glob, entries, back-end area and a record
+# placeholder; --events drafts ids without cases from --causes.
+printf 'gc-gpu-hang-fbo-srgb-blend\tdEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.*\tGPU hang on entries 13-15 (predicted, 05769bf2): no result (src/vivante/draw.rs:10)\ngc-wdog1-filtering-3d\tdEQP-GLES3.functional.texture.filtering.3d.*\tWDOG1 reset (600 s) on entries 58-66 (predicted)\n' > "$tmp/ev-causes.tsv"
+printf 'board-only\tgc-gpu-hang-fbo-srgb-blend\te13\tNO FINISH\tdEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.r8.0\n' > "$tmp/ev.tsv"
+python3 -I "$tool" "$tmp/ev.tsv" --causes "$tmp/ev-causes.tsv" --commit abcd1234 --events > "$tmp/ev.md"
+grep -q '^## GC7000UL: GPU hang on entries 13-15 (cause gc-gpu-hang-fbo-srgb-blend)$' "$tmp/ev.md" || fail "hang title"
+grep -q 'Cause id: gc-gpu-hang-fbo-srgb-blend' "$tmp/ev.md" || fail "hang cause id"
+grep -q 'Glob: `dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.\*`' "$tmp/ev.md" || fail "hang glob"
+grep -q 'Table entries: e13$' "$tmp/ev.md" || fail "hang entries"
+grep -q 'Vivante back-end area: src/vivante/draw.rs' "$tmp/ev.md" || fail "hang area"
+grep -q 'Record: <slice record> at <commit>' "$tmp/ev.md" || fail "record placeholder"
+grep -q '^## GC7000UL: WDOG1 reset (cause gc-wdog1-filtering-3d)$' "$tmp/ev.md" || fail "wdog1 title"
+grep -q 'Table entries: see the slice README' "$tmp/ev.md" || fail "wdog1 without cases"
+grep -q 'Vivante back-end area: src/vivante, driver$' "$tmp/ev.md" || fail "default area"
+if python3 -I "$tool" "$tmp/ev.tsv" --causes "$tmp/ev-causes.tsv" | grep -q wdog1; then fail "--events off drafts an id without cases"; fi
+echo "ok: hang and WDOG1 event drafts"
