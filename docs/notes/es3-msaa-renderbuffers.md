@@ -475,19 +475,19 @@ tools/cts/host-deqp-run.sh --module=gles3 --gpu=$GPU --cts=<VK-GL-CTS> \
 The three back ends gave the same counts and the same messages in every
 group (a per-back-end table each, as the plan asks):
 
-| vivante (`GPU=vivante`) | cases | Pass | Fail | NotSupported | QualityWarning |
+| vivante (`GPU=vivante`), HOST-ONLY baseline | cases | Pass | Fail | NotSupported | QualityWarning |
 |---|---:|---:|---:|---:|---:|
 | `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
 | `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
 | `rasterization.fbo.rbo_multisample_max.` | 12 | 5 | 7 | 0 | 0 |
 
-| powervr (`GPU=powervr`) | cases | Pass | Fail | NotSupported | QualityWarning |
+| powervr (`GPU=powervr`), HOST-ONLY baseline | cases | Pass | Fail | NotSupported | QualityWarning |
 |---|---:|---:|---:|---:|---:|
 | `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
 | `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
 | `rasterization.fbo.rbo_multisample_max.` | 12 | 5 | 7 | 0 | 0 |
 
-| v3d (`GPU=v3d`) | cases | Pass | Fail | NotSupported | QualityWarning |
+| v3d (`GPU=v3d`), HOST-ONLY baseline | cases | Pass | Fail | NotSupported | QualityWarning |
 |---|---:|---:|---:|---:|---:|
 | `fbo.msaa.` | 70 | 0 | 38 | 32 | 0 |
 | `multisample.fbo_max_samples.` | 16 | 9 | 7 | 0 | 0 |
@@ -523,11 +523,107 @@ selects as the script ran them (`fbo.msaa.` 70, `fbo_max_samples.` 16,
 `rbo_multisample_max.` 12), so the totals differ from (d)'s Fail counts for
 the same group names.
 
-### (d2) HOST-ONLY rerun with `msaa-fbo` (to be filled by item `deqp-rerun`)
+### (d2) HOST-ONLY rerun with `msaa-fbo` (2026-11-27)
 
-Same three tables per back end and the same filters, one `OUT` per run, with
-the option of README section 2b on; the Pass/Fail/NotSupported moves against
-(d1) are the point, not the render verdicts. Placeholder: no rerun yet.
+**HOST-ONLY: the linux OSAL keeps the command stream and every read-back is
+black, so no Pass or Fail from a case that compares pixels is a render
+verdict.** Not a board result: nothing here belongs in `tools/cts/RESULTS.md`.
+
+- yakogl commit `e6fd5db7`: its `src/` is the integration tip `600c73c4`'s
+  (the commit adds only gate rows and a test pin); the script printed
+  `library and harness from e6fd5db7`.
+- VK-GL-CTS `93bca01861b0e3ef3c387027a9791e6d065f900c` (the `HOST_DEQP_CTS`
+  tree of `tools/cts/deps.toml`: `fetch_sources.py` run, the yakogl target
+  patch applied), deqp-gles3 built once (`build/host-deqp/deqp-gles3`).
+- Two arms, 18 runs, each with its own `--out`, the off arm first. The on arm
+  passes `-DYAKOGL_MSAA_FBO=ON` with `--lib-cmake-arg`, which builds it in its
+  own library directory (`lib[-powervr|-v3d]-es3-x1159629895`), so the off
+  arm's directories never had the option. The `--features` line of each
+  library's `build.make` reads `...,shaderc-online,msaa-fbo` for the on arm and
+  has no `msaa-fbo` for the off arm. Every run began all its cases (70, 16, 12).
+
+```sh
+export CTS=<VK-GL-CTS-host>
+# off, for GPU in vivante powervr v3d and G in the three filters of (d1):
+tools/cts/host-deqp-run.sh --module=gles3 --gpu=$GPU \
+  --out=build/host-deqp/msaa-$GPU-off-<name> dEQP-GLES3.functional.<G>
+# on:
+tools/cts/host-deqp-run.sh --module=gles3 --gpu=$GPU --lib-cmake-arg=-DYAKOGL_MSAA_FBO=ON \
+  --compare=build/host-deqp/msaa-$GPU-off-<name> \
+  --out=build/host-deqp/msaa-$GPU-on-<name> dEQP-GLES3.functional.<G>
+```
+
+The off arm repeats (d1) exactly on all three back ends (`fbo.msaa.` 0 / 38
+/ 32, `fbo_max_samples.` 9 / 7 / 0, `rbo_multisample_max.` 5 / 7 / 0, the
+same messages), so the moves below are the feature's alone.
+
+HOST-ONLY rerun, `msaa-fbo` on (Pass / Fail / NotSupported /
+CompatibilityWarning; the (d1) baseline in brackets):
+
+| vivante (`GPU=vivante`), HOST-ONLY rerun | cases | Pass | Fail | NotSupported | CompatibilityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 (0) | 39 (38) | 31 (32) | 0 (0) |
+| `multisample.fbo_max_samples.` | 16 | 9 (9) | 7 (7) | 0 (0) | 0 (0) |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 (5) | 5 (7) | 0 (0) | 2 (0) |
+
+| powervr (`GPU=powervr`), HOST-ONLY rerun | cases | Pass | Fail | NotSupported | CompatibilityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 (0) | 39 (38) | 31 (32) | 0 (0) |
+| `multisample.fbo_max_samples.` | 16 | 9 (9) | 7 (7) | 0 (0) | 0 (0) |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 (5) | 5 (7) | 0 (0) | 2 (0) |
+
+| v3d (`GPU=v3d`), HOST-ONLY rerun | cases | Pass | Fail | NotSupported | CompatibilityWarning |
+|---|---:|---:|---:|---:|---:|
+| `fbo.msaa.` | 70 | 0 (0) | 39 (38) | 31 (32) | 0 (0) |
+| `multisample.fbo_max_samples.` | 16 | 6 (9) | 10 (7) | 0 (0) | 0 (0) |
+| `rasterization.fbo.rbo_multisample_max.` | 12 | 5 (5) | 5 (7) | 0 (0) | 2 (0) |
+
+Moved cases (`--compare`, status off -> on):
+
+| case | vivante | powervr | v3d |
+|---|---|---|---|
+| `fbo.msaa.4_samples.rgba16f` | NotSupported -> Fail | NotSupported -> Fail | NotSupported -> Fail |
+| `rasterization.fbo.rbo_multisample_max.interpolation.lines_wide` | Fail -> CompatibilityWarning | Fail -> CompatibilityWarning | Fail -> CompatibilityWarning |
+| `rasterization.fbo.rbo_multisample_max.primitives.lines_wide` | Fail -> CompatibilityWarning | Fail -> CompatibilityWarning | Fail -> CompatibilityWarning |
+| `multisample.fbo_max_samples.constancy_alpha_to_coverage` | - | - | Pass -> Fail |
+| `multisample.fbo_max_samples.constancy_both` | - | - | Pass -> Fail |
+| `multisample.fbo_max_samples.constancy_both_inverted` | - | - | Pass -> Fail |
+
+What moved inside a status, by message (the `fbo.msaa.` Fail count hides
+it):
+
+| back end | `fbo.msaa.` Fail messages, on (off: 34 `Got GL_INVALID_OPERATION at es3fFboTestCase.cpp:154`, 4 `renderbuffer_resize`) |
+|---|---|
+| vivante | 23 `Image comparison failed`, 12 `GL_INVALID_OPERATION at es3fFboTestCase.cpp:90`, 4 `renderbuffer_resize` |
+| powervr | 35 `Image comparison failed`, 4 `renderbuffer_resize` |
+| v3d | 23 `Image comparison failed`, 12 `GL_INVALID_OPERATION at es3fFboTestCase.cpp:90`, 4 `renderbuffer_resize` |
+
+- **The 34 API Fails are gone on every back end.** The 2- and 4-sample
+  `glRenderbufferStorageMultisample` calls now allocate (`GL_MAX_SAMPLES` 4);
+  the cases run to their pixel comparison, which reads black on the host
+  (`Image comparison failed`, meaningless). The NotSupported split is 19
+  `Sample count not supported` (the 8-sample cases and `2_samples.rgba16f`)
+  and 12 `Format not supported` (float formats). `4_samples.rgba16f` passes
+  the sample-count check now and fails on the black read-back.
+- **The 12 `GL_INVALID_OPERATION at es3fFboTestCase.cpp:90`** on vivante and
+  v3d are the depth/stencil cases' resolve blit: the depth/stencil resolve gap
+  of (g) and (h) (`gl-ds-dst-clear`, `gc-ds-read`, `gc-ds-write` on the GC7000UL;
+  the V3D's `v3d_depth_resolve` / `v3d_stencil_resolve` give nothing for 4x
+  depth/stencil). The PowerVR's blit is accepted and the cases fail on the
+  black read-back.
+- **v3d `fbo_max_samples.constancy_alpha_to_coverage`, `_both`,
+  `_both_inverted`**, and `proportionality_alpha_to_coverage` (already Fail
+  off, on the black read-back), end on `glDrawArrays ... GL_INVALID_OPERATION
+  at es3fMultisampleTests.cpp:345`: the V3D refuses alpha-to-coverage at 4x
+  (`v3d-msaa-fbo` handoff). It is an API error, so a real regression of the
+  status. The other back ends draw it.
+- **`lines_wide` Fail -> CompatibilityWarning** on all three: at 4 samples
+  dEQP accepts the wide lines with a warning. On the host this is the black
+  read-back's verdict as much as any, see (h).
+- **vivante's colour 4x draws are 1x here.** `msaa_fbo::unsupported` refuses
+  sizes that are not multiples of 16x4 (dEQP draws 119x131 and 40x40), so the
+  GC7000UL drew those cases single-sampled. That does not change a host status.
+  `gc-msaa-pad` lifts the limit and `deqp-rerun2` reruns it.
 
 ### (d3) What each group compares, and the depth/stencil resolve destination
 
