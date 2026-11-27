@@ -287,7 +287,7 @@ fn build(target: &V3dJob71Target, clear: &V3dJob71Clear, draws: &[Draw]) -> Ours
         inp.extend(raw(&fs));
         inp.extend(raw(&vs));
         inp.extend(raw(&cs));
-        for x in [dr.prim, dr.count, dr.first] {
+        for x in [dr.prim, dr.count, dr.first, 0] {
             w(&mut inp, x);
         }
         // no uniform words, no GL uniform storage, three attribute records
