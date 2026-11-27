@@ -7399,7 +7399,13 @@ fn walk_nodes(
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
-                    let computed = f.alu_of(x).is_some() && a == AluOp::Fceil;
+                    /* `floor` of a quotient, `mod`'s `x - y * floor(x / y)`
+                     * (arith step 1a; deqp_arith_op_common_mod_fs_mediump:
+                     * `FRCP.f16`, `FMA.v2f16`, `FROUND.v2f16.rtn`, then
+                     * `FMA.v2f16 r0, r1^.neg.h00, r2^.h00, r0^.h00`) */
+                    let quotient = matches!(f.alu_of(x), Some((Alu::Fmul, [p, q, _]))
+                        if [p, q].iter().any(|&v| matches!(f.alu_of(v), Some((Alu::Frcp, _)))));
+                    let computed = f.alu_of(x).is_some() && (a == AluOp::Fceil || quotient);
                     /* the class is read where it decides: for a varying's
                      * lane that is no computed operand (a class the front
                      * end does not know is refused there, nir.rs `class_of`) */
@@ -7474,6 +7480,19 @@ fn walk_nodes(
                             continue;
                         }
                     }
+                    /* the front end's `mod(x, y)` is `ffma(y, fneg(floor(x
+                     * / y)), x)`; NIR's `fsub(x, fmul(y, floor))` negates
+                     * the product's first operand, `y` (`fneg(fmul(a, b))`
+                     * is `fmul(fneg(a), b)`, nir_opt_algebraic.py):
+                     * deqp_arith_op_common_mod_fs_mediump's `FMA.v2f16 r0,
+                     * r1^.neg.h00, r2^.h00, r0^.h00` */
+                    if let Some((Alu::Fneg, [fl, ..])) = f.alu_of(x[1]) {
+                        if matches!(f.alu_of(fl), Some((Alu::Ffloor, _))) && !matches!(x[0], Val::Const(_)) {
+                            let ny = f.neg(x[0], at)?;
+                            *o = f.node(Alu::Ffma, [ny, fl, x[2]], at)?;
+                            continue;
+                        }
+                    }
                     *o = f.node(Alu::Ffma, x, at)?;
                 }
             }
@@ -7496,7 +7515,28 @@ fn walk_nodes(
                             continue;
                         }
                     }
-                    let Val::Const(c) = lane(vals, s[0], i) else { return Err(MaliError::Arithmetic) };
+                    let Val::Const(c) = lane(vals, s[0], i) else {
+                        /* `1.0 / x` of a mediump lane: one 16-bit `frcp`
+                         * (arith step 1a; deqp_arith_op_binary_div_fs_mediump:
+                         * `FRCP.f16 r1, r1^.h00` of the narrowed varying,
+                         * then the quotient's `FMA.v2f16 r0, r0^.h00,
+                         * r1^.h00, 0x0.neg`) */
+                        let x = f.fp16_operand(lane(vals, s[0], i));
+                        if x == Val::Undef {
+                            return Err(MaliError::ColourForm);
+                        }
+                        /* of a varying's or a uniform's lane (matrix_div_fs_
+                         * mediump: `FRCP.f16.discard r0, u2.w0.h00`). Of a
+                         * computed lane there is `smoothstep`'s `1.0 / (e1 -
+                         * e0)`, whose operands Mesa loads in another order
+                         * (`x - e0` first, op_common_smoothstep_fs_mediump):
+                         * not lowered */
+                        if f.input_lane(x).is_none() && f.uniform_dword(x).is_none() {
+                            return Err(MaliError::Arithmetic);
+                        }
+                        *o = f.node(Alu::Frcp, [x, Val::Undef, Val::Undef], at)?;
+                        continue;
+                    };
                     let r = (1.0 / f32::from_bits(c)).to_bits();
                     if f16_exact(c).is_none() || f16_exact(r).is_none() {
                         return Err(MaliError::ConstantFold);

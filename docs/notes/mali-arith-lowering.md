@@ -413,6 +413,28 @@ Unblocks: `shaders.operator.binary_operator.{div,div_assign}`, `shaders.matrix.d
 `shaders.random.*` with `frcp`. Host forecast: `deqp-host-measure.sh --filter` on `shaders.operator`, `shaders.matrix`: the 179
 cases move to their next refusal; expect most operator-suite cases to compile (107 + 54 matrix), the random ones depend on the other ops.
 
+**Landed (the Mali compiler train, step 1), in part.** The `Frcp` arm makes
+one 16-bit `frcp` of a mediump varying's or uniform's lane, and the `Ffloor`
+arm takes the quotient under `mod`; the front end's `mod`, `ffma(y,
+fneg(floor(x / y)), x)`, is built with the negation on `y`, as NIR's
+`fneg(fmul(a, b))` rule leaves it. Byte-equal: `matrix_div_fs_mediump`,
+`op_binary_div_fs_mediump`, `op_binary_div_assign_fs_mediump`,
+`op_common_mod_fs_mediump` (the three `*_fs_highp` division references were
+byte-equal before). Left refused:
+
+- `op_common_smoothstep_fs_mediump`: with the reciprocal of a computed lane
+  it compiles to Mesa's instructions with the varyings loaded in another
+  order (Mesa computes `x - e0` before `e1 - e0`; `builtin_call.rs` expands
+  `smoothstep` with the reciprocal first, and that file is every back
+  end's). So `frcp` of a computed lane stays `Arithmetic`.
+- `op_common_mod_fs_highp` (`FsVaryingLoad`), `op_common_smoothstep_fs_highp`
+  (`ColourForm`): the highp island's `ffma`, not the division.
+- `other_frcp_fs_none`: its operand is `gl_FragCoord`'s lane.
+- `random_frcp_fs_mediump`: its reciprocal is lowered, a projective look-up
+  is next (`TexKind`).
+
+Step 1b is not landed.
+
 ### 4.2 Step 1b: fp32 transcendentals of a lane
 
 Mesa: rows `sin cos tan log2 log pow exp2` (fs). The kernel is fp32 at both precisions; the fp16 detail is only the

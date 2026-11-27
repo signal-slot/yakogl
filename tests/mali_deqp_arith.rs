@@ -29,6 +29,12 @@ mod mali_ref;
 /// prefix: each has a byte-compare test below.
 const LOWERED: &[&str] = &[
     "matrix_div_fs_highp",
+    /* arith step 1a: `1.0 / x` of a mediump varying or uniform lane
+     * (`FRCP.f16`), `mod`'s floor of the quotient */
+    "matrix_div_fs_mediump",
+    "op_binary_div_assign_fs_mediump",
+    "op_binary_div_fs_mediump",
+    "op_common_mod_fs_mediump",
     "constexpr_fceil_vs_highp",
     "constexpr_fsign_vs_highp",
     /* arith step 3: floor, ceil, sign of a mediump varying lane, float `!=`
@@ -77,6 +83,9 @@ const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no 
 const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 /// `MaliError::Rebalance`.
 const CHAIN: &str = "Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet";
+/// `random_frcp_fs_mediump` past its reciprocal (arith step 1a): its
+/// look-up with a projection.
+const TEX_KIND: &str = "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message, in the note's
 /// shape order: the shape, the stage and precision of the reference, how many
@@ -113,7 +122,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("isok_int_round_fs_mediump", ARITH),
     /* matrix.div fs highp: 18 cases of shaders.matrix.div.const_highp_mat2_float_fragment */
     /* matrix.div fs mediump: 36 cases of shaders.matrix.div.const_mediump_mat2_float_fragment */
-    ("matrix_div_fs_mediump", ARITH),
     /* matrix.storeout fs highp: 11 cases of shaders.matrix.add.const_highp_mat3_float_fragment */
     ("matrix_storeout_fs_highp", ARITH_CONST),
     /* matrix.storeout fs mediump: 18 cases of shaders.matrix.add.const_mediump_mat3_float_fragment */
@@ -163,9 +171,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.binary.add fs mediump: 8 cases of shaders.operator.binary_operator.add.mediump_float_vec3_fragment */
     ("op_binary_add_fs_mediump", OPERAND),
     /* op.binary.div_assign fs mediump: 28 cases of shaders.operator.binary_operator.div_assign_effect.mediump_float_fragment */
-    ("op_binary_div_assign_fs_mediump", ARITH),
     /* op.binary.div fs mediump: 20 cases of shaders.operator.binary_operator.div.mediump_float_fragment */
-    ("op_binary_div_fs_mediump", ARITH),
     /* op.binary.equal vs highp: 6 cases of shaders.operator.binary_operator.equal.highp_ivec2_vertex */
     ("op_binary_equal_vs_highp", ARITH),
     /* op.binary.equal vs mediump: 12 cases of shaders.operator.binary_operator.equal.mediump_ivec2_vertex */
@@ -213,7 +219,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.mod fs highp: 7 cases of shaders.operator.common_functions.mod.highp_float_fragment */
     ("op_common_mod_fs_highp", LOAD),
     /* op.common.mod fs mediump: 7 cases of shaders.operator.common_functions.mod.mediump_float_fragment */
-    ("op_common_mod_fs_mediump", ARITH),
     /* op.common.sign fs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_fragment */
     ("op_common_sign_fs_highp", ARITH),
     /* op.common.sign vs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_vertex */
@@ -321,7 +326,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* random.fne fs mediump: 19 cases of shaders.random.all_features.fragment.29 */
     ("random_fne_fs_mediump", ARITH),
     /* random.frcp fs mediump: 15 cases of shaders.random.texture.fragment.1 */
-    ("random_frcp_fs_mediump", ARITH),
+    ("random_frcp_fs_mediump", TEX_KIND),
     /* random.frsq fs mediump: 10 cases of shaders.random.all_features.fragment.35 */
     ("random_frsq_fs_mediump", ARITH),
     /* random.fsin fs mediump: 35 cases of shaders.random.all_features.fragment.18 */
@@ -430,7 +435,6 @@ fn matrix_div_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (matrix.div, fs, mediump; 36 cases)"]
 fn matrix_div_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_matrix_div_fs_mediump");
 }
@@ -585,7 +589,6 @@ fn op_binary_div_assign_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.div_assign, fs, mediump; 28 cases)"]
 fn op_binary_div_assign_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_binary_div_assign_fs_mediump");
 }
@@ -596,7 +599,6 @@ fn op_binary_div_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.div, fs, mediump; 20 cases)"]
 fn op_binary_div_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_binary_div_fs_mediump");
 }
@@ -800,7 +802,6 @@ fn op_common_mod_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.mod, fs, mediump; 7 cases)"]
 fn op_common_mod_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_mod_fs_mediump");
 }
@@ -1139,7 +1140,7 @@ fn random_fne_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (random.frcp, fs, mediump; 15 cases)"]
+#[ignore = "refused: a texture look-up other than texture2D(sampler2D, coordinate) (its `1.0 / x` is lowered, arith step 1a; random.frcp, fs, mediump; 15 cases)"]
 fn random_frcp_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_random_frcp_fs_mediump");
 }
