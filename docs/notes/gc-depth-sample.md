@@ -460,12 +460,13 @@ arms' pixels, the page), `main_imx8mp.c` (`dtpu_page_sel`), host selftest
 to `tools/board.sh x2 run`, on the image built as in the 11-11 session
 (`IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 222`, sweep image;
 the build check of this item used `-DCONFIG_YAKOGL_TEST_KNOBS=y`, rc 0).
-It runs case 222 alone and ends with the page. `SEL=0` still ends with the
-CASE record. If the arms did not run (check 1 or 2 stopped the case), there
+It runs case 222 alone and ends with the page; the record goes under
+`records/x2/` (gitignored, redacted), and it is measured on the Armadillo-X2
+in place of the Verdin iMX8MP. `SEL=0` still ends with the CASE record. If the arms did not run (check 1 or 2 stopped the case), there
 is no page and the record is the case's CASE record (the log says "no dtpu
 page").
 
-**Page.** `yakogl-tools record --words 3` shows kind PERF, tag `0xb0` and
+**Page.** Read it from the `records/x2/` record of the run. `yakogl-tools record --words 3` shows kind PERF, tag `0xb0` and
 the words w1, w2, w3:
 
 | word | bits | meaning |
