@@ -331,10 +331,17 @@ gate's `--changed` rows include it).
 - In scope: dEQP-GLES2 `functional.texture.mipmap.2d.generate.rgba8888_fastest`,
   `_nicest`, `_non_square_fastest` and `_non_square_nicest`
   (`tools/cts/gles2-mustpass.txt:14907-14910`).
-  - They are 4 of the 32 `generate.*` cases. They are the only ones the GPU
-    chain takes: plain RGBA8 2D (`src/pvr/backend.rs:6242-6247`).
-  - The a8, l8, la88, rgb565, rgb888, rgba4444 and rgba5551 cases, and every
-    cube case, stay with the GL core's CPU box.
+  - Correction (am62p-deqp, from `tests/pvr_mip_formats.rs`): not 4 but
+    20 of the 32 `generate.*` cases offer their chain to the GPU.
+    rgb565, rgb888, rgba4444 and rgba5551 are stored as RGBA8 too, so
+    those four formats and rgba8888 offer it, each with the fastest and
+    nicest hints, square and `non_square`. Of these 20, only the 10
+    square 64x64 chains take three levels a render. The 10 `non_square`
+    32x64 chains are refused by the backend at either setting (their 1x2
+    level: the PBE writes pixel pairs), so the GL core's CPU filter makes
+    them.
+  - The a8, l8 and la88 cases (12), and every cube case, stay with the GL
+    core's CPU box.
   - Any other `texture.mipmap.2d.*` or `texture.filtering.*` case that calls
     `glGenerateMipmap` on an RGBA8 2D texture also changes, as soon as its
     chain has 3 or more levels above 0 (render 2 exists).
@@ -664,10 +671,9 @@ reset or a wrong probe. The milliseconds did not follow:
   chain.
 
 So the knob stays **off**: `MIP_THREE_LEVELS_DEFAULT` is still `false`, and
-the `mip3-flip` item has nothing to flip. The per-case dEQP-GLES2
-`functional.texture.mipmap.2d.*` verdicts of both arms are item
-am62p-deqp's (it needs the board's dEQP stage 1). They were not read in
-this session.
+the `mip3-flip` item has nothing to flip. That session did not read the
+per-case dEQP-GLES2 `functional.texture.mipmap.2d.*` verdicts of the
+two arms. They are in the next section.
 
 **Pictures, read against `pvr-mip-three-levels-es2.md`.** The split is the
 same: 27 match, 6 mismatch. The set of mismatching scenes moved:
@@ -693,6 +699,148 @@ None of these moves is a mip move:
 That is what the es2 note expects: TPU levels 1 and 2 unchanged, and the
 ALU levels 1 to 3 LSB, inside tolerance 8.
 
+### dEQP mipmap.2d and case 250 on the Verdin AM62P (2026-11-27)
+
+Plan #420 item am62p-deqp. Measured on the Verdin AM62P (PowerVR
+BXS-4-64), in one lease of `target:am62p` and `target:am62p-console`.
+
+- **Arm A**: `472630df`, an origin/main commit as it is. It holds
+  `f740f881` (the knob), `f54e70f2` (case 250) and `facb5b54`
+  (mip3-deqp-diff.py).
+- **Arm E**: `8b837abd`, which is `472630df` plus one commit,
+  `pvr: arm e sets three mip levels a render on by default`. That commit
+  changes only `const MIP_THREE_LEVELS_DEFAULT: bool = false;` to `true`.
+  It recreates `76ef6dac`, which no longer exists. Both commits are the
+  same change on the same parent. Arm E was built locally and never
+  pushed.
+
+How both arms were built and run:
+
+- dEQP: one image with `CONFIG_DEQP_CASE`
+  `dEQP-GLES2.functional.texture.mipmap.2d.*`. It was built by
+  `tools/cts/am62p-deqp-images.sh` with a one-row table
+  (`# image MIP2D:`), the form of `am62p-full-tree.txt`. It was run by
+  `TREE_IMAGE_DIR=... tools/board.sh am62p tree` with
+  `BOARD_BOOT=uboot-mmc`. The dEQP stage 1 was built for this session
+  (`tools/cts/deps-env.sh --build --board am62p DEQP_WORK`).
+- Case 250: `tools/cts/pr-session.sh mip250-a --knob off --cases '250'`,
+  and `mip250-e ... --allow-local` for arm E. The results were read
+  from the console log in each board.sh record.
+
+The records stayed in the session's work trees, which are untracked
+and **not kept**. No console log was committed. In each record name the
+last eight hex digits are the image's sha256 prefix, not the commit:
+
+    A dEQP:     records/am62p/deqp-mip2d-472630df/20261127-2010-MIP2D-1a000fc4/
+    E dEQP:     records/am62p/deqp-mip2d-8b837abd/20261127-2014-MIP2D-6cad6599/
+    A case 250: build/pr/mip250-a-472630df/run-gltest/20261127-2004-pr-mip250-a-gltest-a1179fe0/
+    E case 250: build/pr/mip250-e-8b837abd/run-gltest/20261127-2000-pr-mip250-e-gltest-bdeb7361/
+
+`verdict=` lines (board.sh):
+
+    A dEQP:     board.sh am62p MIP2D rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=84s
+    E dEQP:     board.sh am62p MIP2D rc=0 verdict=done boot=uboot-mmc row boot_verdict=done result=legacy:deqp_summary resets=0 record=absent back_after=69s
+    A case 250: board.sh am62p pr-mip250-a-gltest rc=4 verdict=failed boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=77s
+    E case 250: board.sh am62p pr-mip250-e-gltest rc=4 verdict=failed boot=uboot-mmc row boot_verdict=done result=legacy:gl_test_all resets=0 record=absent back_after=90s
+
+**dEQP-GLES2 `functional.texture.mipmap.2d.*`, per case.** Both arms
+read `deqp: done: 84 passed, 0 failed, 0 not supported, 0 warnings,
+complete=1`, with 84 cases begun, 84 with a result and 0 GPU reset lines.
+Every one of the 84 mipmap.2d cases is **Pass on A and Pass on E**. The
+count of mipmap.2d cases whose verdict differs is **0**. All 84 cases, by
+family (`{a,b}` is both forms):
+
+| mipmap.2d family | cases, verdict A / E | differ |
+|---|---|---|
+| mipmap.2d.affine.* (12) | `{linear,nearest}_{linear,nearest}_{clamp,mirror,repeat}`: Pass / Pass | 0 |
+| mipmap.2d.basic.* (24) | `{linear,nearest}_{linear,nearest}_{clamp,mirror,repeat}` and each `_non_square`: Pass / Pass | 0 |
+| mipmap.2d.bias.* (4) | `{linear,nearest}_{linear,nearest}`: Pass / Pass | 0 |
+| mipmap.2d.generate.* (32) | `{a8,l8,la88,rgb565,rgb888,rgba4444,rgba5551,rgba8888}` x `{,non_square_}{fastest,nicest}`: Pass / Pass | 0 |
+| mipmap.2d.projected.* (12) | `{linear,nearest}_{linear,nearest}_{clamp,mirror,repeat}`: Pass / Pass | 0 |
+
+`python3 -I tools/cts/mip3-deqp-diff.py <A dEQP record> <E dEQP record>`
+ends with the line below and exits 0:
+
+    mipmap.2d: 84 cases, 0 differ (new failures 0, new passes 0, other 0)
+
+No case differed, so no basic, projected or bias case needed a rerun.
+These verdicts are the ones the knob can change: the 10 square 64x64
+`generate.*` chains of rgb565, rgb888, rgba4444, rgba5551 and rgba8888
+(part (e)). They pass with three levels a render, so dEQP's threshold
+sees no ALU level off. The `non_square` 32x64 chains are refused at
+either setting, so dEQP does not exercise a non-square three-level
+render.
+
+**gl_test case 250 (`miplevels`), level by level.** On both arms checks
+1 to 3 are ok (program linked, framebuffers `0x7`, no GL error), and the
+case FAILs. 800x600 level 1 has max |d| 2 **on both arms**, so the
+failure is not the knob's (below, and the Handoff). Each level line
+reads `differ N, max |d| M, ties-even E, ties-up U`. The ALU levels of
+arm E are marked with `*`:
+
+| level | A `472630df` (off) | E `8b837abd` (on) |
+|---|---|---|
+| 800x600 L0 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| 800x600 L1 | 125873, **2**, 29741, 30282 | 125873, **2**, 29741, 30282 |
+| 800x600 L2 | 13741, 1, 7367, 7700 | 13741, 1, 7367, 7700 |
+| 800x600 L3 | 1763, 1, 1858, 2077 | 694, 1, 735, 3200 * |
+| 800x600 L4 | 294, 1, 71, 54 | 8, 1, 12, 110 * |
+| 800x600 L5 | 45, 1, 15, 11 | 44, 1, 13, 16 |
+| 800x600 L6 | 7, 1, 6, 8 | 0, 0, 0, 10 * |
+| 800x600 L7 | 0, 0, 1, 2 | 0, 0, 0, 6 * |
+| 800x600 L8 | 0, 0, 0, 2 | 0, 0, 0, 1 |
+| 800x600 L9 | 0, 0, 0, 1 | 0, 0, 0, 2 * |
+| 256x256 L0 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+| 256x256 L1 | 668, 1, 718, 7536 | 668, 1, 718, 7536 |
+| 256x256 L2 | 144, 1, 144, 1853 | 144, 1, 144, 1853 |
+| 256x256 L3 | 32, 1, 34, 529 | 0, 0, 0, 563 * |
+| 256x256 L4 | 13, 1, 3, 118 | 0, 0, 0, 121 * |
+| 256x256 L5 | 4, 1, 2, 29 | 4, 1, 2, 28 |
+| 256x256 L6 | 0, 0, 0, 12 | 0, 0, 0, 12 * |
+| 256x256 L7 | 0, 0, 0, 2 | 0, 0, 0, 2 * |
+| 256x256 L8 | 0, 0, 0, 0 | 0, 0, 0, 0 |
+
+The total lines:
+
+    A: gl_test: miplevels 800x600: levels 10, differ 141723, max |d| 2, ties-even 39059, ties-up 40137
+    A: gl_test: miplevels 256x256: levels 9, differ 861, max |d| 1, ties-even 901, ties-up 10079
+    E: gl_test: miplevels 800x600: levels 10, differ 140360, max |d| 2, ties-even 37868, ties-up 41327
+    E: gl_test: miplevels 256x256: levels 9, differ 816, max |d| 1, ties-even 864, ties-up 10115
+
+Both arms print the same first texel at max |d| 2:
+`miplevel 800x600 L1: first at (173, 9) got 0x63b9975c up 0x63b9975e
+even 0x63b8965e`. Its red byte is 0x5c, where both rules give 0x5e.
+
+How to read the table:
+
+- **The TPU levels are the same on both arms.** 800x600 L1 and L2 and
+  256x256 L1 and L2 are byte statistics for byte statistics equal. L2
+  is render 2's `o0` on arm E and a level kick on arm A, so a
+  three-target render stores its first level exactly as the level kick
+  does.
+- **The ALU levels of arm E are closer to the exact reference than arm
+  A's TPU levels.** On 256x256 they read differ 0 and ties-even 0: every
+  tie byte is the `floor(v * 255 + 0.5)` byte, and every other byte is
+  exact. On 800x600, L3 drops from 1763 differing bytes to 694, L4 from
+  294 to 8, and L6 from 7 to 0, all within one LSB.
+- **The 800x600 level-1 failure is the TPU's.** 26 % of its bytes equal
+  neither rule's byte, with ties split about evenly between E and U.
+  The 256x256 level 1 has the same exact quarter weights and reads 668
+  differing bytes. The likely cause is that the TPU's sub-texel position
+  is not exact at 800 and 600, where 1/400 and 1/300 are not binary
+  fractions. The case's header expected 0 differing bytes on the even
+  steps (from a host model in doubles), and its FAIL bound, max |d| > 1,
+  is tighter than this. That is a new defect, for both arms (Handoff).
+  It is not a regression of the knob.
+
+`tests/pvr_mip_ties.rs`'s `PINNED` hashes cannot be compared. Case 250
+prints no hash, and its level 0 (xorshift32 noise drawn by a pass) is
+not that file's `level0`.
+
+None of this changes `am62p-slow-terrain.md` candidate 2's conclusion.
+The knob stays off because the frame is not kick-bound. dEQP sees no
+difference.
+
 ## Open
 
 - How ties round in the pack, and whether the TPU's bilinear equals the
@@ -702,6 +850,33 @@ ALU levels 1 to 3 LSB, inside tolerance 8.
   probes see only quadrant centres of one colour, and glmark2's means moved
   by at most 2. The answer needs gl_test case 250's level read-back and
   the dEQP mipmap cases, both item am62p-deqp's.
+  **Answered in part by am62p-deqp, measured on the Verdin AM62P on
+  2026-11-27** (case 250 at `472630df` / `8b837abd`, records above):
+  - The pack does **not** round half to even. On 256x256, where every
+    step weighs 1/4 exactly, the TPU levels put 7536 of the 8254 tie
+    bytes that read as one of the two rules (L1), and 1853 of 1997 (L2),
+    on the half-up byte: 91 % and 93 %, on both arms.
+  - The rest read neither a clean half-up nor a half-even rule. The
+    ties-even counts (718, 144) match the differ counts (668, 144), so
+    on those ties the TPU's sum lands just under the tie and rounds
+    down whatever the parity. That points to the TPU filter's precision,
+    not to the pack's rule.
+  - mipgen3.frag's `Q` (`floor(v * 255 + 0.5)`) is the right macro.
+    Arm E's ALU levels on 256x256 read ties-up only, with 0 differing
+    bytes, and the pack of an ALU output does not round a second time.
+    Part (b) keeps `Q` as written.
+  - The 800x600 chain cannot answer the tie question. Its level 1
+    differs on 26 % of its bytes (max |d| 2) on both arms, so the tie
+    split there (29741 E, 30282 U) measures the TPU's sample position,
+    not the rounding.
+  - The odd-step half: **the TPU's bilinear is not the ALU's**, but the
+    two differ by 1 LSB at most. On 800x600's odd steps, arm A's TPU
+    levels differ from the exact reference on 294 bytes (L4) and 7
+    (L6). Arm E's ALU levels differ on 8 and 0.
+
+  Still open: why the TPU misses the exact box at 800x600 level 1 (the
+  Handoff names the defect). A per-texel tie answer on an NPOT chain
+  waits for that.
 - Whether a render whose emits have different pitches and maxclips stores
   correctly on the board. It is first run by E1's patch (two emits) or by
   this change (three). **Answered in part on 2026-11-27, on the Verdin
@@ -717,6 +892,32 @@ ALU levels 1 to 3 LSB, inside tolerance 8.
   A wrong pitch would shear a level and move those probes and means, so
   the store is right to that resolution. A per-texel answer needs case
   250's read-back.
+
+  **Answered by am62p-deqp, for the chains it reads, measured on the
+  Verdin AM62P on 2026-11-27** (`8b837abd`, records above): yes, those
+  renders store correctly.
+  - In arm E's case 250, every level that a three-target render stored
+    reads back within 1 LSB of the exact reference at every texel. The
+    800x600 chain's renders store L2 to L4 at pitches 256/128/64 and
+    maxclips 200x150/100x75/50x37 on a 400x300 grid. Then L5 to L7, then
+    L8 and L9. Render 2's pitches are padded past the widths (256 for
+    200, 128 for 100, 64 for 50), and the odd sizes include 50x37,
+    25x18, 12x9 and 3x2. The ALU levels differ on
+    fewer bytes than arm A's level kicks. On 256x256 they differ on 0.
+    A wrong pitch or maxclip would shear a level or cut it, which
+    shows as max |d| far above 1. The worst on any arm-E level is 1,
+    except 800x600 L1, which is the same on arm A and is not a
+    three-target render.
+  - dEQP: the 10 square 64x64 `generate.*` chains that take three levels
+    a render all Pass on arm E, as on arm A (0 of 84 differ).
+  - On the host, `tests/pvr_mip_mixed_pitch.rs` pins the same store
+    words for NPOT, odd-width, one-texel-wide, one-texel-high and
+    padded-pitch chains.
+
+  Not covered on the board: a non-square three-level chain. dEQP's
+  `non_square` 32x64 chains are refused at either setting, and the
+  64x32 shape runs only on the host (`tests/pvr_mip_formats.rs`). That
+  part is still open.
 - Why case 216's frame is 44.20 ms with 40 kicks and with 21, while the
   GPU is busy only 7.8 to 9.0 ms of it (above). Until that is known, fewer
   kicks cannot pay.
