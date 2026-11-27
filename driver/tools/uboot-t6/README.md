@@ -86,12 +86,12 @@ first stop code: record its cause, do not retry it.
 | 4 | `BOARD_HOST=... T6_HAND=... T6_RECORD_DIR=... T6_UART=... driver/tools/uboot-t6/prompt-reads.sh --go` | 0 | 12 no autoboot line, nothing written; 4 autoboot missed, Linux booted; 5 stopped at the prompt, power cut needed; 6 `reset` entered, no sign of Linux; 7 a command made U-Boot reset the board; 1 board not back in Armbian; 2 usage; 3 refused, board not rebooted; 40 RFC 2217 session or line not set; 41 RFC 2217 tool failed in the run |
 | 5 | `BOARD_HOST=... T6_HAND=... T6_RECORD_DIR=... T6_UART=... driver/tools/uboot-t6/prompt-go.sh <dir>/<probe>.bin <probe> --go` | 0 verdict PASS, Armbian back | 12, 4, 5, 6, 7 as step 4; 8 an answer differed, no `go`, Armbian back; 9 `go` not answered; 10 image started, no sign of Linux, needs a person; 11 verdict FAIL, Armbian back; 1, 2, 3, 40, 41 as step 4 |
 | 6 | `T6_ROUTE=uboot driver/tools/kexec-zephyr/t6-verdict.sh <probe> <record>/image.log` | 0 PASS | 1 FAIL (n of m lines not ok); 2 usage |
-| 7 | `python3 -I tools/cts/t6-uboot-handover-summary.py <reads-record> <t6_cold-record>` | 0 | 2 usage; 3 an address in the input; 4 a record unreadable |
+| 7 | `python3 -I tools/cts/t6-uboot-handover-summary.py <reads-record> <t6_gpu-record> [<t6_cold-record>]` | 0 | 2 usage; 3 an address in the input; 4 a record unreadable |
 | 8 | `tools/cts/t6-uboot-rows.sh <image-dir> <out-dir> <LABEL>... --go` | 0 | 2 usage or a refused label or image, nothing run; 3 stopped at a prompt-go code other than 0 or 11 (named in `rows.tsv`) |
 | 9 | `python3 -I tools/cts/t6-uboot-deqp-compare.py --uboot <rows out-dir\|rows.tsv\|record dir> --armbian tools/cts/log/2026-11-24-t6-gles2-S?-8ff01055` | 0 | 2 bad input; 3 only with `--kexec` (a bad kexec file) |
 | 10 | `BOARD_HOST=... driver/tools/uboot-t6/stage.sh undo <dir>/t6-boot.fingerprint` | 0 | 1 `/boot/yakogl` removed but a stock file differs (named); 2 usage; 3 refused |
 | 11 | `tools/cts/t6-redact-check.sh <record>` | 0 | 1 a finding (file, line and kind, never the text); 2 usage or a missing file |
-| 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, a secret survived redaction; 2 usage or no text file; 3 destination exists |
+| 12 | `tools/cts/t6-uboot-log.sh <record> <YYYY-MM-DD> <name> <sha8>`, into `tools/cts/log/<date>-t6-uboot-<name>-<sha8>/` | 0 | 1 refused, a secret survived redaction (a real reads record carries the `mmc part` UUIDs and the `serial#`: see step 12); 2 usage or no text file; 3 destination exists |
 
 Notes on the steps:
 
@@ -103,7 +103,8 @@ Notes on the steps:
    and `T6_HAND` are set; (b) python3 imports what `prompt-go.py` and
    `t6-uart-rfc2217.py` import; (c) the image directory (below); (d)
    `records/` is gitignored; (e) the `console-check.sh` command is printed,
-   not run. Exit 0 all ok, 1 a `FAIL`, 2 usage (not a directory). Check (c)
+   not run. Check (c) needs a local `origin/main` ref (`git fetch` is not
+   run for it). Exit 0 all ok, 1 a `FAIL`, 2 usage (not a directory). Check (c)
    needs one `COMMIT` file in `<image-dir>` (one sha, an ancestor of the
    local `origin/main`; nothing is fetched) and a `SHA256SUMS` (sha256sum
    format) whose hashes match, in one of two layouts. Single: each other
@@ -119,9 +120,10 @@ Notes on the steps:
    `<img-dir>` when its builder exits 0: `SHA256SUMS` (one line
    `<LABEL>/zephyr/zephyr.bin` per label of that call whose `<LABEL>.built`
    says rc=0 and whose image is not empty; a failed or empty row is named on
-   stderr and left out; the file is rewritten by each call, so a later
-   selective build lists only its own labels and preflight then names the
-   other images) and `COMMIT` (the full hash of the checkout's HEAD, the
+   stderr and left out; a later selective build replaces the lines of its
+   own labels and keeps every other label's line, and a call whose
+   checkout HEAD differs from the directory's `COMMIT` is refused before
+   building, exit 2: use a fresh directory) and `COMMIT` (the full hash of the checkout's HEAD, the
    commit built from; no git HEAD: a warning and no file). preflight.sh
    reads exactly these two: `COMMIT` must be an ancestor of the local
    `origin/main`, and each image's sha256 must match its `SHA256SUMS` line.
@@ -145,9 +147,14 @@ Notes on the steps:
    `prompt-go.py` judges). Run `t6-verdict.sh` again on `image.log` only
    to judge a record apart; `<probe>` is one of `t6_hello`, `t6_gpu`,
    `t6_mmu`, `t6_fw`, `t6_submit`, `t6_cold`, `triangle`.
-7. Run it with the prompt reads record and the `t6_cold` go record; it
-   prints which of keep, move or refuse `gpu_clock_set` took and the WDT0
-   gate reads.
+7. Run it with the prompt reads record and the `t6_gpu` go record: the
+   hand-over lines (`gpu_clock_set` keep, move or refuse, the RK806 supply,
+   PD_GPU, CRU) are printed by `t6_gpu`, `t6_fw` and `t6_submit` through
+   `t6_z1.c`, not by `t6_cold`. Give it the `t6_cold` record too and the
+   block adds the WDT0 gate and display lines. Go record directories are
+   named `<stamp>-t6-uboot-go`, one per probe run; `record.txt` or your
+   notes say which probe each holds. `T6_RECORD_DIR` should be the session
+   directory `records/nanopc-t6/<YYYYMMDD-HHMM>-<name>-<sha8>/`.
 8. Only after `gl_test` passed. 0 and 11 are answers with Armbian back and
    the next label runs; any other code stops, never retried.
 9. Per-case outcomes of the U-Boot run against Armbian's 8ff01055 tree
@@ -164,6 +171,10 @@ Notes on the steps:
     the copy by hand. Nothing of `records/` leaves unchecked.
 12. `answers.txt` and `uart.log` carry the board's MACs and serial number
     and are never copied as they are; the log tool refuses what survives.
+    A real reads record carries the `mmc part` UUIDs and the `serial#`
+    (rules for both are a pending redaction item), so the refusal is
+    expected. Until then run it with `--exclude answers.txt --exclude
+    uart.log` and quote the reads from the summary block (step 7).
 
 ### Board rules
 
