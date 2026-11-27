@@ -4,7 +4,7 @@
 """Probe colours of a glmark2 picture from a camera screenshot of the i.MX8MP panel.
 
     tools/cts/glmark2-photo-probes.py <screenshot.png> [--rotation 0|90|180|270]
-        [--window x,y,w,h] [--tolerance N]
+        [--window x,y,w,h] [--tolerance N] [--frame panel|x2-kvm]
         [--compare <tools/cts/glmark2-pictures.txt> <column> <scene info string>]
 
 The screenshot is the tailvision camera's take_screenshot: a perspective-corrected
@@ -24,6 +24,21 @@ Where the window is (the sources of the numbers):
     panel's top-left 800x600, at (0, 0), and the rest of the panel is "black, not
     old memory" (board_imx8mp.c:346, memset 0): the right 480 columns and the
     bottom 200 rows are black. --window overrides the default.
+
+--frame x2-kvm: the screenshot is a whole-frame capture of the Armadillo-X2's
+display through the NanoKVM (1920x1080, any size of that aspect, rotation 0),
+not the Verdin panel. The X2 scans the 800x600 glmark2 window at (0,0) of a
+1920x1080 frame and the rest is black (copy path, SCANOUT_VIEW=n;
+docs/notes/x2-lcdif-1080.md, board_imx8mp.c scanout code), so the window is
+cropped at (0,0,800,600) of the 1920x1080 frame. Because a crop of the window
+alone reads plausible probes from a wrong framing, the area OUTSIDE the window
+is checked too: it must be black (every sampled pixel <= BLACK_LEVEL, at most
+OUTSIDE_BAD_FRACTION of the samples allowed above it for JPEG noise, a margin of
+OUTSIDE_MARGIN frame pixels around the window left out for edge blur). If it is
+not (a shifted window, a wrong frame, a desktop behind), no probes are printed
+and the exit is 2 with the share of non-black samples and the first place. The
+default frame is `panel` (the Verdin, above), where there is no such check. The
+PNG decoder is the only one: a JPEG capture is converted to PNG first.
 
 The probes are the sample's picture code (driver/samples/zephyr/glmark2/src/main.cpp
 lines 386-388): px = {w/2, w/4, 3w/4, w/4, 3w/4}, py = {h/2, h/4, h/4, 3h/4, 3h/4}
@@ -66,6 +81,10 @@ import sys
 import zlib
 
 PANEL = (1280, 800)  # verdin_imx8mp_display.dtsi:157-158
+FRAMES = {"panel": PANEL, "x2-kvm": (1920, 1080)}  # x2-kvm: NanoKVM whole frame
+OUTSIDE_STEP = 8  # x2-kvm outside check: sample every 8th frame pixel
+OUTSIDE_MARGIN = 6  # frame pixels around the window not checked (edge blur)
+OUTSIDE_BAD_FRACTION = 0.005  # of the samples may be above BLACK_LEVEL (JPEG noise)
 WINDOW = (0, 0, 800, 600)  # board_imx8mp.c:310-355, 403-410: the panel's top-left
 NAMES = ("c", "tl", "tr", "bl", "br")
 BLACK_LEVEL = 16
@@ -149,16 +168,17 @@ def decode_png(data):
 class Photo:
     """The screenshot seen in panel coordinates."""
 
-    def __init__(self, w, h, rows, rotation):
+    def __init__(self, w, h, rows, rotation, panel=PANEL):
         self.w, self.h, self.rows, self.rot = w, h, rows, rotation
+        self.panel = panel
         # the upright panel's size in image pixels (before the rotation)
         self.uw, self.uh = (h, w) if rotation in (90, 270) else (w, h)
 
     def pixel(self, px, py):
-        px = min(max(px, 0), PANEL[0] - 1)
-        py = min(max(py, 0), PANEL[1] - 1)
-        ux = (px + 0.5) * self.uw / PANEL[0]
-        uy = (py + 0.5) * self.uh / PANEL[1]
+        px = min(max(px, 0), self.panel[0] - 1)
+        py = min(max(py, 0), self.panel[1] - 1)
+        ux = (px + 0.5) * self.uw / self.panel[0]
+        uy = (py + 0.5) * self.uh / self.panel[1]
         if self.rot == 0:
             x, y = ux, uy
         elif self.rot == 90:  # turned clockwise: upright (ux, uy) is at (uh - uy, ux)
@@ -175,6 +195,24 @@ class Photo:
         pts = [self.pixel(px + dx, py + dy) for dy in range(-half, half + 1)
                for dx in range(-half, half + 1)]
         return tuple(sorted(p[c] for p in pts)[len(pts) // 2] for c in range(3))
+
+
+def outside_check(photo, win):
+    """x2-kvm: -> (bad samples, samples, first bad frame pixel or None) outside the window."""
+    x0, y0, w, h = win
+    fw, fh = photo.panel
+    bad, n, first = 0, 0, None
+    for y in range(OUTSIDE_STEP // 2, fh, OUTSIDE_STEP):
+        for x in range(OUTSIDE_STEP // 2, fw, OUTSIDE_STEP):
+            if (x0 - OUTSIDE_MARGIN <= x < x0 + w + OUTSIDE_MARGIN
+                    and y0 - OUTSIDE_MARGIN <= y < y0 + h + OUTSIDE_MARGIN):
+                continue
+            n += 1
+            if max(photo.median(x, y, 1)) > BLACK_LEVEL:
+                bad += 1
+                if first is None:
+                    first = (x, y)
+    return bad, n, first
 
 
 def probe_points(x0, y0, w, h):
@@ -246,7 +284,8 @@ def compare(probes, ref, tol):
 
 
 def parse(argv):
-    a = {"rotation": 0, "window": WINDOW, "tol": TOLERANCE, "compare": None}
+    a = {"rotation": 0, "window": WINDOW, "tol": TOLERANCE, "compare": None, "frame": "panel"}
+    win = None
     pos, i = [], 0
     try:
         while i < len(argv):
@@ -258,10 +297,14 @@ def parse(argv):
                 i += 2
             elif o == "--window":
                 v = tuple(int(s) for s in argv[i + 1].split(","))
-                if (len(v) != 4 or v[2] < GRID[0] or v[3] < GRID[1] or v[0] < 0 or v[1] < 0
-                        or v[0] + v[2] > PANEL[0] or v[1] + v[3] > PANEL[1]):
-                    raise Bad("--window x,y,w,h must lie in the %dx%d panel" % PANEL)
-                a["window"] = v
+                if len(v) != 4:
+                    raise Bad("--window is x,y,w,h")
+                win = v
+                i += 2
+            elif o == "--frame":
+                a["frame"] = argv[i + 1]
+                if a["frame"] not in FRAMES:
+                    raise Bad("--frame is %s" % " or ".join(FRAMES))
                 i += 2
             elif o == "--tolerance":
                 a["tol"] = int(argv[i + 1])
@@ -283,6 +326,12 @@ def parse(argv):
     if len(pos) != 1:
         raise Bad("exactly one screenshot expected")
     a["png"] = pos[0]
+    fw, fh = FRAMES[a["frame"]]
+    if win is not None:
+        if (win[2] < GRID[0] or win[3] < GRID[1] or win[0] < 0 or win[1] < 0
+                or win[0] + win[2] > fw or win[1] + win[3] > fh):
+            raise Bad("--window x,y,w,h must lie in the %dx%d %s" % (fw, fh, a["frame"]))
+        a["window"] = win
     return a
 
 
@@ -295,7 +344,14 @@ def main(argv):
         except OSError as e:
             raise Bad("cannot read the screenshot: %s" % e)
         w, h, rows = decode_png(data)
-        probes, mean, black = measure(Photo(w, h, rows, a["rotation"]), a["window"])
+        photo = Photo(w, h, rows, a["rotation"], FRAMES[a["frame"]])
+        if a["frame"] == "x2-kvm":
+            bad, n, first = outside_check(photo, a["window"])
+            if bad > n * OUTSIDE_BAD_FRACTION:
+                raise Bad("x2-kvm framing wrong: %d of %d samples outside the window %s are "
+                          "not black (first at frame pixel %s); no probes read" % (
+                              bad, n, ",".join(map(str, a["window"])), first))
+        probes, mean, black = measure(photo, a["window"])
         print(fmt(a["window"], probes, mean, black))
         if not a["compare"]:
             return 0
