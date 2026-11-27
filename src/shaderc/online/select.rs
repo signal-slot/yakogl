@@ -4071,6 +4071,167 @@ impl<'a> Sel<'a> {
         self.compact(dead)
     }
 
+    /// `mul v, a, b` read once, by `add d, v, c`, becomes `mad d, a, b, c`
+    /// at the add's place (rank 3 of docs/notes/gc-compiler-ranks-3-5.md).
+    ///
+    /// # Values
+    ///
+    /// The product is rounded before the sum in both forms on every model
+    /// this tree has: the host interpreter's `mad` is an f32 multiply then an
+    /// f32 add (`tests/common/mod.rs`), and Mesa's etnaviv models the GC
+    /// `mad` as NIR's unfused `fmad`. The GC7000's own rounding is not
+    /// measured, so **no pair is fused in a shader with an `invariant`
+    /// output** (`IoDecl::is_invariant`, which also covers `#pragma STDGL
+    /// invariant(all)`): a shader that asked for one value in two programs
+    /// keeps the same instructions as the program it is compared with. The
+    /// guard is shader-wide, the conservative form of PowerVR's per-output
+    /// rule (`powervr/prepare.rs` `fusion_pairs`).
+    ///
+    /// # When a pair is fused
+    ///
+    /// * the `mul` is F32, not saturated, unconditional, and writes a virtual
+    ///   register no other instruction writes or reads before it;
+    /// * its only reader is one source of an F32 `add`, unconditional and not
+    ///   saturated, and every lane the add's write mask takes through that
+    ///   source's swizzle was written by the `mul`. A product read twice
+    ///   stays a `mul`: its value is wanted somewhere else as well;
+    /// * the read carries no `abs`; a `neg` moves onto a `mul` source
+    ///   (`-(a*b) = (-a)*b`, exact), refused when both are immediates;
+    /// * the two are in one straight line: no branch between them and no
+    ///   branch target after the `mul` up to the add, and nothing between
+    ///   them writes what the `mul` read, so its sources read the same
+    ///   values at the add's place;
+    /// * the three sources fit the caps (`within_caps`: one constant-file
+    ///   register, two immediates) and `mad` takes each group. A product
+    ///   by one uniform added to another stays two instructions: folding
+    ///   either uniform into a `mov` would cost what the fusion saves.
+    ///
+    /// An add that sums two products takes the first; it is a `mad` when the
+    /// second is looked at, and that one stays a `mul`.
+    fn fuse_mul_add(&mut self) -> Result<(), SelectError> {
+        let n = self.instrs.len();
+        if n < 2 || self.m.outputs.iter().any(ir::IoDecl::is_invariant) {
+            return Ok(());
+        }
+        let (Some(mul), Some(add), Some(mad)) = (build::op_id("mul"), build::op_id("add"), build::op_id("mad")) else {
+            return Ok(());
+        };
+        let (Some(m0), Some(m1)) = (mul.slot_of_operand(0), mul.slot_of_operand(1)) else { return Ok(()) };
+        let (Some(a0), Some(a1)) = (add.slot_of_operand(0), add.slot_of_operand(1)) else { return Ok(()) };
+        let dead = self.arena.alloc_filled(n, false)?;
+        let plain = |ins: &SelInstr| {
+            ins.ty == OpType::F32
+                && ins.cond.is_none()
+                && !ins.saturate
+                && ins.tex.is_none()
+                && ins.target.is_none()
+                && !ins.rtz
+        };
+
+        for i in 0..n {
+            let p = self.instrs.as_slice()[i];
+            if p.op != mul || !plain(&p) {
+                continue;
+            }
+            let Some(SelDst::Virtual { v, write_mask: pm }) = p.dst else { continue };
+            let (Some(x), Some(y)) = (p.srcs[m0], p.srcs[m1]) else { continue };
+
+            /* The one reader, and no other write of `v`. */
+            let mut reader = None;
+            let mut ok = true;
+            for (j, ins) in self.instrs.as_slice().iter().enumerate() {
+                if dead[j] {
+                    continue;
+                }
+                if j != i && matches!(ins.dst, Some(SelDst::Virtual { v: w, .. }) if w == v) {
+                    ok = false;
+                    break;
+                }
+                for (k, sl) in ins.srcs.iter().enumerate() {
+                    if matches!(sl, Some(SelSrc::Virtual { v: r, .. }) if *r == v) {
+                        if j <= i || reader.is_some() {
+                            ok = false;
+                        }
+                        reader = Some((j, k));
+                    }
+                }
+                if !ok {
+                    break;
+                }
+            }
+            let Some((j, k)) = reader else { continue };
+            if !ok {
+                continue;
+            }
+            let s = self.instrs.as_slice()[j];
+            if s.op != add || !plain(&s) || (k != a0 && k != a1) {
+                continue;
+            }
+            let other = if k == a0 { a1 } else { a0 };
+            let (Some(SelSrc::Virtual { swizzle, neg, abs, .. }), Some(c)) = (s.srcs[k], s.srcs[other]) else {
+                continue;
+            };
+            let am = match s.dst {
+                Some(SelDst::Virtual { write_mask, .. } | SelDst::Fixed { write_mask, .. }) => write_mask,
+                _ => continue,
+            };
+            if abs || am == 0 {
+                continue;
+            }
+            /* Every lane the add takes from the product, the mul wrote. */
+            if (0..4).any(|l| am & (1 << l) != 0 && pm & (1 << (swizzle[l] & 3)) == 0) {
+                continue;
+            }
+
+            /* One straight line, and the mul's sources unchanged up to j. */
+            let reads = |d: &SelDst, src: &SelSrc| match (d, src) {
+                (SelDst::Virtual { v: w, .. }, SelSrc::Virtual { v: r, .. }) => w == r,
+                (SelDst::Fixed { reg, .. }, SelSrc::Input { reg: r, .. }) => reg == r,
+                (SelDst::Address { .. }, SelSrc::Physical(q)) => q.amode != 0,
+                _ => false,
+            };
+            let mut straight = true;
+            for (q, ins) in self.instrs.as_slice().iter().enumerate() {
+                if ins.target.is_some_and(|t| (t as usize) > i && (t as usize) <= j) {
+                    straight = false;
+                    break;
+                }
+                if q > i && q < j && !dead[q] {
+                    let clobbers = ins.dst.is_some_and(|d| reads(&d, &x) || reads(&d, &y));
+                    if ins.target.is_some() || clobbers {
+                        straight = false;
+                        break;
+                    }
+                }
+            }
+            if !straight {
+                continue;
+            }
+
+            /* The product's sources read through the add's lanes. An
+             * immediate is one value in every lane and composes as itself. */
+            let (mut x, mut y) = (compose(x, swizzle), compose(y, swizzle));
+            if neg {
+                if let Some(nx) = negated(x) {
+                    x = nx;
+                } else if let Some(ny) = negated(y) {
+                    y = ny;
+                } else {
+                    continue;
+                }
+            }
+            let mut fused = SelInstr::new(mad, OpType::F32).operand(0, x).operand(1, y).operand(2, c);
+            fused.dst = s.dst;
+            if !within_caps(&fused.srcs) || !fused.srcs.iter().flatten().all(|r| mad.takes_group(group_of(r))) {
+                continue;
+            }
+            self.instrs.as_mut_slice()[j] = fused;
+            dead[i] = true;
+        }
+
+        self.compact(dead)
+    }
+
     /// Delete `mov d, <uniform or literal>` by making every reader name the
     /// constant directly.
     ///
@@ -4771,6 +4932,7 @@ fn select_from<'a>(
     }
     s.nodes(m.body)?;
     s.propagate_copies()?;
+    s.fuse_mul_add()?;
     s.fold_constant_reads()?;
     s.legalise_operands()?;
     s.eliminate_dead()?;
