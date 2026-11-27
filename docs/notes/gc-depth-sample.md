@@ -485,6 +485,17 @@ code tells at once which row of the verdict table above applies. Check 3's index
 fails, the verdict is "none" and the other bits are not evidence). A run
 that is all right reads w1 = `0x00001001`, w2 = w3 = `0x10001000`.
 
+**What an Armadillo-X2 record holds (measured on the Armadillo-X2 in place
+of the Verdin iMX8MP).** An X2 record keeps only the page words w0..w2 of
+selector `0x10b0`, so w3 is not there. The session reads w1 (checks, verdict
+code, GL error) and w2 (the check-4 and check-5 indices) from the record.
+The check-6 and check-7 indices live in w3 and exist only on the console
+line, and the console is captured only when `BOARD_UART` is set. A record of
+a run without it cannot show them, and the note must say so rather than guess.
+The full `tools/cts/imx8mp-dtpu-page.py` decode needs that console log, or
+the decoder's two-word mode (item dtpu-two-word, not yet landed), which
+reads w1 and w2 alone.
+
 The verdict table maps one to one: w1 bit 5 clear with bit 4 set is row 2
 (fewer bits), bits 4 and 5 set with bit 6 clear is row 3 (raw view), bit 6
 also set is row 4, bit 7 set with bit 4 clear is row 5. depth-sample-gc
@@ -563,7 +574,12 @@ from the environment only and go into no file or message.
 sha256).
 
 **Read the page (a rerun fills this).** `yakogl-tools record --words 3` on
-the record, then the table of "Reading the dtpu page" above. A session that
+the record, then the table of "Reading the dtpu page" above. An X2 record
+holds w0..w2 only: read w1 and w2 from it. The check-6 and check-7 indices
+(w3) come from the console line, which exists only if `BOARD_UART` was set
+for the run; otherwise write "not in the record" for them. Decode with
+`tools/cts/imx8mp-dtpu-page.py` on that log, or in its two-word mode once
+dtpu-two-word has landed. A session that
 ends with a verdict writes it down, with the values from the record only,
 in a table headed "measured on the Armadillo-X2 in place of the Verdin
 iMX8MP", naming: the origin/main commit the image was built from, the
