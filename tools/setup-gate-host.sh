@@ -52,6 +52,15 @@
 # driver/src/fw/pvr_fw_blob.h is there (the AM62P image rows gap without it;
 # it is never fetched or committed; --install copies it from the layout, see below)
 # and a CC_aarch64_unknown_none that names no executable. --check also
+# reports the first of LC_ALL, LC_CTYPE, LANG that is set and names no
+# locale the host has installed (compared case-insensitively, utf8 and
+# UTF-8 the same, against `locale -a`) as missing, with the fix: export
+# LC_ALL=C, or install the locale. C, POSIX and a C.* name need no
+# installation, an unset or empty value names nothing, and a host without
+# a locale command reports nothing. (With an uninstalled locale, nine
+# tools rows of tools/check.sh fail on their bash children's setlocale
+# warning; LC_ALL=C passes them, and CONTRIBUTING.md's --check section
+# says the same.) --check also
 # reports GLMARK2_SRC (check.sh's glmark2 corpus row gaps unless it names a
 # glmark2 tree at the commit tools/hostharness/glmark2/run.sh pins, tested
 # the way run.sh tests it: a git checkout at the pin without local changes,
@@ -717,7 +726,36 @@ check_disk() {
   done
 }
 
+# The locale the environment names must be installed. LC_ALL wins over
+# LC_CTYPE over LANG; the first of the three that is set (an empty value
+# names nothing, as on every other consumer of these variables) is the
+# name compared with `locale -a`, case-insensitively and with utf8 and
+# UTF-8 the same. C, POSIX and C.* are built into every C library and
+# need no installation. Without a locale command the name cannot be
+# told, so nothing is reported.
+check_locale() {
+  local v var="" val="" want have
+  for v in LC_ALL LC_CTYPE LANG; do
+    if [ -n "${!v-}" ]; then
+      var=$v val=${!v}
+      break
+    fi
+  done
+  case $val in
+    "" | C | POSIX | C.*) return ;;
+  esac
+  command -v locale >/dev/null 2>&1 || return
+  want=$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]' | sed 's/utf-8/utf8/')
+  have=$(locale -a 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/utf-8/utf8/')
+  if printf '%s\n' "$have" | grep -qxF -- "$want"; then
+    line ok locale "$var=$val"
+  else
+    line missing locale "$var=$val is not an installed locale (locale -a does not list it; the tools rows of tools/check.sh would fail on it): export LC_ALL=C, or install the locale"
+  fi
+}
+
 run_checks() {
+  check_locale
   check_disk
   check_gate_disk
   check_cargo
