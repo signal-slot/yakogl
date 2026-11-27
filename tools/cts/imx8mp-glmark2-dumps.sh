@@ -60,6 +60,21 @@
 #            leases.
 # --dry-run  print what build or run would execute and run nothing.
 #
+# IMX8MP_DUMP_BOARD=verdin|x2 (default verdin, everything above). x2 is the
+# Armadillo-X2 (same i.MX8MP and GC7000UL), where the i.MX8MP picture sessions
+# run while the Verdin is away (owner, 2026-11-27): build for
+# armadillo_x2/mimx8ml8/a53 (its sample conf already has the UART2 console,
+# GC_COMMON_PANEL_CONSOLE=n and the watchdog arm, so IMX8MP_DUMP_CONSOLE adds
+# nothing: imx8mp-console.conf is the Verdin's UART3 console and is left out;
+# the watchdog flags stay) and run `BOARD_BOOT=kexec-dev tools/board.sh x2 run
+# <img> <records-dir> <label>` (crash-route kexec out of Armadillo Base OS, a
+# development run; BOARD_UART and BOARD_HOST from the environment, never a
+# file). RUN_BOUND/RETURN_BOUND are the same 720/600: the image ends itself
+# after ~410 s and WDOG1 resets at 660 s at the latest, inside board.sh's
+# kexec-dev defaults (1500/600). Each record's meta.txt gains board=x2 and
+# measured_on=..., so every record says it was measured on the X2. The record
+# stays <records-dir>/<YYYYMMDD-HHMM>-<label>-<sha8>/.
+#
 # The watchdog numbers. The image feeds WDOG1 only until
 # CONFIG_GC_BOARD_WDOG_SECONDS of uptime (gc_wdog_arm.c); WDOG1 then resets the
 # SoC 60 s later. A run is: boot and GPU init (~60 s allowed), the scene (10 s
@@ -77,7 +92,12 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 PICTURES=${PICTURES:-$HERE/glmark2-pictures.txt}
-ZBOARD=verdin_imx8mp/mimx8ml8/a53
+case "${IMX8MP_DUMP_BOARD:-verdin}" in
+verdin) ZBOARD=verdin_imx8mp/mimx8ml8/a53; BTARGET=imx8mp; BBOOT=uboot-mmc ;;
+x2) ZBOARD=armadillo_x2/mimx8ml8/a53; BTARGET=x2; BBOOT=kexec-dev ;;
+*) echo "imx8mp-glmark2-dumps: IMX8MP_DUMP_BOARD must be verdin or x2" >&2; exit 2 ;;
+esac
+X2_MEASURED='Armadillo-X2 (i.MX8MP, GC7000UL), kexec-dev development run'
 WDOG_S=${WDOG_S:-600}
 RUN_BOUND=${RUN_BOUND:-$((WDOG_S + 120))}
 RETURN_BOUND=${RETURN_BOUND:-600}
@@ -124,9 +144,12 @@ selected() {
 build_args() {
     local a=${2//;/\\;} console=()
     case "${IMX8MP_DUMP_CONSOLE:-uart}" in
+    uart | panel) ;;
+    *) die "IMX8MP_DUMP_CONSOLE must be uart or panel" ;;
+    esac
+    [ "$BTARGET" = x2 ] || case "${IMX8MP_DUMP_CONSOLE:-uart}" in
     uart) console=("-DEXTRA_CONF_FILE=$HERE/imx8mp-console.conf" -DCONFIG_GC_COMMON_PANEL_CONSOLE=n) ;;
     panel) ;;
-    *) die "IMX8MP_DUMP_CONSOLE must be uart or panel" ;;
     esac
     printf '%s\n' build -p always -b "$ZBOARD" -d "$3/$1" "$REPO/driver/samples/zephyr/glmark2" -- \
         "-DZEPHYR_MODULES=${MODS:-<zephyr-modules>}" "-DYAKOGL_DIR=$REPO" \
@@ -226,7 +249,7 @@ cmd_run() {
     local img=$1 rec=$2 sel rc=0 l arg r c
     shift 2
     sel=$(selected "$@") || exit 2
-    [ "$DRY" = 1 ] || : "${BOARD_UART:?set BOARD_UART to the bridge of target:imx8mp-console (host:port)}"
+    [ "$DRY" = 1 ] || : "${BOARD_UART:?set BOARD_UART to the serial bridge of the console (host:port)}"
     # every image needs its stored 40-hex build commit before anything runs
     while IFS=$'\t' read -r l arg; do
         stored_commit "$img" "$l" > /dev/null || exit 2
@@ -234,18 +257,20 @@ cmd_run() {
     while IFS=$'\t' read -r l arg; do
         c=$(stored_commit "$img" "$l")
         if [ "$DRY" = 1 ]; then
-            echo "BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh imx8mp run $img/$l/zephyr/zephyr.bin $rec $l   # BOARD_UART from the environment"
+            echo "BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh $BTARGET run $img/$l/zephyr/zephyr.bin $rec $l   # BOARD_UART from the environment"
             echo "echo commit=$c >> $rec/<record of $l>/meta.txt"
+            [ "$BTARGET" = x2 ] && echo "printf 'board=x2\\nmeasured_on=%s\\n' '$X2_MEASURED' >> $rec/<record of $l>/meta.txt"
             echo "awk '/board: record/ { exit } { print }' $rec/<record of $l>/console.txt > $rec/<record of $l>/console-live.txt"
             echo "tools/cts/glmark2-fb.py $rec/<record of $l>/console-live.txt $rec/<record of $l>/$l.png --scene $(scene_name "$arg")"
             continue
         fi
         [ -s "$img/$l/zephyr/zephyr.bin" ] || { echo "$l: no image $img/$l/zephyr/zephyr.bin" >&2; rc=1; continue; }
-        BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND \
-            "$REPO/tools/board.sh" imx8mp run "$img/$l/zephyr/zephyr.bin" "$rec" "$l" || { echo "$l: board run failed" >&2; rc=1; continue; }
+        BOARD_BOOT=$BBOOT RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND \
+            "$REPO/tools/board.sh" "$BTARGET" run "$img/$l/zephyr/zephyr.bin" "$rec" "$l" || { echo "$l: board run failed" >&2; rc=1; continue; }
         r=$(ls -d "$rec"/*-"$l"-* 2> /dev/null | tail -1)
         [ -s "$r/meta.txt" ] || { echo "$l: no meta.txt in the record" >&2; rc=1; continue; }
         echo "commit=$c" >> "$r/meta.txt"
+        [ "$BTARGET" = x2 ] && printf 'board=x2\nmeasured_on=%s\n' "$X2_MEASURED" >> "$r/meta.txt"
         [ -s "$r/console.txt" ] || { echo "$l: no console.txt in the record" >&2; rc=1; continue; }
         decode_live "$r" "$l" "$arg" || { echo "$l: damaged or missing dump, rerun it ($r)" >&2; rc=1; }
     done <<< "$sel"
@@ -328,6 +353,15 @@ self_test() {
     case $out in *"venv: using WEST_VENV"*) ;; *) echo "self-test: WEST_VENV does not win: $out" >&2; return 1 ;; esac
     [ "$(WEST_VENV=/w ZEPHYR_VENV=/z venv_pick 2> /dev/null)" = /w ] || { echo "self-test: venv_pick path (WEST_VENV)" >&2; return 1; }
     [ "$(unset WEST_VENV; ZEPHYR_VENV=/z venv_pick 2> /dev/null)" = /z ] || { echo "self-test: venv_pick path (ZEPHYR_VENV)" >&2; return 1; }
+    out=$(IMX8MP_DUMP_BOARD=x2 bash "$0" --dry-run build /nonexistent-dir 5)
+    case $out in
+    *"-b armadillo_x2/mimx8ml8/a53"*"-DCONFIG_GC_BOARD_WDOG_SELF_ARM=y -DCONFIG_GC_BOARD_WDOG_SECONDS=$WDOG_S"*"-DCONFIG_GLMARK2_FRAME_DUMP=y"*'-DCONFIG_GLMARK2_ARGS="-b texture:texture-filter=mipmap"'*) ;;
+    *) echo "self-test: x2 build line: $out" >&2; return 1 ;;
+    esac
+    case $out in *verdin* | *EXTRA_CONF_FILE* | *PANEL_CONSOLE*) echo "self-test: x2 build line has verdin or console flags: $out" >&2; return 1 ;; esac
+    out=$(IMX8MP_DUMP_BOARD=x2 bash "$0" --dry-run build /nonexistent-dir "$(grep -m1 'effect2d' <<< "$all" | cut -d' ' -f1)")
+    case $out in *'kernel=0,1,0\;1,-4,1\;0,1,0\;'*) ;; *) echo "self-test: x2 effect2d kernel not escaped: $out" >&2; return 1 ;; esac
+    (IMX8MP_DUMP_BOARD=nosuch bash "$0" scenes > /dev/null 2>&1); [ $? -eq 2 ] || { echo "self-test: bad IMX8MP_DUMP_BOARD accepted" >&2; return 1; }
     out=$(DRY=1 cmd_build /nonexistent-dir terrain)
     case $out in *'-DCONFIG_GLMARK2_ARGS="-b terrain"'*) ;; *) echo "self-test: terrain build line: $out" >&2; return 1 ;; esac
     case $out in *"-DEXTRA_CONF_FILE=$HERE/imx8mp-console.conf"*"-DCONFIG_GC_COMMON_PANEL_CONSOLE=n"*) ;; *) echo "self-test: uart console flags: $out" >&2; return 1 ;; esac
@@ -346,7 +380,16 @@ self_test() {
     (DRY=1 cmd_run "$ci" /rec 5 gm33-loop > /dev/null 2>&1); [ $? -eq 2 ] || { rm -rf "$ci"; echo "self-test: one missing commit does not stop the whole run" >&2; return 1; }
     out=$(DRY=1 cmd_run "$ci" /rec 5)
     out=${out//"$ci"//img}
+    local x2out
+    x2out=$(IMX8MP_DUMP_BOARD=x2 bash "$0" --dry-run run "$ci" /rec 5)
+    x2out=${x2out//"$ci"//img}
     rm -rf "$ci"
+    case $x2out in
+    "BOARD_BOOT=kexec-dev RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh x2 run /img/gm05-texture/zephyr/zephyr.bin /rec gm05-texture"*"echo commit=$cm >>"*"board=x2"*"measured_on=%s"*"$X2_MEASURED"*) ;;
+    *) echo "self-test: x2 run line: $x2out" >&2; return 1 ;;
+    esac
+    case $x2out in *uboot-mmc* | *"board.sh imx8mp"*) echo "self-test: x2 run line names the verdin route: $x2out" >&2; return 1 ;; esac
+    if grep -qE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|/dev/tty' <<< "$x2out"; then echo "self-test: an address in the x2 run line" >&2; return 1; fi
     case $out in
     "BOARD_BOOT=uboot-mmc RUN_BOUND=$RUN_BOUND RETURN_BOUND=$RETURN_BOUND tools/board.sh imx8mp run /img/gm05-texture/zephyr/zephyr.bin /rec gm05-texture"*) ;;
     *) echo "self-test: run line: $out" >&2; return 1 ;;
