@@ -158,6 +158,45 @@ def totals(args):
     return rows, tot, raw, miss, {b: mod.span(e).replace(',', ', ') for b, e in boards.items()}
 
 
+# A README names an event on a line that begins with its marker and names the entries: "Reset: e03 ended on WDOG1",
+# "- WDOG1 e03 ...", "Hang: e50 ...", "Watchdog reset e03, e04 ...". Prose that merely mentions the watchdog (the
+# slice READMEs explain WDOG1 at length, "Resets and reboots outside the rows") is not an event.
+EVENT_RX = re.compile(r'^\s*(?:[-*]\s+)?(?:\*\*)?(?P<k>(?:WDOG\d*|watchdog)(?:\s+resets?)?|resets?|hangs?|NO FINISH)\b(?:\*\*)?\s*[:\-,]?\s',
+                      re.I)
+ENTRY_RX = re.compile(r'\be(\d+)\b|\bentr(?:y|ies)\s+(\d+)', re.I)
+
+
+def fault_events(dirs, rows):
+    """(resets, hangs, shortfall entries) the slice records carry. The README lines that begin with a marker (WDOG1, watchdog reset, reset, NO FINISH: a reset; hang: a hang) and
+    name an entry (`e12`, `entry 12`), as the slice READMEs write them by hand; one event per line. Prose and the
+    `board.sh <board> e<NN> ... resets=` verdict lines are not events. And the shortfall: a table entry with a
+    record that begun fewer cases than its mustpass count (merge's stderr WARNING ... (shortfall)). A
+    shortfall entry no README line names counts as one hang or reset of unknown kind (a hang ends the entry
+    at the last case begun, a WDOG1 reset likewise: the records do not tell them apart)."""
+    resets, hangs, named = [], [], set()
+    for d in dirs:
+        try:
+            names = sorted(f for f in os.listdir(d) if f.lower().startswith('readme'))
+        except OSError:
+            continue
+        for name in names:
+            for l in open(os.path.join(d, name), errors='replace').read().splitlines():
+                m = EVENT_RX.match(l)
+                es = {int(x) for t in ENTRY_RX.findall(l) for x in t if x}
+                if not m or not es:
+                    continue
+                (hangs if m.group('k').lower().startswith('hang') else resets).append(
+                    (os.path.basename(os.path.normpath(d)), sorted(es)))
+                named |= es
+    short = [r[0] for r in rows if r[2] < r[1] and (r[2] or sum(r[3:7]))]   # no-record entries (all zero) are not shortfalls
+    short = sorted(set(short))
+    return resets, hangs, short, sorted(set(short) - named)
+
+
+def mod_span(entries):
+    return load_merge().span(entries).replace(',', ', ')
+
+
 def rel(d):
     """A slice directory as the texts name it: below the repository root, else (a copy elsewhere) as
     tools/cts/log/<name>, never an absolute path of this machine."""
@@ -287,8 +326,26 @@ def main():
     dirs_txt = ', '.join('`%s/`' % rel(d) for d in shown)
     partial = '' if ok else 'PARTIAL: '
     bad_verdict = any('verdict' in p for p in problems)
-    reset_txt = ('reset verdicts NOT CLEAN, see the problems' if bad_verdict else
-                 '0 resets (every entry run is `verdict=done`, `resets=absent`)')
+    ev_resets, ev_hangs, ev_short, ev_unnamed = fault_events(args.dirs, rows)
+    n_res, n_hang = len(ev_resets), len(ev_hangs) + len(ev_unnamed)
+    n_ev = n_res + n_hang
+    ev_parts = []
+    if ev_resets:
+        ev_parts.append('%d reset line%s' % (n_res, '' if n_res == 1 else 's'))
+    if ev_hangs:
+        ev_parts.append('%d hang line%s' % (len(ev_hangs), '' if len(ev_hangs) == 1 else 's'))
+    if ev_unnamed:
+        ev_parts.append('%d shortfall entr%s no README line names (%s)' % (
+            len(ev_unnamed), 'y' if len(ev_unnamed) == 1 else 'ies', mod_span(ev_unnamed)))
+    if bad_verdict:
+        reset_txt = 'reset verdicts NOT CLEAN, see the problems'
+    elif n_ev:
+        reset_txt = ('%d resets or hangs counted from the records (%s; entries begun short: %s); every entry run '
+                     'is `verdict=done`' % (n_ev, ', '.join(ev_parts), mod_span(ev_short) if ev_short else 'none'))
+    else:
+        reset_txt = '0 resets (every entry run is `verdict=done`, `resets=absent`)'
+    ev_roadmap = '%d resets or hangs' % n_ev if n_ev else '0 resets'
+    ev_ja = 'リセットまたはハング %d 件' % n_ev if n_ev else 'リセット 0'
     five = tuple(n(x) for x in (npass, nfail, nns, nother, nnone))
 
     # The board each slice was measured on. Verdin only: every draft is as before. All Armadillo-X2: each draft
@@ -356,7 +413,7 @@ def main():
     status_txt = ('i.MX8MP は%s%sを %s（%s）で実行し%s、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / '
                   '結果なし %s、%s（記録は %s。合格でない一覧は docs/es3/imx8mp-gles3-notpass.tsv）。' % (
                       board_ja, scope, short_ja, args.date, part_ja, n(mp), *five,
-                      'リセットの確認が未完' if bad_verdict else 'リセット 0', '、'.join(rel(d) for d in shown)))
+                      'リセットの確認が未完' if bad_verdict else ev_ja, '、'.join(rel(d) for d in shown)))
     next_txt = STATUS_NEXT_DONE if ok else STATUS_NEXT
     print(status_txt)
     print('次の山: "%s" -> "%s"' % (STATUS_NEXT, next_txt))
@@ -372,7 +429,7 @@ def main():
     roadmap_txt = wrap('- i.MX8MP: %s%s%s at %s (%s): %s cases, %s pass / %s fail / %s NotSupported / %s other / '
                        '%s without a result, %s (#24).' % (
                            partial, scope, board_en, short_txt, args.date, n(mp), *five,
-                           'reset verdicts not clean' if bad_verdict else '0 resets'), width=78, indent='  ')
+                           'reset verdicts not clean' if bad_verdict else ev_roadmap), width=78, indent='  ')
     print(roadmap_txt)
     print()
     print('--- GitHub issue #24 comment ---')
