@@ -299,6 +299,13 @@ fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the
     let ensts = dlog.iter().position(|x| matches!(x, Access::R("dpu", 0x2b_0094, _))).unwrap();
     let gate = at(Access::W("ldb", 0x0, 0x1E));
     assert!(fg_off < token && token < ensts && ensts < gate, "{dlog:?}");
+    // the frame counter is read before the first FGENSTS poll and again
+    // when the wait ends, both before the LDB gate
+    let ts: Vec<usize> =
+        dlog.iter().enumerate().filter(|(_, x)| matches!(x, Access::R("dpu", 0x2b_0098, _))).map(|(i, _)| i).collect();
+    let before_gate: Vec<usize> = ts.into_iter().filter(|&i| i < gate).collect();
+    assert!(before_gate.len() == 2 && before_gate[0] > token && before_gate[0] < ensts, "{dlog:?}");
+    assert!(before_gate[1] > ensts, "{dlog:?}");
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
@@ -375,7 +382,11 @@ fn a_frame_gen_that_never_stops_still_brings_the_ldb_down_and_returns_not_stoppe
     let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
     r.log.borrow_mut().clear();
     let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
-    assert!(matches!(e, Error::Display(display::Error::NotStopped(_))), "{e:?}");
+    let Error::Display(display::Error::NotStopped(fg)) = e else { panic!("{e:?}") };
+    // the wait ran the whole 1 s and the error carries the frame counter
+    let w = fg.stop.expect("the frame counter is in the error");
+    assert_eq!(w.waited_us, display::STOP_WAIT_US);
+    assert!(w.frame_end() > w.frame_start(), "{w:?}");
     assert!(r.log.borrow().contains(&Ev::W(dm::LDB, 0x1E)));
     assert!(sm.sm.borrow().on(13));
 }
@@ -471,4 +482,18 @@ fn a_sequence_that_never_completes_times_out_and_leaves_the_ldb_clocks_on() {
     assert_eq!(r.m.display.peek("ldb", 0x0), 0x14);
     assert!(sm.sm.borrow().on(13) && sm.sm.borrow().enabled(38));
     assert!(r.env.lines.borrow().iter().any(|l| l.contains("no SeqComplete0 in 1000000 us")));
+}
+
+/// The success line names the time waited and the frame counter values.
+#[test]
+fn a_stop_that_succeeds_logs_the_wait_and_the_frame_counter() {
+    let r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.env.lines.borrow_mut().clear();
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    let lines = r.env.lines.borrow();
+    let l = lines.iter().find(|l| l.contains("FrameGen0 stopped after")).expect("a success line");
+    assert!(l.contains(" us (") && l.contains("frame counter") && l.contains("FGTIMESTAMP 0x"), "{l}");
 }

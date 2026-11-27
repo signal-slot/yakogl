@@ -279,22 +279,36 @@ pub fn display_down<T: Transport>(
         delay(dpu::POLL_STEP_US);
         waited += dpu::POLL_STEP_US;
     }
-    let budget = 2 * display::frame_us(&stream.prepared.mode, stream.prepared.pix_hz);
-    let stopped = dpu::wait_stopped(m, base, budget, &mut delay).map_err(display::Error::NotStopped);
-    let frame =
-        m.read32(base + r::DISENG_FRAMEGEN0_FGTIMESTAMP as usize) >> r::diseng_framegen0_fgtimestamp::FRAMEINDEX_SHIFT;
+    let stopped = dpu::wait_stopped(m, base, display::STOP_WAIT_US, &mut delay).map_err(display::Error::NotStopped);
     ylog!(
         env,
         Inf,
         "verdin-imx95 LVDS down: SeqComplete0 after {} us, FGENSTS {}, frame {}",
         waited,
         if stopped.is_ok() { "stopped" } else { "running" },
-        frame
+        match &stopped {
+            Ok(w) => w.frame_end(),
+            Err(display::Error::NotStopped(fg)) => fg.stop.map_or(0, |w| w.frame_end()),
+            Err(_) => 0,
+        }
     );
     ldb::down(m, cfg.ldb);
     // the pixel link off, the power; no second wait when the first failed
     match stopped {
-        Ok(_) => display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display),
+        Ok(w) => {
+            ylog!(
+                env,
+                Inf,
+                "verdin-imx95 X12: FrameGen0 stopped after {} us ({} polls), frame counter {} -> {} (FGTIMESTAMP 0x{:08x} -> 0x{:08x})",
+                w.waited_us,
+                w.polls,
+                w.frame_start(),
+                w.frame_end(),
+                w.ts_start,
+                w.ts_end
+            );
+            display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display)
+        }
         Err(e) => Err(Error::Display(e)),
     }
 }

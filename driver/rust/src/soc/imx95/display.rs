@@ -65,6 +65,10 @@ pub const CHANNEL: u32 = 0;
 pub const RESET_US: u32 = 10;
 /// How long [`start`] waits for `PrimSyncStat` (Linux: 100 ms).
 pub const SYNC_WAIT_US: u32 = 100_000;
+/// How long [`stop`] waits for FrameGen0 to read stopped (Linux's
+/// `dc_crtc_atomic_disable` waits up to 1 s for the sequence-complete
+/// interrupt). The board read `fgensts 1` after about 33 ms.
+pub const STOP_WAIT_US: u32 = 1_000_000;
 
 /// The blocks' addresses as the image maps them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -352,8 +356,7 @@ pub fn stop<T: Transport>(
         pixel_link_off(m, b);
     }
     dpu::stop(m, b.dpu);
-    let budget = 2 * frame_us(&s.prepared.mode, s.prepared.pix_hz);
-    dpu::wait_stopped(m, b.dpu, budget, delay_us).map_err(Error::NotStopped)?;
+    dpu::wait_stopped(m, b.dpu, STOP_WAIT_US, delay_us).map_err(Error::NotStopped)?;
     display_power::power_off(t, s.prepared.source)?;
     Ok(())
 }
