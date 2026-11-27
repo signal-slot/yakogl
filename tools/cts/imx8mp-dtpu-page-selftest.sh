@@ -6,8 +6,12 @@
 # check-3 failure (not a verdict, exit 1), the X2 11-11 case (check 4 failed at index 1, check 5
 # passed), a GL error (check 8), pages that contradict gl_test_dtpu.inc's encoding, and console
 # logs: a good one (also through console-redact.py), two pages, "no dtpu page", no page line and
-# a truncated page line. The words are made up, encoded by hand from gl_test_dtpu.inc:12-25 and
-# dtpu_verdict() (48-57). Host only; python3 -I; scratch under ${TMPDIR:-$PWD}, never /tmp.
+# a truncated page line. Two-word mode (an Armadillo-X2 record stores w0..w2 only, so w3 is
+# absent): codes 1..5 and the check-3 rerun from w1 and w2 alone, the check 6/7 indices named
+# "not in an X2 record", and two words plus a console log, where the indices come from the log
+# (a log that disagrees with the words is exit 2). The words are made up, encoded by hand from
+# gl_test_dtpu.inc:12-25 and dtpu_verdict() (48-57). Host only; python3 -I; scratch under
+# ${TMPDIR:-$PWD}, never /tmp.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 tool=$here/imx8mp-dtpu-page.py
@@ -116,7 +120,7 @@ has reserved "imx8mp-dtpu-page: w1 0x00001003 sets bits outside gl_test_dtpu.inc
 run nothex 2 0x00001001 0x1000100g 0x10001000
 has nothex "imx8mp-dtpu-page: not a 32-bit hex word: '0x1000100g'"
 run toolong 2 0x00001001 0x110001000 0x10001000
-run twowords 2 0x00001001 0x10001000
+run oneword 2 0x00001001                     # one word: neither 2-word nor 3-word mode
 run noargs 2
 
 # --- console logs ------------------------------------------------------------------------------
@@ -173,6 +177,79 @@ has log-cut "imx8mp-dtpu-page: line 2: malformed dtpu page record: yk-record: 59
 printf 'yk-record: 594b0cb0 00001001 1000zzzz 10001000\n' >"$tmp/junk.log"
 run log-junk 2 --log "$tmp/junk.log"
 run log-missing 2 --log "$tmp/no-such.log"
+
+# --- two-word mode: the Armadillo-X2 stores w0..w2 only, so w3 is not in the record -----------
+# gc_result.c (KEEP_LPGPR0) drops w3 at the sink; every check's pass/fail bit and the verdict
+# code are in w1, the check 4/5 indices in w2. The check 6/7 first indices are named as absent,
+# never guessed. Same pages as the three-word cases above, minus their w3.
+run exact2 0 0x00001001 0x10001000
+has exact2 "page: w1=0x00001001 w2=0x10001000 (w3: not in an X2 record)"
+has exact2 "check 7: pass (P3 on the deeper ramp (not stale))"
+has exact2 "verdict: 1 (D24X8 exact)"
+has exact2 "outcome: (a) (a depth view of the surface, no copy, no CPU resolve on the draw path)"
+run stale2 0 0x00002081 0x10001000
+has stale2 "check 7: fail (P3 on the deeper ramp (not stale)) first index: not in an X2 record"
+has stale2 "note: the X2 record stores w0..w2 only; a console log holds the missing indices when the run captured one (BOARD_UART)"
+has stale2 "verdict: 2 (D24X8 exact but stale without a wait (check 7))"
+has stale2 "outcome: (a)+flush ((a) plus the texture-cache flush of (a).9)"
+run code3-2w 0 0x00003011 0x10000001         # the X2 11-11 case, w2 alone gives check 4 at 1
+has code3-2w "check 4: fail (P1 (D24X8 view) == P0) first at index 1 (GL x 1, y 63)"
+has code3-2w "verdict: 3 (D24X8 with fewer bits (check 4 fails, 5 passes))"
+has code3-2w "outcome: (a) (a depth view of the surface, no copy, no CPU resolve on the draw path)"
+run fewbits-stale-2w 0 0x00003091 0x10000001
+has fewbits-stale-2w "check 7: fail (P3 on the deeper ramp (not stale)) first index: not in an X2 record"
+has fewbits-stale-2w "outcome: (a)+flush ((a) plus the texture-cache flush of (a).9)"
+run raw2 0 0x00004031 0x00020001
+has raw2 "check 5: fail (P1 within 255 of P0) first at index 2 (GL x 2, y 63)"
+has raw2 "check 6: pass (P2 (raw A8R8G8B8 view) is the PE's word)"
+has raw2 "verdict: 4 (D24X8 off, the raw view is the word (check 6 passes))"
+has raw2 "outcome: (b) (a GPU copy, in the stream, into a layout the TPU reads)"
+run none2 0 0x000050f1 0x00000000
+has none2 "check 6: fail (P2 (raw A8R8G8B8 view) is the PE's word) first index: not in an X2 record"
+has none2 "check 7: fail (P3 on the deeper ramp (not stale)) first index: not in an X2 record"
+has none2 "verdict: 5 (the LINEAR descriptor does not address the surface)"
+has none2 "outcome: (c) (the CPU resolve stays; its three CPU fixes)"
+run ref2 1 0x00000009 0x10001000             # check 3 failed: not a verdict, rerun
+has ref2 "check 3: fail (P0 (today's path) on the ramp, the reference; its index is not kept)"
+has ref2 "verdict: 0 (no verdict (check 3 failed))"
+has ref2 "not a verdict: check 3 failed, rerun"
+hasnt ref2 '^outcome:'
+run glerr2 0 0x05021101 0x10001000
+has glerr2 "check 8: fail (first GL error 0x0502)"
+has glerr2 "outcome: (a) (a depth view of the surface, no copy, no CPU resolve on the draw path)"
+run idx-nobit-2w 2 0x00003011 0x10001000     # check 4's fail bit, no index in w2
+has idx-nobit-2w "imx8mp-dtpu-page: check 4: fail bit 1 but index 4096"
+# four positional words and three words plus --log stay usage errors (exit 2)
+run fourwords 2 0x00001001 0x10001000 0x10001000 0x10001000
+run three-with-log 2 0x00001001 0x10001000 0x10001000 --log "$tmp/good.log"
+run log-noarg 2 --log
+
+# --- two words plus a console log: the indices come from the log's page line ------------------
+# the stale page's four console words; the record's two words cross-checked against them
+{
+	echo '*** Booting Zephyr OS build v4.1.0 ***'
+	echo '[00:00:03.500,000] <inf> gc_gl_test: gc_gl_test: case 222 dtpu page 0xb0'
+	echo 'yk-record: 594b0cb0 00002081 10001000 00051000'
+} >"$tmp/stale.log"
+run two-log 0 0x00002081 0x10001000 --log "$tmp/stale.log"
+has two-log "page: w1=0x00002081 w2=0x10001000 w3=0x00051000"
+has two-log "check 7: fail (P3 on the deeper ramp (not stale)) first at index 5 (GL x 5, y 63)"
+has two-log "verdict: 2 (D24X8 exact but stale without a wait (check 7))"
+has two-log "outcome: (a)+flush ((a) plus the texture-cache flush of (a).9)"
+has two-log "note: w3 read from the console line (the X2 record stores w0..w2 only)"
+hasnt two-log "not in an X2 record"
+# from stdin too
+python3 -I "$tool" 0x00002081 10001000 --log - <"$tmp/stale.log" >"$tmp/two-stdin.out" 2>&1
+if [ $? = 0 ] && grep -qxF -- 'check 7: fail (P3 on the deeper ramp (not stale)) first at index 5 (GL x 5, y 63)' "$tmp/two-stdin.out"; then ok "two-stdin: two words plus stdin log"; else bad "two-stdin: decode differs"; cat "$tmp/two-stdin.out" >&2; fi
+# words that disagree with the log are not a decode
+run two-mismatch 2 0x00001001 0x10001000 --log "$tmp/stale.log"
+has two-mismatch "imx8mp-dtpu-page: the given w1=0x00001001 w2=0x10001000 do not match the log's dtpu page w1=0x00002081 w2=0x10001000"
+run two-nopage 2 0x00001001 0x10001000 --log "$tmp/nopage.log"
+has two-nopage "imx8mp-dtpu-page: no dtpu page: the log says check 1 or 2 stopped case 222; its CASE record is the result"
+# two words plus the check-3 page in a log: still not a verdict (exit 1)
+run two-log-ref 1 0x00000009 0x10001000 --log "$tmp/ref.log"
+has two-log-ref "not a verdict: check 3 failed, rerun"
+hasnt two-log-ref '^outcome:'
 
 echo "$nok ok, $nfail failed"
 [ "$nfail" = 0 ]
