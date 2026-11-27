@@ -62,10 +62,16 @@ pub const DEPTH_TPU_OFF: i32 = 0;
 pub const DEPTH_TPU_D24X8: i32 = 1;
 pub const DEPTH_TPU_RAW8888: i32 = 2;
 
-/// The experiment's mode ([`mode`]): 0 unless gl_test set it.
+/// The product default mode: what [`mode`] answers in a build without
+/// `test-knobs`, and the knob's start value. Still [`DEPTH_TPU_OFF`], the CPU
+/// resolve; changing it to [`DEPTH_TPU_D24X8`] is the outcome-(a) switch of
+/// docs/notes/gc-depth-sample-wire.md.
+pub const DEPTH_TPU_DEFAULT: i32 = DEPTH_TPU_OFF;
+
+/// The experiment's mode ([`mode`]): [`DEPTH_TPU_DEFAULT`] unless gl_test set it.
 #[cfg(feature = "test-knobs")]
 #[no_mangle]
-pub static mut gc_debug_depth_tpu: i32 = DEPTH_TPU_OFF;
+pub static mut gc_debug_depth_tpu: i32 = DEPTH_TPU_DEFAULT;
 
 /// Set [`gc_debug_depth_tpu`]; returns the previous value (gl_test's `dtpu`
 /// runs each arm and puts it back).
@@ -76,8 +82,9 @@ pub extern "C" fn gc_debug_set_depth_tpu(mode: i32) -> i32 {
     unsafe { core::ptr::addr_of_mut!(gc_debug_depth_tpu).replace(mode) }
 }
 
-/// The experiment's mode: [`DEPTH_TPU_OFF`] in every build without
-/// `test-knobs`, and in one that has not set the knob.
+/// The current mode: [`DEPTH_TPU_DEFAULT`] (today [`DEPTH_TPU_OFF`], the CPU
+/// resolve) in every build without `test-knobs`, and in one that has not set
+/// the knob.
 pub fn mode() -> i32 {
     #[cfg(feature = "test-knobs")]
     {
@@ -87,7 +94,7 @@ pub fn mode() -> i32 {
     }
     #[cfg(not(feature = "test-knobs"))]
     {
-        DEPTH_TPU_OFF
+        DEPTH_TPU_DEFAULT
     }
 }
 
@@ -116,7 +123,7 @@ fn view(id: u32, kick: u32) -> Option<DepthView> {
 }
 
 /// `crate::backend::samples_rendered_depth`'s GC answer: no in mode 0 (every
-/// product build); otherwise yes when `id`'s depth plane is Live here,
+/// product build while [`DEPTH_TPU_DEFAULT`] is [`DEPTH_TPU_OFF`]); otherwise yes when `id`'s depth plane is Live here,
 /// single-sampled, and covers `w` x `h`. No wait and no CPU access.
 pub fn gc_depth_sampled(id: u32, w: u32, h: u32) -> bool {
     mode() != DEPTH_TPU_OFF && id != 0 && view(id, 0).is_some_and(|v| v.covers(w, h))
@@ -410,6 +417,13 @@ pub fn copy_sampler_words(t: &GlesTextureBind, v: &DepthView, copy: u64) -> Resu
 #[cfg(test)]
 mod copy_tests {
     use super::*;
+
+    /// The product default is still the CPU resolve; changing it is a
+    /// deliberate edit of this test (docs/notes/gc-depth-sample-wire.md).
+    #[test]
+    fn product_default_is_cpu_resolve() {
+        assert_eq!(DEPTH_TPU_DEFAULT, DEPTH_TPU_OFF);
+    }
     use crate::ds_retention::unorm24_depth;
     use crate::vivante::cmd::GcCmd;
     use crate::vivante::regs::*;
