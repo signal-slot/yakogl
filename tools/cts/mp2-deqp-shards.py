@@ -5,7 +5,7 @@
 
     python3 -I tools/cts/mp2-deqp-shards.py tools/cts/gles2-mustpass.txt \
         --out DIR [--times times.tsv] [--budget-ms 15000] [--default-ms 100] \
-        [--overhead-ms 0]
+        [--overhead-ms 0] [--max-bytes N]
 
 Each STM32MP257F-DK run is a one-shot from ST's U-Boot that lasts about 20 s
 (the IWDG resets the board after about 32 s; docs/notes/stm32mp257f-dk-uboot-boot.md
@@ -23,7 +23,11 @@ and manifest.tsv (header line, then index<TAB>cases<TAB>est_ms<TAB>file per
 shard). Shards are consecutive slices of the input in input order (greedy: a
 shard closes when the next case would push it past the budget), so the split
 is stable and deterministic: the same inputs give the same bytes. A shard's
-estimate is --overhead-ms plus the sum of its cases' ms. A case that cannot
+estimate is --overhead-ms plus the sum of its cases' ms. --max-bytes N (default
+0: no limit) also closes a shard when its comma-joined filter (what the image
+gets, see below) would pass N bytes: the slot's room is CONFIG_DEQP_CASE_SLOT_SIZE
+- 1 (mp2-deqp-slot.py show prints it), and the 2048-byte argument buffer
+bounds a CONFIG_DEQP_CASE_TABLE entry. A case name longer than N is an error. A case that cannot
 fit a budget alone is an error (exit 1, nothing written), not an over-budget
 shard.
 
@@ -85,17 +89,21 @@ def load_times(path):
     return times
 
 
-def plan(cases, times, budget, default_ms, overhead):
+def plan(cases, times, budget, default_ms, overhead, max_bytes=0):
     shards = []
-    cur, cur_ms = [], overhead
+    cur, cur_ms, cur_b = [], overhead, 0
     for c in cases:
+        nb = len(c.encode("utf-8"))
+        if max_bytes and nb > max_bytes:
+            raise ValueError("case %s (%d bytes) exceeds --max-bytes %d" % (c, nb, max_bytes))
         ms = times.get(c, default_ms)
         if overhead + ms > budget:
             raise ValueError("case %s (%d ms + %d ms overhead) exceeds the budget %d ms"
                              % (c, ms, overhead, budget))
-        if cur and cur_ms + ms > budget:
+        if cur and (cur_ms + ms > budget or (max_bytes and cur_b + 1 + nb > max_bytes)):
             shards.append((cur, cur_ms))
-            cur, cur_ms = [], overhead
+            cur, cur_ms, cur_b = [], overhead, 0
+        cur_b += nb + (1 if cur else 0)
         cur.append(c)
         cur_ms += ms
     if cur:
@@ -111,13 +119,16 @@ def main(argv):
     ap.add_argument("--budget-ms", type=int, default=15000)
     ap.add_argument("--default-ms", type=int, default=100)
     ap.add_argument("--overhead-ms", type=int, default=0)
+    ap.add_argument("--max-bytes", type=int, default=0)
     a = ap.parse_args(argv)
     if a.budget_ms <= 0 or a.default_ms < 0 or a.overhead_ms < 0:
         ap.error("budget must be positive, default and overhead not negative")
+    if a.max_bytes < 0:
+        ap.error("--max-bytes must not be negative")
     try:
         cases = load_cases(a.caselist)
         times = load_times(a.times) if a.times else {}
-        shards = plan(cases, times, a.budget_ms, a.default_ms, a.overhead_ms)
+        shards = plan(cases, times, a.budget_ms, a.default_ms, a.overhead_ms, a.max_bytes)
     except (OSError, ValueError) as e:
         print("mp2-deqp-shards: %s" % e, file=sys.stderr)
         return 1

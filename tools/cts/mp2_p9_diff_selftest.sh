@@ -105,6 +105,20 @@ out=$(python3 -I "$TOOL" --baseline "$D/base2.tsv" --accepted "$D/acc.txt" --mus
 chk "exclude tsv: d dropped from new and shared" grep -qx 'mp2-p9-diff: shared 1, new 0, fixed 1, missing 0, excluded 2' <<<"$out"
 run --exclude "$D/nonexistent" "$D/ex.log" >/dev/null; chk "exclude: missing file exits 2" test $? -eq 2
 
+# --cases: a log with no "case filter" line, a case list of two names (patch C)
+printf '# the sweep list\n%s.a\n%s.d\n%s.not-in-mustpass\n' $P $P $P >"$D/cl.txt"
+out=$(run "$D/miss.log"); rc=$?
+chk "cases: without it every other mustpass name is missing" grep -q 'missing 6$' <<<"$out"
+out=$(run --cases "$D/cl.txt" "$D/miss.log"); rc=$?
+chk "cases: only the case list's .d is missing" grep -qx 'mp2-p9-diff: shared 0, new 0, fixed 1, missing 1' <<<"$out"
+chk "cases: the missing name is .d" after "$out" 'missing from the DK run: 1' "$P.d"
+chk "cases: a missing case still exits 1" test $rc -eq 1
+printf '%s.a\n' $P >"$D/cl1.txt"
+run --cases "$D/cl1.txt" "$D/miss.log" >/dev/null; chk "cases: all run, exit 0" test $? -eq 0
+out=$(run --cases "$D/cl.txt" --exclude "$D/excl.txt" "$D/miss.log")
+chk "cases: with --exclude, .d left out as excluded" grep -qx 'mp2-p9-diff: shared 0, new 0, fixed 1, missing 0, excluded 2' <<<"$out"
+run --cases "$D/nonexistent" "$D/miss.log" >/dev/null; chk "cases: missing file exits 2" test $? -eq 2
+
 # error exits
 run "$D/nonexistent" >/dev/null; chk "missing input exits 2" test $? -eq 2
 run "$D/dk.tsv" "$D/dk.log" >/dev/null; chk "mixed forms exit 2" test $? -eq 2

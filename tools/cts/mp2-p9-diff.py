@@ -4,7 +4,7 @@
 """Diff a STM32MP257F-DK dEQP-GLES2 run against the i.MX8MP baseline (roadmap P9).
 
     tools/cts/mp2-p9-diff.py [--baseline results.tsv] [--accepted FILE]
-      [--mustpass FILE] [--exclude FILE] [--report-only] RESULT...
+      [--mustpass FILE] [--cases FILE] [--exclude FILE] [--report-only] RESULT...
 
 RESULT is a DK results.tsv (the per-row form tools/board.sh writes, last
 column the ';'-separated failing names) or a UART log (read with
@@ -37,6 +37,12 @@ A name the i.MX8MP baseline lists in its failing column (its results.tsv
 cannot tell a warning from a failure) and the DK log shows as a warning is
 therefore "fixed"; a warning on both boards, with the baseline not listing the
 name, appears in no class. Exclude such names if they are not wanted.
+
+--cases FILE limits the "missing" class to the case names in FILE (one per
+line, "#" comments; mp2-deqp-sweep.sh passes its OUT/cases.txt): a sweep of a
+case list that is not the whole mustpass, or of a range of shards, no longer
+reports every other mustpass case missing when the logs carry no
+"case filter" line. A case in FILE that is not a mustpass name is ignored.
 
 --exclude FILE drops names before any class or count, from the baseline, the
 DK results, the accepted list and the mustpass scope alike. The syntax is
@@ -124,6 +130,7 @@ def main():
     ap.add_argument("--accepted", default=os.path.join(HERE, "es2-accepted.txt"))
     ap.add_argument("--mustpass", default=os.path.join(HERE, "gles2-mustpass.txt"))
     ap.add_argument("--exclude", metavar="FILE")
+    ap.add_argument("--cases", metavar="FILE")
     ap.add_argument("--report-only", action="store_true")
     a = ap.parse_args()
     try:
@@ -132,6 +139,7 @@ def main():
         mustpass = names_of(a.mustpass)
         texts = [read(p) for p in a.result]
         pats = exclude_patterns(a.exclude) if a.exclude else None
+        only = set(names_of(a.cases)) if a.cases else None
     except OSError as e:
         print("mp2-p9-diff: %s" % e, file=sys.stderr)
         return 2
@@ -186,7 +194,8 @@ def main():
         mnote = " (a results.tsv lists no passing names: not checkable)"
     else:
         scope = tally.scope_of(mustpass, filters)[0] if filters else mustpass
-        missing = sorted(c for c in scope if c not in status)
+        missing = sorted(c for c in scope
+                         if c not in status and (only is None or c in only))
         mnote = ""
 
     def show(title, names, note=""):

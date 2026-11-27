@@ -68,6 +68,20 @@ printf 'dEQP-GLES2.a.one 400\n' >"$D/bad.tsv"
 run "$FX/cases.txt" --out "$D/m" --times "$D/bad.tsv" 2>/dev/null
 chk "malformed time table: exit 1" test "$?" = 1
 
+# --max-bytes: a shard's comma-joined filter stays within N bytes (patch B)
+run "$FX/cases.txt" --out "$D/mb" --budget-ms 100000 --max-bytes 40 >/dev/null
+chk "max-bytes 40: 3 shards of 2 cases" test "$(tail -n +2 "$D/mb/manifest.tsv" | cut -f2 | tr '\n' ,)" = "2,2,2,"
+chk "max-bytes 40: every filter within 40 bytes" bash -c 'for f in "$1"/shard-*.txt; do [ "$(paste -sd, "$f" | tr -d "\n" | wc -c)" -le 40 ] || exit 1; done' _ "$D/mb"
+cat "$D"/mb/shard-*.txt >"$D/mb.all"
+chk "max-bytes: every case once, in input order" cmp -s "$D/mb.all" "$D/a.want"
+run "$FX/cases.txt" --out "$D/mb0" --budget-ms 100000 >/dev/null
+chk "no --max-bytes: one shard as before" test "$(($(wc -l <"$D/mb0/manifest.tsv") - 1))" = 1
+run "$FX/cases.txt" --out "$D/mbx" --max-bytes 10 2>/dev/null
+chk "max-bytes: a name over the limit exits 1" test "$?" = 1
+chk "max-bytes: nothing written then" test ! -e "$D/mbx"
+run "$FX/cases.txt" --out "$D/mbn" --max-bytes -1 2>/dev/null
+chk "max-bytes: negative refused (exit 2)" test "$?" = 2
+
 # the real mustpass, default budget
 MP=$HERE/gles2-mustpass.txt
 run "$MP" --out "$D/r" >/dev/null
