@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image S03a7b: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S03a7b.console.txt
+S03a7b.console.txt: deqp: done: 84 passed, 18 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 102 cases begun, 102 with a result, 0 without
+mustpass cases with a result: 102 (of 102 seen)
+group                                       pass   fail    n/s  other
+shaders                                       84     18      0      0
+TOTAL                                         84     18      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  S03a7b: deqp: summary 102 cases begun, 102 with a result; deqp: done 84 passed, 18 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 102 cases, P 84 F 18 R 0 N 0 other 0; 102 result lines seen
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x3

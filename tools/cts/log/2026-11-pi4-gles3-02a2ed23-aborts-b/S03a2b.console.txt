@@ -1,0 +1,959 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 02a2ed23, 2026-11-27, image S03a2b: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.09 [sdcard] pieeprom.upd not found
+  4.09 [sdcard] recover4.elf not found
+  4.10 [sdcard] recovery.elf not found
+  4.25 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.31 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.32 0x00d03114 0x00000000 0x00001fff
+  4.36 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.72 Starting start4.elf @ 0xfec00200 partition 1
+  4.27 XHCI-STOP
+  4.27 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.28 USBSTS 18
+  4.28 PCI0 reset
+  4.29 +
+
+MESS:00:00:04.307171:0: arasan: arasan_emmc_open
+MESS:00:00:04.308829:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.429056:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.441925:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.476199:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.477611:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.481995:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.643979:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.646800:0: brfs: File read: 170 bytes
+MESS:00:00:04.739515:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.744023:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.757772:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.223820:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.229366:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.238399:0: *** Restart logging
+MESS:00:00:05.240175:0: brfs: File read: 170 bytes
+MESS:00:00:05.318513:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.323545:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.341834:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.346919:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.352519:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.361278:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.366784:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.388991:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.404283:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.407574:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.448270:0: brfs: File read: 56249 bytes
+MESS:00:00:05.467141:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.532059:0: brfs: File read: 5971 bytes
+MESS:00:00:05.534738:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.577772:0: brfs: File read: 170 bytes
+MESS:00:00:05.581506:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.584932:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.590782:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.747564:0: brfs: File read: 145 bytes
+MESS:00:00:07.181821:0: brfs: File read: /mfs/sd/yakogl-S03a2b.bin
+MESS:00:00:07.184903:0: Loaded 'yakogl-S03a2b.bin' to 0x200000 size 0x1001f58
+MESS:00:00:07.191775:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.200562:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.207083:0: uart: Baud rate change done...
+MESS:00:00:07.209102:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 02a2ed23
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.*,dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x338f000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.scalar'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.scalar
+v3d_deqp: case #0 P 256ms k2/9 c20406/20483 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec2
+v3d_deqp: case #1 P 141ms k2/9 c20523/20930 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec3
+v3d_deqp: case #2 P 181ms k2/9 c20589/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec4
+v3d_deqp: case #3 P 218ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.scalar
+v3d_deqp: case #4 P 92ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec2
+v3d_deqp: case #5 P 141ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec3
+v3d_deqp: case #6 P 180ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec4
+v3d_deqp: case #7 P 217ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.scalar
+v3d_deqp: case #8 P 48ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec2
+v3d_deqp: case #9 P 122ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec3
+v3d_deqp: case #10 P 172ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec4
+v3d_deqp: case #11 P 208ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.scalar
+v3d_deqp: case #12 P 48ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec2
+v3d_deqp: case #13 P 120ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec3
+v3d_deqp: case #14 P 173ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec4
+v3d_deqp: case #15 P 208ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.scalar
+v3d_deqp: case #16 P 74ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec2
+v3d_deqp: case #17 P 141ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec3
+v3d_deqp: case #18 P 180ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec4
+v3d_deqp: case #19 P 217ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.scalar
+v3d_deqp: case #20 P 75ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec2
+v3d_deqp: case #21 P 140ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec3
+v3d_deqp: case #22 P 180ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec4
+v3d_deqp: case #23 P 218ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.scalar
+v3d_deqp: case #24 P 430ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec2
+v3d_deqp: case #25 P 951ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec3
+v3d_deqp: case #26 P 1395ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec4
+v3d_deqp: case #27 P 1834ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.scalar
+v3d_deqp: case #28 P 432ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec2
+v3d_deqp: case #29 P 948ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec3
+v3d_deqp: case #30 P 1377ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec4
+v3d_deqp: case #31 P 1820ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.scalar
+v3d_deqp: case #32 P 61ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec2
+v3d_deqp: case #33 P 747ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec3
+v3d_deqp: case #34 P 1356ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec4
+v3d_deqp: case #35 P 1802ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.scalar
+v3d_deqp: case #36 P 61ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec2
+v3d_deqp: case #37 P 747ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec3
+v3d_deqp: case #38 P 1356ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec4
+v3d_deqp: case #39 P 1802ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.scalar
+v3d_deqp: case #40 P 268ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec2
+v3d_deqp: case #41 P 948ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec3
+v3d_deqp: case #42 P 1408ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec4
+v3d_deqp: case #43 P 1836ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.scalar
+v3d_deqp: case #44 P 269ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec2
+v3d_deqp: case #45 P 948ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec3
+v3d_deqp: case #46 P 1402ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec4
+v3d_deqp: case #47 P 1842ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.asinh.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.scalar
+v3d_deqp: case #48 P 107ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec2
+v3d_deqp: case #49 P 175ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec3
+v3d_deqp: case #50 P 236ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec4
+v3d_deqp: case #51 P 288ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.scalar
+v3d_deqp: case #52 P 108ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec2
+v3d_deqp: case #53 P 176ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec3
+v3d_deqp: case #54 P 236ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec4
+v3d_deqp: case #55 P 289ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.scalar
+v3d_deqp: case #56 P 49ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec2
+v3d_deqp: case #57 P 155ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec3
+v3d_deqp: case #58 P 237ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec4
+v3d_deqp: case #59 P 293ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.scalar
+v3d_deqp: case #60 P 49ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec2
+v3d_deqp: case #61 P 153ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec3
+v3d_deqp: case #62 P 235ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec4
+v3d_deqp: case #63 P 293ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.scalar
+v3d_deqp: case #64 P 83ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec2
+v3d_deqp: case #65 P 178ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec3
+v3d_deqp: case #66 P 239ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec4
+v3d_deqp: case #67 P 295ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.scalar
+v3d_deqp: case #68 P 83ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec2
+v3d_deqp: case #69 P 179ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec3
+v3d_deqp: case #70 P 238ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec4
+v3d_deqp: case #71 P 295ms k2/9 c20653/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.scalar
+v3d_deqp: case #72 P 160ms k2/9 c20722/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec2
+v3d_deqp: case #73 P 255ms k2/9 c20790/21305 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec3
+v3d_deqp: case #74 P 354ms k2/10 c20856/21321 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec4
+v3d_deqp: case #75 P 450ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.scalar
+v3d_deqp: case #76 P 161ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec2
+v3d_deqp: case #77 P 255ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec3
+v3d_deqp: case #78 P 354ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec4
+v3d_deqp: case #79 P 450ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.scalar
+v3d_deqp: case #80 P 142ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec2
+v3d_deqp: case #81 P 263ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec3
+v3d_deqp: case #82 P 363ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec4
+v3d_deqp: case #83 P 462ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.scalar
+v3d_deqp: case #84 P 142ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec2
+v3d_deqp: case #85 P 262ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec3
+v3d_deqp: case #86 P 363ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec4
+v3d_deqp: case #87 P 462ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.scalar
+v3d_deqp: case #88 P 162ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec2
+v3d_deqp: case #89 P 264ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec3
+v3d_deqp: case #90 P 365ms k2/10 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec4
+v3d_deqp: case #91 P 465ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.scalar
+v3d_deqp: case #92 P 164ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec2
+v3d_deqp: case #93 P 263ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec3
+v3d_deqp: case #94 P 365ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec4
+v3d_deqp: case #95 P 466ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atan2.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.scalar
+v3d_deqp: case #96 P 299ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec2
+v3d_deqp: case #97 P 628ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec3
+v3d_deqp: case #98 P 916ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec4
+v3d_deqp: case #99 P 1192ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.scalar
+v3d_deqp: case #100 P 298ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec2
+v3d_deqp: case #101 P 629ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec3
+v3d_deqp: case #102 P 907ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec4
+v3d_deqp: case #103 P 1190ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.scalar
+v3d_deqp: case #104 P 56ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec2
+v3d_deqp: case #105 P 483ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec3
+v3d_deqp: case #106 P 859ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec4
+v3d_deqp: case #107 P 1123ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.scalar
+v3d_deqp: case #108 P 55ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec2
+v3d_deqp: case #109 P 484ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec3
+v3d_deqp: case #110 P 860ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec4
+v3d_deqp: case #111 P 1121ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.scalar
+v3d_deqp: case #112 P 192ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec2
+v3d_deqp: case #113 P 626ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec3
+v3d_deqp: case #114 P 918ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec4
+v3d_deqp: case #115 P 1194ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.scalar
+v3d_deqp: case #116 P 192ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec2
+v3d_deqp: case #117 P 628ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec3
+v3d_deqp: case #118 P 917ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec4
+v3d_deqp: case #119 P 1192ms k2/11 c20927/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.atanh.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.scalar
+v3d_deqp: case #120 P 205ms k2/11 c21141/21715 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec2
+v3d_deqp: case #121 P 334ms k2/11 c21236/21917 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec3'..
+yakogl/v3d: a draw's client data outgrew the job's data arena (292608 bytes): staged in GPU memory of its own
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec3
+v3d_deqp: case #122 P 475ms k2/11 c21378/22490 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec4
+v3d_deqp: case #123 P 594ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.scalar
+v3d_deqp: case #124 P 204ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec2
+v3d_deqp: case #125 P 332ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec3
+v3d_deqp: case #126 P 826ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec4
+v3d_deqp: case #127 P 1413ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.scalar
+v3d_deqp: case #128 P 414ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec2
+v3d_deqp: case #129 P 693ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec3
+v3d_deqp: case #130 P 976ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec4
+v3d_deqp: case #131 P 1246ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.scalar
+v3d_deqp: case #132 P 414ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec2
+v3d_deqp: case #133 P 693ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec3
+v3d_deqp: case #134 P 971ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec4
+v3d_deqp: case #135 P 1247ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.scalar
+v3d_deqp: case #136 P 464ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec2
+v3d_deqp: case #137 P 786ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec3
+v3d_deqp: case #138 P 1101ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec4
+v3d_deqp: case #139 P 1432ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.scalar
+v3d_deqp: case #140 P 462ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec2
+v3d_deqp: case #141 P 785ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec3
+v3d_deqp: case #142 P 1111ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec4
+v3d_deqp: case #143 P 1428ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.clamp.mediump_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.scalar
+v3d_deqp: case #144 P 226ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec2
+v3d_deqp: case #145 P 399ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec3
+v3d_deqp: case #146 P 541ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec4
+v3d_deqp: case #147 P 680ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.scalar
+v3d_deqp: case #148 P 228ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec2
+v3d_deqp: case #149 P 396ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec3
+v3d_deqp: case #150 P 540ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec4
+v3d_deqp: case #151 P 681ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.highp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.scalar
+v3d_deqp: case #152 P 77ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec2
+v3d_deqp: case #153 P 349ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec3
+v3d_deqp: case #154 P 550ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec4
+v3d_deqp: case #155 P 698ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.scalar
+v3d_deqp: case #156 P 77ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec2
+v3d_deqp: case #157 P 343ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec3
+v3d_deqp: case #158 P 552ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec4
+v3d_deqp: case #159 P 699ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.lowp_vertex.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.scalar
+v3d_deqp: case #160 P 160ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec2
+v3d_deqp: case #161 P 397ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec3
+v3d_deqp: case #162 P 546ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec4
+v3d_deqp: case #163 P 681ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_fragment.vec4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.scalar'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.scalar
+v3d_deqp: case #164 P 160ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.scalar
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec2'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec2
+v3d_deqp: case #165 P 396ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec3'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec3
+v3d_deqp: case #166 P 542ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec4'..
+deqp: Pass dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec4
+v3d_deqp: case #167 P 683ms k2/11 c21664/22918 r0 dEQP-GLES3.functional.shaders.builtin_functions.precision.cos.mediump_vertex.vec4
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        168/168 (100.0%)
+  Failed:        0/168 (0.0%)
+  Not supported: 0/168 (0.0%)
+  Warnings:      0/168 (0.0%)
+  Waived:        0/168 (0.0%)
+deqp: done: 168 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 168 cases begun, 168 with a result, 0 without
+v3d_deqp DONE, all passed: build 02a2ed23, filter 'dEQP-GLES3.functional.shaders.builtin_functions.precision.asin.*,dEQP-GLES3.functional.shaders.builtin_fu...
+  168 cases in 88037 ms, record at 88 s after boot, reset at ~250 s
+  totals: P 168  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 168 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 168 cases begun, 168 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 11; slowest #47 1842 ms
+  carve-out (KiB, of 48636): after #0 20406, last 21664, high-water 22918
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 348 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 21656064 bytes used now, 23468800 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 3/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 564 calls, 48095 map reads (85 a call, at most 1153 in one); free runs 5, longest 26110976 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 348 jobs ended; emitted 3360, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x338f000, GPU VA 0x181000..0x3100000
+driver: ... 7 more lines (UART)
+v3d_deqp: build 02a2ed23 DONE, all passed: 168 cases, P 168 F 0 R 0 N 0 other 0

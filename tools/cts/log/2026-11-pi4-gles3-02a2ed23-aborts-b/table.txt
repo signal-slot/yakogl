@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 02a2ed23, 2026-11-27, the twenty re-split labels of S03a and T14/T14a: deqp-uart-tally.py --table over the twenty consoles (README.md)
+== mustpass: 1383 cases in these records' case filters (41427 outside them, not run, left out); 1383 with a result (1563 case lines seen)
+group                           pass   fail   n.s.     QW  other   none
+shaders                         1087     54      0      0      0      0
+texture                          233      9      0      0      0      0
+TOTAL                           1320     63      0      0      0      0
+== the totals above are the result lines seen; the image's own counters, beside them:
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 94 cases begun, 94 with a result; deqp: done 94 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 94 cases, P 94 F 0 R 0 N 0 other 0; 94 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 168 cases begun, 168 with a result; deqp: done 168 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 168 cases, P 168 F 0 R 0 N 0 other 0; 168 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 83 cases begun, 83 with a result; deqp: done 83 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 83 cases, P 83 F 0 R 0 N 0 other 0; 83 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 96 cases begun, 96 with a result; deqp: done 96 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0; 96 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 38 cases begun, 38 with a result; deqp: done 38 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 38 cases, P 38 F 0 R 0 N 0 other 0; 38 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 87 cases begun, 87 with a result; deqp: done 87 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 87 cases, P 87 F 0 R 0 N 0 other 0; 87 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 113 cases begun, 113 with a result; deqp: done 95 passed, 18 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 113 cases, P 95 F 18 R 0 N 0 other 0; 113 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 76 cases begun, 76 with a result; deqp: done 76 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 76 cases, P 76 F 0 R 0 N 0 other 0; 76 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 122 cases begun, 122 with a result; deqp: done 104 passed, 18 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 122 cases, P 104 F 18 R 0 N 0 other 0; 122 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 54 cases begun, 54 with a result; deqp: done 54 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 54 cases, P 54 F 0 R 0 N 0 other 0; 54 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 12 cases begun, 12 with a result; deqp: done 12 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 12 cases, P 12 F 0 R 0 N 0 other 0; 12 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 12 cases begun, 12 with a result; deqp: done 12 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 12 cases, P 12 F 0 R 0 N 0 other 0; 12 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 135 cases begun, 135 with a result; deqp: done 135 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 135 cases, P 135 F 0 R 0 N 0 other 0; 135 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 96 cases begun, 96 with a result; deqp: done 96 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0; 96 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 102 cases begun, 102 with a result; deqp: done 84 passed, 18 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 102 cases, P 84 F 18 R 0 N 0 other 0; 102 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 225 cases begun, 225 with a result; deqp: done 217 passed, 8 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 225 cases, P 217 F 8 R 0 N 0 other 0; 225 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 47 cases begun, 47 with a result; deqp: done 41 passed, 6 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 47 cases, P 41 F 6 R 0 N 0 other 0; 47 result lines seen
+  2026-11-pi4-gles3-02a2ed23-aborts-b: deqp: summary 1 cases begun, 1 with a result; deqp: done 1 passed, 0 failed, 0 not supported, 0 warnings; 02a2ed23 DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0; 1 result lines seen
+== not Pass, by name
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.mediump_vertex.mat4x3
+Fail dEQP-GLES3.functional.texture.units.2_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.4_units.mixed.7
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.5
+Fail dEQP-GLES3.functional.texture.units.8_units.mixed.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_2d_array.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_3d.7
+Fail dEQP-GLES3.functional.texture.units.8_units.only_cube.2
