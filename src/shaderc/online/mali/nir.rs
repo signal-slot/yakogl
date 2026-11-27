@@ -3263,6 +3263,19 @@ fn vs_narrow_stored(vs: &mut Nir<'_>, v: Val) -> Result<Val, MaliError> {
     Ok(Val::Lane(id, 0))
 }
 
+/// The narrowing a mediump local's assignment makes of a highp built-in's
+/// result ([`vs_stored_sum`]): lower_precision's `f2fmp` of the vector
+/// stands at the assignment, after the operations of all its lanes, so it
+/// is made where the first fp16 reader stands. CSE'd.
+fn vs_narrow_assigned(vs: &mut Nir<'_>, v: Val) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    let nd = NirNode { kind: Kind::Alu(Alu::F2f16), src: [v, u, u], bits: 16, width: 1 };
+    if let Some(i) = vs.nodes[..vs.n].iter().position(|x| *x == nd) {
+        return Ok(Val::Lane(i as u16, 0));
+    }
+    Ok(Val::Lane(vs.push_node(nd)?, 0))
+}
+
 /// A 16-bit lane read by a 32-bit operation, an output or a highp local is
 /// widened first (`f2f32`, `F16_TO_F32 a.hN`), as GLSL's lower_precision
 /// converts a mediump value where a highp expression reads it.
@@ -3286,8 +3299,26 @@ fn vs_widen(vs: &mut Nir<'_>, v: Val) -> Result<Val, MaliError> {
 /// it is). deqp_posvary_fract_highp_*: `color.yz = res` of `fract`'s `fadd`,
 /// read by `color * 0.80`.
 fn vs_stored_sum(vs: &Nir<'_>, m: &Module<'_>, s: ir::Src, v: Val) -> Result<bool, MaliError> {
-    let sum = matches!(v, Val::Lane(n, 0) if matches!(vs.nodes[n as usize],
-            NirNode { kind: Kind::Alu(Alu::Fadd), bits: 32, width: 1, .. }));
+    /* a built-in's fp32 kernel (arith step 2: `sin cos log2 exp2 pow`) */
+    let kernel =
+        |v: Val| matches!(vs_alu_of(vs, v), Some((Alu::Fsin | Alu::Fcos | Alu::Flog2 | Alu::Fexp2 | Alu::Fpow, _)));
+    let sum = match (v, vs_alu_of(vs, v)) {
+        (Val::Lane(n, 0), Some((op, src))) if vs.nodes[n as usize].bits == 32 && vs.nodes[n as usize].width == 1 => {
+            match op {
+                /* `ceil`, `min`, `max` of highp lanes (deqp_arith_op_common
+                 * _{ceil,clamp}_vs_highp) and the kernels' results
+                 * (deqp_arith_op_angle_sin_vs_highp) likewise */
+                Alu::Fadd | Alu::Fceil | Alu::Fmax | Alu::Fmin => true,
+                /* a product of a kernel's result: `tan`'s `sin(x) * (1.0 /
+                 * cos(x))`, `log`'s `log2(x) * ln 2`
+                 * (deqp_arith_op_angle_tan_vs_highp, op_exponential_log_vs
+                 * _highp). Any other product keeps its form */
+                Alu::Fmul => kernel(src[0]) || kernel(src[1]),
+                _ => kernel(v),
+            }
+        }
+        _ => false,
+    };
     /* the local's class is read only where it decides ([`local_class_of`]) */
     match m.def(s.val) {
         Some(IrOp::LoadLocal { local, .. }) if sum => Ok(local_class_of(m, *local)? == Prec::Medium),
@@ -3432,9 +3463,16 @@ fn vs_alu16(
     for k in 0..2 {
         for i in 0..width {
             x[k][i] = lane(w, s[k], i);
-            /* the `f2f16` right after the sum ([`vs_narrow_stored`]) */
+            /* the `f2f16` right after the sum ([`vs_narrow_stored`]); of
+             * a built-in's result (`max`, `ceil`, a kernel: arith step 2)
+             * the vector's conversion after every lane's operation, where
+             * the assignment stands (`color.xy = res` of `max(in0, in1)`:
+             * both `FMAX.f32`, then both `FADD.f32 r.h0`) */
             if vs_stored_sum(vs, m, s[k], x[k][i])? {
-                x[k][i] = vs_narrow_stored(vs, x[k][i])?;
+                /* `sign`'s `b2f(0 < x) - b2f(x < 0)` is a built-in's too */
+                let sign = matches!(vs_alu_of(vs, x[k][i]), Some((Alu::Fadd, [p, ..])) if vs.is_alu(p, Alu::B2f));
+                let sum = vs.is_alu(x[k][i], Alu::Fadd) && !sign;
+                x[k][i] = if sum { vs_narrow_stored(vs, x[k][i])? } else { vs_narrow_assigned(vs, x[k][i])? };
             }
         }
     }
@@ -6457,6 +6495,7 @@ fn walk<'s>(
                 }
                 /* lanes an arm makes for every lane at once, at lane 0 */
                 let mut held = [Val::Undef; 4];
+                let mut held2 = [Val::Undef; 4];
                 let split = if a == AluOp::Fmul { split_const(w, &s, width) } else { [false; 2] };
                 /* the operands' lanes, a 16-bit one widened ([`vs_widen`]) */
                 let mut xs = [[Val::Undef; 4]; 3];
@@ -6487,6 +6526,55 @@ fn walk<'s>(
                     if !reduces && (0..super::nir_fs::ir_arity(a)).any(|k| x(k) == Val::Undef) {
                         *o = Val::Undef;
                         continue;
+                    }
+                    /* a mediump operation on a built-in kernel's result
+                     * (`tan`'s `sin(x) * (1.0 / cos(x))`, `log`'s `log2(x) *
+                     * ln 2`), or a kernel of a computed mediump operand
+                     * (`exp`'s `exp2(x * log2 e)`): Mesa's are fp16 around
+                     * the fp32 kernel (deqp_arith_op_angle_tan_vs_mediump:
+                     * `FRCP.f16`, `FMA.v2f16`), arith step 6, no form in
+                     * this fp32 walk. `pow`'s `exp2(log2(a) * b)` is the
+                     * one `fpow` at either precision
+                     * (deqp_arith_op_exponential_pow_vs_mediump) */
+                    if medium {
+                        let kernel = |v: Val| {
+                            matches!(
+                                vs_alu_of(&vs, v),
+                                Some((Alu::Fsin | Alu::Fcos | Alu::Flog2 | Alu::Fexp2 | Alu::Fpow, _))
+                            )
+                        };
+                        let arity = super::nir_fs::ir_arity(a);
+                        let pow_inner = a == AluOp::Fmul
+                            && m.instrs
+                                .iter()
+                                .any(|op| matches!(op, IrOp::Alu(AluOp::Fexp2, e) if e[0].val == ValueId(id.0)));
+                        if (0..arity).any(|k| kernel(x(k))) && !pow_inner {
+                            return Err(MaliError::Arithmetic);
+                        }
+                        let pow = matches!(vs_alu_of(&vs, x(0)), Some((Alu::Fmul, [p, q, _]))
+                            if vs.is_alu(p, Alu::Flog2) || vs.is_alu(q, Alu::Flog2));
+                        /* a mediump kernel of more lanes than Mesa's words
+                         * were compared for: `sin`, `cos` of a vec3 or
+                         * vec4, `exp2`, `log2` of a vec4 come in another
+                         * lane order (drawn with the drm-shim, not
+                         * committed): refused, not guessed */
+                        /* (a scalar's operand is one lane in every lane) */
+                        let n =
+                            (0..lanes).filter(|&i| xs[0][i] != Val::Undef && !xs[0][..i].contains(&xs[0][i])).count();
+                        let wide = match a {
+                            AluOp::Fsin | AluOp::Fcos => n > 2,
+                            AluOp::Fexp2 | AluOp::Flog2 => n > 3 && !pow,
+                            _ => false,
+                        };
+                        if wide {
+                            return Err(MaliError::Arithmetic);
+                        }
+                        if matches!(a, AluOp::Fsin | AluOp::Fcos | AluOp::Flog2 | AluOp::Fexp2)
+                            && vs_alu_of(&vs, x(0)).is_some()
+                            && !(a == AluOp::Fexp2 && pow)
+                        {
+                            return Err(MaliError::Arithmetic);
+                        }
                     }
                     /* a mediump sum or product of two constants: fp16 at
                      * each step, every constant rounded to half and every
@@ -6763,7 +6851,91 @@ fn walk<'s>(
                         AluOp::Bcsel => vs.alu(Alu::Bcsel, x(0), x(1), x(2))?,
                         /* the clamps of vsarith_182_fsat and _fsatfolded
                          * (docs/notes/mali-vs-compare-clamp.md section 3) */
+                        /* of two computed highp operands, a plain fp32
+                         * `FMAX` / `FMIN` (arith step 2;
+                         * deqp_arith_op_common_clamp_vs_highp's `clamp(in0,
+                         * in1, in2)`: `FMAX.f32 r0, r2^, r0^`, then
+                         * `FMIN.f32 r0, r0^, r5^`). A mediump one is
+                         * Mesa's fp16 pair (step 6): refused in
+                         * [`vs_clamp`] */
+                        AluOp::Fmax | AluOp::Fmin
+                            if !medium && !matches!(x(0), Val::Const(_)) && !matches!(x(1), Val::Const(_)) =>
+                        {
+                            vs.alu(if a == AluOp::Fmax { Alu::Fmax } else { Alu::Fmin }, x(0), x(1), Val::Undef)?
+                        }
                         AluOp::Fmax | AluOp::Fmin => vs_clamp(&mut vs, a, x(0), x(1))?,
+                        /* `ceil` of a highp lane is one `FROUND.f32.rtp`
+                         * (deqp_arith_op_common_ceil_vs_highp); `sign` is
+                         * `b2f(0 < x) - b2f(x < 0)` (nir_opt_algebraic.py's
+                         * `lower_fsign`), two `FCMP_OR.f32.lt.f1` and an
+                         * `FADD.f32 a, b.neg` (deqp_arith_op_common_sign_vs
+                         * _highp). The mediump ones are fp16 in Mesa (step
+                         * 6): no form here */
+                        /* `sin`, `cos`, `log2`, `exp2` of a computed fp32
+                         * lane: Mesa's kernels (emit.rs `fsincos`,
+                         * `flog2`, `fexp2`; deqp_arith_op_angle_sin_vs
+                         * _highp). `exp2(log2(a) * b)` is `fpow(a, b)`
+                         * (nir_opt_algebraic.py:1872; the front end's
+                         * `pow`), the exponent scaled by the log
+                         * (deqp_arith_op_exponential_pow_vs_highp) */
+                        AluOp::Fsin | AluOp::Fcos | AluOp::Flog2 if !matches!(x(0), Val::Const(_)) => {
+                            let op = match a {
+                                AluOp::Fsin => Alu::Fsin,
+                                AluOp::Fcos => Alu::Fcos,
+                                _ => Alu::Flog2,
+                            };
+                            let v = vs.alu(op, x(0), Val::Undef, Val::Undef)?;
+                            /* a mediump lane's result is narrowed where it
+                             * is made (lower_precision's `f2fmp` of each
+                             * scalarised lane: the vec2 `sin`'s `FADD.f32
+                             * r2.h0` between the two kernels); a highp one
+                             * at its assignment ([`vs_narrow_assigned`]) */
+                            if medium {
+                                vs_narrow_stored(&mut vs, v)?;
+                            }
+                            v
+                        }
+                        AluOp::Fexp2 if !matches!(x(0), Val::Const(_)) => match vs_alu_of(&vs, x(0)) {
+                            Some((Alu::Fmul, [p, q, _])) if vs.is_alu(p, Alu::Flog2) || vs.is_alu(q, Alu::Flog2) => {
+                                let (l, b) = if vs.is_alu(p, Alu::Flog2) { (p, q) } else { (q, p) };
+                                let base = vs_alu_of(&vs, l).map(|(_, s)| s[0]).unwrap_or(Val::Undef);
+                                /* the exponents :1882-1886 rewrite have no
+                                 * reference here */
+                                if matches!(b, Val::Const(c) if matches!(f32::from_bits(c), 1.0 | 2.0 | 3.0 | 4.0)) {
+                                    return Err(MaliError::AlgebraicForm);
+                                }
+                                vs.alu(Alu::Fpow, base, b, Val::Undef)?
+                            }
+                            _ => vs.alu(Alu::Fexp2, x(0), Val::Undef, Val::Undef)?,
+                        },
+                        AluOp::Fceil if !medium && !matches!(x(0), Val::Const(_)) => {
+                            vs.alu(Alu::Fceil, x(0), Val::Undef, Val::Undef)?
+                        }
+                        AluOp::Fsign if !medium && !matches!(x(0), Val::Const(_)) => {
+                            /* on the vector before it is scalarised: every
+                             * lane's `0 < x`, then every lane's `x < 0`,
+                             * then each lane's `fadd` (made at lane 0,
+                             * `held`; a vec2's four `FCMP_OR.f32.lt.f1`
+                             * before its two `FADD.f32`) */
+                            if l == 0 {
+                                let zero = Val::Const(F32_ZERO);
+                                if (0..lanes).any(|i| matches!(xs[0][i], Val::Const(_))) {
+                                    return Err(MaliError::Arithmetic);
+                                }
+                                /* a lane past the operand's has none */
+                                let live = |i: usize| xs[0][i] != Val::Undef;
+                                for (i, h) in held.iter_mut().enumerate().take(lanes).filter(|&(i, _)| live(i)) {
+                                    let pos = vs.alu(Alu::Fcmp(Cmpf::Lt), zero, xs[0][i], Val::Undef)?;
+                                    *h = vs.alu(Alu::B2f, pos, Val::Undef, Val::Undef)?;
+                                }
+                                for (i, h) in held2.iter_mut().enumerate().take(lanes).filter(|&(i, _)| live(i)) {
+                                    let neg = vs.alu(Alu::Fcmp(Cmpf::Lt), xs[0][i], zero, Val::Undef)?;
+                                    let n = vs.alu(Alu::B2f, neg, Val::Undef, Val::Undef)?;
+                                    *h = vs.alu(Alu::Fneg, n, Val::Undef, Val::Undef)?;
+                                }
+                            }
+                            vs.alu(Alu::Fadd, held[l], held2[l], Val::Undef)?
+                        }
                         /* `abs` is the `.abs` modifier on its consumer and
                          * `floor` one `FROUND.f32.rtn` (vsarith_181_fmactrl,
                          * docs/notes/mali-vs-abs-if.md) */
