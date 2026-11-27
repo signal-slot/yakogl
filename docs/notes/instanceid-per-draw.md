@@ -47,6 +47,30 @@ test `0fbc924d`, the feature declaration `3ef0bbef`, gl_test case 243
 built not run). Host results, HOST-ONLY, in sections 3 and 5. Not measured on
 a board.
 
+**Update (2026-11-27): the P3 vertex PDS program is bounded (`a34b6647`).**
+Under the feature, many divided streams overran it two ways. Mesa's instance
+divide grew the code segment past the buffer (8 divided streams made 41
+(mixed) / 53 (odd) code dwords against the 21 of `VCODE_DWORDS`, copied
+unchecked), and Mesa's temp allocator only asserts its 32-temp block
+(`PVR_PDS_TEMPS_BLOCK_SIZE`, `pvr_pds.c:305`), which the driver's `NDEBUG`
+let overrun. `driver/src/pvr_pds_render_gen.h` now names the limits every
+vertex program is checked against before a word is written:
+`PVR_PDS_VERTEX_MAX_DATA_DW` 138 (the multiplier sits in its stream's data
+block, word `8s+3`, so the data side does not move),
+`PVR_PDS_VERTEX_MAX_CODE_DW` 21 plus `PVR_PDS_VERTEX_DIVIDE_CODE_DW` 5 for
+every stream with divisor > 1 (101 for all 16), and
+`PVR_PDS_VERTEX_MAX_TEMPS` 32, counted the way Mesa's `pvr_pds_get_temps()`
+allocates them before Mesa runs. A program above them is refused (-1). The
+back end bounds its stream sets the same way (`pds_vertex_temps`,
+`instance_divides_overrun_temps`): a draw above the temps — possible only
+when all 16 attributes are per instance with a divisor > 1 (16 mixed take 33
+temps, 16 odd 34; 15 fit whatever their divisors) — is drawn instance by
+instance with its per-instance attributes as constants
+(`draw_instances_flattened`), the GL core's own split for divisors above
+`max_instance_divisor`. A program without divisors never exceeded 138 / 21,
+so no feature-off program is refused. Host dEQP recheck after the fix at
+`fee1b6ef`: unchanged (section 5). Not measured on a board.
+
 ## Summary
 
 The six dEQP-GLES3 cases
@@ -289,6 +313,37 @@ split, every stream divisor 0). The split-pin tests of
 compiled out under the feature by design; `es3_pvr_divisor.rs` is their
 replacement.
 
+The size bounds landed after P3 itself (`a34b6647`, 2026-11-27). Mesa's
+instance divide costs one SFTLP32 for a power of two and two LIMM, the MAD
+and two SFTLP64 for any other divisor (the shift is `shift + 31 > 31`, so
+always two): at most 5 code dwords per divided stream, and the multiplier
+sits in its stream's data block (word `8s+3`), so the data side never grew.
+The generator refuses (-1), before writing a word, a program above
+`PVR_PDS_VERTEX_MAX_DATA_DW` (138), above `PVR_PDS_VERTEX_MAX_CODE_DW` (21)
+plus `PVR_PDS_VERTEX_DIVIDE_CODE_DW` (5) per divided stream, or needing more
+than `PVR_PDS_VERTEX_MAX_TEMPS` (32) temps — counted the way Mesa's
+`pvr_pds_get_temps()` allocates them, because Mesa only asserts the block
+and the driver builds with `NDEBUG`. `VCODE_DWORDS` in `src/pvr/backend.rs`
+carries the worst case (101 with the feature; without it no stream has a
+divisor and it stays 21, as before). `src/pvr/backend.rs` bounds the streams
+before the generator runs: `pds_vertex_temps` counts divisors the way Mesa
+allocates them, and `instance_divides_overrun_temps` counts the draw's
+attributes as streams in vi register order — coalescing only removes
+streams, and removing one never raises the count, so it is an upper bound.
+A draw above 32 temps (16 mixed streams take 33, 16 odd 34; 15 fit whatever
+their divisors, so it needs all 16 attributes per instance with divisor > 1)
+goes to `draw_instances_flattened`: each instance drawn alone, its
+per-instance arrays as constants (per vertex, stride 0) at element
+instance / divisor, `gl_InstanceID` base + instance through P1's modifier,
+the clear with the first instance only — the GL core's own split for
+divisors above `max_instance_divisor`, done in the back end because the core
+decides that split from the table's static `max_instance_divisor`, not per
+draw. `record_draw` refuses (`-EINVAL`, never generates) a stream set above
+the temps should one reach it. `tests/es3_pvr_divisor_pds_many.rs` (11 cases
+with the feature, 7 without) pins the four limits, the 8-divided-stream
+programs at 41 / 53 code dwords, the 16-stream refusals (exit 1, not an
+assert), and the per-instance fallback.
+
 Two lib tests in `src/pvr/backend_tests.rs` encode the **feature-off**
 chunking and fail under `test-knobs,pvr-instance-divisor` by design:
 `a_draw_that_reads_gl_instance_id_is_split_with_each_chunk_as_the_base`
@@ -522,6 +577,17 @@ Expected verdicts:
   shows 0 case changes in the instanced groups, reproduced twice. The 1,100
   non-instanced stream cases are
   case-for-case identical with and without the feature.
+- After the bounds (`a34b6647`), re-measured at `fee1b6ef` in both arms
+  (`GPU=powervr`, with and without the feature): unchanged against the
+  numbers above. Per set: `dEQP-GLES3.functional.instanced.*` 45 cases,
+  `dEQP-GLES3.functional.draw.draw_{arrays,elements}_instanced.*` 66 cases,
+  111 together — the same 0 Pass / 111 Fail / 0 NotSupported in both arms,
+  0 case changes, no crash and no `draw refused` line. The refusals and the
+  per-instance fallback of `a34b6647` are host-test facts
+  (`tests/es3_pvr_divisor_pds_many.rs`); what they protect is not
+  host-visible: the six cases' expected Fail to Pass and the
+  `attrib_divisor` cases staying Pass on the PDS divide are picture
+  verdicts on the AM62P, still unmeasured (#313 holds the board).
 - PowerVR host-test sweep at `4f4310a6`: 213 of 213 rows pass without the
   feature. With it the only failures are the two `test-knobs` lib tests named
   under the P3 row of section 3, which encode the feature-off chunking.
