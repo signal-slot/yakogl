@@ -12330,6 +12330,37 @@ fn frag_coord_tree(pr: &Pairs, x: u8) -> bool {
     walk(pr, x, 0, &mut frag) && frag
 }
 
+/// Pair `x` is `FMA.v2f16` of a varying's converted lanes 0 and 1
+/// ([`Leaf::Half`] of the load's first pair) by a splat constant plus a
+/// splat constant: the two-lane computed coordinate of a vec4 varying that
+/// gm2_nbshrf_4 draws (`texture2D(m, sc.st * 0.5 + 0.5)`: `LD_VAR_BUF_IMM
+/// ... .v4`, `V2F32_TO_V2F16 r0, r0^, r1^`, `FMA.v2f16 r0, r0^,
+/// 0x38000000.h11, 0x38000000.h11`, then `F16_TO_F32` of each half and the
+/// two moves to the staging words; docs/notes/mali-tex-coords.md, section
+/// TEX_COORD2). A sum alone, a product alone, a constant pair of two
+/// values, a uniform, a negation or lanes 2 and 3 have no reference, nor
+/// has the colour reading another lane of the same load (`* sc.z`).
+fn varying_coord_tree(pr: &Pairs, x: u8) -> bool {
+    let splat = |y: u8| matches!(pr.nodes[y as usize], P::Leaf(Leaf::Const(c)) if c >> 16 == c & 0xffff);
+    let P::Op(Alu::Ffma, [a, b, c]) = pr.nodes[x as usize] else { return false };
+    let P::Leaf(Leaf::Half { k, h: 0, swz: Swz::H01 }) = pr.nodes[a as usize] else { return false };
+    /* the load's one reader is the coordinate's pair */
+    let reads_k = |n: &P| match *n {
+        P::Leaf(
+            Leaf::Half { k: j, .. }
+            | Leaf::Splat { k: j, .. }
+            | Leaf::Mk { k: j, .. }
+            | Leaf::Raw { k: j, .. }
+            | Leaf::RawLane { k: j, .. }
+            | Leaf::MkInt { k: j, .. },
+        ) => j == k,
+        P::Leaf(Leaf::Lanes { k: j, e, .. }) => j == k || e == k,
+        _ => false,
+    };
+    let others = pr.nodes[..pr.n].iter().enumerate().any(|(i, n)| i != a as usize && reads_k(n));
+    splat(b) && splat(c) && !others
+}
+
 fn mark(pr: &Pairs, x: u8, live: &mut [bool; MAX_PAIRS]) {
     if live[x as usize] {
         return;
@@ -12480,10 +12511,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             let nd = f.nir.nodes[node as usize];
             if nd.src[0] != nd.src[1] {
                 let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
-                /* only gl_FragCoord's word and constants under it: a
-                 * varying's lanes (gm2_constfold_5, 6: `TextureCoord +
-                 * vec2(k, 0.0)`) and uniforms have no reference here */
-                if !frag_coord_tree(&pr, xy) {
+                /* gl_FragCoord's word and constants under it, or a
+                 * varying's first two lanes in one multiply-add of splat
+                 * constants (TEX_COORD2, [`varying_coord_tree`]). Other
+                 * varying trees (gm2_constfold_5, 6: `TextureCoord +
+                 * vec2(k, 0.0)`, Mesa's `FADD_IMM.v2f16`) and uniforms
+                 * have no reference here */
+                if !frag_coord_tree(&pr, xy) && !varying_coord_tree(&pr, xy) {
                     return Err(MaliError::TexCoord);
                 }
                 pr.note(xy, Place::Output, &mut f.prods);
