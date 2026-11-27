@@ -888,6 +888,7 @@ fn triangle_job_is_mesas() {
         prim: ffi71::V3D_PRIM_TRIANGLES,
         count: 3,
         first: 0,
+        indices: None,
     };
     let mut h = harness_at(p);
     let a = backend71::assemble(&t, &frame, &[draw], &mut h).unwrap_or_else(|e| panic!("triangle: {e}"));
@@ -1070,6 +1071,7 @@ fn draw_refusals_are_named() {
         prim: ffi71::V3D_PRIM_TRIANGLES,
         count: 3,
         first: 0,
+        indices: None,
     };
     backend71::plan_draw(&t, &base, TRI_PLACE.ind).expect("Mesa's triangle");
     // a TMU configuration uniform: the 7.1 texture state is not written here

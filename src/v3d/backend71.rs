@@ -55,8 +55,9 @@
 //! with the clear draws (Mesa's blitter clear: fill71's clear quad) among
 //! the draws and a new job wherever a whole clear follows queued draws.
 //! `assemble_filled` admits the framebuffer again for limits71's tile size,
-//! turns each `FilledDraw` into a [`Draw71`] ([`draw_of`]: arrays, one
-//! instance, no point size; the rest is refused by name, [`FILLED_REFUSALS`])
+//! turns each `FilledDraw` into a [`Draw71`] ([`draw_of`]: arrays or u16
+//! indices, one instance, no point size; the rest is refused by name,
+//! [`FILLED_REFUSALS`])
 //! and runs steps 4 to 6 with fill71's `V3dJob71Clear`. The six gl_test
 //! shapes and the 4- and 8-target clears assemble this way
 //! (tests/v3d71_backend71_shapes.rs against tools/v3d/pi5/gl_*.clif).
@@ -248,10 +249,40 @@ pub struct Draw71<'a> {
     /// Vertex attribute arrays (float), record i is the programs'
     /// `vattr_sizes[i]`.
     pub attrs: &'a [ffi71::V3dVertexAttr],
-    /// `V3D_PRIM_*`, vertex count and first vertex (arrays, one instance).
+    /// `V3D_PRIM_*`, vertex (or index) count and first vertex (arrays, one
+    /// instance; 0 for an indexed draw).
     pub prim: u32,
     pub count: u32,
     pub first: u32,
+    /// The index buffer of a `glDrawElements` (`None`: `glDrawArrays`).
+    pub indices: Option<Indices71>,
+}
+
+/// An indexed draw's index buffer: what v3d_job71 writes as
+/// `INDEX_BUFFER_SETUP` (address, size) and `INDEXED_PRIM_LIST` (index type,
+/// `count` indices from `offset`), as Mesa's `v3d_draw_vbo` does at 7.1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Indices71 {
+    /// `V3D_INDEX_TYPE_*` (the packet's `Index type`); [`draw_of`] admits
+    /// `V3D_INDEX_TYPE_16` only ([`REF_INDEX_TYPE`]).
+    pub index_type: u32,
+    /// GPU address of the index buffer's first byte.
+    pub buffer: u32,
+    /// Its size in bytes from `buffer` (`INDEX_BUFFER_SETUP`'s `Size`).
+    pub buffer_bytes: u32,
+    /// Byte offset of the first index in the buffer (`Index Offset`).
+    pub offset: u32,
+}
+
+impl Draw71<'_> {
+    /// `struct v3d_job71_draw`'s `indexed`, `index_type`, `index_buffer`,
+    /// `index_buffer_bytes` and `index_offset`.
+    pub fn index_fields(&self) -> (bool, u32, u32, u32, u32) {
+        match self.indices {
+            Some(i) => (true, i.index_type, i.buffer, i.buffer_bytes, i.offset),
+            None => (false, 0, 0, 0, 0),
+        }
+    }
 }
 
 /// What step 4 predicts the builder writes for one draw.
@@ -500,6 +531,7 @@ impl Builder71 for CBuilder71<'_> {
             let mut cs = d.cs;
             cs.uniforms = d.cs_uniforms.as_ptr();
             cs.num_uniforms = d.cs_uniforms.len() as u32;
+            let (indexed, index_type, index_buffer, index_buffer_bytes, index_offset) = d.index_fields();
             let draw = ffi71::V3dJob71Draw {
                 st: &d.st,
                 fs: &fs,
@@ -512,11 +544,11 @@ impl Builder71 for CBuilder71<'_> {
                 prim: d.prim,
                 count: d.count,
                 first: d.first,
-                indexed: false,
-                index_type: 0,
-                index_buffer: 0,
-                index_buffer_bytes: 0,
-                index_offset: 0,
+                indexed,
+                index_type,
+                index_buffer,
+                index_buffer_bytes,
+                index_offset,
                 tmu: core::ptr::null(),
                 num_tmu: 0,
                 vs_tmu: core::ptr::null(),
@@ -660,17 +692,21 @@ pub fn assemble(
 /// The refusals of the fill71 path that this module names itself (module
 /// `backend71`): what fill71 can describe but [`Draw71`] (and so the
 /// [`Builder71`] calls) does not carry yet.
-pub const FILLED_REFUSALS: [&str; 4] = [REF_INDEXED, REF_INSTANCED, REF_PSIZ, REF_TARGET];
+pub const FILLED_REFUSALS: [&str; 4] = [REF_INDEX_TYPE, REF_INSTANCED, REF_PSIZ, REF_TARGET];
 
-const REF_INDEXED: &str = "an indexed draw: the 7.1 table assembles glDrawArrays only (Draw71 has no index buffer)";
+/// An indexed draw of 8-bit or 32-bit indices. The GL core widens both to
+/// u16 before the back end (src/gl/draw.rs `draw_elements`), so only a
+/// GlesDraw that bypasses it reaches this.
+pub const REF_INDEX_TYPE: &str =
+    "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only";
 const REF_INSTANCED: &str = "an instanced draw (more than one instance): the 7.1 table assembles one instance per draw";
 const REF_PSIZ: &str = "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records";
 const REF_TARGET: &str = "fill71's target descriptor is not the framebuffer's (size or render target count)";
 
 /// A fill71 draw as the builder takes it. The views point into `fd`.
 pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
-    if fd.indexed {
-        return Err(own(REF_INDEXED));
+    if fd.indexed && fd.index_type != ffi71::V3D_INDEX_TYPE_16 {
+        return Err(own(REF_INDEX_TYPE));
     }
     if fd.instances > 1 {
         return Err(own(REF_INSTANCED));
@@ -692,6 +728,12 @@ pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
         prim: fd.prim,
         count: fd.count,
         first: fd.first,
+        indices: fd.indexed.then_some(Indices71 {
+            index_type: fd.index_type,
+            buffer: fd.index_buffer,
+            buffer_bytes: fd.index_buffer_bytes,
+            offset: fd.index_offset,
+        }),
     })
 }
 

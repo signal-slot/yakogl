@@ -57,7 +57,8 @@
 //!
 //! * a clear quad when the clear program did not build
 //!   ([`REF_CLEAR_PROGRAM`], the 4.2 table's string);
-//! * what `backend71` does not assemble (indexed, instanced, point size) and
+//! * what `backend71` does not assemble (8-bit and 32-bit indices,
+//!   instanced, point size) and
 //!   everything `glue71`, `fill71` and their modules refuse (textures among
 //!   them);
 //! * a depth/stencil the framebuffer keeps between jobs: the table keeps it
@@ -736,10 +737,13 @@ mod rec {
                 attrs[rec] = *a;
             }
         }
-        /* staged indices: backend71 assembles glDrawArrays only and names
-         * the refusal; the indices are not copied for a draw it refuses */
+        /* staged indices (client memory, or the GL core's u16 scratch): a
+         * copy in the data arena for the job's life. backend71 assembles u16
+         * indices only and names the other types (REF_INDEX_TYPE), so those
+         * are not copied: the dummy stands in until the refusal */
         if !d.index_cpu.is_null() {
-            q.indices = Some(glue71::IndexPlace { addr: dummy, size: u64::from(d.index_bytes) });
+            let addr = if d.index_size == 2 { stage(g, d.index_cpu, d.index_bytes as usize)? } else { dummy };
+            q.indices = Some(glue71::IndexPlace { addr, size: u64::from(d.index_bytes) });
         }
         q.prog = Some(prog);
         q.attrs = attrs;

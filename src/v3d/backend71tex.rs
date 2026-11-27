@@ -530,6 +530,7 @@ impl TexBuilder71 for CTexBuilder71<'_> {
             let mut cs = d.cs;
             cs.uniforms = d.cs_uniforms.as_ptr();
             cs.num_uniforms = d.cs_uniforms.len() as u32;
+            let (indexed, index_type, index_buffer, index_buffer_bytes, index_offset) = d.index_fields();
             let draw = ffi71::V3dJob71Draw {
                 st: &d.st,
                 fs: &fs,
@@ -542,11 +543,11 @@ impl TexBuilder71 for CTexBuilder71<'_> {
                 prim: d.prim,
                 count: d.count,
                 first: d.first,
-                indexed: false,
-                index_type: 0,
-                index_buffer: 0,
-                index_buffer_bytes: 0,
-                index_offset: 0,
+                indexed,
+                index_type,
+                index_buffer,
+                index_buffer_bytes,
+                index_offset,
                 tmu: ptr(bd.fs_tmu),
                 num_tmu: bd.fs_tmu.len() as u32,
                 vs_tmu: ptr(bd.vs_tmu),
