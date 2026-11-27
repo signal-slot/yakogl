@@ -395,6 +395,26 @@ mkdir "$work/bro"; ro="$work/bro/$(basename "${S[0]}")"; cp -r "${S[0]}" "$ro"
 grep -v 'board\.sh' "$ro/README.md" > "$ro/R" && mv "$ro/R" "$ro/README.md"; echo 'Board: Armadillo-X2' >> "$ro/README.md"
 python3 "$REPORT" --date 2026-11-10 "$ro" 2>&1 | sed -n '/^--- GitHub issue #24/,/^--- anchors/p' | grep -q 'Armadillo-X2'; expect "a README line 'Armadillo-X2' alone names the X2" $?
 blk "$work/full.out" | grep -qE 'Armadillo|Board'; [ $? = 1 ]; expect "all-Verdin: the #24 block names no board" $?
+# the RESULTS.md, STATUS.md and ROADMAP.md drafts name the board too (lines joined: the drafts are wrapped)
+sec() { sed -n "/^--- $2/,/^--- /p" "$1" | sed '$d' | tr '\n' ' ' | tr -s ' '; }
+XL='measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
+sec "$work/bx2.out" 'RESULTS.md' | grep -qF "recipe \`docs/es3/board-recipe-imx8mp.md\`), $XL, 2026-11-10:"
+expect "all-X2: the RESULTS.md paragraph says $XL" $?
+sec "$work/bx2.out" 'STATUS.md' | grep -qF 'i.MX8MP は Armadillo-X2（i.MX 8M Plus、GC7000UL）で全ツリー'
+expect "all-X2: the STATUS.md sentence says Armadillo-X2（i.MX 8M Plus、GC7000UL）で" $?
+sec "$work/bx2.out" 'ROADMAP.md' | grep -qF "tools/cts/imx8mp-gles3-tree.txt\`), $XL at \`"
+expect "all-X2: the ROADMAP.md bullet says $XL" $?
+sec "$work/brd.out" 'RESULTS.md' | grep -qF 'measured on the Verdin iMX8M Plus and the Armadillo-X2, 2026-11-10'
+expect "mixed: the RESULTS.md paragraph names both boards" $?
+sec "$work/brd.out" 'RESULTS.md' | grep -q -- '- Boards: `[^`]*rows001-045/`: Armadillo-X2 (i.MX 8M Plus, GC7000UL); `[^`]*rows046-090/`: Verdin'
+expect "mixed: the RESULTS.md draft lists each slice's board" $?
+sec "$work/brd.out" 'STATUS.md' | grep -qF 'i.MX8MP は Verdin iMX8M Plus と Armadillo-X2 で'
+expect "mixed: the STATUS.md sentence names both boards" $?
+sec "$work/brd.out" 'ROADMAP.md' | grep -qF 'measured on the Verdin iMX8M Plus and the Armadillo-X2 at'
+expect "mixed: the ROADMAP.md bullet names both boards" $?
+for f in RESULTS.md STATUS.md ROADMAP.md; do
+	sec "$work/full.out" "$f" | grep -qE 'Armadillo|Verdin|measured on'; [ $? = 1 ]; expect "all-Verdin: the $f draft names no board (as before)" $?
+done
 
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 

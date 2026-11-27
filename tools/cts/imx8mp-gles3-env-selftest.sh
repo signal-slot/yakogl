@@ -146,6 +146,38 @@ IMX8MP_OUT="$ao" "$a" > "$tmp/o" 2> "$tmp/e"; rc=$?
 if [ $rc -eq 2 ]; then ok "artefacts: no argument: exit 2"; else bad "artefacts: no argument: exit $rc"; fi
 env -u IMX8MP_OUT "$a" $img > "$tmp/o" 2> "$tmp/e"; rc=$?
 if [ $rc -ne 0 ] && grep -q IMX8MP_OUT "$tmp/e"; then ok "artefacts: no IMX8MP_OUT: exit $rc naming it"; else bad "artefacts: no IMX8MP_OUT: exit $rc"; fi
+env -u IMX8MP_BOARD IMX8MP_OUT="$ao" "$a" $img > "$tmp/o" 2>&1
+if ! grep -q 'Armadillo-X2\|CONFIG_GC_BOARD_WDOG_SELF_ARM\|CONFIG_BOARD' "$tmp/o"; then ok "artefacts: a Verdin image names no X2 and no X2 keys"
+else bad "artefacts: Verdin output has X2 lines: $(cat "$tmp/o")"; fi
+
+# the Armadillo-X2: $IMX8MP_OUT/x2/es3-<hash8>, named x2/es3-<hash8> or es3-<hash8> with IMX8MP_BOARD=x2
+mkdir -p "$ao/x2/$img/zephyr"
+printf 'x2-bin' > "$ao/x2/$img/zephyr/zephyr.bin"; printf 'x2-elf' > "$ao/x2/$img/zephyr/zephyr.elf"
+printf 'x2-table' > "$ao/x2/$img.table.conf"
+printf 'CONFIG_BOARD="armadillo_x2"\nCONFIG_GC_BOARD_WDOG_SELF_ARM=y\n# CONFIG_DEQP_REPORT_ES2 is not set\n# CONFIG_YAKOGL_REPORT_ES2 is not set\n' > "$ao/x2/$img/zephyr/.config"
+xfiles=("$ao/x2/$img/zephyr/zephyr.bin" "$ao/x2/$img/zephyr/zephyr.elf" "$ao/x2/$img.table.conf" "$s/libdeqp-gles3-package.a" "$s/functional/libdeqp-gles3-functional.a")
+for how in "x2/$img" "IMX8MP_BOARD=x2 $img" "IMX8MP_BOARD=x2 x2/$img"; do
+	case $how in IMX8MP_BOARD=x2*) arg=${how#IMX8MP_BOARD=x2 }; e=(IMX8MP_BOARD=x2) ;; *) arg=$how; e=() ;; esac
+	env -u IMX8MP_BOARD -u DEQP_STAGE1_GLES3 "${e[@]}" IMX8MP_OUT="$ao" "$a" "$arg" > "$tmp/o" 2> "$tmp/e"; rc=$?
+	good=1
+	for f in "${xfiles[@]}"; do
+		want="$(stat -c %s "$f") $(sha256sum "$f" | cut -d' ' -f1) $f"
+		grep -qxF "$want" "$tmp/o" || good=0
+	done
+	if [ $rc -eq 0 ] && [ $good -eq 1 ] && [ "$(grep -cE '^[0-9]+ [0-9a-f]{64} ' "$tmp/o")" -eq 5 ] \
+		&& grep -qx 'board x2: the Armadillo-X2 (i.MX 8M Plus, GC7000UL), image under $IMX8MP_OUT/x2' "$tmp/o" \
+		&& grep -qx 'CONFIG_BOARD="armadillo_x2"' "$tmp/o" && grep -qx 'CONFIG_GC_BOARD_WDOG_SELF_ARM=y' "$tmp/o" \
+		&& ! grep -qF "$ao/$img/" "$tmp/o"; then
+		ok "artefacts x2 ($how): the X2 image's five lines, the board line, CONFIG_BOARD and the watchdog key"
+	else bad "artefacts x2 ($how): exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+done
+rm "$ao/x2/$img/zephyr/zephyr.bin"
+env -u IMX8MP_BOARD IMX8MP_BOARD=x2 IMX8MP_OUT="$ao" "$a" $img > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 1 ] && grep -qF "$ao/x2/$img/zephyr/zephyr.bin" "$tmp/e"; then ok "artefacts x2: the Verdin image never stands in for a missing X2 image"
+else bad "artefacts x2: missing X2 image: exit $rc, $(cat "$tmp/o" "$tmp/e")"; fi
+IMX8MP_BOARD=pi4 IMX8MP_OUT="$ao" "$a" $img > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 2 ] && grep -q 'IMX8MP_BOARD must be empty or x2' "$tmp/e"; then ok "artefacts: IMX8MP_BOARD=pi4 refused"
+else bad "artefacts: IMX8MP_BOARD=pi4: exit $rc"; fi
 
 echo "$nok ok, $nfail failed"
 [ $nfail -eq 0 ]

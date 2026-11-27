@@ -51,7 +51,7 @@ if [ -n "${BOARD_UART:-}" ]; then ok "BOARD_UART is set"
 elif [ "$board" = x2 ]; then echo "  note BOARD_UART is unset: the X2 console is optional, the record is the result (no console, no recoveries observed)"
 else bad "BOARD_UART is unset"; fi
 if [ "$board" = x2 ]; then
-	echo "  info board x2: the Armadillo-X2 (tools/board.sh x2, crash-route kexec)"
+	echo "  info board x2: measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL; tools/board.sh x2, crash-route kexec)"
 	for t in kexec_zephyr snvs_lpgpr; do
 		if [ -x "${X2_TOOLS:-$ROOT/driver/tools/kexec-zephyr}/$t" ]; then ok "x2 tool driver/tools/kexec-zephyr/$t is built"
 		else bad "x2 tool driver/tools/kexec-zephyr/$t is not built (driver/tools/kexec-zephyr/README.md)"; fi

@@ -7,7 +7,8 @@
 #
 #   TMPDIR=<dir> tools/cts/imx8mp-gles3-pipeline-selftest.sh
 #
-# Host only; no board, no driver. Everything is written under $TMPDIR (never /tmp) and removed at the end.
+# Armadillo-X2 slices (three-word rows, board.sh x2 verdict lines, the X2 campaign's slice names) go through the
+# same checks and must name the board. Host only; no board, no driver. Everything is written under $TMPDIR (never /tmp) and removed at the end.
 # Exit 0 when the chain agrees, 1 on any failure. (M4, --notpass naming only Fail and NoResult, is closed:
 # the slices carry a cases.tsv and the rows must name NotSupported/QualityWarning/Crash/Timeout.)
 set -u
@@ -41,6 +42,8 @@ n = len(table)
 assert n == 133, n
 cut = [(0, 45), (45, 90), (90, n)]
 names = ['2026-11-10-imx8mp-gles3-%s-rows%03d-%03d' % (commit[:8], a + 1, b) for a, b in cut]
+if mode == 'x2':     # the Armadillo-X2 campaign's names (docs/es3/board-recipe-imx8mp.md, "Armadillo-X2 campaign")
+    names = ['2026-11-imx8mp-gles3-x2-%s-rows%02d-%02d' % (commit[:8], a + 1, b) for a, b in cut]
 
 STATUS = {}
 
@@ -70,8 +73,14 @@ def write(d, rows, commit_text):
     os.makedirs(d)
     with open(os.path.join(d, 'README.md'), 'w') as f:
         f.write('# i.MX8MP dEQP-GLES3 slice (synthetic)\n\norigin/main %s\n' % commit_text)
+        if mode == 'x2':
+            f.write('Run 2026-11-28, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2\n')
         for r in rows:
-            f.write('board.sh imx8mp e%02d rc=0 verdict=done resets=absent\n' % r[0])
+            if mode == 'x2' and r[3] != '-':
+                f.write('board.sh x2 e%02d rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP '
+                        'resets=absent record=x,y,z back_after=40s\n' % r[0])
+            elif mode != 'x2':
+                f.write('board.sh imx8mp e%02d rc=0 verdict=done resets=absent\n' % r[0])
     with open(os.path.join(d, 'results.tsv'), 'w') as f:
         f.write("# index\tfilter\tbegun\tpassed\tfailed\tnotsup\tother\tnoresult\tfailing names (';'-separated)\n")
         for r in rows:
@@ -85,21 +94,25 @@ for (a, b), nm in zip(cut, names):
     d = os.path.join(root, mode, nm)
     rows = []
     for i in range(n):
-        if a <= i < b:
+        if a <= i < b and mode == 'x2':  # three-word record: begun and noresult are '-' (w3 is not stored)
+            r = row(i)
+            rows.append(r[:2] + ('-',) + r[3:7] + ('-', r[8]))
+        elif a <= i < b:
             rows.append(row(i))
-        elif mode == 'board':           # tally walks tree.txt: rows not run are all '-'
+        elif mode in ('board', 'x2'):           # tally walks tree.txt: rows not run are all '-'
             rows.append((i, table[i], '-', '-', '-', '-', '-', '-', '-'))
     write(d, rows, commit)
 PY
 
 py() { python3 -I "$@"; }
-for mode in board committed; do
+for mode in board committed x2; do
 	py "$work/gen.py" "$work" "$HERE" "$C1" "$mode" || { echo "generator failed" >&2; exit 2; }
 done
 mp() { python3 "$MERGE" "$@"; }
 
 mapfile -t S < <(ls -d "$work"/committed/*/)
 mapfile -t B < <(ls -d "$work"/board/*/)
+mapfile -t XS < <(ls -d "$work"/x2/*/)
 [ ${#S[@]} = 3 ] && [ ${#B[@]} = 3 ] || { echo "generator wrote an unexpected layout" >&2; exit 2; }
 echo "slices: $(for d in "${S[@]}"; do basename "$d"; done | paste -sd' ')"
 
@@ -189,6 +202,31 @@ grep -q '^# e1: unresolved ' "$work/np.tsv"; [ $? = 1 ]; expect "e1's unresolved
 nr="$work/norec"; cp -r "${S[2]}" "$nr"
 awk 'BEGIN{FS=OFS="\t"} /^#/ {print; next} !d {print $1,$2,"-","-","-","-","-","-","-"; d=1; next} {print}' "${S[2]}results.tsv" > "$nr/results.tsv"
 mp --notpass "${S[0]}" "${S[1]}" "$nr" 2> /dev/null | grep -q '^e90:NoResult dEQP-GLES3\.'; expect "an entry with a dash row gives NoResult cases" $?
+
+echo "== Armadillo-X2 slices (three-word rows, board.sh x2 lines, 2026-11-imx8mp-gles3-x2-<hash8>-rowsAA-BB)"
+XL='measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
+[ ${#XS[@]} = 3 ] && basename "${XS[0]}" | grep -qx "2026-11-imx8mp-gles3-x2-${C1:0:8}-rows01-45"; expect "the X2 slices carry the campaign's names" $?
+mp --check "${XS[@]}" > "$work/x1.out" 2>&1; rc=$?
+{ [ "$rc" = 0 ] && tail -1 "$work/x1.out" | grep -q '133 entries with a record: OK' && grep -qxF "$XL" "$work/x1.out"; }
+expect "X2 slices: --check 133 entries OK and names the Armadillo-X2" $?
+mp --check --partial "${XS[0]}" > "$work/x2.out" 2>&1; expect "one X2 slice alone checks with --partial" $?
+mp --notpass "${XS[@]}" > "$work/xnp.tsv" 2> /dev/null; rc=$?
+{ [ "$rc" = 0 ] && sed -n 2p "$work/xnp.tsv" | grep -qxF "# $XL"; }; expect "X2 notpass: second header line names the Armadillo-X2" $?
+diff <(grep -v '^#' "$work/np.tsv") <(grep -v '^#' "$work/xnp.tsv") > /dev/null; expect "X2 notpass rows equal the Verdin-form rows of the same results" $?
+diff <(grep '^# e[0-9]*: ' "$work/np.tsv") <(grep '^# e[0-9]*: ' "$work/xnp.tsv") > /dev/null; expect "X2 notpass per-entry comments equal (begun derived from the numbers)" $?
+grep -v '^#' "$work/xnp.tsv" | grep -Evq "$shape"; [ $? = 1 ]; expect "every X2 notpass row is <record>:<Status> <case>" $?
+mp --totals "${XS[@]}" 2> /dev/null | tail -1 | grep -qxF "$XL"; expect "X2 totals end with the Armadillo-X2 line" $?
+mp --totals "${XS[@]}" 2> /dev/null | grep -q '^no record: 0 of 133 entries (none)'; expect "X2 totals: no missing entry" $?
+mp --check "${S[0]}" "${S[1]}" "${XS[2]}" > "$work/x3.out" 2>&1; rc=$?
+{ [ "$rc" = 0 ] && grep -q '^boards: .*rows001-045: Verdin iMX8M Plus; .*rows046-090: Verdin iMX8M Plus; 2026-11-imx8mp-gles3-x2-[0-9a-f]*-rows91-133: Armadillo-X2' "$work/x3.out" \
+	&& ! grep -qxF "$XL" "$work/x3.out"; }; expect "Verdin + X2 slices merge and name each slice's board" $?
+mp --notpass "${S[@]}" 2> /dev/null | grep -q 'Armadillo\|boards:'; [ $? = 1 ]; expect "Verdin-only notpass names no board (unchanged)" $?
+mp --check "${XS[0]}" "${XS[1]}" > "$work/x4.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'no record: 43 of 133 entries (90-132)' "$work/x4.out"; }; expect "two X2 slices of three fail --check, naming 90-132" $?
+xr="$work/x2reset"; cp -r "${XS[1]}" "$xr"
+sed -i 's/e46 rc=0 verdict=done /e46 rc=0 verdict=done_stopped /' "$xr/README.md"
+mp --check "${XS[0]}" "$xr" "${XS[2]}" > "$work/x5.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'e46: verdict=done_stopped' "$work/x5.out"; }; expect "an X2 watchdog stop (done_stopped) fails --check, naming the entry" $?
 
 if [ "$fails" = 0 ]; then echo "pipeline selftest: OK "; exit 0; fi
 echo "pipeline selftest: FAILED ($fails)"; exit 1

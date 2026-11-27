@@ -14,9 +14,11 @@ every `board.sh imx8mp e<NN> rc=.. verdict=.. ...` line, verbatim, or every `boa
 Armadillo-X2 session (tools/cts/imx8mp-gles3-board.sh --board x2: boot=kexec-dev, DEV, "never a row" in board.sh's
 words; by the owner's decision of 2026-11-27 they are rows of this campaign, docs/es3/board-recipe-imx8mp.md,
 "Running a GLES3 slice on the Armadillo-X2"). The board is read from the lines; one slice is one board's session,
-so lines of both boards are refused (exit 2). An X2 slice's README says "measured on the Armadillo-X2 (tools/board.sh
-x2, crash-route kexec)", names its records under records/x2/ and its image under $IMX8MP_OUT/x2/; a Verdin slice's
-README is byte for byte what it was before.
+so lines of both boards are refused (exit 2). An X2 slice's README says "measured on the Armadillo-X2 (i.MX 8M Plus,
+GC7000UL) with tools/board.sh x2 (crash-route kexec)", names its records under records/x2/ and its image under
+$IMX8MP_OUT/x2/, and names the slice after --out when that is `<YYYY-MM[-DD]>-imx8mp-gles3-[x2-]<hash8>-rowsAA-BB`
+of the commit and rows (the X2 campaign's `2026-11-imx8mp-gles3-x2-<hash8>-rowsAA-BB`); a Verdin slice's README
+is byte for byte what it was before.
 --run-date is the day the session ran when it is not the slice's --date (the campaign's slice names keep
 2026-11-16, docs/es3/board-recipe-imx8mp.md): it goes into the "Run ..." lines, --date stays in the name. Page lines (`e<NN>-p<k>`) are counted per
 entry, not copied. A line seen twice verbatim counts once; two different lines for one entry (a rerun: pass
@@ -44,7 +46,7 @@ import argparse, os, re, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINE = re.compile(r'^\s*(board\.sh\s+(imx8mp|x2)\s+e(\d+)(?:-p(\d+))?\s+rc=\S+\s+verdict=\S+.*?)\s*$')
-X2_MEASURED = 'measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)'
+X2_MEASURED = 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)'
 
 RUN_DIR = re.compile(r'-e(\d+)-[0-9a-f]{8}$')
 
@@ -208,6 +210,16 @@ CONSOLE = ['', '## Console', '',
            'reported, not claimed.']
 
 
+def x2_name(a, h8, lo, hi):
+    """An X2 slice's directory name: the basename of --out when it is `<YYYY-MM[-DD]>-imx8mp-gles3-[x2-]<hash8>-rowsAA-BB`
+    for this commit and these rows (the X2 campaign's `2026-11-imx8mp-gles3-x2-<hash8>-rowsAA-BB`), else the
+    `<date>-imx8mp-gles3-<hash8>-rowsAA-BB` form."""
+    b = os.path.basename(os.path.normpath(a.out)) if a.out else ''
+    if re.fullmatch(r'\d{4}-\d{2}(?:-\d{2})?-imx8mp-gles3-(?:x2-)?%s-rows%02d-%02d' % (h8, lo, hi), b):
+        return b
+    return '%s-imx8mp-gles3-%s-rows%02d-%02d' % (a.date, h8, lo, hi)
+
+
 def build(a):
     if not re.fullmatch(r'[0-9a-f]{40}', a.commit):
         raise Refuse('--commit must be the full 40-hex commit, got %r' % a.commit)
@@ -241,9 +253,9 @@ def build(a):
          'commit %s' % a.commit, '',
          ]
     if board == 'x2':
-        o += ['Run %s on the Armadillo-X2 (i.MX 8M Plus, GC7000UL), %s: the slice' % (a.run_date or a.date, X2_MEASURED),
-              '`%s-imx8mp-gles3-%s-rows%02d-%02d`, %s of `tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the'
-              % (a.date, h8, lo, hi, span, ent),
+        o += ['Run %s, %s: the slice' % (a.run_date or a.date, X2_MEASURED),
+              '`%s`, %s of `tools/cts/imx8mp-gles3-tree.txt` (%s, counted from 0 as the'
+              % (x2_name(a, h8, lo, hi), span, ent),
               'selector does), one crash-route kexec per entry, from the campaign commit above. The Toradex Verdin iMX8M',
               'Plus is off the farm; by the owner\'s decision of 2026-11-27 these kexec-dev runs (board.sh\'s `DEV`, "never',
               'a row") are rows of this campaign. The procedure is `docs/es3/board-recipe-imx8mp.md`, "Running a GLES3',

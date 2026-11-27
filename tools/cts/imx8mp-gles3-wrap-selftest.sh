@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Selftest of imx8mp-gles3-board.sh (usage errors, image choice, argument hand-off to tools/board.sh) and of
+# Selftest of imx8mp-gles3-board.sh (usage errors, image choice, argument hand-off to tools/board.sh, for the Verdin
+# and for the Armadillo-X2: --board x2 / IMX8MP_BOARD=x2, $IMX8MP_OUT/x2/es3-* images, board.sh x2) and of
 # check-imx8mp-gles3-tree.py (passes on the committed table, fails on broken copies of it). The wrapper runs
 # from a copy under a temporary ROOT whose tools/board.sh is a stub, so the real board.sh is never called.
 # Host only; writes under ${TMPDIR:-$PWD}.
@@ -81,6 +82,64 @@ else bad "TREE_IMAGE alone: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
 env -u TREE_IMAGE -u IMX8MP_OUT "$w" tally "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
 if [ $rc -eq 0 ] && grep -qxF "ARGS: imx8mp tally $outdir" "$tmp/o"; then ok "tally <outdir> -> 'imx8mp tally <outdir>'"
 else bad "tally: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+
+# ---- (A2) the Armadillo-X2: --board x2 or IMX8MP_BOARD=x2 runs tools/board.sh x2 with $IMX8MP_OUT/x2/es3-* images;
+# the Verdin default and the X2 images never stand in for each other
+mkdir -p "$out/x2/es3-cccccccc/zephyr" "$out/x2/es3-dddddddd/zephyr"
+: > "$out/x2/es3-cccccccc/zephyr/zephyr.bin"; : > "$out/x2/es3-dddddddd/zephyr/zephyr.bin"
+touch -d '2026-01-15 00:00:00' "$out/x2/es3-cccccccc/zephyr/zephyr.bin"
+touch -d '2026-01-20 00:00:00' "$out/x2/es3-dddddddd/zephyr/zephyr.bin"   # older than the Verdin's aaaaaaaa
+xwant="ARGS: --dry-run x2 tree $root/tools/cts/imx8mp-gles3-tree.txt $outdir"
+for how in "--board x2" "--board=x2" "IMX8MP_BOARD=x2"; do
+	case $how in IMX8MP_BOARD=x2) e=(IMX8MP_BOARD=x2); f=() ;; *) e=(); read -ra f <<< "$how" ;; esac
+	env -u TREE_IMAGE -u IMX8MP_BOARD "${e[@]}" IMX8MP_OUT="$out" "$w" --dry-run "${f[@]}" tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+	if [ $rc -eq 0 ] && grep -qxF "$xwant" "$tmp/o" && grep -qxF "IMAGE: $out/x2/es3-dddddddd/zephyr/zephyr.bin" "$tmp/o" \
+		&& grep -qxF "imx8mp-gles3-board: tools/board.sh --dry-run x2 tree tools/cts/imx8mp-gles3-tree.txt $outdir" "$tmp/e"; then
+		ok "x2 ($how): newest x2/es3-* image (dddddddd, not the newer Verdin aaaaaaaa), board.sh got '${xwant#ARGS: }'"
+	else bad "x2 ($how): exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+done
+# the board flag wins over IMX8MP_BOARD
+env -u TREE_IMAGE IMX8MP_BOARD=x2 IMX8MP_OUT="$out" "$w" --board imx8mp tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 0 ] && grep -qxF "ARGS: imx8mp tree $root/tools/cts/imx8mp-gles3-tree.txt $outdir" "$tmp/o" \
+	&& grep -qxF "IMAGE: $out/es3-aaaaaaaa/zephyr/zephyr.bin" "$tmp/o"; then
+	ok "--board imx8mp over IMX8MP_BOARD=x2: the Verdin's board.sh and image"
+else bad "--board imx8mp over IMX8MP_BOARD=x2: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+# a newer X2 image leaves the Verdin default unchanged
+touch -d '2026-04-01 00:00:00' "$out/x2/es3-cccccccc/zephyr/zephyr.bin"
+env -u TREE_IMAGE -u IMX8MP_BOARD IMX8MP_OUT="$out" "$w" tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 0 ] && grep -qxF "ARGS: imx8mp tree $root/tools/cts/imx8mp-gles3-tree.txt $outdir" "$tmp/o" \
+	&& grep -qxF "IMAGE: $out/es3-aaaaaaaa/zephyr/zephyr.bin" "$tmp/o"; then
+	ok "Verdin default: a newer X2 image is not picked up, board.sh imx8mp"
+else bad "Verdin default beside a newer X2 image: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+env -u TREE_IMAGE -u IMX8MP_BOARD IMX8MP_OUT="$out" "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 0 ] && grep -qxF "IMAGE: $out/x2/es3-cccccccc/zephyr/zephyr.bin" "$tmp/o"; then ok "x2: after touching cccccccc it is chosen"
+else bad "x2 newest after touch: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+# x2 with Verdin images only
+env -u TREE_IMAGE -u IMX8MP_BOARD IMX8MP_OUT="$tmp/empty" "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 2 ] && grep -q 'no x2/es3-\* image' "$tmp/e" && [ ! -s "$tmp/o" ]; then ok "x2 without an X2 image: exit 2, 'no x2/es3-* image', board.sh not run"
+else bad "x2 without an X2 image: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+mkdir -p "$tmp/vonly/es3-eeeeeeee/zephyr"; : > "$tmp/vonly/es3-eeeeeeee/zephyr/zephyr.bin"
+env -u TREE_IMAGE -u IMX8MP_BOARD IMX8MP_OUT="$tmp/vonly" "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 2 ] && [ ! -s "$tmp/o" ]; then ok "x2 beside a Verdin image only: exit 2, the Verdin image is never used"
+else bad "x2 beside a Verdin image only: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+# TREE_IMAGE wins on x2 too
+env -u IMX8MP_BOARD TREE_IMAGE=$tmp/mine.bin IMX8MP_OUT="$out" "$w" --board x2 tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 0 ] && grep -qxF "IMAGE: $tmp/mine.bin" "$tmp/o" && grep -q '^ARGS: x2 tree ' "$tmp/o"; then ok "x2: TREE_IMAGE is used over the x2/es3-* images"
+else bad "x2 TREE_IMAGE: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+# tally
+env -u TREE_IMAGE -u IMX8MP_OUT IMX8MP_BOARD=x2 "$w" tally "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 0 ] && grep -qxF "ARGS: x2 tally $outdir" "$tmp/o" && grep -qxF "imx8mp-gles3-board: tools/board.sh x2 tally $outdir" "$tmp/e"; then
+	ok "x2 tally <outdir> -> 'x2 tally <outdir>'"
+else bad "x2 tally: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+# unknown boards
+for b in pi4 verdin ''; do
+	env -u TREE_IMAGE -u IMX8MP_BOARD IMX8MP_OUT="$out" "$w" --board "$b" tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+	if [ $rc -eq 2 ] && [ ! -s "$tmp/o" ]; then ok "--board '$b': exit 2, board.sh not run"
+	else bad "--board '$b': exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
+done
+env -u TREE_IMAGE IMX8MP_BOARD=pi4 IMX8MP_OUT="$out" "$w" tree "$outdir" > "$tmp/o" 2> "$tmp/e"; rc=$?
+if [ $rc -eq 2 ] && grep -q "is imx8mp or x2, not 'pi4'" "$tmp/e"; then ok "IMX8MP_BOARD=pi4: exit 2 naming the two boards"
+else bad "IMX8MP_BOARD=pi4: exit $rc: $(cat "$tmp/o" "$tmp/e")"; fi
 
 # ---- (B) check-imx8mp-gles3-tree.py
 chk=$here/check-imx8mp-gles3-tree.py

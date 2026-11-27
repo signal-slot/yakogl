@@ -1135,6 +1135,9 @@ sessions tools (its rows 32-39), each as `bash <selftest>` with `TMPDIR` set.
 
 ## Running a GLES3 slice on the Armadillo-X2
 
+The campaign commit and slice names of this section are superseded by "Armadillo-X2 campaign" below (commit
+`c29a5ffe`, slices `2026-11-imx8mp-gles3-x2-c29a5ffe-rowsAA-BB`); the rest still applies.
+
 **Decision (owner, 2026-11-27): the Toradex Verdin iMX8M Plus is off the farm (since 2026-11-16, no return
 date); the rest of this campaign runs on the Armadillo-X2**, which has the same i.MX 8M Plus and GC7000UL. Its
 runs are `tools/board.sh x2` crash-route kexec runs (`boot=kexec-dev`), which `board.sh` labels `DEV` and
@@ -1253,6 +1256,147 @@ slices"):
 | s04 | `35`-`51` | `34-50` | s10 | `108`-`122` | `107-121` |
 | s05 | `52`-`57` | `51-56` | s11 | `123`-`133` | `122-132` |
 | s06 | `58`-`67` | `57-66` | | | |
+
+## Armadillo-X2 campaign
+
+**This section supersedes the commit and the slice names of "Running a GLES3 slice on the Armadillo-X2"
+above** (its board constraints, tools and step details stay valid). The whole 133-entry tree runs again on the
+Armadillo-X2 (i.MX 8M Plus, GC7000UL) from **one** `origin/main` commit, so the c1 check (133 entries from one
+commit) sees one commit. The Verdin slices at `9bc82915` and the plan at `05769bf2` predate `832431bc` (how an X2
+tree names its fails) and are not part of it. **Every record of this campaign names the Armadillo-X2**: the
+slice README (`imx8mp-gles3-slice.py`: "measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh
+x2 (crash-route kexec)"), `imx8mp-gles3-merge.py` (`--check`, `--notpass`, `--totals`: the line `measured on the
+Armadillo-X2 (i.MX 8M Plus, GC7000UL)`), `imx8mp-gles3-report.py` (all four drafts), `imx8mp-gles3-artefacts.sh`
+(`board x2: ...`) and the preflight (`info board x2: measured on the Armadillo-X2 ...`).
+
+### Campaign commit and image
+
+- **Commit C**: `c29a5ffe84f7d891fc84fe8b151b9eefedbb351d` (`c29a5ffe`), the `origin/main` tip of 2026-11-27
+  (`imx8mp-gles3-report: the #24 block names the board a slice was measured on`). Every slice of this campaign
+  is `--commit c29a5ffe84f7d891fc84fe8b151b9eefedbb351d`.
+- **Image** `$IMX8MP_OUT/x2/es3-c29a5ffe/zephyr/zephyr.bin`: **16,704,248 bytes**, sha256
+  **`0f0a785eb09a16e15f9578c95b4ab92a157fb02e2b5d1d5a6d95a2ec1566f834`**; built 2026-11-27 from a clean checkout
+  of C (`YAKOGL_SAMPLE_TREE=c29a5ffe`, `YAKOGL_SAMPLE_TABLE=6c5b8a70`, Zephyr `af17c0c8aa2a`, as `board.sh x2`
+  reads them from the image). `imx8mp-gles3-artefacts.sh x2/es3-c29a5ffe` printed:
+  ```
+  board x2: the Armadillo-X2 (i.MX 8M Plus, GC7000UL), image under $IMX8MP_OUT/x2
+  16704248 0f0a785eb09a16e15f9578c95b4ab92a157fb02e2b5d1d5a6d95a2ec1566f834 x2/es3-c29a5ffe/zephyr/zephyr.bin
+  45837272 f19c5c8fea12d3b24447df5a1c68eb23bb8db01760ec6c7dcfe3077d01f2364a x2/es3-c29a5ffe/zephyr/zephyr.elf
+  38164 5b7a612379058051e8be1d1983829e7c13254e817289282fe6e38f99bbedb82f x2/es3-c29a5ffe.table.conf
+  132944 2fff51840518bd589eb2eaa700bacc120b365448b2ac0ada7bcdccf2bf5bb2e8 deqp-stage1-gles3/build/modules/gles3/libdeqp-gles3-package.a
+  12732236 7b842c954d403450601f75fe245b47581233cc870a778598800065b41a0885cc deqp-stage1-gles3/build/modules/gles3/functional/libdeqp-gles3-functional.a
+  # CONFIG_DEQP_REPORT_ES2 is not set
+  # CONFIG_YAKOGL_REPORT_ES2 is not set
+  CONFIG_BOARD="armadillo_x2"
+  CONFIG_GC_BOARD_WDOG_SELF_ARM=y
+               RAM:     234100 KB       256 MB     89.30%
+  ```
+  (paths cut below `$IMX8MP_OUT`). The table fragment holds the 133 rows of `tools/cts/imx8mp-gles3-tree.txt` in
+  order; `check-deqp-images.py` found it a conformance image.
+- **Stage 1** (`$DEQP_STAGE1`, here `$IMX8MP_OUT/deqp-stage1-gles3`): VK-GL-CTS `93bca01` (`tools/cts/deps.toml`,
+  DEQP_WORK) with the two yakogl patches, built with `IMX8MP_BOARD=x2 DEQP_MODULE=gles3
+  tools/cts/imx8mp-deqp-stage1.sh` from the checkout of C (3 min 17 s on the build host).
+- **Host checks on that image, 2026-11-27**: `check-imx8mp-gles3-tree.py`: `OK` (mustpass 42810, entries 133,
+  longest entry 1868 chars, matched exactly once 42810); `imx8mp-gles3-preflight.sh --board x2 --commit <C> --out
+  $IMX8MP_OUT` (`BOARD_HOST` and `BOARD_UART` unset): `preflight: all ok` (11 `ok`, image `es3-c29a5ffe` is commit
+  `c29a5ffe` and carries `gc_wdog_arm: armed`, both X2 tools built); `IMX8MP_BOARD=x2
+  tools/cts/imx8mp-gles3-board.sh --dry-run tree <dir>`: exit 0, `board.sh x2: tree: 133 rows`, 133 `=== eNN
+  rc=0` rows, each staging `x2/es3-c29a5ffe/zephyr/zephyr.bin` and ending
+  `/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash`.
+
+### One slice session, in this order
+
+Names only: `BOARD_HOST` comes from the board resource's environment (`target:x2`), `BOARD_UART` from the console
+resource's (`target:x2-console`, the X2's UART2); never write their values into a file, a README or a commit.
+`TREE_ROWS` counts entries from 0 (comma ranges are allowed: `13,57-60`); the slice name counts table rows from 1.
+
+```sh
+COMMIT=c29a5ffe84f7d891fc84fe8b151b9eefedbb351d; C8=c29a5ffe
+IMG=$IMX8MP_OUT/x2/es3-$C8/zephyr/zephyr.bin
+AA=01; BB=13; ROWS=0-12                              # the session's slice (table below)
+```
+
+1. **Reuse or rebuild the image.** Reuse it when it is there with the sha256 above:
+   `echo "0f0a785eb09a16e15f9578c95b4ab92a157fb02e2b5d1d5a6d95a2ec1566f834  $IMG" | sha256sum -c`. Otherwise rebuild it
+   at C in a checkout of its own (a worktree under the workspace or `$TMPDIR`, never `/tmp`):
+   ```sh
+   git worktree add --detach "$TMPDIR/yakogl-$C8" "$COMMIT"; cd "$TMPDIR/yakogl-$C8"
+   # stage 1 first, only if $DEQP_STAGE1/build/modules/gles3/libdeqp-gles3-package.a is missing
+   # (CTS = a VK-GL-CTS checkout at 93bca01, e.g. DEQP_WORK's $DEPS/VK-GL-CTS):
+   IMX8MP_BOARD=x2 DEQP_MODULE=gles3 CTS=<VK-GL-CTS> tools/cts/imx8mp-deqp-stage1.sh
+   IMX8MP_BOARD=x2 DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-build.sh es3-$C8 'dEQP-GLES3.info.*' \
+     --table tools/cts/imx8mp-gles3-tree.txt          # rc=0, then the check-deqp-images line
+   ```
+   A rebuilt image may differ in bytes; that is fine (c1 asks for one commit, not one image), and the slice
+   README records the sha256 it ran (step 3). Never set `IMX8MP_CONSOLE=1` (the Verdin's UART3; the build refuses
+   it with `x2`). Every later step runs from the integration tip's checkout.
+2. **The loader and the record tool**, once per checkout (gitignored, never committed): step 2 of "Running a GLES3
+   slice on the Armadillo-X2". On a host with neither `aarch64-linux-gcc` nor `lld`, this campaign's tools were
+   built with clang and the Zephyr SDK's linker: `clang --target=aarch64-linux-gnu -O2 -ffreestanding
+   -fno-stack-protector -fno-pic -c -o $TMPDIR/$t.o $t.c && aarch64-zephyr-elf-ld.bfd -static -nostdlib -e _start
+   -o $t $TMPDIR/$t.o` (static aarch64 ELF, entry at 0x400000; not yet run on the board when this was written).
+3. **Artefacts**: `IMX8MP_BOARD=x2 tools/cts/imx8mp-gles3-artefacts.sh es3-$C8 > $TMPDIR/artefacts.txt`; its
+   image line must carry the sha256 of step 1.
+4. **Preflight** (read-only; with `BOARD_HOST` set it reads the board's device-tree model and `/tmp`):
+   `tools/cts/imx8mp-gles3-preflight.sh --board x2 --commit "$COMMIT" --out "$IMX8MP_OUT" | tee $TMPDIR/preflight.txt`.
+   It must end `preflight: all ok`, with `ok   the board is the Armadillo-X2 (model '...', fsl,imx8mp)` and
+   `ok   /tmp is a tmpfs`. A FAIL on the board check needs a person, not a retry.
+5. **Dry run** (touches no board): `REC=records/x2/$(date -u +%Y%m%d-%H%M)-es3-$C8-rows$AA-$BB-$(sha256sum "$IMG" | cut -c1-8)`,
+   then `TREE_ROWS=$ROWS IMX8MP_BOARD=x2 tools/cts/imx8mp-gles3-board.sh --dry-run tree "$REC"`: the wrapper's
+   `tools/board.sh --dry-run x2 tree ...` line, then only the slice's rows.
+6. **Run the slice**, two passes as before:
+   ```sh
+   export IMX8MP_BOARD=x2 TREE_IMAGE=$IMG BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt
+   # BOARD_UART: set it from the console resource's environment (UART2, read only) to capture the console
+   TREE_ROWS=$ROWS NAMES=0 tools/cts/imx8mp-gles3-board.sh tree "$REC" 2>&1 | tee "$REC.log"     # pass 1: the rows
+   TREE_ROWS=$ROWS tools/cts/imx8mp-gles3-board.sh tree "$REC" 2>&1 | tee -a "$REC.log"          # pass 2: the name pages
+   tools/cts/imx8mp-gles3-board.sh tally "$REC" | tee "$REC.tally.txt"
+   ```
+   **`RUN_BOUND`**: the recipe's slice notes give `RUN_BOUND=800` for the Verdin's `uboot-mmc` route; `board.sh
+   x2` (`kexec-dev`) does not read it: it waits at most 1500 s for Linux after each jump, and WDOG1 (600 s,
+   `gc_wdog_arm: armed`) is the image's own bound. Leave it unset; a risk row that needs longer than 1500 s
+   back is a board that did not come back (rc 5): stop the session, no retry.
+7. **Scan the console** when `BOARD_UART` was set: `python3 -I tools/cts/imx8mp-console-scan.py --fail-dark --watch
+   <the slice's risk entries, 0-based> $(ls -d "$REC"/*/ | grep -v -e '-p[0-9]\+-[0-9a-f]\{8\}/$') | tee
+   $TMPDIR/console-scan.txt`. Use `--fail-dark` on every X2 session with a console: an empty or NUL-only capture
+   then exits 1 (`console dark`) instead of reading as a clean console, and the README says recoveries were not
+   observed for those rows. Without `BOARD_UART` there is nothing to scan: the record is the result. Then
+   `python3 -I tools/cts/imx8mp-gles3-redact.py --check "$REC"` (`--fix` on a hit).
+8. **The slice directory** `tools/cts/log/2026-11-imx8mp-gles3-x2-c29a5ffe-rowsAA-BB/` (rows from 1, two digits
+   below 100: `rows01-13`, `rows96-96`, `rows123-128`):
+   ```sh
+   D=tools/cts/log/2026-11-imx8mp-gles3-x2-$C8-rows$AA-$BB
+   python3 -I tools/cts/imx8mp-gles3-slice.py --commit "$COMMIT" --rows $AA-$BB --date <the session's day, UTC> \
+     --window <HH:MM/HH:MM> --lines "$REC.log" --lines "$REC.tally.txt" --records "$REC" \
+     --results "$REC/results.tsv" --artefacts $TMPDIR/artefacts.txt --preflight $TMPDIR/preflight.txt --out "$D"
+   cp "$REC/results.tsv" "$REC/rows.md" "$D/"
+   python3 -I tools/cts/imx8mp-gles3-merge.py --check --partial "$D"    # exit 0; prints the X2 line
+   ```
+   `slice.py` takes the slice name from `--out` when it is this form for C and the rows; the README then says
+   "measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" and holds the 40-hex commit. With a console, add the
+   `e<NN>.console.txt` copies and `console-scan.txt` as step 12 of the Verdin procedure says. `merge --check
+   --partial` must exit 0 and print `measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)` before its `checked ...`
+   line. Steps 11-16 of "Running a GLES3 slice session" (rerun rule, commit contents, not-pass and report tools,
+   the split of an overrunning entry) apply unchanged; a re-split changes the table and so the image: it needs a
+   new campaign commit, not a patched image.
+
+### The sessions
+
+Ten normal sessions in this order, then the risk session (s13) last, which runs every hang- and watchdog-risk
+entry **one entry per invocation** (`TREE_ROWS=13`, then `14`, ...; one slice directory per range below):
+
+| Plan item | Slice directory (`...-x2-c29a5ffe-rows...`) | `TREE_ROWS` |
+| --- | --- | --- |
+| s07 (first; checks the pipeline end to end) | `rows01-13` | `0-12` |
+| s08 | `rows17-34` | `16-33` |
+| s09 | `rows35-51` | `34-50` |
+| s11 | `rows52-57` and `rows129-133` (two directories) | `51-56`, `128-132` |
+| s12 | `rows62-72` | `61-71` |
+| s14 | `rows73-85` | `72-84` |
+| s02 | `rows86-95` | `85-94` |
+| s06 | `rows97-110` | `96-109` |
+| s10 | `rows111-122` | `110-121` |
+| s13 (risk, last) | `rows14-16`, `rows58-61`, `rows96-96`, `rows123-128` | `13`..`15`, `57`..`60`, `95`, `122`..`127`, one at a time |
 
 ## RGBA32 two-plane sampling run (one session)
 
