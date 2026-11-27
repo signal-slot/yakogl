@@ -247,6 +247,18 @@
 # its files) or a tree's (every run's line, then the dEQP tally: per console
 # tools/cts/deqp-uart-tally.py's verdict, the recoveries, the mustpass table
 # and the cases not Pass; for the selector form results.tsv and rows.md).
+# x2's whole dEQP-GLES2 tree (the Armadillo-X2 standing in for the Verdin
+# iMX8MP: every tree.txt filter a dEQP-GLES2 one) ends its tally with stage
+# 1's fields, tools/cts/es2-tree-gate.py on the tree directory: "Fail N",
+# "NoResult N", "crashes N", "NotSupported N" and whether every NotSupported
+# name is in BOARD_ACCEPTED, then "stage1: PASS|FAIL (...)"; the tally's exit
+# status is then the gate's (0 PASS, 1 FAIL, 2 unreadable). The names come
+# from the consoles, so run the tree with BOARD_UART set. The tree is the
+# image board-stage.sh x2 deqp builds, with its table:
+#   TREE_IMAGE=$IMX8MP_OUT/x2/deqp-<sha8>/zephyr/zephyr.bin tools/board.sh x2 tree \
+#       tools/cts/imx8mp-full-tree.txt records/x2/<YYYYMMDD-HHMM>-deqp-gles2-<sha8>
+# (each of the 29 entries one kexec-dev boot with its selector, its console
+# in its run directory; tools/cts/x2-deqp-selftest.sh checks it without a board).
 # "diff <a> <b>" compares two trees: per mustpass case (consoles) or per row
 # (results.tsv).
 #
@@ -313,7 +325,9 @@
 #   BOARD_MUSTPASS     the mustpass list the console tally and diff read
 #                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
 #                      tree names tools/cts/gles3-mustpass.txt)
-#   SEL                i.MX8MP, x2: the selector written into the cleared record
+#   BOARD_ACCEPTED     x2's dEQP-GLES2 tree tally: the agreed NotSupported list
+#                      (default tools/cts/es2-accepted.txt)
+#   SEL              i.MX8MP, x2: the selector written into the cleared record
 #                      (imx95: refused, the image reads no selector); x2: w1 =
 #                      0x5345<SEL> in LPGPR2 (SEL=4272 is gl_test case 222's
 #                      dtpu page, SEL=0x1000 / 0x1004 glmark2's PERF pages 0 / 4)
@@ -3477,6 +3491,20 @@ consoles_with_deqp() {
     done
 }
 
+# es2_stage1 DIR: x2's whole dEQP-GLES2 tree (every tree.txt filter a
+# dEQP-GLES2 one): stage 1's fields from tools/cts/es2-tree-gate.py, with
+# NotSupported against BOARD_ACCEPTED; returns the gate's exit status. Any
+# other board or tree: nothing printed, 0.
+es2_stage1() {
+    local dir=$1
+    [ "$BOARD" = x2 ] && [ -f "$dir/tree.txt" ] || return 0
+    awk -F'\t' '/^[[:space:]]*(#|$)/ { next } { n++ } $4 !~ /^dEQP-GLES2\./ { bad = 1 } END { exit bad || !n }' \
+        "$dir/tree.txt" || return 0
+    echo "== stage 1 (tools/cts/es2-tree-gate.py; NotSupported against ${BOARD_ACCEPTED:-tools/cts/es2-accepted.txt})"
+    python3 "$HERE/cts/es2-tree-gate.py" --accepted "${BOARD_ACCEPTED:-$HERE/cts/es2-accepted.txt}" \
+        --mustpass "${BOARD_MUSTPASS:-$HERE/cts/gles2-mustpass.txt}" "$dir"
+}
+
 cmd_tally() {
     [ $# -eq 1 ] || usage
     local dir=$1 d c rv runs=() cons=()
@@ -3501,7 +3529,8 @@ cmd_tally() {
     if [ -f "$dir/tree.txt" ] && [ "$(cut -f3 "$dir/tree.txt" | head -1)" != - ]; then
         echo "== results per row (the selector form)"
         results_tsv "$dir"
-        return 0
+        es2_stage1 "$dir"
+        return
     fi
     mapfile -t cons < <(consoles_with_deqp "${runs[@]}")
     [ ${#cons[@]} -gt 0 ] || { echo "== no dEQP lines in these consoles"; return 0; }
