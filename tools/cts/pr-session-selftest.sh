@@ -80,6 +80,19 @@ run t > /dev/null && fail "a missing knob was accepted"
 run t --knob on --cap-pages x > /dev/null && fail "a bad cap was accepted"
 run t --knob on --one-in-flight > /dev/null && fail "--one-in-flight without --glmark2 was accepted"
 
+# the board.sh record is <logdir>/<date>-<name>-<sha8>/console.txt: the session
+# must find it there (it looked at <logdir>/console.txt and kept no log)
+RL=$FD/run-gltest
+mkdir -p "$RL/20261127-1439-pr-t-gltest-b9766cf5" "$RL/20261127-1501-pr-t-gltest-aaaaaaaa"
+echo "14:39:01 old" > "$RL/20261127-1439-pr-t-gltest-b9766cf5/console.txt"
+echo "15:01:02 case 216 per frame: 40.00 kicks" > "$RL/20261127-1501-pr-t-gltest-aaaaaaaa/console.txt"
+got=$("$S" --find-console "$RL") || fail "find-console: no record found"
+[ "$got" = "$RL/20261127-1501-pr-t-gltest-aaaaaaaa/console.txt" ] || fail "find-console: wrong file: $got"
+mkdir -p "$FD/flat" && echo x > "$FD/flat/console.txt"
+[ "$("$S" --find-console "$FD/flat")" = "$FD/flat/console.txt" ] || fail "find-console: flat dir"
+mkdir -p "$FD/empty"
+"$S" --find-console "$FD/empty" > /dev/null && fail "find-console: empty dir accepted"
+
 if [ "$fails" = 0 ]; then
     echo "pr-session-selftest: ok"
 else
