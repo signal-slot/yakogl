@@ -141,7 +141,7 @@ fn depth_of<R>(f: impl FnOnce() -> R) -> (R, usize) {
 
 /// The deepest stack any reference pair's compile and link takes stays
 /// under 240 KiB with the cap at 256 locals. HOST-ONLY, x86_64, this
-/// profile: measured 210 KiB (deqp_loops2_vs_for_dyn_nested; it was 172 KiB
+/// profile: measured 219 KiB (deqp_loops2_vs_for_dyn_nested, on 69d67922; it was 172 KiB
 /// at fvg_filter_image, its 24 guarded passes
 /// nested), where the walk with its copies on the stack took 282 KiB at 32
 /// locals and 1187 KiB at 256 (docs/notes/mali-local-arrays.md section 7).
