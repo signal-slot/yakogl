@@ -31,7 +31,8 @@ target, `cs_golden` mode 29, README section "A tile-status fast clear"),
 `gc-depth-sample.md` ("This back end's surface"), `driver/samples/zephyr/gl_test`
 (`main_imx8mp.c`, the case table in `driver/tools/pvrlab/gl_test.c`). Own code
 was cited at `7c2af19d`; the `backend.rs` lines below were re-read at
-`e07d066a`. Line numbers in `backend.rs`, `main_imx8mp.c` and `regs.rs` drift.
+`e07d066a`; the two `src/vivante/backend.rs` citations (`ensure_no_colour_surface`,
+`single_buffer` and the `PE_DEPTH_CONFIG` writer) at `692e2a63`. Line numbers in `backend.rs`, `main_imx8mp.c` and `regs.rs` drift.
 
 ## Answer in short
 
@@ -342,7 +343,7 @@ the pair "SINGLE_BUFFER(2), no SUPER_TILED".
 
 A 64x64 depth-only draw into a framebuffer with a D24S8 renderbuffer and a
 dummy colour target (Mesa's, `etnaviv_state.c:397-407`; `ensure_no_colour_surface`,
-`backend.rs:1038-1044` is the back end's dummy), `GL_ALWAYS`, depth writes on,
+`src/vivante/backend.rs:1193-1199` is the back end's dummy), `GL_ALWAYS`, depth writes on,
 depth cleared to 1.0 by a quad first. One quad (two triangles in one plane)
 covering the target, with window depth `z(x, y) = (x + 64 y) / 8192` over the
 target, so `z` stays in `[0, 0.5)`. Every pixel then has a **unique** depth,
@@ -367,8 +368,8 @@ board decodes what the host verified.
 Mode 3 runs first: if the control does not read as today's layout, the
 decoding is wrong and the other three pages mean nothing. The hook is `gc_debug_depth_dump(mode, out)`; it needs a
 new test knob that overrides the two fields for a depth-only draw
-(`single_buffer()` and the `PE_DEPTH_CONFIG` writer, `backend.rs:813-826`,
-`:1796-1802`), default off. The hook reads the surface through the CPU view
+(`single_buffer()` and the `PE_DEPTH_CONFIG` writer, `src/vivante/backend.rs:958-971`,
+`:1934-1957`), default off. The hook reads the surface through the CPU view
 after `finish` (the carve-out is non-cacheable; `gc-depth-sample.md`).
 
 ### The page
