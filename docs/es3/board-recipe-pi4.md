@@ -440,7 +440,7 @@ starting `commit: <sha>` (or `commit <sha>`) naming that commit; a tally
 without `complete=1` and its full `deqp: summary: N cases begun, N with a
 result, 0 without` line — the abort check, printed as `aborted, no complete
 deqp summary (<n>): <labels>`; and any file holding a home path, an IPv4
-address, a `.ts.net` name or a `/dev/tty` path. Session directories are
+address, a `.ts.net` name or a serial device path (a tty node under `/dev`). Session directories are
 named `tools/cts/log/<YYYY-MM>-pi4-gles3-<sha8>-rowsAA-BB/` (the checker's
 default glob). Per image a record holds `<LABEL>.console.txt` (that boot's
 console, the firmware's first line to the end line, CRs and NULs dropped,
@@ -449,9 +449,11 @@ with relative paths), plus `table.txt` (the `--table` view over all
 consoles) and `cycles.txt` (per image: the image sha256, the Linux boot id
 before the reboot, the reboot time, the seconds until Linux was back, the
 clean-up read-back, the `cases in` line and the end line). A console's
-dEQP banner reads `dEQP Core vulkan-cts-1.4.6.2-555-g93bca018...`; in the
-copies `board.sh` makes, its address redaction (`redact_dir`) takes the
-`1.4.6.2` for an IPv4 address and writes `vulkan-cts-192.0.2.1-...` (rows
+dEQP banner reads `dEQP Core vulkan-cts-<CTS release>-555-g93bca018...`, where the
+release is a four-part version number (1.4.6 followed by a patch level); in the
+copies `board.sh` makes, its address redaction (`redact_dir`) takes that
+four-part number for an IPv4 address and writes the RFC 5737 documentation
+address in its place, `vulkan-cts-<documentation address>-...` (rows
 0-15 of `b1b5b845`, the only rows run through `board.sh`), so read the
 release from the rows run by hand. The three records above predate this
 contract: plain `-a`, `-b`, `-c` directory names,
