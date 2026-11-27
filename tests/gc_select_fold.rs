@@ -4,7 +4,10 @@
 //! GC7000 online compiler (plan #328, item gt-tiled-probe): rank T (a product
 //! retargeted past a constant-lane store, t5v), rank 4a/4b (float constant
 //! folding and the one-operand identities, t4 and t4b) and rank 4c (a
-//! constant lane of a constructed vector read as the constant, t4c). Each
+//! constant lane of a constructed vector read as the constant, t4c) and rank
+//! 3 (a `mul` read once by an `add` is a `mad`, refused toward an invariant
+//! output, for a product read twice and for two uniforms; plan #421 item
+//! cc-mad). Each
 //! case pins the instruction count the note targets and says, from the
 //! listing, which instruction went.
 //!
@@ -276,6 +279,111 @@ fn a_mixed_read_of_a_constructed_vector_keeps_the_constant_lane() {
     close(colour_of(&c, [0.25, -0.5, 3.0, 9.0], [0.0; 4]), [0.5, -1.0, 6.0, 4.0], "mixed");
 }
 
+/// The colour as bits, for the rank 3 cases: a fused `mad` must give the
+/// host interpreter's `mul` then `add` bit for bit, not merely close.
+fn bits_of(c: &Compiled, a: [f32; 4], b: [f32; 4]) -> [u32; 4] {
+    colour_of(c, a, b).map(f32::to_bits)
+}
+
+/// Inputs whose product does not round exactly, so a single-rounding `mad`
+/// would differ from the two-rounding sum in the last bit somewhere.
+const ROUNDS: [([f32; 4], [f32; 4]); 3] = [
+    ([1.000_000_1, 3.333_333_3, -0.1, 7.0], [1.000_000_1, -2.5, 0.3, -1.0e-7]),
+    ([0.1, 0.2, 0.3, 0.4], [0.7, 1.0e8, -3.0, 0.5]),
+    ([-123.456, 0.0, -0.0, 1.5], [0.333_333_34, 2.0, -0.0, f32::MIN_POSITIVE]),
+];
+
+/// t3's `* Kernel +` without the texture: `a * b.x + b` is one `mad`
+/// (rank 3, `select.rs` `fuse_mul_add`), and its value is the `mul` then
+/// the `add`. The sum's swizzle is composed into the product's sources:
+/// `a * b + a.wzyx` is one `mad` too. Two products in one sum take one
+/// `mad` and keep one `mul`.
+fn rank3_a_product_read_once_by_a_sum_is_one_mad() {
+    let src = fs("", "gl_FragColor = a * b.x + b;");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("mad", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul"), count(&p, "add")), (1, 0, 0), "one mad: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in ROUNDS {
+        let want = core::array::from_fn(|l| (a[l] * b[0] + b[l]).to_bits());
+        assert_eq!(bits_of(&c, a, b), want, "mad: a {a:?} b {b:?}");
+    }
+
+    let src = fs("", "gl_FragColor = a * b + a.wzyx;");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("mad swizzled", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul"), count(&p, "add")), (1, 0, 0), "one mad: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in ROUNDS {
+        let want = core::array::from_fn(|l| (a[l] * b[l] + a[3 - l]).to_bits());
+        assert_eq!(bits_of(&c, a, b), want, "mad swizzled: a {a:?} b {b:?}");
+    }
+
+    let src = fs("", "gl_FragColor = a * b.x + b * a.y;");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("two products", &p);
+    assert_eq!((count(&p, "mad"), count(&p, "mul"), count(&p, "add")), (1, 1, 0), "mul and mad: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in ROUNDS {
+        let want = core::array::from_fn(|l| (a[l] * b[0] + b[l] * a[1]).to_bits());
+        assert_eq!(bits_of(&c, a, b), want, "two products: a {a:?} b {b:?}");
+    }
+}
+
+/// No pair is fused in a shader with an `invariant` output: the GC7000's
+/// `mad` rounding is not measured, and a value asked to be the same in two
+/// programs keeps the instructions of the program it is compared with. The
+/// guard is shader-wide: an invariant varying keeps `gl_Position`'s pair a
+/// `mul` and an `add` as well, and the pragma counts as invariance of
+/// every output (the spec's rule, `IoDecl::is_invariant`).
+fn rank3_no_mad_toward_an_invariant_output() {
+    let body = "void main() { gl_Position = p * q.x + q; v = q; }\n";
+    let decl = "attribute vec4 p;\nattribute vec4 q;\n";
+    let plain = compile(SHC_STAGE_VERTEX, &format!("{decl}varying vec4 v;\n{body}"));
+    show("vertex", &plain);
+    assert_eq!(count(&plain, "mad"), 1, "with no invariant output the pair is a mad: {plain:?}");
+    for (name, head) in [
+        ("invariant gl_Position", format!("{decl}varying vec4 v;\ninvariant gl_Position;\n")),
+        ("pragma", format!("#pragma STDGL invariant(all)\n{decl}varying vec4 v;\n")),
+        ("invariant varying", format!("{decl}invariant varying vec4 v;\n")),
+    ] {
+        let p = compile(SHC_STAGE_VERTEX, &format!("{head}{body}"));
+        show(name, &p);
+        assert_eq!(count(&p, "mad"), 0, "{name}: no mad: {p:?}");
+        assert_eq!((count(&p, "mul"), count(&p, "add")), (1, 1), "{name}: the mul and the add stay: {p:?}");
+    }
+}
+
+/// A product with a second reader stays a `mul`: `t = a * b.x; (t + b) * t`.
+fn rank3_a_product_read_twice_is_not_fused() {
+    let src = fs("", "vec4 t = a * b.x; gl_FragColor = (t + b) * t;");
+    let p = compile(SHC_STAGE_FRAGMENT, &src);
+    show("read twice", &p);
+    assert_eq!(count(&p, "mad"), 0, "t is read twice: {p:?}");
+    let c = compile_raw(SHC_STAGE_FRAGMENT, &src);
+    for (a, b) in ROUNDS {
+        let want = core::array::from_fn(|l| {
+            let t = a[l] * b[0];
+            ((t + b[l]) * t).to_bits()
+        });
+        assert_eq!(bits_of(&c, a, b), want, "read twice: a {a:?} b {b:?}");
+    }
+}
+
+/// A product by one uniform added to another would read two constant-file
+/// registers in one instruction, which the machine's encoding is not given
+/// (`within_caps`): `a * U + V` stays a `mul` and an `add`. With one
+/// uniform, `a * U + b` is a `mad`.
+fn rank3_two_uniforms_are_not_one_mad() {
+    let p = compile(SHC_STAGE_FRAGMENT, &fs("uniform vec4 U;\nuniform vec4 V;\n", "gl_FragColor = a * U + V;"));
+    show("two uniforms", &p);
+    assert_eq!(count(&p, "mad"), 0, "U and V are two constant registers: {p:?}");
+    assert_eq!((count(&p, "mul"), count(&p, "add")), (1, 1), "the mul and the add stay: {p:?}");
+    let p = compile(SHC_STAGE_FRAGMENT, &fs("uniform vec4 U;\n", "gl_FragColor = a * U + b;"));
+    show("one uniform", &p);
+    assert_eq!(count(&p, "mad"), 1, "one constant register: {p:?}");
+}
+
 /// One test: the online compiler's scratch arena is not reentrant, so the
 /// cases run one after another on one thread.
 #[test]
@@ -289,4 +397,8 @@ fn gc_select_fold_micro_shaders() {
     an_identity_of_a_slot_stored_again_later_keeps_the_earlier_value();
     t4c_a_constant_lane_of_a_constructed_vector_is_read_as_the_constant();
     a_mixed_read_of_a_constructed_vector_keeps_the_constant_lane();
+    rank3_a_product_read_once_by_a_sum_is_one_mad();
+    rank3_no_mad_toward_an_invariant_output();
+    rank3_a_product_read_twice_is_not_fused();
+    rank3_two_uniforms_are_not_one_mad();
 }

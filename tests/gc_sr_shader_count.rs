@@ -7,8 +7,10 @@
 //! sr-compiler-fix). Mesa etnaviv's `etna_shc` counts for the GC7000UL are
 //! the comments; they are the target, not a pin. The pins include the note's
 //! "The patch" (a copy fold and a scalar lane merge,
-//! `src/shaderc/online/vivante/peephole.rs`); the comments give the count
-//! before it.
+//! `src/shaderc/online/vivante/peephole.rs`) and rank 3 of
+//! `docs/notes/gc-compiler-ranks-3-5.md` (a `mul` read once by an `add` is a
+//! `mad`, `select.rs` `fuse_mul_add`); the comments give the count before
+//! them.
 //!
 //! The glmark2 texts are GPL-3.0 and never committed: they are read from the
 //! host harness's corpus (`GLMARK2_CORPUS`, by default
@@ -48,12 +50,13 @@ const GLMARK2: [(&str, &str, u32, u32); 8] = [
     ("6964fcf6aaac9739", "vert", 19, 5), // horse vertex; etna 14, 4; before 23, 5; 21, 5 before rank 4c
     ("474800a67afed087", "frag", 1, 2), // horse fragment; etna 1, 2; before 1, 2
     ("7215f4f5052a383c", "vert", 19, 5), // refract vertex; etna 19, 5; before 23, 5; 21, 5 before rank 4c
-    ("3fae89c9ab969ea3", "frag", 64, 11), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4
+    ("3fae89c9ab969ea3", "frag", 55, 11), // refract fragment; etna 48, 6; before 86, 12; 71, 12 before rank 4, 64 before rank 3
 ];
 /// The eight's instructions: etna_shc 105; before the patch 170; 146 before
 /// rank 4 (float constant folding, `docs/notes/gc-compiler-ranks-3-5.md`),
-/// 139 before rank 4c (a constructor's constant lane read as the constant).
-const GLMARK2_TOTAL: u32 = 132;
+/// 139 before rank 4c (a constructor's constant lane read as the constant),
+/// 132 before rank 3 (a `mul` read once by an `add` is a `mad`).
+const GLMARK2_TOTAL: u32 = 123;
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -65,17 +68,17 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
         ("m1", SHC_STAGE_FRAGMENT, fs("gl_FragColor = a / a.w;"), 2),
         // m1b: etna 3; before the patch 6
         ("m1b", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(a.xyz / a.w, 1.0);"), 4),
-        // m13: etna 3 (mad); before the patch 6 (the patch has no contraction)
-        ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 6),
-        // m9: etna 7; before the patch 17; 10 before rank 4 (`L.xyz / L.w` is a constant now)
+        // m13: etna 3 (mad); before the patch 6 (the patch has no contraction), 6 before rank 3
+        ("m13", SHC_STAGE_FRAGMENT, fs("vec3 t = a.xyz * b.x + b.xyz; gl_FragColor = vec4(t * 0.5 + 0.5, 1.0);"), 4),
+        // m9: etna 7; before the patch 17; 10 before rank 4 (`L.xyz / L.w` is a constant now), 8 before rank 3
         (
             "m9",
             SHC_STAGE_FRAGMENT,
             fs("const vec4 L = vec4(1.0, 2.0, 3.0, 2.0); gl_FragColor = vec4(normalize(a.xyz / a.w - L.xyz / L.w), 1.0);"),
-            8,
+            7,
         ),
-        // m5: etna 10; before the patch 20; 17 before rank 4 (`1.0 - eta * eta` folds)
-        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 16),
+        // m5: etna 10; before the patch 20; 17 before rank 4 (`1.0 - eta * eta` folds), 16 before rank 3
+        ("m5", SHC_STAGE_FRAGMENT, fs("gl_FragColor = vec4(refract(a.xyz, b.xyz, 1.2), 1.0);"), 15),
         // m8: etna 4; before the patch 8
         ("m8", SHC_STAGE_FRAGMENT, fs("float k = dot(a.xyz, b.xyz); gl_FragColor = vec4(vec3(sqrt(1.0 - k * k)), 1.0);"), 7),
         // m4 (vertex): etna 4; before the patch 6; 5 before rank 4c (the `1.0` lane read as the constant)
