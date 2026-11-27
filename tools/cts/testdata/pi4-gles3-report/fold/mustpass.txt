@@ -1,0 +1,5 @@
+dEQP-GLES3.functional.f.one
+dEQP-GLES3.functional.f.two
+dEQP-GLES3.functional.f.three
+dEQP-GLES3.functional.f.four
+dEQP-GLES3.functional.f.five

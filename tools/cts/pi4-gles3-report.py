@@ -43,6 +43,20 @@ accepted only when stated: --mixed-commit SHA, once per commit, full 40-digit sh
     most labels as 'all the other labels').
 check-pi4-gles3-log.py is run once per commit group (its missing/aborted/duplicate
 findings are resolved here instead); gles3-notpass.py --pi4 is not run in this mode.
+
+Fold mode. --fold-sublabels prints the whole-tree figure of a re-split tree (a parent label
+that aborted plus the sub-labels that ran the rest of its cases: S03a -> S03a1.., T14a ->
+T14a1, T14aa ...) and nothing else. The tallies hold only counts, so it reads the per-case
+result lines of every <LABEL>.console.txt in the session directories (the sessions in ORDER OF
+THE ARGUMENTS, earliest first; inside one directory a longer label, a sub-label, is newer than
+its parent, then by name). A case's result is the one of the NEWEST record that holds its name;
+the parent's cases that never started ('none') have no line, so they are dropped by construction.
+Every mustpass name is counted exactly once (pass / fail / NotSupported / other / none) in a
+per-family table (functional.<group>) with TOTAL and a check line that the sum equals the
+mustpass size (42,810 for pi4-gles3-tree.txt). The cases with a result in more than one record
+are reported as duplicates (the older record's result is dropped), as are result lines for names
+outside the mustpass. Exit 1 when the check fails or a record cannot be read; no commit or
+completeness check is made (use --mixed-commit and the session's own check for those).
 """
 import argparse
 import datetime
@@ -410,6 +424,60 @@ def mixed_texts(mixed):
     line = 'Commits (mixed-commit tree, a later session supersedes an earlier record of the same label): ' + '; '.join(
         '`%s`: %s' % (c, part(i, c, l)) for i, (c, l) in enumerate(gs)) + '.'
     return full, ja, md, line
+
+
+def fold_figures(args, out):
+    """--fold-sublabels: per-family figure, each mustpass case once, the newest record's result wins."""
+    uart = load('deqp-uart-tally')
+    cases = [l.strip() for l in read(args.mustpass).splitlines() if l.strip() and not l.startswith('#')]
+    names = set(cases)
+    order = []  # (dir index, label length, label, path): oldest first
+    for i, d in enumerate(args.dirs):
+        if not os.path.isdir(d):
+            out.write('FAIL: %s: no such session directory\n' % d)
+            return 1
+        for fn in os.listdir(d):
+            if fn.endswith('.console.txt'):
+                lab = fn[:-len('.console.txt')]
+                order.append((i, len(lab), lab, os.path.join(d, fn)))
+    order.sort()
+    result, who, dups, outside = {}, {}, {}, 0
+    for _, _, lab, path in order:
+        got = uart.scan(read(path))['got']
+        outside += sum(1 for c in got if c not in names)
+        for c, st in got.items():
+            if c not in names:
+                continue
+            if c in result:
+                dups.setdefault(c, [who[c]]).append(lab)
+            result[c], who[c] = st, lab
+    cols = ['Pass', 'Fail', 'NotSupported', 'other', 'none']
+    fam = {}
+    for c in cases:
+        parts = c.split('.')
+        g = fam.setdefault('info' if parts[1] == 'info' else parts[2] if len(parts) > 3 else c, dict.fromkeys(cols, 0))
+        st = result.get(c)
+        g['none' if st is None else st if st in cols else 'other'] += 1
+    out.write('== whole-tree figure, sub-labels folded, each case once (%d records, newest wins)\n' % len(order))
+    out.write('%-28s %7s %6s %6s %6s %6s\n' % ('group', 'pass', 'fail', 'n.s.', 'other', 'none'))
+    tot = dict.fromkeys(cols, 0)
+    for g in sorted(fam):
+        for k in cols:
+            tot[k] += fam[g][k]
+        out.write('%-28s %7d %6d %6d %6d %6d\n' % ((g,) + tuple(fam[g][k] for k in cols)))
+    out.write('%-28s %7d %6d %6d %6d %6d\n' % (('TOTAL',) + tuple(tot[k] for k in cols)))
+    total = sum(tot.values())
+    ok = total == len(cases) == len(names)
+    out.write('check: pass+fail+n.s.+other+none = %s, mustpass %s names: %s\n'
+              % (n(total), n(len(cases)), 'OK' if ok else 'MISMATCH'))
+    out.write('figure: %s pass / %s fail / %s NotSupported / %s other / %s without a result of %s\n'
+              % (n(tot['Pass']), n(tot['Fail']), n(tot['NotSupported']), n(tot['other']), n(tot['none']), n(total)))
+    out.write('duplicates: %d cases have a result in more than one record (newest kept)%s\n'
+              % (len(dups), ''.join('\n  %s: %s' % (c, ' -> '.join(v)) for c, v in sorted(dups.items())[:20])))
+    if len(dups) > 20:
+        out.write('  ... and %d more\n' % (len(dups) - 20))
+    out.write('result lines for names outside the mustpass: %d (ignored)\n' % outside)
+    return 0 if ok else 1
 
 
 def report(args, out):
@@ -831,6 +899,26 @@ def self_test():
         rc, out = rep(td, *(['--mixed-commit', sha, '--mixed-commit', sha_b[:8]] + [old, r1, r2]))
         expect('mixed: a short sha is refused', rc == 1 and 'not a full 40-digit sha' in out, out)
 
+    # fold mode: parent F1 aborted after two cases, F1a and F1b ran the rest; each case counted once
+    fx = os.path.join(HERE, 'testdata', 'pi4-gles3-report', 'fold')
+
+    def fold(*dirs):
+        p = subprocess.run([sys.executable, '-I', me, '--fold-sublabels', '--mustpass', os.path.join(fx, 'mustpass.txt')]
+                           + [os.path.join(fx, d) for d in dirs], capture_output=True, text=True)
+        tot = [l.split()[1:] for l in p.stdout.splitlines() if l.startswith('TOTAL')]
+        return p.returncode, p.stdout + p.stderr, tot[0] if tot else None
+    rc, out, tot = fold('s1', 's2')
+    expect('fold: parent aborted + two sub-labels: each of 5 cases once, TOTAL 3 pass / 1 fail / 1 n.s. / 0 other / 0 none',
+           rc == 0 and tot == ['3', '1', '1', '0', '0'] and '= 5, mustpass 5 names: OK' in out, out)
+    expect('fold: the case the parent and F1a both hold is one duplicate, newest (F1a) kept, Fail replaced by Pass',
+           'duplicates: 1 cases' in out and 'f.one: F1 -> F1a' in out, out)
+    rc, out, tot = fold('s1')
+    expect('fold: the parent alone leaves the rest without a result, the sum still 5',
+           rc == 0 and tot == ['0', '1', '1', '0', '3'], out)
+    rc, out, tot = fold('s2', 's1')
+    expect('fold: the order of the arguments decides (parent last: its Fail wins f.one)',
+           rc == 0 and tot == ['2', '2', '1', '0', '0'], out)
+
     print('pi4-gles3-report self-test: %d of %d cases ok' % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0
 
@@ -844,6 +932,9 @@ def main():
     ap.add_argument('--mixed-commit', action='append', default=[], metavar='SHA',
                     help='accept a tree recorded at several commits: give each full sha once; the sessions are in '
                          'argument order, a later one supersedes an earlier record of a label (see the module doc)')
+    ap.add_argument('--fold-sublabels', action='store_true',
+                    help='print only the whole-tree figure with re-split sub-labels folded: each mustpass case '
+                         'once, the newest record (argument order) that holds it wins (see the module doc)')
     ap.add_argument('--root', default=ROOT, help='tree whose docs the anchors are read from')
     ap.add_argument('--apply', metavar='ROOT', help='rewrite the anchored texts in the tree ROOT (all or nothing)')
     ap.add_argument('--self-test', action='store_true')
@@ -853,6 +944,8 @@ def main():
         return self_test()
     if not args.dirs:
         ap.error('at least one session directory is required')
+    if args.fold_sublabels:
+        return fold_figures(args, sys.stdout)
     return report(args, sys.stdout)
 
 

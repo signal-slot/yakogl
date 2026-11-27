@@ -1,0 +1,3 @@
+deqp: case filter 'dEQP-GLES3.functional.f.one,dEQP-GLES3.functional.f.three'
+deqp: Pass dEQP-GLES3.functional.f.one
+deqp: Pass dEQP-GLES3.functional.f.three
