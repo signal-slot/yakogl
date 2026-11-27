@@ -60,6 +60,9 @@ want tools/check_pool_selftest.sh tools
 want tools/newdir/selftest.sh tools
 want tools/some_new_tool.sh all
 want tools/selftest_helper.sh all
+# it decides which test targets the whole-suite rows build
+want tools/check_live_tests.py all
+want tools/check_live_tests_selftest.py tools
 want third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml all
 want some/new/place.rs all
 # one GPU

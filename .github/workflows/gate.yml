@@ -393,8 +393,15 @@ jobs:
       # reads the record, so it reuses only passes of what is on main.
       - name: tools/check.sh (every row, main, nightly or by hand)
         if: steps.seen.outputs.run == 'true' && github.event_name != 'pull_request'
+        # A pull request's whole-suite test rows build only the test targets
+        # that hold code in the row's feature set (tools/check.sh,
+        # live_test_targets). This run builds and runs every target and
+        # requires each one tools/check_live_tests.py calls empty to run no
+        # test: the proof of that reading on the real tree (docs/ci.md,
+        # section 6).
         env:
           YAKOGL_CHECK_RECORD: ${{ github.ref == 'refs/heads/main' && github.sha || '' }}
+          YAKOGL_CHECK_EMPTY_TARGETS: prove
         run: |
           mkdir -p build
           "$RUNNER_TEMP/gate-run.sh" "$RUNNER_TEMP/gate.pgid" tools/check.sh 2>&1 | tee build/gate-ci.log

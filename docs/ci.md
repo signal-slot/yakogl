@@ -676,3 +676,19 @@ line), a `tools/*_selftest.sh` the map did not know in 102 (alone in 52),
   (the loop over `tools/check_selftests.py`), and `tools/check_scope_selftest.sh`
   requires of every row that names a self-test that the self-test's path
   reaches it.
+- A whole-suite test row (`cargo test --features F` with no target, and the
+  V3D row's `--tests`) builds only the targets of `tests/` that hold code
+  in `F`: `tools/check_live_tests.py` reads each file's head and names the
+  targets whose crate-level `#![cfg(...)]` is false for the feature set
+  whatever the host (anything it cannot read is built), and `cargo_test`
+  names the others (`--lib --test a --test b ...`; `live_test_targets` in
+  `tools/check.sh`). On 2026-11-27 that is 6,200 of the 8,478 test binaries
+  of the nine `CONFIGS` rows and 497 of the 942 of the V3D row: about
+  0.2 s of build and 7.2 MB each (with debug info), and one process each
+  to list and run. The run on main (`gate.yml`,
+  `YAKOGL_CHECK_EMPTY_TARGETS=prove`) still builds and runs every target
+  and fails when one the tool calls empty ran a test, so a wrong reading
+  is found within a day and leaves a test unrun on pull requests until
+  then. In the three measured builds of the row above, none of the 595
+  targets it calls empty ran a test and each of the other 347 ran at least
+  one.
