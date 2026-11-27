@@ -8,7 +8,8 @@ Raspberry Pi 4 (V3D 4.2). This file says what is not Pass now and why that is
 accepted. The numbers and the commit are in `tools/cts/RESULTS.md`. Earlier
 rounds, their failures and their fixes are in git history. The fourth back
 end, the Mali-G610 of the NanoPC-T6 (stage 5), is section M: its whole tree,
-not yet at 0 Fail.
+not yet at 0 Fail. The same back end on the Mali-G310 of the Verdin iMX95,
+under Zephyr, is section N: its tree, session by session.
 
 ## Summary
 
@@ -625,3 +626,58 @@ do not depend on this subsection.
 
 These host measures predate this tip (`e65567ea` and earlier); plan
 #402 keeps `remeasure-402` to re-measure the taken rows there.
+
+## N. Mali-G310 (Verdin iMX95): the tree on Zephyr, at `e63ab28e`
+
+The `gpu-mali` back end on the Toradex Verdin iMX95 (i.MX 95, Mali-G310,
+Valhall v10, one shader core) under Zephyr: the T6's 76 rows of
+`tools/cts/mali-gles2-tree.txt`, one image per row
+(`tools/cts/imx95-deqp-images.sh`), each started from the module's own
+U-Boot by hand and read on its console (B8 of
+`docs/notes/pre-study-imx95.md`, issue #7). The rows run in board sessions;
+each session is a slice, `tools/cts/log/<date>-imx95-gles2-<session>-<sha8>/`,
+in the T6 slices' form (`mali-deqp-tally.py --tally` reads it), with the
+whole console of every row in `console/`.
+
+| Session | Rows | Commit | Slice | Pass | Fail | NotSupported |
+|---|---|---|---|---:|---:|---:|
+| S4 (2,675 cases) | 69-76 | `e63ab28e` | `2026-11-25-imx95-gles2-S4-e63ab28e` | 2,107 | 537 | 31 |
+| S1-S3 (14,490 cases) | 1-68 | | not run yet | | | |
+
+S4, 2026-11-25: every row ran to its end with a result for each case it
+began, and reset the board itself by PSCI, in 7.3 to 18.8 s of its 600 s
+lifetime. There was no hang, no WDOG3 reset, no GPU restart, no tiler OOM and
+no refused draw. 567 of the 568 non-Pass cases carry the online compiler's
+own refusal (issue #11251). The one without is
+`shaders.texture_functions.vertex.texturecubelod`, which fails the image
+compare as on the T6 (M.1). The causes, largest first (the slice's README
+has the whole table):
+
+| Cases | Status | Cause |
+|---:|---|---|
+| 151 | Fail | arithmetic other than +, -, * and a dot or matrix product (107 fragment, 44 vertex) |
+| 61 | Fail | back end defect: an invariant of the pipeline did not hold (IrIndex), fragment (10 through the link) |
+| 50 | Fail | an integer or boolean value, fragment (6 through the link) |
+| 35 | Fail | a constant product in a shape Mesa's algebraic rules move or fold (20 fragment, 15 vertex) |
+| 33 | Fail | fp16 arithmetic on gl_FragCoord other than x and y as a pair |
+| 27 | Fail | a vertex uniform other than a float, vec2, vec3, vec4 or mat4 (23), or not highp (4) |
+| 27 | Fail | a constant operation on a value that is not a finite normal float (16 fragment, 11 vertex) |
+| 22 | Fail | a mediump fragment uniform not read in its own fp16 lane pairs |
+| 19 | Fail | a loop in a vertex shader |
+| 17 | Fail | a gl_FragColor lane other than the varying's own lane or a constant |
+| 16 | Fail | a discard other than a highp `if (a < b) discard;` |
+| 16 | Fail | a fused multiply-add other than a matrix product's (vertex) |
+| 16 | Fail | control flow (9 fragment, 7 vertex) |
+| 15 | Fail | a fragment operand of a form or in a place no reference draws |
+| 32 | Fail | 7 smaller kinds (mixed fp32 and fp16 8, equal varying lanes 7, chained additions 5, texture coordinate 4, texture look-up form 4, fp16 varying load 2, texture result lanes 1), and the image compare (1) |
+| 31 | NotSupported | refusals of the same kinds |
+
+Against the T6's S4 at `8ff01055` (section M), by name (`diff-t6.tsv` of the
+slice): 163 cases differ, all toward Pass on the G310 (162 Fail and 1
+NotSupported now Pass, 111 of them in `shaders.conversions`). None is worse.
+550 of the 568 cases that are non-Pass on both boards stop on the same
+refusal. The other 18 stop on a later or reworded refusal: 8 that the T6
+refused in the vertex shader reach the fragment shader and stop on the
+IrIndex defect. The two runs are 283 commits apart, and every difference is
+a compiler status. So far S4 shows no difference that only the G310 has
+(`docs/notes/mali-g310-vs-g610.md` section 5).
