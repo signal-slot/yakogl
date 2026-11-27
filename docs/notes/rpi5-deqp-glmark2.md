@@ -2,8 +2,11 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Raspberry Pi 5: what P13 (dEQP-GLES2 and glmark2) needs
 
-Status: plan, every reference reread on the tip `ab919063` (2026-11-24).
-Nothing here was run on a board, and no code is changed by this note. It is item P13 of
+Status: plan, every reference reread on the tip `ab919063` (2026-11-24);
+sections 2, 3 and 7 updated at the tip `d2dbaa7e` (2026-11-27), where the
+deqp `rpi_5` image links, the stage-1 tree exists and the first `gl_test`
+board run has happened. No code is changed by this note; where a board
+session has answered something since, the rows say so with their commit. It is item P13 of
 `docs/notes/pre-study-rpi5.md` (section 8, row at `:619`: "dEQP-GLES2 and
 glmark2 on the board", size L, depends on P8 to P10, done when "the Pi 4's
 counts, or the refusals named"). It reads how the Pi 4 does the same two
@@ -105,16 +108,16 @@ Mali.
 |---|---|---|
 | Zephyr option | `CONFIG_YAKOGL_GPU_V3D71` exists, selects the PM watchdog and the mailbox; binning is polled. Its help text still says the 7.1 TFU "is not driven yet (refused by name)" (`:121-122`), but the OSAL has its own 7.1 TFU entry `osal_v3d71_tfu` since `eeb4e485`; only the 4.2-shaped TFU entries stay refused | `zephyr/Kconfig:106-122`; `zephyr/CMakeLists.txt:98-111`; `src/osal/zephyr_v3d71.c:39-59` (`osal_v3d71_tfu_present` `:840`) |
 | OSAL | VA space 512 MiB, carve-out is a `__noinit` static of `CONFIG_YAKOGL_V3D_CARVEOUT_BYTES`; init refuses unless the PM watchdog is armed; `osal_zephyr_v3d_default_platform()` answers the clock switch itself (`rpi5_v3d.c`), so a caller can pass `EGL_DEFAULT_DISPLAY` | `src/osal/zephyr_v3d71.c:106,114-120,201-205`; `driver/zephyr/lib/board/rpi5/rpi5_v3d.c:3-12,31` |
-| Cargo feature, `yakogl_backend_v3d71` | **not in the tree yet**: no `gpu-v3d71` in `Cargo.toml` (`gpu-v3d` is `:101`) and no `*71` `mod` line in `src/v3d/mod.rs`. The job assembly `backend71.rs` (`f1df7fe7`, `7f791cde`), `fill71.rs` (`90776db5`) and the table glue `glue71.rs` (`699353e9`) are merged as pure modules, host-tested through `#[path]` (`tests/v3d71_backend71.rs`, `v3d71_backend71_shapes.rs`, `v3d71_glue.rs`); hooking them up is `feat71` | `docs/notes/v3d71-gl-table.md:35,86-109`; `docs/notes/v3d71-table71.md:19-22` |
+| Cargo feature, `yakogl_backend_v3d71` | **merged (`9f286b5e`)**: `gpu-v3d71 = ["gpu-v3d"]` (`Cargo.toml:109`), `table71` has a `mod` line (`src/v3d/mod.rs`) and is the build's `g_backend`, and the zephyr 7.1 library build passes `gpu-v3d71` to cargo (`79c8e4f2`). `table71` records clears and scissored draws into `v3d_job71` jobs (`dc6bca24`) and draws the clear quad of gl_test cases 5, 58, 66 and 102 with 59 and 67 refused by name (`fa704233`); a `gpu-v3d71` build links GL programs through `link71` (`c3216765`). **Caveat (measured on the board, `d2dbaa7e`):** the pure modules build their results in `Vec`s and `String`s, so the `mod` lines gate them on `host-test` (`src/v3d/mod.rs:40-73`); a product `gpu-v3d71` build carries the table alone and `table71::REF_NO_RECORDING` refuses every draw and clear (`src/v3d/table71.rs:93-128`). Giving the recording path a product form is open (`src/v3d/table71.rs` module docs, "A product build records nothing yet") | `docs/notes/v3d71-gl-table.md:35,86-109`; `docs/notes/v3d71-table71.md:19-22` |
 | Pure modules | `admit71`, `attr71`, `backend71`, `backend71tex`, `clearplan71`, `draw71`, `ffi71`, `fill71`, `format71`, `frame71`, `glue71`, `ident71`, `limits71`, `mip71`, `prim71`, `record71`, `rt71`, `sampler71`, `texfill71`, `texglue71`, `texstate71`, `texture71`, `texuni71`, `tfuplan71`, `uniform71`, `zskeep71` | `ls src/v3d/*71*.rs` |
 | C | `v3d_job71.{c,h}` (compared with Mesa's `gl_*.clif` jobs, 35 named differences), `v3d_tex71.*`, `v3d_tfu71.*`, `v3d_frame71_tri.c` | `v3d71-gl-table.md:181-191`; `driver/src/v3d/*71*` |
 | Compiler | 7.1 online back end: es100 126 of 126; `qpu_corpus_71` 874 of 1090 (216 refusals, each listed); glmark2-es2's 69 linkable pairs all link; the dEQP-GLES2 `.test` library 1778 of 1778; harvested dEQP-GLES2 programs 9720 of 10599 (879 refused, 6 of them 7.1-only); points and lines variants 126 of 126; the GL link entry `link71` is merged (`966a39a5`) | `docs/notes/v3d71-backend.md:950-958,973-1014,801-824` |
 | Uniform stream | `uniform71.rs` fills `CONSTANT`, `UNIFORM`, the four viewport words and **names every other contents a refusal**; the texture words are a separate merged module, `texuni71.rs` (`b066d160`), not yet wired | `src/v3d/uniform71.rs:13-22` |
 | Board facts | triangle PASS (Mesa's shaders and ours), TFU mip-chain job PASS with `IOC` although `HUB_IDENT1` bit 17 reads 0 | `tools/cts/RESULTS.md:806-829` (rows `:823-825`); `v3d71-gl-table.md:227-237` |
 | Console and screen | console is `uart10` at 115200 (`pre-study-rpi5.md:77`); `CONFIG_YAKOGL_BOARD_RPI5` gives a 32 bpp mailbox framebuffer, untried on the board, with no GPU platform, record screen or watchdog | `driver/zephyr/lib/board/Kconfig:39-49`; `rpi5/rpi5_screen.h:10`; `rpi5-display.md` sections 1-2 (the firmware's plane is RGB565; own 32 bpp plane is P11 stage 2, `rpi5_scanout32`) |
-| Images for `rpi_5` | **gl_test** has `boards/rpi_5.conf` and `.overlay` (`1bb98759`): `GPU_V3D` and `GPU_V3D71` (`:10-11`), 48 MiB carve-out (`:14`), `uart10`, no screen; `sram0` 96 MiB from 0x200000 (`rpi_5.overlay:17-19`, below the DTB at 0x2efec600). Per that commit it compiles with `-DYAKOGL_WERROR=ON` and **fails at the link**: the sample's CMake takes the 4.2 branch, and without `gpu-v3d71` `g_backend` is the 4.2 table. **deqp and glmark2 have no `rpi_5` board files** | `driver/samples/zephyr/gl_test/boards/rpi_5.conf`, `rpi_5.overlay`; `gl_test/README.md:208` |
+| Images for `rpi_5` | **gl_test** links `-Werror` (board files `1bb98759`: 48 MiB carve-out, `uart10`, no screen, `sram0` 96 MiB from 0x200000; the `V3D71` CMake branch and `main_rpi5.c` `dec352ac`; the link `85afd0cf`) and ran on the board (`d2dbaa7e`, section 7 item 7). **deqp** has `boards/rpi_5.conf` and `.overlay` and `src/v3d71_board.c` (`35c98f25`): the Pi 4's deqp figures (48 MiB carve-out, 16 MiB tiled copies, 8 MiB scratch, `sram0` 256 MiB from 0x200000), the record over the UART with no screen, `CONFIG_YAKOGL_RPI5_WDOG_HOLD_S=240` held equal to `V3D_DEQP_LIFETIME_S` by `CMakeLists.txt`; the image links `-Werror` and `strings` shows `v3d_deqp: build` and the end formats (measured after `9f286b5e` and `79c8e4f2`). **glmark2** has `boards/rpi_5.conf` and `.overlay` and the board layer's BCM2712 arm (`a6bb122f`, `d4f95c29`) and builds `-Werror` | `driver/samples/zephyr/{gl_test,deqp,glmark2}/boards/rpi_5.*`, `deqp/src/v3d71_board.c` |
 | Probes' memory | every probe image is 32 MiB of `sram0` from 0x200000 (low, below 4 GiB, U10) | `tools/probes/rpi_5/rpi5_triangle/boards/rpi_5.overlay:15-17` |
-| Stage and tools | no `pi5` in `board-stage.sh` (`usage` `:181`), `cts-common.sh` (`:47`) or `common-images.sh` (`:86-100`); no `rpi_5` arm in `deqp-tree-images.sh` (`:78-81`), and `images-selftest.sh:403-404` uses `rpi_5` as its example of a board **without** an arm (expects rc 2), so adding the arm changes that case too; no `rpi_5` in `deps.toml`'s `DEQP_WORK` board case (`:408-415`) or `deps-env.sh`'s list (`:21`); `check.sh` has the row `zephyr rpi_5 probe images` (`:5026`) but no `rpi_5` gl_test, deqp or glmark2 row (`rpi4 gl_test image` is `:4937`) | read |
+| Stage and tools | `rpi_5` **is** in `deps.toml`'s `DEQP_WORK` board case and `deps-env.sh`'s board list (`95eb8c3b`), and `deqp-tree-images.sh` has the `rpi_5` arm beside `pi5-full-tree.txt` (31 images) and `pi5-deqp-images.sh` (`e4001734`; its `images-selftest` case moved with it); still no `pi5` in `board-stage.sh`, `cts-common.sh` or `common-images.sh` (`stage71`), and `check.sh` still has no `rpi_5` gl_test, deqp or glmark2 row (the N5/N6 rows of `docs/notes/rpi5-gate-rows.md` section 3 are drafted, none added yet) | read at `d2dbaa7e` |
 
 ## 3. The images to build
 
@@ -195,16 +198,34 @@ Mali.
   uses, `board.sh:391`). The wrapper `tools/cts/pi5-deqp-images.sh` is one
   line like `pi4-deqp-images.sh:11`.
 
+**Settled (2026-11-27).** The deqp sample's `rpi_5` files merged as
+`35c98f25` along exactly these lines: `src/v3d71_board.c` installs the
+record tap and prints `v3d_deqp: build ...` and the end lines over the UART
+with no screen, arms the board layer's PM watchdog for
+`V3D_DEQP_LIFETIME_S` (240 s, `CONFIG_YAKOGL_RPI5_WDOG_HOLD_S` held equal
+to it by `CMakeLists.txt`, which refuses an image where they differ), and
+`deqp/CMakeLists.txt` carries a `CONFIG_YAKOGL_GPU_V3D71` branch beside the
+untouched Pi 4 one. The same trap for gl_test (the 4.2 branch linking
+`rpi_wdog.c` and `rpi_mbox.c` a second time) was fixed by the `V3D71`
+branch (`dec352ac`) and its link (`85afd0cf`).
+
 ### 3.3 Memory and binary size on the Pi 5
 
-Starting values, taken from the Pi 4 files and **not measured** on the Pi 5
-(they are the first thing the first build and board session settle):
+Starting values, taken from the Pi 4 files (the merged `rpi_5` board files
+settled them; the note below the table says how):
 
 | Image | `sram0` | carve-out / tiled copies / scratch | Why |
 |---|---|---|---|
 | gl_test | 96 MiB from 0x200000 | 48 / 8 (default) / 2 MiB | `gl_test/boards/rpi_4b.conf:7`, `.overlay:5,14` |
 | dEQP | 256 MiB (to 0x10200000) | 48 / 16 / 8 MiB; T5: 72 / 24 | `deqp/boards/rpi_4b.conf:9,14,23`; `texture-2048.conf:30-31`; `board.sh:390` already allows exactly this window |
 | glmark2 | 288 MiB (to 0x12200000) | 96 / 24 MiB, TFU on | `glmark2/boards/rpi_4b.conf:12,21,31`; **`board.sh:390`'s `LOAD_END` is 0x10200000, 32 MiB short**: a `pi5` glmark2 run needs the window raised (to 0x12200000, or a per-image rule) in `tools/board.sh`, the file the `texverdict71` and `stage71` items (neither on main) also edit |
+
+Settled in the merged board files: gl_test 96 MiB / 48 / 8 / 2
+(`1bb98759`; the first board run `d2dbaa7e` needed no more), deqp 256 MiB /
+48 / 16 / 8 (`35c98f25`), glmark2 288 MiB / 96 / 24 with the TFU on
+(`a6bb122f`). `tools/board.sh`'s pi5 `LOAD_END` is still 0x10200000
+(`:450`), 32 MiB short of the glmark2 image: the GM row waits for the
+window rule of item 6.
 
 Limits that bound these on the Pi 5:
 
@@ -369,39 +390,50 @@ separate item, because it edits `board-stage.sh`, `deps.toml`,
 
 Size as in `pre-study-rpi5.md:601`: S a day or less once its inputs exist, M
 a few days, L a week or more. "Depends on" names plan items and says for
-each whether it is merged at `888583fc` (checked by `git log` and the files).
-None of the P13 items below is started.
+each whether it is merged at `d2dbaa7e` (re-checked with `git log` and the
+files on 2026-11-27). Of the P13 items below, **1 and 3 are done**, 4
+merged as `e4001734`, 5 has its board files, and **7 ran its first board
+session**.
 
-At the tip, **merged**: `backend71` (`f1df7fe7`, `7f791cde`), `fill71`
-(`90776db5`), `glue71` (`699353e9`), `texuni71` (`b066d160`), `link71`
-(`966a39a5`), `refs71b` (`9e8c8fc9`) and its check `compose71d`
-(`tests/v3d71_compose5.rs`, `8bc24775`), the OSAL's 7.1 TFU (`osaltfu71`,
-`eeb4e485`), `mip71` (`e6f6e56d`, a pure module, not wired), `texglue71`
-(`e7737914`) and `backend71tex` (`5bde3959`), the two texture assembly
-modules, pure and not wired; the board files and CMake branch of
-`gltest71a` (`1bb98759`, `dec352ac`: `boards/rpi_5.*`, the `V3D71` branch
-of gl_test's `CMakeLists.txt`, `main_rpi5.c`; its link is not on main),
-of `deqp-rpi5a` (`35c98f25`: `boards/rpi_5.*`, `v3d71_board.c`, the
-`CONFIG_YAKOGL_GPU_V3D71` branch of `deqp/CMakeLists.txt`; link not on
-main) and of glmark2 (`a6bb122f`, the board layer's BCM2712 arm
-`d4f95c29`, `glmk71bl`); `tree71` (`e4001734`: `pi5-full-tree.txt`,
-`pi5-deqp-images.sh`, the `rpi_5` arm of `deqp-tree-images.sh`, item 4);
-`tfu140` (`e8d59f40`: gl_test case 140 is left out of 7.1 builds).
-**Not on main**: `feat71` (the `gpu-v3d71` feature, no `gpu-v3d71` in
-`Cargo.toml`, no `*71` `mod` line in `src/v3d/mod.rs`), the link of the
-`rpi_5` gl_test, deqp and glmark2 images (they wait for `feat71`),
-`stage71` (no `pi5` arm in `board-stage.sh`), `texverdict71`, `cases71`,
-`board71`, `shaders71tex`, `boardtex71`, `gate71plan`.
+At the tip `d2dbaa7e`, **merged**: `backend71` (`f1df7fe7`, `7f791cde`),
+`fill71` (`90776db5`), `glue71` (`699353e9`), `texuni71` (`b066d160`),
+`link71` (`966a39a5`), `refs71b` (`9e8c8fc9`) and its check `compose71d`
+(`tests/v3d71_compose5.rs`, `8bc24775`), the Mesa-reference compares of the
+stencil ops, instanced draws, four targets, prims and textured draw
+(`bac626fa`, `0e13f9fc`, `050001cc`, `ed36498d`, `512f3297`), the OSAL's
+7.1 TFU (`osaltfu71`, `eeb4e485`), `mip71` (`e6f6e56d`, a pure module, not
+wired), `texglue71` (`e7737914`) and `backend71tex` (`5bde3959`), the two
+texture assembly modules, pure and not wired; `gpu-v3d71` in `Cargo.toml`
+with `table71` as the build's `g_backend` (`feat71`, `9f286b5e`), the
+table recording clears and draws (`dc6bca24`) and the six gl_test shapes
+(`fa704233`), `link71` behind a `gpu-v3d71` build (`c3216765`), the zephyr
+7.1 library build passing `gpu-v3d71` to cargo (`79c8e4f2`), and a
+`gpu-v3d71` archive referencing no 4.2 job-builder symbol (`f5a64ebc`); the
+gl_test image (board files `1bb98759`, CMake branch and `main_rpi5.c`
+`dec352ac`, the link `-Werror` `85afd0cf`), the deqp image (`35c98f25`:
+`boards/rpi_5.*`, `v3d71_board.c`, the `CONFIG_YAKOGL_GPU_V3D71` branch of
+`deqp/CMakeLists.txt`) and the glmark2 board files with the board layer's
+BCM2712 arm (`a6bb122f`, `d4f95c29`, `glmk71bl`); the stage-1 case in
+`deps.toml` and `deps-env.sh` (`95eb8c3b`); `tree71` (`e4001734`:
+`pi5-full-tree.txt`, `pi5-deqp-images.sh`, the `rpi_5` arm of
+`deqp-tree-images.sh`, item 4); `tfu140` (`e8d59f40`: gl_test case 140 is
+left out of 7.1 builds). The first `gl_test` board run happened
+(`board71`, `d2dbaa7e`). **Not on main**: the recording path in a **product
+`gpu-v3d71` build** (the pure modules are `host-test`-only, section 2: a
+product image refuses every draw and clear by name — a new defect, and
+what gates the board items 7 and 10 to 13), `stage71` (no `pi5` arm in
+`board-stage.sh`), `texverdict71`, the P10 wiring (`mip71` and `texuni71`
+still have no `mod` line; `shaders71tex`, `board71-tex`), `gate71plan`.
 
 | # | Item | Size | Depends on | Files (new unless said) | Done when |
 |---|---|---|---|---|---|
-| 1 | **D0 `deqp-rpi5-sample`**: the deqp sample configures and builds for `rpi_5` (no board run): `boards/rpi_5.conf` and `.overlay`, `src/v3d71_board.c` (UART record, watchdog, no screen, section 3.2), the `CONFIG_YAKOGL_GPU_V3D71` branch of `deqp/CMakeLists.txt:95`; `-DYAKOGL_WERROR=ON`, the image prints `v3d_deqp: build` and the end lines | M | `backend71` (merged); `feat71` (not on main: the cargo feature); `gltest71` (board files merged, the Zephyr link not on main) | deqp sample only; `CMakeLists.txt` edited at the V3D branch (Pi 4 branch unchanged) | `west build -b rpi_5 ... deqp -DYAKOGL_WERROR=ON` links; `strings` has the two end formats |
+| 1 | **D0 `deqp-rpi5-sample`**: the deqp sample configures and builds for `rpi_5` (no board run): `boards/rpi_5.conf` and `.overlay`, `src/v3d71_board.c` (UART record, watchdog, no screen, section 3.2), the `CONFIG_YAKOGL_GPU_V3D71` branch of `deqp/CMakeLists.txt:95`; `-DYAKOGL_WERROR=ON`, the image prints `v3d_deqp: build` and the end lines | M | `backend71` (merged); `feat71` (merged `9f286b5e`); `gltest71` (merged `85afd0cf`) | deqp sample only; `CMakeLists.txt` edited at the V3D branch (Pi 4 branch unchanged) | **Done (2026-11-27)**: `west build -b rpi_5 ... deqp -DYAKOGL_WERROR=ON` links and `strings` has the two end formats (measured after `9f286b5e` and `79c8e4f2`); the files are `35c98f25` |
 | 2 | **`stage71`**: `board-stage.sh pi5 common`, then `deqp` (items 3-4 plug in) | S | `gltest71` (link not on main) | `tools/cts/board-stage.sh`, `cts-common.sh`, `common-images.sh` (`pi5`), `deps-env.sh`, `deps.toml` | `board-stage.sh pi5 common` builds GT; `--dry-run` runs; selftests row in the same commit |
-| 3 | **Stage 1 for `rpi_5`**: the stage-1 case in `deps.toml`, one full build of VK-GL-CTS for the A76 (about 1.9 GB, a farm build, not a board; never the sparse `VK-GL-CTS-gles3` checkout) | S (a long build) | 1, 2 | `tools/cts/deps.toml`, `deps-env.sh` | `DEQP_WORK` marker present; `check-deqp-images.py` accepts the config |
+| 3 | **Stage 1 for `rpi_5`**: the stage-1 case in `deps.toml`, one full build of VK-GL-CTS for the A76 (about 1.9 GB, a farm build, not a board; never the sparse `VK-GL-CTS-gles3` checkout) | S (a long build) | 1, 2 | `tools/cts/deps.toml`, `deps-env.sh` | **Done (2026-11-27)**: `95eb8c3b` names the `rpi_5` case (it did not need 2), and `deps-env.sh --build --board rpi_5 DEQP_WORK` produced one full stage-1 tree for the A76 on the farm (its own `deqp-stage1-rpi_5` tree in the runner's dependency cache, the sparse `VK-GL-CTS-gles3` untouched, the A76 flags read back from the build); `check-deqp-images.py` accepts the rpi_5 config. No board |
 | 4 | **`pi5-full-tree.txt` and `pi5-deqp-images.sh`**; the `deqp-tree-images.sh` board arm `rpi_5` | S | 1, 3 | `tools/cts/pi5-full-tree.txt`, `pi5-deqp-images.sh`, `deqp-tree-images.sh:78-81`, `images-selftest.sh:403-404` | `--dry-run` lists the table's images; the table check (`cts-selftest`) covers every mustpass name once. Done in the commit `cts: pi5-full-tree.txt and the rpi_5 arm of deqp-tree-images.sh`: 31 images (the Pi 4's 29 with T1 split into T1 + TV and MISC into MISC + PO, sections 4 and 6), 17165 mustpass cases matched once (`check-gles3-tree.py --mustpass gles2-mustpass.txt`), `images-selftest.sh` section 7h |
 | 5 | **glmark2 image for `rpi_5`**: the board files, the `YAKOGL_BOARD` question (section 3.2), `--off-screen`, the counters line `absent` | M | 2, `gltest71` (link not on main), `mip71` (merged, not wired), P10 | `glmark2/boards/rpi_5.{conf,overlay}`, a Pi 5 branch of `main.cpp`/`platform.c` or the board layer; `Kconfig` `depends on` if chosen | the image builds `-Werror`; the host harness prints 33 scenes |
 | 6 | **`board.sh` pi5 windows and end rule for GM/deqp**: raise `LOAD_END` for the 288 MiB image, a `deqp`-record verdict check; selftest | S | 5 (and `texverdict71`, not on main, same file) | `tools/board.sh` | `board.sh --dry-run pi5 tree` for a GM row |
-| 7 | **7.1 table: P9 complete** (`backend71`, `cases71`, `gltest71`, `board71`): the six gl_test cases pass, or a non-pass is named (59 expected) | M (running) | `backend71`, `fill71`, `glue71` merged; `feat71`, `cases71`, `board71` and the gl_test link not on main | n/a | `RESULTS.md` Pi 5 row |
+| 7 | **7.1 table: P9 complete** (`backend71`, `cases71`, `gltest71`, `board71`): the six gl_test cases pass, or a non-pass is named (59 expected) | M (running) | `backend71`, `fill71`, `glue71`, `feat71` (`9f286b5e`), `cases71` (as `fa704233`) and the gl_test link (`85afd0cf`) merged | n/a | **Ran (2026-11-27, `d2dbaa7e`, image `85afd0cf`)**: 0 of 6 pass, every FAIL for **one** named cause logged once before case 5 — `V3D 7.1: the table records no draw or clear in this build (the 7.1 modules are host-test only)` (`table71::REF_NO_RECORDING`, section 2): no job was submitted (`jobs 0 submitted`), every clear and draw then raised GL error 0x502, and cases 59 and 67 never reached their own refusals; U11's record layout stays unanswered (`docs/notes/v3d71-record-u11.md` section 5). The 5-of-6 expectation is untested. Left: the product-form 7.1 table (new defect), then one re-run from one origin/main commit; the `RESULTS.md` Pi 5 row waits for its holder |
 | 8 | **P10 complete** (`mip71`, `texuni71`, `shaders71tex`, `osaltfu71`, `board71-tex`): textures, TFU mip chains, the first cube-map case | M (running) | 7; `texuni71` (`b066d160`), `osaltfu71` (`eeb4e485`) and `mip71` (`e6f6e56d`) merged as modules, `mip71` and `texuni71` still not wired (no `mod` line in `src/v3d/mod.rs`; only `tests/v3d71_mip.rs` and `v3d71_texuni.rs` use them, through `#[path]`); `texglue71` (`e7737914`) and `backend71tex` (`5bde3959`) merged, pure; `glue71`'s textured draw is pinned by `tests/v3d71_glue_tex.rs` (`512f3297`); `shaders71tex`, `board71-tex` not on main | n/a | `boardtex71` verdict |
 | 9 | **7.1 draw state for fragment ops**: `refs71b` then `compose71d`, then the table takes blend, depth/stencil ops, indexed/instanced, points/lines; a gl_test case per group | M | 7, `refs71b` (merged, `9e8c8fc9`), `compose71d` (merged, `tests/v3d71_compose5.rs`, `8bc24775`); Mesa references pinned on the host since: stencil ops (`bac626fa`), instanced draws (`0e13f9fc`), four targets (`050001cc`), indexed draws, points and lines through `glue71` (`ed36498d`); the table taking these states waits for `feat71` | `src/v3d/*71*.rs`, tests | host compare equal; new cases pass |
 | 10 | **Run `SMALL`, `FF`, `MISC` on the board** (the first three images) and record the refusals by name | S (board) | 1-4, 7 | `records/` (ignored), RESULTS row | 3 records with `verdict=done`, 0 resets |
