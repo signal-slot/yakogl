@@ -772,6 +772,90 @@ AVERAGE works in is not stated: **board only**.
   AVERAGE) in the item's host test and mark the hardware choice **board
   only**.
 
+## (g) The 4x depth/stencil resolve: sample 0 on every back end
+
+Design of item `msaa-ds-design`, carried here by `msaa-note-ds`; it fills the
+"which sample" cells that (f) left open. Docs only: no code of it has landed.
+
+**The rule.** A depth or stencil resolve keeps **sample 0** of the 4x surface
+on every back end and never averages (averaging invents depth between the
+steps that (d3)(b) shows the case needs). Mesa does the same: the blitter
+draws a depth/stencil resolve with sample index 0 (`u_blitter.c:1975-1986`),
+and Panfrost's folded store takes `SAMPLE_0` only for Z/S (`pan_fb.c:178`).
+
+**The destination.** The `fbo.msaa` blit of (d3)(b) lands in a second FBO
+whose depth/stencil renderbuffer was never drawn. The GL core must clear an
+undrawn destination's depth/stencil before it asks `ds_write` whether the
+plane can be written (**Option B**, `gl-ds-dst-clear`, `src/gl/blit.rs`). No
+new `YakoglBackend` field results, so none of the `YakoglBackend {` literals
+(264 at the triage) changes. The cost is one clear of a plane that the blit
+overwrites next; the gain is that the probe sees a drawn destination on every
+back end.
+
+**Per back end.**
+
+| back end | today | the item |
+|---|---|---|
+| GC7000UL | `ds_write` and `stencil_resolve` are `None`; no D24S8 reader for a 4x surface | `gc-ds-read`: read sample 0 from the scale-2 surface, the top-left word of the 2x2 block (**unverified on a board**), through its own D24S8 reader (depth in bits 31..8, stencil in 7..0). `gc-ds-write`: add `ds_write` so a depth/stencil blit has a destination. `gc-ds-scale-convert`: move a plane between the 1x and the 4x surface instead of refusing |
+| Mali | `frame.rs:2149-2154` writes Z/S back with AVERAGE; `ds_write` and `stencil_resolve` are `None` | `mali-zs-sample0`: write Z/S back with `MSAA SINGLE` (sample 0), colour stays AVERAGE. `mali-ds-write`: add `stencil_resolve` and `ds_write` over the 1x `ZsBuf`. Depth samples do **not** survive across frames (the 4x Z/S is not stored); a resolve sees only the frame that drew |
+| PowerVR | `depth_resolve` and `ds_write` exist; a never-drawn single-sample destination makes the `ds_write` probe answer 1 and the blit gives `GL_INVALID_OPERATION` | `pvr-ds-undrawn`: after `gl-ds-dst-clear`, check whether the case still needs a change; fix it only if it does |
+| V3D | sample-0 depth/stencil store for `v3d_depth_resolve` (f5) | none in this design |
+
+**Order.** `gl-ds-dst-clear` (D0), then `pvr-ds-undrawn`; the GC chain
+`gc-ds-read`, `gc-ds-write`, `gc-ds-scale-convert`; the Mali chain
+`mali-zs-sample0`, then `mali-ds-write` (waits on `mali-msaa-mrt`, both edit
+`src/mali/backend.rs`).
+
+**Rows it moves, per back end.** Up to 12 `fbo.msaa` depth/stencil cases (6
+formats, 2 and 4 samples); 6 of the 8 `fbo.invalidate.*unbind_blit_msaa_*`
+rows (the depth, depth_stencil and stencil ones); the 1x
+`fbo.blit.depth_stencil` shapes, which the missing `ds_write` also refuses.
+`multisample.fbo_max_samples.{depth,stencil}` are **not** moved: they read
+colour only (d3).
+
+**Open board checks.** (1) The GC7000UL's sample-0 position in the scale-2
+surface, on the Armadillo-X2 (it replaces the i.MX8MP, same SoC and GPU; the
+record must say it was measured on the X2). (2) Mali `ZS SINGLE` on the
+NanoPC-T6. Until then both cells of (f3) and (f4) stay **board only**.
+
+## (h) HOST-ONLY cause table of the `msaa-fbo` reruns (triage on `ec4237fc`)
+
+**HOST-ONLY: every read-back is black on the host, so no Pass/Fail change in
+a case that compares pixels is a render verdict.** Not a board result; nothing
+here belongs in `tools/cts/RESULTS.md`. This table says *why* the cases fail
+in the rerun with `msaa-fbo`; the counts of (d2) are the rerun's.
+
+| group | vivante and powervr (Pass / Fail / NotSupported) | v3d, before `v3d-msaa-fbo` |
+|---|---|---|
+| `fbo.msaa.` (70) | 0 / 39 / 31 | 0 / 38 / 32 |
+| `multisample.fbo_max_samples.` (16) | 9 / 7 / 0 | 9 / 7 / 0 |
+| `rasterization.fbo.rbo_multisample_max.` (12) | 5 Pass, 5 Fail, 2 CompatibilityWarning | 5 / 7 (Fail) |
+
+Causes of the `fbo.msaa` failures:
+
+| cause | cases | owner |
+|---|---:|---|
+| colour case: only fails because the stand-in reads back black | 23 | none: a board shows the verdict |
+| depth/stencil case: the depth/stencil resolve gap of (g) | 12 | `gl-ds-dst-clear`, the GC and Mali chains, `pvr-ds-undrawn` |
+| `renderbuffer_resize.*`: the stand-in | 4 | none |
+| allowed NotSupported: 8 samples, or `2_samples.rgba16f` | 19 or 20 | none |
+| float formats: need `color-buffer-float` | 12 | the float RT rows |
+
+The 19 or 20 depends on whether `4_samples.rgba16f` is counted with them;
+the table sums are the triage's, not recounted here.
+
+**The GC7000UL limit that hid 4x.** `msaa_fbo::unsupported` refused 4x unless
+the width was a multiple of 16 and the height of 4 (the RS resolve size).
+dEQP draws 119x131 and 40x40, so on vivante every dEQP size drew 1x and the
+rows above measure that, not the 4x path. `gc-msaa-pad` removes the limit;
+vivante counts move after it, and `deqp-rerun2` records them.
+
+**What stays unmeasured.** `fbo_max_samples` Fail 7 and `rbo_multisample_max`
+Fail 5 are counted by the same colour-count and coverage tests as (d3) and
+read black here; they have no host cause beyond the stand-in. Only the
+statuses NotSupported and the API errors (`Got GL_INVALID_OPERATION`) are
+host facts.
+
 ## (e) Open points and the RC8 row draft
 
 1. **Size cap.** (b)3 sets `width * height > 2048 * 2048` as
