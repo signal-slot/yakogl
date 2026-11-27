@@ -598,3 +598,72 @@ ignored passes now; the `shaderc::online::mali` unit tests pass, including
 move). `tests/mali_glmark2_corpus.rs` gives the same verdicts with and
 without these changes (`run.sh` corpus of glmark2 22c527cb, written into a
 scratch copy with `MALI_GLMARK2_WRITE=1`, equal to the committed fixture).
+
+## What `lower-invariant` found (per-value exactness, 2026-11-27)
+
+Item `lower-invariant` (plan #377), on the integration tip 69d67922, to land
+the `invariant_cse` approach of spike `spike-invariant-cse`. Host only.
+**The approach was already in the tree**, landed by 9f5f6e76 (spike
+`spike-mixmisc-rest3`, turn 2), so this item changes no code. The
+interface, in `src/shaderc/online/mali/nir.rs`:
+
+- `Nir::exact`: one flag per node. Only `Nir::mark_exact` sets it, called
+  in `build` just before `fuse`, from the lanes of every output
+  `is_invariant()` (`gl_Position`, `gl_PointSize`, invariant varyings).
+  It marks every node those lanes read, through every source, as a
+  fixpoint. Mesa's `nir_opt_cse` ORs `exact` into the instruction it
+  keeps, so a term that an invariant output shares with another output is
+  exact in both (deqp_misc2_invariant_cse's `v_unrelated`). `fuse` makes no
+  late fusion of an exact node: an exact `fmul` stays `FMA.f32 a, b, -0`
+  and its `fadd` stays a separate `FADD.f32`.
+- `Nir::exact_build`: set per IR value from `invariant_values` (the IR
+  values an invariant output's stores read, locals through every store,
+  as `propagate_invariance` does). While it is set, the inexact rules of
+  `Nir::alu` are not applied. The viewport transform resets it to false,
+  so the transform of an invariant `gl_Position` stays fused, as in Mesa
+  (deqp_misc_invariant_position: `FMA.f32 r0, r0^, u0.w0, u0.w1`).
+- `MaliError::Invariant` is now left only for an output made invariant by
+  `#pragma STDGL invariant(all)` (`Invariance::Pragma`) whose stores are
+  not all copies. Mesa gives the pragma to no built-in
+  (`mesa_invariant`), so this refuses more than Mesa does. The unit pin
+  is `tests.rs` (`gl_Position = p * p` under the pragma). An invariant
+  output whose every store is a copy (`invariant_copies` /
+  `output_copies`) is built as the non-invariant program.
+
+**References at the tip** (feature set
+`host-test,gpu-mali,shaderc-online,no-shader-table`):
+- `tests/mali_deqp_misc.rs`: `misc_invariant_position` is byte-equal and not
+  ignored. The two ignored tests left (`spill_*`) are `Spill`, not this
+  text.
+- `tests/mali_deqp_misc2.rs`: `misc2_invariant_cse` (the whole pair,
+  verbatim `shaders.invariance.highp.common_subexpression_0`),
+  `misc2_invariant_cse_vertex` and `misc2_invariant_posonly` are
+  byte-equal and not ignored. None of the eight ignored references refuses
+  `Invariant`: `rebalance_*` four (`Rebalance`, one of them
+  `rebalance_invariant`), `algebraic_random13` (`LaneCycle`),
+  `algebraic_random46` (`FragColorLane`), `attrnum_*` two (`numbering`).
+  `refusals_pinned` passes, so nothing needed to be un-ignored or re-pinned.
+- `tests/mali_glmark2_corpus.rs` against glmark2 22c527cb's corpus
+  (`tools/hostharness/glmark2/run.sh`, 69 shaders): verdicts unchanged
+  (52 compiled, 31 of 31 pairs linked, 23 of 33 scenes clean).
+  `tests/fixtures/mali_glmark2_verdicts.txt` and
+  `tools/mali/corpus-verdicts.txt` do not move. The `shaderc::online::mali`
+  unit tests pass (361).
+
+**The 12 dEQP cases** (`shaders.invariance.{highp,mediump,lowp}.common_subexpression_{0,2,3}`,
+two `qualification_order`, one `preprocessor.pragmas`). Only a vertex
+shader under the pragma, with arithmetic, can still give this text (it
+was not checked which of the three non-invariance cases does). The
+invariance cases now refuse in other families (spike `spike-invariant-cse`, not re-measured
+here: the CTS checkout in `$CONNECTED_DEPS_DIR` holds only the gles3 data,
+not the invariance cases' C++ generator):
+- unitype: the mediump fragment uniform `u_color` read as `.r .g . .a`
+  (the mediump and lowp `common_subexpression_*` fragment side).
+- ARITH_CONST: `c / M / M` in `common_subexpression_2`.
+- Rebalance: `common_subexpression_1` (deqp_misc2_rebalance_invariant).
+  That case is not one of the 12: it refused `Rebalance` first already.
+
+Open: only the highp `common_subexpression_0` programs are byte-checked
+against Mesa. The other invariance programs that compile have not been
+compared to Mesa yet. Counting the 12 cases again belongs to a host
+re-measure (families-refresh-4).
