@@ -240,6 +240,12 @@ What it answers:
 - Our 7.1 compiler's pass-through VS, CS and FS run on the hardware and
   give the same pixels as Mesa's.
 
+Recorded in `tools/cts/RESULTS.md`, section "V3D 7.1: Raspberry Pi 5 on
+Zephyr", as the rows "M5: the first triangle, Mesa's shaders" and "M5: the
+first triangle, our shaders" (commit `dd034db5`); the summary for
+`rpi5_triangle_ours` is in `../rpi5_triangle_ours/README.md`, "On the
+board".
+
 ## Limits
 
 - The interrupts are not used (the waits poll), as in `rpi5_clear`.

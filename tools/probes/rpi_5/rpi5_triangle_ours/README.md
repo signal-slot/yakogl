@@ -19,3 +19,26 @@ and its board results: `../rpi5_triangle/README.md`.
 
 Verdicts: `../rpi5_triangle/verdicts.sh <console.log>` also reads this
 image's `shaders ours` log (see "Verdicts" in `../rpi5_triangle/README.md`).
+
+## On the board (M5, 2026-11-20)
+
+Built from `0c58c457` with `-DYAKOGL_WERROR=ON` (82,208 bytes, image sha256
+`0fb81874ead08a6f...`), run once through `tools/board.sh pi5 run`,
+`get_throttled` 0x0 before and after: `rc=0 verdict=done boot=tryboot row
+boot_verdict=complete result=legacy:v3d_triangle_pass resets=0
+back_after=215s`, and
+
+`v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside,
+2796 outside, 288 edge, tol 3; shaders ours)`
+
+— the same pixels as the `rpi5_triangle` run of the same build (the full
+console: `../rpi5_triangle/README.md`, "On the board").
+
+Re-run 2026-11-25 from origin/main `a6f49077` (image sha256 `4e23b31b`) as
+a readiness check: `v3d_triangle: PASS`, 0 of 4096 px wrong, the same
+counts.
+
+Recorded in `tools/cts/RESULTS.md`, section "V3D 7.1: Raspberry Pi 5 on
+Zephyr": the row "M5: the first triangle, our shaders" (commit `dd034db5`)
+and the P10/U8 `rpi5_tex` row, which carries the readiness re-run (commit
+`26fc52b3`).
