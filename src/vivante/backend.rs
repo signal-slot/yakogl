@@ -3316,6 +3316,7 @@ pub extern "C" fn gc_shutdown() {
         }
     }
     super::tiled_copy::release_all();
+    super::depth_sample::release_copies();
     super::wide_target::release_all();
     tiled_rt::release_all();
     super::ds_cache::release_all();
@@ -3792,6 +3793,10 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
          * in this one), before this draw samples them */
         let g = g();
         super::tiled_copy::emit_pending(gl, &mut g.frames[g.cur].w, gc_kick_id());
+        /* dtpu mode 3: the RS copy of each depth surface the draw samples
+         * into its SUPER_TILED buffer, after the render that wrote it
+         * (depth_sample.rs `emit_copies`; nothing in any other mode) */
+        super::depth_sample::emit_copies(gl, &mut g.frames[g.cur].w, gc_kick_id());
         // SAFETY: the caller's contract, passed on; `restore` is a copy of
         // the draw with only its clear fields changed.
         let rc = restore.as_ref().map_or(0, |r| unsafe { record(r, clock) });
@@ -3864,6 +3869,8 @@ pub extern "C" fn gc_attachment_gone(id: u32) {
         return;
     }
     super::ds_cache::gone(id, kick_pending_retired);
+    /* dtpu mode 3's copy of it, freed once no pending kick reads it */
+    super::depth_sample::copy_gone(id);
 }
 
 /// Write the depth plane of GL object `id` into a depth texture's texels
@@ -4092,6 +4099,8 @@ pub(super) fn finish() -> i32 {
         }
     }
     retire_wide_targets();
+    /* every kick completed: dtpu mode 3's retired copies go */
+    super::depth_sample::reap_copies();
     0
 }
 
@@ -4124,6 +4133,7 @@ pub extern "C" fn gc_finish_previous() -> i32 {
         wait_fence(prev)
     };
     retire_wide_targets();
+    super::depth_sample::reap_copies();
     rc
 }
 

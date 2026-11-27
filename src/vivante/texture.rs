@@ -174,7 +174,7 @@ pub fn gc_texfmt(format: u8) -> GcTexfmt {
         GLES_TEXFMT_R32F => f.format_ext = GC_TEX_FORMAT_EXT_R32F,
         /* a depth surface read in place (depth_sample.rs, test knob only): no
          * INT_FILTER for a Z/S format (etnaviv_format.c:320) */
-        super::depth_sample::GC_TEXFMT_DEPTH_VIEW => {
+        super::depth_sample::GC_TEXFMT_DEPTH_VIEW | super::depth_sample::GC_TEXFMT_DEPTH_COPY => {
             f.format = super::depth_sample::GC_TEX_FORMAT_D24X8;
             f.no_alpha = true;
         }
@@ -452,13 +452,18 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
     let desc: &mut [u32] = unsafe { core::slice::from_raw_parts_mut(cpu as *mut u32, GC_TEXDESC_BYTES / 4) };
     desc.fill(0);
 
-    let tiled = fmt.compressed || copy.is_some();
+    /* dtpu mode 3's SUPER_TILED copy of a depth surface (depth_sample.rs
+     * `copy_binding`): TILED addressing with HALIGN SUPER_TILED, the words of
+     * `depth_sample::copy_sampler_words` */
+    let depth_copy = t.format == super::depth_sample::GC_TEXFMT_DEPTH_COPY;
+    let tiled = fmt.compressed || copy.is_some() || depth_copy;
     let [config0, config1, config2] = format_words(t, tiled);
     desc[GC_TEXDESC_CONFIG0 as usize / 4] = config0;
     /* a copy the resolve engine made is padded to 16x4 (tiled_copy.rs
      * `rs_fits`), Mesa's TILED layout when the RS may touch it
      * (etnaviv_resource.c:382) */
-    desc[GC_TEXDESC_CONFIG1 as usize / 4] = config1 | copy.map_or(0, |(_, _, _, halign)| texdesc_halign(halign));
+    let halign = copy.map_or(if depth_copy { GC_TEXTURE_HALIGN_SUPER_TILED } else { 0 }, |(_, _, _, h)| h);
+    desc[GC_TEXDESC_CONFIG1 as usize / 4] = config1 | texdesc_halign(halign);
     desc[GC_TEXDESC_CONFIG2 as usize / 4] = config2;
     /* A block format's rows are rows of blocks, not of texels: the GL core
      * lays ceil(w/4) of them side by side
@@ -488,6 +493,10 @@ fn build_descriptor(f: &mut GcFrame, t: &GlesTextureBind, plane: u32) -> u64 {
     desc[GC_TEXDESC_SLICE as usize / 4] = match copy {
         /* the copy's level-0 layer, tile-padded */
         Some((_, _, slice, _)) => slice,
+        /* a 64x64-padded level's layer (etnaviv_resource.c:331) */
+        None if depth_copy => {
+            desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4] * super::layout::align_up(t.height, super::layout::SUPER_TILE)
+        }
         None => {
             desc[GC_TEXDESC_LINEAR_STRIDE as usize / 4] * if fmt.compressed { t.height.div_ceil(4) } else { t.height }
         }

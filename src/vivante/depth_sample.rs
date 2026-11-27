@@ -18,6 +18,8 @@
 //! - mode 2, the raw view: A8R8G8B8 with the identity swizzle and INT_FILTER,
 //!   so the texel is (D1, D0, S, D2) of the word `D2 D1 D0 S`.
 //!
+//! (Mode 3 samples a copy instead: section "Outcome (b).1, mode 3".)
+//!
 //! Both are LINEAR, one level, LOD 0 at the surface past the guard, and
 //! `LINEAR_STRIDE` the surface's row stride; mode 2 is NEAREST. A binding whose
 //! texture does not fit inside the live surface (or whose surface went away
@@ -27,7 +29,7 @@
 //! (tools/check.sh, "no test knob in the artefact"), and the wiring for one is
 //! docs/notes/gc-depth-sample-wire.md.
 //!
-//! # Outcome (b).1, prepared and not wired
+//! # Outcome (b).1, mode 3
 //!
 //! If `dtpu` answers (b) (checks 4 and 5 fail, check 6 passes: the TPU
 //! addresses the surface's bytes, but D24X8 does not decode a LINEAR surface),
@@ -36,10 +38,15 @@
 //! shape and samples that as D24X8, Mesa's own sample of a depth resource.
 //! [`copy_blit`] builds that copy's resolve-engine words, [`copy_bytes`] the
 //! buffer's size, and [`copy_sampler_words`] the descriptor words that sample
-//! the buffer. They are pure: nothing calls them yet (the wiring, the buffer's
-//! lifetime and the knob arm that checks it on the board are the note's
-//! (b).1 bullets and depth-sample-gc's). Their unit tests run the copy through
-//! `rs_interp` and decode the texels through the words.
+//! the buffer. Knob mode 3 ([`DEPTH_TPU_RSCOPY`]) wires them: the answer
+//! ([`gc_depth_sampled`]) makes the buffer (`depth_copy::CopyPool`, keyed by
+//! id and surface generation), `emit_copies` records the copy before the
+//! draw, [`binding`] points the descriptor at the buffer as
+//! [`GC_TEXFMT_DEPTH_COPY`] and stamps it with the draw's kick,
+//! `gc_attachment_gone` retires it and `finish` / `finish_previous` reap it.
+//! A surface the copy refuses, or no buffer, answers no: the CPU resolve.
+//! tests/gc_depth_copy_knob.rs proves it on the host; the board arm that
+//! checks it (case 222's knob 3) is gc-depth-sample-wire.md's "Board check".
 //!
 //! Mesa 26.2.1 citations are `src/gallium/drivers/etnaviv/<file>:<line>` and
 //! `src/etnaviv/hw/<header>:<line>` of the tree tools/vivante/README.md builds
@@ -57,10 +64,18 @@ pub const GC_TEX_FORMAT_D24X8: u32 = 0x11;
 /// place as D24X8 ([`view_binding`] mode 1). Never a `GLES_TEXFMT_*`.
 pub const GC_TEXFMT_DEPTH_VIEW: u8 = 0xf5;
 
-/// Knob modes: 0 the CPU resolve, 1 D24X8, 2 the raw A8R8G8B8 view.
+/// A backend-private texel class: a binding that reads outcome (b).1's
+/// SUPER_TILED copy of a depth surface as D24X8 ([`copy_binding`], mode 3).
+/// Never a `GLES_TEXFMT_*`.
+pub const GC_TEXFMT_DEPTH_COPY: u8 = 0xf4;
+
+/// Knob modes: 0 the CPU resolve, 1 D24X8, 2 the raw A8R8G8B8 view, 3 an RS
+/// copy into a SUPER_TILED buffer sampled as D24X8 (outcome (b).1, section
+/// "Mode 3" below).
 pub const DEPTH_TPU_OFF: i32 = 0;
 pub const DEPTH_TPU_D24X8: i32 = 1;
 pub const DEPTH_TPU_RAW8888: i32 = 2;
+pub const DEPTH_TPU_RSCOPY: i32 = 3;
 
 /// The product default mode: what [`mode`] answers in a build without
 /// `test-knobs`, and the knob's start value. Still [`DEPTH_TPU_OFF`], the CPU
@@ -124,9 +139,16 @@ fn view(id: u32, kick: u32) -> Option<DepthView> {
 
 /// `crate::backend::samples_rendered_depth`'s GC answer: no in mode 0 (every
 /// product build while [`DEPTH_TPU_DEFAULT`] is [`DEPTH_TPU_OFF`]); otherwise yes when `id`'s depth plane is Live here,
-/// single-sampled, and covers `w` x `h`. No wait and no CPU access.
+/// single-sampled, and covers `w` x `h`. In mode 3 the RS copy must also be
+/// possible: a surface [`copy_bytes`] takes and its buffer in the pool (made
+/// now, so a refused shape or no memory leaves the draw on the CPU resolve).
+/// No wait and no CPU access of the surface.
 pub fn gc_depth_sampled(id: u32, w: u32, h: u32) -> bool {
-    mode() != DEPTH_TPU_OFF && id != 0 && view(id, 0).is_some_and(|v| v.covers(w, h))
+    match mode() {
+        DEPTH_TPU_OFF => false,
+        DEPTH_TPU_RSCOPY => id != 0 && copy_ready(id, w, h),
+        _ => id != 0 && view(id, 0).is_some_and(|v| v.covers(w, h)),
+    }
 }
 
 /// Does `t` ask for a depth compare that reads the depth's value
@@ -223,6 +245,9 @@ pub fn view_binding(t: &GlesTextureBind, mode: i32, v: Option<DepthView>) -> Res
 /// keeping the surface for `kick`. A refusal is logged once.
 pub fn binding(t: &GlesTextureBind, kick: u32) -> Result<GlesTextureBind, i32> {
     let mode = mode();
+    if mode == DEPTH_TPU_RSCOPY {
+        return copy_binding_live(t, kick);
+    }
     let v = view(t.depth_id, kick);
     let b = view_binding(t, mode, v);
     match (&b, v) {
@@ -431,9 +456,6 @@ fn shape_ok(v: &DepthView) -> bool {
 ///
 /// `None` for a surface [`shape_ok`] refuses or a `dst` that is not on
 /// [`COPY_ALIGN`] or past 32 bits.
-// Nothing calls it until depth-sample-gc wires (b).1; the dead_code allow goes
-// with that wiring (the pub functions beside it are reachable from outside).
-#[allow(dead_code)]
 pub(super) fn copy_blit(v: &DepthView, dst: u64) -> Option<RsBlit> {
     let bytes = copy_bytes(v)? as u64;
     if !dst.is_multiple_of(COPY_ALIGN) || dst + bytes > 1 << 32 {
@@ -574,6 +596,165 @@ pub fn copy_sampler_words(t: &GlesTextureBind, v: &DepthView, copy: u64) -> Resu
         size: texdesc_size_width(t.width) | texdesc_size_height(t.height),
         lod0: copy,
     })
+}
+
+/* ---- Mode 3: (b).1 wired behind the knob ---- */
+
+use super::cmd::GcCmd;
+use super::depth_copy::{CopyPool, OsalHost};
+use crate::backend::GlesDraw;
+use crate::util::Global;
+
+/// The (b).1 buffers of mode 3, one per sampled depth object
+/// (`depth_copy.rs`). Empty in every other mode.
+static POOL: Global<CopyPool> = Global::new(CopyPool::new());
+
+fn pool() -> &'static mut CopyPool {
+    // SAFETY: single-threaded by contract; no caller holds a reference
+    // across a call that takes another.
+    unsafe { POOL.get() }
+}
+
+/// The live depth plane of `id` and its generation; `kick` != 0 keeps the
+/// surface until that kick completed.
+fn view_gen(id: u32, kick: u32) -> Option<(DepthView, u32)> {
+    let (gpu, stride, rows, gen) = super::ds_cache::depth_view_gen(id, super::backend::GC_DEPTH_GUARD_BYTES, kick)?;
+    Some((DepthView { gpu, stride, rows }, gen))
+}
+
+/// Mode 3's answer for `id`: its live surface covers `w` x `h`, the RS can
+/// copy it, and its buffer is in the pool. Each refusal is logged once and
+/// leaves the draw on the CPU resolve.
+fn copy_ready(id: u32, w: u32, h: u32) -> bool {
+    let Some((v, gen)) = view_gen(id, 0).filter(|(v, _)| v.covers(w, h)) else {
+        return false;
+    };
+    if copy_bytes(&v).is_none() {
+        crate::glog_once!(
+            "vivante: dtpu mode 3: a {w}x{h} depth surface (stride {}, {} rows) the RS cannot copy; the CPU resolves it",
+            v.stride,
+            v.rows
+        );
+        return false;
+    }
+    match pool().buffer(&mut OsalHost, id, gen, &v) {
+        Ok(_) => true,
+        Err(e) => {
+            crate::glog_once!(
+                "vivante: dtpu mode 3: no depth-copy buffer for a {w}x{h} depth texture ({e}); the CPU resolves it"
+            );
+            false
+        }
+    }
+}
+
+/// The binding `emit_slot` describes in mode 3 instead of `t` (whose texels
+/// are stale): the D24X8 view of mode 1 ([`view_binding`], so `t`'s
+/// swizzle and the [`exact_depth_reader`] refusal are the same), at `copy`,
+/// (b).1's SUPER_TILED copy of the surface `v`, as [`GC_TEXFMT_DEPTH_COPY`]
+/// (`texture::build_descriptor` writes ADDRESSING TILED, HALIGN SUPER_TILED
+/// and the copy's SLICE for it, the words of [`copy_sampler_words`]).
+/// -ENOTSUP when there is no surface or no copy, the texture does not fit,
+/// the shape or the address is one the copy refuses, or for an exact-depth
+/// reader.
+pub fn copy_binding(t: &GlesTextureBind, v: Option<DepthView>, copy: Option<u64>) -> Result<GlesTextureBind, i32> {
+    let (Some(v), Some(copy)) = (v, copy) else {
+        return Err(-ENOTSUP);
+    };
+    copy_sampler_words(t, &v, copy)?;
+    let b = view_binding(t, DEPTH_TPU_D24X8, Some(v))?;
+    Ok(GlesTextureBind { format: GC_TEXFMT_DEPTH_COPY, base_gpu: copy, ..b })
+}
+
+/// [`binding`] in mode 3: the live buffer of `t.depth_id` at its surface's
+/// generation, stamped with `kick` (not freed before that kick completed).
+fn copy_binding_live(t: &GlesTextureBind, kick: u32) -> Result<GlesTextureBind, i32> {
+    let id = t.depth_id;
+    let vg = view_gen(id, kick);
+    let copy = vg.and_then(|(_, gen)| pool().live(id).filter(|l| l.1 == gen).map(|l| l.0));
+    let b = copy_binding(t, vg.map(|(v, _)| v), copy);
+    match (&b, vg) {
+        (Ok(_), Some((v, _))) => {
+            pool().note_read(id, kick);
+            crate::glog_once!(
+                "vivante: dtpu mode 3: a {}x{} depth texture sampled from its RS copy (stride {})",
+                t.width,
+                t.height,
+                v.stride
+            );
+        }
+        _ => crate::glog_once!(
+            "vivante: dtpu mode 3: a {}x{} depth texture has no RS copy it can sample (no live surface or buffer, a depth compare, or a shape the copy refuses); the draw is refused",
+            t.width,
+            t.height
+        ),
+    }
+    b
+}
+
+/// Mode 3: record into `c`, before draw `d` records anything, one RS copy of
+/// each depth surface its bindings sample (each object once) into its pool
+/// buffer (the one [`gc_depth_sampled`] made for the surface's generation),
+/// and stamp the buffer and the surface with `kick`, the kick being
+/// recorded (`backend::draw_one`'s `record_all`, so a draw recorded again in
+/// a new frame records the copy again). `emit_rs`'s colour and depth flush
+/// and RA-PE stall put the depth the PE wrote in memory first; the draw's own
+/// `emit_flushes` (texture cache included) and stall come after the copy. A
+/// binding with no copy here is refused by name at [`binding`]. Nothing in
+/// any other mode.
+pub(super) fn emit_copies(d: &GlesDraw, c: &mut GcCmd, kick: u32) {
+    if mode() != DEPTH_TPU_RSCOPY {
+        return;
+    }
+    let fs = &d.textures[..(d.num_textures as usize).min(d.textures.len())];
+    let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
+    let mut done = [0u32; 64];
+    let mut n = 0usize;
+    for t in fs.iter().chain(vs) {
+        let id = t.depth_id;
+        if id == 0 || t.incomplete != 0 || done[..n].contains(&id) {
+            continue;
+        }
+        if n < done.len() {
+            done[n] = id;
+            n += 1;
+        }
+        /* the buffer [`gc_depth_sampled`] made: no allocation and no kick
+         * query here, with the stream open */
+        let Some((v, gen)) = view_gen(id, kick) else { continue };
+        let Some((dst, _, _)) = pool().live(id).filter(|l| l.1 == gen) else { continue };
+        let Some(b) = copy_blit(&v, dst) else { continue };
+        super::backend::emit_rs(c, &b);
+        pool().note_read(id, kick);
+    }
+}
+
+/// The depth contents of `id` are gone (`gc_attachment_gone`): its copy
+/// buffer is retired, and freed once no pending kick reads it.
+pub(super) fn copy_gone(id: u32) {
+    pool().gone(&mut OsalHost, id);
+}
+
+/// Free the retired copy buffers whose kicks completed (`finish`,
+/// `finish_previous`).
+pub(super) fn reap_copies() {
+    pool().reap(&mut OsalHost);
+}
+
+/// Free every copy buffer (backend shutdown).
+pub(super) fn release_copies() {
+    pool().release_all(&mut OsalHost);
+}
+
+/// Mode 3's buffer of depth object `id` (host tests): its GPU address, the
+/// surface generation it was made for, and the kick that last read it.
+pub fn copy_live(id: u32) -> Option<(u64, u32, u32)> {
+    pool().live(id)
+}
+
+/// Mode 3's buffers held, live and retired (host tests).
+pub fn copies_held() -> usize {
+    pool().held()
 }
 
 #[cfg(test)]

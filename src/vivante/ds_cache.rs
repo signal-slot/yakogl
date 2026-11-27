@@ -872,6 +872,14 @@ fn resolve_row(src: &[u8], out: &mut [f32]) {
 /// that is not `Linear` (super-tiled with `gc_tiled_rt`) is refused: the
 /// view is described linear.
 pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
+    depth_view_gen(id, guard, kick).map(|(gpu, stride, rows, _)| (gpu, stride, rows))
+}
+
+/// [`depth_view`] with the depth plane's generation (`DsKey::depth_gen`)
+/// fourth: what the RS copy of dtpu mode 3 (depth_sample.rs,
+/// `depth_copy::CopyPool`) keys its buffer by, so a respecified texture
+/// never samples the copy of its old contents.
+pub fn depth_view_gen(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32, u32)> {
     let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.scale == 1 && k.plane == DEPTH as u8);
     let e = cache()
         .entries
@@ -884,7 +892,7 @@ pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
     if kick != 0 {
         e.used_by = kick;
     }
-    Some((e.mem.gpu + guard as u64, e.stride, e.rows))
+    Some((e.mem.gpu + guard as u64, e.stride, e.rows, e.key.depth_gen))
 }
 
 /// Keep the clear values of a surface that is let go.
