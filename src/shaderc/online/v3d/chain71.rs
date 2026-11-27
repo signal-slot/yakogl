@@ -538,15 +538,25 @@ pub fn compile_program71_keyed<'a>(
     }
 
     /* chain-hook replaces this: chain.rs:504-513, the three stages, with
-     * build71. */
+     * build71. The fragment shader is built last: its build71 tries up to
+     * two interleaved orders on top of the in-order build, and the scratch
+     * a winning one keeps is never given back. Built first, that left the
+     * vertex and coordinate shaders too little scratch for
+     * dEQP-GLES2.functional.uniform_api.random.79 (OutOfScratch since
+     * c2a54983). Last, its extra builds only use what the other two left.
+     * No stage reads another's build, so the words are the same, and a
+     * refusal is still the fragment shader's first, then the vertex
+     * shader's, then the coordinate shader's. */
+    let vs_built = vertex71(&vsp, records, false, vs_key, a);
+    let cs_built = vertex71(&csp, records, true, vs_key, a);
     let (fsel, (fs_code, fs_threads)) = under_pressure71(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
         |pr| select_fragment_keyed(&fsp, inputs, flat, centroid, fs_key, pr, a),
         false,
         a,
     )?;
-    let (vsel, vs_code) = vertex71(&vsp, records, false, vs_key, a)?;
-    let (csel, cs_code) = vertex71(&csp, records, true, vs_key, a)?;
+    let (vsel, vs_code) = vs_built?;
+    let (csel, cs_code) = cs_built?;
 
     /* chain-hook replaces this: chain.rs:515-553, the prog_data. */
     let slots = a.alloc_filled(inputs.len(), (0u8, 0u8))?;
