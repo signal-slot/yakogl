@@ -5080,14 +5080,18 @@ fn build_common(
              * the cube's -- the program alone decides (the record's bit 1,
              * set by the online compiler when it sampled the array by layer
              * address), the copy's staleness is asked at every draw, and a
-             * render into the array in the frame being recorded keeps the
-             * stacked image. The copy is layer-major, each layer a full
-             * twiddled chain: the backend describes it as a TEXTYPE_2D of
-             * one layer's size with the layer count in the image word. */
+             * layer rendered into by the frame still being recorded, for
+             * another framebuffer than this draw's, has that frame submitted
+             * and waited for so the copy is made from what was drawn (the
+             * cube's rule); only this draw's own framebuffer holding the
+             * array (a feedback loop, undefined in GL) keeps the stacked
+             * image. The copy is layer-major, each layer a full twiddled
+             * chain: the backend describes it as a TEXTYPE_2D of one
+             * layer's size with the layer count in the image word. */
             #[cfg(feature = "gpu-powervr")]
             if tb.type_ == GLES_TEXTYPE_2D_ARRAY && sh.native_cube & 2 != 0 {
                 let rendered = tb.target_kick;
-                let open = rendered != 0 && rendered == backend::kick_id();
+                let open = rendered != 0 && rendered == backend::kick_id() && (draws_into || backend::flush() != 0);
                 if !open && (rendered == 0 || !backend::kick_pending(rendered) || backend::finish() == 0) {
                     let (_, _, mip_filter, mip_levels) = sampling_fields(t);
                     let single = !(mip_filter != 0 && mip_levels > 1);
@@ -5132,15 +5136,19 @@ fn build_common(
             /* The PowerVR's native 3D texture (gl::native_vol,
              * pvr_native_3d; docs/notes/pvr-3d-native.md), by the same rules
              * as the 2D array's: the program alone decides (the record's bit
-             * 2), the copy's staleness is asked at every draw, and a render
-             * into the volume in the frame being recorded keeps the grid.
+             * 2), the copy's staleness is asked at every draw, and a slice
+             * rendered into by the frame still being recorded, for another
+             * framebuffer than this draw's, has that frame submitted and
+             * waited for so the copy is made from what was drawn (the
+             * cube's rule); only this draw's own framebuffer holding the
+             * volume (a feedback loop, undefined in GL) keeps the grid.
              * Here, after the sampler object's filters are in force: the
              * copy holds the levels a mipmap filter walks, which the GL core
              * does not count for a 3D grid (its `levels` stays 1). */
             #[cfg(feature = "gpu-powervr")]
             if tb.type_ == GLES_TEXTYPE_3D && sh.native_cube & 4 != 0 {
                 let rendered = tb.target_kick;
-                let open = rendered != 0 && rendered == backend::kick_id();
+                let open = rendered != 0 && rendered == backend::kick_id() && (draws_into || backend::flush() != 0);
                 if !open && (rendered == 0 || !backend::kick_pending(rendered) || backend::finish() == 0) {
                     let levels = super::native_vol::sampled_levels(t);
                     if let Some((gpu, bytes)) = super::native_vol::copy(t, rendered, levels) {
