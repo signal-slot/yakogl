@@ -11,6 +11,13 @@ the `glmark2-jobs` entries at frame 10 (`render` 7930 and 9352 us,
 no board run. Code is read at `537da3a8`. glmark2 is the pinned `22c527cb`
 (`$CONNECTED_DEPS_DIR/glmark2-src`).
 
+Updated 2026-11-27 (plan #419, item `docs-rows23`): Mesa's 4.2 `v3d_shc` was
+since built and run over terrain's own texts (item `mesa-noise-count`), and
+its counts for the noise and terrain programs are measured below (rows
+marked "measured"); the other Mesa 4.2 counts stay estimates.
+`pi4-slow-terrain.md`'s ranked rows 2 and 3 carry their blocked status
+(section 5).
+
 ## Answer in short
 
 - **Our compiler's counts.** The two tilt-shift blurs compile to 78
@@ -22,9 +29,12 @@ no board run. Code is read at `537da3a8`. glmark2 is the pinned `22c527cb`
 - **The large program is the noise pass.** `terrain-noise.frag` compiles to
   **1495 instructions at 2 threads** (256x256, no texture). At 500 MHz and
   32 lane-instructions a clock that is **6.1 ms** of QPU issue, not the
-  "about 0.5 ms" `v3d-terrain-gpu.md` assumed. The terrain draw's vertex
-  shader is 172 instructions at 2 threads and its fragment shader 160 at 4.
-  Their QPU issue is at least **8.7 ms**.
+  "about 0.5 ms" `v3d-terrain-gpu.md` assumed. Mesa 26.2.1's `v3d_shc` at
+  4.2 puts the same text at **1161 words** (measured 2026-11-27): ours is
+  1.29x it. The terrain draw's vertex shader is 172 instructions at 2
+  threads (Mesa: 154 at 4) and its fragment shader 160 at 4 (Mesa: 153);
+  the coordinate shader is 97 (Mesa: 92). Their QPU issue is at least
+  **8.7 ms**.
 - **So the 7930 and 9352 us entries are most likely the noise job and the
   terrain draw, not the two blurs.** The `glmark2-jobs` line lists the jobs
   that frame 10's swap completed. Its first entry can be the previous
@@ -37,15 +47,23 @@ no board run. Code is read at `537da3a8`. glmark2 is the pinned `22c527cb`
   sums to **24.0 to 25.3 ms** against the measured 23.49 (section 4).
 - **Ranked fixes.** (1) Better add/mul pairing in the V3D scheduler for the
   noise shader. It has 872 add-side and 830 mul-side operations in 1495
-  words, so the floor is about 872 to 900 words: about **-2.4 to -2.6 ms a
-  frame**, with no picture risk. (2) The same pairing for the terrain draw's
-  VS and FS: about **-2 ms**. (3) Nothing in the blurs' instruction count,
-  layout or TMU set-up: about **0 ms**. Every fix is in
-  `src/shaderc/online/v3d/**` (plan #308).
-- **Not run here:** Mesa's 4.2 `v3d_shc` (it needs a Mesa tree, and
-  unpacking the archive was refused in this session) and any board run.
-  Each Mesa 4.2 count below is an estimate and is marked as one. Our counts
-  are of the exact texts the host harness records.
+  words, so the floor is about 872 to 900 words — a theoretical bound: the
+  reachable reference is Mesa's measured 1161, and the pairing aims at 1000
+  words or fewer. About **-2.4 to -2.6 ms a frame**, with no picture risk.
+  (2) The same pairing for the terrain draw's VS and FS (Mesa measured 154
+  / 153 / 92 against our 172 / 160 / 97): about **-2 ms**. (3) Nothing in
+  the blurs' instruction count, layout or TMU set-up: about **0 ms**. Every
+  fix is in `src/shaderc/online/v3d/**` (plan #308). The two non-shader
+  rows beside them — rows 2 and 3 of `pi4-slow-terrain.md`'s ranked table,
+  the TFU chain skip and the D16 depth — are blocked in the GL core
+  (section 5).
+- **Not run here:** any board run. Mesa's 4.2 `v3d_shc` was not run in the
+  writing session; it was built and run on 2026-11-27 (item
+  `mesa-noise-count`) in a Mesa 26.2.1 tree with `tools/v3d/v3d_shc.c` per
+  `tools/v3d/README.md`, and its counts for terrain's noise and draw
+  programs are measured below. The remaining Mesa 4.2 counts are estimates
+  and are marked as such. Our counts are of the exact texts the host
+  harness records.
 
 ## 1. How it was measured
 
@@ -107,17 +125,22 @@ texts.
   command and glmark2 `22c527cb`). It has terrain's pairs with `terrain.vert`
   (`terrain-18bca803...`) as the vertex shader. The pairs with
   `terrain-texture.vert` and the noise text failed its translator
-  (`translate: cannot parse declarator 'vec2 uvScale'`), so **Mesa has no
-  count of the noise shader, at 7.1 or at 4.2**. The fragment files map to
+  (`translate: cannot parse declarator 'vec2 uvScale'`), so **Mesa 7.1 has
+  no count of the noise shader**. Mesa 4.2 compiles the text: **1161
+  words**, measured 2026-11-27 (next bullet). The fragment files map to
   roles as `gc-terrain-shaders.md:60-71` gives them: `8c866224` tilt V,
   `bbba1ac2` tilt H, `4d266cda` terrain, `bdfd8dd6` and `e043e1e8` bloom.
   Read from the texts: `e043e1e8` is bloom H (it has `stepX`), `bdfd8dd6`
   bloom V, `895a73bc` the overlay (`tDiffuse * opacity`), `d697bb50` the
   luminance pass, `c549a79a` the normal map.
-- **4.2: not measured.** `tools/v3d/README.md:10-29` builds `v3d_shc` in a
-  Mesa 26.2.1 tree. `$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz` is
-  on this host, but this session's sandbox refused `tar`. As an estimate,
-  the scratch `corpus` mode compiles every pair of
+- **4.2: measured for terrain's own programs (2026-11-27, item
+  `mesa-noise-count`).** `tools/v3d/README.md:10-29` builds `v3d_shc` in a
+  Mesa 26.2.1 tree (`$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz`);
+  run over the harness texts it gives the noise FS **1161** words, the
+  terrain VS **154** at 4 threads, the terrain FS **153** and the terrain
+  CS **92** (Mesa's threads were recorded for the vertex shader only). The
+  other 4.2 counts below stay estimates. As an estimate, the scratch
+  `corpus` mode compiles every pair of
   `tools/v3d/qpu_counts_42.tsv` (Mesa 4.2) with ours and reads
   `qpu_counts_71.tsv` beside it. Of 1090 pairs, 874 compile in this
   scratch compile (most of the rest are `#version 450` texts that the ES
@@ -128,23 +151,27 @@ texts.
   | every pair | 874 | 41,012 | 31,922 | 28,126 | 1.28 | 1.13 |
   | pairs with a texture look-up | 84 | 4,401 | 4,038 | 3,260 | **1.09** | **1.24** |
 
-  The "Mesa 4.2 (est.)" column below is Mesa 7.1 x 1.24, the ratio of the
+  The measured terrain rows show that estimate running 6 to 10 % high
+  (terrain FS 169 estimated against 153 measured, VS 164 against 154). The
+  "Mesa 4.2 (est.)" column below is Mesa 7.1 x 1.24, the ratio of the
   texturing set. The nearest corpus program to a blur is
   `femtovg/filter_image.frag`, a Gaussian loop: ours 87, Mesa 4.2 93.
 
 ## 2. Per-shader table
 
 Ours: the scratch run above. Mesa 7.1: `glmark2_counts_71.tsv` (vs, fs,
-vs threads, fs threads). Mesa 4.2: estimate, not measured.
+vs threads, fs threads). Mesa 4.2: measured for the noise and terrain rows
+on 2026-11-27 (rows marked "measured"; Mesa's threads recorded for the
+terrain VS only); the other rows are the 7.1 x 1.24 estimates.
 
-| program (job) | stage | ours words | ours threads | ours add / mul halves used | ours look-ups (`retire`) | ours `ldtmu` (16-bit words) | ours `thrsw` | ours `ldunif` / uniforms | spills | Mesa 7.1 words, threads | Mesa 4.2 (est.) |
+| program (job) | stage | ours words | ours threads | ours add / mul halves used | ours look-ups (`retire`) | ours `ldtmu` (16-bit words) | ours `thrsw` | ours `ldunif` / uniforms | spills | Mesa 7.1 words, threads | Mesa 4.2 words (est. unless marked) |
 |---|---|---:|---:|---|---:|---:|---:|---|---:|---|---:|
-| noise (`terrain-noise.frag`) | fs | **1495** | **2** | 872 / 830 | 0 | 0 | 3 | 21 / 21 | 0 | not compiled (translator) | not measured |
+| noise (`terrain-noise.frag`) | fs | **1495** | **2** | 872 / 830 | 0 | 0 | 3 | 21 / 21 | 0 | not compiled (translator) | **1161, measured** |
 | normal map | fs | 35 | 4 | 16 / 17 | 3 | 3 | 3 | 3 / 9 | 0 | 28, 4 | 35 |
 | luminance (set-up only) | fs | 14 | 4 | 6 / 7 | 1 | 2 | 3 | 3 / 5 | 0 | 15, 4 | 19 |
-| terrain (`terrain.frag`) | fs | 160 | 4 | 89 / 119 | 5 | 9 | 5 | 39 / 49 | 0 | 136, 4 | 169 |
-| terrain (`terrain.vert`) | vs | 172 | **2** | 109 / 98 | 2 | 3 | 3 | 85 / 89 | 0 | 132, 4 | 164 |
-| terrain (`terrain.vert`) | cs (bin) | 97 | 4 | 60 / 54 | 1 | 1 | 3 | 63 / 65 | 0 | not in the table | not measured |
+| terrain (`terrain.frag`) | fs | 160 | 4 | 89 / 119 | 5 | 9 | 5 | 39 / 49 | 0 | 136, 4 | **153, measured** |
+| terrain (`terrain.vert`) | vs | 172 | **2** | 109 / 98 | 2 | 3 | 3 | 85 / 89 | 0 | 132, 4 | **154 at 4, measured** |
+| terrain (`terrain.vert`) | cs (bin) | 97 | 4 | 60 / 54 | 1 | 1 | 3 | 63 / 65 | 0 | not in the table | **92, measured** |
 | bloom H / V (radius 2) | fs | 48 / 50 | 4 | 22 / 31 | 5 | 10 | 5 | - / 16 | 0 | 39 / 40, 4 | 48 / 50 |
 | overlay | fs | 14 | 4 | 4 / 8 | 1 | 2 | 3 | 1 / 3 | 0 | 14, 4 | 17 |
 | tilt-shift H (radius 4) | fs | **78** | 4 | 38 / 56 | 9 | 18 | 7 | 10 / 28 | 0 | 64, 4 | 79 |
@@ -178,7 +205,11 @@ halves `nop`, but 623 words leave the add half empty and 665 the mul half.
 A perfect pairing would be about 872 words. Data dependences make that a
 floor that cannot quite be reached. The shader runs at 2 threads because
 its values do not fit 4 threads' registers. With no TMU access the thread
-count does not slow it.
+count does not slow it. Mesa 4.2 packs the same text into **1161 words**
+(measured 2026-11-27): 334 words below ours, and 1.29x above the 872-word
+pairing bound. The bound is theoretical — no compiler reaches it; Mesa's
+1161 is the reachable reference, and section 5 candidate 1 aims at 1000
+words or fewer.
 
 ## 3. Layouts of the sampled textures
 
@@ -291,8 +322,12 @@ entries before the terrain draw; "the terrain entry" is the one before the
 
 1. **Noise: pair the add and mul halves better in the V3D scheduler.** 1495
    words for 872 add and 830 mul operations; a floor of about 872 to 900
-   words. Expected: the noise job **6.1 to about 3.6 ms in the model, -2.4
-   to -2.6 ms a frame**. If the measured 7.93 scales with the word count
+   words. Mesa 4.2's count for the same text is now measured (2026-11-27):
+   **1161 words**. The floor is a theoretical bound — nothing reaches it;
+   Mesa's 1161 is the reachable reference, and the pairing aims at **1000
+   words or fewer**: below Mesa, short of the floor. Expected: the noise
+   job **6.1 to about 3.6 ms in the model, -2.4 to -2.6 ms a frame**. If
+   the measured 7.93 scales with the word count
    (instruction-cache misses would), about -3 ms. Picture risk: **none**,
    because the operations do not change, only the order in which words are
    packed. ES 2.0 risk: every V3D program's words move, so the words pins
@@ -305,16 +340,22 @@ entries before the terrain draw; "the terrain entry" is the one before the
    spread, render sum down by the same amount. A host pin first: the
    scratch count of `noise.fs` (1495) falls, and `sim` gives the same
    outputs on a pixel grid.
-   - 1b. Fewer noise operations (front-end folding). This needs Mesa's 4.2
-     count of the same text first. It is not measured: Mesa's translator
-     fails on the text and its 4.2 `v3d_shc` was not built here. On the
-     GC7000 the same text was 2.03x Mesa's (`gc-terrain-shaders.md`), but
-     those causes (`rcp` of a constant, `mov` per negate) are partly
-     GC-specific. Here `fsub` carries the negates, and the listing has no
-     SFU `recip`. Expected: unknown until that count exists.
+   - 1b. Fewer noise operations (front-end folding). Mesa's 4.2 count of
+     the same text now exists: 1161 words (measured 2026-11-27; Mesa 7.1
+     still fails the translator on it). Ours is 1.29x it. Whether the
+     334-word gap is scheduling (candidate 1) or extra operations needs
+     Mesa's 1161-word listing compared with ours: candidate 1 first, the
+     listing comparison after it. On the GC7000 the same text was 2.03x
+     Mesa's (`gc-terrain-shaders.md`), but those causes (`rcp` of a
+     constant, `mov` per negate) are partly GC-specific. Here `fsub`
+     carries the negates, and the listing has no SFU `recip`. Expected:
+     unknown until the listings are compared.
 2. **Terrain draw: the same pairing for its VS (172 words for 109 add / 98
-   mul) and FS (160 for 89 / 119).** Floors of about 115 and 125. Expected:
-   ALU 8.65 to about 6.5 ms, **about -2 ms a frame**. The draw stays
+   mul) and FS (160 for 89 / 119).** Floors of about 115 and 125, again
+   below what Mesa reaches: its measured 4.2 counts for the same programs
+   are 154 (VS, at 4 threads), 153 (FS) and 92 (CS) — the reachable
+   reference, as in candidate 1. Expected: ALU 8.65 to about 6.5 ms,
+   **about -2 ms a frame**. The draw stays
    ALU-bound only while its 3.0 M look-ups (2.8 ms) stay under the ALU
    time. Risks and owner as in 1; candidates 1 and 2 are the same change.
    Confirming record value: **the terrain entry's `render` 9352 to about
@@ -322,7 +363,8 @@ entries before the terrain draw; "the terrain entry" is the one before the
    393,216 vertices = 2.4 ms at the model's rate) falls with the CS pairing.
    2b. The terrain VS at 4 threads instead of 2 (register pressure) helps
    only the latency of its 2 look-ups. The gain is not measured and
-   probably small, because the draw is ALU-bound.
+   probably small, because the draw is ALU-bound. Mesa's 4.2 code fits the
+   same text at 4 threads (154 words), so 4 threads is reachable.
 3. **Blurs: nothing found to fix.** They are 78/80 words (Mesa about the
    same), 4 threads, 16-bit returns, the same TMU batching as Mesa, UIF
    level 0 as in Mesa, no raster sampling and no 32-bit return. Their model
@@ -343,12 +385,28 @@ entries before the terrain draw; "the terrain entry" is the one before the
    This is why the XOR was dropped, and the risk is real. Confirming
    values: the normal map, bloom H and bloom V entries' `render`. Rank last.
 
+Adjacent to these shader candidates: rows 2 and 3 of `pi4-slow-terrain.md`'s
+ranked table are the same kind of question, blocked in the GL core
+(2026-11-27). The TFU chain skip (0.10 ms predicted, `lazy-mip-chain.md`
+rule M) needs a per-draw proof that the sampler never minifies —
+magnification only, or the min filter reads no level below 0 — made in the
+GL core's draw preparation, `src/gl/draw.rs` (plan #397); the D16 depth for
+a `DEPTH_COMPONENT16` renderbuffer (about 0.4 ms predicted,
+`v3d-blur-jobs.md` candidate 1) needs a depth-format field on the backend
+draw record (for example `GlesDraw.depth_bits` in `src/backend.rs`, plan
+#417, filled by `src/gl/draw.rs`, plan #397): `GlesDraw` names the depth
+buffer by id and size and carries no format, and a guess is not exact under
+ES 2.0. Neither is exact in `src/v3d/**` alone; neither produced a commit
+or a test.
+
 ## What was not done
 
-- **Mesa 4.2 counts**: not measured. The tree's route is a built
-  `v3d_shc` (`tools/v3d/README.md:10-36`); this session could not unpack
-  the Mesa archive. Mesa 7.1 has no noise count, because its translator
-  refuses the `MEDIUMP_OR_DEFAULT vec2 uvScale` declarator.
+- **Mesa 4.2 counts for the normal map, the luminance pass, bloom, the
+  overlay and the blurs**: still the 7.1 x 1.24 estimates. The route
+  (`v3d_shc` built in a Mesa 26.2.1 tree, `tools/v3d/README.md:10-36`) was
+  taken on 2026-11-27 for terrain's noise and draw programs only. Mesa 7.1
+  still has no noise count, because its translator refuses the
+  `MEDIUMP_OR_DEFAULT vec2 uvScale` declarator.
 - **Quad helper lanes, per-tile vertex re-shading, instruction-cache size,
   the V3D clock**: not measured. Each one makes the terrain and noise
   models larger, never smaller.
