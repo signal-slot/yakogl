@@ -26,7 +26,7 @@ CI, a review, then the merge. Never push main by hand.
    request (the merge of the branch into main), and every row nightly on
    main's tip and when started by hand; main is not run on each merge. It
    runs on self-hosted runners that have the environment below. The file's
-   header says which rows each event runs. (`pages.yml` only publishes the
+   header says which rows each event runs. (`.github/workflows/pages.yml` only publishes the
    website on a push to main that touches `website/`; it checks nothing.)
    A pull request's run leaves out the clippy rows (owner, 2026-11-13: they
    doubled the build of each feature set); the nightly run on main runs
@@ -34,7 +34,7 @@ CI, a review, then the merge. Never push main by hand.
    is quick, and fix a red nightly's clippy rows first (docs/ci.md, "The
    nightly").
    A pull request from a fork gets no gate: the runners are the project's
-   own machines and a run executes the code it checks, so `gate.yml` runs
+   own machines and a run executes the code it checks, so `.github/workflows/gate.yml` runs
    the gate only for a pull request from a branch of this repository. A
    fork's pull request shows `check` skipped and one check instead, `outside`,
    on a GitHub-hosted runner, which says so and fails on purpose (nothing
@@ -53,18 +53,31 @@ host needs for a gate walk. It is not a list of commands to run before a
 pull request (step 1 above).
 
 - A red `cargo fmt --check` or a single warning is a defect.
-- The full run (nightly, by hand) checks formatting, clippy (no warnings;
-  a pull request's run leaves the clippy rows to the nightly,
-  `--no-clippy`), the tests in every
+- The options (the usage text at the top of `tools/check.sh`):
+  - no option: every row. This is the nightly run and a run started by hand.
+  - `--changed <base>`: the rows the diff from `<base>` can reach. A pull
+    request's run is `--no-clippy --changed <merge base>`.
+  - `--no-clippy`: leave out every clippy row; the summary counts them as
+    "left to the nightly", never as gaps. `YAKOGL_CHECK_NO_CLIPPY=1` does
+    the same.
+  - `--local <base>`: like `--changed`, but a diff that reaches everything
+    runs the local set only (what `tools/land.sh` runs).
+  - `--quick`: most of the full plan's rows, for a tight edit loop; it
+    leaves out the other feature configurations, the Zephyr images and the
+    glmark2 corpus.
+  - `--jobs N`: up to N rows at once (`YAKOGL_CHECK_JOBS`).
+  The CI uses only `--no-clippy --changed` and the bare run; neither
+  `--quick` nor `--local` is the landing gate.
+- The full run checks formatting, clippy (no warnings), the tests in every
   feature configuration, the C check programs, the generated files, the
   product archives, the Python tools, and the Zephyr image builds. On a CI
   runner (8 cores, 3 compiler slots) a run that reaches every scope takes
-  about 2 h 45 min (`gate.yml`, comment above `timeout-minutes`). The
-  durations below were measured with `--quick` or with older, smaller plans:
-  35 to 80 minutes depending on the host (36 minutes from a cold tree and
-  49 minutes on another host, `docs/release/readme-walkthrough.md`; 76
-  minutes on 4 cores with two compiler slots, after a `--quick` in the same
-  clone of `e3e8d777`, 2026-11-08).
+  about 2 h 45 min (`.github/workflows/gate.yml`, comment above
+  `timeout-minutes`); `--quick` takes from tens of minutes to over an hour
+  depending on the host and the tree (cold or warm). No file keeps the row
+  counts: `YAKOGL_CHECK_PLAN=1 tools/check.sh [--quick]` lists the rows and
+  runs none, and its summary line gives the counts. A docs-only change
+  reaches only a few rows.
 - A self-test (a tracked file named `*selftest.sh` or `*selftest.py`) needs
   no row of its own: the gate gives one to each that no row names
   (`tools/check_selftests.py` lists them), under the scope of its path. The
@@ -73,121 +86,37 @@ pull request (step 1 above).
 - It is green only at "N ok, 0 failed, 0 gap(s)". A step that could not run
   is a **gap**, and a gap makes the gate red. These need setup: `ZEPHYR_WS`,
   `HAL_NXP_DIR`, `PCO_SHC` (with `GLSLANG`, `GLSL2USC_CACHE`), the PowerVR
-  firmware header, and the `aarch64-unknown-none-softfloat` Rust target
+  firmware header, `lz4` (the am62p second-stage row), `qemu-system-aarch64`
+  (the uboot-mp2 row) and the `aarch64-unknown-none-softfloat` Rust target
   (`rustup target add`). Without them you get a red run with named gaps;
-  read which rows failed and which were gaps. The gate reads `ZEPHYR_WS`,
-  `HAL_NXP_DIR` and `PCO_SHC` from the environment only, so a stale value
-  (a moved checkout) is a gap too, and a stale `DEQP_GLES3_TEST_DIR` fails
-  the `shaderc-online` tests: `tools/cts/deps-env.sh --check` says which
-  entries this host's dependency layout has, and
-  `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
-  On a new host, build the entries the layout lacks, first, as one command:
-  `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR LZ4 MP2_QEMU`
-  (the Mali firmware, "The PowerVR firmware" below; the dEQP GLES3 shader
-  corpus, which the `shaderc-online` tests and the corpus test read; and
-  `capture_spm_load` beside `pco_shc`, which the `spm_load` regenerate row
-  compares against, a gap without it; only the full plan reads that row; the
-  `hal_nxp` checkout, which the imx8mp `regs.rs` regenerate row reads, a
-  gap without it; the `lz4` program of the am62p second-stage vectors,
-  built from source without root; and the `qemu-system-aarch64` of the
-  uboot-mp2 QEMU row, built from pinned sources without root in about 7
-  minutes on 4 cores, a gap without it).
-  On the `ed15e1be` walk (2026-11-09) the firmware and the corpus took
-  seconds and the capture program 85 s (97 s on a retry here after a reset
-  download); run the build once at a time, two at once share `PCO_SHC.src` and
-  the second dies with `Text file busy`. Then, after the export and the
-  PowerVR header copy, as the CI does, `tools/setup-gate-host.sh --check`
-  says whether this host has every tool and file the gate needs (it reads
-  the same variables, so run before the export it reports a stale one as
-  missing; `tools/setup-gate-host.sh --install` installs the packages, `lz4`
-  among them). The `lz4` command is a prerequisite of `--quick`: without it
-  the `am62p second stage` row is a gap and the run is red (`apt install lz4`,
-  Gentoo `app-arch/lz4`). A `CC_<target>` variable in the shell that names a
-  tool that is not there (for example `CC_aarch64_unknown_none`) fails the
-  aarch64 and `no Mesa reference` rows from a cold tree, in the build scripts
-  of the crates; `--check` reports it and `unset` fixes it. An `LC_ALL` or
-  `LANG` naming a locale the host has not installed fails the rows that run
-  `tools/` scripts; `--check` reports it and `export LC_ALL=C` before the
-  run fixes it. `ZEPHYR_WS` may be given
-  through a symbolic link: the gate resolves it to the real path first, and
-  every Zephyr build rewrites its generated linker snippets' `#include` paths
-  to absolute at the end of the configure (`zephyr/linker_snippets.cmake`), so
-  the image rows build from a checkout at any depth (they once failed with
-  `swi_tables.ld` not found in a worktree of another depth). A snippet that
-  names a file no path resolves is left as it is and the configure warns with
-  that line. The checkout itself is not resolved: run the gate from its
-  canonical path (`cd "$(pwd -P)"` first), not through a symbolic link, until
-  that is fixed; from a linked path the two artefact rows "no table" and "no test knob in
-  the artefact" fail (`dep_info_within` compares the physical dep-info paths
-  with the logical `$PWD`; `cd -P` at `tools/check.sh:115` is the fix, not
-  applied, `docs/notes/gate-symlinked-path.md`).
-- `tools/check.sh --quick` runs most of the full plan's rows (the CI does
-  not use it). `YAKOGL_CHECK_PLAN=1 tools/check.sh --quick` and
-  `YAKOGL_CHECK_PLAN=1 tools/check.sh` list the rows and run none; their
-  summary lines give the counts, ok plus gaps (a row whose tool or file the
-  host lacks is listed as a gap). No file keeps the count: a row added by
-  one pull request edits no number that another one edits too. The plan
-  at `e52f2e3f` is 562 rows in `--quick` and 622 in the full run (the
-  summary lines of `YAKOGL_CHECK_PLAN=1`), and a docs-only change run as
-  `tools/check.sh --no-clippy --changed <parent>` reaches 4 rows; the dated runs below keep the
-  row counts they had then (177 in `--quick` at `570cd8c6` and `18353e05`).
-  Measured on
-  2026-11-10 from a fresh clone of `0f020431` at a canonical path on a 4 core
-  host with two compiler slots, the layout exported, `lz4` on PATH and the
-  stale `CC_aarch64_unknown_none` unset: "177 ok, 0 failed, 0 gap(s)" in
-  4603 s from a cold tree and 1710 s warm (at `28611536`, 4703 s cold). From
-  a fresh clone of `18353e05` the same: "177 ok, 0 failed, 0 gap(s)" in
-  971 s. With the variable and the missing `lz4` as the host had them, the
-  host check exits 1 and the run is red (173 ok, 4 failed at `18353e05`).
-  At `8a5da05e` a run read "175 ok, 1 failed, 1 gap(s)" in 1379 s: the
-  failed row was `test yakogl-mali-panthor`
-  (`gltest_guard::the_verdict_line_is_out_before_the_next_case_starts`, a
-  timing test; it passed in the walks above) and the gap `lz4`. Earlier, with
-  fewer rows: "176 ok, 0 failed, 0 gap(s)" in 2950 s at `ed15e1be`
-  (2026-11-09), "173 ok, 0 failed,
-  0 gap(s)" in 2334 s with two compiler slots (4 cores) at `e3e8d777`
-  (2026-11-08), "170 ok, 0 failed, 0 gap(s)" in 2309 s from a fresh clone of
-  `14e93e64` (2026-11-06), and "146 ok, 0 failed, 0 gap(s)" in 2747 s at
-  `8198a56f` (2026-10-25). On a warm tree it took minutes when it had 147 rows (190 s on four
-  lanes, 2026-10-25, the figure in the `tools/check.sh` header); the dated
-  runs above are the measures for the larger plans, up to an hour or more
-  from a cold tree. If `MESA_V3D_TREE` is set on
-  your host to a Mesa tree without `build-v3d`, the three v3d rows (tex_check,
-  cl_golden, job_check) become one `gap` naming `MESA_V3D_TREE`, and a gap
-  keeps the run red: unset it (`env -u MESA_V3D_TREE tools/check.sh --quick`)
-  for the vendored reference build, or point it at a built tree
-  (`tools/v3d/README.md`). `tools/check.sh --local <base>` runs the local set
-  (about twenty rows, `tools/check_scope_selftest.sh`) when a change reaches
-  everything. Neither is the landing gate: the CI is.
-- The commands above, run in this order in a fresh clone (over HTTPS) at a
-  canonical path of `31e07d90` (2026-11-11), the layout exported with
-  `export $(tools/cts/deps-env.sh)` and `lz4` built from source on PATH
-  (node with 4 cores, two compiler slots, 7 GB; rustc 1.99.1, cargo 1.99.1,
-  clippy 0.1.99, a stable toolchain), exit code and wall time:
-
-  | command | exit | wall |
-  | --- | --- | --- |
-  | `tools/cts/deps-env.sh --check`, layout missing entries | 1 | 1.1 s |
-  | `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR` | 0 | 286.5 s |
-  | the PowerVR header copy | 0 | 0.1 s |
-  | `tools/setup-gate-host.sh --check` | 0 | 12.7 s |
-  | `tools/check.sh --changed origin/main` (no change) | 0 | 56.3 s |
-  | `tools/check.sh --quick`, cold tree | stopped at the 2 h limit, no summary line | about 7200 s |
-  | `tools/check.sh --quick`, rerun, warm tree | 0 | 3416.7 s |
-  | `tools/check.sh --local origin/main` (no change) | 0 | 12.9 s |
-  | `tools/check_scope_selftest.sh` (137 checks, 0 failed) | 0 | 56.7 s |
-
-  The `--quick` summary line: "check.sh: 177 ok, 0 failed, 0 gap(s) (a gap was
-  not run: it is not a pass), 0 skipped (every row), 0 not run (passed on
-  main) in 3416s". The layout there lacked `HAL_NXP_DIR` too, so the build
-  named it. This host has no cold-tree time at that commit (more than two
-  hours); the last cold one is 4603 s at `0f020431` (2026-11-10, rustc
-  1.101.0-nightly, the same step list without `HAL_NXP_DIR`, where the host
-  check first exited 1 for a missing `lz4` and a stale
-  `CC_aarch64_unknown_none`, 3.0 s, and 0 once both were fixed). The
-  `gltest_guard` timing test did not fail in either walk (it did at
-  `8a5da05e`). Record: GitHub issue 1606; a walk at a symlinked path is
-  `docs/notes/gate-symlinked-path.md`.
+  read which rows failed and which were gaps. The gate reads these
+  variables from the environment only, so a stale value (a moved checkout)
+  is a gap too, and a stale `DEQP_GLES3_TEST_DIR` fails the `shaderc-online`
+  tests. `tools/cts/deps-env.sh --check` says which entries the dependency
+  layout has, `export $(tools/cts/deps-env.sh)` sets them, and
+  `tools/cts/deps-env.sh --build <NAME>...` builds the ones it lacks
+  (`MALI_CSFFW`, `DEQP_GLES3_TEST_DIR`, `PCO_SPM_LOAD_CAPTURE`,
+  `HAL_NXP_DIR`, `LZ4`, `MP2_QEMU`); run one build at a time. Then, after
+  the export and the PowerVR header copy (below),
+  `tools/setup-gate-host.sh --check` says whether the host has every tool
+  and file the gate needs (`--install` installs the packages).
+- Host traps that `tools/setup-gate-host.sh --check` reports: a `CC_<target>`
+  variable naming a tool that is not there (for example
+  `CC_aarch64_unknown_none`) fails the aarch64 and `no Mesa reference` rows
+  from a cold tree (`unset` it); an `LC_ALL` or `LANG` naming a locale the
+  host has not installed fails the rows that run `tools/` scripts
+  (`export LC_ALL=C`).
+- Run the gate from the checkout's canonical path (`cd "$(pwd -P)"` first),
+  not through a symbolic link: from a linked path the two artefact rows "no
+  table" and "no test knob in the artefact" fail
+  (`docs/notes/gate-symlinked-path.md`). `ZEPHYR_WS` itself may be a link.
+- If `MESA_V3D_TREE` is set on your host to a Mesa tree without `build-v3d`,
+  the three v3d rows (tex_check, cl_golden, job_check) become one `gap`
+  naming `MESA_V3D_TREE`, and a gap keeps the run red: unset it
+  (`env -u MESA_V3D_TREE tools/check.sh --quick`) for the vendored
+  reference build, or point it at a built tree (`tools/v3d/README.md`).
+- A walk of these commands in a fresh clone is recorded in GitHub issue
+  1606 and `docs/release/readme-walkthrough.md`.
 
 ## Branches and commits
 
