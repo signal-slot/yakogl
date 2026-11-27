@@ -673,6 +673,6 @@ line), a `tools/*_selftest.sh` the map did not know in 102 (alone in 52),
 - A self-test the map does not know (`tools/<tool>_selftest.sh`) reaches
   the tools rows, not every row (`path_scopes` in `tools/check.sh`). The
   gate already gives such a file a row of its own under its path's scope
-  (section 3.1's self-test loop), and `tools/check_scope_selftest.sh`
+  (the loop over `tools/check_selftests.py`), and `tools/check_scope_selftest.sh`
   requires of every row that names a self-test that the self-test's path
   reaches it.

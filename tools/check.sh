@@ -257,6 +257,17 @@ path_scopes() {
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
   tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  # A self-test no line above claims (tools/<tool>_selftest.sh, the usual
+  # second file of a new tool): a change of it can break the row that runs it
+  # and no other, and that row is a tools row. The gate gives every self-test
+  # no row names a row under its own path's scope, the tools scope for this
+  # one (the loop over tools/check_selftests.py), and
+  # tools/check_scope_selftest.sh requires of every row that does name a
+  # self-test that a change of the self-test reaches it. Until 2026-11-27
+  # such a file selected every row: 52 of the 362 pull requests merged since
+  # 2026-11-13 whose diff reached every row did so for this alone
+  # (docs/ci.md, section 6).
+  tools/*selftest.sh) echo tools ;;
   *) echo all ;;
   esac
 }
