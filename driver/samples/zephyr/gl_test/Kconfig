@@ -597,6 +597,20 @@ config T6_GL_TEST_CASES
 	  (YAKOGL_GPU_MALI's help; board::nanopc_t6_osal, "Recovery").
 	  Empty: T6_GL_TEST_CASE.
 
+config GL_TEST_VI95_PANEL_HOLD_S
+	int "Verdin iMX95: seconds the X12 panel's picture stays after the suite"
+	default 30
+	range 0 120
+	depends on YAKOGL_VERDIN_IMX95_DISPLAY
+	help
+	  With the display (-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y),
+	  src/main_mali.c draws three colour bars on the Mallow's X12
+	  LVDS panel after the suite, board_show()s them and holds them
+	  this long for a camera, feeding the watchdog each second, before
+	  board_finish(). The suite and the hold together stay inside
+	  YAKOGL_BOARD_LIFETIME_S (300 s in verdin_imx95.conf), hence the
+	  range. 0: the picture is shown and the run ends at once.
+
 endmenu
 
 rsource "../common/Kconfig"
