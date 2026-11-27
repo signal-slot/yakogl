@@ -902,7 +902,8 @@ refuses `GL_HALF_FLOAT` and the packed types, and the getters refuse
   C test of the PDS words for divisors 2, 3, 4 and 0xffff (`0fbc924d`),
   `tests/es3_pvr_divisor.rs`, `es3_pvr_divisor_split.rs` and
   `es3_pvr_chunk_fetch.rs`, gl_test case 243 `divmix` (`8b6b05ff`, built not
-  run). Host dEQP, HOST-ONLY, `GPU=powervr`: `instanced.*` is 111 cases, 0
+  run). Host dEQP, HOST-ONLY, `GPU=powervr`: the two instanced groups are 111 cases (`instanced.*` 45 plus
+  `draw.draw_{arrays,elements}_instanced.*` 66), 0
   Pass / 111 Fail / 0 NotSupported at `03a923ed` (before) because the host
   back end renders no picture, and `host-deqp-run.sh --compare` shows 0 case
   changes with and without the feature at `4f4310a6` (reproduced twice); the
