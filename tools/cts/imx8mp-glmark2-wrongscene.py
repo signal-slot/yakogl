@@ -76,19 +76,43 @@ def label_of(scene):
     raise Refuse(f"scene {scene!r} is not in `imx8mp-glmark2-dumps.sh scenes`")
 
 
-def meta_commit(record):
-    """The first 8 hex digits of the commit= line of <record>/meta.txt."""
+def meta_lines(record):
+    """The lines of <record>/meta.txt ([] when there is none)."""
     d = record.rstrip("/")
     if not os.path.isdir(d):
         d = os.path.join(os.path.dirname(os.path.dirname(HERE)), d)
     try:
         with open(os.path.join(d, "meta.txt"), encoding="utf-8") as f:
-            for line in f:
-                m = re.fullmatch(r"commit=([0-9a-f]{40})\s*", line)
-                if m:
-                    return m.group(1)[:8]
+            return f.read().splitlines()
     except OSError:
-        pass
+        return []
+
+
+SAFE_VALUE = re.compile(r"[A-Za-z0-9 (),.+_/-]{1,120}")
+
+
+def meta_board(record):
+    """(board, measured_on) of meta.txt; measured_on is None unless it is a
+    plain description (nothing that looks like an address, host or tty)."""
+    board = on = None
+    for line in meta_lines(record):
+        k, _, v = line.partition("=")
+        if k == "board" and board is None:
+            board = v.strip()
+        elif k == "measured_on" and on is None:
+            v = v.strip()
+            if SAFE_VALUE.fullmatch(v) and not REDACT.search(v) \
+                    and not re.search(r"\.[a-z]{2,}\b|/", v):
+                on = v
+    return board, on
+
+
+def meta_commit(record):
+    """The first 8 hex digits of the commit= line of <record>/meta.txt."""
+    for line in meta_lines(record):
+        m = re.fullmatch(r"commit=([0-9a-f]{40})\s*", line)
+        if m:
+            return m.group(1)[:8]
     raise Refuse("the row's commit cell is '-' and no commit=<40 hex> line was found "
                  "in meta.txt of the record (give --record as the record directory, "
                  "or fill the row with imx8mp-glmark2-note-fill.py first)")
@@ -128,8 +152,23 @@ def entry(a):
     if route not in ROUTES:
         raise Refuse(f"route {route!r} is not one of {', '.join(ROUTES)} (a photograph "
                      "alone is 'seen without a value', never wrong)")
+    board, on = meta_board(a.record)
+    x2 = board == "x2"
     label = label_of(scene)
     nn = label.split("-")[0]
+    if x2:
+        intro = (f"The glmark2-es2 scene `{scene}` renders wrong on the i.MX8MP (i.MX 8M Plus,\n"
+                 "Vivante GC7000UL). It was measured on the Armadillo-X2 (i.MX 8M Plus,\n"
+                 "GC7000UL), not on the Verdin, which is away (owner's rule of 2026-11-27),\n"
+                 "judged by eye against the upstream glmark2 picture on Mesa llvmpipe\n"
+                 "(tools/cts/glmark2-host-ref.sh).\n")
+        boardline = ("Armadillo-X2 (i.MX 8M Plus), Vivante GC7000UL (measured on the X2"
+                     + (f"; measured_on: {on}" if on else "") + ")")
+    else:
+        intro = (f"The glmark2-es2 scene `{scene}` renders wrong on the i.MX8MP (Verdin iMX8M\n"
+                 "Plus, Vivante GC7000UL), judged by eye against the upstream glmark2 picture\n"
+                 "on Mesa llvmpipe (tools/cts/glmark2-host-ref.sh).\n")
+        boardline = "Verdin iMX8M Plus (i.MX8MP), Vivante GC7000UL"
     # starts with the scene cell: imx8mp-glmark2-issue-texts.py reads it so
     title = f"{scene}: renders wrong on the i.MX8MP (GC7000UL)"
     return f"""### {scene}
@@ -138,11 +177,8 @@ def entry(a):
 
 **Body**:
 
-The glmark2-es2 scene `{scene}` renders wrong on the i.MX8MP (Verdin iMX8M
-Plus, Vivante GC7000UL), judged by eye against the upstream glmark2 picture
-on Mesa llvmpipe (tools/cts/glmark2-host-ref.sh).
-
-- Board and GPU: Verdin iMX8M Plus (i.MX8MP), Vivante GC7000UL
+{intro}
+- Board and GPU: {boardline}
 - Commit: {commit} (origin/main)
 - Record: `records/imx8mp/{rec}/`
 - Route: {route}
