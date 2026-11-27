@@ -88,8 +88,13 @@ prints `vi95_deqp: build e63ab28e` and `sample: build tree=e63ab28e`):
 | T6S4R07 | `4e52548c5055e1ac6d46a3c26831f6d815ef70221423e2e3f8f9d8a47887b901` |
 | T6S4R08 | `0e587066d31e6815f9b75eb012b53fb87592d16788dabfec110ee65023f8e8a1` |
 
-The full figures are in `rows.tsv` (and, in `tools/cts/mali-deqp-tally.py`'s
-columns, `chunks.tsv`). From `go` to the Linux login takes about 56 s per row:
+The table above is the session's own; `rows.tsv` is built by
+`tools/cts/imx95-rows-tsv.py` from `console/` in the other sessions' schema
+(`row` 1-8 for T6S4R01-R08, `cases`, `status`, `seconds`, `lifetime_s` 600,
+`bbm` not-read, `exit_line`; the image's uptime in ms is in `exit_line`).
+The tool does not derive the md5, `go` and `back` columns of the earlier
+hand-written table, so they are only in the table above. The per-chunk figures
+in `tools/cts/mali-deqp-tally.py`'s columns are in `chunks.tsv`. From `go` to the Linux login takes about 56 s per row:
 the image, the reset, U-Boot and the module's Linux boot.
 
 ## The record that survives the reset (U2)
