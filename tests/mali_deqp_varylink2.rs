@@ -24,6 +24,9 @@
 mod mali_ref;
 
 const EQUAL: &str = "Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet";
+const COLOUR_FORM: &str =
+    "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+const FS_LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 const NO_ATTRIBUTE: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
 
 /// Each reference and the refusal it meets at the tip.
@@ -32,8 +35,8 @@ const PINS: [(&str, &str); 7] = [
     ("prec_mixed", EQUAL),
     ("mat2", EQUAL),
     ("loop_bcast", EQUAL),
-    ("vec_uniform", NO_ATTRIBUTE),
-    ("scalar_uniform", NO_ATTRIBUTE),
+    ("vec_uniform", COLOUR_FORM),
+    ("scalar_uniform", FS_LOAD),
     ("loop_uniform", NO_ATTRIBUTE),
 ];
 
@@ -70,17 +73,20 @@ fn loop_bcast() {
 }
 
 /// `v_color = vec4(i + h, g, f, b)` with `g` a uniform: Mesa stores `g` as a
-/// plain interpolated lane of the one smooth vec4.
+/// plain interpolated lane of the one smooth vec4, at word 3 (nir.rs
+/// `fill`). The vertex shader compiles; the program's fragment shader reads
+/// the load's lanes as `(x, w, y, z)`, a colour form not lowered.
 #[test]
-#[ignore = "refused: a varying lane computed from no attribute, the vertex shader alone; pinned by refusals_pinned"]
+#[ignore = "refused: the program's fragment shader, a colour of the load's lanes out of order; pinned by refusals_pinned"]
 fn vec_uniform() {
     mali_ref::assert_matches("deqp_varylink2_vec_uniform");
 }
 
 /// `a = 3.0 * n` beside interpolated varyings: the fragment shader reads
-/// only `a`, which Mesa keeps as one flat lane (`ffma(x, 0.0, x)`).
+/// only `a`, which Mesa keeps as one flat lane (`ffma(x, 0.0, x)`). The
+/// vertex shader compiles; the fragment shader alone is refused first.
 #[test]
-#[ignore = "refused: a varying lane computed from no attribute, the vertex shader alone; pinned by refusals_pinned"]
+#[ignore = "refused: the fragment shader alone, a varying conversion form; pinned by refusals_pinned"]
 fn scalar_uniform() {
     mali_ref::assert_matches("deqp_varylink2_scalar_uniform");
 }

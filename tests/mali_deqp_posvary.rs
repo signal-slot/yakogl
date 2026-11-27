@@ -36,7 +36,9 @@ mod mali_ref;
 const NO_ATTR: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
 const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
 const CONST_PRODUCT: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
+const FS_LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
 
 /// The references the compiler matches byte for byte, without the
 /// `deqp_posvary_` prefix: a declared varying the vertex shader never
@@ -57,6 +59,7 @@ const MATCHED: &[&str] = &[
     "fract_lowp_vec3",
     "tex_uniform_w",
     "tex_uniform_w_array",
+    "flat_lane_vec4_v86",
 ];
 
 /// Every reference with its whole `MaliError` message, without the
@@ -72,14 +75,15 @@ const REFUSED: &[(&str, &str)] = &[
      * and left out of the walk (nir_fs.rs `ir_live`), so the operand form
      * of `b - vec4(.., e, ..)` is next */
     ("flat_sep_kau_bs26", FS_OPERAND),
-    /* the uniform vec4 laid out before the interpolated float: Mesa's link
-     * moves its lanes after it (words 1-4), which the per-varying layout
-     * cannot hold (nir.rs `fill`) */
-    ("flat_sep_vec4_bs51", NO_ATTR),
+    /* the uniform vec4 laid out before the interpolated float: the link
+     * moves its lanes after it (words 1-3, its w flat at word 4; nir.rs
+     * `fill`), the vertex shader compiles; the fragment shader alone is
+     * refused first, its `int(d)` */
+    ("flat_sep_vec4_bs51", ARITH),
     /* uniform lanes inside a vec4 with attribute lanes (shape `flat_lane`),
-     * before them: Mesa moves them after the interpolated lanes */
-    ("flat_lane_vec4_v86", NO_ATTR),
-    ("flat_lane_vec4_c30", NO_ATTR),
+     * before them, moved after them: the vertex shader compiles, the
+     * fragment shader alone is refused first, its varying load form */
+    ("flat_lane_vec4_c30", FS_LOAD),
     /* a loop over uniform bounds and constant arrays (shape `loop_phi`) */
     ("loop_phi_array", NO_ATTR),
     /* a declared varying the vertex shader does not write, read under a
@@ -102,9 +106,8 @@ macro_rules! refused_ref {
 refused_ref! {
     flat_sep_rnd13, "refused: the fragment shader alone, a constant product (flat_sep)";
     flat_sep_kau_bs26, "refused: the fragment shader alone, an operand form (flat_sep)";
-    flat_sep_vec4_bs51, "refused: the uniform lanes laid out before the interpolated one, which Mesa moves after it (flat_sep)";
-    flat_lane_vec4_v86, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
-    flat_lane_vec4_c30, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
+    flat_sep_vec4_bs51, "refused: the fragment shader alone, arithmetic (flat_sep)";
+    flat_lane_vec4_c30, "refused: the fragment shader alone, a varying load form (flat_lane)";
     loop_phi_array, "refused: a loop over uniform bounds stored in a varying (loop_phi)";
     unwritten_declared_dead_read, "refused: the fragment shader alone selects its colour under a boolean uniform (control flow)";
 }
@@ -163,6 +166,10 @@ matched_ref! {
     tex_uniform_w;
     /// The same through a sampler array.
     tex_uniform_w_array;
+    /// `vec4(c, c, b, a - 5.0)`: the uniform `c` (its two lanes one value)
+    /// moved after the interpolated `b` and `a - 5.0` (word 2, stored as it
+    /// is), one `.v3` load, `IADD.v2u16 r1, r2^.h00, 0x0` its word.
+    flat_lane_vec4_v86;
 }
 
 /// Each reference is refused with exactly its text in [`REFUSED`] (the

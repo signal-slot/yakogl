@@ -10215,7 +10215,6 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
      * in scalar slot order): every lane the link keeps, in layout order,
      * takes the next scalar slot from VAR0; a vertex shader's constant
      * lane is not one, the link propagates it into this shader */
-    let mut s = 0u16;
     /* each 16-byte slot's lanes, and those of them the program reads */
     let (mut held, mut used) = ([0u8; MAX_VARYINGS], [0u8; MAX_VARYINGS]);
     /* each slot's first read: the first read of a varying with a lane read
@@ -10235,13 +10234,16 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     /* the lanes laid out, by the first vertex lane of their value
      * (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420, in scalar slot
      * order: the first kept, the others read from it; fsload_dup_swz's
-     * q.x is p.y): (that lane, slot, lane) */
-    let mut placed = [(((0u8, 0u8), 0u8), 0u8, 0u8); 4 * MAX_VARYINGS];
+     * q.x is p.y): (that lane, its index in `classes`) */
+    let mut placed = [(((0u8, 0u8), 0u8), 0usize); 4 * MAX_VARYINGS];
     let mut nplaced = 0;
-    for at in &lay[..n] {
+    /* each varying's lanes: the index in `classes` of the lane that holds
+     * it (its own, or the equal one laid out first) */
+    let mut lane_class = [[None::<usize>; 4]; MAX_VARYINGS];
+    let (mut keeps, mut starts) = ([0u8; MAX_VARYINGS], [0u16; MAX_VARYINGS]);
+    for (j, at) in lay[..n].iter().enumerate() {
         let loc = at.location as usize & 15;
-        let first = s;
-        let full = (1u8 << at.comps) - 1;
+        starts[j] = nclasses as u16;
         let mut keep = if whole[loc] {
             let konst = |c: u8| f.prec.consts.get(at.location, c).is_some();
             (0..at.comps).filter(|&c| !konst(c)).fold(read[loc], |m, c| m | 1 << c)
@@ -10258,14 +10260,10 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             let interp = m.inputs.iter().find(|d| d.kind == IoKind::Varying && d.location == at.location);
             let interp = interp.map_or(ir::INTERP_SMOOTH, |d| d.interp);
             let class = (f.prec.consts.class(at.location, comp), interp);
-            if let Some(&(_, slot, lane)) = placed[..nplaced].iter().find(|x| x.0 == class) {
+            if let Some(&(_, i)) = placed[..nplaced].iter().find(|x| x.0 == class) {
                 /* a lane equal to one laid out: read from it, not stored */
                 keep &= !(1 << comp);
-                if read[loc] & (1 << comp) != 0 {
-                    used[slot as usize] |= 1 << lane;
-                    first_read[slot as usize] = first_read[slot as usize].min(f.var_key[loc]);
-                    f.lane_of[loc][comp as usize] = Some((slot, lane));
-                }
+                lane_class[j][comp as usize] = Some(i);
                 continue;
             }
             let declared = m
@@ -10279,22 +10277,51 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                 smooth = true;
             }
             *classes.get_mut(nclasses).ok_or(MaliError::VaryingLocation)? = (at.location, comp, convergent);
-            nclasses += 1;
-            let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
-            *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
-            *placed.get_mut(nplaced).ok_or(MaliError::VaryingLocation)? = (class, slot as u8, lane);
+            *placed.get_mut(nplaced).ok_or(MaliError::VaryingLocation)? = (class, nclasses);
+            lane_class[j][comp as usize] = Some(nclasses);
             nplaced += 1;
+            nclasses += 1;
+        }
+        keeps[j] = keep;
+    }
+    /* each kept lane's word, the vertex shader's ([`super::nir::fill`]) */
+    let mut words = [0u8; 4 * MAX_VARYINGS];
+    let filled = super::nir::fill(&classes[..nclasses], &mut words)?.count_ones() as usize;
+    for (j, at) in lay[..n].iter().enumerate() {
+        let loc = at.location as usize & 15;
+        let full = (1u8 << at.comps) - 1;
+        let keep = keeps[j];
+        for comp in 0..at.comps {
+            let Some(i) = lane_class[j][comp as usize] else { continue };
+            let w = words[i];
+            let (slot, lane) = ((w / 4) as usize, w % 4);
+            if keep & (1 << comp) != 0 {
+                *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
+            }
             if read[loc] & (1 << comp) != 0 {
-                used[slot] |= 1 << lane;
+                *used.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
                 first_read[slot] = first_read[slot].min(f.var_key[loc]);
                 f.lane_of[loc][comp as usize] = Some((slot as u8, lane));
             }
-            s += 1;
         }
         f.compacted |= keep != full;
-        f.reads[f.nreads] = FsRead { location: at.location, mask: keep, offset: 4 * first };
-        f.nreads += 1;
+        /* one record per run of its words ([`super::nir::runs`]); a
+         * varying no lane of which is kept, one of no component */
+        let own: [Option<u8>; 4] =
+            core::array::from_fn(|c| (keep & (1 << c) != 0).then(|| lane_class[j][c].map(|i| words[i])).flatten());
+        let (runs, nruns) = super::nir::runs(own);
+        if nruns == 0 {
+            *f.reads.get_mut(f.nreads).ok_or(MaliError::VaryingLocation)? =
+                FsRead { location: at.location, mask: 0, offset: 4 * starts[j] };
+            f.nreads += 1;
+        }
+        for &(offset, mask) in &runs[..nruns] {
+            *f.reads.get_mut(f.nreads).ok_or(MaliError::VaryingLocation)? =
+                FsRead { location: at.location, mask, offset };
+            f.nreads += 1;
+        }
     }
+    let s = nclasses as u16;
     if declared_flat && smooth {
         return Err(MaliError::VaryingNotFromAttribute);
     }
@@ -10302,7 +10329,6 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
      * interpolated lane, else those past the interpolated vec4s the
      * convergent lanes fill ([`super::nir::fill`]) */
     let interp = classes[..nclasses].iter().filter(|l| !l.2).count();
-    let filled = super::nir::fill(&classes[..nclasses])?.count_ones() as usize;
     let flat_from = if declared_flat || interp == 0 { 0 } else { interp + filled };
     /* a slot is loaded when the program reads a lane of it, at the width
      * the link left it (`nir_unlower_io_to_vars` makes one variable of the

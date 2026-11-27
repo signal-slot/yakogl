@@ -410,8 +410,10 @@ const COMPILER_REFUSED: &[&str] = &[
     "conditionals_varying_one_path",
     // a varying lane computed from no attribute
     "conditionals_attribute_select",
-    // a varying lane left unwritten
-    "random_declared_not_written",
+    // (`random_declared_not_written` was refused as "a varying lane left
+    // unwritten" until nir::fill gave each lane its own word and the vertex
+    // shader stored in word order (Mesa's fs_assign_slot_groups): its
+    // unread v_u and v_w leave the layout and it draws since)
     // (`random_constant_varying_through_loop` was refused as "a loop in a
     // vertex shader" until plan #367 lower-int-loops unrolled a counted
     // vertex loop: its `c` folds to 0.75, a constant varying, and it draws)
