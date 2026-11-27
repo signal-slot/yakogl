@@ -17,7 +17,10 @@
 //! byte-equal ([`MATCHED`]); `vec_subscript`, `tmp_array` and
 //! `struct_dynidx` compile but differ ([`DIFFERS`]; the first difference is
 //! in the comment of each test); `struct_cmp`, `struct_int` and
-//! `varying_array` are refused with other texts ([`REFUSED`]).
+//! `varying_array` are refused with other texts ([`REFUSED`]). Plan #402's
+//! `lower-vsunif` makes `struct_int` byte-equal ([`MATCHED`]): a nested
+//! struct's member (`s.b.b`) is fp32 in the block whatever its precision,
+//! as a plain struct's member already was.
 //!
 //! The shapes, HOST-ONLY at `e65567ea` (`tools/mali/deqp-host-measure.sh
 //! --cases` over the 463 cases whose `refusals.tsv` text in the four slices
@@ -66,22 +69,18 @@ mod mali_ref;
 /// reference here was taken for, `UniformType`, is gone since `5e1feec9`).
 const ARITHMETIC: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
-/// `struct_int`: the nested struct's members are not highp (Mesa's fp16 uniform).
-const VS_UNIFORM_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
-
 /// `varying_array`: the dynamically written varying array leaves lanes unwritten.
 const VARYING_LANE: &str = "Valhall: a varying lane left unwritten is not lowered yet";
 
 /// The references the compiler makes byte-equal, without the
 /// `deqp_vsunif_` prefix.
-const MATCHED: &[&str] = &["random_dead_int", "struct_local"];
+const MATCHED: &[&str] = &["random_dead_int", "struct_int", "struct_local"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &["struct_dynidx", "tmp_array", "vec_subscript"];
 
 /// Every refused reference with its whole `MaliError` message.
-const REFUSED: &[(&str, &str)] =
-    &[("struct_cmp", ARITHMETIC), ("struct_int", VS_UNIFORM_PRECISION), ("varying_array", VARYING_LANE)];
+const REFUSED: &[(&str, &str)] = &[("struct_cmp", ARITHMETIC), ("varying_array", VARYING_LANE)];
 
 /// The references with a struct uniform, drawn with its members set.
 const STRUCT: &[&str] = &["struct_cmp", "struct_dynidx", "struct_int"];
@@ -190,7 +189,6 @@ fn struct_cmp() {
 }
 
 #[test]
-#[ignore = "refused: a vertex shader uniform that is not highp (a nested struct uniform's members, Mesa's fp16 uniform), lowered by lower-vsunif"]
 fn struct_int() {
     assert_matches("struct_int");
 }

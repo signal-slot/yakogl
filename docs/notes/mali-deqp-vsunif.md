@@ -264,10 +264,37 @@ their new states. HOST-ONLY:
 | `tmp_array` | compiles, differs | last FAU word (`0x3e000000` / `0x30003000`); instruction 0: ours lacks `.wait0` on `LD_ATTR_IMM`, then an f32 `CSEL` tree against Mesa's fp16 tree |
 | `struct_dynidx` | compiles, differs | FAU words; instruction 0: `MOV.i32 0x0` against `0x3020100`, select tree against `LSHIFT_OR`/`IADD_IMM` addressing |
 | `struct_cmp` | refused | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` |
-| `struct_int` | refused | `Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet` |
+| `struct_int` | refused (byte-equal since `lower-vsunif`, section 8) | `Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet` |
 | `varying_array` | refused | `Valhall: a varying lane left unwritten is not lowered yet` |
 
 What `lower-vsunif` has left is therefore the three differing references
 (Mesa's fp16 narrowing of the attribute and its select tree, the struct
 array addressing) and the three refusals above, not the int uniform type
 check. The references are unchanged.
+
+## 8. `lower-vsunif` (plan #402)
+
+`struct_int` is byte-equal (HOST-ONLY, on `7153ca84`) and is in `MATCHED`
+of `tests/mali_deqp_vsunif.rs`. It was refused only because the vertex
+walk's precision check (`src/shaderc/online/mali/mod.rs`, the loop over the
+block's uniforms before `MaliError::UniformPrecision`) counted a uniform as
+a struct member only when `uniform_precision` could look up its
+declaration, and that lookup gives up on a nested member (`s.b.b`, the
+mediump vec2 of the nested `T`). A struct's member is fp32 in the block
+whatever its precision (lower_precision.cpp:1029-1031), nested or not, so
+a dotted name with no array on its path is now a member too. A name with
+an array on its path whose precision is unknown stays refused:
+`deqp_unif2_arr_struct_array`'s `s[0].b[1].b[0]` compiles with that check
+dropped, but not to Mesa's program (Mesa narrows those members with
+`FADD.f32 r0.h0, u7.w1, 0x0.neg` and `FMA.v2f16`, and the FAU words from
+`u5.w3` on are ours 0), so it keeps its refusal in `tests/mali_deqp_unif2.rs`.
+
+What is left, unchanged:
+
+| reference | state | what it needs |
+|---|---|---|
+| `vec_subscript` | differs | Mesa's fp16 narrowing of the attribute (`V2F32_TO_V2F16`) and the `MUX.v2i16` select tree (section 5) |
+| `tmp_array` | differs | the same fp16 tree over the local array's elements, `.wait0` on `LD_ATTR_IMM` |
+| `struct_dynidx` | differs | `LD_PKA` of a struct array at `LSHIFT_OR`/`IADD_IMM` offsets |
+| `struct_cmp` | refused, `Arithmetic` | the member-wise struct compare (`FCMP_OR.v2f16`, `ICMP_OR.u32.eq`, `LSHIFT_AND`) |
+| `varying_array` | refused, `VaryingForm` (unwritten lane) | the masked `CSEL` writes of a dynamically indexed varying array |

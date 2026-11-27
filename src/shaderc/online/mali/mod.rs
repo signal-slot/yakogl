@@ -1472,10 +1472,13 @@ fn compile_stage<'s>(
         /* an fp16 uniform is lowered (nir.rs `fp16_uniform`), and a struct's
          * member is fp32 whatever its precision (lower_precision.cpp:1029-1031
          * asks for a float base type; vsstruct_partial's `val.a` is `u5.w1`,
-         * its `f2f32(f2fmp(x))` folded): any other uniform not highp has no
-         * reference */
+         * its `f2f32(f2fmp(x))` folded), a nested struct's too when no
+         * array is on its path (`uniform_precision` does not look those
+         * up; deqp_vsunif_struct_int's `s.b.b`; deqp_unif2_arr_struct_array's
+         * `s[0].b[1].b[0]` is another program): any other uniform not highp
+         * has no reference */
         for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
-            let member = u.name.contains('.') && prec(u.name).is_some();
+            let member = u.name.contains('.') && (prec(u.name).is_some() || !u.name.contains('['));
             /* a bool has no precision (GLSL ES 1.00 section 4.5.2: the
              * qualifier applies to floats and ints) and is a 32-bit word
              * of 0 / ~0 in Mesa (`UniformBooleanTrue`), whatever the
