@@ -37,8 +37,14 @@ OUTSIDE_BAD_FRACTION of the samples allowed above it for JPEG noise, a margin of
 OUTSIDE_MARGIN frame pixels around the window left out for edge blur). If it is
 not (a shifted window, a wrong frame, a desktop behind), no probes are printed
 and the exit is 2 with the share of non-black samples and the first place. The
-default frame is `panel` (the Verdin, above), where there is no such check. The
-PNG decoder is the only one: a JPEG capture is converted to PNG first.
+default frame is `panel` (the Verdin, above), where there is no such check.
+
+JPEG input (the NanoKVM capture is one; recognised by its FF D8 FF header, not the
+file name): there is no JPEG decoder here. The file is converted to an 8-bit PNG
+first, by Pillow if it imports, else by ffmpeg, else by ImageMagick (magick, then
+convert) found on PATH, into a directory under $TMPDIR (removed afterwards). With
+none of them the exit is 2 and the message says so. A JPEG's probes differ from the
+PNG's by compression noise (a few levels), far inside the tolerance.
 
 The probes are the sample's picture code (driver/samples/zephyr/glmark2/src/main.cpp
 lines 386-388): px = {w/2, w/4, 3w/4, w/4, 3w/4}, py = {h/2, h/4, h/4, 3h/4, 3h/4}
@@ -75,9 +81,13 @@ CONTENT-ONLY evidence: the right kind of picture is there (bright where it shoul
 dark where it should be, the hue roughly right). It is not a value, does not replace
 the UART probes, and never goes into the table as a probe value. Stdlib only.
 """
+import os
 import re
+import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 import zlib
 
 PANEL = (1280, 800)  # verdin_imx8mp_display.dtsi:157-158
@@ -163,6 +173,41 @@ def decode_png(data):
                 raise Bad("palette PNG without PLTE")
             rows.append(bytes(v for i in cur for v in plte[3 * i:3 * i + 3]))
     return w, h, rows
+
+
+def jpeg_to_png(path, tmpdir):
+    """Convert a JPEG to an 8-bit RGB PNG in tmpdir with Pillow or an external tool."""
+    out = os.path.join(tmpdir, "capture.png")
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.convert("RGB").save(out, "PNG")
+        return out
+    except ImportError:
+        pass
+    except Exception as e:  # Pillow present but the file is damaged
+        raise Bad("JPEG cannot be decoded by Pillow: %s" % e)
+    cmds = []
+    if shutil.which("ffmpeg"):
+        cmds.append(["ffmpeg", "-v", "error", "-y", "-i", path, "-pix_fmt", "rgb24", out])
+    for tool in ("magick", "convert"):
+        if shutil.which(tool):
+            cmds.append([tool, path, "-depth", "8", "-interlace", "none", "PNG24:" + out])
+    if not cmds:
+        raise Bad("the capture is a JPEG and this tool has no JPEG decoder: install Pillow "
+                  "(python3 -m pip install pillow), ffmpeg or ImageMagick (convert/magick), "
+                  "or give a PNG")
+    errs = []
+    for cmd in cmds:
+        try:
+            r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            errs.append("%s: %s" % (cmd[0], e))
+            continue
+        if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+        errs.append("%s exit %d: %s" % (cmd[0], r.returncode, r.stderr.decode("utf-8", "replace").strip()[:200]))
+    raise Bad("JPEG conversion failed (%s)" % "; ".join(errs))
 
 
 class Photo:
@@ -343,6 +388,10 @@ def main(argv):
                 data = f.read()
         except OSError as e:
             raise Bad("cannot read the screenshot: %s" % e)
+        if data[:3] == b"\xff\xd8\xff":
+            with tempfile.TemporaryDirectory(prefix="photo-probes-", dir=os.environ.get("TMPDIR") or None) as td:
+                with open(jpeg_to_png(a["png"], td), "rb") as f:
+                    data = f.read()
         w, h, rows = decode_png(data)
         photo = Photo(w, h, rows, a["rotation"], FRAMES[a["frame"]])
         if a["frame"] == "x2-kvm":
