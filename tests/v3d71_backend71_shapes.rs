@@ -1543,8 +1543,8 @@ fn what_draw71_does_not_carry_is_refused_by_name() {
     assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[0]));
     let e = one_job(|d| d.instances = 2).unwrap_err();
     assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[1]));
-    let e = one_job(|d| d.vs_writes_psiz = true).unwrap_err();
-    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[2]));
+    // a vertex program writing gl_PointSize is drawn, not refused
+    // (tests/v3d71_table_points.rs compares its record with Mesa's)
     // every draw is planned before the builder runs: a uniform the 7.1 table
     // does not fill yet is uniform71's named refusal
     let e = one_job(|d| d.vs_uniforms[0].contents = uniform71::TMU_CONFIG_P0).unwrap_err();
@@ -1561,5 +1561,5 @@ fn a_target_other_than_the_framebuffer_is_refused() {
     let fb = Framebuffer { width: G_SIZE, height: G_SIZE, tile_alloc: G_TILE, flip_y: false, colors: &colors, ds };
     let mut h = Harness { gpu: [G_BCL, G_RCL, G_IND], lists: Default::default() };
     let e = backend71::assemble_filled(&table(), &fb, &job, &mut h).unwrap_err();
-    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[3]));
+    assert_eq!((e.module, e.reason.as_str()), ("backend71", backend71::FILLED_REFUSALS[2]));
 }
