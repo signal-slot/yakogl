@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Self-test of imx8mp-glmark2-issue-texts.py on synthetic notes in $TMPDIR.
+# Self-test of imx8mp-glmark2-issue-texts.py on synthetic notes in $TMPDIR and
+# on the filled-note fixtures in tools/cts/testdata/imx8mp-glmark2-issue-texts/
+# (the board wording cases: an X2 note, a Verdin note, a note naming no board).
 # Needs only python3 and bash. Exit 2 if TMPDIR is unset.
 set -u
 if [ -z "${TMPDIR:-}" ]; then
@@ -91,6 +93,51 @@ for pair in "3:RESULTS.md" "4:STATUS.md" "6:../../ROADMAP.md"; do
     [ -n "$a" ] && { grep -qF -- "$a" "$f" || bad "block $n anchor not in ${pair#*:}: $a"; }
   done <<<"$anchors"
 done
+
+# --- board wording (the owner's rule of 2026-11-27: the i.MX8MP pictures are
+# measured on the Armadillo-X2 while the Verdin is away) ---
+td=$here/testdata/imx8mp-glmark2-issue-texts
+[ -f "$td/note-x2.md" ] || bad "fixture $td/note-x2.md missing"
+
+# perblock OUT NEEDLE LABEL: each of the six blocks' printed text names NEEDLE
+perblock() {
+  local o=$1 needle=$2 label=$3 b
+  for b in 1 2 3 4 5 6; do
+    grep -A2 -- "^== $b\. " <<<"$o" | grep -qF -- "$needle" \
+      || bad "$label: block $b does not name $needle"
+  done
+}
+
+outx=$(python3 "$tool" --note "$td/note-x2.md" 2>"$d/ex") || bad "x2 fixture refused: $(cat "$d/ex")"
+grep -q "33 right, 0 wrong, 0 seen without a value, of 33" <<<"$outx" || bad "x2 note counts"
+perblock "$outx" "Armadillo-X2" "x2 note, board derived from the note"
+grep -q "Armadillo-X2 で測定、" <<<"$outx" || bad "x2 note: STATUS lines not marked as X2 readings"
+grep -q "board: Armadillo-X2" <<<"$outx" || bad "x2 note: 'where' names no board"
+
+outf=$(python3 "$tool" --note "$td/note-x2.md" --board "Armadillo-X2 (bench)" 2>"$d/ef") || bad "--board free text refused: $(cat "$d/ef")"
+perblock "$outf" "Armadillo-X2 (bench)" "--board free text"
+
+outv=$(python3 "$tool" --note "$td/note-x2.md" --board verdin 2>"$d/ev") || bad "--board verdin refused: $(cat "$d/ev")"
+grep -q "Verdin iMX8M Plus" <<<"$outv" || bad "--board verdin names no board"
+if grep -q "Armadillo-X2" <<<"$outv"; then bad "--board verdin printed Armadillo-X2"; fi
+
+outn=$(python3 "$tool" --note "$td/note-verdin.md" 2>"$d/en") || bad "verdin fixture refused: $(cat "$d/en")"
+grep -q "Verdin iMX8M Plus, GC7000UL" <<<"$outn" || bad "verdin note keeps the pre-rule wording"
+grep -q "board: Verdin iMX8M Plus" <<<"$outn" || bad "verdin note: 'where' names no board"
+if grep -q "Armadillo-X2" <<<"$outn"; then bad "verdin note printed Armadillo-X2"; fi
+
+outb=$(python3 "$tool" --note "$td/note-no-board-mention.md" 2>"$d/eb") || bad "no-board fixture refused: $(cat "$d/eb")"
+perblock "$outb" "Armadillo-X2" "note naming no board (owner's-rule default)"
+
+# 192.0.2.0/24 is reserved (RFC 5737): a fixture address, never a lab one.
+if python3 "$tool" --note "$td/note-x2.md" --board "192.0.2.99" >/dev/null 2>"$d/e10"; then bad "--board with an address accepted"; fi
+grep -q "redaction" "$d/e10" || bad "--board address refusal names no redaction"
+if python3 "$tool" --note "$td/note-x2.md" --board "/dev/ttyUSB3" >/dev/null 2>&1; then bad "--board with a tty path accepted"; fi
+if python3 "$tool" --note "$td/note-x2.md" --board "" >/dev/null 2>&1; then bad "empty --board accepted"; fi
+
+if printf '%s\n' "$outx" "$outf" "$outv" "$outn" "$outb" | grep -En '([0-9]{1,3}\.){3}[0-9]{1,3}|/dev/tty|ttyUSB|ttyACM|ts\.net|password'; then
+  bad "forbidden text in board-wording output"
+fi
 
 if [ "$fail" = 0 ]; then echo "imx8mp-glmark2-issue-texts-selftest: ok"; fi
 exit "$fail"
