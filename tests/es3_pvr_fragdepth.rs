@@ -11,7 +11,9 @@
 //! in a variant that rewrites the outputs as colour (several sRGB
 //! attachments, an integer render target). A depth written with a discard
 //! (`depthf` under the kill test's p0, after `alphaf`), beside several colour
-//! outputs and in a blend variant builds.
+//! outputs and in a blend variant builds. Every `depthf` group carries the
+//! output-lock check (`olchk`) pco sets on it, also when `gl_FragDepth` is
+//! written after control flow (dEQP's failing fragdepth shapes).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
@@ -319,4 +321,66 @@ fn deqp_fragdepth_programs_compile() {
         }
     }
     assert!(bad.is_empty(), "{bad:#?}");
+}
+
+/// Every `depthf` group of a program: (`olchk`, `cc`) of its header.
+fn depthf_headers(image: &[u8]) -> Vec<(Option<u32>, Option<u32>)> {
+    let mut off = 0usize;
+    let mut out = Vec::new();
+    while off < image.len() {
+        let g = decode_group(image, off).expect("decodes");
+        if g.instrs().any(|(_, ph, r)| ops_for(r, ph).next().is_some_and(|o| o.name == "depthf")) {
+            out.push((g.hdr.get("olchk"), g.hdr.get("cc")));
+        }
+        off += g.total;
+    }
+    out
+}
+
+/// A `gl_FragDepth` written after control flow (a dynamic conditional, a
+/// uniform loop, dEQP's two programs) and the straight-line one: every
+/// `depthf` group carries the output-lock check, as pco's `isp_feedback`
+/// sets it (`.olchk = tctx->olchk`) and the discard feedback `alphaf`
+/// already does. With a discard as well, `depthf` keeps its predicate
+/// (`if(p0)`, the kill test's) beside the check; without one it is not
+/// predicated, as before.
+#[test]
+fn depthf_carries_the_output_lock_check_after_control_flow() {
+    let deqp = |n: &str| {
+        let (name, decl, body) = DEQP.iter().find(|c| c.0 == n).copied().unwrap();
+        deqp_source(name, decl, body)
+    };
+    let cases = [
+        ("dynamic conditional", fragment("if (v.y < 0.5) gl_FragDepth = v.x; else gl_FragDepth = 1.0 - v.x;")),
+        ("loop", fragment("gl_FragDepth = 0.0; for (int i = 0; i < int(d * 4.0); i++) gl_FragDepth += 0.25;")),
+        ("dEQP dynamic_conditional_write", deqp("dynamic_conditional_write")),
+        ("dEQP uniform_loop_write", deqp("uniform_loop_write")),
+        ("straight line", fragment("gl_FragDepth = d;")),
+    ];
+    let mut cc_free = None;
+    for (what, src) in &cases {
+        let r = compile(src).unwrap_or_else(|e| panic!("{what}: {e}"));
+        assert_eq!(r.writes_depth, 1, "{what}");
+        let h = depthf_headers(&r.image);
+        assert!(!h.is_empty(), "{what}: no depthf group");
+        for (olchk, cc) in &h {
+            assert_eq!(*olchk, Some(1), "{what}: a depthf group without olchk: {h:?}");
+            cc_free.get_or_insert(*cc);
+            assert_eq!(*cc, cc_free.unwrap(), "{what}: depthf predicated without a discard: {h:?}");
+        }
+    }
+    /* with a discard, under p0 and with the check: cc differs from the
+     * unpredicated groups above. */
+    for body in [
+        "if (v.x < 0.5) discard; if (v.y < 0.5) gl_FragDepth = v.x; else gl_FragDepth = d;",
+        "if (v.x < 0.5) discard; gl_FragDepth = d;",
+    ] {
+        let r = compile(&fragment(body)).unwrap_or_else(|e| panic!("{body}: {e}"));
+        let h = depthf_headers(&r.image);
+        assert!(!h.is_empty(), "{body}: no depthf group");
+        for (olchk, cc) in &h {
+            assert_eq!(*olchk, Some(1), "{body}: a depthf group without olchk: {h:?}");
+            assert_ne!(*cc, cc_free.unwrap(), "{body}: depthf not under the kill test's p0: {h:?}");
+        }
+    }
 }

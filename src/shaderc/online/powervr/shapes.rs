@@ -627,23 +627,41 @@ pub const ALPHA_FEEDBACK: Template = Template {
 
 /// `depthf`: the fragment's depth, already clamped to [0, 1], in `s0`,
 /// handed to the ISP (the draw's pass type is DEPTH_FEEDBACK, and its
-/// program's record says so -- `ShcShader::writes_depth`). No destination and
-/// no output-lock check: pco's `ref_needs_olchk` (`pco_legalize.c`) sets
-/// that only for a pixel output write, and pco_map.py's group_map(O_DEPTHF)
-/// has no header of its own beyond the group's; a `wdf` follows it, as the
-/// kill path's feedback above does. The one program-level difference from
-/// pco is the fusion it skips: pco wires the `fsat` result into `s0`
-/// directly from `w0` in the same group; this builder leaves the clamped
-/// value in a temporary the group loads, as the kill test and the pixel
-/// write load theirs. Not yet checked against a pco program (the corpus has
-/// none that writes `gl_FragDepth`): the host test pins the program the
-/// chain builds, the AM62P run of `fbo.depth` is the check of the encoding.
+/// program's record says so -- `ShcShader::writes_depth`). No destination,
+/// and the output-lock check set, as pco sets it: `trans_nir`'s
+/// `isp_feedback` builds `depthf` with `.olchk = tctx->olchk`
+/// (`pco_trans_nir.c`, true for every fragment shader without
+/// `olchk_skip`), and pco_map.py's group_map(O_DEPTHF) carries it into the
+/// header (`OM_OLCHK`); `ref_needs_olchk` (`pco_legalize.c`) moves it only
+/// off a pixel output reference, which `depthf`'s temporary is not. This is
+/// the check [`ALPHA_FEEDBACK`], the discard feedback, already carries. A
+/// `wdf` follows it, as the kill path's feedback above does.
+///
+/// pco also predicates the feedback: `lower_isp_fb` (`pco_nir_pvfio.c`)
+/// always ORs a sample-coverage test (`(1 << sample_id) & sample_mask_in ==
+/// 0`) into the discard flag, so its `depthf` is always under p0 (`E1_Z1`).
+/// Without a discard this builder computes no p0 and runs the group
+/// unconditionally (`E1_ZX`): on a single-sampled target the coverage test
+/// of an invoked fragment's own sample is never true, so p0 would be set for
+/// every fragment and the two agree. On a multisampled target they may not
+/// (sample 0 uncovered, another sample covered): that test is not modelled
+/// here. With a discard, [`DEPTH_FEEDBACK_KEPT`] is under p0 as pco's
+/// (the kill flag only, without the coverage term).
+///
+/// The one program-level difference from pco beyond that is the fusion it
+/// skips: pco wires the `fsat` result into `s0` directly from `w0` in the
+/// same group; this builder leaves the clamped value in a temporary the
+/// group loads, as the kill test and the pixel write load theirs. Not yet
+/// checked against a pco program (the corpus has none that writes
+/// `gl_FragDepth`): the host test pins the program the chain builds, the
+/// AM62P run of `shaders.fragdepth` and `fbo.depth` is the check of the
+/// encoding.
 pub const DEPTH_FEEDBACK: Template = Template {
     name: "depthf",
     bitwise: false,
     dst: false,
     dst_w1: false,
-    header: &[],
+    header: &[("olchk", "1")],
     steps: &[Step { op: "depthf", phase: super::isa::PH_BACKEND, fields: &[] }],
     slots: [Some(Arg::Op(0)), None, None, None, None, None],
     mux: None,
@@ -653,13 +671,15 @@ pub const DEPTH_FEEDBACK: Template = Template {
 /// [`DEPTH_FEEDBACK`] in a shader that also discards: executed under p0 (the
 /// header's `if(p0)`, set by [`KILL_TEST`] when the fragment is kept), after
 /// [`ALPHA_FEEDBACK`] and before the shared `wdf`. A killed fragment writes
-/// no depth, as Mesa's `isp_feedback` predicates `depthf` under the kill.
+/// no depth, as Mesa's `isp_feedback` predicates `depthf` under the kill
+/// (`E1_Z1`), and the group carries the same output-lock check as
+/// [`DEPTH_FEEDBACK`] and [`ALPHA_FEEDBACK`].
 pub const DEPTH_FEEDBACK_KEPT: Template = Template {
     name: "depthf",
     bitwise: false,
     dst: false,
     dst_w1: false,
-    header: &[("cc", "if(p0)")],
+    header: &[("cc", "if(p0)"), ("olchk", "1")],
     steps: &[Step { op: "depthf", phase: super::isa::PH_BACKEND, fields: &[] }],
     slots: [Some(Arg::Op(0)), None, None, None, None, None],
     mux: None,
