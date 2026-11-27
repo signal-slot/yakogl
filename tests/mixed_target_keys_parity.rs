@@ -249,15 +249,17 @@ fn a_three_target_mix() {
     agree(&[GL_R32UI, GL_RGBA8, GL_RGBA16F]);
 }
 
+/// A mix of float classes (no integer layout) has a key on both sides too.
+#[test]
+fn a_float_class_mix() {
+    agree(&[GL_RGBA8, GL_RGBA16F]);
+    agree(&[GL_RGBA8, GL_R32F]);
+}
+
 #[test]
 fn not_a_mix_agrees_on_no_key() {
-    let lists: [&[u32]; 5] = [
-        &[GL_R32UI],
-        &[GL_R32UI, GL_R32UI],
-        &[GL_R32UI, GL_R32UI, GL_R32UI],
-        &[GL_RGBA8, GL_RGBA8],
-        &[GL_RGBA8, GL_RGBA16F],
-    ];
+    let lists: [&[u32]; 4] =
+        [&[GL_R32UI], &[GL_R32UI, GL_R32UI], &[GL_R32UI, GL_R32UI, GL_R32UI], &[GL_RGBA8, GL_RGBA8]];
     for f in lists {
         let (gl_list, gl_mixed) = gl_side(f);
         let d = draw_of(f);

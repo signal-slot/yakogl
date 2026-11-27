@@ -4962,6 +4962,22 @@ fn the_pbe_twiddle_probe_sets_the_memlayout_and_log2_sizes_and_is_off_by_default
     assert_eq!((tw.frag.pbe_word[0][1] >> 32) & 0x3fff, 15, "maxclip_x unchanged");
 }
 
+/// The program a draw into a mix of float classes runs: the variant of the
+/// draw's mixed key writing the registers its layout spans (the gate of
+/// [`int_targets_drawn`] checks both, a draw without one is refused).
+fn mixed_fs(d: &GlesDraw) -> ShcShader {
+    use super::super::target_keys::*;
+    let (keys, k) = draw_target_keys(d).expect("target keys");
+    let (_, span) = crate::target_key::shc_mixed_out_layout(&keys[..k]).expect("a layout");
+    ShcShader {
+        meta_off: SHC_NO_META,
+        temps: 3,
+        num_outputs: span,
+        blend_key: draw_mixed_key(d).expect("a mix"),
+        ..ShcShader::ZERO
+    }
+}
+
 /// [`mrt_clear_dwords`]: a clear of several 8-bit attachments uploads the
 /// packed colour once per attachment, kicks the background object with the
 /// program of as many output dwords (two: the RGBA16F one, which is the same
@@ -4990,6 +5006,10 @@ fn a_clear_of_several_8bit_attachments_writes_every_output() {
             };
         }
         d.target_gpu = d.targets[0].gpu;
+        let fs = if float_last { Some(mixed_fs(&d)) } else { None };
+        if let Some(f) = fs.as_ref() {
+            d.fs = f;
+        }
         assert_eq!(draw(&d), 0);
         let (bg, own) = (rig.b().bg_color.gpu, rig.b().bg_kick_off);
         assert_eq!(pvr_backend_flush(), 0);
@@ -6105,6 +6125,10 @@ fn a_frame_into_several_float_targets_loads_each_back() {
         d.num_targets = 2;
         d.targets[0] = GlesDrawTarget { gpu: d.target_gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 };
         d.targets[1] = GlesDrawTarget { gpu: d.target_gpu + 0x10_0000, w: 32, h: 32, format: second, out_shift: 0 };
+        let fs = (second != GLES_SURF_RGBA8888).then(|| mixed_fs(&d));
+        if let Some(f) = fs.as_ref() {
+            d.fs = f;
+        }
         assert_eq!(draw(&d), 0, "{}", gles_surf_name(second));
         let (b, fl) = (rig.b(), rig.fbload());
         assert_eq!(b.frame_quads, 2, "{}: one load per attachment", gles_surf_name(second));
