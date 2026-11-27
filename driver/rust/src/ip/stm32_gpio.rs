@@ -3,7 +3,7 @@
 //! One GPIO bank of the STM32MP25 (RM0457 GPIO chapter): alternate function,
 //! output, level and input, plus the per-pin RIF registers (`SECCFGR`,
 //! `PRIVCFGR`, `CIDCFGR`, `SEMCR`). The bank's base address is the caller's;
-//! [`bank_base`] gives the ones in ST's `stm32mp251.dtsi` (GPIOA..GPIOK
+//! `bank_base` gives the ones in ST's `stm32mp251.dtsi` (GPIOA..GPIOK
 //! 0x44240000 + 0x10000 * n, GPIOZ 0x46200000).
 //!
 //! Register order follows Linux `drivers/pinctrl/stm32/pinctrl-stm32.c`:
@@ -21,8 +21,8 @@
 //! `SEMWL` (bits 23:16); `SEMCR[n]` (0x54 + 8 n) holds `MUTEX` (bit 0) and
 //! `SCID` (bits 5:4) of the holder. Linux checks a bank's pins against these
 //! before it takes them (the stm32mp25 RIF check in pinctrl-stm32.c); here
-//! [`access`] does it for a compartment ID the caller names. The A35 side of
-//! ST's images runs as CID 1 ([`CID_A35`]). The code sets none of them: the
+//! `access` does it for a compartment ID the caller names. The A35 side of
+//! ST's images runs as CID 1 (`CID_A35`). The code sets none of them: the
 //! secure side owns the RIF registers. `PRIVCFGR` is not checked: the A35
 //! image runs privileged (EL1).
 

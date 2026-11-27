@@ -47,7 +47,7 @@
 //!   proof that frames are timed. ST's MP25 (r3.1) adds, per layer, the
 //!   burst length (`L1BLCR`, from the DT's `st,burstlen` / 8, 0 when absent;
 //!   only for `st,stm32mp21-ltdc`/`st,stm32mp25-ltdc`, so the caller passes
-//!   it in [`Output::burst_bytes`]), the default colour `L1DCCR` = black, the
+//!   it in `Output::burst_bytes`), the default colour `L1DCCR` = black, the
 //!   blending order field (`BOR`, zpos 0) in `BFCR`, and `EDCR` = 0 (output
 //!   YCbCr conversion off, `ycbcr_output`).
 //! - Layer (`ltdc_plane_atomic_update`): `WHPCR`/`WVPCR` hold the window
@@ -68,22 +68,22 @@
 //!   underrun error, `CRCIF` (7) CRC mismatch, `FURIF` (8) rotation FIFO
 //!   underrun (RM0457 Rev 5 §53.8.13-15, Table 501). The frame wait follows
 //!   docs/notes/stm32mp257f-dk-display-bringup.md, "CRC and frame wait", fix
-//!   spec steps 4-9: [`Ltdc::wait_frame`] sets `IER.LIE` as ST does
+//!   spec steps 4-9: `Ltdc::wait_frame` sets `IER.LIE` as ST does
 //!   (`ltdc_crtc_enable_vblank` :1454-1456, `ltdc_crtc_set_crc_source`
 //!   :1488-1490), clears `LIF` and then samples `ISR` and the scan line
 //!   `CPSR.CYPOS` (:86, :197, `ltdc_crtc_get_scanout_position` :1413-1415)
 //!   each step; a frame event is `LIF` or a `CYPOS` wrap, whichever comes
-//!   first ([`FrameVia`]), because on the DK `ISR` read 0 with `LIE` set
+//!   first (`FrameVia`), because on the DK `ISR` read 0 with `LIE` set
 //!   (board-display4, finding 1). Per event `ISR` is written to `ICR`
 //!   (`ltdc_irq` :1051-1052) and, for the CRC, `CCRCR` is read right after
-//!   (:1053-1054). [`Ltdc::frame_diag`] reads `ISR`, `IER`, `CPSR` twice,
+//!   (:1053-1054). `Ltdc::frame_diag` reads `ISR`, `IER`, `CPSR` twice,
 //!   `CDSR` (:87) and `GCR` after a timeout.
 //! - Read-backs (fix spec steps 1-3): `configure` reads `LIPCR` back
-//!   ([`Configured::lipcr`]); `enable` reads `IER` back and, after the reload,
+//!   (`Configured::lipcr`); `enable` reads `IER` back and, after the reload,
 //!   `LxCR.LEN` and `GCR.LTDCEN`; `set_fb` also `LxCFBAR`. The non-layer
 //!   registers are not shadowed (R5 §53.5.20), so a read-back that differs is
 //!   a write-path fault, not a pending reload.
-//! - Scan-out check (fix spec checks 10-12): [`Ltdc::scanout_check`] counts
+//! - Scan-out check (fix spec checks 10-12): `Ltdc::scanout_check` counts
 //!   frame events, reads the layer back before and after them and collects
 //!   the error flags, with an `RRIF` positive control so that an `ISR` that
 //!   latches nothing is reported as "errors unobservable", not as clean.
@@ -110,8 +110,8 @@
 //!   R5 §53.8.25, a 16-bit signature of each frame's pixels, R5 §53.5.17)
 //!   once per line interrupt, right after `ISR` was written to `ICR`, and
 //!   `ltdc_irq_thread` drops the first `CRC_SKIP_FRAMES` (2) values after the
-//!   enable (:1017-1018). [`Ltdc::crc_enable`] and [`Ltdc::frame_crc`] do the
-//!   same; [`Ltdc::crc_pin`] arms the hardware comparison (`ECRCR` 0x78,
+//!   enable (:1017-1018). `Ltdc::crc_enable` and `Ltdc::frame_crc` do the
+//!   same; `Ltdc::crc_pin` arms the hardware comparison (`ECRCR` 0x78,
 //!   R5 §53.8.24, `IER.CRCIE` bit 7) for the board's latch-point experiment.
 //!   This module knows the version but not the RIF state: the caller passes
 //!   whether layer 3 is secure (RIFSC entry 120) to `crc_enable`. The CRC

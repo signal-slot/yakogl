@@ -77,7 +77,7 @@ impl From<&GpuUp> for YdImx95GpuPower {
 /// The i.MX 95's record in the OSAL's `struct yd_t6_gpu_up`: the GPU's own
 /// part (the identity before and after the reset, the reset, the L2) and
 /// where the run stopped; the RK3588's words (PMU, CRU, RK806, SPI2, QoS,
-/// take-over) stay 0. The SCMI part is [`YdImx95GpuPower`].
+/// take-over) stay 0. The SCMI part is `YdImx95GpuPower`.
 impl From<&GpuUp> for YdT6GpuUp {
     fn from(g: &GpuUp) -> YdT6GpuUp {
         YdT6GpuUp {

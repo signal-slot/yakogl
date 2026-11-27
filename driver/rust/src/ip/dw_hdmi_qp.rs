@@ -7,7 +7,7 @@
 //! and the status read-back. Step D6 of `driver/docs/nanopc-t6-display.md`
 //! (section 7); the facts are its section 1 "DW HDMI QP TX0".
 //!
-//! This is not a variant of [`crate::ip::dw_hdmi_tx`] (the older 8-bit
+//! This is not a variant of `crate::ip::dw_hdmi_tx` (the older 8-bit
 //! DesignWare HDMI TX of the i.MX 8M Plus): the QP controller has 32-bit
 //! registers and takes the timing from the VOP; it is programmed with no
 //! timing at all.
@@ -28,7 +28,7 @@
 //! 2. Bind (qp.c:1013-1032): `MAINUNIT_0_INT_MASK_N` 0x3014 = 0,
 //!    `MAINUNIT_1_INT_MASK_N` 0x3024 = 0 (qp.h:761, :776), then
 //!    `TIMER_BASE_CONFIG0` 0x80 (qp.h:35) = 428571429, the reference clock in
-//!    Hz as Linux assumes it ([`LINUX_TIMER_BASE_HZ`]); the board passes the
+//!    Hz as Linux assumes it (`LINUX_TIMER_BASE_HZ`); the board passes the
 //!    rate the dump's `clk_summary` gives (note, U14). The T6 measured
 //!    `clk_hdmitx0_ref` = 428571429 Hz under Linux 6.18 on 2026-11-12, so
 //!    the value is confirmed for this board. Linux then resets and
@@ -50,7 +50,7 @@
 //!    enable before the port started ended in a synchronous external abort
 //!    at its first access, `HDCP2LOGIC_CONFIG0` (FAR 0xfde808e0, ESR
 //!    0x96000010); after the port started it passed, and `CMU_STATUS` read
-//!    0x00000200 then (no clock reported off). So [`enable`] first reads
+//!    0x00000200 then (no clock reported off). So `enable` first reads
 //!    `CMU_STATUS` and waits, bounded, for `IPI_CLK_OFF` (bit 1) and
 //!    `VIDQPCLK_OFF` (bit 3) to read 0 (qp.h:48-49); still set, it refuses
 //!    with nothing written. Whether `CMU_STATUS` itself answers without the
@@ -75,14 +75,14 @@
 //!    0x40, `TMDS_FIFO_CONTROL0` 0x974, `PKTSCHED_PKT_SEND` 0xab0 (qp.h:23,
 //!    :183, :216; note section 6). Nothing here reads them or writes them.
 //! 8. Left out, besides the I2C master, InfoFrames and audio: scrambling
-//!    (Linux uses it only above 340 MHz, which [`tmds_char_rate`] refuses),
+//!    (Linux uses it only above 340 MHz, which `tmds_char_rate` refuses),
 //!    CEC, HDCP 1.4, and the main interrupt (Linux requests it, qp.c:1071;
 //!    here its masks stay 0 and nothing takes it: every status is polled).
-//! 9. Nothing here waits on hot-plug: [`hpd`] is a single read for the
+//! 9. Nothing here waits on hot-plug: `hpd` is a single read for the
 //!    status line. The T6's panel gives a hot-plug level but no EDID
 //!    (board, Linux 6.18, 2026-11-12: sys_grf `SOC_STATUS1` bit 16 reads 1,
 //!    the connector is connected, its EDID is 0 bytes), so the board uses
-//!    one fixed mode and [`Sink::Dvi`]; Linux too picks DVI when there is
+//!    one fixed mode and `Sink::Dvi`; Linux too picks DVI when there is
 //!    no EDID.
 //!
 //! The RK3588 glue (glue, and dtsi:1606-1630: the controller's
@@ -114,14 +114,14 @@
 //! bit 1 (port 0) or 4 (port 1) = 1, and vo1_grf `GRF_VO1_CON0` 0x00 bits
 //! 6:5 (port 0) or 8:7 (port 1) = a sync polarity field (vop2.h:400-401).
 //! They belong to the VOP's enable (step D1 / D7), so this module only forms
-//! them ([`vop_grf_con2_word`], [`vo1_con0_sync_word`]) and writes neither.
+//! them (`vop_grf_con2_word`, `vo1_con0_sync_word`) and writes neither.
 //! The field Linux v6.18 writes is not the plain "hsync, vsync positive"
 //! pair: the VOP builds flags with bit 0 = +hsync, bit 1 = +vsync, bit 3 =
 //! dclk inverted (vop2.c:1655-1661; `rockchip_drm_vop.h:346-347`,
 //! vop2.h:770), and the RK3588 HDMI case tests them against DRM's NHSYNC
 //! (bit 1) and NVSYNC (bit 3) (vop2_reg.c:1660-1668; `drm_mode.h:71-74`), so
 //! field bit 0 follows +vsync and field bit 1 the dclk inversion (0 for
-//! HDMI). [`linux_sync_field`] reproduces it, so the image can equal the
+//! HDMI). `linux_sync_field` reproduces it, so the image can equal the
 //! dump; what the bits mean in hardware is not in any source we have.
 
 use crate::mmio::Mmio;

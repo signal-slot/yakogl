@@ -31,7 +31,7 @@
 //! another did not would be left paging. Here each set is looked at on its
 //! own: a set with paging enabled is stalled and switched off, a set without
 //! it gets only the two register writes, and the result is checked on every
-//! set. [`paging_off`] fails by name when a set keeps paging.
+//! set. `paging_off` fails by name when a set keeps paging.
 
 use crate::mmio::Mmio;
 

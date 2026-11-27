@@ -38,7 +38,7 @@
 //!    is read as `RXFLR` says.
 //!
 //! What this does differently: it polls `RXFLR` instead of taking the
-//! interrupt, so it refuses a transfer longer than [`MAX_LEN`] (well inside
+//! interrupt, so it refuses a transfer longer than `MAX_LEN` (well inside
 //! any FIFO the driver detects, `get_fifo_len`, :224-237:
 //! `ROCKCHIP_SPI_VER2_TYPE*` 64), and it masks the controller's
 //! interrupts (`IMR` 0).
@@ -68,7 +68,7 @@ pub const CTRLR0_8BIT_TR_MODE0: u32 = (1 << 13) | (1 << 11) | (1 << 10) | 1;
 /// The longest transfer this polls through the FIFO in one go.
 pub const MAX_LEN: usize = 16;
 
-/// Why [`transfer`] refused. The value crosses to C, one number per cause.
+/// Why `transfer` refused. The value crosses to C, one number per cause.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum SpiRefusal {

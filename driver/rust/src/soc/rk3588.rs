@@ -105,8 +105,8 @@ pub const NPLL: Pll = Pll { con: 120, mode_shift: 0 };
 pub const XIN24M_HZ: u64 = 24_000_000;
 
 /// The rate of a `pll_rk3588` from its three `PLL_CON` words:
-/// 24 MHz · (m + k / 65535) / p >> s, with m = CON0[9:0], p = CON1[5:0],
-/// s = CON1[8:6], k = CON2[15:0] (clk-pll.c:856-864, 887-927). `None`
+/// 24 MHz · (m + k / 65535) / p >> s, with m = CON0\[9:0\], p = CON1\[5:0\],
+/// s = CON1\[8:6\], k = CON2\[15:0\] (clk-pll.c:856-864, 887-927). `None`
 /// for p = 0 (no rate).
 pub const fn pll_hz(con0: u32, con1: u32, con2: u32) -> Option<u64> {
     let m = (con0 & 0x3ff) as u64;
@@ -124,10 +124,10 @@ pub const fn pll_hz(con0: u32, con1: u32, con2: u32) -> Option<u64> {
 }
 
 /// What the CRU says of the GPU's clock: `CLK_GPU_SRC` is a 3-bit mux
-/// (CLKSEL_CON(158)[7:5]: gpll, cpll, aupll, npll, spll) and a 5-bit
-/// divider ([4:0]); `CLK_GPU`, `CLK_GPU_COREGROUP` and `CLK_GPU_STACKS` are
+/// (CLKSEL_CON(158)\[7:5\]: gpll, cpll, aupll, npll, spll) and a 5-bit
+/// divider (\[4:0\]); `CLK_GPU`, `CLK_GPU_COREGROUP` and `CLK_GPU_STACKS` are
 /// gates 4, 6 and 7 of CLKGATE_CON(66) after it, `CLK_GPU_SRC`'s own gate
-/// is bit 1, and `CLK_GPU_STACKS` has its own divider in CLKSEL_CON(159)[4:0]
+/// is bit 1, and `CLK_GPU_STACKS` has its own divider in CLKSEL_CON(159)\[4:0\]
 /// (clk-rk3588.c:1353-1363). Bit 14 of CLKSEL_CON(158) switches the GPU to
 /// the GPU PVTPLL (a ring oscillator in the GPU GRF), a field Linux does not
 /// name: TF-A's rk3588 SCMI clock driver sets it to put the GPU on the
@@ -379,7 +379,7 @@ pub struct ClockSet {
 ///
 /// Kept, nothing written: `CLK_GPU_SRC` is a PLL this reads, in normal
 /// mode, whose rate over the divider is exactly an OPP rate
-/// ([`gpu_opp_rate`]), and the stacks divider (CLKSEL_CON(159)[4:0]) is 1.
+/// (`gpu_opp_rate`), and the stacks divider (CLKSEL_CON(159)\[4:0\]) is 1.
 /// Whether that PLL is powered is not this decision's: the caller powers it
 /// ([`pll_on`]) as it does today.
 ///

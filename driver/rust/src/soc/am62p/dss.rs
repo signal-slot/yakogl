@@ -139,7 +139,7 @@ pub struct DssData {
     /// and one more that may be scanned: a commit replaced it while it may
     /// have been latched (0: none).
     pub app_addr_unsure: AtomicU64,
-    /// GO writes of every writer begun and ended ([`commit`]): a GO write by
+    /// GO writes of every writer begun and ended (`commit`): a GO write by
     /// another writer between two reads of the GO bit shows in them.
     pub go_enter: AtomicU32,
     pub go_exit: AtomicU32,
@@ -290,7 +290,7 @@ fn write_and_go(m: &impl Mmio, d: &DssData, mut f: impl FnMut()) -> Written {
 /// is counted in `go_enter` / `go_exit`. So with no GO write by anyone else:
 ///
 /// - GO clear before this commit: the last commit was latched, the plane
-///   scans exactly its address ([`app_settled`]);
+///   scans exactly its address (`app_settled`);
 /// - GO set before this commit and still set at its GO read, and set ever
 ///   since the last commit's GO (its mark): nothing was latched since that
 ///   commit wrote its address, so that buffer (`old`) was never scanned and

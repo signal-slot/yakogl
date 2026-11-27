@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Rockchip RK806 PMIC on SPI: the frame of a register read, the meaning
 //! of the registers that say whether a buck converter is on and at what
-//! voltage, and exactly one write frame, [`dcdc1_enable_frame`].
+//! voltage, and exactly one write frame, `dcdc1_enable_frame`.
 //!
 //! The NanoPC-T6's RK806 supplies the whole board, and a wrong write turns it
 //! off, so the module can build no write that takes a register or a value.

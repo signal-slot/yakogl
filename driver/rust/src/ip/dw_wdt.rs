@@ -7,7 +7,7 @@
 //! Why: a Zephyr image that Linux kexecs, or that U-Boot starts, must not
 //! depend on an earlier stage having armed the watchdog. Armbian leaves it
 //! stopped (measured on the NanoPC-T6, 2026-10-18: `/sys/class/watchdog/
-//! watchdog0/state` "inactive", `WDT_CR` 0x00000008). [`arm`] leaves it running
+//! watchdog0/state` "inactive", `WDT_CR` 0x00000008). `arm` leaves it running
 //! with the period asked for, set to reset the system on the first timeout,
 //! and reports what it found, so the board says which case it was.
 //!
@@ -37,7 +37,7 @@
 //!    (dw_wdt.c:225-226).
 //! 6. Writing 0x76 to `WDT_CRR` (0x0c) restarts the counter
 //!    (`WDT_CRR_RESTART_KEY`); a write of `TOP` takes effect at the next
-//!    restart, so [`arm`] restarts after writing it.
+//!    restart, so `arm` restarts after writing it.
 //! 7. `WDT_EOI` (0x14) clears the interrupt when READ: nothing here reads it.
 //!
 //! What the system reset resets on the RK3588 (the CRU's global reset

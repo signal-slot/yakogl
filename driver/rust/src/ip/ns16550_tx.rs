@@ -10,11 +10,11 @@
 //!
 //! - `LCR` (0x0c) is read once. With `DLAB` (bit 7) set, offset 0 is the
 //!   divisor latch, not `THR`, and a byte written there would change the baud
-//!   rate: then nothing is written at all ([`Tx::usable`] is false).
+//!   rate: then nothing is written at all (`Tx::usable` is false).
 //! - `LSR` (0x14) is read before each byte until `THRE` (bit 5) is set, at most
-//!   [`POLL_MAX`] times; a read also clears `LSR`'s error bits, which nothing
+//!   `POLL_MAX` times; a read also clears `LSR`'s error bits, which nothing
 //!   here needs. After `POLL_MAX` reads the byte is written anyway and counted
-//!   in [`Tx::timeouts`]: a UART that never drains must not hold the image.
+//!   in `Tx::timeouts`: a UART that never drains must not hold the image.
 //! - `THR` (0x00) is written, one byte per 32-bit store.
 //!
 //! The register offsets are the 16550's (`RBR`/`THR` 0, `LCR` 3, `LSR` 5)

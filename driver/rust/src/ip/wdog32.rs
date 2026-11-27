@@ -5,7 +5,7 @@
 //! state the previous stage left it in, read it back, and refresh (feed) it.
 //!
 //! Why: an image that U-Boot starts with `go` must not depend on U-Boot's
-//! watchdog still running, nor on its timeout. [`arm`] leaves WDOG3 running
+//! watchdog still running, nor on its timeout. `arm` leaves WDOG3 running
 //! with the timeout asked for, configured as Linux configures it on this
 //! module, and reports what it found, so the board says which case it was.
 //!
@@ -30,7 +30,7 @@
 //! 3. `CS.UPDATE` 1 keeps the configuration writable after it is written;
 //!    both drivers write it, so a later stage (Linux after a reset, or this
 //!    image again) can reconfigure. With `UPDATE` 0 the unlock does not take
-//!    and [`arm`] refuses on the read-back.
+//!    and `arm` refuses on the read-back.
 //! 4. On the i.MX 93/95 (`fsl,imx93-wdt`) the counter runs on the LPO
 //!    (32 kHz) through the 256 prescaler: 125 ticks per second
 //!    (imx7ulp_wdt.c `imx93_wdt_hw`: `prescaler_enable`, `wdog_clock_rate`
@@ -42,7 +42,7 @@
 //!    (ulp_wdog.c `IS_ENABLED(CONFIG_ARCH_IMX9)`). On the i.MX 95 the System
 //!    Manager takes WDOG3's timeout as its WDOG3 interrupt
 //!    (imx-sm devices/MIMX95/sm/dev_sm_handlers.c `WDOG3_IRQHandler` ->
-//!    `FaultHandler(DEV_SM_FAULT_WDOG3)`), so [`arm`] sets it when asked
+//!    `FaultHandler(DEV_SM_FAULT_WDOG3)`), so `arm` sets it when asked
 //!    (`ext_reset`) and reads it back.
 //! 6. `WAIT` and `STOP` 1 keep the counter running while the core waits or
 //!    stops (Linux writes both): a `wfi` does not pause the watchdog.

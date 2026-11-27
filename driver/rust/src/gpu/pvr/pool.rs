@@ -553,7 +553,7 @@ impl YdPvrPool {
         f
     }
 
-    /// The summary (five lines, see [`Line`]): at ERR right after an
+    /// The summary (five lines, see `Line`): at ERR right after an
     /// exhaustion, at INF otherwise (the run-end report).
     pub fn report(&mut self, k: &YdPvrKm, b: &Bumps, exhausted: bool) {
         let mut free = [FreeOf::default(); POOL_HEAPS];

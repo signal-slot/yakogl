@@ -155,15 +155,15 @@
 //!     ports it uses (c:2474-2484).
 //!
 //! The take-over from a system that left the VOP running (route (a) of
-//! driver/docs/nanopc-t6-display.md, section 2): (1) [`take_over`] finds
+//! driver/docs/nanopc-t6-display.md, section 2): (1) `take_over` finds
 //! the running ports itself (`DSP_CTRL` STANDBY clear: VP0, and VP1 when
 //! Linux drives the second output), disables every window except the one
 //! asked to keep (refused if that one is already enabled), writes
 //! `REG_CFG_DONE` for the running ports and waits for one frame start on
 //! each; (2)
 //! `rk_iommu::paging_off`, so nothing fetches through Linux's page tables
-//! any more by the time they stop being used; (3) [`overlay_single`] and
-//! [`window_show`] with our buffer. Doing (2) before (1) would let Linux's
+//! any more by the time they stop being used; (3) `overlay_single` and
+//! `window_show` with our buffer. Doing (2) before (1) would let Linux's
 //! windows read their IOVAs as physical addresses for up to a frame; doing
 //! (3) before (1) leaves Linux's windows enabled outside every port's layer
 //! range, whose fetch behaviour the source does not tell.

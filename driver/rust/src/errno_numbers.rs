@@ -5,10 +5,10 @@
 //! C as a bare number, so a Rust crate must use the numbering of the C
 //! library on the other side of that boundary:
 //!
-//! - the driver crate (`yakogl_drivers::errno`): [`ZEPHYR`], its only C
+//! - the driver crate (`yakogl_drivers::errno`): `ZEPHYR`, its only C
 //!   library;
-//! - the YakoGL crate (`src/util.rs`, which includes this file): [`numbering`]
-//!   of its OSAL, [`ZEPHYR`] for the Zephyr OSALs and [`LINUX`] for the
+//! - the YakoGL crate (`src/util.rs`, which includes this file): `numbering`
+//!   of its OSAL, `ZEPHYR` for the Zephyr OSALs and `LINUX` for the
 //!   others.
 //!
 //! The names below 35 and `ENODATA` are the same in both; `ESHUTDOWN`,

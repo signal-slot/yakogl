@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The Synopsys DesignWare MIPI DSI host controller ("DSI", 0x4800_0000 on the
 //! STM32MP25, IP version 1.41) driving a video-mode link, with the PHY behind
-//! [`Phy`] (on the MP25: ST's wrapper and PLL, `ip::stm32_dsi_phy`).
+//! `Phy` (on the MP25: ST's wrapper and PLL, `ip::stm32_dsi_phy`).
 //!
 //! Facts from Linux v6.18 (commit 7d0a66e4bb90; GPL-2.0: facts and file:line
 //! only, nothing copied), `drivers/gpu/drm/bridge/synopsys/dw-mipi-dsi.c`,
@@ -40,15 +40,15 @@
 //! 9. two frames (:288-295, :1016), then command mode with the clock lane
 //!    requested in HS (continuous unless the device allows otherwise) and
 //!    `PWR_UP` 1 (:628-648), and `phy_ops->power_on` (:1021);
-//! 10. [`video_on`]: the same switch to video mode (:1052).
+//! 10. `video_on`: the same switch to video mode (:1052).
 //!
 //! Where this driver differs from Linux, and why:
 //!
 //! - Linux only logs a PHY that does not lock or a clock lane that does not
-//!   reach the stop state (:919-926) and carries on; [`attach`] stops there
+//!   reach the stop state (:919-926) and carries on; `attach` stops there
 //!   with `-ETIMEDOUT` and the step, so a dead link is reported where it
 //!   died. A PHY whose lock is not reported in `PHY_STATUS` says so
-//!   ([`Phy::lock_in_phy_status`]); the lock wait is then skipped.
+//!   (`Phy::lock_in_phy_status`); the lock wait is then skipped.
 //! - Linux carries on when a `phy_ops` hook fails (:991, :1011, :859); here
 //!   the error stops the attach.
 //! - `VID_NUM_CHUNKS` and `VID_NULL_SIZE`: Linux never writes them (its TODO
@@ -57,22 +57,22 @@
 //!   cannot keep chunks Linux would not have.
 //! - `DATAEN_ACTIVE_LOW`: mainline never sets it; ST's tree sets it for a
 //!   connector whose bus flags say DE low (ST dw-mipi-dsi.c:695-696). It is
-//!   set here from [`VideoMode::de_high`].
+//!   set here from `VideoMode::de_high`.
 //! - Linux's burst-mode line time multiplies in 32 bits (:785); here in 64.
 //! - The version: Linux's ST glue accepts IP 1.30, 1.31 and 1.41 only
-//!   (ST dw_mipi_dsi-stm.c:1344-1351); [`probe`] does the same. A SoC whose
+//!   (ST dw_mipi_dsi-stm.c:1344-1351); `probe` does the same. A SoC whose
 //!   glue names no version list (the i.MX 95: NXP's `imx95-mipi-dsi.c`
 //!   checks none, and hal_nxp's `PERI_MIPI_DSI.h` gives no reset value for
-//!   `VERSION`) uses [`probe_at_least`]: any Synopsys "1.xy" version from a
+//!   `VERSION`) uses `probe_at_least`: any Synopsys "1.xy" version from a
 //!   floor up, the floor being the `PHY_TMR_CFG` layout its header documents.
 //!
 //! The i.MX 95 (`soc::imx95::dsi`) drives this host unchanged, with its own
-//! [`Phy`] (`soc::imx95::combo_phy`), which reaches the combo D-PHY's
-//! registers through the host's PHY test interface ([`regs::PHY_TST_CTRL0`],
-//! [`regs::PHY_TST_CTRL1`]).
+//! `Phy` (`soc::imx95::combo_phy`), which reaches the combo D-PHY's
+//! registers through the host's PHY test interface (`regs::PHY_TST_CTRL0`,
+//! `regs::PHY_TST_CTRL1`).
 //!
 //! Not used on the ADV7535 path, kept minimal: command-mode writes
-//! ([`transfer`], :374-465, generic and DCS writes as drm_mipi_dsi.c builds
+//! (`transfer`, :374-465, generic and DCS writes as drm_mipi_dsi.c builds
 //! them); reads, dual-link and the video pattern generator are not
 //! implemented. The ADV7535 itself is set up over I2C (`ip::adv7535`).
 

@@ -17,12 +17,12 @@
 //!    15:8, SDADEL 19:16, SCLDEL 23:20, PRESC 31:28.
 //! 2. `stm32f7_i2c_hw_config` (:756-784): TIMINGR first, then `CR1.ANFOFF`
 //!    (set when the analog filter is off), then `CR1.DNF` (cleared, then
-//!    set), `CR1.PE` last. [`init`] does that, with PE cleared before TIMINGR
+//!    set), `CR1.PE` last. `init` does that, with PE cleared before TIMINGR
 //!    (TIMINGR may be written only with PE low, RM0457).
 //! 3. `stm32f7_i2c_compute_timing` (:461-650): the spec table
-//!    (`stm32f7_get_specs`: 100 kHz, 400 kHz, 1 MHz rows as in [`SPECS`]),
+//!    (`stm32f7_get_specs`: 100 kHz, 400 kHz, 1 MHz rows as in `SPECS`),
 //!    analog filter 50..260 ns (:171-172, never used in the computation: see
-//!    [`compute_timing`]), DNF = round(DT filter
+//!    `compute_timing`), DNF = round(DT filter
 //!    width / kernel clock period) <= 15 (:496), sdadel/scldel limits
 //!    (:517-527), the first (SCLDEL, SDADEL) per prescaler (:534-562), then
 //!    SCLL/SCLH inside `clk_min = 1e9/speed` .. `clk_max = 1e9/(0.8 speed)`

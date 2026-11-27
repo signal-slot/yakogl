@@ -19,7 +19,7 @@
 //! its limits are in adv7533_mode_valid (dsi:111-117): 148500 kHz and
 //! 891000 kHz per lane; no `link_config` (drv:1237).
 //!
-//! Linux's order, which [`Bridge`] follows: probe (drv:1210 [`Bridge::init`]),
+//! Linux's order, which `Bridge` follows: probe (drv:1210 `Bridge::init`),
 //! then per enable: mode_fixup (dsi:123, the DSI lanes), mode_set (drv:706,
 //! 0x4a, 0x17), power_on (drv:345: `__adv7511_power_on`, `regcache_sync`, then
 //! adv7533_dsi_power_on, which programs the timing generator FIRST, dsi:70),
@@ -29,8 +29,8 @@
 //! - no regcache: Linux replays its cached registers after power-up
 //!   (`regcache_sync`, drv:351: the register patch first, regcache.c:377,
 //!   then the cached values) because the chip loses them on power-down or a
-//!   cable pull; here [`Bridge::power_up`] replays the main-map patch and the
-//!   three secondary addresses, and [`Bridge::start`] configures the rest
+//!   cable pull; here `Bridge::power_up` replays the main-map patch and the
+//!   three secondary addresses, and `Bridge::start` configures the rest
 //!   again after either.
 //! - no AVI/audio difference is made: r3.1 writes an AVI frame without a VIC
 //!   or aspect (hdmi_avi_infoframe_init, drv:232) and no 0x71/0x74; this
@@ -41,14 +41,14 @@
 //!   done" and returns what is in the buffer), and the segment register gets
 //!   `block / 2` (drv:539 writes `block`, which equals it for blocks 0 and 1
 //!   and names a segment that does not exist for block 2).
-//! - the AVI infoframe bytes are built here ([`avi_infoframe`]), not by the
+//! - the AVI infoframe bytes are built here (`avi_infoframe`), not by the
 //!   DRM HDMI helper.
 //!
-//! The part has four I2C targets, reached through the shim's [`Env`] by bus
+//! The part has four I2C targets, reached through the shim's `Env` by bus
 //! index (the shim maps each to the address on the board's I2C controller):
-//! the main map ([`BUS_MAIN`], 0x3d on the DK), the DSI/CEC map
-//! ([`BUS_DSI_CEC`], 0x3c: on the ADV7533/5 the DSI receiver lives there), the
-//! EDID map ([`BUS_EDID`], 0x3f) and the packet map ([`BUS_PACKET`], 0x38;
+//! the main map (`BUS_MAIN`, 0x3d on the DK), the DSI/CEC map
+//! (`BUS_DSI_CEC`, 0x3c: on the ADV7533/5 the DSI receiver lives there), the
+//! EDID map (`BUS_EDID`, 0x3f) and the packet map (`BUS_PACKET`, 0x38;
 //! never used here, Linux uses it for audio/SPD only). The three secondary
 //! addresses are programmed through the main map's 0x43 / 0x45 / 0xE1.
 //!

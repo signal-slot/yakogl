@@ -28,8 +28,8 @@
 //! - **The PLL.** `out = ref * ndiv / (idf * odf)` (`:198-207`), `idf` 1-16,
 //!   `ndiv` 64-625 (`:109-112`). The lane bit rate is twice the PLL output
 //!   (`:345`, `:477-478`, `:694-695`). `odf`, `hsfreqrange`, the VCO range
-//!   and the charge pump come from the band table [`BANDS`] (`dppa_map`,
-//!   `:273-337`), keyed by the lane rate. The search is [`search`] (`:339-397`).
+//!   and the charge pump come from the band table `BANDS` (`dppa_map`,
+//!   `:273-337`), keyed by the lane rate. The search is `search` (`:339-397`).
 //! - **The enable.** Linux waits for the clock lane's stop state
 //!   (`PSR.PSSC`, a host register, `:532-533`) and then sets `WRPCR2.PLLEN`
 //!   (`:537`). On a timeout it only logs "let's continue" (`:534-535`). There
@@ -58,17 +58,17 @@
 //!   *whole Mbit/s* the first search achieved (`:478-479`, `:695`). For 720p60
 //!   on 4 lanes (445.5 Mbit/s) the truncation to 445 moves the PLL to `idf
 //!   15`, `ndiv 247` (444.6 Mbit/s) instead of the exact `idf 4`, `ndiv 66`.
-//!   [`init`] programs the search for the requested rate itself, which is
+//!   `init` programs the search for the requested rate itself, which is
 //!   what `mode_valid` checked (`:1163`). The test
 //!   `linux_set_rate_truncates_the_720p_four_lane_target` pins Linux's
 //!   value.
 //! - `dppa_map`'s search runs past its end for a lane rate of 2500 Mbit/s
 //!   or more (`:352-358` leaves `i == ARRAY_SIZE`, then `:365` reads
-//!   `dppa_map[63]`). [`band_index`] stays on the last row, and [`init`]
+//!   `dppa_map[63]`). `band_index` stays on the last row, and `init`
 //!   refuses rates outside 80-2500 Mbit/s (`:127-128`, as `mode_valid` does
 //!   at `:1146-1150`).
 //! - `CCF = (ref_MHz - 17) * 4` (`:702`) is written unmasked into a 6-bit
-//!   field (`WPCR1_CCF`, `:68`). [`ccf`] refuses a reference that does not
+//!   field (`WPCR1_CCF`, `:68`). `ccf` refuses a reference that does not
 //!   fit (below 17 MHz, or 33 MHz and up). The 40 MHz HSE would give 92,
 //!   which spills into bit 6. The DK's reference is `FLEXGEN_28` at 27 MHz
 //!   (docs/notes/stm32mp257f-dk-display.md, the clock tree section), CCF 40.

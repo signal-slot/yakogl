@@ -31,7 +31,7 @@
 //!    "ropll" and "lcpll" (dtsi:3125-3130); Linux v6.18 never asserts or
 //!    releases them. Probe releases apb, cmn and init (hdptx.c:2067-2069).
 //!    The resets are the CRU's (D4, `soc::rk3588_display::reset`), so this
-//!    module asks its caller for them through [`Host`].
+//!    module asks its caller for them through `Host`.
 //! 4. Stage 1, before any PLL write (hdptx.c:804-818): assert apb, wait 20
 //!    µs, release apb; assert lane, cmn, init; `CON0` `PLL_EN`, `BIAS_EN`,
 //!    `BGR_EN` = 0. Before that Linux reads `STATUS` and warns when
@@ -88,7 +88,7 @@
 //!
 //! The init tables of facts 5 and 7 (212 writes of analog settings that no
 //! public document explains) are not in this file: the board hands them in
-//! as an [`Image`], the PHY's register file as the board dump (D0) reads it
+//! as an `Image`, the PHY's register file as the board dump (D0) reads it
 //! under Linux with the same mode (note, question U1). An image holds the
 //! final value of each register once, in ascending order; Linux's tables
 //! write some registers twice and the lane tables out of order, so the
