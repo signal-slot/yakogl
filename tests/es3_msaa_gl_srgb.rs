@@ -21,8 +21,9 @@
 //! `compatible_resolve_formats` does ("Blits between linear and sRGB formats
 //! are also allowed", src/mesa/main/blit.c), and tests/es3_msaa_gl.rs and
 //! tests/es3_msaa_gl_formats.rs pin that fold as intended: the two folding
-//! pairs below pass with the fold, and a strict-ES-3.0 test of each is
-//! `#[ignore]`d. Everything else of ES 3.0 4.3.3 — RGB10_A2 or a 16-bit
+//! pairs below pass with the fold, and the strict reading is not followed:
+//! Mesa gives no error for the pair on GLES either, so the strict tests
+//! became the two `resolves_as_mesa_reads_es30` tests. Everything else of ES 3.0 4.3.3 — RGB10_A2 or a 16-bit
 //! format against a different format, in either direction — the core does
 //! enforce, and is pinned passing, on renderbuffers and on sRGB textures.
 //! One texture case is build-dependent and `#[ignore]`d: an attachment is
@@ -574,30 +575,30 @@ fn rgba8_to_srgb_resolves_across_the_fold() {
     assert_eq!(px[0][3], RESOLVED[3], "alpha, linear, as stored");
 }
 
-/// ES 3.0 4.3.3 strict: SRGB8_ALPHA8 and RGBA8 are different internal
-/// formats, so a resolve between them is GL_INVALID_OPERATION. The core
-/// folds sRGB into linear instead (the two tests above), which Mesa does on
-/// purpose; these hold the spec text and flip if the core ever adopts it.
+/// ES 3.0.6 4.3.3 says a resolve between different internal formats is
+/// GL_INVALID_OPERATION, but Mesa, which is what the core follows, reads
+/// "identical" with the encoding folded away for GLES too
+/// (`compatible_resolve_formats` in blit.c: "Blits between linear and sRGB
+/// formats are also allowed"). SRGB8_ALPHA8 into RGBA8 therefore resolves
+/// (the decode is pinned by the tests above), and so does the reverse.
 #[test]
-#[ignore = "the core folds sRGB into linear for a resolve (linear_format, src/gl/blit.rs; Mesa compatible_resolve_formats), pinned as intended by es3_msaa_gl.rs and es3_msaa_gl_formats.rs"]
-fn srgb_to_rgba8_strict_es30_is_invalid_operation() {
+fn srgb_to_rgba8_resolves_as_mesa_reads_es30() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x_of(GL_SRGB8_ALPHA8);
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_INVALID_OPERATION);
-    assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused resolve waits for nothing");
-    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+    assert!(PENDING.lock().unwrap().is_empty(), "the blit waited for the 4x job");
+    assert_ne!(pixels(dst.fb)[0], [0; 4], "copied");
 }
 
 #[test]
-#[ignore = "the core folds sRGB into linear for a resolve (linear_format, src/gl/blit.rs; Mesa compatible_resolve_formats), pinned as intended by es3_msaa_gl.rs and es3_msaa_gl_formats.rs"]
-fn rgba8_to_srgb_strict_es30_is_invalid_operation() {
+fn rgba8_to_srgb_resolves_as_mesa_reads_es30() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_SRGB8_ALPHA8]).unwrap();
     let src = drawn_4x_of(GL_RGBA8);
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_INVALID_OPERATION);
-    assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused resolve waits for nothing");
-    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+    assert!(PENDING.lock().unwrap().is_empty(), "the blit waited for the 4x job");
+    assert_ne!(pixels(dst.fb)[0], [0; 4], "copied");
 }
 
 /* ---- RGB10_A2 ------------------------------------------------------------- */

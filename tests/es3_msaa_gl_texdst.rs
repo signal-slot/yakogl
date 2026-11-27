@@ -789,13 +789,11 @@ fn other_format(internal: GLenum, format: GLenum, ty: GLenum) {
 /// A texture of another internal format than the renderbuffer's: ES 3.0
 /// 4.3.3 GL_INVALID_OPERATION for a resolve.
 #[test]
-#[ignore = "core defect: a RGB8 / RGBA4 texture is stored as RGBA8, so the resolve's format check sees a match and the blit gives GL_NO_ERROR (src/gl/blit.rs)"]
 fn texture_rgb8_is_invalid_operation() {
     other_format(GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE);
 }
 
 #[test]
-#[ignore = "core defect: a RGB8 / RGBA4 texture is stored as RGBA8, so the resolve's format check sees a match and the blit gives GL_NO_ERROR (src/gl/blit.rs)"]
 fn texture_rgba4_is_invalid_operation() {
     other_format(GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4);
 }
