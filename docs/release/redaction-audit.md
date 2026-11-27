@@ -7,8 +7,8 @@ Audit for checklist line 8 (`docs/release/checklist.md`), in four
 passes:
 
 - **Part 4** (first section): the public run of `tools/release/redaction-scan.py`
-  on `ed6a7c0e7539` plus the change that adds `tools/release/doc-path-check.py`
-  (2026-11-27), the current state of the tree; the private
+  on `764c7e21f45f` and on the change that re-reads checklist lines 1, 5 and 8
+  there (2026-11-27), the current state of the tree; the private
   classes are the owner's run.
 - **Part 3**: the re-run on the tree after the scope cut of #1606 step 5
   (2026-10-26).
@@ -26,14 +26,14 @@ Where parts 1 and 2 disagree on the tree, the status after the merge is
 noted at the finding (H2, H3, M1). Their `file:line` references are at
 their own bases; many of those files have left the tree since.
 
-# Part 4: public scan of the origin/main tip (2026-11-27, `ed6a7c0e7539`)
+# Part 4: public scan of the origin/main tip (2026-11-27, `764c7e21f45f`)
 
 | Item | Value |
 |---|---|
 | Date | 2026-11-27, public classes only |
-| Base | `ed6a7c0e7539ddb7f1c9679c79df41df1faa8f1b` ("release: lines 3 and 6 carry the 4f34ffb8 --quick and step-4 readings"), the tip of `origin/main` as the clone holds it (`git fetch origin` could not reach the remote). Scanned on the base (18242 files) and on the commit of the change that adds `tools/release/doc-path-check.py`, sets `LC_ALL` in `.github/workflows/gate.yml` and edits `CHANGELOG.md` and `DESIGN.md` (18243 files): the same output but the file count. The tool skips binaries, `third_party/` and this file |
+| Base | `764c7e21f45ffedcb187bbd9e85031985fcdcfb2` ("tools: imx8mp-dtpu-page decodes case 222's page into checks, verdict and outcome"), the tip of `origin/main` as the clone holds it (`git fetch origin` could not reach the remote). Scanned on the base (18341 files) and on the commit of the change that edits `CHANGELOG.md`, `DESIGN.md` and this file (18341 files): the same output. The tool skips binaries, `third_party/` and this file |
 | History | not scanned (decision 1 of #1606: the public history is one fresh commit of the cleaned tree) |
-| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `ed6a7c0e7539` and at the change's commit. Self-test: `python3 -I tools/release/redaction-scan.py --self-test`. Regression test: `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header). Look-alikes are in `tools/release/redaction-scan.allow` |
+| Command | `python3 -I tools/release/redaction-scan.py HEAD` at `764c7e21f45f` and at the change's commit. Self-test: `python3 -I tools/release/redaction-scan.py --self-test`. Regression test: `cargo test --features gpu-vivante,shaderc-online --test redaction_scan` (the feature set named in the test's header). Look-alikes are in `tools/release/redaction-scan.allow` |
 | Private classes | **not run, the owner's run**: no private value was set or written for this round (`YAKOGL_REDACTION_PRIVATE` and `YAKOGL_REDACTION_PRIVATE_FILE` unset). `owner-login` and `lab-host` read "not run", `login-at-host` runs for `root` only |
 | Exit status | scan: **3** on both commits (`0 H/M finding(s), 3 class(es) not run, 115 informational, 158 look-alike(s) dropped: NOT COMPLETE (private classes not run)`); self-test: exit 0, "self-test passed"; cargo test: exit 0, 4 passed, on both commits |
 
@@ -85,15 +85,15 @@ round: none.
 | Lab checkout layout | `lab-layout` (L) | 20 | 3 | 17 | 0 | 0 |
 | Total | | 273 | 158 | 115 | 0 | **0** H/M |
 
-Against the public run on `029d83a27d0b` (2026-11-26), the same scan with an
-empty allow file (`--allow <empty file>`) on `029d83a27d0b`, `fa704233d6d5`,
-`ed6a7c0e7539` and the change's commit reads the same 273 hits (253 H/M and
-20 L before the allow file; the same file, class and masked value for each,
-line numbers dropped from the comparison): no hit is new and none left.
-Neither `redaction-scan.py` nor `redaction-scan.allow` changed between them;
-the commits since `029d83a27d0b` touch `src/v3d/table71.rs`, `src/vivante/`,
-their tests, `docs/notes/` and release documents. The new
-`tools/release/doc-path-check.py` adds no hit.
+Against the public runs on `029d83a27d0b` (2026-11-26) and `ed6a7c0e7539`
+(2026-11-27), the same scan with an empty allow file (`--allow <empty file>`)
+on `ed6a7c0e7539`, `764c7e21f45f` and the change's commit reads the same 273
+hits (253 H/M and 20 L before the allow file; the same file, class and masked
+value for each, line numbers dropped from the comparison): no hit is new and
+none left. Neither `redaction-scan.py` nor `redaction-scan.allow` changed
+between them; the 99 files the commits since `ed6a7c0e7539` add
+(`tools/release/doc-path-check.py`, records and tools under `tools/cts/`,
+`docs/`) add no hit.
 
 ## Every surviving hit
 
@@ -101,7 +101,7 @@ their tests, `docs/notes/` and release documents. The new
 
 None (0 H/M).
 
-### Hits new since `029d83a27d0b`
+### Hits new since `ed6a7c0e7539`
 
 None. The disposition of every current hit is in the tables below.
 
@@ -131,7 +131,7 @@ allow file with their own comments.
 |---|---|---|---|
 | e-mail | `tools/board_selftest.sh` | `t***[6]@p***[16]` (a `.example` host) | RFC 2606 reserved fake `BOARD_HOST` of the pi5 dry-run self-test |
 | IPv4 | `tools/board_selftest.sh` | `1***[10]`, `1***[11]` | private-range inputs of a redaction test: a fake ssh error and a console line the redaction must rewrite |
-| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`); drops nothing at `ed6a7c0e7539` (see open items) |
+| login at host | `tools/board_selftest.sh` | `r***[4]@t***[11]` | fake `BOARD_HOST` of the NanoPC-T6 run self-test (`fd11f275`); drops nothing at `764c7e21f45f` (see open items) |
 | IPv4, login at host | `tools/cts/mali-slice-readme-selftest.sh` | `1***[8]`, `r***[4]@b***[5]` | inputs of a refusal test: the slice check must refuse them |
 | e-mail | `tools/cts/x2-glmark2-scenes-selftest.sh` | `t@example.com` | RFC 2606 git identity of the self-test's repository |
 | home path | `tools/cts/mali-glmark2-selftest.sh`, `tools/cts/mali-glmark2-session-selftest.sh` | the fake board's stage directory (no user name) | fake path of a self-test |
@@ -140,7 +140,7 @@ allow file with their own comments.
 | login at host, tailnet DNS | `tools/cts/testdata/mali-slice-redact/dirty/` (`kmsg/a.txt`, `meta.txt`) | `r***[4]@b***[5]`, a `board-1.example.ts.net` name | inputs of a redaction test; the tailnet name is under the reserved `example` |
 | lab-host | `driver/rust/src/soc/imx8mp/regs.rs` | `U***[4]` followed by `_PHY` (the value itself is never quoted) | generated i.MX8MP register identifiers (NXP's PHY power-domain names) collide with the four characters of a lab host; one class, one path, the uppercase prefix with its `_PHY` suffix (`caa4bd6b`). Only the owner's run exercises it |
 | IPv4, IPv6, login, tailnet DNS, e-mail | `tools/cts/mali-slice-redact.py` | `1***[10]`, `1***[10]`, `f***[4]::1`, `r***[4]@b***[5]`, `r***[4]@192.0.2.7`, the `example.ts.net` name, `s***[11]@t***[11].service` | inputs of the redaction test that the tool's help and checks use; the last is a systemd unit instance, not an address |
-| lab-host | `docs/release/snapshot.md` | a lowercase word in three phrasings of the rehearsal's question 13 (the value itself is never quoted) | rule of `3a0ef3d1`; its pattern matches no line of the file at `ed6a7c0e7539` (see open items) |
+| lab-host | `docs/release/snapshot.md` | a lowercase word in three phrasings of the rehearsal's question 13 (the value itself is never quoted) | rule of `3a0ef3d1`; its pattern matches no line of the file at `764c7e21f45f` (see open items) |
 
 ### Information (not findings)
 
@@ -153,8 +153,8 @@ allow file with their own comments.
 
 `tests/redaction_scan.rs` is a cargo integration test in the scanned tree; it
 builds every fixture value at run time and holds none literally. At
-`ed6a7c0e7539` and at the change's commit it passes, 4 of 4 (the tree scan
-about 80 s):
+`764c7e21f45f` and at the change's commit it passes, 4 of 4 (the test run
+about 235 s, most of it the tree scan):
 
 - `redaction_scan_self_test` runs `redaction-scan.py --self-test`.
 - `redaction_scan_reports_a_committed_home_path`: a throwaway repository with
@@ -202,7 +202,7 @@ user-network address under `driver/tools/uboot-mp2/qemu/`.
   snapshot are #1606 step 8, owner decisions D7 and D8; this part keeps the
   tree ready and the scan re-runnable. The scan on a one-commit snapshot
   rehearsal is in `docs/release/snapshot.md` ("Procedure and rehearsal").
-- **Two exact-path rules match nothing** at `ed6a7c0e7539`: the
+- **Two exact-path rules match nothing** at `764c7e21f45f`: the
   login-at-host rule of `fd11f275` for `tools/board_selftest.sh` (the fixture
   no longer carries that login) and the lab-host rule of `3a0ef3d1` for
   `docs/release/snapshot.md` (its pattern matches no line of the file). Each
@@ -215,7 +215,7 @@ user-network address under `driver/tools/uboot-mp2/qemu/`.
 
 ## Verdict of part 4
 
-The tree at `ed6a7c0e7539`, and at the change's commit, is clean in every
+The tree at `764c7e21f45f`, and at the change's commit, is clean in every
 public class: 0 H/M findings (exit 3, private classes not run), the
 self-test passes, and
 `cargo test --features gpu-vivante,shaderc-online --test redaction_scan`

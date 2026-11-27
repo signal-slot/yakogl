@@ -9,8 +9,9 @@ It started on the PowerVR BXS-4-64 (Rogue, BVNC 36.53.104.796; TI AM62P / Torade
 Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom V3D 4.2
 (Raspberry Pi 4). A fourth back end, for the Arm Mali-G610 (RK3588, FriendlyElec
 NanoPC-T6), is in progress: on Zephyr it passes the regression set of `gl_test`
-off-screen as a development result, and dEQP-GLES2 has run only on the board's own
-Linux (`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"); its shaders
+off-screen as a development result, and the whole dEQP-GLES2 tree has run, with
+failures left, both on Zephyr and on the board's own Linux (`src/mali/`,
+`driver/docs/nanopc-t6-mali.md`; `tools/cts/RESULTS.md`, "Mali"); its shaders
 come from our own Valhall compiler in `src/shaderc/online/mali/`. The V3D 7.1 of the
 Raspberry Pi 5 (BCM2712) is being added beside the V3D 4.2, not as a fifth
 exactly-one `gpu-*` feature but as the cargo feature `gpu-v3d71`, which implies
@@ -238,8 +239,10 @@ yakogl/
 
 The library was built in vertical slices, each tested on silicon (clear and a solid
 draw, attributes and varyings, textures, render state, framebuffer objects); the plan
-is in git history (`git show 5ad2fa0e:DESIGN.md`, "Incremental plan"). The silicon test rig is
-`driver/tools/pvrlab/gl_test.c`, so a known-good reference is never lost.
+is in the history of the working repository the project was developed in
+(`git show 5ad2fa0e:DESIGN.md` there, "Incremental plan"; that commit is not in
+this repository). The silicon test rig is `driver/tools/pvrlab/gl_test.c`, so a
+known-good reference is never lost.
 
 ## The backend contract (`src/backend.h`)
 
@@ -317,9 +320,10 @@ default cross target is `aarch64-unknown-none` (hard float: `CONFIG_FPU` /
 
 The port began as a translation of the upstream C library and diverged from it
 wherever the C was wrong. That account (the fix round, the syncs to the upstream
-commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) is in git
-history (`git show 5ad2fa0e:DESIGN.md`, "The Rust crate"). Those three commits are
-of the old C repository and are not in this one.
+commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) is in the
+working repository's history (`git show 5ad2fa0e:DESIGN.md` there, "The Rust
+crate"). Neither `5ad2fa0e` nor those three commits (of the old C repository) are
+in this one.
 
 Verification on the host: unit tests on the strict mocks of `src/testutil.rs`, in every
 feature configuration `tools/check.sh` lists, and the host differential harness
@@ -327,7 +331,9 @@ feature configuration `tools/check.sh` lists, and the host differential harness
 sweeps and hostile sequences over a recording OSAL (GPU memory hashes, decoded kicks)
 and an interposer on the exported entry points, in every platform mode, dev and
 release, with AddressSanitizer on the libraries themselves. Nothing is rendered there.
-On silicon the library runs on all three boards, built as a Zephyr module: gl_test,
-dEQP-GLES2, glmark2 and the Slint example (`examples/slint/`; results in
-`tools/cts/RESULTS.md`). The open items are
-the GitHub issues of signal-slot/yakogl.
+On silicon the library runs on the AM62P, the i.MX8MP and the Pi 4, built as a Zephyr
+module: gl_test, dEQP-GLES2, glmark2 and the Slint example (`examples/slint/`); the
+NanoPC-T6 on Zephyr runs gl_test, dEQP-GLES2, two glmark2 scenes and Slint as
+development results, and the Pi 5 and the STM32MP257F-DK run bring-up probes
+(results in `tools/cts/RESULTS.md`). The open items are the GitHub issues of
+signal-slot/yakogl.
