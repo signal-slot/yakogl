@@ -18,11 +18,13 @@ the project was developed in.
 The newest board results are in `tools/cts/RESULTS.md`; these are the
 records at the tip.
 
-- dEQP-GLES2, one whole tree per board, still reads 0 Fail. Re-runs: the
-  AM62P's 1x images at `36c4305a` (2026-11-05), where the two
-  `flush_finish` timing cases pass without dEQP's warning and the
-  combined 1x + ms4 row reads 17,142 (the ms4 row is still from
-  `e9901869a`); i.MX8MP 17,318 at `0fbe61a3`; Pi 4 17,126 at `46f93767`.
+- dEQP-GLES2, one whole tree per board at `e9901869a`, 0 Fail, AM62P
+  17,140 (1x and ms4), i.MX8MP 17,318, Pi 4 17,126, issue #870. Re-runs
+  since, from `tools/cts/RESULTS.md`: the AM62P's 1x images at
+  `36c4305a` (2026-11-05), where the two `flush_finish` timing cases pass
+  without dEQP's warning and the combined 1x + ms4 row reads 17,142 (the
+  ms4 row is still from `e9901869a`); i.MX8MP 17,318 at `0fbe61a3`; Pi 4
+  17,126 at `46f93767`.
 - glmark2-es2 on the AM62P reads 489: 33 scenes, 0 failed, 0 GL errors
   (main `b884868c`, 2026-11-27, record `031e7bef`; shadow 10.56, refract
   34.83 and terrain 79.90 ms a frame; 468 on 2026-11-01). Common-set
