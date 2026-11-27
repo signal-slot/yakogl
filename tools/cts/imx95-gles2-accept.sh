@@ -69,7 +69,7 @@ main_ref=origin/main
 mustpass=
 
 usage() {
-	sed -n "5,26p" "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n "5,24p" "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
