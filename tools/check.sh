@@ -440,7 +440,9 @@ no_board_env() {
 # selftest_row <path>: a self-test that takes no argument, without the board
 # variables and with a temporary directory of its own under the gitignored
 # build/ (several refuse to write under /tmp or without TMPDIR), removed when
-# the self-test is over.
+# the self-test is over. Exit 77 is a missing host input (no cc, no dtc): the
+# row is a gap, not a failure of the code, the way the check71 row maps it
+# (the marker file tells run_row).
 selftest_row() {
   local t=$1 tmp run=bash status=0
   case "$t" in *.py) run=python3 ;; esac
@@ -449,6 +451,10 @@ selftest_row() {
   mkdir -p "$tmp" || return 1
   no_board_env env TMPDIR="$tmp" "$run" "$t" || status=$?
   rm -rf "$tmp"
+  if [ "$status" -eq 77 ] && [ -n "${ROW_SEQ-}" ]; then
+    echo "gap: $t exited 77 (a host input it needs is missing; it did not run)"
+    : > "$ROWS/$ROW_SEQ.gap"
+  fi
   return "$status"
 }
 
@@ -4825,8 +4831,8 @@ zephyr_werror_image() {
 # leave that check out.
 zephyr_triangle_image() { NO_PRESENT_CHECK=1 zephyr_werror_image "$@"; }
 # Every Zephyr image under tools/probes/rpi_5/ (a directory with a
-# CMakeLists.txt and a prj.conf: rpi5_hello, rpi5_wdog, rpi5_dtb, rpi5_ident,
-# rpi5_clear as present), built for rpi_5 with -Werror on our C files. One
+# CMakeLists.txt and a prj.conf: every one the loop finds, not a fixed list;
+# fifteen at the time of writing, from rpi5_clear to rpi5_wdog), built for rpi_5 with -Werror on our C files. One
 # row for all of them, so a new probe needs no new row.
 zephyr_rpi5_probe_images() {
   local d name n=0
