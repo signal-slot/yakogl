@@ -233,7 +233,7 @@ fn statics_fit_the_window_and_the_dtb_lies_above_it() {
     let heap = n(conf_value(PRJ, "COMMON_LIBC_MALLOC_ARENA_SIZE").unwrap());
     assert_eq!((carve, tiled, heap), (96 << 20, 24 << 20, 96 << 20));
     // the conf sets no scratch, so the Kconfig default (4 MiB) applies; the
-    // overlay's comment says 2 MiB (reported, not fixed)
+    // overlay's comment names the same 4 MiB
     assert!(conf_value(CONF, "YAKOGL_SHADERC_SCRATCH_BYTES").is_none());
     let scratch: u64 = 4 << 20;
     let data: u64 = 10 << 20; // glmark2's ~9.4 MB of data files, rounded up
