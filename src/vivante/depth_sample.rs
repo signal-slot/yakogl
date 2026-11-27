@@ -4,11 +4,16 @@
 //! `dtpu`; plan #328, #1204): can the texture unit read the row-linear D24S8
 //! surface the PE wrote, without the CPU resolve (`ds_cache::resolve_depth`)?
 //!
-//! A test knob selects it, `gc_debug_set_depth_tpu(mode)`, and only gl_test
-//! sets it. Mode 0, the default and the only mode without `test-knobs`, is
-//! today's path: [`gc_depth_sampled`] answers no, the GL core resolves the
-//! depth into the R32F texels on the CPU, and nothing here runs. With mode 1
-//! or 2 [`gc_depth_sampled`] answers yes for a Live, single-sampled depth
+//! A test knob selects the mode, `gc_debug_set_depth_tpu(mode)`, and only
+//! gl_test and the host tests set it. The product default
+//! ([`DEPTH_TPU_DEFAULT`], the only mode without `test-knobs`) is mode 4,
+//! [`DEPTH_TPU_D24X8_FLUSH`]: gl_test `dtpu` on the Armadillo-X2 (measured
+//! there in place of the Verdin iMX8MP) answered verdict code 3 with check 7
+//! failing, outcome "(a) plus a texture-cache flush" of
+//! docs/notes/gc-depth-sample-wire.md. Mode 0 is the CPU resolve:
+//! [`gc_depth_sampled`] answers no, the GL core resolves the depth into the
+//! R32F texels on the CPU, and nothing here runs. With mode 1, 2 or 4
+//! [`gc_depth_sampled`] answers yes for a Live, single-sampled depth
 //! plane that covers the texture, the GL core puts the id into the binding
 //! (`GlesTextureBind::depth_id`), and `texture::emit_slot` samples the surface
 //! through the binding [`view_binding`] makes:
@@ -25,9 +30,9 @@
 //! texture does not fit inside the live surface (or whose surface went away
 //! between the answer and the draw) fails the draw with -ENOTSUP, by name: the
 //! texels were left stale on the strength of the answer, so sampling them
-//! would be wrong. This is not a product path: the release archive has no knob
-//! (tools/check.sh, "no test knob in the artefact"), and the wiring for one is
-//! docs/notes/gc-depth-sample-wire.md.
+//! would be wrong. Modes 1, 2 and 3 are not product paths: the release
+//! archive has no knob (tools/check.sh, "no test knob in the artefact"), so
+//! it runs mode 4 alone.
 //!
 //! # Outcome (b).1, mode 3
 //!
@@ -78,10 +83,15 @@ pub const DEPTH_TPU_RAW8888: i32 = 2;
 pub const DEPTH_TPU_RSCOPY: i32 = 3;
 
 /// The product default mode: what [`mode`] answers in a build without
-/// `test-knobs`, and the knob's start value. Still [`DEPTH_TPU_OFF`], the CPU
-/// resolve; changing it to [`DEPTH_TPU_D24X8`] is the outcome-(a) switch of
-/// docs/notes/gc-depth-sample-wire.md.
-pub const DEPTH_TPU_DEFAULT: i32 = DEPTH_TPU_OFF;
+/// `test-knobs`, and the knob's start value. [`DEPTH_TPU_D24X8_FLUSH`], the
+/// D24X8 view with a texture-cache flush in front of the sampling draw:
+/// gl_test `dtpu`'s verdict code 3 with check 7 failing (stale texels at
+/// index 32 with no wait or flush), measured on the Armadillo-X2 in place of
+/// the Verdin iMX8MP, selects outcome "(a) plus a texture-cache flush" of
+/// docs/notes/gc-depth-sample-wire.md. Plain mode 1 is not safe there (check
+/// 7). Exact-depth readers ([`exact_depth_reader`]) and planes that are not
+/// row-linear (`ds_cache::depth_view`) never take the view.
+pub const DEPTH_TPU_DEFAULT: i32 = DEPTH_TPU_D24X8_FLUSH;
 
 /// The experiment's mode ([`mode`]): [`DEPTH_TPU_DEFAULT`] unless gl_test set it.
 #[cfg(feature = "test-knobs")]
@@ -97,8 +107,7 @@ pub extern "C" fn gc_debug_set_depth_tpu(mode: i32) -> i32 {
     unsafe { core::ptr::addr_of_mut!(gc_debug_depth_tpu).replace(mode) }
 }
 
-/// The current mode: [`DEPTH_TPU_DEFAULT`] (today [`DEPTH_TPU_OFF`], the CPU
-/// resolve) in every build without `test-knobs`, and in one that has not set
+/// The current mode: [`DEPTH_TPU_DEFAULT`] ([`DEPTH_TPU_D24X8_FLUSH`]) in every build without `test-knobs`, and in one that has not set
 /// the knob.
 pub fn mode() -> i32 {
     #[cfg(feature = "test-knobs")]
@@ -137,8 +146,8 @@ fn view(id: u32, kick: u32) -> Option<DepthView> {
     Some(DepthView { gpu, stride, rows })
 }
 
-/// `crate::backend::samples_rendered_depth`'s GC answer: no in mode 0 (every
-/// product build while [`DEPTH_TPU_DEFAULT`] is [`DEPTH_TPU_OFF`]); otherwise yes when `id`'s depth plane is Live here,
+/// `crate::backend::samples_rendered_depth`'s GC answer: no in mode 0 (the
+/// CPU resolve, set by the knob only); otherwise yes when `id`'s depth plane is Live here,
 /// single-sampled, and covers `w` x `h`. In mode 3 the RS copy must also be
 /// possible: a surface [`copy_bytes`] takes and its buffer in the pool (made
 /// now, so a refused shape or no memory leaves the draw on the CPU resolve).
@@ -281,7 +290,8 @@ pub fn binding(t: &GlesTextureBind, kick: u32) -> Result<GlesTextureBind, i32> {
 /// surface a draw wrote or cleared since the last such flush, the words of
 /// [`emit_view_flush`]. A board arm of case 222 that sets 4 tells whether
 /// that flush cures check 7 (gl_test does not set 4 today; the arm is
-/// driver/samples/zephyr's).
+/// driver/samples/zephyr's). The X2's code 3 with check 7 failing made it
+/// the product default ([`DEPTH_TPU_DEFAULT`]).
 pub const DEPTH_TPU_D24X8_FLUSH: i32 = 4;
 
 /// How many written depth objects [`Written`] names before it gives up and
@@ -761,11 +771,16 @@ pub fn copies_held() -> usize {
 mod copy_tests {
     use super::*;
 
-    /// The product default is still the CPU resolve; changing it is a
-    /// deliberate edit of this test (docs/notes/gc-depth-sample-wire.md).
+    /// The product default is the D24X8 view with its texture-cache flush
+    /// (mode 4): the Armadillo-X2's `dtpu` verdict code 3 with check 7
+    /// failing (docs/notes/gc-depth-sample-wire.md). Changing it is a
+    /// deliberate edit of this test.
     #[test]
-    fn product_default_is_cpu_resolve() {
-        assert_eq!(DEPTH_TPU_DEFAULT, DEPTH_TPU_OFF);
+    fn product_default_is_depth_view_with_flush() {
+        assert_eq!(DEPTH_TPU_DEFAULT, DEPTH_TPU_D24X8_FLUSH);
+        assert_eq!(DEPTH_TPU_DEFAULT, 4);
+        #[cfg(not(feature = "test-knobs"))]
+        assert_eq!(mode(), DEPTH_TPU_D24X8_FLUSH, "no knob: the default");
     }
     use crate::ds_retention::unorm24_depth;
     use crate::vivante::cmd::GcCmd;
@@ -1074,7 +1089,7 @@ mod guard_tests {
     /// from `ZERO` (compare_op 0).
     #[test]
     fn a_depth_compare_is_refused_the_view() {
-        for mode in [DEPTH_TPU_D24X8, DEPTH_TPU_RAW8888] {
+        for mode in [DEPTH_TPU_D24X8, DEPTH_TPU_RAW8888, DEPTH_TPU_D24X8_FLUSH] {
             for op in 1..=6u8 {
                 for fixed in [0, FIXED] {
                     let t = depth_texture(op | fixed, [0; 4]);
@@ -1090,7 +1105,7 @@ mod guard_tests {
         }
     }
 
-    /// Mode 0 is today's path: the view is never made, whatever the binding.
+    /// Mode 0 is the CPU resolve: the view is never made, whatever the binding.
     #[test]
     fn mode_0_makes_no_view() {
         for op in [NO_COMPARE, FIXED | 1] {
@@ -1100,6 +1115,6 @@ mod guard_tests {
             }
         }
         #[cfg(not(feature = "test-knobs"))]
-        assert!(!gc_depth_sampled((1 << 30) | 1, 64, 64), "no knob: the CPU resolve");
+        assert!(!gc_depth_sampled((1 << 30) | 1, 64, 64), "no live surface: the CPU resolve");
     }
 }

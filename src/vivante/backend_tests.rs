@@ -5744,8 +5744,9 @@ fn dtpu_texture(id: u32, w: u32, h: u32) -> GlesTextureBind {
 /// The depth-sampling experiment's descriptor, read out of the stream for a
 /// surface a draw allocated (docs/notes/gc-depth-sample.md, "Descriptor
 /// fields"): the view is the PE's surface past the guard at its own stride,
-/// and a binding that carries a depth id while the knob is off is refused
-/// (-ENOTSUP), not sampled from its stale texels.
+/// and a binding that carries a depth id draws under the product default
+/// (dtpu mode 4, the view with its flush) and, with the knob at 0 (the CPU
+/// resolve), is refused (-ENOTSUP), not sampled from its stale texels.
 #[test]
 fn the_depth_view_describes_the_surface_the_pe_writes() {
     use super::super::depth_sample::{view_binding, DepthView, DEPTH_TPU_D24X8};
@@ -5775,25 +5776,37 @@ fn the_depth_view_describes_the_surface_the_pe_writes() {
     assert_eq!(desc[texdesc_lod_addr(1) as usize / 4], 0, "one level");
     assert_eq!(st.reg(nte_descriptor_samp_ctrl0(0)) & GC_SAMP_INT_FILTER, 0, "no INT_FILTER for a Z/S format");
 
-    /* a depth id with the knob off (the only state of a product build) */
+    /* a depth id under the default (the only state of a product build) */
+    assert_eq!(super::super::depth_sample::mode(), super::super::depth_sample::DEPTH_TPU_DEFAULT);
     d.textures[0] = dtpu_texture(id, 64, 64);
     // SAFETY: `d` is a live draw for the length of the call.
-    assert_eq!(unsafe { gc_draw(&d) }, -crate::util::ENOTSUP);
+    assert_eq!(unsafe { gc_draw(&d) }, 0, "the default samples the view");
+    /* a depth id with the knob at 0, the CPU resolve */
+    #[cfg(feature = "test-knobs")]
+    {
+        use super::super::depth_sample::{gc_debug_set_depth_tpu, DEPTH_TPU_OFF};
+        let prev = gc_debug_set_depth_tpu(DEPTH_TPU_OFF);
+        // SAFETY: `d` is a live draw for the length of the call.
+        let rc = unsafe { gc_draw(&d) };
+        gc_debug_set_depth_tpu(prev);
+        assert_eq!(rc, -crate::util::ENOTSUP, "knob 0: refused");
+    }
     assert!(rig.faults().is_empty());
 }
 
 /// With the knob (gl_test `dtpu`), the answer and the draw: yes for a live
 /// plane covering the texture, and the slot then describes the surface (mode
 /// 1 D24X8, mode 2 A8R8G8B8); a texture larger than the surface is answered
-/// no and its draw refused with -ENOTSUP; mode 0 answers no again.
+/// no and its draw refused with -ENOTSUP; mode 0 answers no again. The knob
+/// goes back to the product default afterwards.
 #[cfg(feature = "test-knobs")]
 #[test]
 fn the_dtpu_knob_samples_the_depth_surface_in_place() {
-    use super::super::depth_sample::{gc_debug_set_depth_tpu, gc_depth_sampled};
+    use super::super::depth_sample::{gc_debug_set_depth_tpu, gc_depth_sampled, DEPTH_TPU_DEFAULT};
     struct Off;
     impl Drop for Off {
         fn drop(&mut self) {
-            gc_debug_set_depth_tpu(0);
+            gc_debug_set_depth_tpu(DEPTH_TPU_DEFAULT);
         }
     }
     let rig = Rig::new();
@@ -5801,6 +5814,8 @@ fn the_dtpu_knob_samples_the_depth_surface_in_place() {
     let id = 0x4000_0065;
     rig.submit(&pair_draw(&rig, (id, 1), (id, 1)));
     let (gpu, stride, _) = ds_cache::depth_view(id, GC_DEPTH_GUARD_BYTES, 0).expect("a live depth plane");
+    assert!(gc_depth_sampled(id, 64, 64), "the default (mode 4): the view");
+    gc_debug_set_depth_tpu(0);
     assert!(!gc_depth_sampled(id, 64, 64), "knob 0: the CPU resolve");
     for (mode, format) in [(1, 0x11), (2, GC_TEX_FORMAT_A8R8G8B8)] {
         assert_eq!(gc_debug_set_depth_tpu(mode), if mode == 1 { 0 } else { 1 });

@@ -187,10 +187,14 @@ fn a_texture_that_does_not_fit_the_live_surface_is_refused() {
 }
 
 /// Without the knob (every product build, and a test-knobs build that has
-/// not set it) the GC answers no: the GL core keeps the CPU resolve.
+/// not set it) the mode is the product default, dtpu mode 4 (the view with
+/// its texture-cache flush; the Armadillo-X2's verdict code 3 with check 7
+/// failing). With no live depth surface for the id the GC still answers no:
+/// the GL core keeps the CPU resolve.
 #[test]
-fn the_answer_is_no_while_the_knob_is_off() {
-    assert_eq!(mode(), DEPTH_TPU_OFF);
+fn the_answer_is_no_without_a_live_surface() {
+    assert_eq!(mode(), DEPTH_TPU_DEFAULT);
+    assert_eq!(DEPTH_TPU_DEFAULT, DEPTH_TPU_D24X8_FLUSH);
     assert!(!gc_depth_sampled(0x4000_0064, 64, 64));
     assert!(!yakogl::backend::samples_rendered_depth(0x4000_0064, 64, 64));
 }
