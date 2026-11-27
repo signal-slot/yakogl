@@ -1,0 +1,759 @@
+14:20:02 [  149.241429] reboot: Restarting system
+14:20:02 \x00�
+14:20:02 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:20:02 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:20:02 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+14:20:02 SPL initial stack usage: 17088 bytes
+14:20:02 Trying to boot from MMC1
+14:20:02 Authentication passed
+14:20:02 Authentication passed
+14:20:02 Authentication passed
+14:20:02 Loading Environment from nowhere... OK
+14:20:02 init_env from device 9 not supported!
+14:20:02 Authentication passed
+14:20:02 Authentication passed
+14:20:02 Starting ATF on ARM64 core...
+14:20:02 
+14:20:02 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+14:20:02 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+14:20:02 
+14:20:02 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:20:02 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:20:02 SPL initial stack usage: 1920 bytes
+14:20:02 HW CFG: 0x00
+14:20:02 Trying to boot from MMC1
+14:20:02 Authentication passed
+14:20:02 Authentication passed
+14:20:02 
+14:20:02 
+14:20:02 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:20:02 
+14:20:02 SoC:   AM62PX SR1.0 HS-FS
+14:20:02 DRAM:  2 GiB
+14:20:02 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+14:20:02 Core:  161 devices, 34 uclasses, devicetree: separate
+14:20:02 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+14:20:02 Loading Environment from MMC... OK
+14:20:02 In:    serial@2800000
+14:20:02 Out:   serial@2800000
+14:20:02 Err:   serial@2800000
+14:20:02 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+14:20:02 Serial#: 08641335
+14:20:02 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+14:20:02 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+14:20:02 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+14:20:02 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+14:20:02 
+14:20:02 Hit any key to stop autoboot:  0 
+14:20:02 yakogl-netboot: once=pr-regress-GM-on-2d9099f902e12a8c-1795789075
+14:20:02 Saving Environment to MMC... Writing to MMC(0)... OK
+14:20:02 yakogl-netboot: cleared
+14:20:02 13694688 bytes read in 97 ms (134.6 MiB/s)
+14:20:02 yakogl-netboot: go 0x82000000
+14:20:02 ## Starting application at 0x82000000 ...
+14:20:02 sample: build tree=c8be59f6 table=6c5b8a70
+14:20:02 I: rti_arm: armed preload 0xef rate 32768 Hz: expiry 60000 ms, fed for 900 s
+14:20:02 board: watchdog armed
+14:20:02 I: Cadence DSI id 0xcadd5131, IP_CONF 0x948490d0
+14:20:02 I: D-PHY: WIZ at +0xf00 (MOD_VER 0x69924881)
+14:20:02 I: VP clock source 51200000 Hz (pixel clock 51200000 Hz)
+14:20:02 I: DSS rev 0x64040901
+14:20:02 I: DSS ready: VP2 1024x600 @ 51200000 Hz, safety layer ARGB8888 at 0x852d7000
+14:20:02 I: TISCI: power domain 237 on
+14:20:02 I: TISCI: power domain 242 on
+14:20:02 I: TISCI: GPU clock 237/3 = 800000000 Hz
+14:20:02 I: TISCI: GPU clock 237/3 runs at 800000000 Hz
+14:20:02 I: GPU regs 0xfd80000 (512 KiB) mapped at 0xfd80000
+14:20:02 I: CORE_ID = 0x002400350068031c -> BVNC 192.0.2.0
+14:20:02 I: PowerVR BXS-4-64 MC1 alive (BVNC 192.0.2.0)
+14:20:02 I: GPU bring-up milestone 1 complete (power + BVNC readback)
+14:20:02 I: GPU core clock measured: 800 MHz (CR_TIMER 31252 ticks in 10 ms)
+14:20:02 I: GPU carveout phys 0xa0000000 (256 MiB) mapped at 0x91e00000
+14:20:02 I: DDK FW: code@0x0 (196608 B), data@0x80000 (135168 B), objs from 0xc0000
+14:20:02 I: DDK FW: 229376-byte image for DDK 25.2 loaded (code 0x0, data 0x80000, rodata 0xa0000)
+14:20:02 I: runtime cfg: ActivePMLatency 5 ms
+14:20:02 I: FWIF structs built (KCCB/FWCCB/sysinit/osinit); heap used to 0xd8d28
+14:20:02 I: MMU: FW heap mapped (4096 KiB main + 192 KiB config of the 32 MiB window), PC root phys=0xa0430000
+14:20:02 I: M3 complete (MMU + FW load + FWIF structs). Booting FW core...
+14:20:02 I: FW boot: firmware_started=0x1 after ~1 ms
+14:20:02 I: GPU bring-up milestone 4 complete (firmware booted)
+14:20:02 I: DDK FW: skipping open-FW healthcheck; render KICK drives the FW
+14:20:02 I: render: scaffolding built; awaiting final cmd_transfer regs (pvr_render_regs.h) before first GPU draw
+14:20:02 I: D-PHY: 307812500 bit/s per lane, band 5
+14:20:02 I: DSI link up: 4 lanes, sync events, line 4047 B, 307812500 bit/s per lane
+14:20:02 I: sn65dsi8x: ID "58ISD" rev 0x01 (attempt 1)
+14:20:02 I: sn65dsi8x: up, DSI 153600 kHz (range 0x1e), LVDS 51200 kHz = /3 (range 1), fmt 0x68
+14:20:02 I: sn65dsi8x: link clean (IRQ_STAT 0x00)
+14:20:02 W: bridge up, video on, IRQ_STAT 0x00, at 271 ms
+14:20:02 W: backlight on at 276 ms
+14:20:02 I: SN65DSI8x up: lvds range 1, dsi range 30, div 2, fmt 0x68, IRQ_STAT 0x00
+14:20:02 *** Booting Zephyr OS build af17c0c8aa2a ***
+14:20:02 I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+14:20:02 Secondary CPU core 1 (MPID:0x1) is up
+14:20:02 Secondary CPU core 2 (MPID:0x2) is up
+14:20:02 Secondary CPU core 3 (MPID:0x3) is up
+14:20:02 glmark2: upstream 22c527cb0556f3a1ac4445aaa52cc532760928d5 (2023.01), size 800x600, args ""
+14:20:02 glmark2: window 800x600, stride 3200, 4 bytes a pixel
+14:20:02 E: invalid file name!!
+14:20:02 I: freelist grow pool: 16384 pages (64 MiB) at phys 0xa0854000
+14:20:02 I: render: parameter buffer: carveout 256 MiB -> 2048 pages listed, 18432 max, grow 1024, pool 16384 pages
+14:20:02 I: freelist id=1 np=2048 max=18432 backing=2048 fpm=0 ebase=16384 arr.gpu=0xfa00000000 pages_phys=0xa4854000 cur_dev=0xfa00010000 pfn[16384]=0x000a4854 pfn[18431]=0x000a5053
+14:20:02 I: freelist id=2 np=2048 max=18432 backing=2048 fpm=0 ebase=16384 arr.gpu=0xfa00014000 pages_phys=0xa5068000 cur_dev=0xfa00024000 pfn[16384]=0x000a5068 pfn[18431]=0x000a5867
+14:20:02 I: freelist id=3 np=26 max=32 backing=26 fpm=0 ebase=4 arr.gpu=0xfa00028000 pages_phys=0xa587c000 cur_dev=0xfa00028010 pfn[4]=0x000a587c pfn[31]=0x00000000
+14:20:02 I: render: pds0: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 f4000002 | @0x80: f0080101 f0090201  usc0: 0580a044 ff000000 00000000 00000000
+14:20:02 I: render: init ok (PB@0x8000000000 border@0x8000200000 eot_usc_off=0x1000 gen_b=0x5234000 pds_b=0x1000 usc_b=0xa000)
+14:20:02 I: osal(zephyr): ready (regs=0xfd80000)
+14:20:02 I: pvr_backend: init ok (pds arena off 0x1000, gen arena 0x804ff00000, vdm 0x8005234000, clear_fs off 0xc000)
+14:20:02 =======================================================
+14:20:02     glmark2 2023.01
+14:20:02 =======================================================
+14:20:02     OpenGL Information
+14:20:02     GL_VENDOR:      Signal Slot
+14:20:02     GL_RENDERER:    PowerVR BXS-4-64 (YakoGL)
+14:20:02     GL_VERSION:     OpenGL ES 2.0 YakoGL
+14:20:02     Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=8 samples=0
+14:20:02     Surface Size:   800x600 windowed
+14:20:02 =======================================================
+14:20:02 glmark2-mem: entry 0 before setup: osal(zephyr) mem: pool handed out 94265344, free in the lists 0, live 94265344 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 0002c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400e9d00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 0545c000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400e9e80 400e9f00 00000003 00000000 05458000 00000080 0546e000 00000080
+14:20:02 I: render: hrt[40]: 0545e000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 800x600 x1 te_screen=0x00025031 mtile1=0x00380000 mtile2=0x00280000 isp_mtile=0x000e000a stride=140 rgn=560 tpc=8192 teaa=0
+14:20:02 [build] use-vbo=false:I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 00030000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400e9f80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 05503000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400ea100 400ea180 00000003 00000000 054ff000 00000080 05515000 00000080
+14:20:02 I: render: hrt[40]: 05505000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 800x600 x1 te_screen=0x00025031 mtile1=0x00380000 mtile2=0x00280000 isp_mtile=0x000e000a stride=140 rgn=560 tpc=8192 teaa=0
+14:20:02 glmark2: the window is double-buffered by EGL (shown by the swap)
+14:20:02  FPS: 168 FrameTime: 5.977 ms
+14:20:02 glmark2-frame: [build] use-vbo=false: 1675 frames; us per frame: gl 5838, swap 126, show 3, other 3, frame 5970; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [build] use-vbo=false: us per frame: program 8, uniforms 2, attribs 400, textures 3, state 2, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 416; untimed laps 0
+14:20:02 glmark2-counters: [build] use-vbo=false: frames 1675 kicks 1675 waits 1 draws 3350 tiles 3182500 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [build] use-vbo=false: 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 42a6, crc16q 0b66; mean 12 12 12; black no
+14:20:02 glmark2-mem: entry 0 end: osal(zephyr) mem: pool handed out 108634112, free in the lists 28672, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 1 before setup: osal(zephyr) mem: pool handed out 108634112, free in the lists 28672, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [build] use-vbo=true:I: eglSwapBuffers: the display held every window buffer; the swap waited for one to be free
+14:20:02  FPS: 887 FrameTime: 1.128 ms
+14:20:02 glmark2-frame: [build] use-vbo=true: 8873 frames; us per frame: gl 44, swap 1082, show 0, other 0, frame 1126; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [build] use-vbo=true: us per frame: program 2, uniforms 0, attribs 2, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 6; untimed laps 0
+14:20:02 glmark2-counters: [build] use-vbo=true: frames 8873 kicks 8873 waits 8869 draws 17746 tiles 16858700 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [build] use-vbo=true: 800x600; probes c a4a4a4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 160d, crc16q 0b66; mean 12 12 12; black no
+14:20:02 glmark2-mem: entry 1 end: osal(zephyr) mem: pool handed out 109158400, free in the lists 552960, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 2 before setup: osal(zephyr) mem: pool handed out 109158400, free in the lists 552960, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [texture] texture-filter=nearest: FPS: 1043 FrameTime: 0.959 ms
+14:20:02 glmark2-frame: [texture] texture-filter=nearest: 10437 frames; us per frame: gl 51, swap 905, show 0, other 1, frame 957; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [texture] texture-filter=nearest: us per frame: program 3, uniforms 1, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 9; untimed laps 0
+14:20:02 glmark2-counters: [texture] texture-filter=nearest: frames 10437 kicks 10437 waits 10436 draws 20874 tiles 19830300 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [texture] texture-filter=nearest: 800x600; probes c 2b2d2dff, tl 181a1aff, tr 000000ff, bl 050404ff, br 000000ff; crc16 4786, crc16q 8bc3; mean 14 14 14; black no
+14:20:02 glmark2-mem: entry 2 end: osal(zephyr) mem: pool handed out 109162496, free in the lists 557056, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 3 before setup: osal(zephyr) mem: pool handed out 109162496, free in the lists 557056, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [texture] texture-filter=linear: FPS: 1027 FrameTime: 0.974 ms
+14:20:02 glmark2-frame: [texture] texture-filter=linear: 10271 frames; us per frame: gl 51, swap 921, show 0, other 1, frame 973; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [texture] texture-filter=linear: us per frame: program 3, uniforms 1, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 9; untimed laps 0
+14:20:02 glmark2-counters: [texture] texture-filter=linear: frames 10271 kicks 10271 waits 10270 draws 20542 tiles 19514900 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [texture] texture-filter=linear: 800x600; probes c 2c2d2dff, tl 1a1b1cff, tr 000000ff, bl 050404ff, br 000000ff; crc16 2dc4, crc16q 3a6b; mean 14 14 14; black no
+14:20:02 glmark2-mem: entry 3 end: osal(zephyr) mem: pool handed out 109162496, free in the lists 557056, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 4 before setup: osal(zephyr) mem: pool handed out 109162496, free in the lists 557056, live 108605440 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 I: render: hc dwords: 00000000 00ff00ff 00000088 00000000 00000088 00000000 00000000 00000200 0000f00f 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 00034000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400ea200 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 0559a000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400ea380 400ea400 00000003 00000000 05596000 00000080 055ac000 00000080
+14:20:02 I: render: hrt[40]: 0559c000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 256x256 x1 te_screen=0x0000f00f mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:20:02 I: render: hc dwords: 00000000 00ff00ff 00000088 00000000 00000088 00000000 00000000 00000200 0000f00f 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 00038000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400ea480 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 055b1000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400ea600 400ea680 00000003 00000000 055ad000 00000080 055c3000 00000080
+14:20:02 I: render: hrt[40]: 055b3000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 256x256 x1 te_screen=0x0000f00f mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:20:02 I: render: hc dwords: 00000000 00ff00ff 00000088 00000000 00000088 00000000 00000000 00000200 0000f00f 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 0003c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400ea700 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 055c8000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400ea880 400ea900 00000003 00000000 055c4000 00000080 055da000 00000080
+14:20:02 I: render: hrt[40]: 055ca000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 256x256 x1 te_screen=0x0000f00f mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:20:02 I: render: hc dwords: 00000000 00ff00ff 00000088 00000000 00000088 00000000 00000000 00000200 0000f00f 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:20:02 I: render: hrt[0]: 00040000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[16]: 00000000 400ea980 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:20:02 I: render: hrt[24]: 00000000 00000000 055df000 00000080 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[32]: 400eab00 400eab80 00000003 00000000 055db000 00000080 055f1000 00000080
+14:20:02 I: render: hrt[40]: 055e1000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:20:02 I: render: HWRT 256x256 x1 te_screen=0x0000f00f mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:20:02 I: pvr_backend: the GPU made levels 1..=9 of the 10-level chain of a 512x512 texture, the GL core the rest
+14:20:02 [texture] texture-filter=mipmap: FPS: 915 FrameTime: 1.094 ms
+14:20:02 glmark2-frame: [texture] texture-filter=mipmap: 9151 frames; us per frame: gl 49, swap 1042, show 0, other 1, frame 1092; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [texture] texture-filter=mipmap: us per frame: program 2, uniforms 1, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 8; untimed laps 0
+14:20:02 glmark2-counters: [texture] texture-filter=mipmap: frames 9151 kicks 9151 waits 9150 draws 18302 tiles 17386900 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [texture] texture-filter=mipmap: 800x600; probes c 2d2e2fff, tl 1b1c1dff, tr 000000ff, bl 050404ff, br 000000ff; crc16 1a02, crc16q f520; mean 14 14 14; black no
+14:20:02 glmark2-mem: entry 4 end: osal(zephyr) mem: pool handed out 109604864, free in the lists 557056, live 109047808 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 5 before setup: osal(zephyr) mem: pool handed out 109604864, free in the lists 557056, live 109047808 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [shading] shading=gouraud:I: yakogl: program 2 has no uniform 'ModelViewMatrix'
+14:20:02  FPS: 756 FrameTime: 1.323 ms
+14:20:02 glmark2-frame: [shading] shading=gouraud: 7566 frames; us per frame: gl 46, swap 1274, show 0, other 1, frame 1321; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [shading] shading=gouraud: us per frame: program 2, uniforms 0, attribs 2, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 6; untimed laps 0
+14:20:02 glmark2-counters: [shading] shading=gouraud: frames 7566 kicks 7566 waits 7562 draws 15132 tiles 14375400 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [shading] shading=gouraud: 800x600; probes c 0000c9ff, tl 000000ff, tr 000000ff, bl 000011ff, br 00008fff; crc16 c6b1, crc16q 297d; mean 0 0 17; black no
+14:20:02 glmark2-mem: entry 5 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 6 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [shading] shading=blinn-phong-inf:I: yakogl: program 2 has no uniform 'ModelViewMatrix'
+14:20:02  FPS: 616 FrameTime: 1.626 ms
+14:20:02 glmark2-frame: [shading] shading=blinn-phong-inf: 6156 frames; us per frame: gl 43, swap 1579, show 0, other 1, frame 1623; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [shading] shading=blinn-phong-inf: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:20:02 glmark2-counters: [shading] shading=blinn-phong-inf: frames 6156 kicks 6156 waits 6154 draws 12312 tiles 11696400 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [shading] shading=blinn-phong-inf: 800x600; probes c 1a1abaff, tl 000000ff, tr 000000ff, bl 1a1a25ff, br 1a1a8bff; crc16 ed29, crc16q 4c7c; mean 5 5 18; black no
+14:20:02 glmark2-mem: entry 6 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 7 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 [shading] shading=phong: FPS: 485 FrameTime: 2.064 ms
+14:20:02 glmark2-frame: [shading] shading=phong: 4851 frames; us per frame: gl 44, swap 2016, show 0, other 0, frame 2060; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:20:02 glmark2-steps: [shading] shading=phong: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:20:02 glmark2-counters: [shading] shading=phong: frames 4851 kicks 4851 waits 4848 draws 9702 tiles 9216900 reposts 0 wait_timeouts 0
+14:20:02 glmark2-picture: [shading] shading=phong: 800x600; probes c 0505a2ff, tl 000000ff, tr 000000ff, bl 050586ff, br 0505c0ff; crc16 c94f, crc16q c6ee; mean 1 1 28; black no
+14:20:02 glmark2-mem: entry 7 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:20:02 glmark2-mem: entry 8 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 [shading] shading=cel: FPS: 415 FrameTime: 2.413 ms
+14:21:00 glmark2-frame: [shading] shading=cel: 4148 frames; us per frame: gl 44, swap 2365, show 0, other 1, frame 2410; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [shading] shading=cel: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:21:00 glmark2-counters: [shading] shading=cel: frames 4148 kicks 4148 waits 4147 draws 8296 tiles 7881200 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [shading] shading=cel: 800x600; probes c 009900ff, tl 000000ff, tr 000000ff, bl 009900ff, br 009900ff; crc16 f09a, crc16q 7354; mean 0 25 0; black no
+14:21:00 glmark2-mem: entry 8 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 9 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 602112, live 109092864 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 I: yakogl: program 2 has no uniform 'NormalMap'
+14:21:00 I: yakogl: program 2 has no uniform 'HeightMap'
+14:21:00 [bump] bump-render=high-poly: FPS: 336 FrameTime: 2.983 ms
+14:21:00 glmark2-frame: [bump] bump-render=high-poly: 3356 frames; us per frame: gl 65, swap 2912, show 0, other 1, frame 2978; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [bump] bump-render=high-poly: us per frame: program 2, uniforms 1, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 6; untimed laps 0
+14:21:00 glmark2-counters: [bump] bump-render=high-poly: frames 3356 kicks 3356 waits 3355 draws 13424 tiles 6376400 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [bump] bump-render=high-poly: 800x600; probes c a2a2a2ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 6761, crc16q ca03; mean 15 15 15; black no
+14:21:00 glmark2-mem: entry 9 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 10 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 I: yakogl: program 2 has no uniform 'HeightMap'
+14:21:00 [bump] bump-render=normals: FPS: 848 FrameTime: 1.179 ms
+14:21:00 glmark2-frame: [bump] bump-render=normals: 8485 frames; us per frame: gl 49, swap 1128, show 0, other 0, frame 1177; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [bump] bump-render=normals: us per frame: program 4, uniforms 1, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 9; untimed laps 0
+14:21:00 glmark2-counters: [bump] bump-render=normals: frames 8485 kicks 8485 waits 8482 draws 16970 tiles 16121500 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [bump] bump-render=normals: 800x600; probes c abababff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 e006, crc16q 48e9; mean 15 15 15; black no
+14:21:00 glmark2-mem: entry 10 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 11 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 I: yakogl: program 2 has no uniform 'NormalMap'
+14:21:00 [bump] bump-render=height: FPS: 703 FrameTime: 1.424 ms
+14:21:00 glmark2-frame: [bump] bump-render=height: 7030 frames; us per frame: gl 54, swap 1366, show 0, other 1, frame 1421; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [bump] bump-render=height: us per frame: program 4, uniforms 1, attribs 2, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 10; untimed laps 0
+14:21:00 glmark2-counters: [bump] bump-render=height: frames 7030 kicks 7030 waits 7026 draws 14060 tiles 13357000 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [bump] bump-render=height: 800x600; probes c 989898ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 e31f, crc16q 404f; mean 15 15 15; black no
+14:21:00 glmark2-mem: entry 11 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 12 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 172 FrameTime: 5.817 ms
+14:21:00 glmark2-frame: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: 1723 frames; us per frame: gl 37, swap 5766, show 0, other 1, frame 5804; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: us per frame: program 2, uniforms 0, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 6; untimed laps 0
+14:21:00 glmark2-counters: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: frames 1723 kicks 1723 waits 1722 draws 3446 tiles 3273700 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: 800x600; probes c 000000ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 2116, crc16q e900; mean 0 0 1; black no
+14:21:00 glmark2-mem: entry 12 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 13 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 112 FrameTime: 8.997 ms
+14:21:00 glmark2-frame: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: 1115 frames; us per frame: gl 38, swap 8932, show 0, other 1, frame 8971; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:00 glmark2-steps: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: us per frame: program 2, uniforms 0, attribs 1, textures 2, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 7; untimed laps 0
+14:21:00 glmark2-counters: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: frames 1115 kicks 1115 waits 1114 draws 2230 tiles 2118500 reposts 0 wait_timeouts 0
+14:21:00 glmark2-picture: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: 800x600; probes c ffffffff, tl ffffffff, tr ffffffff, bl ffffffff, br ffffffff; crc16 e4c5, crc16q 2953; mean 231 233 221; black no
+14:21:00 glmark2-mem: entry 13 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:00 glmark2-mem: entry 14 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 [pulsar] light=false:quads=5:texture=false: FPS: 965 FrameTime: 1.036 ms
+14:21:56 glmark2-frame: [pulsar] light=false:quads=5:texture=false: 9658 frames; us per frame: gl 154, swap 879, show 0, other 1, frame 1034; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:56 glmark2-steps: [pulsar] light=false:quads=5:texture=false: us per frame: program 10, uniforms 4, attribs 9, textures 3, state 2, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 30; untimed laps 0
+14:21:56 glmark2-counters: [pulsar] light=false:quads=5:texture=false: frames 9658 kicks 9658 waits 9655 draws 57948 tiles 18350200 reposts 0 wait_timeouts 0
+14:21:56 glmark2-picture: [pulsar] light=false:quads=5:texture=false: 800x600; probes c 700170ff, tl 5a0313ff, tr 000000ff, bl 000000ff, br 811b4dff; crc16 f53d, crc16q bdc6; mean 48 32 45; black no
+14:21:56 glmark2-mem: entry 14 end: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 glmark2-mem: entry 15 before setup: osal(zephyr) mem: pool handed out 109694976, free in the lists 561152, live 109133824 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 I: render: hc dwords: 00000000 00d100d1 00000088 00000000 00000088 00000000 00000000 00000200 0000d00d 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 00044000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eac00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 0560c000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400ead80 400eae00 00000003 00000000 05608000 00000080 0561e000 00000080
+14:21:56 I: render: hrt[40]: 0560e000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 210x210 x1 te_screen=0x0000d00d mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:21:56 I: render: hc dwords: 00000000 00d100d1 00000088 00000000 00000088 00000000 00000000 00000200 0000d00d 00000010 00000000 00100000 00100000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 00048000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eae80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 05623000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400eb000 400eb080 00000003 00000000 0561f000 00000080 05635000 00000080
+14:21:56 I: render: hrt[40]: 05625000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 210x210 x1 te_screen=0x0000d00d mtile1=0x00100000 mtile2=0x00100000 isp_mtile=0x00040004 stride=16 rgn=64 tpc=512 teaa=0
+14:21:56 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4:I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 0004c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eb100 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 056be000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400eb280 400eb300 00000003 00000000 056ba000 00000080 056d0000 00000080
+14:21:56 I: render: hrt[40]: 056c0000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 800x600 x1 te_screen=0x00025031 mtile1=0x00380000 mtile2=0x00280000 isp_mtile=0x000e000a stride=140 rgn=560 tpc=8192 teaa=0
+14:21:56 I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 00050000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eb380 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 056d5000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400eb500 400eb580 00000003 00000000 056d1000 00000080 056e7000 00000080
+14:21:56 I: render: hrt[40]: 056d7000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 800x600 x1 te_screen=0x00025031 mtile1=0x00380000 mtile2=0x00280000 isp_mtile=0x000e000a stride=140 rgn=560 tpc=8192 teaa=0
+14:21:56  FPS: 47 FrameTime: 21.685 ms
+14:21:56 glmark2-frame: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: 462 frames; us per frame: gl 14877, swap 6759, show 0, other 2, frame 21638; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:56 glmark2-steps: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: us per frame: program 43, uniforms 7, attribs 26, textures 29, state 7, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 114; untimed laps 0
+14:21:56 glmark2-counters: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: frames 462 kicks 5083 waits 4155 draws 11091 tiles 6508708 reposts 0 wait_timeouts 0
+14:21:56 glmark2-picture: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: 800x600; probes c ffffffff, tl 919191ff, tr ffffffff, bl ffffffff, br ffffffff; crc16 5a5d, crc16q e6b2; mean 204 210 189; black no
+14:21:56 glmark2-mem: entry 15 end: osal(zephyr) mem: pool handed out 110747648, free in the lists 1171456, live 109576192 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 glmark2-mem: entry 16 before setup: osal(zephyr) mem: pool handed out 110747648, free in the lists 1171456, live 109576192 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 I: render: hc dwords: 00000000 001300bd 00000088 00000000 00000088 00000000 00000000 00000200 0000100b 00000008 00000000 00100000 00080000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 00054000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eb600 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 056ec000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400eb780 400eb800 00000003 00000000 056e8000 00000080 056fe000 00000080
+14:21:56 I: render: hrt[40]: 056ee000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 190x20 x1 te_screen=0x0000100b mtile1=0x00100000 mtile2=0x00080000 isp_mtile=0x00040002 stride=8 rgn=32 tpc=512 teaa=0
+14:21:56 I: render: hc dwords: 00000000 001300bd 00000088 00000000 00000088 00000000 00000000 00000200 0000100b 00000008 00000000 00100000 00080000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 00058000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400eb880 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 05703000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400eba00 400eba80 00000003 00000000 056ff000 00000080 05715000 00000080
+14:21:56 I: render: hrt[40]: 05705000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 190x20 x1 te_screen=0x0000100b mtile1=0x00100000 mtile2=0x00080000 isp_mtile=0x00040002 stride=8 rgn=32 tpc=512 teaa=0
+14:21:56 I: render: hc dwords: 00000000 00130013 00000088 00000000 00000088 00000000 00000000 00000080 00001001 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:21:56 I: render: hrt[0]: 0005c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[16]: 00000000 400ebb00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:21:56 I: render: hrt[24]: 00000000 00000000 0571a000 00000080 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[32]: 400ebc80 400ebd00 00000003 00000000 05716000 00000080 0572c000 00000080
+14:21:56 I: render: hrt[40]: 0571c000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:21:56 I: render: HWRT 20x20 x1 te_screen=0x00001001 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:21:56 [desktop] effect=shadow:windows=4: FPS: 147 FrameTime: 6.822 ms
+14:21:56 glmark2-frame: [desktop] effect=shadow:windows=4: 1468 frames; us per frame: gl 794, swap 6014, show 0, other 1, frame 6809; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:56 glmark2-steps: [desktop] effect=shadow:windows=4: us per frame: program 80, uniforms 13, attribs 49, textures 51, state 13, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 208; untimed laps 0
+14:21:56 glmark2-counters: [desktop] effect=shadow:windows=4: frames 1468 kicks 4405 waits 1468 draws 41111 tiles 8369500 reposts 0 wait_timeouts 0
+14:21:56 glmark2-picture: [desktop] effect=shadow:windows=4: 800x600; probes c ffffffff, tl 919191ff, tr 606060ff, bl ffffffff, br ffffffff; crc16 2f09, crc16q 9e28; mean 199 204 184; black no
+14:21:56 glmark2-mem: entry 16 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 glmark2-mem: entry 17 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 61 FrameTime: 16.580 ms
+14:21:56 glmark2-frame: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: 605 frames; us per frame: gl 16484, swap 62, show 0, other 4, frame 16550; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:56 glmark2-steps: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: us per frame: program 15, uniforms 5, attribs 11, textures 4, state 5, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 43; untimed laps 0
+14:21:56 glmark2-counters: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: frames 605 kicks 605 waits 1 draws 1210 tiles 1149500 reposts 0 wait_timeouts 0
+14:21:56 glmark2-picture: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: 800x600; probes c c7e3f4ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 a62d, crc16q a3e7; mean 41 56 66; black no
+14:21:56 glmark2-mem: entry 17 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 glmark2-mem: entry 18 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 85 FrameTime: 11.801 ms
+14:21:56 glmark2-frame: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: 850 frames; us per frame: gl 11714, swap 61, show 0, other 3, frame 11778; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:21:56 glmark2-steps: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: us per frame: program 15, uniforms 5, attribs 11, textures 4, state 4, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 42; untimed laps 0
+14:21:56 glmark2-counters: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: frames 850 kicks 850 waits 1 draws 1700 tiles 1615000 reposts 0 wait_timeouts 0
+14:21:56 glmark2-picture: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: 800x600; probes c b4d9f0ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 694f, crc16q 7c39; mean 42 57 66; black no
+14:21:56 glmark2-mem: entry 18 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:21:56 glmark2-mem: entry 19 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 69 FrameTime: 14.535 ms
+14:22:52 glmark2-frame: [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: 690 frames; us per frame: gl 14442, swap 63, show 0, other 4, frame 14509; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:22:52 glmark2-steps: [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: us per frame: program 16, uniforms 6, attribs 12, textures 5, state 6, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 47; untimed laps 0
+14:22:52 glmark2-counters: [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: frames 690 kicks 690 waits 1 draws 1380 tiles 1311000 reposts 0 wait_timeouts 0
+14:22:52 glmark2-picture: [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: 800x600; probes c b4d9f0ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 9975, crc16q 16f5; mean 42 57 66; black no
+14:22:52 glmark2-mem: entry 19 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 glmark2-mem: entry 20 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1171456, live 109907968 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 [ideas] speed=duration: FPS: 170 FrameTime: 5.896 ms
+14:22:52 glmark2-frame: [ideas] speed=duration: 1698 frames; us per frame: gl 5859, swap 29, show 0, other 1, frame 5889; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:22:52 glmark2-steps: [ideas] speed=duration: us per frame: program 455, uniforms 272, attribs 330, textures 283, state 132, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 1476; untimed laps 0
+14:22:52 glmark2-counters: [ideas] speed=duration: frames 1698 kicks 1698 waits 1 draws 497959 tiles 3226200 reposts 0 wait_timeouts 0
+14:22:52 glmark2-picture: [ideas] speed=duration: 800x600; probes c 2a223bff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 1c68, crc16q e1db; mean 4 3 6; black no
+14:22:52 glmark2-mem: entry 20 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1167360, live 109912064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 glmark2-mem: entry 21 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1167360, live 109912064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 [jellyfish] <default>: FPS: 159 FrameTime: 6.311 ms
+14:22:52 glmark2-frame: [jellyfish] <default>: 1588 frames; us per frame: gl 98, swap 6199, show 0, other 2, frame 6299; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:22:52 glmark2-steps: [jellyfish] <default>: us per frame: program 14, uniforms 2, attribs 3, textures 3, state 1, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 25; untimed laps 0
+14:22:52 glmark2-counters: [jellyfish] <default>: frames 1588 kicks 1588 waits 1587 draws 4764 tiles 3017200 reposts 0 wait_timeouts 0
+14:22:52 glmark2-picture: [jellyfish] <default>: 800x600; probes c 3f2419ff, tl 578ef9ff, tr 578ef9ff, bl 3358c8ff, br 3358c8ff; crc16 74e5, crc16q abbc; mean 69 103 196; black no
+14:22:52 glmark2-mem: entry 21 end: osal(zephyr) mem: pool handed out 111079424, free in the lists 1167360, live 109912064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 glmark2-mem: entry 22 before setup: osal(zephyr) mem: pool handed out 111079424, free in the lists 1167360, live 109912064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 I: yakogl: program 8 has no uniform 'fogDensity'
+14:22:52 I: yakogl: program 8 has no uniform 'fogNear'
+14:22:52 I: yakogl: program 8 has no uniform 'fogFar'
+14:22:52 I: yakogl: program 8 has no uniform 'fogColor'
+14:22:52 I: render: hc dwords: 00000000 012b018f 00000088 00000000 00000088 00000000 00000000 00000800 00013019 00000030 00000000 00200000 00180000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00060000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ebd80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 05731000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ebf00 400ebf80 00000003 00000000 0572d000 00000080 05743000 00000080
+14:22:52 I: render: hrt[40]: 05733000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 400x300 x1 te_screen=0x00013019 mtile1=0x00200000 mtile2=0x00180000 isp_mtile=0x00080006 stride=48 rgn=192 tpc=2048 teaa=0
+14:22:52 I: render: hc dwords: 00000000 012b018f 00000088 00000000 00000088 00000000 00000000 00000800 00013019 00000030 00000000 00200000 00180000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00064000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ec000 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 05748000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ec180 400ec200 00000003 00000000 05744000 00000080 0575a000 00000080
+14:22:52 I: render: hrt[40]: 0574a000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 400x300 x1 te_screen=0x00013019 mtile1=0x00200000 mtile2=0x00180000 isp_mtile=0x00080006 stride=48 rgn=192 tpc=2048 teaa=0
+14:22:52 I: render: hc dwords: 00000000 012b018f 00000088 00000000 00000088 00000000 00000000 00000800 00013019 00000030 00000000 00200000 00180000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00068000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ec280 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 0575f000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ec400 400ec480 00000003 00000000 0575b000 00000080 05771000 00000080
+14:22:52 I: render: hrt[40]: 05761000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 400x300 x1 te_screen=0x00013019 mtile1=0x00200000 mtile2=0x00180000 isp_mtile=0x00080006 stride=48 rgn=192 tpc=2048 teaa=0
+14:22:52 I: render: hc dwords: 00000000 012b018f 00000088 00000000 00000088 00000000 00000000 00000800 00013019 00000030 00000000 00200000 00180000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 0006c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ec500 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 05776000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ec680 400ec700 00000003 00000000 05772000 00000080 05788000 00000080
+14:22:52 I: render: hrt[40]: 05778000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 400x300 x1 te_screen=0x00013019 mtile1=0x00200000 mtile2=0x00180000 isp_mtile=0x00080006 stride=48 rgn=192 tpc=2048 teaa=0
+14:22:52 I: render: hc dwords: 00000000 007f007f 00000088 00000000 00000088 00000000 00000000 00000080 00007007 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00070000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ec780 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 0578d000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ec900 400ec980 00000003 00000000 05789000 00000080 0579f000 00000080
+14:22:52 I: render: hrt[40]: 0578f000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 128x128 x1 te_screen=0x00007007 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:22:52 I: render: hc dwords: 00000000 007f007f 00000088 00000000 00000088 00000000 00000000 00000080 00007007 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00074000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400eca00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 057a4000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ecb80 400ecc00 00000003 00000000 057a0000 00000080 057b6000 00000080
+14:22:52 I: render: hrt[40]: 057a6000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 128x128 x1 te_screen=0x00007007 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:22:52 I: render: hc dwords: 00000000 007f007f 00000088 00000000 00000088 00000000 00000000 00000080 00007007 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00078000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ecc80 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 057bb000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ece00 400ece80 00000003 00000000 057b7000 00000080 057cd000 00000080
+14:22:52 I: render: hrt[40]: 057bd000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 128x128 x1 te_screen=0x00007007 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:22:52 I: render: hc dwords: 00000000 007f007f 00000088 00000000 00000088 00000000 00000000 00000080 00007007 00000004 00000000 00080000 00080000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 0007c000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ecf00 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 057d2000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ed080 400ed100 00000003 00000000 057ce000 00000080 057e4000 00000080
+14:22:52 I: render: hrt[40]: 057d4000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 128x128 x1 te_screen=0x00007007 mtile1=0x00080000 mtile2=0x00080000 isp_mtile=0x00020002 stride=4 rgn=16 tpc=128 teaa=0
+14:22:52 I: render: hc dwords: 00000000 01ff01ff 00000088 00000000 00000088 00000000 00000000 00000800 0001f01f 00000040 00000000 00200000 00200000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00080000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ed180 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 057e9000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ed300 400ed380 00000003 00000000 057e5000 00000080 057fb000 00000080
+14:22:52 I: render: hrt[40]: 057eb000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 512x512 x1 te_screen=0x0001f01f mtile1=0x00200000 mtile2=0x00200000 isp_mtile=0x00080008 stride=64 rgn=256 tpc=2048 teaa=0
+14:22:52 [terrain] <default>:W: render: fence 109533 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=frame set last_posted=109536
+14:22:52 W: render: fence 109584 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (2 so far) site=frame set last_posted=109587
+14:22:52 W: render: fence 109635 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (3 so far) site=frame set last_posted=109638
+14:22:52 W: render: fence 109686 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (4 so far) site=frame set last_posted=109689
+14:22:52 W: render: fence 109737 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (5 so far) site=frame set last_posted=109740
+14:22:52 W: render: fence 109788 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (6 so far) site=frame set last_posted=109791
+14:22:52 W: render: fence 109839 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (7 so far) site=frame set last_posted=109842
+14:22:52 W: render: fence 109890 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (8 so far) site=frame set last_posted=109893
+14:22:52  FPS: 13 FrameTime: 80.915 ms
+14:22:52 glmark2-frame: [terrain] <default>: 124 frames; us per frame: gl 79915, swap 884, show 0, other 1, frame 80800; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:22:52 glmark2-steps: [terrain] <default>: us per frame: program 200, uniforms 10, attribs 11, textures 22, state 4, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 248; untimed laps 0
+14:22:52 glmark2-counters: [terrain] <default>: frames 124 kicks 6325 waits 6060 draws 7441 tiles 2788552 reposts 124 wait_timeouts 0
+14:22:52 glmark2-picture: [terrain] <default>: 800x600; probes c 53580eff, tl 555710ff, tr 7d9525ff, bl 4f5d12ff, br 5f7d18ff; crc16 b36c, crc16q 051a; mean 120 130 44; black no
+14:22:52 glmark2-mem: entry 22 end: osal(zephyr) mem: pool handed out 112087040, free in the lists 1150976, live 110936064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 glmark2-mem: entry 23 before setup: osal(zephyr) mem: pool handed out 112087040, free in the lists 1150976, live 110936064 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 [shadow] <default>:I: render: hc dwords: 00000000 04af063f 00000088 00000000 00000088 00000000 00000000 00008000 0004b063 00000208 00000000 00680000 00500000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00084000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ed400 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 0584c000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ed580 400ed600 00000003 00000000 0583c000 00000080 0585e000 00000080
+14:22:52 I: render: hrt[40]: 0584e000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 1600x1200 x1 te_screen=0x0004b063 mtile1=0x00680000 mtile2=0x00500000 isp_mtile=0x001a0014 stride=520 rgn=2080 tpc=32768 teaa=0
+14:22:52 I: pvr_backend: a 1600x1200 depth texture is sampled from its depth buffer (X8U24, stride 1600): no CPU resolve
+14:22:52 I: render: hc dwords: 00000000 04af063f 00000088 00000000 00000088 00000000 00000000 00008000 0004b063 00000208 00000000 00680000 00500000 00000000 00000000 00000000
+14:22:52 I: render: hrt[0]: 00088000 000000fa 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[8]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[16]: 00000000 400ed680 00000000 00000000 400d8da8 400d8d28 400d8d68 00000000
+14:22:52 I: render: hrt[24]: 00000000 00000000 0586f000 00000080 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[32]: 400ed800 400ed880 00000003 00000000 0585f000 00000080 05881000 00000080
+14:22:52 I: render: hrt[40]: 05871000 00000080 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[48]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: hrt[56]: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+14:22:52 I: render: HWRT 1600x1200 x1 te_screen=0x0004b063 mtile1=0x00680000 mtile2=0x00500000 isp_mtile=0x001a0014 stride=520 rgn=2080 tpc=32768 teaa=0
+14:22:52  FPS: 95 FrameTime: 10.618 ms
+14:22:52 glmark2-frame: [shadow] <default>: 944 frames; us per frame: gl 383, swap 10212, show 0, other 1, frame 10596; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:22:52 glmark2-steps: [shadow] <default>: us per frame: program 8, uniforms 3, attribs 5, textures 212, state 1, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 230; untimed laps 0
+14:22:52 glmark2-counters: [shadow] <default>: frames 944 kicks 2832 waits 943 draws 5665 tiles 10667200 reposts 0 wait_timeouts 0
+14:22:52 glmark2-picture: [shadow] <default>: 800x600; probes c a0a0a0ff, tl 000000ff, tr 000000ff, bl 4d4d4dff, br 4c4c4cff; crc16 0f82, crc16q c98d; mean 34 34 34; black no
+14:22:52 glmark2-mem: entry 23 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:22:52 glmark2-mem: entry 24 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [refract] <default>: FPS: 29 FrameTime: 35.063 ms
+14:23:49 glmark2-frame: [refract] <default>: 286 frames; us per frame: gl 34074, swap 908, show 0, other 0, frame 34982; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [refract] <default>: us per frame: program 9, uniforms 2, attribs 3, textures 5, state 1, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 21; untimed laps 0
+14:23:49 glmark2-counters: [refract] <default>: frames 286 kicks 3718 waits 3142 draws 6007 tiles 8665800 reposts 1 wait_timeouts 0
+14:23:49 glmark2-picture: [refract] <default>: 800x600; probes c 4f2f47ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 cb60, crc16q c989; mean 24 19 32; black no
+14:23:49 glmark2-mem: entry 24 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 25 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [conditionals] fragment-steps=0:vertex-steps=0: FPS: 1092 FrameTime: 0.916 ms
+14:23:49 glmark2-frame: [conditionals] fragment-steps=0:vertex-steps=0: 10923 frames; us per frame: gl 38, swap 876, show 0, other 0, frame 914; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [conditionals] fragment-steps=0:vertex-steps=0: us per frame: program 1, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:23:49 glmark2-counters: [conditionals] fragment-steps=0:vertex-steps=0: frames 10923 kicks 10923 waits 10921 draws 21846 tiles 20753700 reposts 0 wait_timeouts 0
+14:23:49 glmark2-picture: [conditionals] fragment-steps=0:vertex-steps=0: 800x600; probes c 000000ff, tl 000000ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 caae, crc16q e1b1; mean 57 57 57; black no
+14:23:49 glmark2-mem: entry 25 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 26 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [conditionals] fragment-steps=5:vertex-steps=0: FPS: 541 FrameTime: 1.851 ms
+14:23:49 glmark2-frame: [conditionals] fragment-steps=5:vertex-steps=0: 5408 frames; us per frame: gl 38, swap 1809, show 0, other 1, frame 1848; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [conditionals] fragment-steps=5:vertex-steps=0: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:23:49 glmark2-counters: [conditionals] fragment-steps=5:vertex-steps=0: frames 5408 kicks 5408 waits 5406 draws 10816 tiles 10275200 reposts 0 wait_timeouts 0
+14:23:49 glmark2-picture: [conditionals] fragment-steps=5:vertex-steps=0: 800x600; probes c 000000ff, tl 000000ff, tr c2c2c2ff, bl eaeaeaff, br 474747ff; crc16 10a5, crc16q c4b5; mean 50 50 50; black no
+14:23:49 glmark2-mem: entry 26 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 27 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [conditionals] fragment-steps=0:vertex-steps=5: FPS: 1077 FrameTime: 0.929 ms
+14:23:49 glmark2-frame: [conditionals] fragment-steps=0:vertex-steps=5: 10777 frames; us per frame: gl 37, swap 888, show 0, other 2, frame 927; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [conditionals] fragment-steps=0:vertex-steps=5: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:23:49 glmark2-counters: [conditionals] fragment-steps=0:vertex-steps=5: frames 10777 kicks 10777 waits 10776 draws 21554 tiles 20476300 reposts 0 wait_timeouts 0
+14:23:49 glmark2-picture: [conditionals] fragment-steps=0:vertex-steps=5: 800x600; probes c 000000ff, tl 030303ff, tr fdfdfdff, bl fefefeff, br f9f9f9ff; crc16 e701, crc16q fbdc; mean 55 55 55; black no
+14:23:49 glmark2-mem: entry 27 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 28 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [function] fragment-complexity=low:fragment-steps=5: FPS: 792 FrameTime: 1.264 ms
+14:23:49 glmark2-frame: [function] fragment-complexity=low:fragment-steps=5: 7919 frames; us per frame: gl 38, swap 1223, show 0, other 0, frame 1261; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [function] fragment-complexity=low:fragment-steps=5: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:23:49 glmark2-counters: [function] fragment-complexity=low:fragment-steps=5: frames 7919 kicks 7919 waits 7916 draws 15838 tiles 15046100 reposts 0 wait_timeouts 0
+14:23:49 glmark2-picture: [function] fragment-complexity=low:fragment-steps=5: 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 188f, crc16q 9c78; mean 55 55 55; black no
+14:23:49 glmark2-mem: entry 28 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 29 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 [function] fragment-complexity=medium:fragment-steps=5: FPS: 552 FrameTime: 1.812 ms
+14:23:49 glmark2-frame: [function] fragment-complexity=medium:fragment-steps=5: 5523 frames; us per frame: gl 38, swap 1771, show 0, other 0, frame 1809; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:23:49 glmark2-steps: [function] fragment-complexity=medium:fragment-steps=5: us per frame: program 2, uniforms 0, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:23:49 glmark2-counters: [function] fragment-complexity=medium:fragment-steps=5: frames 5523 kicks 5523 waits 5520 draws 11046 tiles 10493700 reposts 0 wait_timeouts 0
+14:23:49 glmark2-picture: [function] fragment-complexity=medium:fragment-steps=5: 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 bbc2, crc16q ec40; mean 55 55 55; black no
+14:23:49 glmark2-mem: entry 29 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:23:49 glmark2-mem: entry 30 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 724 FrameTime: 1.382 ms
+14:24:37 glmark2-frame: [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: 7244 frames; us per frame: gl 38, swap 1340, show 0, other 1, frame 1379; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:24:37 glmark2-steps: [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: us per frame: program 2, uniforms 1, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:24:37 glmark2-counters: [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: frames 7244 kicks 7244 waits 7242 draws 14488 tiles 13763600 reposts 0 wait_timeouts 0
+14:24:37 glmark2-picture: [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 787d, crc16q 55db; mean 54 54 54; black no
+14:24:37 glmark2-mem: entry 30 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 glmark2-mem: entry 31 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 723 FrameTime: 1.384 ms
+14:24:37 glmark2-frame: [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: 7233 frames; us per frame: gl 38, swap 1342, show 0, other 1, frame 1381; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:24:37 glmark2-steps: [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: us per frame: program 2, uniforms 1, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:24:37 glmark2-counters: [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: frames 7233 kicks 7233 waits 7230 draws 14466 tiles 13742700 reposts 0 wait_timeouts 0
+14:24:37 glmark2-picture: [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 c714, crc16q cc81; mean 55 55 55; black no
+14:24:37 glmark2-mem: entry 31 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 glmark2-mem: entry 32 before setup: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 219 FrameTime: 4.575 ms
+14:24:37 glmark2-frame: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: 2190 frames; us per frame: gl 38, swap 4525, show 0, other 1, frame 4564; pvr kick times: absent (built without CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES)
+14:24:37 glmark2-steps: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: us per frame: program 2, uniforms 1, attribs 1, textures 0, state 0, gc rest 0, gc ds 0, gc tiled copy 0, gc frame 0, gc uniforms 0, gc vertex 0, gc emit 0; sum 5; untimed laps 0
+14:24:37 glmark2-counters: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: frames 2190 kicks 2190 waits 2188 draws 4380 tiles 4161000 reposts 0 wait_timeouts 0
+14:24:37 glmark2-picture: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: 800x600; probes c 000000ff, tl 000000ff, tr 2c2c2cff, bl 636363ff, br 868686ff; crc16 3017, crc16q 158f; mean 55 55 55; black no
+14:24:37 glmark2-mem: entry 32 end: osal(zephyr) mem: pool handed out 112668672, free in the lists 1441792, live 111226880 bytes; frees held 0 (0 KiB); high-water absent, largest free range absent (pvr_render_pool_report)
+14:24:37 =======================================================
+14:24:37                                   glmark2 Score: 485 
+14:24:37 =======================================================
+14:24:37 glmark2: score 485: 33 scenes ran, 0 failed, 0 unsupported (33 list entries)
+14:24:37 glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 0
+14:24:37 glmark2: GL errors raised 0, draws that sampled an incomplete texture 0
+14:24:37 glmark2-list:  0 build:use-vbo=false        ran 168 fps   1 build:use-vbo=true         ran 887 fps
+14:24:37 glmark2-list:  2 texture:texture-filter=n.. ran 1043 fps  3 texture:texture-filter=l.. ran 1027 fps
+14:24:37 glmark2-list:  4 texture:texture-filter=m.. ran 915 fps   5 shading:shading=gouraud    ran 756 fps
+14:24:37 glmark2-list:  6 shading:shading=blinn-ph.. ran 616 fps   7 shading:shading=phong      ran 485 fps
+14:24:37 glmark2-list:  8 shading:shading=cel        ran 415 fps   9 bump:bump-render=high-poly ran 336 fps
+14:24:37 glmark2-list: 10 bump:bump-render=normals   ran 848 fps  11 bump:bump-render=height    ran 703 fps
+14:24:37 glmark2-list: 12 effect2d:kernel=0,1,0;1,.. ran 172 fps  13 effect2d:kernel=1,1,1,1,.. ran 112 fps
+14:24:37 glmark2-list: 14 pulsar                     ran 965 fps  15 desktop:effect=blur        ran 47 fps
+14:24:37 glmark2-list: 16 desktop:effect=shadow      ran 147 fps  17 buffer:interleave=false:.. ran 61 fps
+14:24:37 glmark2-list: 18 buffer:interleave=false:.. ran 85 fps   19 buffer:interleave=true     ran 69 fps
+14:24:37 glmark2-list: 20 ideas                      ran 170 fps  21 jellyfish                  ran 159 fps
+14:24:37 glmark2-list: 22 terrain                    ran 13 fps   23 shadow                     ran 95 fps
+14:24:37 glmark2-list: 24 refract                    ran 29 fps   25 conditionals:fragment-st.. ran 1092 fps
+14:24:37 glmark2-list: 26 conditionals:fragment-st.. ran 541 fps  27 conditionals:fragment-st.. ran 1077 fps
+14:24:37 glmark2-list: 28 function:fragment-comple.. ran 792 fps  29 function:fragment-comple.. ran 552 fps
+14:24:37 glmark2-list: 30 loop:fragment-loop=false   ran 724 fps  31 loop:fragment-uniform=fa.. ran 723 fps
+14:24:37 glmark2-list: 32 loop:fragment-uniform=true ran 219 fps
+14:24:37 yk-record: 594b1201 fc3f01e5 6184003f 00258320
+14:24:37 osal(zephyr): pending frees: high-water 1/128, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+14:24:37 osal(zephyr): at close: pending frees now 0 (0 KiB), oldest fence none, last submitted 179621; reclaim on: 0 refusals, 0 served without a wait, 0 after a wait, 0 refused
+14:24:37 I: render pool summary: 255808 KiB, bump 92704 KiB now, 92704 KiB high-water; top 4096 KiB now, 60544 KiB high-water
+14:24:37 I: render pool general: free 1316 KiB in 9 ranges, largest 384 KiB; 150 reused, 130 bumped, 0 refused; 253 frees (164024 KiB)
+14:24:37 I: render pool pds: free 0 KiB in 0 ranges, largest none; 0 reused, 8 bumped, 0 refused; 0 frees (0 KiB)
+14:24:37 I: render pool usc: free 92 KiB in 8 ranges, largest 16 KiB; 113 reused, 64 bumped, 0 refused; 136 frees (556 KiB)
+14:24:37 I: render pool losses: dropped 0 KiB, 0 double frees, 0 bad chain headers, rolled back 0 KiB
+14:24:37 I: render freelists: 0 grow requests, 0 served, 0 unserved, 0 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+14:24:37 I: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 0, TA stores 0, 3D stores 0, CDM stores 0, TDM stores 0, other 0
+14:24:37 osal(zephyr): ds slots peak 5/32, ds bytes peak 15564800, ds given up 0, ds refused 0 (slots full 0, no buffer 0), depth sampled from the buffer 2088 (refused 0)
+14:24:37 osal(zephyr): log: 1 causes logged once, 25 repeats not printed
+14:24:37 shaderc: keep high-water 83648 of 1048576 bytes (0 held now)
+14:24:37 yakogl: draws refused 0
+14:24:37 glmark2: PASS
+14:24:37 I: dss stats before hold t=341718 ms: vsyncs 20080 app_frames 160426 underflows 0 sync_lost 0 go_timeouts 0 go_waits 141912 safety_flips 0 app 1
+14:24:37 board: holding 20 s, then the reset
+14:24:37 I: dss stats after hold t=361736 ms: vsyncs 21258 app_frames 160426 underflows 0 sync_lost 0 go_timeouts 0 go_waits 141912 safety_flips 0 app 1
+14:24:37 board: resetting the SoC
+14:24:37 \x00�
+14:24:37 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:24:37 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:24:37 Changed A53 CPU frequency to 1250000000Hz (U grade) in DT
+14:24:37 SPL initial stack usage: 17088 bytes
+14:24:37 Trying to boot from MMC1
+14:24:37 Authentication passed
+14:24:37 Authentication passed
+14:24:37 Authentication passed
+14:24:37 Loading Environment from nowhere... OK
+14:24:37 init_env from device 9 not supported!
+14:24:37 Authentication passed
+14:24:37 Authentication passed
+14:24:37 Starting ATF on ARM64 core...
+14:24:37 
+14:24:37 NOTICE:  BL31: v2.13.0(release):v2.13.0-259-ge0c4d3903b-dirty
+14:24:37 NOTICE:  BL31: Built : 00:00:00, Jan  1 1970
+14:24:37 
+14:24:37 U-Boot SPL 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:24:37 SYSFW ABI: 4.0 (firmware rev 0x000b '11.2.5--v11.02.05 (Fancy Rat)')
+14:24:37 SPL initial stack usage: 1920 bytes
+14:24:37 HW CFG: 0x00
+14:24:37 Trying to boot from MMC1
+14:24:37 Authentication passed
+14:24:37 Authentication passed
+14:25:13 
+14:25:13 
+14:25:13 U-Boot 2024.04-ti-g11cb0162a795 (Jan 01 1970 - 00:00:00 +0000)
+14:25:13 
+14:25:13 SoC:   AM62PX SR1.0 HS-FS
+14:25:13 DRAM:  2 GiB
+14:25:13 optee optee: OP-TEE: revision 4.7 (a9690ae39995af36)
+14:25:13 Core:  161 devices, 34 uclasses, devicetree: separate
+14:25:13 MMC:   mmc@fa10000: 0, mmc@fa00000: 1
+14:25:13 Loading Environment from MMC... OK
+14:25:13 In:    serial@2800000
+14:25:13 Out:   serial@2800000
+14:25:13 Err:   serial@2800000
+14:25:13 Model: Toradex 0099 Verdin AM62P Quad 2GB WB IT V1.0B
+14:25:13 Serial#: 08641335
+14:25:13 Carrier: Toradex Dahlia V1.1C, Serial# 11080240
+14:25:13 am65_cpsw_nuss ethernet@8000000: K3 CPSW: nuss_ver: 0x6BA01903 cpsw_ver: 0x6BA81903 ale_ver: 0x00290105 Ports:2
+14:25:13 Net:   eth0: ethernet@8000000port@1 [PRIME]Could not get PHY for mdio@f00: addr 7
+14:25:13 am65_cpsw_nuss_port ethernet@8000000port@2: phy_connect() failed
+14:25:13 
+14:25:13 Hit any key to stop autoboot:  0 
+14:25:13 6188160 bytes read in 55 ms (107.3 MiB/s)
+14:25:13 288 bytes read in 20 ms (13.7 KiB/s)
+14:25:13 Failed to load '/safeui/zephyr_a53.bin'
+14:25:13 SafeUI images not found, booting Linux
+14:25:13 \x1b7\x1b[r\x1b[999;999H\x1b[6n\x1b8MMC: no card present
+14:25:13 No EFI system partition
+14:25:13 No EFI system partition
+14:25:13 Failed to persist EFI variables
+14:25:13 No EFI system partition
+14:25:13 Failed to persist EFI variables
+14:25:13 No EFI system partition
+14:25:13 Failed to persist EFI variables
+14:25:13 ** Booting bootflow '<NULL>' with efi_mgr
+14:25:13 Loading Boot0000 'mmc 0' failed
+14:25:13 EFI boot manager: Cannot load any image
+14:25:13 Boot failed (err=-14)
+14:25:13 MMC: no card present
+14:25:13 MMC: no card present
+14:25:13 MMC: no card present
+14:25:13 MMC: no card present
+14:25:13 ** Booting bootflow 'mmc@fa10000.bootdev.part_1' with script
+14:25:13 6956 bytes read in 21 ms (323.2 KiB/s)
+14:25:13 75135 bytes read in 22 ms (3.3 MiB/s)
+14:25:13 65 bytes read in 21 ms (2.9 KiB/s)
+14:25:13 Working FDT set to 90200000
+14:25:13 Applying Overlay: <board-host>_panel-cap-touch-7inch-dsi_overlay.dtbo
+14:25:13 4693 bytes read in 21 ms (217.8 KiB/s)
+14:25:13 11272338 bytes read in 83 ms (129.5 MiB/s)
+14:25:13 13381763 bytes read in 94 ms (135.8 MiB/s)
+14:25:13    Uncompressing Kernel Image to 0
+14:25:13 ## Flattened Device Tree blob at 90200000
+14:25:13    Booting using the fdt blob at 0x90200000
+14:25:13 Working FDT set to 90200000
+14:25:13    Loading Ramdisk to fc1d3000, end fce96083 ... OK
+14:25:13    Loading Device Tree to 00000000fc19d000, end 00000000fc1d2fff ... OK
+14:25:13 Working FDT set to fc19d000
+14:25:13 
+14:25:13 Starting kernel ...
+14:25:13 
+14:25:13 [    1.058036] tps65219 0-0030: System was put in shutdown due to timeout during an active or standby transition.
+14:25:13 [    1.083937] debugfs: File ':bus@f0000:bus@48000000:interrupt-controller@48000000' in directory 'domains' already present!
+14:25:13 [    1.084269] debugfs: File ':bus@f0000:bus@4e000000:interrupt-controller@4e400000' in directory 'domains' already present!
+14:25:13 [    1.694292] OF: graph: no port node found in /bus@f0000/dss@30220000/oldi-txes/oldi@1/ports
+14:25:13 [    1.753833] OF: graph: no port node found in /bus@f0000/dss@30220000/oldi-txes/oldi@1/ports
+14:25:13 [    1.763489] cdns-dsi 30500000.dsi: [drm] *ERROR* modalias failure on /bus@f0000/dsi@30500000/port@1
+14:25:13 [    1.772679] cdns-dsi 30500000.dsi: [drm] *ERROR* modalias failure on /bus@f0000/dsi@30500000/port@0
+14:25:13 [    1.784929] OF: graph: no port node found in /bus@f0000/dss@30220000/oldi-txes/oldi@1/ports
+14:25:13 Starting systemd-udevd version 255.21^
+14:25:13 sysroot.readonly configuration value: 0 (fs writable: 1)
+14:25:13 Using legacy ostree bind mount for /
+14:25:13 [    7.881130] omap-mailbox 29000000.mailbox: no available mbox devices found
+14:25:13 [    7.888778] omap-mailbox 29020000.mailbox: no available mbox devices found
+14:25:13 [    7.972349] omap-mailbox 29030000.mailbox: no available mbox devices found
+14:25:13 [    8.277725] vdec 30210000.video-codec: OPP table not found in device tree
+14:25:13 [    8.418157] remoteproc remoteproc0: request_firmware failed: -2
+14:25:13 [    8.506912] platform 78000000.r5f: mbox_request_channel: can't parse "mboxes" property
+14:25:13 [    8.563866] platform 78000000.r5f: error -ENOENT: mbox_request_channel failed
+14:25:13 [    8.571393] k3_r5_rproc bus@f0000:bus@b00000:r5fss@78000000: k3_r5_cluster_rproc_init failed, ret = -2
+14:25:13 
+14:25:13 Torizon OS 7.6.1+build.38 <board-host> ttyS2
+14:25:13 
+14:25:19 <board-host> login: 
