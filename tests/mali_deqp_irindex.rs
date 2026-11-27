@@ -9,9 +9,12 @@
 //! `tests/mali_ref` does the compare. The references were drawn with
 //! `tools/mali/deqp_ref.sh --instrument shim` (the command is in the note).
 //!
-//! Every reference meets the defect at the tip, so each byte-compare is
-//! `#[ignore]`d with the site and the cause, and `refusals_pinned` (not
-//! ignored) asserts the defect exactly ([`REFUSED`]). The fix (item
+//! `pair_hi_unread` and `pair_lo_unread` (124 of the 187 cases) are
+//! byte-equal ([`LOWERED`]): `convert_inputs16` converts the varying lanes a
+//! live node reads, not those of a dead `bvec2(v)` lane. Every other
+//! reference is still refused, so its byte-compare is `#[ignore]`d with the
+//! site and the cause, and `refusals_pinned` (not ignored) asserts each
+//! refusal exactly ([`REFUSED`]). The fix (item
 //! irindex-fix) moves a shape to [`LOWERED`] (or to [`DIFFERS`] when it
 //! compiles with other words than Mesa's, or to another refusal text in
 //! [`REFUSED`]) in the same commit and drops the `#[ignore]`.
@@ -24,7 +27,7 @@ mod mali_ref;
 
 /// The references the fix made byte-equal, without the `deqp_irindex_`
 /// prefix: each has a byte-compare test below that is not ignored.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["pair_hi_unread", "pair_lo_unread"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -42,7 +45,7 @@ const MIXED: &str =
     "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message: all nine
-/// met `Defect(IrIndex)` at `3497799a` (the note's section 2 names the
+/// references met `Defect(IrIndex)` at `3497799a` (the note's section 2 names the
 /// site of each); `sqrt_op_value` is past it now ([`MIXED`]).
 const REFUSED: &[(&str, &str)] = &[
     ("b2f16_pair", IR_INDEX),
@@ -50,8 +53,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("load_vec3_cmp", MIXED),
     ("mat3_uniform_conv", ALGEBRAIC),
     ("mat4_pair_unread", IR_INDEX),
-    ("pair_hi_unread", IR_INDEX),
-    ("pair_lo_unread", IR_INDEX),
     ("sqrt_op_value", MIXED),
     ("val16_abs_fold", IR_INDEX),
 ];
@@ -86,14 +87,15 @@ fn mat4_pair_unread() {
     mali_ref::assert_matches("deqp_irindex_mat4_pair_unread");
 }
 
+/// `bvec2(v).x`: the conversion is of the lanes a live node reads
+/// (`convert_inputs16`), `v.x` alone (`FADD.f32 r0.h0, r0^, 0x0.neg`).
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:8146 (index, from src32), the bvec2(v) V2F32_TO_V2F16 pair reads v.y, which the colour never reads"]
 fn pair_hi_unread() {
     mali_ref::assert_matches("deqp_irindex_pair_hi_unread");
 }
 
+/// `bvec2(v).yyyy`: `v.y` alone, as `pair_hi_unread`.
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:8146 (index, from load_lane), the bvec2(v) V2F32_TO_V2F16 pair reads v.x, which the colour never reads"]
 fn pair_lo_unread() {
     mali_ref::assert_matches("deqp_irindex_pair_lo_unread");
 }

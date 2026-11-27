@@ -32,7 +32,15 @@
 //! `random_mixed_rcp_inf` and `random_mixed_rsq_inf` fold their constants and
 //! refuse later. `random_mixed_rcp16` compiles since its `rcp` is dead and
 //! left out of the walk (`nir_fs.rs` `ir_live`), but its vertex program keeps
-//! a varying Mesa's link removes ([`DIFFERS`]). Every other test is ignored
+//! a varying Mesa's link removes ([`DIFFERS`]). Step A of the note (the
+//! vertex walk's integer and boolean constants through `nir::fold_int`)
+//! makes `const_call_other_bvec` and `const_call_other_ivec` byte-equal and
+//! moves `zero_operand_inot`, `random_mixed_icmp`, `random_mixed_inot`,
+//! `const_other_inot` and `const_other_iabs` to their next refusal;
+//! `zero_operand_icmp` compiles and differs by the vertex walk's fp32
+//! mediump sums ([`DIFFERS`]); `const_call_transcendental_atan` keeps the
+//! refusal (its `iand` is left unfolded: the folded `atan` is not Mesa's
+//! `atanf`, step B). Every other test is ignored
 //! with its refusal quoted; the lowering removes the `ignore`, moves the name
 //! from `REFUSALS` to `MATCHED` in the same commit. `refusals_pinned` runs
 //! now: it asserts each ignored reference's exact current refusal, that each
@@ -58,19 +66,73 @@ macro_rules! cfold_ref {
 }
 
 cfold_ref! {
-    cfold2_zero_operand_icmp => "deqp_cfold2_zero_operand_icmp",
-    cfold2_zero_operand_inot => "deqp_cfold2_zero_operand_inot",
     cfold2_zero_operand_rcp16 => "deqp_cfold2_zero_operand_rcp16",
-    cfold2_random_mixed_icmp => "deqp_cfold2_random_mixed_icmp",
-    cfold2_random_mixed_inot => "deqp_cfold2_random_mixed_inot",
-    cfold2_const_other_inot => "deqp_cfold2_const_other_inot",
-    cfold2_const_other_iabs => "deqp_cfold2_const_other_iabs",
     cfold2_const_other_rcp16 => "deqp_cfold2_const_other_rcp16",
     cfold2_const_call_transcendental_log2 => "deqp_cfold2_const_call_transcendental_log2",
     cfold2_const_call_transcendental_pow => "deqp_cfold2_const_call_transcendental_pow",
     cfold2_const_call_transcendental_atan => "deqp_cfold2_const_call_transcendental_atan",
-    cfold2_const_call_other_bvec => "deqp_cfold2_const_call_other_bvec",
-    cfold2_const_call_other_ivec => "deqp_cfold2_const_call_other_ivec",
+}
+
+/// The unrolled counter's compares fold and the selects of `arr[i]` with
+/// them (step A, nir.rs `fold_int_alu`): the program is the products and
+/// sums, 29 words against Mesa's 30, because Mesa adds the mediump lanes at
+/// fp16 and the vertex walk at fp32 (the compiled audit's cause V1, which
+/// the same shader with the loop written out already had).
+#[test]
+#[ignore = "differs: Mesa adds the mediump vertex lanes at fp16, the vertex walk at fp32 (audit cause V1); pinned by refusals_pinned"]
+fn cfold2_zero_operand_icmp() {
+    mali_ref::assert_matches("deqp_cfold2_zero_operand_icmp");
+}
+
+/// Its counter's `inot` folds (step A): a constant product is next.
+#[test]
+#[ignore = "refused: a constant product in a shape Mesa's algebraic rules move or fold"]
+fn cfold2_zero_operand_inot() {
+    mali_ref::assert_matches("deqp_cfold2_zero_operand_inot");
+}
+
+/// Its constant lanes' `ieq` folds (step A): vertex arithmetic is next.
+#[test]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
+fn cfold2_random_mixed_icmp() {
+    mali_ref::assert_matches("deqp_cfold2_random_mixed_icmp");
+}
+
+/// Its `inot` of a constant false folds (step A): vertex arithmetic is next.
+#[test]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product"]
+fn cfold2_random_mixed_inot() {
+    mali_ref::assert_matches("deqp_cfold2_random_mixed_inot");
+}
+
+/// Its unrolled write loop's counter folds (step A): a constant product is
+/// next.
+#[test]
+#[ignore = "refused: a constant product in a shape Mesa's algebraic rules move or fold"]
+fn cfold2_const_other_inot() {
+    mali_ref::assert_matches("deqp_cfold2_const_other_inot");
+}
+
+/// `5-1 + 2*3 - 9/3` folds in the vertex shader (step A; the quotient in
+/// `vs_idiv`): the fragment shader's `isOk(float, int)` compare is next.
+#[test]
+#[ignore = "refused: an integer or boolean value (the fragment shader's int compare)"]
+fn cfold2_const_other_iabs() {
+    mali_ref::assert_matches("deqp_cfold2_const_other_iabs");
+}
+
+/// `equal(bvec2(true), bvec2(false)).y` folds in the vertex shader (step A),
+/// and the fragment shader's `false == ref_out0` is the select with its arms
+/// swapped (`nir_fs.rs` `int_lane`, `float(!b)`): byte-equal.
+#[test]
+fn cfold2_const_call_other_bvec() {
+    mali_ref::assert_matches("deqp_cfold2_const_call_other_bvec");
+}
+
+/// The same for `equal(ivec2, ivec2)`: byte-equal.
+#[test]
+fn cfold2_const_call_other_ivec() {
+    mali_ref::assert_matches("deqp_cfold2_const_call_other_ivec");
 }
 
 /// `(!false || false) && (true ^^ false)`: the `ior` of constants folds (nir.rs
@@ -120,33 +182,41 @@ fn cfold2_random_mixed_rcp16() {
 /// `MaliError::ConstantFold`.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
+/// The next refusals of the references whose constants fold (step A).
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
+const CONSTANT_PRODUCT: &str = "a constant product in a shape Mesa's algebraic rules move or fold";
+
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_cfold2_zero_operand_icmp", CONSTANT_FOLD),
-    ("deqp_cfold2_zero_operand_inot", CONSTANT_FOLD),
+    ("deqp_cfold2_zero_operand_inot", CONSTANT_PRODUCT),
     ("deqp_cfold2_zero_operand_rcp16", CONSTANT_FOLD),
-    ("deqp_cfold2_random_mixed_icmp", CONSTANT_FOLD),
-    ("deqp_cfold2_random_mixed_inot", CONSTANT_FOLD),
+    ("deqp_cfold2_random_mixed_icmp", ARITH),
+    ("deqp_cfold2_random_mixed_inot", ARITH),
     ("deqp_cfold2_random_mixed_rcp_inf", "a fused multiply-add other than a matrix product's (a built-in function's)"),
-    ("deqp_cfold2_random_mixed_rsq_inf", "arithmetic other than +, -, * and a dot or matrix product"),
-    ("deqp_cfold2_const_other_inot", CONSTANT_FOLD),
-    ("deqp_cfold2_const_other_iabs", CONSTANT_FOLD),
+    ("deqp_cfold2_random_mixed_rsq_inf", ARITH),
+    ("deqp_cfold2_const_other_inot", CONSTANT_PRODUCT),
+    ("deqp_cfold2_const_other_iabs", "an integer or boolean value"),
     ("deqp_cfold2_const_other_rcp16", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_log2", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_pow", CONSTANT_FOLD),
     ("deqp_cfold2_const_call_transcendental_atan", CONSTANT_FOLD),
-    ("deqp_cfold2_const_call_other_bvec", CONSTANT_FOLD),
-    ("deqp_cfold2_const_call_other_ivec", CONSTANT_FOLD),
 ];
 
 /// The references that compile byte-equal (their tests run).
-const MATCHED: &[&str] =
-    &["deqp_cfold2_const_other_ior", "deqp_cfold2_random_mixed_f2i", "deqp_cfold2_zero_operand_rcp_inf"];
+const MATCHED: &[&str] = &[
+    "deqp_cfold2_const_call_other_bvec",
+    "deqp_cfold2_const_call_other_ivec",
+    "deqp_cfold2_const_other_ior",
+    "deqp_cfold2_random_mixed_f2i",
+    "deqp_cfold2_zero_operand_rcp_inf",
+];
 
 /// The references that compile with other words than Mesa's: the vertex
 /// program of `random_mixed_rcp16` stores a varying the fragment shader
-/// reads only in dead code, which Mesa's link removes (`vs.varying`).
-const DIFFERS: &[&str] = &["deqp_cfold2_random_mixed_rcp16"];
+/// reads only in dead code, which Mesa's link removes (`vs.varying`);
+/// `zero_operand_icmp` adds its mediump lanes at fp32 where Mesa narrows
+/// them to fp16 (the compiled audit's cause V1).
+const DIFFERS: &[&str] = &["deqp_cfold2_random_mixed_rcp16", "deqp_cfold2_zero_operand_icmp"];
 
 #[test]
 fn refusals_pinned() {

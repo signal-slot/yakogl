@@ -28,7 +28,7 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal (or that were byte-equal when
 /// drawn), without the `deqp_intval5_` prefix.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["light_amount_2_2"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -45,16 +45,14 @@ const REFUSED: &[(&str, &str)] = &[
     ("c_int_lt", TEXT_LANE),
     ("c_int_two", TEXT_INT),
     ("c_ivec4", TEXT_LANE),
-    ("light_amount_0_16", TEXT_CONST),
-    ("light_amount_2_2", TEXT_CONST),
+    ("light_amount_0_16", TEXT_UBO),
     ("mask1632", TEXT_INT),
 ];
 
 const TEXT_INT: &str = "Valhall: an integer or boolean value is not lowered yet";
 const TEXT_LANE: &str =
     "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
-const TEXT_CONST: &str =
-    "Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet";
+const TEXT_UBO: &str = "Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO) is not lowered yet";
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
 /// program, the tail and the blend branch included).
@@ -151,9 +149,9 @@ fn light_amount_0_16() {
     mali_ref::assert_matches("deqp_intval5_light_amount_0_16");
 }
 
-/// `light_amount` with 2 directional and 2 omni lights.
+/// `light_amount` with 2 directional and 2 omni lights: the unrolled
+/// counters' compares and selects fold (ConstantFold step A), byte-equal.
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn light_amount_2_2() {
     mali_ref::assert_matches("deqp_intval5_light_amount_2_2");
 }

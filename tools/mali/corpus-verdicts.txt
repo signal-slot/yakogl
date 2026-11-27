@@ -60,8 +60,8 @@ tools/shaders/es100/int_div.frag: Valhall: arithmetic other than +, -, * and a d
 tools/shaders/es100/intlit.frag: ok
 tools/shaders/es100/ioswap.vert: ok
 tools/shaders/es100/light_amount.frag: ok
-tools/shaders/es100/light_amount_0_16.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
-tools/shaders/es100/light_amount_2_2.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+tools/shaders/es100/light_amount_0_16.vert: Valhall: a uniform past the FAU's 128 words (Mesa loads it from the UBO) is not lowered yet
+tools/shaders/es100/light_amount_2_2.vert: ok
 tools/shaders/es100/loop_full.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/loop_nested.dowhile.frag: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 tools/shaders/es100/loop_nested.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
@@ -300,6 +300,7 @@ tools/shaders/internal/es/clear.frag: ok
 tools/shaders/internal/es/fbload.frag: ok
 tools/shaders/internal/es/fbload_int.frag: ok
 tools/shaders/internal/es/mipgen.frag: ok
+tools/shaders/internal/es/mipgen3.frag: Valhall: an if whose condition is not a comparison (a constant, a boolean operator) is not lowered yet
 tools/shaders/internal/es/quad.vert: ok
 tools/shaders/internal/fbload.frag: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }
 tools/shaders/internal/fbload.vert: front end: Rejected { line: 1, tok: "#version", msg: "desktop GLSL source; this is an OpenGL ES compiler" }

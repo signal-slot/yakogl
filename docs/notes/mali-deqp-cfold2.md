@@ -191,6 +191,38 @@ section 2 names the partner refusals) and the reference to un-ignore first.
 Steps 1 to 3 together take 192 of the 204 below the 100-case line on their
 own. Step 1 alone does it: 204 - 148 = 56.
 
+### 4.1 Step A as landed
+
+`Nir::alu_sized`'s all-constant branch sends the 32-bit integer and boolean
+operations to `nir::fold_int` (`nir.rs` `fold_int_alu`: the compares, `inot`,
+`ior`, `ixor`, `iadd`, `imul`, `ineg`, `f2i`, `i2f`, `u2f`, `b2i`, `isub`,
+`iabs`) before the float test; `vs_idiv` folds a quotient of two constants;
+`bcsel` of a constant condition is the arm it takes
+(nir_opt_algebraic.py); and the fragment walk's `float(!b)` of a 32-bit
+boolean is the select with its arms swapped (`int_lane`). What it does not
+do:
+
+- `iand` stays unfolded. The only constant `iand` of the measure is the
+  sign test of `atan`'s expansion, and the value folded behind it
+  (`3f8db716`) is not Mesa's `atanf(2.0)` (`3f8db70d`): step B's.
+- An integer sum or product of a constant and a select of two constants is
+  refused by name (`AlgebraicForm`): Mesa distributes the operation into
+  the select (nir_opt_algebraic.py:3430-3433) and its `i2f` then reads two
+  float constants (`deqp_constrnd_int_bits_vs`).
+- `zero_operand_icmp` compiles and is in `DIFFERS`: its integer constants
+  and selects fold as Mesa's do, and the 29 words left differ from Mesa's
+  30 only because the vertex walk adds the mediump lanes at fp32 (the
+  compiled audit's cause V1; the same shader with the loop written out by
+  hand compiled so before this step).
+
+Outcome of the references: `const_call_other_bvec`, `const_call_other_ivec`
+and `deqp_intval5_light_amount_2_2` are byte-equal; `zero_operand_inot`,
+`const_other_inot`, the six `deqp_vsconst_*loop*`, five `deqp_loops2_vs_idx_*`,
+three `deqp_idxloc_vs_*` and two `deqp_loops_vs_idx_*` references move to the
+constant-product refusal, `random_mixed_icmp` and `random_mixed_inot` to
+vertex arithmetic, `const_other_iabs` to the fragment integer text,
+`light_amount_0_16` to the FAU's 128-word limit.
+
 ## 5. The test
 
 `tests/mali_deqp_cfold2.rs`:
