@@ -42,7 +42,7 @@ SUMMARY_RE = re.compile(r"glmark2: score (\d+): (\d+) scenes ran, (\d+) failed, 
 # after its colon (a Zephyr level "I: ", the library's "glmark2:", ...); the
 # bare result line, with nothing but a console timestamp before it,
 # completes it.
-PREFIX_RE = re.compile(r"(?:^|\s)(\[[\w-]+\] \S+?):(?=[IWED]: |glmark2|osal|yakogl|shaderc)")
+PREFIX_RE = re.compile(r"(?:^|\s)(\[[\w-]+\] \S+?):(?=[IWED]: |glmark2|osal|yakogl|shaderc|\s*$)")
 BARE_RE = re.compile(r"^(?:\S+ )?\s*(FPS: .*|Set up failed.*|Unsupported.*)$")
 
 

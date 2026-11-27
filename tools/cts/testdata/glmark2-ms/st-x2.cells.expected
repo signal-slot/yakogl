@@ -1,8 +1,4 @@
-rc 1
+rc 0
 -- stdout
+terrain 250.00 ms (4 FPS), shadow 38.50 ms (25 FPS), refract 250.00 ms (4 FPS)
 -- stderr
-FAIL: scene started, no result line: [terrain] <default>
-FAIL: scene started, no result line: [refract] <default>
-FAIL: summary says 33 scenes ran, 31 result lines read
-FAIL: no ms a frame for terrain
-FAIL: no ms a frame for refract
