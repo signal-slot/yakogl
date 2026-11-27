@@ -33,7 +33,7 @@ use yakogl::shaderc::online::vivante::decode::decode_instr;
 use yakogl::shaderc::online::vivante::wide128::{compile_planes, IDENTITY, ONE, ZERO};
 use yakogl::shaderc::{
     release_shader, wide128_sensitivity, wide128_variant, LodKey, ShcShader, Wide128Planes, SHC_STAGE_FRAGMENT,
-    SHC_STAGE_VERTEX, SHC_VIV_CONST_LITERAL,
+    SHC_STAGE_VERTEX, SHC_VIV_CONST_LITERAL, SHC_VIV_NO_REG,
 };
 
 /// Held across every compile and every read of its code: the plane key is
@@ -144,8 +144,23 @@ fn imm(tok: &str) -> u32 {
     }
 }
 
-/// Run the listing of `sh` on symbolic texels and return `t1`, the result
-/// register of a one-output shader: a look-up writes the lanes of its
+/// The register a one-output shader leaves its result in: the fragment
+/// colour output, or the vertex stage's varying `v`. Not always `t1`: the
+/// allocator places an output in the register of the value it copies when
+/// that value dies at the copy (`alloc.rs` `copy_source_dying_here`).
+fn result_reg(sh: &ShcShader) -> String {
+    if sh.viv.ps_color_out_reg != SHC_VIV_NO_REG {
+        return format!("t{}", sh.viv.ps_color_out_reg);
+    }
+    let v = sh.viv.out[..sh.viv.num_out.into()]
+        .iter()
+        .find(|o| o.name[0] == b'v' as core::ffi::c_char && o.name[1] == 0)
+        .expect("the vertex stage writes v");
+    format!("t{}", v.reg)
+}
+
+/// Run the listing of `sh` on symbolic texels and return its result
+/// register ([`result_reg`]): a look-up writes the lanes of its
 /// destination mask from the plane its unit names (`unit` the R,G plane,
 /// `companion` the B,A plane), a `mov` writes lane `k` of its mask from
 /// `src.swizzle[k]`, a literal comes from the constant file or the
@@ -201,7 +216,7 @@ fn lanes_of(sh: &ShcShader, unit: u32, companion: u32) -> [Lane; 4] {
         }
         regs.insert(reg.to_string(), new);
     }
-    regs["t1"].map(|l| l.expect("the result is written"))
+    regs[&result_reg(sh)].map(|l| l.expect("the result is written"))
 }
 
 fn sampler_fs(sampler: &str, out: &str, body: &str) -> String {
