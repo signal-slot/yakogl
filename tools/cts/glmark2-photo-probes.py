@@ -5,6 +5,7 @@
 
     tools/cts/glmark2-photo-probes.py <screenshot.png> [--rotation 0|90|180|270]
         [--window x,y,w,h] [--tolerance N] [--frame panel|x2-kvm]
+        [--kvm [--rect x,y,w,h]]
         [--compare <tools/cts/glmark2-pictures.txt> <column> <scene info string>]
 
 The screenshot is the tailvision camera's take_screenshot: a perspective-corrected
@@ -38,6 +39,20 @@ OUTSIDE_MARGIN frame pixels around the window left out for edge blur). If it is
 not (a shifted window, a wrong frame, a desktop behind), no probes are printed
 and the exit is 2 with the share of non-black samples and the first place. The
 default frame is `panel` (the Verdin, above), where there is no such check.
+
+--kvm: the screenshot is an upright, straight (no perspective) HDMI capture, of any
+size, with the 800x600 scene (4:3) somewhere inside it, possibly scaled, the rest
+black (Armadillo-X2 through the NanoKVM). The scene rectangle is found in capture
+pixels as the bounding box of the non-black content (a row or column counts when
+at least KVM_MIN_HITS sampled pixels of it exceed BLACK_LEVEL, so JPEG noise does
+not widen it), then it must be 4:3 within KVM_ASPECT_TOL and at least 40x30; else
+exit 2 and --rect x,y,w,h (capture pixels) is the manual override. The five
+probes and the mean are taken at the scene's fractions of that rectangle
+(1/2, 1/4, 3/4 as above), so a scaled scene needs no scale option. A scene whose
+border rows or columns are black itself shrinks the box: the aspect check then
+refuses, use --rect. --kvm excludes --frame, --window and --rotation. The output
+line is the same, marked "approximate: KVM capture", with the rectangle shown in
+a trailing "[kvm rect x,y,w,h]".
 
 JPEG input (the NanoKVM capture is one; recognised by its FF D8 FF header, not the
 file name): there is no JPEG decoder here. The file is converted to an 8-bit PNG
@@ -100,6 +115,9 @@ NAMES = ("c", "tl", "tr", "bl", "br")
 BLACK_LEVEL = 16
 TOLERANCE = 48
 HALF = 3  # probe patch half-width, panel pixels
+KVM_STEP = 2  # --kvm detection: sample every 2nd capture pixel
+KVM_MIN_HITS = 3  # sampled pixels above BLACK_LEVEL for a row/column to count
+KVM_ASPECT_TOL = 0.04  # the found rectangle's w/h may differ from 4:3 by this fraction
 GRID = (40, 30)  # main.cpp Picture::GRID_X, GRID_Y
 
 
@@ -260,6 +278,30 @@ def outside_check(photo, win):
     return bad, n, first
 
 
+def find_scene_rect(w, h, rows):
+    """--kvm: bounding box (x, y, w, h) of the non-black content of an upright capture."""
+    cols, rws = [0] * w, [0] * h
+    for y in range(0, h, KVM_STEP):
+        r = rows[y]
+        for x in range(0, w, KVM_STEP):
+            if max(r[3 * x], r[3 * x + 1], r[3 * x + 2]) > BLACK_LEVEL:
+                cols[x] += 1
+                rws[y] += 1
+    xs = [x for x in range(w) if cols[x] >= KVM_MIN_HITS]
+    ys = [y for y in range(h) if rws[y] >= KVM_MIN_HITS]
+    if not xs or not ys:
+        raise Bad("--kvm: no non-black content found in the capture (black screen?); "
+                  "give --rect x,y,w,h")
+    x0, y0 = xs[0], ys[0]
+    rw, rh = xs[-1] - x0 + KVM_STEP, ys[-1] - y0 + KVM_STEP
+    rw, rh = min(rw, w - x0), min(rh, h - y0)
+    if rw < GRID[0] or rh < GRID[1] or abs(rw / rh - 4 / 3) > KVM_ASPECT_TOL * 4 / 3:
+        raise Bad("--kvm: the non-black area %d,%d,%d,%d is not a 4:3 scene (a desktop or "
+                  "OSD in the frame, or a scene with black borders); give --rect x,y,w,h"
+                  % (x0, y0, rw, rh))
+    return x0, y0, rw, rh
+
+
 def probe_points(x0, y0, w, h):
     """The sample's probes (main.cpp:386-388) as panel pixels, in NAMES order."""
     px = (w // 2, w // 4, w * 3 // 4, w // 4, w * 3 // 4)
@@ -283,11 +325,11 @@ def measure(photo, win):
     return probes, mean, black
 
 
-def fmt(win, probes, mean, black):
+def fmt(win, probes, mean, black, note="camera photograph"):
     pr = ", ".join("%s %02x%02x%02x00" % ((n,) + p) for n, p in zip(NAMES, probes))
     return ("photo: %dx%d; probes %s; mean %d %d %d; black %s  "
-            "[approximate: camera photograph, content-only]" % (
-                win[2], win[3], pr, mean[0], mean[1], mean[2], "yes" if black else "no"))
+            "[approximate: %s, content-only]" % (
+                win[2], win[3], pr, mean[0], mean[1], mean[2], "yes" if black else "no", note))
 
 
 def reference(path, column, scene):
@@ -329,24 +371,38 @@ def compare(probes, ref, tol):
 
 
 def parse(argv):
-    a = {"rotation": 0, "window": WINDOW, "tol": TOLERANCE, "compare": None, "frame": "panel"}
+    a = {"rotation": 0, "window": WINDOW, "tol": TOLERANCE, "compare": None, "frame": "panel",
+         "kvm": False, "rect": None}
     win = None
+    given = set()
     pos, i = [], 0
     try:
         while i < len(argv):
             o = argv[i]
             if o == "--rotation":
+                given.add(o)
                 a["rotation"] = int(argv[i + 1])
                 if a["rotation"] not in (0, 90, 180, 270):
                     raise Bad("--rotation is 0, 90, 180 or 270")
                 i += 2
             elif o == "--window":
+                given.add(o)
                 v = tuple(int(s) for s in argv[i + 1].split(","))
                 if len(v) != 4:
                     raise Bad("--window is x,y,w,h")
                 win = v
                 i += 2
+            elif o == "--kvm":
+                a["kvm"] = True
+                i += 1
+            elif o == "--rect":
+                v = tuple(int(s) for s in argv[i + 1].split(","))
+                if len(v) != 4 or min(v) < 0 or v[2] < GRID[0] or v[3] < GRID[1]:
+                    raise Bad("--rect is x,y,w,h in capture pixels, at least 40x30")
+                a["rect"] = v
+                i += 2
             elif o == "--frame":
+                given.add(o)
                 a["frame"] = argv[i + 1]
                 if a["frame"] not in FRAMES:
                     raise Bad("--frame is %s" % " or ".join(FRAMES))
@@ -371,6 +427,10 @@ def parse(argv):
     if len(pos) != 1:
         raise Bad("exactly one screenshot expected")
     a["png"] = pos[0]
+    if a["rect"] is not None and not a["kvm"]:
+        raise Bad("--rect needs --kvm")
+    if a["kvm"] and given:
+        raise Bad("--kvm excludes %s" % ", ".join(sorted(given)))
     fw, fh = FRAMES[a["frame"]]
     if win is not None:
         if (win[2] < GRID[0] or win[3] < GRID[1] or win[0] < 0 or win[1] < 0
@@ -393,6 +453,22 @@ def main(argv):
                 with open(jpeg_to_png(a["png"], td), "rb") as f:
                     data = f.read()
         w, h, rows = decode_png(data)
+        if a["kvm"]:
+            rect = a["rect"] or find_scene_rect(w, h, rows)
+            if rect[0] + rect[2] > w or rect[1] + rect[3] > h:
+                raise Bad("--rect lies outside the %dx%d capture" % (w, h))
+            photo = Photo(w, h, rows, 0, (w, h))
+            probes, mean, black = measure(photo, rect)
+            print(fmt(rect, probes, mean, black, "KVM capture") +
+                  "  [kvm rect %s]" % ",".join(map(str, rect)))
+            if not a["compare"]:
+                return 0
+            res, worst = compare(probes, reference(*a["compare"]), a["tol"])
+            for r in res:
+                print(r)
+            print("compare: %s (tolerance %d; KVM capture, content only)" % (
+                "all near" if worst == 0 else "differs", a["tol"]))
+            return worst
         photo = Photo(w, h, rows, a["rotation"], FRAMES[a["frame"]])
         if a["frame"] == "x2-kvm":
             bad, n, first = outside_check(photo, a["window"])

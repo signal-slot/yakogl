@@ -186,6 +186,100 @@ NAME="unknown frame"; bad2 python3 -I "$PROBES" "$T/x.png" --frame nosuch
 # the default framing keeps its limits: 1920-wide windows do not fit the panel
 NAME="default frame window outside panel"; bad2 python3 -I "$PROBES" "$T/a.png" --window 1000,0,800,600
 
+# --kvm: the 800x600 scene placed and scaled inside a 1920x1080 frame, JPEG-like noise
+cat > "$T/genk.py" <<'PY'
+import random, struct, sys, zlib
+# genk.py <out> <x> <y> <scale> <noise> <junk 0|1: grey patch outside the scene> [W H of the frame]
+out, ox, oy, sc, nz, junk = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == "1"
+W, H = (int(sys.argv[7]), int(sys.argv[8])) if len(sys.argv) > 8 else (1920, 1080)
+COL = {"c": (200, 160, 40), "tl": (24, 28, 24), "tr": (30, 80, 220),
+       "bl": (220, 30, 30), "br": (40, 200, 90)}
+POS = {"c": (400, 300), "tl": (200, 150), "tr": (600, 150), "bl": (200, 450), "br": (600, 450)}
+random.seed(7)
+sw, sh = int(800 * sc), int(600 * sc)
+def px(x, y):
+    sx, sy = (x - ox) / sc, (y - oy) / sc
+    if 0 <= x - ox < sw and 0 <= y - oy < sh:
+        for k, (qx, qy) in POS.items():
+            if abs(sx - qx) <= 20 and abs(sy - qy) <= 20:
+                return COL[k]
+        return (60, 70, 80)
+    if junk and 1500 <= x < 1800 and 100 <= y < 300:
+        return (90, 90, 90)
+    return (0, 0, 0)
+rows = []
+for y in range(H):
+    r = bytearray()
+    for x in range(W):
+        p = px(x, y)
+        for v in p:
+            r.append(min(255, max(0, v + random.randint(-nz, nz))) if (p != (0, 0, 0) or nz == 0) else
+                     max(0, random.randint(-nz, nz)))
+    rows.append(b"\0" + bytes(r))
+def chunk(t, b):
+    return struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+with open(out, "wb") as f:
+    f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
+PY
+genk() { python3 -I "$T/genk.py" "$@"; }
+# the probes within 8 levels (the table's tolerance) of REF, and the printed rect
+kvm_case() { # name png expected-rect args...
+    local name=$1 png=$2 rect=$3; shift 3
+    local out
+    out=$(python3 -I "$PROBES" "$png" --kvm "$@" 2>&1) || { bad "$name: exit $?: $out"; return; }
+    python3 -I - "$out" "$REF" "$rect" <<'PY' && ok "$name" || bad "$name: $out"
+import re, sys
+out, want, rect = sys.argv[1:4]
+got = re.search(r"probes (.*?); mean", out).group(1)
+g = re.findall(r"([a-z]+) ([0-9a-f]{8})", got)
+w = re.findall(r"([a-z]+) ([0-9a-f]{8})", want)
+assert [a for a, _ in g] == ["c", "tl", "tr", "bl", "br"], g
+for (_, a), (_, b) in zip(g, w):
+    assert all(abs(int(a[i:i+2], 16) - int(b[i:i+2], 16)) <= 8 for i in (0, 2, 4)), (a, b)
+m = re.search(r"\[kvm rect (\d+),(\d+),(\d+),(\d+)\]", out)
+r = [int(v) for v in rect.split(",")]
+assert m and all(abs(int(a) - b) <= 4 for a, b in zip(m.groups(), r)), (m and m.groups(), r)
+assert "KVM capture" in out and "black no" in out
+PY
+}
+genk "$T/k1.png" 560 240 1.0 0 0
+kvm_case "kvm 800x600 centred in 1920x1080" "$T/k1.png" 560,240,800,600
+genk "$T/k2.png" 100 50 1.5 3 0
+kvm_case "kvm scene scaled 1.5x at (100,50), noise" "$T/k2.png" 100,50,1200,900
+genk "$T/k3.png" 1300 700 0.5 3 0
+kvm_case "kvm scene scaled 0.5x at (1300,700), noise" "$T/k3.png" 1300,700,400,300
+genk "$T/k4.png" 0 0 1.0 3 0
+kvm_case "kvm scene at (0,0), noise" "$T/k4.png" 0,0,800,600
+genk "$T/k5.png" 120 67 0.5 3 0 960 540
+kvm_case "kvm 960x540 capture, scene 0.5x at (120,67)" "$T/k5.png" 120,67,400,300
+kvm_case "kvm 960x540 capture with --rect" "$T/k5.png" 120,67,400,300 --rect 120,67,400,300
+# a manual rectangle overrides detection: junk outside would break the detection
+genk "$T/kj.png" 560 240 1.0 3 1
+python3 -I "$PROBES" "$T/kj.png" --kvm >"$T/o" 2>"$T/e"; rc=$?
+[ $rc -eq 2 ] && grep -q -- "--rect" "$T/e" && [ ! -s "$T/o" ] \
+    && ok "kvm junk outside the scene: exit 2, points to --rect" || bad "kvm junk rc=$rc"
+kvm_case "kvm --rect x,y,w,h with junk outside" "$T/kj.png" 560,240,800,600 --rect 560,240,800,600
+# --compare reads the KVM probes like the camera ones
+python3 -I "$PROBES" "$T/k2.png" --kvm --compare "$T/pictures.txt" imx8mp "[test] scene=ref" >"$T/o"; rc=$?
+[ $rc -eq 0 ] && [ "$(grep -c ': near' "$T/o")" = 5 ] && ok "kvm compare: exit 0, 5 near" || bad "kvm compare rc=$rc"
+python3 -I "$PROBES" "$T/k2.png" --kvm --compare "$T/pictures.txt" imx8mp "[test] scene=swap" >"$T/o"; rc=$?
+[ $rc -eq 1 ] && grep -q ': far' "$T/o" && ok "kvm compare swapped: exit 1, far" || bad "kvm compare swapped rc=$rc"
+# the line goes through the same column parser: the leading fields match the camera form
+python3 -I "$PROBES" "$T/k1.png" --kvm | grep -q '^photo: 800x600; probes c [0-9a-f]\{8\}, tl .*; mean [0-9]* [0-9]* [0-9]*; black no' \
+    && ok "kvm line in the column form" || bad "kvm line form"
+# a 1600x1200 window is not 800x600: size shown as found
+python3 -I "$PROBES" "$T/k2.png" --kvm | grep -q '^photo: 1200x900;' && ok "kvm line shows the found rectangle size" || bad "kvm size"
+# an all-black capture
+gen "$T/kb.png" 1280 720 0 0,0,0 1
+NAME="kvm all black"; bad2 python3 -I "$PROBES" "$T/kb.png" --kvm
+genk "$T/kc.png" 700 300 1.5 0 0
+NAME="kvm scene cut by the frame edge (not 4:3)"; bad2 python3 -I "$PROBES" "$T/kc.png" --kvm
+NAME="kvm with --frame"; bad2 python3 -I "$PROBES" "$T/k1.png" --kvm --frame x2-kvm
+NAME="kvm with --window"; bad2 python3 -I "$PROBES" "$T/k1.png" --kvm --window 0,0,800,600
+NAME="--rect without --kvm"; bad2 python3 -I "$PROBES" "$T/k1.png" --rect 0,0,800,600
+NAME="kvm rect outside capture"; bad2 python3 -I "$PROBES" "$T/k1.png" --kvm --rect 1500,800,800,600
+
 # JPEG input: converted by Pillow / ffmpeg / ImageMagick; no decoder in the tool
 PYBIN=$(command -v python3)
 JPG="$T/x.jpg"; made=""
