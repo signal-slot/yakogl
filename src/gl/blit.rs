@@ -206,6 +206,28 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
             (surf, bits, surf == GLES_SURF_RGBA8888 && backend::rt_rgba8888_is_bgra(), false, None)
         }
     };
+    /* the format the application gave a texture, not the one it is stored in
+     * (RGB8 and RGBA4 are held as RGBA8): the multisample rule compares the
+     * application-level formats (Mesa compatible_resolve_formats, which looks
+     * at the renderbuffer's InternalFormat, not its Mesa format) */
+    let internalformat = match (a.type_, tex) {
+        (GL_TEXTURE, _) => c
+            .texture_ref(a.name)
+            .filter(|t| t.texfmt == GLES_TEXFMT_RGBA8)
+            .and_then(|t| {
+                super::es3_formats::by_index(t.es3_fmt).map(|e| e.internalformat).or(match (t.format, t.type_) {
+                    /* the packed upload types name the sized format of
+                     * the unsized internal formats (ES 3.0 table 3.3) */
+                    (GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4) => Some(GL_RGBA4),
+                    (GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1) => Some(GL_RGB5_A1),
+                    (GL_RGB, GL_UNSIGNED_SHORT_5_6_5) => Some(GL_RGB565),
+                    (GL_RGB, _) => Some(GL_RGB8),
+                    _ => None,
+                })
+            })
+            .unwrap_or(s.internalformat),
+        _ => s.internalformat,
+    };
     let kind = match bits.component_type {
         GL_INT => ColorKind::Int,
         GL_UNSIGNED_INT => ColorKind::Uint,
@@ -224,7 +246,7 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
         flip: false,
         kind,
         bits: bits.rgba,
-        internalformat: s.internalformat,
+        internalformat,
         tex,
     })
 }
