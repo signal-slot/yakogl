@@ -7007,18 +7007,57 @@ fn a_masked_srgb_clear_takes_the_f16x4_program_and_a_clamped_colour() {
     assert_eq!(u, [1.0, 0.5, 0.0, 1.0]);
 }
 
-/// An sRGB attachment beside another one is refused by name: the
-/// several-output path packs RGBA8 bytes where the PBE would read halves.
+/// An sRGB attachment beside an RGBA8 one is drawn as RGBA8 whose PBE
+/// state encodes, per render target (`srgb_beside_other_as_rgba8`): U8
+/// sources, REG_WORD0 `gamma` on the sRGB slot alone, the background clear
+/// the linear colour's bytes (the PBE encodes them), and the next frame's
+/// load of the sRGB attachment decodes (TPU gamma). With the sRGB
+/// attachment as draw buffer 0, a program of the sRGB class (it encodes or
+/// writes halves for every output) is refused by name.
 #[test]
-fn an_srgb_attachment_beside_another_is_refused_by_name() {
+fn an_srgb_attachment_beside_another_encodes_its_own_target() {
     let rig = Rig::new();
     let mut m = rig.draw(3);
     m.num_targets = 2;
+    m.clear_rgba = [0.5, 0.25, 0.0, 1.0];
     m.targets[0] = GlesDrawTarget { gpu: m.target_gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 };
     m.targets[1] =
         GlesDrawTarget { gpu: m.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_SRGB8_A8, out_shift: 0 };
-    assert_eq!(draw(&m), -util::ENOTSUP);
-    assert!(rig.logs().iter().any(|l| l.contains("SRGB8_ALPHA8 colour attachment beside")), "{:?}", rig.logs());
+    assert_eq!(draw(&m), 0, "{:?}", rig.logs());
+    let bg = rig.b().bg_color.gpu;
+    assert_eq!(pvr_backend_flush(), 0);
+    let (k, _) = rig.kicks()[0];
+    assert_eq!(k.frag.num_rt, 2);
+    let want = u32::from_le_bytes([128, 64, 0, 255]);
+    let col: Vec<u32> = (0..2).map(|i| rig.gpu_u32(bg + 4 * i)).collect();
+    assert_eq!(col, [want, want], "the linear clear colour's bytes, once per attachment");
+    let emits = rig.eot_emits();
+    let e = emits.last().expect("an end-of-tile program");
+    for i in 0..2 {
+        let a = m.targets[i].gpu;
+        assert_eq!(e[2 * i..2 * i + 2], pbe_emit_words(a, GLES_SURF_RGBA8888, i as u32, i as u32), "attachment {i}");
+        assert_eq!((k.frag.pbe_word[i][0] >> 4) & 1, i as u64, "attachment {i}: PBE gamma");
+    }
+
+    /* the next frame loads both: attachment 1 through the TPU's gamma */
+    let mut l = m;
+    l.do_clear = false;
+    assert_eq!(draw(&l), 0, "{:?}", rig.logs());
+    assert!(rig.b().frame_loads_color, "the frame loads its colour");
+    let fl = rig.fbload();
+    assert_eq!(fl.loads[1].tex.base_gpu, m.targets[1].gpu, "attachment 1 loaded");
+    assert_eq!(fl.loads[1].tex.format, GLES_TEXFMT_SRGB8_A8, "decoded by the TPU");
+    assert_eq!(pvr_backend_flush(), 0);
+
+    let mut s = m;
+    s.target_format = GLES_SURF_SRGB8_A8;
+    s.targets[0].format = GLES_SURF_SRGB8_A8;
+    s.targets[1].format = GLES_SURF_RGBA8888;
+    // SAFETY: the rig's fragment record outlives the draw.
+    let enc = ShcShader { blend_key: shaderc::SHC_BLEND_KEY_SRGB_ENCODED, ..unsafe { *s.fs } };
+    s.fs = &enc;
+    assert_eq!(draw(&s), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l.contains("SRGB8_ALPHA8 draw buffer 0 beside")), "{:?}", rig.logs());
 }
 
 /// `n` sRGB attachments, the first the rig's target, each 64x64.

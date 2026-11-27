@@ -603,6 +603,12 @@ struct Fbo {
 
 impl Fbo {
     fn new(internal: GLenum) -> Fbo {
+        Fbo::with([GL_RGBA8, GL_RGBA8, GL_RGBA8, internal])
+    }
+
+    /// Four renderbuffer attachments of the given formats, 0..3, all four
+    /// draw buffers written.
+    fn with(formats: [GLenum; 4]) -> Fbo {
         let (mut fb, mut rbs) = (0, [0; 4]);
         // SAFETY: room for the names; plain GL calls.
         unsafe {
@@ -611,7 +617,7 @@ impl Fbo {
             glGenRenderbuffers(4, rbs.as_mut_ptr());
             for (i, &rb) in rbs.iter().enumerate() {
                 glBindRenderbuffer(GL_RENDERBUFFER, rb);
-                glRenderbufferStorage(GL_RENDERBUFFER, if i == 3 { internal } else { GL_RGBA8 }, SIZE, SIZE);
+                glRenderbufferStorage(GL_RENDERBUFFER, formats[i], SIZE, SIZE);
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i as u32, GL_RENDERBUFFER, rb);
             }
             let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3];
@@ -663,6 +669,9 @@ struct Frame {
     emits: Vec<Emit>,
     /// The kick's `num_rt`.
     num_rt: u32,
+    /// PBESTATE_REG_WORD0 `gamma` (bit 4, pbestate.xml:268) of each of the
+    /// kick's `num_rt` register word pairs.
+    gamma: Vec<bool>,
 }
 
 /// Clears and draws over the bound framebuffer with the program of `class`,
@@ -691,7 +700,9 @@ fn drawn(class: Class) -> Result<Frame, GLenum> {
     let kicks = KICKS.lock().unwrap().clone();
     assert_eq!(emits.len(), 1, "one end-of-tile program: {:?}", logs());
     assert_eq!(kicks.len(), 1, "one kick: {:?}", logs());
-    Ok(Frame { emits: emits[0].chunks(2).map(|p| decode(p[1])).collect(), num_rt: kicks[0].0 })
+    let (num_rt, words) = kicks[0];
+    let gamma = words.iter().take(num_rt as usize).map(|w| w[0] & 1 << 4 != 0).collect();
+    Ok(Frame { emits: emits[0].chunks(2).map(|p| decode(p[1])).collect(), num_rt, gamma })
 }
 
 /// The class of the fourth output a format needs.
@@ -741,8 +752,6 @@ enum Outcome {
     /// Complete; the back end refuses the draw by name: an integer
     /// attachment beside another one (`GL_INVALID_OPERATION`).
     RefusedInteger,
-    /// Complete; refused by name: an sRGB attachment beside another format.
-    RefusedSrgb,
     /// The renderbuffer storage is refused (`GL_INVALID_ENUM`), so the
     /// framebuffer is incomplete.
     NotRenderable,
@@ -752,11 +761,13 @@ use Outcome::*;
 
 /// (GL name, label, the surface the GL core hands over for attachment 3 (a
 /// renderbuffer), today's outcome, whether the surface is ONE 32-bit output
-/// register (`surf_out_dwords` in src/pvr/backend.rs: sRGB and RGBA16F take
-/// two, an RGBA8-class or packed integer one)).
+/// register (`surf_out_dwords` in src/pvr/backend.rs: RGBA16F takes two, an
+/// RGBA8-class or packed integer one; an sRGB attachment beside one of
+/// another format is drawn as RGBA8 bytes the PBE encodes, one register,
+/// `srgb_beside_other_as_rgba8`)).
 const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_RGBA8, "RGBA8", GLES_SURF_RGBA8888, Draws, true),
-    (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8", GLES_SURF_SRGB8_A8, RefusedSrgb, false),
+    (GL_SRGB8_ALPHA8, "SRGB8_ALPHA8", GLES_SURF_SRGB8_A8, Draws, true),
     /* the 10-bit class is drawn as RGBA8 on the PowerVR today
      * (docs/es3/backend-caps.md section 3) */
     (GL_RGB10_A2, "RGB10_A2", GLES_SURF_RGBA8888, Draws, true),
@@ -841,8 +852,8 @@ fn completeness_and_surface_of_attachment_3() {
         for a in 0..3 {
             assert_eq!(fb_target_format_n(ctx(), a), GLES_SURF_RGBA8888, "{name}: attachment {a}");
         }
-        /* one 32-bit register, except sRGB and RGBA16F's two (the half_float
-         * and sRGB rules of the back end) */
+        /* one 32-bit register, except RGBA16F's two (the half_float rule of
+         * the back end) */
         let bpp = backend::gles_surf_bytes_per_pixel(surf);
         assert!(bpp <= 4 || !ROWS.iter().any(|r| r.0 == internal && r.4), "{name}: {bpp} bytes a pixel");
     }
@@ -880,14 +891,14 @@ fn four_pbe_states_reach_the_hardware() {
 }
 
 /// The back end refuses, by name, an integer attachment 3 beside RGBA8
-/// targets, and an sRGB one: `GL_INVALID_OPERATION`, no kick.
+/// targets: `GL_INVALID_OPERATION`, no kick. (An sRGB one was refused the
+/// same way until item pvr-srgb-mix of plan #368.)
 #[test]
-fn integer_and_srgb_attachment_3_are_refused_by_name_today() {
+fn integer_attachment_3_is_refused_by_name_today() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
         let want = match outcome {
             RefusedInteger => "an integer colour attachment beside another colour attachment",
-            RefusedSrgb => "an SRGB8_ALPHA8 colour attachment beside one of another format",
             _ => continue,
         };
         let f = Fbo::new(internal);
@@ -897,22 +908,14 @@ fn integer_and_srgb_attachment_3_are_refused_by_name_today() {
     }
 }
 
-/// Whether a read of attachment 3 beside RGBA8 targets is refused today:
-/// sRGB is (`GL_INVALID_OPERATION`): the clear before it is refused by the
-/// back end (an sRGB attachment beside another format) and the refusal
-/// surfaces at the read's flush. The rest read, the integer formats in their
-/// own read pair since item pvr-backend (plan #368) made their clear of
-/// attachment 3 a quad of its own (it was refused at the flush the same way
-/// before).
-fn read_is_refused(internal: GLenum) -> bool {
-    internal == GL_SRGB8_ALPHA8
-}
-
 /// `glClearBuffer{f,i,ui}v` of attachment 3 raises no error for any complete
 /// format (the type must match the format's class), and a `glReadPixels` of
-/// it, in the read pair valid for the format, reads for every format but
-/// sRGB (see `read_of_integer_and_srgb_attachment_3`). The
-/// host fills no pixels, so the values are not looked at.
+/// it, in the read pair valid for the format, reads for every format: the
+/// integer formats since item pvr-backend (plan #368) made their clear of
+/// attachment 3 a quad of its own, sRGB since item pvr-srgb-mix (its clear
+/// was refused beside another format, and the refusal surfaced at the
+/// read's flush). The host fills no pixels, so the values are not looked
+/// at.
 #[test]
 fn clear_buffer_and_read_of_attachment_3() {
     let _g = rig();
@@ -921,8 +924,7 @@ fn clear_buffer_and_read_of_attachment_3() {
             continue;
         }
         let _f = Fbo::new(internal);
-        let want = (GL_NO_ERROR, if read_is_refused(internal) { GL_INVALID_OPERATION } else { GL_NO_ERROR });
-        assert_eq!(clear_and_read(internal), want, "{name}: clear, read");
+        assert_eq!(clear_and_read(internal), (GL_NO_ERROR, GL_NO_ERROR), "{name}: clear, read");
         /* the other clear family for the class is a type mismatch */
         let wrong = if int_class(internal) { 0 } else { 1 };
         // SAFETY: plain GL calls.
@@ -983,26 +985,42 @@ fn integer_attachment_3_beside_rgba8_draws() {
     }
 }
 
-/// An sRGB attachment 3 beside RGBA8 targets draws (the PBE encodes it on
-/// store, `gamma` of REG_WORD0).
+/// An sRGB attachment 3 beside RGBA8 targets draws (item pvr-srgb-mix,
+/// plan #368): four PBE states, attachment 3's the RGBA8 one on output
+/// register 3 (the program writes linear bytes, one register), and only its
+/// register words set `gamma` (REG_WORD0 bit 4), so the PBE encodes that
+/// render target alone on store, as Mesa sets `reg.gamma` per attachment.
 #[test]
-#[ignore = "pvr-backend (plan #368): an SRGB8_ALPHA8 attachment beside one of another format is refused (srgb_targets_as_rgba8 serves all-sRGB draws only); as two output registers it would not fit register 3 either (pvr-budget4-test)"]
 fn srgb_attachment_3_beside_rgba8_draws() {
     let _g = rig();
     let _f = Fbo::new(GL_SRGB8_ALPHA8);
-    let frame = drawn(Class::Float).unwrap_or_else(|e| panic!("draw error {e:#x}"));
+    let frame = drawn(Class::Float).unwrap_or_else(|e| panic!("draw error {e:#x}: {:?}", logs()));
     assert_eq!(frame.emits.len(), 4);
+    assert_eq!(frame.num_rt, 4, "kick num_rt");
+    assert_eq!(frame.emits, [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2), rgba8_emit(3)], "PBE states");
+    assert_eq!(frame.gamma, [false, false, false, true], "REG_WORD0 gamma per render target");
+}
+
+/// The sRGB attachment may be any of the four: with attachment 3 RGBA8 and
+/// attachment 1 sRGB (`Fbo::with`'s order), only render target 1 encodes.
+#[test]
+fn srgb_attachment_beside_rgba8_encodes_its_own_target_alone() {
+    let _g = rig();
+    let _f = Fbo::with([GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA8, GL_RGBA8]);
+    let frame = drawn(Class::Float).unwrap_or_else(|e| panic!("draw error {e:#x}: {:?}", logs()));
+    assert_eq!(frame.num_rt, 4, "kick num_rt");
+    assert_eq!(frame.emits, [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2), rgba8_emit(3)], "PBE states");
+    assert_eq!(frame.gamma, [false, true, false, false], "REG_WORD0 gamma per render target");
 }
 
 /// A read of attachment 3 in the pair valid for its format (integer targets:
 /// RGBA_INTEGER with INT / UNSIGNED_INT; sRGB: RGBA / UNSIGNED_BYTE) is
 /// accepted, as the read of an RGBA8 one is.
 #[test]
-#[ignore = "pvr-backend (plan #368): the integer rows read since pvr-backend; the sRGB row's clear of attachment 3 is refused by the back end (an SRGB8_ALPHA8 attachment beside one of another format) and the read's flush raises GL_INVALID_OPERATION"]
 fn read_of_integer_and_srgb_attachment_3() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
-        if outcome == NotRenderable || !read_is_refused(internal) {
+        if outcome == NotRenderable || !(int_class(internal) || internal == GL_SRGB8_ALPHA8) {
             continue;
         }
         let _f = Fbo::new(internal);
