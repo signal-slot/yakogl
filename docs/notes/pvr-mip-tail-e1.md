@@ -771,6 +771,330 @@ or a note of the session's own) with:
   - A loop or EOT fault would show as a hang or a wrong picture in case 216.
     That is why case 216 runs first and alone.
 
+## (5) Combined with three levels a render
+
+Written 2026-11-27 at main `b884868c`. In this part, line numbers are that
+commit's, not `ea371491`'s. **This is a design only. Nothing in it has
+run.** No code was written, built or run for it, and no board was used.
+Every kick count below is arithmetic from the cited notes and code. Every
+millisecond figure is a prediction.
+
+The combination is the last bullet of "Open" in `pvr-mip-three-levels.md`:
+{1}, {2-4}, then one tail kick for the rest of the chain. That is 3 kicks a
+chain.
+
+Where things stand:
+
+- Three levels a render is on main, behind `MIP_THREE_LEVELS`, which is off
+  by default (`src/pvr/backend.rs:3090-3102`). The board A/B of that knob
+  (arm A against arm E) is plan #420's am62p-gm item, and it has not
+  reported yet.
+- The tail kick of parts (1)-(4) is not on main. It exists only as the
+  patch above, against `ea371491`.
+
+### Grouping per chain size
+
+With three levels on, `mip_chain_gpu` (`:7538`, loop `:7568-7587`) draws
+level 1 alone, then `record_mip_levels` groups of up to three. After the
+render {2-4}, level 4 is in the storage. The combination draws everything
+below level 4 as one tail kick from level 4. So the tail's s is fixed at 4,
+where E1's own rule is s = max(3, n - 1 - 5).
+
+The tail is taken only when both of these hold:
+
+1. **It saves a kick.** Three levels draws the levels after 4 in
+   ceil((n - 5) / 3) renders. The tail replaces them with one, so it saves
+   a kick only when n - 5 > 3.
+2. **It fits the program.** The tail program holds at most
+   `MIP_TAIL_LEVELS` = 5 levels (part (1)), so n - 5 <= 5.
+
+That leaves n = 9 or 10 (8 or 9 levels above 0), with `mip_tail_plan`
+returning a surface. In every other case the chain keeps three levels'
+grouping exactly as it is on main.
+
+| chain (GL size, levels above 0) | knob off | three levels (arm E) | E1 alone (part (1)) | **combined** | tail surface |
+|---|---:|---:|---:|---:|---|
+| 800x600, 9 (terrain x2, tilt-shift, case 216's A and C) | 9 | 4: 1; 2-4; 5-7; 8-9 | 5 | **3**: 1; 2-4; tail 5..9 | levels 5..9 (25x18 .. 1x1), 1364 texels: 44 x 31, `num_rt` 1. This is E1's own 800x600 tail, which also has s = 4 |
+| 256x256, 8 (bloom H and V, case 216's B) | 8 | 4: 1; 2-4; 5-7; 8 | 4 | **3**: 1; 2-4; tail 5..8 | levels 5..8 (8x8 .. 1x1), 85 texels: 12 x 7 plus the last texel through slot 1 (1x1 at level 8), `num_rt` 2. This is new: E1's 256x256 tail starts at s = 3 |
+| 512x512, 9 (terrain's specular chain, built once at setup) | 9 | 4 | 5 | **3** | levels 5..9, 341 texels: 20 x 17 plus the last texel. This is E1's own surface |
+| 1600x1200, 10 (refract) | 10 | 4: 1; 2-4; 5-7; 8-10 | 6 | **4**, as arm E: no tail | a tail of 5..10 would be 6 levels, which the program cannot hold |
+| 128x128, 7 | 7 | 3: 1; 2-4; 5-7 | 4 | 3, as arm E: no tail | saves nothing |
+| 64x64, 6 (dEQP-GLES2 `generate.*` shapes, per `pvr-mip-three-levels.md` part (e)) | 6 | 3: 1; 2-4; 5-6 | 4 | 3, as arm E: no tail | saves nothing |
+| 16x16 and smaller | as today | as arm E | as today | as arm E | - |
+
+Each 256x256 surface is computed by part (1)'s `mip_tail_plan` search:
+
+- 85 texels is odd and the last level is 1x1 at pitch 1, so the body is 84.
+- The pitch starts at the first even value at or past sqrt(84), which is 10.
+  10 does not divide 84; 12 does, giving 7 rows.
+- 12 x 7 lies inside level 1's 128x128 grid.
+
+A chain whose surface does not fit returns `None` and falls back to arm E's
+grouping, not to a refusal. One example is a non-square POT chain whose
+level 1 is too narrow.
+
+Level by level, against arm E (`TPU` = byte-identical by construction,
+`ALU` = a program's bilinear over TPU leaves; arm E's column is
+`pvr-mip-three-levels.md` part (b)):
+
+| chain | levels 1-4 | level 5 | levels 6, 7 | level 8 | level 9 |
+|---|---|---|---|---|---|
+| 800x600, arm E | 1 TPU, 2 TPU, 3-4 ALU | TPU of level 4 (`o0` of render 3) | ALU | TPU of level 7 (`o0` of render 4) | ALU |
+| 800x600, combined | the same render, the same bytes | the tail's leaf: `textureLod(level 4, (x + 0.5) * u_scale, 0)`. With a one-level linear sampler this is the same filter at the same coordinate bits (part (4)), so the bytes are expected to be **the same** | ALU over the same leaves with the same clamp, the same `DOWN` arithmetic and the same `Q`, so expected the same | **ALU** in place of the TPU | ALU over a different level 8 |
+| 256x256, arm E | as above | TPU of level 4 | ALU | TPU (`record_mip_level`) | - |
+| 256x256, combined | the same | the tail's leaf, expected the same | expected the same | **ALU** | - |
+
+So the combination should move nothing that arm E does not already move,
+except level 8 and everything computed from it. Those are levels of 6 texels
+or fewer (800x600's 3x2 and 1x1, 256x256's 1x1). The 256x256 chain is POT,
+so every weight is exactly 1/2 there, and the only open point is tie
+rounding (part (2), "What the host cannot see").
+
+### Kicks a frame, against the host's 28
+
+glmark2 terrain has five chains a frame (`terrain-mip-usage.md`): two
+800x600 terrain builds, the 800x600 tilt-shift H chain and the two 256x256
+bloom chains.
+
+| | knob off | arm E (three levels) | E1 alone | **combined** |
+|---|---:|---:|---:|---:|
+| mip kicks a frame | 9 + 8 + 8 + 9 + 9 = 43 | 4 x 5 = 20 | 5 + 4 + 4 + 5 + 5 = 23 | **3 x 5 = 15** |
+| passes | 8 | 8 | 8 | 8 |
+| **kicks a frame, host now** (no dead clear kick) | **51** (`tests/pvr_terrain_kicks.rs`) | **28** (`tests/pvr_mip_three_levels.rs`) | 31 | **23** = 28 - 5, one fewer a chain |
+| with the window's dead clear kick, as parts (2) and (d) counted | 52 | 29 | 32 | 24 |
+
+The combination is 5 kicks a frame below arm E's 28, and 28 below the knob
+off.
+
+Other counts, from the same table:
+
+- gl_test case 216 `mipchains` has four chains and 5 passes:
+  3 x 4 + 5 = **17** kicks a frame, against arm E's 21 and today's 40.
+- The setup's 512x512 chain goes from 4 kicks to 3, once.
+- Refract does not move from arm E's count.
+
+### What both changes share: the pitch and target fields
+
+Both draws are siblings of `record_mip_level`. Both write the same static
+`MIP_DRAW` and the same backend fields.
+
+| field | three-target render (`record_mip_levels`, `:7387-7484`) | tail kick (part (1)'s `record_mip_tail`) | rule in the combination |
+|---|---|---|---|
+| `d.target_w/h` | `hwrt.max(level)`, where hwrt is level 1's size | `lv[1].max(P, R)` | the same HWRT size for every kick of the chain, so the chain keeps its one HWRT set (`HWRT_MEMBERS` = 4) |
+| `d.target_pitch` (slot 0) | level l+1's storage pitch | P, the surface's pitch | per draw, nothing shared |
+| `Backend::mip_clip` (slot 0's maxclip, moved to `frame_clip` at `:6175-6176`) | (W1, H1) | (P, R) | each draw sets it and zeroes it after `draw_one`. `record_mip_tail` must zero it too, as `record_mip_levels` does at `:7481` |
+| `d.num_targets`, `d.targets[1..]` | 2 or 3, each at a level's address with its GL extent | 2 when the range is odd: slot 1 is the 1x1 last level | each draw starts from `GlesDraw::ZERO`, so no target leaks from one draw to the next |
+| `Backend::mip_pitch`, moved to `frame_pitch` at `:6177-6178`, used by `flush` at `:10277-10283` | the secondary levels' storage pitches | **left zero**, so slot 1's linestride stays derived as (1 + 1) & !1 = 2, as the tail kick's words were on the host (appendix A). One row means the linestride is never used | `record_mip_levels` resets `mip_pitch` after its draw (`:7482`), and `frame_begin_with` moves and zeroes it. The tail kick's frame therefore sees `frame_pitch` = 0 without any new code. A host test pins that |
+| the fragment block in `FbLoad` | `mip3_u` (12 dwords) | `mip_tail_u` (44 dwords) | separate fields, as each program's record wants |
+| the program | `mipgen3_fs`, uploaded at the first three-levels chain (`mip3_program`, `:7523`) | `mipgen_tail_fs`. E1's patch uploads it in `static_objects_init`, which would move every allocation after it with the knob off. The combination uploads it lazily instead, as `mip3_program` does; if that upload fails, the chain keeps arm E's grouping | lazy upload, as `mip3_program` does |
+
+Both programs also carry the same intermediate rounding `Q`,
+`floor(v * 255.0 + 0.5)`. It must stay one choice in both. If the board
+says the pack rounds ties to even, both programs change in the same commit.
+
+### How a tail kick follows a three-target render
+
+- **Separate frames.** Render {2-4} targets level 2's address and the tail
+  targets level 5's, so `frame_ends_here` closes render {2-4}'s frame
+  before the tail opens its own. This is the same frame split as between any
+  two level kicks today.
+- **Its source is a secondary emit.** The tail samples level 4, which
+  render {2-4} wrote through slot 2. That is no new dependency: arm E's
+  render 3 samples level 4 written the same way. Queued kicks run in order
+  on the 3D queue. Whatever arm E's board run shows for render 3 (a picture
+  or a probe that is right) holds for the tail's source too. If arm E fails
+  there, the combination fails the same way.
+- **The sampled level is NPOT on the 800x600 chain.** Level 4 is 50x37 at
+  pitch 64. The tail binds it as `record_mip_level` binds any source (width
+  50, `stride_texels` 64), and E1's tail already read level 4 of 800x600
+  that way on the host.
+- **The surface over levels 5..n-1 is not a level.** It is a linear view of
+  their bytes, so its slot 0 store is clipped to P x R, not to any level's
+  extent. No other kick of the chain writes those bytes, and none reads
+  them before the chain's `mip_fence`.
+- **Only the end of the loop changes.** In `mip_chain_gpu`, once `l` reaches
+  5 with three levels on and the tail switch on, if n is 9 or 10 and
+  `mip_tail_plan_from(&lv, n, 4)` returns a surface, the loop records
+  `record_mip_tail` and ends. The flush, the `mip_fence` and the
+  `Ok(None)` answer stay as they are, so the GL core still sees
+  `MipChain::Whole`. Path B's prefix (`mip_cpu_tail`) keeps a kick a level.
+  E1's `mip_tail_plan` becomes `mip_tail_plan_from(lv, n, s)`, with s given
+  (4 here); `MIP_TAIL_MIN_S` is not needed.
+
+### The knob: one more switch
+
+The design is **one more switch, a refinement of the existing one**:
+
+- `pvr_backend_set_mip_tail(on: bool)` beside
+  `pvr_backend_set_mip_three_levels`, with its start value the constant
+  `MIP_TAIL_DEFAULT` = `false`.
+- It is read at each chain, and only when that chain is drawn with three
+  levels (`three` true in `mip_chain_gpu`).
+- With three levels off, the tail switch does nothing, and the chain is a
+  kick a level, as today.
+
+Why one more switch and not a mode of the existing one (an `AtomicU8` of a
+kick a level / three levels / three levels with the tail):
+
+- Plan #420's mip3-flip item and arm E's one-line commit both name
+  `MIP_THREE_LEVELS_DEFAULT`. A mode would rename it under them.
+- The tail's board A/B is then one line on top of arm E (`MIP_TAIL_DEFAULT`
+  = `true`), with a single changed variable, as arm E is one line on top of
+  arm A.
+- E1 alone (the tail without three levels) is not offered. At 31 kicks
+  (32 with the dead clear) it is dominated by arm E's 28. It would also be
+  a fourth grouping to test.
+
+Once both defaults are settled on the board, the two switches can be folded
+into one mode in a later commit.
+
+### Host tests that would pin it
+
+Each test is added in the change's own commit.
+
+1. **`tests/pvr_mip_three_levels.rs`**, extended. It already has the
+   terrain platform, `with_three_levels`, `groups(n)` and `mod levels`.
+   Features `host-test,gpu-powervr,shaderc-online`; the kick and word tests
+   also run in the `report-es2` build.
+   - A `with_tail` guard, like `with_three_levels`.
+   - `terrain_frame_with_three_levels_and_the_tail_is_23_kicks_15_mip_renders_and_8_passes`:
+     each chain stores 1, 3 and 5 levels (800x600) or 1, 3 and 4 (256x256).
+     Its `rts` are 1, 3, 1 (800x600) and 1, 3, 2 (256x256).
+   - A grouping table per size: 800x600, 256x256 and 512x512 take the tail.
+     1600x1200, 128x128 and 64x64 are `groups(n)` unchanged. With three
+     levels off and the tail on, the chain is a kick a level.
+   - Store words of the tail kick:
+     - 800x600: emit 0 at level 5's address with
+       `pbe_reg_words(RGBA8888, 44, 31, pitch 44)`, `num_rt` 1;
+     - 256x256: emit 0 is 12 x 7 at level 5's address, emit 1 is 1x1 at
+       level 8's address, `num_rt` 2, slot 1's linestride the derived 2
+       (`frame_pitch` zero after a three-target frame);
+     - both: the target size is level 1's, and render {2-4}'s words are
+       byte-equal to arm E's.
+   - The block: each tail level's `1/w, 1/h` exactly as `record_mip_levels`
+     makes them, the offsets and pitches, and `u_sf`.
+   - In `mod levels` (out of `report-es2`, since `mipgen_tail.frag` is GLSL
+     ES 3.00, as `mipgen3.frag` is), with E1's appendix B models and
+     contents:
+     - levels 1..5 byte-equal to arm E's chain in every TPU model;
+     - levels 6 and 7 byte-equal to arm E's in every model (a prediction to
+       confirm);
+     - every level byte-equal to the knob-off chain under the `alu` model;
+     - levels 8 and 9 pinned by FNV-1a 64 hashes, with max |d| <= 1 against
+       the knob-off chain under `gl` and `w8`;
+     - padding 0.
+2. **`src/pvr/backend_tests.rs`**: `mip_tail_plan_from` with s = 4, one row
+   per size of the grouping table above, including the `None` cases.
+3. **The tail program's row**: a bound on its temporaries, at 219 or the
+   rebased compiler's figure, under the 255 the allocator refuses. A line in
+   `tests/pvr_mipgen_program.rs`, or beside the `mipgen3` row checks.
+4. **Unchanged and green while `MIP_TAIL_DEFAULT` is false**:
+   - `tests/pvr_terrain_kicks.rs` (51, or 28 if mip3-flip has flipped the
+     default);
+   - `tests/pvr_mip_chain_pin.rs`;
+   - `tests/es2_report_guard.rs`, whose stand-in has `generate_mipmap: None`;
+   - `tests/mipmap_offer_guard.rs`.
+5. **`src/pvr/internal.rs`**: regenerated with the new
+   `internal powervr mipgen_tail` list line after `mipgen3`. The new row is
+   `PVR_INTERNAL_MIPGEN_TAIL` = 38. `--verify` reads one line more than at
+   the base. Use part (1)'s bootstrap order.
+
+### Predicted board record values (in the form of `pvr-mip-three-levels.md` part (f))
+
+The session uses `target:am62p` with `target:am62p-console`, and three
+images of one origin/main commit:
+
+- **arm A**: the commit as it is;
+- **arm E**: the commit plus `MIP_THREE_LEVELS_DEFAULT` = `true`;
+- **arm T**: arm E plus `MIP_TAIL_DEFAULT` = `true`, built with
+  `--allow-local` and never pushed.
+
+If mip3-flip has landed by then, arm A is dropped and arm E is the commit as
+it is. Every arm is built the same way:
+`tools/cts/pr-session.sh <name> --knob off --cases '216' --glmark2`, then
+case 219 for c. Run gl_test case 216 first and alone: the tail's loop, or
+its two emits of different sizes, would show there as a hang or a wrong
+probe. Every value below is a **prediction**. c is the marginal cost of a
+queued render from case 219 (`two - one`), about 1.15 ms on the record.
+
+| record value | A (last record) | E (three levels; am62p-gm's record once it exists) | **T (combined), predicted** |
+|---|---|---|---|
+| gl_test 216 `per frame: N kicks` | 40.00 (`61ad38a1`) | 21.00 | **17.00** (3 + 3 + 3 + 3 + 5) |
+| gl_test 216 `mipchains: 20 frames, X ms a frame` | 46.15 | 46.15 - 19c, about 24 | 46.15 - 23c plus the 4 tail kicks' shading: about **20 ms + shading** at c = 1.15; about 31 ms + shading if a kick is 0.65 ms plus one 20 ms fence a frame |
+| gl_test 216 `TA busy, 3D busy, TA\|3D` | TA\|3D 7.75 ms | about the same | E's, less 4 geometry phases, plus the tail's ALU. The 800x600 tail does 5120 leaf look-ups in a 3898-dword loop, against 1276 taps in E's renders 3 and 4. It is a board figure |
+| gl_test 216 `mipchains: reposts N over 20 frames` | read | not more | not more than E's |
+| gl_test 216 `case 216 mipchains: PASS` | PASS | PASS | **PASS**. The probes catch a hang or a sheared store, not a 1-LSB move |
+| `glmark2-counters: ... [terrain] ... kicks K` | 51 a frame | 28 | **23** |
+| terrain `FPS:` / `FrameTime` | 83.06 ms (`6a7021ec`) | about 57 ms | 83.06 - 28c, about **51 ms** at c = 1.15; about 65 ms at c = 0.65 |
+| refract ms a frame | 35.09 | about 28 | **E's, within noise**: refract's 1600x1200 chain keeps E's grouping |
+| `glmark2-frame: [terrain]` gl and swap us | read | gl falls | gl falls by about 5c below E's |
+| `render: fence N (frame fence) not moved at 20 ms, re-posted` | read | not more | not more |
+| GL errors, incomplete draws, `verdict=done`, resets | 0, 0, done, 0 | the same | **the same** |
+| pictures, column `am62p` of `tools/cts/glmark2-pictures.txt`, tolerance 8 | 28 match / 5 mismatch (animated probes) | the same split | **the same split**. Terrain's per-frame chains are read at levels 0-2, and those bytes are the same as E's. The 512x512 chain's levels 5..9 now come from the tail; only level 8 and below change kind, at 2x2 and under |
+| dEQP-GLES2 `functional.texture.mipmap.2d.*` per case | read | the same per case as A | **the same per case as A and E**. If the generate cases are of the 64x64 kind (`pvr-mip-three-levels.md` part (e)), they keep E's grouping and E's bytes. Only a case with a side of 256 or more reaches the tail |
+
+**The combination is confirmed when** all of these hold:
+
+- case 216 reads 17.00 kicks and PASS;
+- its ms a frame is at least 4c - 2 below arm E's in the same session (the
+  2 ms is slack for 4 tail kicks' shading, as in part (3)), and at least
+  23c - 4 below arm A's;
+- terrain is at least 5c - 3 below arm E's;
+- the pictures and the dEQP verdicts per case are unchanged from arm E.
+
+If the kicks fall and the milliseconds do not, the frame is not kick-bound.
+Then the tail adds nothing that the waits do not swallow
+(`am62p-pvr-mipmap-kicks.md`), and the switch stays off.
+
+The record goes into the three-levels and slow-terrain notes, as the arm-7
+records do: each image's commit, the `verdict=` line and the records path.
+Not a new session file.
+
+### Risks
+
+- **Order.** Build this only after arm E's board verdict. If arm E is not
+  kick-bound, or its three-emit renders store wrongly (the second "Open"
+  question of `pvr-mip-three-levels.md`), the combination inherits the
+  fault and gains nothing. `src/pvr/backend.rs` is also held by mip3-flip
+  and plan #416's rows item while they run.
+- **The program size decides the 800x600 gain.** The 800x600 chain needs
+  all 5 tail levels (5..9).
+  - At `ea371491` the tail took 219 temporaries, and 6 levels needed 255,
+    which the allocator refused.
+  - If today's compiler needs more for 5 levels, a 4-level tail gives
+    800x600 {1}; {2-4}; {5}; tail 6..9. That is 4 kicks, no better than
+    arm E.
+  - Then only the 256x256 chains gain (2 a frame: 28 -> 26).
+  - The temporaries are the first thing to read after the rebase.
+- **The E1 patch is against `ea371491`.** It must be re-applied by hand onto
+  `record_mip_levels` and the three-levels loop, with the tail program's
+  upload made lazy. Its appendix A and B tests must be rewritten for
+  s = 4: the 256x256 surface is new (12 x 7 plus the last texel, not
+  20 x 17).
+- **Firsts on the board.** The combination runs, in a row on the 256x256
+  chain:
+  - the first internal program with a per-pixel loop (`Trip::divergent`);
+  - the first draw with two emits of different sizes (the tail);
+  - the first draw with three emits of different pitches and maxclips
+    (render {2-4}).
+
+  None of them has run on a board. Case 216 alone first is the guard.
+- **Pictures.** Level 8 of the 800x600 and 256x256 chains becomes an ALU
+  level, and so does 800x600's level 9 through it. This is up to 1 LSB under
+  the host's models, in levels of 6 texels or fewer. Level 5 relies on
+  `textureLod(.., 0)` on a one-level sampler giving the same bytes as
+  `texture()`: argued in part (4), unmeasured on the board. Tie rounding
+  stays open for both programs, and they must share `Q`.
+- **Shading time.** E1's tail kick does far more taps than the E renders it
+  replaces: on an 800x600 chain, 5120 leaf look-ups against arm E's 1276
+  taps in renders 3 and 4 (450 + 108 x 4 + 24 x 16, then 6 + 4); on a
+  256x256 chain, 256 against 193 (64 + 16 x 4 + 4 x 16, then 1). If its
+  shading costs more than a
+  queued kick (about c), the combination loses time even while it saves the
+  kick. Case 216's ms against arm E's in the same session tells. The kick
+  times build (`CONFIG_YAKOGL_DRV_GPU_PVR_KICK_TIMES`) gives the tail's
+  post -> frag when the frame ends in a chain.
+
 ## Appendix A: the rig test (scratch, `src/pvr/backend_tests.rs`, appended)
 
 ```diff
