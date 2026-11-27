@@ -3660,6 +3660,9 @@ fn depth_is_not_written_while_the_depth_test_is_off() {
     assert_ne!(rig.submit(&d).reg(GC_PE_DEPTH_CONFIG) & GC_PE_DEPTH_WRITE_ENABLE, 0);
 }
 
+/* an unmirrored 4x draw is a framebuffer object's, drawn through its own
+ * scratch under `msaa-fbo` (msaa_fbo.rs): this pins the build without it */
+#[cfg(not(feature = "msaa-fbo"))]
 #[test]
 fn multisampling_is_off_and_says_so() {
     /* 4x is present and switched off (GC_MSAA_ENABLE): the resolve engine
@@ -4726,6 +4729,9 @@ fn the_flip_study_ends_a_frame_with_flipped_resolve_copies_only_when_asked() {
 /// and 1 does not, so the board can run the two as arms of one session. The
 /// scratch probe answers only once a scratch surface exists.
 #[cfg(feature = "test-knobs")]
+/* an unmirrored 4x draw is a framebuffer object's, drawn through its own
+ * scratch under `msaa-fbo` (msaa_fbo.rs): this pins the build without it */
+#[cfg(not(feature = "msaa-fbo"))]
 #[test]
 fn msaa_bit_one_adds_etnaviv_s_small_msaa_settings_and_the_probe_reads_the_scratch() {
     let rig = Rig::new();
@@ -4791,6 +4797,9 @@ fn msaa_bit_two_writes_the_sample_mask_and_coverage_as_etnaviv_does() {
 }
 
 #[cfg(feature = "test-knobs")]
+/* an unmirrored 4x draw is a framebuffer object's, drawn through its own
+ * scratch under `msaa-fbo` (msaa_fbo.rs): this pins the build without it */
+#[cfg(not(feature = "msaa-fbo"))]
 #[test]
 fn a_multisampled_draw_is_supertiled_and_resolved_like_etnaviv_only_when_on() {
     let rig = Rig::new();
@@ -4916,6 +4925,9 @@ fn a_4x_rgb565_target_resolves_as_r5g6b5() {
 /// target cleared and drawn in one frame, arms 1 and 9 of the board record
 /// (ab43a20c5:tools/cts/log/board-sessions/imx8mp-gltest-r2.md).
 #[cfg(feature = "test-knobs")]
+/* an unmirrored 4x draw is a framebuffer object's, drawn through its own
+ * scratch under `msaa-fbo` (msaa_fbo.rs): this pins the build without it */
+#[cfg(not(feature = "msaa-fbo"))]
 #[test]
 fn every_4x_colour_address_is_the_scratch_the_probe_reads() {
     let rig = Rig::new();
@@ -4958,6 +4970,9 @@ fn every_4x_colour_address_is_the_scratch_the_probe_reads() {
 /// single-sampled draw, the field stays 1 (the linear value). The words are
 /// read back out of the stream, whole.
 #[cfg(feature = "test-knobs")]
+/* an unmirrored 4x draw is a framebuffer object's, drawn through its own
+ * scratch under `msaa-fbo` (msaa_fbo.rs): this pins the build without it */
+#[cfg(not(feature = "msaa-fbo"))]
 #[test]
 fn msaa_bit_four_writes_etnaviv_s_single_buffer_value_for_the_scratch() {
     let rig = Rig::new();
