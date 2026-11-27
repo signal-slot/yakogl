@@ -1429,6 +1429,10 @@ take_lock() {
 # and is retried the same way. The lease is given back at exit
 # (lease_release, from every EXIT trap) only if it is still this run's.
 LEASE=/var/tmp/yakogl-board.lease
+# x2: /var/tmp is on the Armadillo-X2's eMMC (driver/tools/kexec-zephyr/README.md),
+# and nothing of a run is written to the eMMC: the lease is on the tmpfs /tmp,
+# so the reboot that ends a run removes it (lease_release then finds none)
+[ "$BOARD" != x2 ] || LEASE=/tmp/yakogl-board.lease
 LEASE_HELD=0
 LEASE_ME="$(hostname -s 2>/dev/null || echo host):$$"
 
@@ -2641,7 +2645,7 @@ kexec_imx8mp() {
 # KW_LOST, KW_PB and KW_SB, seconds after T0 (empty: it never happened), and
 # writes the run's lost and timeline facts.
 kexec_wait_back() {
-    local t0=$1 t ip=${BOARD_HOST#*@}
+    local t0=$1 t ip=${BOARD_HOST#*@} bid noping=
     KW_LOST=; KW_PB=; KW_SB=
     while :; do
         t=$(($(date +%s) - t0))
@@ -2654,10 +2658,26 @@ kexec_wait_back() {
             fi
         else
             [ -z "$KW_LOST" ] && KW_LOST=$t
+            # x2: a task machine that reaches the board through a forwarded
+            # ssh port cannot ping it; while no ping came back, a boot_id
+            # other than the one read before the jump (BOOT0) over ssh is the
+            # return: "ping n/a" in the timeline, unless a ping now answers too
+            if [ "$BOARD" = x2 ] && [ -z "$KW_PB" ]; then
+                bid=$(timeout 10 ssh "${SSH_OPTS[@]}" -o ConnectTimeout=5 "$BOARD_HOST" 'cat /proc/sys/kernel/random/boot_id' < /dev/null 2>/dev/null) || bid=
+                if [ -n "$bid" ] && [ "$bid" != "$BOOT0" ]; then
+                    KW_SB=$t
+                    if ping -c1 -W1 "$ip" > /dev/null 2>&1; then KW_PB=$t; else noping=1; fi
+                    break
+                fi
+            fi
         fi
         sleep 2
     done
     meta lost "$KW_LOST"
+    if [ -n "$noping" ]; then
+        meta timeline "jump 0s, ping n/a (no reply; a new boot_id over ssh is the return), ssh back ${KW_SB}s, route --crash"
+        return 0
+    fi
     meta timeline "jump 0s, ping lost ${KW_LOST:-?}s, ping back ${KW_PB:-?}s, ssh back ${KW_SB:-?}s, route --crash"
 }
 
@@ -2809,7 +2829,7 @@ x2_stage_finish() {
 }
 
 kexec_x2() {
-    local t0 rec
+    local t0 rec rc out why
     x2_stage_steps
     [ "$VERB" != stage ] || x2_stage_finish
     # 5. the console (opt-in), before anything can print
@@ -2822,15 +2842,34 @@ kexec_x2() {
     X2_APPS_JUMPED=$X2_APPS_STOPPED
     X2_APPS_STOPPED=
     t0=$(date +%s)
-    meta t_reboot "$t0"
     if [ "$DRY" = 1 ]; then
         b "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash   # timeout 120"
-        echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s); then stage snvs_lpgpr again, read LPGPR1..3 and the uptime"
+        echo "DRY host\$   # the loader's exit 1 or 3 is its refusal (nothing jumped): verdict=refused at once with its message, no wait"
+        echo "DRY host\$ wait: ping lost, ping back, ssh back (<= 1500 s; no ping reply: a new boot_id over ssh, ping n/a); then stage snvs_lpgpr again, read LPGPR1..3 and the uptime"
         [ "${X2_STOP_APPS:-0}" != 1 ] || x2_apps_back "the return" "<the stopped containers>"
         exit 0
     fi
-    timeout 120 ssh "${SSH_OPTS[@]}" -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
-        "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash" < /dev/null >> "$RD/kexec.log" 2>&1 || true
+    rc=0
+    out=$(timeout 120 ssh "${SSH_OPTS[@]}" -o ServerAliveInterval=3 -o ServerAliveCountMax=2 "$BOARD_HOST" \
+        "sync; sync; $X2_DIR/kexec_zephyr $X2_DIR/zephyr.bin $YAKO_ADDR --crash" < /dev/null 2>&1) || rc=$?
+    [ -z "$out" ] || printf '%s\n' "$out" >> "$RD/kexec.log"
+    # the loader's refusal (kexec_zephyr.c: exit 1, or 3 when its undo failed):
+    # the board did not jump, so no wait and no not_back; t_reboot stays
+    # unwritten, so the record reads as a refusal (run_refused, verdict_line)
+    case "$rc" in
+    1 | 3)
+        why="kexec_zephyr refused (exit $rc): $(grep . <<<"$out" | tail -n 3 | tr '\n' ' ')"
+        why=${why% }
+        note "$why" >&2
+        meta jump "refused (exit $rc)"
+        run_refused "$why" 3
+        x2_apps_back "the refusal" "$X2_APPS_JUMPED"
+        stop_cap
+        if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
+        finish
+        ;;
+    esac
+    meta t_reboot "$t0"
     meta jump ok
     # 7. Linux: ping lost, ping back, ssh back
     kexec_wait_back "$t0"
