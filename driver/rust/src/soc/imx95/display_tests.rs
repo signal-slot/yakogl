@@ -440,8 +440,14 @@ fn stop_turns_the_link_and_framegen0_off_then_the_power() {
     m.clear_log();
     t.0.borrow_mut().log.clear();
     display::stop(&mut t, &m, &Bases::PHYS, &s, &mut d).unwrap();
-    // enable off, then valid; FrameGen0 off
-    assert_eq!(m.writes(), vec![("csr", 0x8, 0x2), ("csr", 0x8, 0), ("dpu", 0x2b_008c, 0)]);
+    // enable off, then valid; FrameGen0 off (FGENABLE 0x8C), its shadow
+    // token (FGSLR 0x90 SHDTOKGEN) to latch the disable
+    assert_eq!(m.writes(), vec![("csr", 0x8, 0x2), ("csr", 0x8, 0), ("dpu", 0x2b_008c, 0), ("dpu", 0x2b_0090, 1)]);
+    // the FGENSTS (0x94) poll reads only after the token
+    let log = m.log();
+    let token = log.iter().position(|a| *a == Access::W("dpu", 0x2b_0090, 1)).unwrap();
+    let ensts = log.iter().position(|a| matches!(a, Access::R("dpu", 0x2b_0094, _))).unwrap();
+    assert!(token < ensts, "{log:?}");
     assert_eq!(t.0.borrow().log, power_off_reqs());
 }
 

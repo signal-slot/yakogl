@@ -511,9 +511,19 @@ pub fn start(m: &impl Mmio, base: usize) {
     w(m, base, r::DISENG_FRAMEGEN0_FGENABLE, r::diseng_framegen0_fgenable::FGEN_MASK);
 }
 
-/// `DPU_StopDisplay(0)`.
+/// `DPU_StopDisplay(0)`, then FrameGen0's shadow token
+/// (`DPU_TriggerDisplayShadowLoad(0)`), so the cleared `FGENABLE` is
+/// latched at the frame end as [`configure`]'s timing is on the way up.
+/// FrameGen0 runs with `FGSTCTRL.SHDEN` set; without the token the board
+/// read `fgenable 0, fgensts 1` after its stop budget (record
+/// 20261127-1806-triangle-472630df). Linux (`dc_crtc_atomic_disable`,
+/// `dpu95_crtc_disable`) writes no token here but waits up to 1 s for the
+/// DPU's sequence-complete interrupt; the token is this driver's addition,
+/// not yet confirmed on the board. DomainBlend0 gets no token on the way
+/// down, as in Linux.
 pub fn stop(m: &impl Mmio, base: usize) {
     w(m, base, r::DISENG_FRAMEGEN0_FGENABLE, 0);
+    w(m, base, r::DISENG_FRAMEGEN0_FGSLR, r::diseng_framegen0_fgslr::SHDTOKGEN_MASK);
 }
 
 /// FrameGen0's state.
