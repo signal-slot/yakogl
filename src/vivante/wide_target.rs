@@ -43,21 +43,30 @@
 //! - The GL core drops the storage through `texture_released` before its
 //!   address can be handed out again; the shadow goes with it, untouched.
 //!
-//! Not covered: a draw with more than one colour target (the 8-RT bank's
-//! RT_CONFIG has no tiled bit of its own: SINGLE_BUFFER switches every
-//! target), which keeps the linear path (an RGBA16F target there still
-//! does; `draw_one` refuses the 64-bit integer ones); and the depth surface
+//! A draw with more than one colour target, every one of 64-bit pixels
+//! (dEQP's `fragment_out.array.float.{rgba16f,rg16f}_*`: three RGBA16F
+//! targets), renders each into a shadow of its own (`backend::wide_targets`,
+//! [`prepare_targets`], [`bind_targets`]): the 8-RT bank's RT_CONFIG has no
+//! tiled bit of its own, SINGLE_BUFFER switches every target, so all of them
+//! go tiled or none does. It needs a CPU view of every attachment, which the
+//! GL core hands over for attachment 0 only today (`backend::attachment_view`),
+//! so until it hands over the others such a draw keeps the linear path.
+//!
+//! Not covered: a draw that mixes a 64-bit target with narrower ones, which
+//! keeps the linear path (an RGBA16F target there still does; `draw_one`
+//! refuses the 64-bit integer ones); and the depth surface
 //! of a draw into a shadow, which SINGLE_BUFFER(2) switches too: its layout
 //! under (2) is unmeasured, which matters only to `depth_resolve` and to a
 //! depth buffer shared with draws into 32-bit targets (logged once when a
 //! draw reaches it). ES 2.0 has no 64-bit colour format to render into.
 //!
-//! Prepared, not reached: a draw described target by target ([`Target`],
-//! [`wanted_targets`], [`prepare_targets`], [`bind_targets`]), every target
-//! of it on a shadow of its own pixel size, and a 128-bit target (RGBA32I/UI)
+//! Prepared, not reached: a draw of mixed pixel sizes described target by
+//! target ([`Target`], [`wanted_targets`], [`prepare_targets`],
+//! [`bind_targets`]), every target of it on a shadow of its own pixel size,
+//! and a 128-bit target (RGBA32I/UI)
 //! as one shadow of two 8-byte planes (`split_planes` in, `join_planes` out),
 //! Mesa's two G32R32F render targets. `backend.rs` still refuses RGBA32I/UI
-//! and calls only the one-target functions; docs/notes/gc-128bit-render-targets.md,
+//! and calls the multi-target functions for all-64-bit draws only; docs/notes/gc-128bit-render-targets.md,
 //! "Implementation sequence", step 1 says what it must call.
 
 use crate::backend::{gles_surf_bytes_per_pixel, GlesDraw};

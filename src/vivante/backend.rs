@@ -729,6 +729,150 @@ fn wide_target(gl: &GlesDraw) -> bool {
     super::wide_target::wanted(gl, hw_target_list(gl).n == 1, !ms_via_scratch(gl) && !negative_stride(gl.flip_y))
 }
 
+/// The colour targets of a draw with more than one hardware target, every
+/// one of 64-bit pixels, when all of them render into tiled shadows of their
+/// own (`wide_target.rs`, [`wide_target::prepare_targets`]), in hardware
+/// order: `t[..n]`, `t[rt]` hardware target `rt`.
+///
+/// [`wide_target::prepare_targets`]: super::wide_target::prepare_targets
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WideTargets {
+    pub t: [super::wide_target::Target; super::wide_target::MAX_TARGETS],
+    pub n: usize,
+}
+
+impl WideTargets {
+    /// The targets, in hardware order.
+    pub fn list(&self) -> &[super::wide_target::Target] {
+        &self.t[..self.n]
+    }
+}
+
+/// [`wide_targets`] with the CPU view of each GL slot's storage asked of
+/// `view`: `(cpu, row pitch in bytes)`, `None` when the slot has none.
+///
+/// Taken when the draw has two to four hardware targets, every one an
+/// attachment of 8 bytes a pixel (RGBA16F, which RG16F and RGB16F are stored
+/// as, and RGBA16I/UI, RG32I/UI), none of them a 128-bit plane, each with a
+/// CPU view, drawn straight (not through the 4x scratch, not bottom-up). The
+/// PE writes 64-bit pixels into a LINEAR surface at the wrong places (gl_test
+/// case 44, `wide_target.rs`), and PE_LOGIC_OP SINGLE_BUFFER switches every
+/// target of a draw at once (the 8-RT bank's RT_CONFIG has no tiled bit), so
+/// such a draw must render every target tiled. A draw that mixes 64-bit and
+/// narrower targets is not taken: a 32-bit shadow has no CPU write-back here
+/// ([`super::wide_target::retire`] leaves it to the RS), so it keeps the
+/// linear path, as before.
+pub fn wide_targets_of(gl: &GlesDraw, view: impl Fn(u8) -> Option<(*mut u8, u32)>) -> Option<WideTargets> {
+    use super::wide_target::{wanted_targets, Target, MAX_TARGETS};
+    let hw = hw_target_list(gl);
+    if hw.n < 2 || hw.n > MAX_TARGETS || hw.list().iter().any(|t| t.plane != 0) {
+        return None;
+    }
+    let straight = !ms_via_scratch(gl) && !negative_stride(gl.flip_y);
+    let mut out = WideTargets { t: [super::wide_target::target_of(gl); MAX_TARGETS], n: hw.n };
+    for (rt, ht) in hw.list().iter().enumerate() {
+        let (gpu, w, h, format) = if ht.slot == 0 {
+            (gl.target_gpu, gl.target_w, gl.target_h, gl.target_format)
+        } else {
+            let a = gl.targets[ht.slot as usize];
+            (a.gpu, a.w, a.h, a.format)
+        };
+        let bpp = gles_surf_bytes_per_pixel(format);
+        if bpp != 8 {
+            return None;
+        }
+        let (cpu, pitch) = view(ht.slot)?;
+        out.t[rt] = Target { gpu, cpu, w, h, pitch, bpp };
+    }
+    wanted_targets(out.list(), straight).then_some(out)
+}
+
+/// The draw's targets on the multi-target tiled shadow path
+/// ([`wide_targets_of`] with [`attachment_view`]), or `None` when the draw
+/// keeps the one-target shadow ([`wide_target`]) or the linear path.
+fn wide_targets(gl: &GlesDraw) -> Option<WideTargets> {
+    wide_targets_of(gl, |slot| attachment_view(gl, slot))
+}
+
+/// Does this draw render into tiled shadows of 64-bit targets, one
+/// ([`wide_target`]) or several ([`wide_targets`])?
+fn wide_any(gl: &GlesDraw) -> bool {
+    wide_target(gl) || wide_targets(gl).is_some()
+}
+
+/// The CPU view of GL slot `slot`'s storage and its row pitch in bytes.
+/// Slot 0 is the colour surface (`target_cpu`, `draw_pitch`). A later slot
+/// has none yet: `GlesDrawTarget` carries the GPU address, size and format
+/// of attachments 1.. but no CPU view (`src/backend.rs`, `src/backend.h`),
+/// so [`wide_targets`] takes no draw until the GL core hands one over
+/// (`cpu`, and the row pitch in pixels, as `GlesDraw::target_cpu` and
+/// `target_pitch` are for slot 0). Until then a draw of several 64-bit
+/// targets keeps the linear path. The unit tests supply views through
+/// `test_views`.
+fn attachment_view(gl: &GlesDraw, slot: u8) -> Option<(*mut u8, u32)> {
+    if slot == 0 {
+        if gl.target_cpu.is_null() {
+            return None;
+        }
+        let bpp = gles_surf_bytes_per_pixel(gl.target_format);
+        return Some((gl.target_cpu as *mut u8, crate::backend::draw_pitch(gl) * bpp));
+    }
+    #[cfg(test)]
+    {
+        let a = gl.targets[slot as usize];
+        test_views::get(a.gpu).map(|cpu| (cpu, target_pitch(a.w, gles_surf_bytes_per_pixel(a.format))))
+    }
+    #[cfg(not(test))]
+    {
+        None
+    }
+}
+
+/// The unit tests' CPU views of attachments 1.., by GPU address: what the GL
+/// core does not hand over yet ([`attachment_view`]).
+#[cfg(test)]
+pub(super) mod test_views {
+    use std::sync::Mutex;
+    use std::vec::Vec;
+
+    struct View(u64, *mut u8);
+    // SAFETY: a test's own buffer, touched by the test's own thread only
+    // (the TestGl guard serialises the tests).
+    unsafe impl Send for View {}
+
+    static VIEWS: Mutex<Vec<View>> = Mutex::new(Vec::new());
+
+    /// The CPU view of the storage at `gpu`.
+    pub fn set(gpu: u64, cpu: *mut u8) {
+        let mut v = VIEWS.lock().unwrap_or_else(|e| e.into_inner());
+        v.retain(|w| w.0 != gpu);
+        v.push(View(gpu, cpu));
+    }
+
+    pub fn get(gpu: u64) -> Option<*mut u8> {
+        VIEWS.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|w| w.0 == gpu).map(|w| w.1)
+    }
+
+    pub fn clear() {
+        VIEWS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
+/// Hardware target `rt`'s bank words ([`hw_target_surface`]), or the tiled
+/// shadow `bound` (the multi-target path, [`wide_targets`]) when it renders
+/// into one: the shadow's address and the stride of its padded rows, in the
+/// target's own PE format.
+pub fn hw_target_bank_surface(
+    gl: &GlesDraw,
+    ht: HwTarget,
+    bound: Option<&super::wide_target::Bound>,
+) -> (u64, u32, u32) {
+    match bound {
+        Some(b) => (b.gpu, b.stride, pe_color_format(attachment_format(gl, ht.slot)).0),
+        None => hw_target_surface(gl, ht),
+    }
+}
+
 /// The shadow spec of this draw's colour target when it renders into a TILED
 /// shadow (`tiled_rt.rs`, W4): the knob is on, one 4-byte colour target the
 /// resolve engine addresses, drawn straight (not through the 4x scratch, not
@@ -1803,7 +1947,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     /* A draw into a tiled shadow takes Mesa's early-depth rule, both halves
      * of it (EARLY_Z, and DISABLE_ZS when nothing is left for the late
      * stage); every other draw is "never" (`draw_ez`). */
-    let trt = if wide_target(gl) || ms_via_scratch(gl) { None } else { g().trt.takes(gl.target_gpu) };
+    let trt = if wide_any(gl) || ms_via_scratch(gl) { None } else { g().trt.takes(gl.target_gpu) };
     pe_depth |= match tiled_ez(d) {
         Some(ez) => ez.pe_bits & (GC_PE_DEPTH_EARLY_Z | GC_PE_DEPTH_DISABLE_ZS),
         None => draw_early_z(d.fs.viv.ps_depth_out_reg != SHC_VIV_NO_REG).pe_bits & GC_PE_DEPTH_EARLY_Z,
@@ -1963,10 +2107,15 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
         pe_color |= GC_PE_COLOR_FORMAT_SUPER_TILED | GC_PE_COLOR_FORMAT_SUPER_TILED_NEW;
     }
     c.state(GC_PE_COLOR_FORMAT, pe_color);
-    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit) */
-    let shadow = if wide_target(gl) { super::wide_target::bind(gl, gc_kick_id()) } else { None };
+    /* a 64-bit target: its tiled shadow, TILED (no SUPER_TILED bit); a
+     * draw of several 64-bit targets: one shadow each, `bound[rt]` hardware
+     * target rt's ([`wide_targets`]) */
+    let bound = wide_targets(gl).and_then(|w| super::wide_target::bind_targets(w.list(), gc_kick_id()));
+    let shadow = if wide_target(gl) { super::wide_target::bind(gl, gc_kick_id()) } else { bound.map(|b| b[0].gpu) };
     let pitch = if ms {
         ms_pitch(gl.target_w, gles_surf_bytes_per_pixel(gl.target_format))
+    } else if let Some(b) = bound {
+        b[0].stride
     } else if shadow.is_some() {
         super::wide_target::stride(gl.target_w)
     } else if trt.is_some() {
@@ -1991,7 +2140,9 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
      * etnaviv programs it for a HALTI2+ core (etnaviv_state.c:250-420,
      * etnaviv_emit.c, etnaviv_blend.c:150-200). ES 3.0 has one colour mask
      * and one blend state for every draw buffer, so each target takes RT0's.
-     * Linear, like RT0 here (no SUPER_TILED: RT_CONFIG has no linear bit).
+     * Linear, like RT0 here (no SUPER_TILED: RT_CONFIG has no linear bit),
+     * or, for a draw of several 64-bit targets, each in its own tiled
+     * shadow with RT0's SINGLE_BUFFER(2) ([`wide_targets`]).
      * RT_COUNT (PS_CONTROL, shader.rs) is what enables them; nothing is
      * written for a single-target draw. A slot with no target (`gpu` 0) is
      * skipped and the slots after it move down ([`hw_target_list`]); the
@@ -2002,7 +2153,7 @@ fn emit_pe_state(c: &mut GcCmd, d: &GcDraw, depth_stride: u32, depth_addr: u32) 
     for (rt, &ht) in hw.list().iter().enumerate().skip(1) {
         let slot = ht.slot as usize;
         let format = attachment_format(gl, ht.slot);
-        let (gpu, rt_pitch, fmt) = hw_target_surface(gl, ht);
+        let (gpu, rt_pitch, fmt) = hw_target_bank_surface(gl, ht, bound.as_ref().map(|b| &b[rt]));
         /* an integer draw buffer is never blended (ES 3.0 4.1.8), whatever
          * the float or unorm ones beside it are */
         let rt_blend = blend && !gles_surf_is_integer(format);
@@ -2328,7 +2479,7 @@ fn raster_key(k: &mut dedup::Key, d: &GcDraw) -> bool {
 /// (`wide_target::bind`), so it runs every time.
 fn pe_key(k: &mut dedup::Key, d: &GcDraw, depth_stride: u32, depth_addr: u32) -> bool {
     let gl = d.gl;
-    if wide_target(gl) {
+    if wide_any(gl) {
         return false;
     }
     /* the early-Z rule's inputs (emit_pe_state): the program's, and whether
@@ -2945,7 +3096,7 @@ pub extern "C" fn gc_debug_rs_clear(on: bool) {
 /// glDepthMask is already in `do_clear_depth` (gl/draw.rs). When one plane
 /// stays the quad, the whole clear does.
 fn rs_clear_of(gl: &GlesDraw, ds: (u32, u32, u32)) -> Option<rs_clear::Clear> {
-    if gl.scissor || ms_via_scratch(gl) || wide_target(gl) {
+    if gl.scissor || ms_via_scratch(gl) || wide_any(gl) {
         return None;
     }
     let colour = if gl.do_clear {
@@ -3411,7 +3562,10 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
      * own word. A 64-bit integer target ([`GC_INT_RT_64BPP`]) is drawn only
      * alone: beside another draw buffer it would keep the linear path, where
      * the PE misplaces 64-bit pixels (gl_test case 44, `wide_target.rs` "Not
-     * covered"), so such a draw is refused instead of storing garbage. */
+     * covered"), so such a draw is refused instead of storing garbage --
+     * unless every target of it renders into a tiled shadow of its own
+     * ([`wide_targets`]). */
+    let multi_wide = n > 1 && wide_targets(gl).is_some();
     if hw.list().iter().any(|&HwTarget { slot: s, .. }| {
         let (gpu, f) = if s == 0 {
             (gl.target_gpu, gl.target_format)
@@ -3422,7 +3576,7 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
             return false;
         }
         let bit = 1u32 << (f - GLES_SURF_INT_FIRST);
-        GC_INTEGER_RT_FORMATS & bit == 0 || (n > 1 && GC_INT_RT_64BPP & bit != 0)
+        GC_INTEGER_RT_FORMATS & bit == 0 || (n > 1 && !multi_wide && GC_INT_RT_64BPP & bit != 0)
     }) {
         return -crate::util::ENOTSUP;
     }
@@ -3509,9 +3663,15 @@ pub(super) unsafe fn draw_one(draw: *const GlesDraw) -> i32 {
     /* A 64-bit colour target is rendered into its tiled shadow
      * (wide_target.rs), made current now: the PE writes 64-bit pixels into a
      * LINEAR surface at the wrong places (#6), so without the shadow the
-     * draw is refused. */
-    if wide_target(gl) {
-        if super::wide_target::prepare(gl, finish) != 0 {
+     * draw is refused. A draw of several 64-bit targets takes one shadow
+     * each ([`wide_targets`]), none pushing out another. */
+    let wide_n = wide_targets(gl);
+    if wide_target(gl) || wide_n.is_some() {
+        let rc = match wide_n {
+            Some(w) => super::wide_target::prepare_targets(w.list(), finish),
+            None => super::wide_target::prepare(gl, finish),
+        };
+        if rc != 0 {
             return -ENOMEM;
         }
         if gl.depth_test || gl.stencil || gl.do_clear_depth || gl.do_clear_stencil {
