@@ -334,6 +334,40 @@ done
 ROWS=$TEST_RUN/rows
 mkdir -p "$ROWS" || exit 2
 
+# YAKOGL_CHECK_PRUNE=1: a full run on a small disk. The full gate of
+# 760aad3d filled a 193 GB disk (docs/ci.md 3.7) and needs about 220 GB
+# unpruned. With the knob, cargo writes no incremental files
+# (CARGO_INCREMENTAL=0 unless the caller set it), and a row that passed
+# removes the build directories only it reads (row_private, in the row's
+# function), before it is complete, so a row waiting on its `uses` lane
+# starts after the removal:
+#   <target>/check-artefact         the "no Mesa reference" row's archives
+#   build/pvr-check/rgx-target      after pvr km_check, its second and last
+#                                   reader (pvr rgxlayer_check is the first)
+#   build/zephyr-werror/<image>     each image a Zephyr row built, after that
+#                                   row's own checks of it
+# No later row reads any of them; a directory a later row reads (the shared
+# target's deps, the test-ok store, build/precompiled, build/glmark2-host)
+# is never listed. A row that failed keeps its directories. Off by default:
+# the CI's runners keep these directories warm between runs. A check.sh
+# started from a row (a self-test) never prunes.
+PRUNE=0
+if [ "${YAKOGL_CHECK_PRUNE-}" = 1 ]; then
+  PRUNE=1
+  export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}" YAKOGL_CHECK_PRUNE=0
+fi
+# row_private <dir>...: the directories only this row reads.
+row_private() { [ -z "${ROW_SEQ-}" ] || printf '%s\n' "$@" >> "$ROWS/$ROW_SEQ.prune"; }
+# row_prune <n>: remove what row <n> listed (run_row, after it passed).
+row_prune() {
+  local n=$1 p
+  [ -s "$ROWS/$n.prune" ] || return 0
+  sort -u "$ROWS/$n.prune" | while IFS= read -r p; do
+    case "$p" in '' | / | . | ..) continue ;; esac
+    [ ! -d "$p" ] || { rm -rf -- "$p" && echo "check.sh: pruned $p (YAKOGL_CHECK_PRUNE=1)" >> "$ROWS/$n.out"; }
+  done
+}
+
 # The log is a list of entries in the script's order: rows, and the lines
 # about rows that did not run (`skip`, `gap`, `plan`). Each entry is a file
 # under $ROWS named by its number; `n.done` says it is complete, and
@@ -789,6 +823,7 @@ run_row() (
     echo fail > "$ROWS/$n.verdict"
   fi
   [ -n "$key" ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_record "$n"
+  [ "$PRUNE" -eq 1 ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_prune "$n"
   echo $((SECONDS - t0)) > "$ROWS/$n.time"
   : > "$ROWS/$n.done"
 )
@@ -2952,6 +2987,7 @@ if command -v cc >/dev/null 2>&1; then
   pvr_km_check() {
     local out d=build/pvr-check/km s a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
     mkdir -p "$d" || return 1
+    row_private build/pvr-check/rgx-target # this row is its last reader
     cargo build -q -p yakogl-drivers --features pvr --target-dir build/pvr-check/rgx-target || return 1
     # shellcheck disable=SC2046  # the flag is one word
     cc -std=gnu11 -O1 -Wall -Wextra -Werror -Idriver/rust/include -Itools/pvr/km -Idriver/src \
@@ -4132,6 +4168,7 @@ check_no_mesa_reference() {
   fi
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')/check-artefact || return 1
+  row_private "$dir"
   out=$(mktemp "${TMPDIR:-/tmp}/check-artefact.XXXXXX") || return 1
   # No more workers than compiler slots: a worker past the first waits for a
   # token, and a serial run has one slot less in the FIFO than it has slots.
@@ -4359,8 +4396,10 @@ mp2_qemu_row() {
   printf '%s\n' "$out"
   [ "$status" -eq 0 ] || return "$status"
   if printf '%s\n' "$out" | grep -q '^run.sh: skip:'; then
+    # run_row reads the marker only when the row's command fails (as
+    # v3d71_checks): with `return 0` the skip was counted ok.
     : > "$ROWS/$ROW_SEQ.gap"
-    return 0
+    return 77
   fi
   printf '%s\n' "$out" | grep -Eq '^run.sh: [0-9]+ ok, 0 failed' || {
     echo "uboot-mp2 qemu: no 'run.sh: N ok, 0 failed' line"
@@ -4609,6 +4648,7 @@ zephyr_werror_image() {
   esac
   mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || return 1
   mkdir -p build/zephyr-werror
+  row_private "$dir" # read by this row only, and built pristine (-p always)
   if ! (cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
     west build -p always -b "$board" -d "$root/$dir" "$src" -- \
     "-DZEPHYR_MODULES=$mods" "-DYAKOGL_DIR=$root" -DYAKOGL_WERROR=ON "$@") >"$log" 2>&1 </dev/null; then
