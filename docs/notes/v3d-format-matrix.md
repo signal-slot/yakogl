@@ -334,10 +334,11 @@ same samples through `XYZW`.
     COLOR_WRITE_MASKS' Mask (Mesa's v3d_packet.xml "Color Write Masks",
     RT n at bits 4n..4n+3; `v3dx_emit.c:571-585` with independent blend).
     Where every target takes the same mask nothing is set and the packet
-    is the one from before. Still refused by name (GL_INVALID_OPERATION,
-    one log line naming the masks): uneven masks under glEnable(GL_BLEND)
-    with both integer and non-integer targets, because one BLEND_ENABLES
-    and one BLEND_CFG serve every RT (G3).
+    is the one from before. Uneven masks under glEnable(GL_BLEND) with
+    both integer and non-integer targets are drawn too since plan #383
+    item `v3d-per-rt-blend-enable`: BLEND_ENABLES leaves the integer RTs
+    out (`PER_TARGET_BLEND_ENABLE`, `src/gl/draw.rs`); the V3D 7.1 build
+    keeps the refusal (G3).
   - *Clears keep the absent channels at 0, 0, 1.* Since `ab0222cf`
     (plan #383 item `v3d-int-clear-narrow`) the GL core narrows a colour
     clear of such a texture before the back end sees it
@@ -424,12 +425,23 @@ same samples through `XYZW`.
   of an R or RG integer texture beside another target is taken. The
   application still has one glColorMask (ES 3.0 has no glColorMaski); the
   per-RT masks only limit it to each target's channels. What remains
-  open is one BLEND_ENABLES (mask 0xf) and one BLEND_CFG (RT 0's state)
-  for all RTs (`v3d_job.c:696-707`), and with them the one refusal left:
-  `per_target_masks` (`src/gl/draw.rs:2747`) answers GL_INVALID_OPERATION,
-  naming the masks, for uneven masks under glEnable(GL_BLEND) with both
-  integer and non-integer targets (pinned in
-  `tests/es3_v3d_int_rg_mrt_mask.rs`).
+  open is one BLEND_CFG (one blend equation and factor set) for every RT
+  that blends; ES 3.0 has no per-buffer blend state, so it costs nothing
+  in GL terms. BLEND_ENABLES is per RT: `9cccb4ae` made the job builder
+  write `V3dJobState::rt_blend_mask` (integer and 32F RTs left out, Mesa
+  `v3dx_state.c:148-156`), and plan #383 item `v3d-per-rt-blend-enable`
+  made the GL core use it (`PER_TARGET_BLEND_ENABLE`, gpu-v3d without
+  gpu-v3d71): `per_target_masks` no longer refuses uneven masks under
+  glEnable(GL_BLEND) with integer and non-integer targets, and
+  `GlesDraw::blend` is "some written target is not integer"
+  (`draw_blends_a_target`), so an integer attachment 0 beside an RGBA8
+  attachment 1 blends attachment 1. With target 0 not blending,
+  `state::job_state` refuses by name a blend factor reading the
+  destination alpha (DST_ALPHA, ONE_MINUS_DST_ALPHA, SRC_ALPHA_SATURATE):
+  the job state carries only target 0's alpha width. The V3D 7.1 build
+  gives every RT one enable and keeps the refusal. Pinned in
+  `tests/es3_v3d_int_rg_mrt_mask.rs`, `tests/es3_v3d_int_rg_mrt_mask_layers.rs`
+  and `tests/es3_mrt_blend_v3d.rs`; host only, no picture compared.
 - **G4 The clear quad does not clamp a fixed-point clear colour.** The TLB
   path clamps for sRGB and RGB10_A2 (`state.rs:529-539`); the quad hands
   `clear_rgba` to the float program (`backend.rs:5546-5552`), and `glClearColor`
