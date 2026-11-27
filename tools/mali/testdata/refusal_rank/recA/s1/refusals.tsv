@@ -1,0 +1,6 @@
+case	refusal
+t1.a	Backend refused this fragment shader: Mali(alpha is not lowered yet)
+t1.a	Backend refused this fragment shader: Mali(beta cut)
+t1.b	Backend refused this vertex shader: Mali(beta cut)
+t1.c	Backend refused this fragment shader: Mali(beta cut)
+t2.a	Backend refused this fragment shader: Mali(alpha is not lowered yet)

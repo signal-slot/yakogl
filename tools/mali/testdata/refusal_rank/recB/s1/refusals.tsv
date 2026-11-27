@@ -1,0 +1,3 @@
+case	refusal
+t4.a	Backend refused this vertex shader: Mali(alpha is not lowered yet)
+t4.b	link error: x refused this vertex shader: Mali(alpha is not lowered yet)

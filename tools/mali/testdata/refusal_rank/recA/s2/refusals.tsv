@@ -1,0 +1,3 @@
+case	refusal
+t1.c	gamma: no stage word
+t3.a	Backend refused this vertex shader: Mali(alpha is not lowered yet)
