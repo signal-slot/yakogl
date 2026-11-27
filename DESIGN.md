@@ -240,8 +240,7 @@ yakogl/
 The library was built in vertical slices, each tested on silicon (clear and a solid
 draw, attributes and varyings, textures, render state, framebuffer objects); the plan
 is in the history of the working repository the project was developed in
-(`git show 5ad2fa0e:DESIGN.md` there, "Incremental plan"; that commit is not in
-this repository). The silicon test rig is `driver/tools/pvrlab/gl_test.c`, so a
+("Incremental plan" in its DESIGN.md; that history is not in this repository). The silicon test rig is `driver/tools/pvrlab/gl_test.c`, so a
 known-good reference is never lost.
 
 ## The backend contract (`src/backend.h`)
@@ -320,10 +319,9 @@ default cross target is `aarch64-unknown-none` (hard float: `CONFIG_FPU` /
 
 The port began as a translation of the upstream C library and diverged from it
 wherever the C was wrong. That account (the fix round, the syncs to the upstream
-commits `a444fe9`, `bfab616` and `55de113`, and what upstream adopted) is in the
-working repository's history (`git show 5ad2fa0e:DESIGN.md` there, "The Rust
-crate"). Neither `5ad2fa0e` nor those three commits (of the old C repository) are
-in this one.
+commits, and what upstream adopted) is in the working repository's history
+("The Rust crate" in its DESIGN.md). Neither that history nor the upstream
+C repository's commits are in this one.
 
 Verification on the host: unit tests on the strict mocks of `src/testutil.rs`, in every
 feature configuration `tools/check.sh` lists, and the host differential harness
