@@ -51,3 +51,15 @@ Fields, with the line each comes from (`absent` if the line is not there):
 The `glmark2-counters` lines in `testdata/` are made up, written to the design,
 until a GM image prints them. The other counters are cumulative over the whole console, not terrain's alone.
 `testdata/` is synthetic (no board address, host name or UART path).
+
+`compare.py` compares the job entries of two or more records (same arguments
+as `parse.py`; the first is the baseline) and prints one table: per
+`glmark2-jobs` entry the render, bin, prep and idle (us) with the change to
+the first record, the TFU entries' count and sum, the `glmark2-frame` frame, gl
+and swap, FrameTime, `wait.ns` (ms a frame) and chosen counters a frame
+(`--counter KEY`, default `mip.queued`, `tfu.jobs`, `waits`). Entries are
+labelled as `docs/notes/pi4-slow-terrain.md` names them: noise is entry 2,
+terrain the entry before the first `tfu 1/8xxus` entry (entry 4 if none),
+blur entries 8 and 1. `sh compare_selftest.sh` runs it on synthetic logs.
+
+    python3 -I tools/hostharness/terrain-records/compare.py <before> <after>
