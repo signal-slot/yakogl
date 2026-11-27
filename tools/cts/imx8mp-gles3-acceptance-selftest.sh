@@ -245,6 +245,43 @@ else
 	echo "FAIL real tree without the X2 line"; BAD=$((BAD + 1))
 fi
 
+# the same mixed tree with --date of the Verdin day, later-dated slices: the date is the campaign's start, the
+# slice directory dates do not enter any check
+mv "$V" "${V/2026-11-16/2026-11-14}"
+mv "$X" "${X/2026-11-16/2026-11-20}"
+V=${V/2026-11-16/2026-11-14}
+X=${X/2026-11-16/2026-11-20}
+printf 'measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)\n' >>"$X/README.md"
+out=$(sh "$ACC" --date 2026-11-14 --commit 0123abcd "$R" 2>/dev/null)
+if printf '%s\n' "$out" | grep -q '^c1 ok 133 entries' && ! printf '%s\n' "$out" | grep -q '^c3 FAIL'; then
+	echo "ok   --date 2026-11-14 with an X2 slice dated 2026-11-20: c1 ok, c3 ok"
+else
+	echo "FAIL mixed dates"; printf '%s\n' "$out"; BAD=$((BAD + 1))
+fi
+# an incomplete campaign (the X2 slice missing) still fails c1
+mv "$X" "$WORK/x2-away"
+if sh "$ACC" --date 2026-11-14 "$R" 2>/dev/null | grep -q '^c1 FAIL'; then
+	echo "ok   an incomplete mixed campaign fails c1"
+else
+	echo "FAIL incomplete campaign passed c1"; BAD=$((BAD + 1))
+fi
+mv "$WORK/x2-away" "$X"
+# a slice of another commit fails c1 (merge refuses mixed commits); --commit reads only one campaign
+Y="$R/tools/cts/log/2026-11-21-imx8mp-gles3-1111aaaa-rows01-13"
+mkdir -p "$Y"
+sed 's/0123abcd/1111aaaa/' "$V/README.md" | head -1 >"$Y/README.md"
+cp "$V/results.tsv" "$Y/results.tsv"
+if sh "$ACC" --date 2026-11-14 "$R" 2>/dev/null | grep -q '^c1 FAIL'; then
+	echo "ok   a slice of another commit fails c1"
+else
+	echo "FAIL mixed-commit tree passed c1"; BAD=$((BAD + 1))
+fi
+if sh "$ACC" --date 2026-11-14 --commit 0123abcd "$R" 2>/dev/null | grep -q '^c1 ok'; then
+	echo "ok   --commit selects the one campaign again"
+else
+	echo "FAIL --commit with a foreign slice"; BAD=$((BAD + 1))
+fi
+
 if [ $BAD -eq 0 ]; then
 	echo "imx8mp-gles3-acceptance-selftest: all cases passed"
 else

@@ -10,7 +10,9 @@
 #
 # <repo root>  the repository whose record is checked (default: the one that
 #              holds this script); the checkers are run from its tools/cts.
-# --date       the campaign day for c3 (default: the date in the name of the
+# --date       the campaign's start day for c3 (the Verdin day of a campaign whose
+#              later slices were recorded on the Armadillo-X2 on later days; no
+#              slice directory's date is checked) (default: the date in the name of the
 #              tools/cts/log/*-imx8mp-gles3-*-rows01-13 directory, else the
 #              date of the 'Run YYYY-MM-DD, ...' line of its README.md).
 # --commit     the campaign commit (8 hex or more): c1-c3 read only the slices
