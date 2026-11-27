@@ -2700,6 +2700,18 @@ step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mal
 step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
+step "test    $MALI_CONFIG (tests/mali_{const_fold,bool_and,fragcoord16,ideas,mploop,fs_operand,locals,effect2d_tex,tex_multi,tex_vertex,vs_arith,texcoord_lane,vs_fma,int_loops,nonfinite_const,texcoord_425b}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_const_fold --test mali_bool_and --test mali_fragcoord16 --test mali_ideas \
+    --test mali_mploop --test mali_fs_operand --test mali_locals --test mali_effect2d_tex \
+    --test mali_tex_multi --test mali_tex_vertex --test mali_vs_arith --test mali_texcoord_lane \
+    --test mali_vs_fma --test mali_int_loops --test mali_nonfinite_const --test mali_texcoord_425b
+# and its GL-level draws through the Mali back end: glmark2 scenes' programs
+# linked and drawn, the depth-only FBO (D-DEPTHONLY), the sampled depth
+# texture (D-DEPTHTEX) and the NPOT mip chain (D-NPOTMIP).
+step "test    $MALI_CONFIG (tests/mali_{glmark2_scene_draw,depthonly_gl,depthtex_gl,npot_mip_gl}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_glmark2_scene_draw --test mali_depthonly_gl --test mali_depthtex_gl --test mali_npot_mip_gl
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
@@ -5425,18 +5437,25 @@ glmark2_corpus_tests() {
     GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features --features "$c" \
       --test glmark2_corpus -- --nocapture 2>&1 | grep -E '^(SKIP|test result|(powervr|gc7000|v3d):)' || return 1
   done
+  # The Mali's per-scene verdicts (tests/mali_glmark2_corpus.rs) against
+  # tests/fixtures/mali_glmark2_verdicts.txt: only forward (plan #367).
+  local out
+  out=$(GLMARK2_CORPUS="$PWD/build/glmark2-host/shaders" cargo test --no-default-features \
+    --features "$MALI_CONFIG" --test mali_glmark2_corpus -- --nocapture 2>&1) ||
+    { printf '%s\n' "$out" | grep -E '^(test result|mali:|  now ok:)|panicked|regress' | head -40; return 1; }
+  printf '%s\n' "$out" | grep -E '^(test result|mali:)'
 }
 if [ "$QUICK" -eq 0 ]; then
   # tools: the row runs tools/hostharness/glmark2/run.sh, so a change there
   # reaches it (the scope map sends tools/hostharness/* to `tools`).
-  scope pvr vivante v3d tools
+  scope pvr vivante v3d mali tools
   if [ -n "${GLMARK2_SRC-}" ] && [ -d "${GLMARK2_SRC-}/src" ]; then
     mkdir -p build
     # It regenerates build/glmark2-host/shaders, which tests/glmark2_corpus.rs
     # in every test row reads, so it runs alone (w:tree).
     uses w:tree
-    tests_row glmark2_corpus
-    step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs)" glmark2_corpus_tests
+    tests_row glmark2_corpus mali_glmark2_corpus
+    step "test    glmark2 corpus generated from GLMARK2_SRC compiles and links (tests/glmark2_corpus.rs, mali_glmark2_corpus.rs)" glmark2_corpus_tests
   else
     gap "glmark2 corpus: no glmark2 tree at GLMARK2_SRC='${GLMARK2_SRC-}' (set GLMARK2_SRC): the glmark2 shaders were NOT compiled"
   fi
