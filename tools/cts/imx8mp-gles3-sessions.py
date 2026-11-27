@@ -6,7 +6,8 @@
   imx8mp-gles3-sessions.py [--table T] [--mustpass M] [--record DIR] [--margin 0.8] [--window 600] [--scale 1.0]
                            [--sessions N | --session-budget SECONDS] [--overhead SECONDS]
                            [--board-slices GLOB] [--no-board-rates] [--pages] [--page-seconds 91.8]
-                           [--rows A..B] [--gles2]
+                           [--rows A..B] [--gles2] [--x2 [--x2-commit HASH8] [--x2-month YYYY-MM]
+                           [--x2-headroom 1.5] [--x2-setup 600]]
 
 No option: one TSV row per table entry: index, cases (mustpass cases the entry matches), estimated seconds,
 rate source, risk (RISK when the estimate exceeds margin x window), first pattern. Lines starting with '#'
@@ -26,6 +27,17 @@ GLES3 board slices and the Pi 4 record are not used (their groups are other test
 file per entry when its header has a seconds or ms column (source 'imx8mp-gles2:<file>'; the committed baseline has
 none today), else they are assumed (marked 'assumed', half of 600 s over the group's table budget, as for GLES3).
 The 29 rows are the whole table: '--gles2 --rows 0..28' equals '--gles2'.
+
+--x2 lists the Armadillo-X2 sessions still to run at the campaign commit (X2_SLICES: entries 13-15, rows14-16, and
+the eleven slices rows52-57 ... rows129-133; the rest of the campaign, entries 0-12 and 16-50, is recorded on the
+Verdin). One TSV row per slice: slice directory name ('<month>-imx8mp-gles3-x2-<hex8>-rows<AA>-<BB>', the name
+imx8mp-gles3-slice.py gives an X2 slice), rows, entry range, cases (from the table), the estimate (the entries'
+est_seconds: the recorded Verdin per-case rates of their group, '--no-board-rates' drops them), the expected
+failure-name page seconds (as --pages), the budget and the board.sh command line with the board name x2. The budget
+is (estimate + pages) x --x2-headroom (default 1.5) + --x2-setup (default 600 s: staging, kexec boots, tally),
+rounded up to 5 minutes; 'risky' names the entries over margin x window. Entries 58-66 (rows59-67, hangs), ubo and
+transform_feedback carry the recipe's advice in the 'advice' column. The ranges are fixed; --rows, --sessions and
+--session-budget do not apply with --x2 (exit 2). The existing invocations are unchanged.
 
 Rate order, per dEQP group (group_key): 1. measured on the GC7000UL (rate_source 'imx8mp:<slice>' for a Verdin
 slice, 'x2:<slice>' for an Armadillo-X2 one), 2. Pi 4, 3. assumed. The GC7000UL rate comes from the committed
@@ -65,7 +77,7 @@ shaders 0.3 s (2,000 per window); otherwise half of window/budget of the group's
 Matching is dEQP's filter as in check-imx8mp-gles3-tree.py (whole name, '*' any run, comma-separated); that
 checker has no importable function, so its one-line pattern rule is repeated in compile_entry().
 """
-import argparse, os, re, sys
+import argparse, math, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PI4_LABELS = 'FO2 FO3 FO4 FO5 FO6 FR1 FR2 LT M1 PR R1 SQ'.split()
@@ -355,6 +367,51 @@ def split_min_max(sec, n):
         r[j:j + 1] = [(s, best), (best + 1, e)]
     return r
 
+# The Armadillo-X2 sessions of the 9bc82915 campaign still to run: (rows lo, hi as the slice name's rowsAA-BB, the
+# 1-based table rows; entries lo-1..hi-1, TREE_ROWS), recipe advice (docs/es3/board-recipe-imx8mp.md)
+X2_SLICES = [
+    (14, 16, 'blend entries 13-15'),
+    (52, 57, '-'),
+    (58, 61, 'RISK: run entry 57 alone first (no hang expected), 58-60 split; a WDOG1 end is a time overrun'),
+    (62, 67, 'RISK: entries 58-66 may end in a WDOG1 reset; filtering.3d about 22 s a case; run split'),
+    (68, 75, '-'),
+    (76, 83, '-'),
+    (84, 94, '-'),
+    (95, 107, 'entry 95 (basic_teximage3d) RUN_BOUND=800; a hang there points to native 3D mip addressing'),
+    (108, 117, '-'),
+    (118, 122, 'transform_feedback: normal entries, no hang expected; a failure may be the varying packing limit'),
+    (123, 128, 'ubo: normal entries about 255 s planned; on a hang compare the last case with the uniform block size limit'),
+    (129, 133, '-'),
+]
+
+
+def x2_sessions(a, entries, cnt, sec, egroups, failfrac, out):
+    """print the X2_SLICES listing (see the module docstring); return 0"""
+    h8, month = a.x2_commit, a.x2_month
+    out.write('# Armadillo-X2 sessions (board name x2, same i.MX 8M Plus and GC7000UL): campaign commit %s, %d slices, '
+              'one session holds the board at a time\n' % (h8, len(X2_SLICES)))
+    out.write('# budget = (estimate + expected page seconds) x %g + %g s setup, rounded up to 300 s; estimate from the '
+              'rates above (recorded Verdin per-case times where the group has one, else Pi 4 or assumed)\n'
+              % (a.x2_headroom, a.x2_setup))
+    out.write('slice\trows\tentries\tcases\test_seconds\tpage_seconds\tbudget_seconds\trisky_entries\tboard_sh\tadvice\n')
+    tc = ts = tb = 0
+    for lo, hi, advice in X2_SLICES:
+        e0, e1 = lo - 1, hi - 1
+        c = sum(cnt[e0:e1 + 1])
+        est = sum(sec[e0:e1 + 1])
+        exp = [sum(n * failfrac.get(k, 0.0) for k, n in egroups[i].items()) for i in range(e0, e1 + 1)]
+        pages = sum((int(-(-x // 6)) if x > 0 else 0) for x in exp) * a.page_seconds
+        budget = math.ceil(((est + pages) * a.x2_headroom + a.x2_setup) / 300.0) * 300
+        risky = [str(i) for i in range(e0, e1 + 1) if sec[i] > a.margin * a.window]
+        name = '%s-imx8mp-gles3-x2-%s-rows%02d-%02d' % (month, h8, lo, hi)
+        cmd = ('TREE_ROWS=%d-%d tools/board.sh x2 tree tools/cts/imx8mp-gles3-tree.txt records/x2/es3-%s-rows%02d-%02d'
+               % (e0, e1, h8, lo, hi))
+        out.write('%s\trows%02d-%02d\t%d..%d\t%d\t%.0f\t%.0f\t%d\t%s\t%s\t%s\n'
+                  % (name, lo, hi, e0, e1, c, est, pages, budget, ','.join(risky) or '-', cmd, advice))
+        tc, ts, tb = tc + c, ts + est, tb + budget
+    out.write('# total: %d cases, %.0f s estimated, %d s budgeted\n' % (tc, ts, tb))
+    return 0
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
@@ -376,11 +433,19 @@ def main():
     ap.add_argument('--overhead', type=float, default=0.0, help='fixed seconds per entry added to range totals (default 0)')
     ap.add_argument('--rows', help='only table entries A..B (inclusive, 0-based): the per-entry list and the session ranges')
     ap.add_argument('--gles2', action='store_true', help='plan the ES 2.0 regression session (29-row full tree, GLES2 mustpass)')
+    ap.add_argument('--x2', action='store_true', help='list the Armadillo-X2 sessions still to run, with time budgets')
+    ap.add_argument('--x2-commit', default='9bc82915', help='campaign commit in the X2 slice names (default 9bc82915)')
+    ap.add_argument('--x2-month', default='2026-11', help='date part of the X2 slice names (default 2026-11)')
+    ap.add_argument('--x2-headroom', type=float, default=1.5, help='budget multiplier on estimate + pages (default 1.5)')
+    ap.add_argument('--x2-setup', type=float, default=600.0, help='fixed seconds added to every X2 budget (default 600)')
     g = ap.add_mutually_exclusive_group()
     g.add_argument('--sessions', type=int, help='print N contiguous row ranges with balanced totals')
     g.add_argument('--session-budget', type=float, help='print row ranges filled up to this many seconds')
     a = ap.parse_args()
 
+    if a.x2 and (a.gles2 or a.rows is not None or a.sessions or a.session_budget):
+        print('error: --x2 does not combine with --gles2, --rows, --sessions or --session-budget', file=sys.stderr)
+        return 2
     if a.table is None:
         a.table = os.path.join(HERE, 'imx8mp-full-tree.txt' if a.gles2 else 'imx8mp-gles3-tree.txt')
     if a.mustpass is None:
@@ -481,6 +546,11 @@ def main():
     out.write('# other unmeasured groups: assumed 0.5 x 600 s / budget s/case (budgets of imx8mp-gles3-gen.py)\n')
     for t in notes:
         out.write('# note: %s\n' % t)
+    if a.x2:
+        if n != 133:
+            print('error: --x2 plans the 133-entry table, this one has %d' % n, file=sys.stderr)
+            return 2
+        return x2_sessions(a, entries, cnt, sec, egroups, failfrac, out) or (1 if problems else 0)
     if a.sessions or a.session_budget:
         tot = [s + a.overhead for s in sec][lo:hi + 1]
         rng = split_min_max(tot, a.sessions) if a.sessions else split_budget(tot, a.session_budget)
