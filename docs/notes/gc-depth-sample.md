@@ -643,6 +643,28 @@ fields listed there. The loader also tries to bring `cpu4`..`cpu7` back
 online on this 4-core SoC ("could not be brought back online"): harmless
 noise.
 
+### The X2 session of 2026-11-27, second run (item x2-session): verdict code 3, check 7 failing
+
+Measured on the Armadillo-X2 in place of the Verdin iMX8MP. This run
+reached the page. Check 3 passed (w1 bit 3 clear), so the record is a
+verdict, not a rerun case. The page words came from the console's
+`yk-record` line, not from an SNVS read by the runner; the record's
+`NOTE.txt` says so. Selector `SEL=4272` (`0x10b0`).
+
+| item (measured on the Armadillo-X2 in place of the Verdin iMX8MP) | value |
+|---|---|
+| origin/main commit, image sha256, `records/x2/<dir>` name, w1, w2, w3 | **not carried into this item's brief**: the x2-session report holds them and they are not in the tree (records are gitignored). Fill them from that report; they are not guessed here |
+| check 3 passed | yes |
+| check 4 | fails, first at index 1: P1 `0xfffeff81` against P0 `0xff000082`, inside the code-3 precision bound |
+| check 7 (stale cache) | fails: with mode 1 and no wait, the first stale texel is at index 32 |
+| verdict code | **3** |
+| outcome it selects | **(a) plus the texture-cache flush** (knob mode 4), not plain (a); see `gc-depth-sample-wire.md`, "The X2 verdict" |
+
+The verdict is read as the Verdin's (see the previous section on why it
+carries over). Board state afterwards: no container was stopped; the
+board's own lease file expired on its own. A later X2 run needs a key
+that survives the board's reset, else every run ends as rc 5 `not_back`.
+
 ## (b) What would change in the GC back end
 
 Mirror of the V3D: `v3d_depth_sampled`, `depth_buffer_state`/`depth_sample`

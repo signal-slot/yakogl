@@ -84,6 +84,13 @@ resolve. For what the code-3 precision costs glmark2's shadow and refract,
 see the subsection "(a) Code 3 (check 4 fails, 5 passes)" below. Records
 and commits of the after measurement: —.
 
+Which sections now apply: the "(a)" sections with "(a).9"'s flush and
+"(a).10"'s code-3 variant. The (b) sections (GPU copy) and (c)'s CPU fixes
+are not the default; (b) stays behind knob mode 3 and (c)'s fixes are
+already on main. The record directory, commit and page words are in
+`gc-depth-sample.md`'s session section (the "—" above is not yet filled
+there either).
+
 ## What holds for every outcome
 
 ### Today's path, call by call
