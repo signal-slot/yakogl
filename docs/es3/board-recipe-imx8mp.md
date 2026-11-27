@@ -22,6 +22,10 @@ are the existing gles2 ones plus the gles3 switch.
 For a board session read "Running a GLES3 slice session" (after section 4): one ordered procedure over the
 sections below.
 
+**The board is now the Armadillo-X2** (owner, 2026-11-27: the Verdin is off the farm): its sessions follow
+"Running a GLES3 slice on the Armadillo-X2" (after "Running a GLES3 slice session"), and its rows are rows of
+this campaign, each recorded as measured on the Armadillo-X2.
+
 ## What is in the tree
 
 `tools/cts/imx8mp-gles3-tree.txt` has 133 table entries. Together they cover the 42,810 cases of
@@ -1128,6 +1132,127 @@ Rules that hold for every step:
 
 `tools/cts/cts-selftest.sh` runs the selftests of the merge, pipeline, gen, wrap, triage, preflight, report and
 sessions tools (its rows 32-39), each as `bash <selftest>` with `TMPDIR` set.
+
+## Running a GLES3 slice on the Armadillo-X2
+
+**Decision (owner, 2026-11-27): the Toradex Verdin iMX8M Plus is off the farm (since 2026-11-16, no return
+date); the rest of this campaign runs on the Armadillo-X2**, which has the same i.MX 8M Plus and GC7000UL. Its
+runs are `tools/board.sh x2` crash-route kexec runs (`boot=kexec-dev`), which `board.sh` labels `DEV` and
+"(kexec-dev: a development run, never a row)"; **for this campaign they are rows**, and every record of them
+says it was measured on the Armadillo-X2. Everything else stays: the campaign commit `05769bf2`, the table
+`tools/cts/imx8mp-gles3-tree.txt`, the eleven slice names `2026-11-16-imx8mp-gles3-05769bf2-rowsAA-BB` (the date
+in the name is the campaign's, the day a session ran goes into `--run-date`), the stop rule, and steps 11-16 of
+"Running a GLES3 slice session". A tree may mix Verdin and X2 slices (`imx8mp-gles3-merge.py --check` and
+`imx8mp-gles3-acceptance.sh` accept that); one slice is one board's session (`imx8mp-gles3-slice.py` refuses
+lines of both boards).
+
+What differs from the Verdin route (`driver/tools/kexec-zephyr/README.md`, "The Armadillo-X2"): root logs in, no
+`sudo`; nothing is installed; the loader, `snvs_lpgpr` and the image are copied into `/tmp/yakogl-kexec` (a tmpfs)
+for each run and the reboot that ends the run removes them; the record is LPGPR1..3 read through `/dev/mem`, three
+words (`w0 w1 w2`, no `w3`), so `begun` and `noresult` are `-` in `results.tsv` and a failure-name page holds four
+names, not six; there is no remote power control. The Verdin rules "Do not use `kexec-dev`" and
+`BOARD_BOOT=uboot-mmc` do not apply here. Whether WDOG1 resets a *hung* image on the X2 has not been seen yet (the
+proof image has not been jumped): the first watchdog end of this campaign is also that proof.
+
+Board constraints of every X2 session:
+- nothing is written to the eMMC or to the U-Boot environment, and nothing outside the board's `/tmp` tmpfs
+  (`/tmp/yakogl-kexec`); one exception exists today and is not this campaign's to change: `tools/board.sh` keeps
+  its board lease in `/var/tmp/yakogl-board.lease`, and `/var/tmp` is on the eMMC on this board (the preflight's
+  `info /var/tmp ...` line shows where it is);
+- no kernel module is loaded or unloaded, Tailscale and `sshd` are not touched, no container runs (the readiness
+  read refuses one), and no character is typed into the console (it stops U-Boot at its prompt);
+- no reset from outside: the board's only way back from an image is its own watchdog (`gc_wdog_arm: armed`,
+  WDOG1, 600 s) or the image's own reset at its end;
+- a board that does not come back (`board.sh` rc 5, `the board did not come back`, or no ssh answer after the
+  run) is reported as needing a person, and is **not retried**: stop the session, start no further slice.
+
+Session steps (names only; `BOARD_HOST` comes from the board resource's environment, `BOARD_UART` from the console
+resource's environment; never write their values):
+
+1. **Image at the campaign commit** (once; in a worktree of `05769bf2`, as step 1 of the Verdin procedure):
+   ```sh
+   COMMIT=05769bf2c24a00a8c69c608c2310c0edab3f807c; HEAD8=05769bf2
+   git worktree add --detach ../yakogl-05769bf2 "$COMMIT"
+   cd ../yakogl-05769bf2
+   IMX8MP_BOARD=x2 tools/cts/imx8mp-deqp-build.sh --gles3 es3-$HEAD8 'dEQP-GLES3.info.*' \
+     --table tools/cts/imx8mp-gles3-tree.txt         # -> $IMX8MP_OUT/x2/es3-05769bf2/zephyr/zephyr.bin
+   # (--gles3 = DEQP_MODULE=gles3 with DEQP_STAGE1=$DEQP_STAGE1_GLES3, default $IMX8MP_OUT/deqp-stage1-gles3; the
+   #  stage 1 is shared with the Verdin's)
+   ```
+   `IMX8MP_BOARD=x2` builds `armadillo_x2/mimx8ml8/a53` into `$IMX8MP_OUT/x2/` (never beside the Verdin's images)
+   with `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`. Do not set `IMX8MP_CONSOLE=1` (the Verdin's UART3 fragment; the build
+   refuses it with `x2`): the X2's console is UART2, from the sample's board conf. Every later command runs from the
+   integration tip's checkout.
+2. **The loader and the record tool** (once per checkout, never committed; `driver/tools/kexec-zephyr/README.md`):
+   ```sh
+   cd driver/tools/kexec-zephyr
+   for t in kexec_zephyr snvs_lpgpr; do
+     aarch64-linux-gcc -O2 -static -nostdlib -ffreestanding -fno-stack-protector -o $t $t.c
+   done   # or: clang --target=aarch64-linux-gnu -fuse-ld=lld, the same flags
+   ```
+3. **Artefacts**: `tools/cts/imx8mp-gles3-artefacts.sh x2/es3-$HEAD8 | tee $TMPDIR/artefacts.txt`.
+4. **Preflight** (read-only; with `BOARD_HOST` set it reads the board over ssh):
+   ```sh
+   tools/cts/imx8mp-gles3-preflight.sh --board x2 --commit "$COMMIT" --out "$IMX8MP_OUT" | tee $TMPDIR/preflight.txt
+   ```
+   It must end `preflight: all ok`: the env, the stage 1 package, the table, the image
+   `<out>/x2/es3-05769bf2/zephyr/zephyr.bin` with `gc_wdog_arm: armed`, both tools built, `the board is the
+   Armadillo-X2 (model '...', fsl,imx8mp)` and `/tmp is a tmpfs`. It prints `note /boot medium guard does not apply
+   on the X2` (the run writes nothing to `/boot`, the eMMC or the U-Boot env) and `note BOARD_UART is unset: the X2
+   console is optional` when it is. A FAIL on the board check needs a person, not a retry.
+5. **The slice's record directory and a dry run** (touches no board):
+   ```sh
+   IMG=$IMX8MP_OUT/x2/es3-$HEAD8/zephyr/zephyr.bin; S8=$(sha256sum "$IMG" | cut -c1-8)
+   AA=01; BB=13; ROWS=0-12           # the slice: rowsAA-BB is TREE_ROWS=AA-1..BB-1 (table below)
+   REC=records/x2/$(date -u +%Y%m%d-%H%M)-es3-$HEAD8-rows$AA-$BB-$S8
+   TREE_ROWS=$ROWS TREE_IMAGE=$IMG tools/cts/imx8mp-gles3-board.sh --dry-run --board x2 tree "$REC"
+   ```
+   The wrapper prints `imx8mp-gles3-board: tools/board.sh --dry-run x2 tree tools/cts/imx8mp-gles3-tree.txt
+   <dir>` and `board.sh x2: tree: 133 rows ...`; each row's plan ends with
+   `/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash`.
+   Optional, read-only: `tools/board.sh x2 status`.
+6. **Run the slice** (two passes, as on the Verdin; `RUN_BOUND` is not read on `kexec-dev`, whose bound to Linux
+   back is 1500 s):
+   ```sh
+   export IMX8MP_BOARD=x2 TREE_IMAGE=$IMG BOARD_MUSTPASS=tools/cts/gles3-mustpass.txt
+   # BOARD_UART: set it from the console resource's environment to capture UART2 (read only); leave it unset otherwise
+   TREE_ROWS=$ROWS NAMES=0 tools/cts/imx8mp-gles3-board.sh tree "$REC" 2>&1 | tee "$REC.log"     # pass 1: the rows
+   TREE_ROWS=$ROWS tools/cts/imx8mp-gles3-board.sh tree "$REC" 2>&1 | tee -a "$REC.log"          # pass 2: the name pages
+   tools/cts/imx8mp-gles3-board.sh tally "$REC" | tee "$REC.tally.txt"
+   ```
+   Per row: `board.sh x2 e<NN> rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP
+   resets=absent record=<w0>,<w1>,<w2> back_after=<n>s (kexec-dev: a development run, never a row)`. A page is a
+   full rerun of its entry and names four failing cases, so a row with fails costs about one row time per four
+   fails (at most 40 pages). The run directories are `$REC/<YYYYMMDD-HHMM>-e<NN>-<sha8>/`. With `BOARD_UART` set,
+   scan the captures as step 10 of the Verdin procedure does; without it the record is the result and the README
+   says recoveries were not observed. Then `python3 -I tools/cts/imx8mp-gles3-redact.py --check "$REC"` (`--fix`
+   on a hit); `records/` is gitignored.
+7. **The slice README** (no board):
+   ```sh
+   D=tools/cts/log/2026-11-16-imx8mp-gles3-$HEAD8-rows$AA-$BB
+   python3 -I tools/cts/imx8mp-gles3-slice.py --commit "$COMMIT" --rows $AA-$BB --date 2026-11-16 \
+     --run-date <the session's day, UTC> --window <HH:MM/HH:MM> --lines "$REC.log" --lines "$REC.tally.txt" \
+     --records "$REC" --results "$REC/results.tsv" --artefacts $TMPDIR/artefacts.txt \
+     --preflight $TMPDIR/preflight.txt --out "$D"
+   cp "$REC/results.tsv" "$REC/rows.md" "$D/"
+   python3 -I tools/cts/imx8mp-gles3-merge.py --check --partial "$D"
+   ```
+   The README says "measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)", names the owner's
+   decision and its records as `records/x2/<dir>`; `imx8mp-gles3-acceptance.sh` c1 fails an X2 slice without that
+   line. Steps 11-16 of "Running a GLES3 slice session" (rerun rule, commit contents, the not-pass and report
+   tools, the split of an overrunning entry) apply unchanged.
+
+The eleven slices on the X2 (`TREE_ROWS` for steps 5-6; the order and the run advice are those of "The eleven
+slices"):
+
+| Slice | `AA`-`BB` | `TREE_ROWS` | Slice | `AA`-`BB` | `TREE_ROWS` |
+| --- | --- | --- | --- | --- | --- |
+| s01 | `01`-`13` | `0-12` | s07 | `68`-`83` | `67-82` |
+| s02 | `14`-`16` | `13-15` | s08 | `84`-`95` | `83-94` |
+| s03 | `17`-`34` | `16-33` | s09 | `96`-`107` | `95-106` |
+| s04 | `35`-`51` | `34-50` | s10 | `108`-`122` | `107-121` |
+| s05 | `52`-`57` | `51-56` | s11 | `123`-`133` | `122-132` |
+| s06 | `58`-`67` | `57-66` | | | |
 
 ## RGBA32 two-plane sampling run (one session)
 

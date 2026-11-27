@@ -1,0 +1,5 @@
+=== e52 (zephyr.bin, selector 52) 2026-11-28 01:02:03
+board.sh x2 e52 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0800,000002bb,00000000 back_after=41s (kexec-dev: a development run, never a row)
+=== e53 (zephyr.bin, selector 53) 2026-11-28 01:09:10
+board.sh x2 e53 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0802,00000084,00000000 back_after=38s (kexec-dev: a development run, never a row)
+board.sh x2 e53-p0 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP_FAILS resets=absent record=594b0a02,1a2b3c4d,ffffffff back_after=37s (kexec-dev: a development run, never a row)

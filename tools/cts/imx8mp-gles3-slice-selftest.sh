@@ -10,6 +10,10 @@
 # 57) passes the same checks and times.py reads it. Refused: a short hash, a missing entry, two different lines
 # for one entry, an entry outside the range, a missing record directory, a results.tsv without the entry
 # (exit 2), and a line the redact check flags (exit 1); none of them prints or writes a README.
+# An Armadillo-X2 slice (rows53-54 from the fixture's x2-lines.txt and x2-results.tsv: board.sh x2 lines, '-' in
+# begun) says it was measured on the Armadillo-X2, names records/x2 and the X2 commands, passes merge --check
+# --partial alone and beside the Verdin slice, takes --run-date for the Run lines, and lines of both boards in one
+# slice are refused.
 # Host only, no argument; scratch under $TMPDIR (else the current directory), never /tmp.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -155,6 +159,62 @@ python3 -I "$merge" --check --partial "$tmp/d" > "$tmp/m.txt" 2>&1 && ok "new-op
 	|| bad "new-options merge --check: $(cat "$tmp/m.txt")"
 refuse "bad window" 2 --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --window 25:00/26:00
 refuse "empty artefacts" 2 --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --artefacts "$tmp/pre.txt"
+
+# 5. an Armadillo-X2 slice, rows53-54 (entries 52-53): the fixture's x2-lines.txt (board.sh x2 verdict lines, a page
+# line, the run's "===" lines) and x2-results.tsv (three-word records: '-' in begun and noresult)
+mkdir -p "$tmp/x/runs/20261128-0102-e52-89abcdef" "$tmp/x/runs/20261128-0109-e53-89abcdef"
+run --commit $full --rows 53-54 --date 2026-11-16 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+	--records "$tmp/x/runs" --out "$tmp/x/slice" > "$tmp/x.log" 2>&1 && ok "x2 rows53-54 written" \
+	|| bad "x2 rows53-54 refused: $(cat "$tmp/x.log")"
+cp "$slice/x2-results.tsv" "$tmp/x/slice/results.tsv"
+x=$tmp/x/slice/README.md
+grep -q 'measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)' "$x" \
+	&& ok "x2: the README says measured on the Armadillo-X2" || bad "x2: no measured-on line"
+grep -q "owner's decision of 2026-11-27" "$x" && ok "x2: the owner's decision named" || bad "x2: no owner's decision"
+grep -q 'Toradex Verdin iMX8M Plus (GC7000UL): the slice' "$x" && bad "x2: the Verdin sentence was written" \
+	|| ok "x2: no Verdin run sentence"
+[ "$(grep -c '^board\.sh x2 e5[23] rc=0 verdict=done boot=kexec-dev DEV ' "$x")" = 2 ] \
+	&& ok "x2: two verdict lines, verbatim" || bad "x2: verdict lines"
+grep -q 'e53-p0' "$x" && bad "x2: a page line was copied" || ok "x2: page lines not copied"
+grep -q '^| e53 | 0 | done | absent | 38s | - | 1 | - | 132 | 2 | 0 | 0 | - |$' "$x" \
+	&& ok "x2: per-entry row (no uptime, one page, begun and none '-')" || bad "x2: per-entry row of e53"
+grep -q '^Records (gitignored): `records/x2/runs`\.$' "$x" && ok "x2: records under records/x2" || bad "x2: records line"
+python3 -I "$merge" --check --partial "$tmp/x/slice" > "$tmp/m.txt" 2>&1 \
+	&& ok "x2: merge --check --partial passes" || bad "x2: merge --check: $(cat "$tmp/m.txt")"
+python3 -I "$merge" --check --partial "$tmp/a/slice" "$tmp/x/slice" > "$tmp/m.txt" 2>&1 \
+	&& ok "x2: a Verdin slice and an X2 slice of one commit merge" || bad "x2: Verdin+X2 merge --check: $(cat "$tmp/m.txt")"
+python3 -I "$redact" --check "$x" > "$tmp/r.txt" 2>&1 && ok "x2: redact --check passes" || bad "x2: redact: $(cat "$tmp/r.txt")"
+python3 -I "$here/imx8mp-gles3-times.py" --tsv "$tmp/x/slice" 2>/dev/null | grep -q "	e53	" \
+	&& ok "x2: times.py reads the X2 lines" || bad "x2: times.py"
+pre2=$tmp/ws2"/out"
+{
+	printf '16443032 %064d %s/x2/es3-9bc82915/zephyr/zephyr.bin\n' 1 "$pre2"
+	printf '132944 %064d %s/deqp-stage1-gles3/build/modules/gles3/libdeqp-gles3-package.a\n' 3 "$pre2"
+} > "$tmp/art2.txt"
+mkdir -p "$tmp/y"
+run --commit $full --rows 53-54 --date 2026-11-16 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+	--artefacts "$tmp/art2.txt" --preflight "$tmp/pre.txt" --window 01:00/01:15 --out "$tmp/y" > "$tmp/y.log" 2>&1 \
+	&& ok "x2 draft with the new options written" || bad "x2 draft refused: $(cat "$tmp/y.log")"
+y=$tmp/y/README.md
+grep -q '^16443032 0*1 x2/es3-9bc82915/zephyr/zephyr.bin$' "$y" && ok "x2: artefact path cut below IMX8MP_OUT, x2/ kept" \
+	|| bad "x2: artefact line"
+grep -q 'imx8mp-gles3-artefacts.sh x2/es3-9bc82915' "$y" && grep -q 'imx8mp-gles3-preflight.sh --board x2 --commit' "$y" \
+	&& ok "x2: artefacts and preflight commands name the X2" || bad "x2: artefacts/preflight command lines"
+grep -q 'TREE_ROWS=52-53 TREE_IMAGE=\$IMX8MP_OUT/x2/es3-9bc82915/zephyr/zephyr.bin IMX8MP_BOARD=x2' "$y" \
+	&& grep -q 'imx8mp-gles3-board.sh tree \$REC$' "$y" && grep -q 'records/x2/<YYYYMMDD-HHMM>-es3-9bc82915-rows53-54-<image sha8>' "$y" \
+	&& ! grep -q 'BOARD_BOOT=uboot-mmc' "$y" \
+	&& ok "x2: the run commands are the X2's" || bad "x2: run commands"
+grep -qF "$pre2" "$y" && bad "x2: a path was copied" || ok "x2: no path copied"
+{ cat "$tmp/one.txt"; cat "$slice/x2-lines.txt"; } > "$tmp/mixed.txt"
+grep -q '^Run 2026-11-16, 01:00-01:15 UTC' "$y" && ok "x2: without --run-date the Run line takes --date" || bad "x2: Run line"
+run --commit $full --rows 53-54 --date 2026-11-16 --run-date 2026-11-28 --lines "$slice/x2-lines.txt" --window 01:00/01:15 \
+	--results "$slice/x2-results.tsv" > "$tmp/z.md" 2> "$tmp/z.log"
+grep -q '^Run 2026-11-28 on the Armadillo-X2' "$tmp/z.md" && grep -q '^Run 2026-11-28, 01:00-01:15 UTC' "$tmp/z.md" \
+	&& grep -q '`2026-11-16-imx8mp-gles3-9bc82915-rows53-54`' "$tmp/z.md" \
+	&& ok "x2: --run-date in the Run lines, --date in the slice name" || bad "x2: --run-date: $(cat "$tmp/z.log")"
+refuse "bad run date" 2 --commit $full --rows 58 --date 2026-11-15 --run-date 28-11-2026 --lines "$tmp/one.txt"
+refuse "lines of both boards" 2 --commit $full --rows 53-58 --date 2026-11-16 --lines "$tmp/mixed.txt"
+cmp -s "$tmp/plain.md" "$tmp/a/slice/README.md" && ok "Verdin README unchanged by the X2 support" || bad "Verdin README changed"
 
 echo "slice-selftest: $nok ok, $nfail failed"
 [ "$nfail" = 0 ]
