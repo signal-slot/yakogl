@@ -192,6 +192,20 @@ else
     ok "no committed b1b5b845 abort consoles in this checkout"
 fi
 
+# --- U-Boot ids: serial# and the UUIDs of mmc part output
+u1='3f2a1c9e''-7b4d-4e2a-9c1f-''0a1b2c3d4e5f'
+sn='serial''#=0123456789abcdef'
+mp=$(printf '=> mmc part\nPartition Map for MMC device 0  --   Partition Type: EFI\n\nPart\tStart LBA\tName\n\tType GUID:\t%s\n  1\t0x8000\t"rootfs" %s\n=> echo %s\n' "$u1" "$u1" "$u1")
+want_mp=$(printf '=> mmc part\nPartition Map for MMC device 0  --   Partition Type: EFI\n\nPart\tStart LBA\tName\n\tType GUID:\t<uuid>\n  1\t0x8000\t"rootfs" <uuid>\n=> echo %s\n' "$u1")
+out=$(printf '%s\n' "$mp" | python3 -I "$tool")
+if [ "$out" = "$want_mp" ]; then ok "mmc part table UUIDs -> <uuid>, a UUID after the next prompt kept"; else bad "mmc part: $out"; fi
+out2=$(printf '%s\n' "$out" | python3 -I "$tool")
+if [ "$out2" = "$out" ]; then ok "uuid rule idempotent"; else bad "uuid rule not idempotent"; fi
+out=$(printf 'bootargs root=PARTUUID=%s rw\nboot_id=%s\nid %s\n' "$u1" "$u1" "$u1" | python3 -I "$tool")
+if [ "$out" = "$(printf 'bootargs root=PARTUUID=<uuid> rw\nboot_id=%s\nid %s' "$u1" "$u1")" ]; then ok "PARTUUID replaced; boot id and bare UUIDs elsewhere kept"; else bad "partuuid: $out"; fi
+out=$(printf '%s\nserial#: abc123\nserial#=<serial>\nfoo_serial#=1\n' "$sn" | python3 -I "$tool")
+if [ "$out" = "$(printf 'serial#=<serial>\nserial#: <serial>\nserial#=<serial>\nfoo_serial#=1')" ]; then ok "serial# value replaced"; else bad "serial#: $out"; fi
+
 # --- this file and the tool carry nothing the acceptance grep matches
 if grep -nE -- "$acc" "$tool" "$0" >/dev/null; then
     bad "the tool or this selftest trips the acceptance grep"

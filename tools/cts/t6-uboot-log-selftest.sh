@@ -56,6 +56,7 @@ MAC='02:00:5e:''10:00:01'
 MAC7='02:00:5e:''10:00:01:7f'
 TN='100'""'.64.0.9'
 TN_PART='100'""'.101.x.x'
+uuid_re='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 UUID='3f2a1c9e''-7b4d-4e2a-9c1f-''0a1b2c3d4e5f'
 SER='iSer''ial 3 A1B2C3D4E5'
 HOSTV='bridge-''fake-host'
@@ -69,6 +70,11 @@ printf 'U-Boot 2017.09\nconsole on %s at 1500000\n=> go 0x10000000\nT6:G\ngl_tes
   > "$R/20261126-1201-t6-uboot-go/uart.log"
 printf 'PASS\nexit 0\n' > "$R/20261126-1201-t6-uboot-go/verdict.txt"
 printf 'ethaddr=%s\nserverip %s\nacm %s\n' "$MAC" "$TN" "$ACM" > "$R/20261126-1210-t6-uboot-reads/answers.txt"
+{
+  printf '=> mmc part\n\nPartition Map for MMC device 0  --   Partition Type: EFI\n\n'
+  printf 'Part\tStart LBA\tEnd LBA\t\tName\n\tAttributes\n\tType GUID:\t%s\n\tPartition GUID:\t%s\n' "$UUID" "$UUID"
+  printf '  1\t0x00008000\t0x0ffffff\t"rootfs"\n\tguid:\t%s\n=> printenv serial#\nserial%s=0123456789abcdef\n' "$UUID" '#'
+} >> "$R/20261126-1210-t6-uboot-reads/answers.txt"
 printf 'prompt-reads: 27 commands, exit 0\n' > "$R/prompt-reads.log"
 printf '\0\1\2 %s\n' "$UA" > "$R/image.bin"
 ln -s uart.log "$R/20261126-1201-t6-uboot-go/link.log"
@@ -92,6 +98,11 @@ if grep -qF 'console on <uart> at 1500000' "$D/20261126-1201-t6-uboot-go/uart.lo
   grep -qxF 'acm <uart>' "$D/20261126-1210-t6-uboot-reads/answers.txt"; then
   ok "tty path, MAC and tailnet address redacted by console-redact.py"
 else bad "redacted copy: $(cat "$D"/*/*)"; fi
+if grep -qxF 'serial#=<serial>' "$D/20261126-1210-t6-uboot-reads/answers.txt" &&
+  [ "$(grep -c '<uuid>' "$D/20261126-1210-t6-uboot-reads/answers.txt")" = 3 ] &&
+  ! grep -rEiq -- "$uuid_re|0123456789abcdef" "$D"; then
+  ok "mmc part UUIDs and serial# replaced, record copied"
+else bad "mmc part / serial# copy: $(cat "$D"/*/answers.txt)"; fi
 if grep -qxF 'gl_test: 50/50 PASS' "$D/20261126-1201-t6-uboot-go/uart.log" && cmp -s "$R/prompt-reads.log" "$D/prompt-reads.log"; then
   ok "clean lines kept byte for byte"
 else bad "clean lines damaged"; fi
@@ -132,7 +143,7 @@ refusal url "acceptance grep" "uart via ${BR}<addr>:4000" T6_UART=
 refusal tty "acceptance grep" "console $UA_UP" T6_UART=
 refusal mac "acceptance grep" "ethaddr $MAC7" T6_UART=
 refusal tailnet "acceptance grep" "peer $TN_PART up" T6_UART=
-refusal uuid "uuid" "part uuid $UUID" T6_UART=
+refusal uuid "uuid" "disk id $UUID" T6_UART=
 refusal bootid "uuid" "boot_id $UUID" T6_UART=
 refusal serial "t6-redact-check usb-serial" "$SER" T6_UART=
 refusal envhost "t6-redact-check env:T6_UART" "bridge $HOSTV:4000" T6_UART="$HOSTV"
@@ -149,7 +160,7 @@ else bad "path name: rc=$rc out=$out"; fi
 # --exclude leaves a file out, so the rest lands
 r=$T/rec-exclude
 mkdir -p "$r"
-printf 'part uuid %s\n' "$UUID" > "$r/answers.txt"
+printf 'disk id %s\n' "$UUID" > "$r/answers.txt"
 printf 'PASS\n' > "$r/verdict.txt"
 out=$(run --exclude answers.txt "$r" 2026-11-26 exclude 0123abcd 2>&1); rc=$?
 E=$LOG/2026-11-26-t6-uboot-exclude-0123abcd
