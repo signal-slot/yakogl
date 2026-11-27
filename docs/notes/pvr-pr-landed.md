@@ -10,13 +10,13 @@ render" in docs/notes/pvr-render-pool.md; this note is not a replacement of
 it. Nothing here was run on hardware. Paths are relative to the repository
 root; `render.rs` is driver/rust/src/gpu/pvr/render.rs.
 
-## Summary as of 2026-11-21 (plan #301, issue #2 of signal-slot/yakogl)
+## Summary as of 2026-11-27 (plan #301, issue #2 of signal-slot/yakogl)
 
 The "What each landed part does" tables are the 2026-10-30 reading of
 parts 1 and 4 (cites moved to the code of 2026-11-21 where a line shifted).
 The test table, "What is open on parts 1 and 4" and "What a knob-on run can
 reach today" were refreshed on 2026-11-21 against the tip (3cb260c2). The
-current status is the paragraph "Status, 2026-11-21" in
+current status is the paragraph "Status, 2026-11-27" in
 docs/notes/pvr-render-pool.md; the facts:
 
 - **Implemented**, behind `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER` (default
@@ -25,23 +25,24 @@ docs/notes/pvr-render-pool.md; the facts:
   `frag_pr` block (`62b08d4b`), the load shader under `tools/pco_shc`
   (`cfb0a032`), `src/pvr/pr_zs.rs` (`6f550632`), the 3D_PR built from
   `frag_pr` (`f1b3f8d7`), and the backend filling `frag_pr` and
-  `pds_pr_bgnd` (`1311a675`). Stated gaps: `pds_pr_bgnd` is not written into
-  the 3D_PR command; the Z/S words of `pr_zs.rs` have no `frag_pr` field.
-- **Measured on the board** (parts 1 and 4 only, before the frame side):
-  `tools/cts/log/2026-10-31-pr-neg175/` (case 175 knob off TIMEOUT cause 4;
-  knob on PASS, one partial render, HWR 0),
-  `tools/cts/log/2026-10-31-pr-negative/` (case 217 knob off, 256 layers:
-  NOT EXERCISED), `tools/cts/log/2026-11-02-pr-217probe/` (crossing between
-  976 and 1220 layers; knob on at the 512 cap: stop cause 2, partial renders
-  0; knob on without cap: one partial render, depth equal, colour mostly the
-  clear).
-- **Known blocker:** case 217 at the 512-page cap ends in the at-maximum stop
-  (cause 2, `ccb.rs` `at_maximum`, not gated by the knob) with the knob on.
-- **Nothing with the frame side has run on the board.** The three board
-  record directories above are all from images built before the frame side
-  (before `f1b3f8d7` and `1311a675`). Case 175/217 knob on with the frame
-  side, and the regression set knob off and on, are not measured
-  (board-regress, waiting for the board).
+  `pds_pr_bgnd` (`1311a675`), `isp_zlsctl` through `frag_pr` (`ccd2a770`),
+  the at-maximum wait (`9b2e88bc`), FWINIT_PARTIAL_RENDER (`0328f6be`).
+  Stated gap: `pds_pr_bgnd` is not written into the 3D_PR command.
+- **Measured on the board at main `c8be59f6` (2026-11-27), the frame side
+  landed:** `tools/cts/log/2026-11-pr-217/`: case 175 knob on (grow reserve
+  off) PASS, one partial render, GPU recoveries 0, knob off stop cause 4;
+  case 217 at the 512-page cap knob off stop cause 2, knob on the
+  at-maximum wait (`9b2e88bc`) then one partial render, no stop, 0
+  recoveries, but FAIL pixels (1,001,186 of 1,048,576 pixels the clear
+  colour). `tools/cts/log/2026-11-pr-regress/`: gl_test default list 50 of
+  50 knob off and on, glmark2 33 scenes 0 failed 0 resets, 489 off and 485
+  on.
+- **Open:** case 217's colour after the partial render (`pds_pr_bgnd` is
+  still not written into the 3D_PR; the load shader and the PR PBE/EOT
+  store are the other suspects).
+- Earlier records (parts 1 and 4 only, before the frame side):
+  `tools/cts/log/2026-10-31-pr-neg175/`, `tools/cts/log/2026-10-31-pr-negative/`,
+  `tools/cts/log/2026-11-02-pr-217probe/`.
 
 Every behaviour below exists only with the knob
 (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, driver/zephyr/Kconfig:69, off by

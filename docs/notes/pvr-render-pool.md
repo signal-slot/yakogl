@@ -2954,49 +2954,49 @@ and the DDK are cited only. The reading this builds on is the section
 above. The frame side (Z/S, SPM EOT, background load) is read in "The PR
 frame side, read (Mesa 26.2.1)" below.
 
-**Status, 2026-11-21 (plan #301, issue #2 of signal-slot/yakogl, the old
-#3).**
+**Status, 2026-11-27 (plan #301, issue #2 of signal-slot/yakogl, the old
+#3), main `c8be59f6`.**
 - **Implemented, behind `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, default n**
   (`driver/zephyr/Kconfig`; with it off every command and word is today's):
   - parts 1 and 4: FENCE_PR, 3D_PR and its UPDATE, the geometry timeline
     word, the RTA arrays and the HWRT clear (`f73eded7`);
-  - the frame side, in landing order: the SPM scratch size and PR PBE words
-    (`src/pvr/spm.rs`, `14fbb630`); the PR EOT data slot and its builder
-    (`5671bcf0`); the kick's zeroed `frag_pr` block (`62b08d4b`); the
-    background-object load shader generated on the host with Mesa's pco
-    (`tools/pco_shc`, `cfb0a032`); the depth/stencil word builder
-    (`src/pvr/pr_zs.rs`, `6f550632`); the 3D_PR built from the kick's
-    `frag_pr` with the knob on (`f1b3f8d7`); the backend filling `frag_pr`
-    (SPM colour scratch, PR PBE, PR EOT) and `pds_pr_bgnd`, the load
-    shader's entry and the six remaining pins (`1311a675`).
-  - Gaps the code itself states: `pds_pr_bgnd` is computed but not yet
-    written into the 3D_PR command (comment at `PvrRenderFragPr`,
-    driver/rust/src/gpu/pvr/render.rs), and `pr_zs.rs` has no field in the
-    kick's `frag_pr` block (the driver copies the frame's Z/S words, right
-    for an unswapped frame: `docs/notes/pvr-pr-zs.md`). A frame the load
-    shader cannot reload keeps `frag_pr` zero.
-- **Measured on the AM62P so far** (as each README states it):
-  - `tools/cts/log/2026-10-31-pr-neg175/` (commit `d1b24389`, parts 1 and 4
-    only): case 175 knob off TIMEOUT, stop cause 4, partial renders 0 (two
-    runs); knob on PASS in both runs, one firmware partial render, no stop,
-    HWR 0. It reads no pixels.
-  - `tools/cts/log/2026-10-31-pr-negative/` (case 217, knob off): 256 layers
-    completed with requests 0, no stop, no partial render: NOT EXERCISED, the
-    known negative was not reproduced.
-  - `tools/cts/log/2026-11-02-pr-217probe/` (case 217; the crossing lies
-    between 976 and 1220 layers, so the prediction below of 2013 to 2514 was
-    about twice too high; default 1220): knob off stop cause 2
-    (pr-verdict OK); knob on with the cap at 512 the same stop, partial
-    renders 0, pr-verdict FAIL; knob on without grow reserve and cap: one
-    grow request refused, one partial render, kick complete, 0 recoveries,
-    depth read-back equal, colour mostly the clear (FAIL pixels). All
-    three records predate the frame side (`62b08d4b` on).
-- **Known blocker:** case 217 at the 512-page cap ends in the at-maximum stop
-  (cause 2; `driver/rust/src/gpu/pvr/ccb.rs`, `at_maximum`, not gated by the
-  knob) with the knob on, before any partial render can happen. It needs a
-  driver change.
-- **Not yet measured with the frame side landed: case 175/217 knob on,
-  regression set knob off and on (board-regress).**
+  - the frame side: the SPM scratch size and PR PBE words
+    (`src/pvr/spm.rs`, `14fbb630`); the PR EOT data slot (`5671bcf0`); the
+    kick's `frag_pr` block (`62b08d4b`); the background-object load shader
+    from Mesa's pco (`tools/pco_shc`, `cfb0a032`); the depth/stencil word
+    builder (`src/pvr/pr_zs.rs`, `6f550632`) and its `isp_zlsctl` carried
+    through `frag_pr` (`ccd2a770`); the 3D_PR built from `frag_pr`
+    (`f1b3f8d7`); the backend filling `frag_pr` and `pds_pr_bgnd`
+    (`1311a675`);
+  - the at-maximum stop turned into a bounded wait for the firmware's
+    partial render (`9b2e88bc`), FWINIT_PARTIAL_RENDER at firmware boot
+    (`0328f6be`), the composed stall dump (`da52a267`).
+  - Gap the code states: `pds_pr_bgnd` is computed but not written into the
+    3D_PR command (`PvrRenderFragPr`, driver/rust/src/gpu/pvr/render.rs).
+- **Measured on the AM62P at main `c8be59f6`** (2026-11-27):
+  - `tools/cts/log/2026-11-pr-217/`: case 175 knob on (with the grow
+    reserve off, as neg175) **PASS**, one firmware partial render, no stop,
+    GPU recoveries 0; knob off TIMEOUT, stop cause 4. Case 217 (512-page
+    cap, 1220 layers) knob off: stop cause 2. Case 217 knob on: the
+    at-maximum wait, **one partial render**, the kick completes, no stop,
+    0 recoveries, but **FAIL pixels**: 1,001,186 of 1,048,576 pixels are
+    the clear colour (pr-verdict "class 2 F8 corrupt frame"). The colour
+    rendered before the partial render does not survive it. The committed
+    `gl_test-175-{off,on}.conf` alone do not refuse the grow (the grow is
+    served), so case 175 needs `FL_PROBE_NO_RESERVE=y` on top.
+  - `tools/cts/log/2026-11-pr-regress/`: the regression set knob off and on.
+    gl_test default list 50 of 50 in both (pr-regress-compare SAME).
+    glmark2 33 scenes, 0 failed, 0 resets in both, score 489 off and 485
+    on (FPS within 0.3 to 1.8%; the compare reads DIFFERENT on FPS only).
+    No partial render or out-of-memory notice occurs in the set.
+  - Earlier records, before the frame side: `tools/cts/log/2026-10-31-pr-neg175/`
+    (parts 1 and 4: case 175 knob on PASS, one partial render),
+    `tools/cts/log/2026-11-02-pr-217probe/` (the crossing between 976 and
+    1220 layers; run C: one partial render, colour mostly the clear).
+- **Open:** case 217's picture after the partial render (the SPM background
+  reload: `pds_pr_bgnd` into the 3D_PR, the load shader, the PR PBE/EOT
+  store), then case 217 knob on PASS. The knob stays off by default until
+  then.
 - **Parameter demand per layer, and the crossing for the board sessions**
   (computed from the numbers this note records, not measured for 217):
   - the list: 512 pages of 4 KiB = 2048 KiB, no grow possible (cap 512);
