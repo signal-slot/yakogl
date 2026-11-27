@@ -256,7 +256,7 @@ may:
 **A point for W2 and W8 found while reading the golden.** `gc-tiled-wire.md`
 (W8 and the register list in W1) names `RS_EXTRA_CONFIG` `TS_MODE` (bit 24) for
 the TS-sourced resolve. Mesa's stream puts the source's TS mode in
-`RS_SOURCE_STRIDE` bit 29 (`0xa8000400`, `state_3d.xml.h:1371-1373`) and
+`RS_SOURCE_STRIDE` bit 29 (`0xa8000400`, `state_3d.xml.h:1370-1372`) and
 leaves `RS_EXTRA_CONFIG` at 0. The golden is the authority, so the probe
 follows it; it is the same bit 0 in mode 128B, so arms 0, 1 and 3 do not
 depend on the answer. Arm 2 does. W2's emitter should follow the golden.
@@ -301,9 +301,15 @@ granules are the even ones: in row 0, pixels `x` in `[0,8)`, `[16,24)`,
 `0b01010101` (`0x55`) with `nibble_order` 1. High nibble first gives `0xaa`.
 In arm 2 (256B granules) the runs are 16 wide, map bits `0x33`/`0xcc` over
 8-pixel steps. For arm 3 the expected map is computed from
-`layout::offset_in(SuperTiled, order, ..)` for both orders, and the page says
-which order matched (`nibble_order` bit 1 = `Interleaved`); neither means the
-map is neither candidate, and the CRC is kept for the host to decode.
+`layout::offset_in(SuperTiled, order, ..)` for both orders. At 128B granules
+(the 0x01 pattern) the map cannot tell `Drm` from `Interleaved`: the granule
+parity is pixel-index bit 5 in both orders, so both give the same map and the
+order stays undecided from K3 (the K0 match still names the super-tile
+order). Only 256B granules decide it: there the granule parity is pixel-index
+bit 6, which is y3 for `Drm` and x3 for `Interleaved`. A matching map is read
+as "consistent with" the page's `nibble_order` bit 1 (`Interleaved`), not as
+the order; neither candidate matching means the map is neither, and the CRC
+is kept for the host to decode.
 
 ### What each outcome means for W7 to W9 and W12
 
