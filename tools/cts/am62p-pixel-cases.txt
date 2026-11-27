@@ -47,14 +47,19 @@ dEQP-GLES3.functional.fragment_out.random.1,dEQP-GLES3.functional.fragment_out.r
 # gl_test 221 instmix
 # image PD1:
 dEQP-GLES3.functional.instanced.draw_arrays_instanced.mixed.4_instances,dEQP-GLES3.functional.instanced.draw_elements_instanced.mixed.4_instances,dEQP-GLES3.functional.instanced.draw_arrays_instanced.instance_id.4_instances
-# four draw buffers (the MRT4 knob): e660d5d9 (compiler) and the end-of-tile programs, host test
-# tests/es3_pvr_mrt4.rs. The knobs are in the Kconfigs (deqp: CONFIG_PVR_DEQP_MRT4 with CONFIG_DEQP_TEST_KNOBS=y;
-# gl_test: CONFIG_PVR_GL_TEST_MRT4=y) but the library's setter pvr_debug_set_draw_targets (src/pvr/knob.rs) is
-# not in the tree at this tip, so an image with either knob does not link (undefined reference, measured
-# 2026-11-21 at 63b98ef6). Until the setter and DRAW_TARGETS 4 merge, the row below is built WITHOUT the knob:
-# a baseline, the limits' dEQP cases answer 3 draw buffers and fail. After they merge, build this row's
-# image by hand with the same west command as tools/cts/am62p-deqp-images.sh plus
-# -DCONFIG_DEQP_TEST_KNOBS=y -DCONFIG_PVR_DEQP_MRT4=y (the script has no pass-through), and expect Pass.
+# four draw buffers (the MRT4 knob): e660d5d9 (compiler) and the end-of-tile programs, mrt-frameload (integer
+# targets beside others, DRAW_TARGETS 4), host test tests/es3_pvr_mrt4.rs. The knob is the Kconfig symbol
+# CONFIG_PVR_DEQP_MRT4 (driver/samples/zephyr/deqp/Kconfig; gl_test: CONFIG_PVR_GL_TEST_MRT4=y), which makes
+# main.cpp call pvr_debug_set_draw_targets(4) (src/pvr/debug.rs, in the tree) before the first context.
+# CONFIG_DEQP_TEST_KNOBS is not passed: it is a hidden symbol, default y, that every dEQP image already has.
+# tools/cts/am62p-deqp-images.sh has no pass-through for MRT4, so the rows below that need it (PN1, PQ1) are
+# built by hand with the script's west command plus -DCONFIG_PVR_DEQP_MRT4=y; without it they answer 3 draw buffers.
+# four colour targets of fragment_out (random.* are the only fragment_out cases that draw four; each of these
+# failed at GL_COLOR_ATTACHMENT3 before, docs/notes/mrt4-deqp-cases.md section 3):
+# image PQ1:
+dEQP-GLES3.functional.fragment_out.random.0,dEQP-GLES3.functional.fragment_out.random.8,dEQP-GLES3.functional.fragment_out.random.17,dEQP-GLES3.functional.fragment_out.random.21
+# the limits (integer beside float and the partial integer masks are PB1 and PI1 above; no dEQP case names a
+# mask on its own, the lanes of fewer than four components are the partial masks):
 # image PN1:
 dEQP-GLES3.functional.implementation_limits.max_draw_buffers,dEQP-GLES3.functional.implementation_limits.max_color_attachments
 #
