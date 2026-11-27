@@ -28,6 +28,8 @@ const FILES: &[&str] = &[
     "texuni71.rs",
     "sampler71.rs",
     "texstate71.rs",
+    "prim71.rs",
+    "draw71.rs",
 ];
 
 #[derive(Debug, Clone, PartialEq)]

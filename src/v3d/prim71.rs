@@ -220,9 +220,36 @@ fn fit(field: &'static str, value: u64, bits: u32) -> Result<u64, Refusal71> {
     }
 }
 
+/// The bytes of one packet sequence in a fixed array: `bytes[..len]` is
+/// the sequence (docs/notes/v3d71-nostd.md, N3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Packed<const N: usize> {
+    pub bytes: [u8; N],
+    pub len: usize,
+}
+
+impl<const N: usize> Packed<N> {
+    fn new(op: u8, len: usize) -> Self {
+        let mut bytes = [0u8; N];
+        bytes[0] = op;
+        Packed { bytes, len }
+    }
+
+    /// The used bytes.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.bytes[..self.len]
+    }
+
+    /// Append `other`'s bytes (the caller sized `N` for the sequence).
+    fn append<const M: usize>(&mut self, other: &Packed<M>) {
+        self.bytes[self.len..self.len + other.len].copy_from_slice(other.as_slice());
+        self.len += other.len;
+    }
+}
+
 /// Vertex Array Prims (36), or Vertex Array Instanced Prims (38) when
-/// `instances` is not 1.
-pub fn pack_array(mode: u32, first: u64, count: u64, instances: u64) -> Result<Vec<u8>, Refusal71> {
+/// `instances` is not 1: 10 or 14 bytes.
+pub fn array_packed(mode: u32, first: u64, count: u64, instances: u64) -> Result<Packed<14>, Refusal71> {
     let mode = prim_mode(mode)?;
     if count == 0 {
         return Err(Refusal71::ZeroCount);
@@ -233,34 +260,33 @@ pub fn pack_array(mode: u32, first: u64, count: u64, instances: u64) -> Result<V
     let first = fit("Index of First Vertex", first, 32)?;
     let count = fit("Length", count, 32)?;
     if instances == 1 {
-        let mut p = vec![0u8; 10];
-        p[0] = OP_VERTEX_ARRAY_PRIMS;
-        put(&mut p[1..], 0, 8, mode as u64);
-        put(&mut p[1..], 8, 32, count);
-        put(&mut p[1..], 40, 32, first);
+        let mut p = Packed::<14>::new(OP_VERTEX_ARRAY_PRIMS, 10);
+        put(&mut p.bytes[1..], 0, 8, mode as u64);
+        put(&mut p.bytes[1..], 8, 32, count);
+        put(&mut p.bytes[1..], 40, 32, first);
         Ok(p)
     } else {
         let n = fit("Number of Instances", instances, 32)?;
-        let mut p = vec![0u8; 14];
-        p[0] = OP_VERTEX_ARRAY_INSTANCED_PRIMS;
-        put(&mut p[1..], 0, 8, mode as u64);
-        put(&mut p[1..], 8, 32, count);
-        put(&mut p[1..], 40, 32, n);
-        put(&mut p[1..], 72, 32, first);
+        let mut p = Packed::<14>::new(OP_VERTEX_ARRAY_INSTANCED_PRIMS, 14);
+        put(&mut p.bytes[1..], 0, 8, mode as u64);
+        put(&mut p.bytes[1..], 8, 32, count);
+        put(&mut p.bytes[1..], 40, 32, n);
+        put(&mut p.bytes[1..], 72, 32, first);
         Ok(p)
     }
 }
 
 /// Indexed Prim List (32), or Indexed Instanced Prim List (34) when
-/// `instances` is not 1. `offset` is the byte offset of the first index.
-pub fn pack_indexed(
+/// `instances` is not 1: 10 or 14 bytes. `offset` is the byte offset of the
+/// first index.
+pub fn indexed_packed(
     mode: u32,
     gl_type: u32,
     offset: u64,
     count: u64,
     instances: u64,
     restart: bool,
-) -> Result<Vec<u8>, Refusal71> {
+) -> Result<Packed<14>, Refusal71> {
     let mode = prim_mode(mode)?;
     let (ty, _) = index_type(gl_type)?;
     if count == 0 {
@@ -272,59 +298,59 @@ pub fn pack_indexed(
     let offset = fit("Index Offset", offset, 32)?;
     let count = fit(if instances == 1 { "Length" } else { "Instance Length" }, count, 31)?;
     if instances == 1 {
-        let mut p = vec![0u8; 10];
-        p[0] = OP_INDEXED_PRIM_LIST;
-        put(&mut p[1..], 0, 6, mode as u64);
-        put(&mut p[1..], 6, 2, ty as u64);
-        put(&mut p[1..], 8, 31, count);
-        put(&mut p[1..], 39, 1, restart as u64);
-        put(&mut p[1..], 40, 32, offset);
+        let mut p = Packed::<14>::new(OP_INDEXED_PRIM_LIST, 10);
+        put(&mut p.bytes[1..], 0, 6, mode as u64);
+        put(&mut p.bytes[1..], 6, 2, ty as u64);
+        put(&mut p.bytes[1..], 8, 31, count);
+        put(&mut p.bytes[1..], 39, 1, restart as u64);
+        put(&mut p.bytes[1..], 40, 32, offset);
         Ok(p)
     } else {
         let n = fit("Number of Instances", instances, 32)?;
-        let mut p = vec![0u8; 14];
-        p[0] = OP_INDEXED_INSTANCED_PRIM_LIST;
-        put(&mut p[1..], 0, 6, mode as u64);
-        put(&mut p[1..], 6, 2, ty as u64);
-        put(&mut p[1..], 8, 31, count);
-        put(&mut p[1..], 39, 1, restart as u64);
-        put(&mut p[1..], 40, 32, n);
-        put(&mut p[1..], 72, 32, offset);
+        let mut p = Packed::<14>::new(OP_INDEXED_INSTANCED_PRIM_LIST, 14);
+        put(&mut p.bytes[1..], 0, 6, mode as u64);
+        put(&mut p.bytes[1..], 6, 2, ty as u64);
+        put(&mut p.bytes[1..], 8, 31, count);
+        put(&mut p.bytes[1..], 39, 1, restart as u64);
+        put(&mut p.bytes[1..], 40, 32, n);
+        put(&mut p.bytes[1..], 72, 32, offset);
         Ok(p)
     }
 }
 
 /// Base Vertex Base Instance (43): 9 bytes.
-pub fn pack_base(base_vertex: i64, base_instance: u64) -> Result<Vec<u8>, Refusal71> {
+pub fn base_packed(base_vertex: i64, base_instance: u64) -> Result<Packed<9>, Refusal71> {
     let bv = i32::try_from(base_vertex).map_err(|_| Refusal71::BaseVertex(base_vertex))?;
     let bi = fit("Base Instance", base_instance, 32)?;
-    let mut p = vec![0u8; 9];
-    p[0] = OP_BASE_VERTEX_BASE_INSTANCE;
-    put(&mut p[1..], 0, 32, bv as u32 as u64);
-    put(&mut p[1..], 32, 32, bi);
+    let mut p = Packed::<9>::new(OP_BASE_VERTEX_BASE_INSTANCE, 9);
+    put(&mut p.bytes[1..], 0, 32, bv as u32 as u64);
+    put(&mut p.bytes[1..], 32, 32, bi);
     Ok(p)
 }
 
 /// Index Buffer Setup (44): 9 bytes.
-pub fn pack_index_buffer(addr: u32, size: u64) -> Result<Vec<u8>, Refusal71> {
+pub fn index_buffer_packed(addr: u32, size: u64) -> Result<Packed<9>, Refusal71> {
     let size = fit("Size", size, 32)?;
-    let mut p = vec![0u8; 9];
-    p[0] = OP_INDEX_BUFFER_SETUP;
-    put(&mut p[1..], 0, 32, addr as u64);
-    put(&mut p[1..], 32, 32, size);
+    let mut p = Packed::<9>::new(OP_INDEX_BUFFER_SETUP, 9);
+    put(&mut p.bytes[1..], 0, 32, addr as u64);
+    put(&mut p.bytes[1..], 32, 32, size);
     Ok(p)
 }
 
+/// The longest sequence of one draw: base (9) + index buffer setup (9) +
+/// an instanced prim packet (14).
+pub const MAX_DRAW_BYTES: usize = 32;
+
 /// The packets of one GL draw, in the order the control list takes them.
 /// A refusal returns before anything is produced.
-pub fn pack_draw(d: &Draw) -> Result<Vec<u8>, Refusal71> {
+pub fn draw_packed(d: &Draw) -> Result<Packed<MAX_DRAW_BYTES>, Refusal71> {
     prim_mode(d.mode)?;
-    let mut out = Vec::new();
+    let mut out = Packed::<MAX_DRAW_BYTES> { bytes: [0; MAX_DRAW_BYTES], len: 0 };
     if d.base_vertex != 0 || d.base_instance != 0 {
-        out.extend(pack_base(d.base_vertex, d.base_instance)?);
+        out.append(&base_packed(d.base_vertex, d.base_instance)?);
     }
     match d.indices {
-        None => out.extend(pack_array(d.mode, d.first, d.count, d.instances)?),
+        None => out.append(&array_packed(d.mode, d.first, d.count, d.instances)?),
         Some(ix) => {
             let (_, bytes) = index_type(ix.gl_type)?;
             if ix.offset % bytes != 0 {
@@ -335,9 +361,48 @@ pub fn pack_draw(d: &Draw) -> Result<Vec<u8>, Refusal71> {
                 Some(e) if e <= ix.size => {}
                 e => return Err(Refusal71::IndexRange { end: e.unwrap_or(u64::MAX), size: ix.size }),
             }
-            out.extend(pack_index_buffer(ix.addr, ix.size)?);
-            out.extend(pack_indexed(d.mode, ix.gl_type, ix.offset, d.count, d.instances, ix.restart)?);
+            out.append(&index_buffer_packed(ix.addr, ix.size)?);
+            out.append(&indexed_packed(d.mode, ix.gl_type, ix.offset, d.count, d.instances, ix.restart)?);
         }
     }
     Ok(out)
+}
+
+// ---- host-test adapters: the `Vec` forms the host tests call -------------
+
+/// [`array_packed`] as a `Vec`.
+#[cfg(feature = "host-test")]
+pub fn pack_array(mode: u32, first: u64, count: u64, instances: u64) -> Result<Vec<u8>, Refusal71> {
+    array_packed(mode, first, count, instances).map(|p| p.as_slice().to_vec())
+}
+
+/// [`indexed_packed`] as a `Vec`.
+#[cfg(feature = "host-test")]
+pub fn pack_indexed(
+    mode: u32,
+    gl_type: u32,
+    offset: u64,
+    count: u64,
+    instances: u64,
+    restart: bool,
+) -> Result<Vec<u8>, Refusal71> {
+    indexed_packed(mode, gl_type, offset, count, instances, restart).map(|p| p.as_slice().to_vec())
+}
+
+/// [`base_packed`] as a `Vec`.
+#[cfg(feature = "host-test")]
+pub fn pack_base(base_vertex: i64, base_instance: u64) -> Result<Vec<u8>, Refusal71> {
+    base_packed(base_vertex, base_instance).map(|p| p.as_slice().to_vec())
+}
+
+/// [`index_buffer_packed`] as a `Vec`.
+#[cfg(feature = "host-test")]
+pub fn pack_index_buffer(addr: u32, size: u64) -> Result<Vec<u8>, Refusal71> {
+    index_buffer_packed(addr, size).map(|p| p.as_slice().to_vec())
+}
+
+/// [`draw_packed`] as a `Vec`.
+#[cfg(feature = "host-test")]
+pub fn pack_draw(d: &Draw) -> Result<Vec<u8>, Refusal71> {
+    draw_packed(d).map(|p| p.as_slice().to_vec())
 }
