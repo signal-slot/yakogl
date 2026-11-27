@@ -4,7 +4,10 @@
 
 **Skeleton: no scene has been looked at yet.** Every commit, record and route
 cell below is a placeholder (`-`) and every verdict is `not yet looked at`; the
-board sessions fill them in.
+board sessions fill them in. The UART route is established ("Route finding:
+UART": one real dump on the X2, 2026-11-27, damaged on the way and not yet
+rerun), and that section says what a session still needs before a row can be
+filled.
 
 The i.MX8MP column of `tools/cts/glmark2-pictures.txt` is a regression baseline
 that nobody has looked at (`docs/notes/stage2-bench-gap.md`, "Pictures by eye";
@@ -39,10 +42,12 @@ why they stopped, are in `docs/notes/x2-glmark2-pictures-by-eye.md`.
 - The board is the Armadillo-X2, run through `tools/board.sh x2 run`
   (kexec-dev out of Armadillo Base OS; the image is jumped to and the result
   is read back after the reset). The console is the X2's UART2, through the
-  farm's console resource; the screen is seen through the farm's HDMI KVM
-  resource. The image feeds the WDOG for a bounded time, so a scene's run has
-  a window: the slow scenes (terrain, shadow and refract, 1 to 4 FPS) are the
-  first to be checked against it.
+  farm's console resource (on a machine without the adapter's device node:
+  `tools/serial_mcp_pump.py` into the feed bridge of
+  `tools/am62p_netboot_uart.py`, see "Route finding: UART"); the screen is
+  seen through the farm's HDMI KVM resource. The image feeds the WDOG for a
+  bounded time, so a scene's run has a window: the slow scenes (terrain,
+  shadow and refract, 1 to 4 FPS) are the first to be checked against it.
 - A dump is about 1.9 MB, one scene per image; a damaged dump is rerun, pixels
   are never patched.
 - Each decoded picture is compared with the upstream glmark2 picture on Mesa
@@ -78,9 +83,137 @@ value`.
 
 ### Route finding: UART
 
-Not yet established. To fill in: whether the serial console carries the
-`glmark2-fb:` lines whole at its baud rate, how long a dump takes, how often rows
-are lost and the dump is rerun.
+Measured on the Armadillo-X2 on 2026-11-27 (kexec-dev out of Armadillo Base
+OS; the X2 stands in for the Verdin). **The route works and carries a whole
+1.9 MB dump inside the watchdog window, but the one real dump made so far lost
+rows on the way and could not be rerun in that session, so no row of the
+table rests on it yet.** What was measured, in the order it was done:
+
+- **Commit and images.** `472630df` (origin/main as the session's clone showed
+  it; `git fetch origin` was denied on that machine). The four images of rows
+  1, 23, 24 and 25 built with `IMX8MP_DUMP_BOARD=x2
+  tools/cts/imx8mp-glmark2-dumps.sh build` (gm01-build `9093944f`,
+  gm23-terrain `e6a37230`, gm24-shadow `674634cb`, gm25-refract `1e43d80c`:
+  the images' sha256 prefixes), each with the watchdog marker and
+  `CONFIG_GC_BOARD_WDOG_SECONDS=600`. Only gm01 was run.
+- **The console from a leased task machine.** That machine has no device node
+  of the adapter: the farm hands the console out as its serial MCP tools only.
+  `tools/serial_mcp_pump.py` (new; it only calls `serial_status` and
+  `serial_read`, nothing is ever sent to the console) appends the console's
+  bytes to a file, `tools/am62p_netboot_uart.py feed <file> <port>` serves
+  that file as a serial bridge, and `BOARD_UART` names that local port:
+  `tools/board.sh` is unchanged and writes `console.raw`, `console.ts` and
+  `console.txt` into the record as for any bridge.
+- **Liveness, without typing.** The console is silent while Linux idles. No
+  character was sent to it: a line written on the board to its UART2 device
+  over ssh came back through the console resource, 45 of 45 bytes. So the
+  capture path was proven before the jump and U-Boot was never at risk.
+- **Synthetic dump (not a scene; a check of the capture path only).** A file
+  of the dump's exact form (begin line, 600 rows of random pixels with their
+  crc16, end line with the crc32, picture line: 1,933,341 bytes) was written
+  by Linux on the board to UART2 at 115200 baud: 168 s on the board, received
+  byte for byte (plus the CR of each line end), 600 of 600 rows good, frame
+  crc32 and picture value agreeing. 11.5 kB a second, nothing lost.
+- **The real dump: `[build] use-vbo=false`, record
+  `records/imx8mp/20261127-0854-gm01-build-9093944f/` (measured on the X2;
+  kept as the route record, not a verdict record).**
+  `tools/cts/imx8mp-glmark2-uart-stats.py` on it:
+
+  ```
+  [build] use-vbo=false: first 10.5s last 178.2s duration 167.7s bytes 1874473 11175/s damaged 5 missing 18 boot-to-end 178.2s margin 421.8s -> re-run (18 row(s) missing; 5 damaged row(s)/line(s))
+  ```
+
+  The times are seconds after the image's `*** Booting Zephyr` banner, which
+  came 0.1 s after Linux's last line. The scene ran its 10 s, the dump began
+  at 10.5 s and its end line came at 178.2 s: 167.7 s for the dump, the 168 s
+  of the estimate. The end line (`end crc32 b1f7aab3`) and the scene's
+  `glmark2-picture:` line arrived, then `glmark2: PASS`, a hold of 20 s, the
+  image's own reset at 198.6 s (U-Boot printed "reset cause: watchdog"),
+  "Starting kernel" at 204.6 s and Linux's login banner at 216.3 s.
+- **Rows lost.** 582 of the 600 row lines arrived. Rows 441-452, 473, 474,
+  478-480 and 498 are missing and rows 440, 472, 477, 485 and 497 are damaged
+  (two rows run together, or a cut row): 23 rows, all within 13 s (126 s to
+  140 s after the first row). The image printed for the full 167.7 s, so the
+  bytes were sent and dropped on the receiving side (between the adapter and
+  the console server on the farm node); the pump reported no truncated read
+  and no failed read. `imx8mp-glmark2-session.sh 1` ended as it must:
+  `session: step decode failed: damaged or missing rows in the dump of
+  gm01-build: re-run, never patch`, exit 3, the picture kept as
+  `gm01-build.damaged.png`. So far: 1 real dump, 1 damaged, 0 reruns made.
+  The Pi 4 lost rows the same way (`pi4-glmark2-pictures-by-eye.md`, row 2:
+  rows 68-107, rerun once): expect reruns, and never judge a row from a
+  damaged picture. (Its 577 good rows show the horse where
+  llvmpipe has it; that is not a verdict.)
+- **The window.** The image feeds WDOG1 for 600 s of uptime and WDOG1 resets
+  the SoC 60 s later at the latest. The dump ended at 178.2 s: a margin of
+  421.8 s. A dump takes the same 168 s whatever the scene; what a slow scene
+  adds is the time before its begin line (scene setup, its 10 s and its last
+  frames at 1 to 4 FPS). Terrain, shadow and refract were not run, so their
+  begin times are not measured: they fit as long as the dump begins within
+  about 430 s of the banner, and uart-stats' margin on their first runs is
+  the check (the host estimate made before this session was about 320 s from
+  the jump to the end line).
+- **The value against the column.** The X2's picture line reads `probes c
+  a3a3a3ff, tl 000000ff, tr 000000ff, bl 000000ff, br 000000ff; crc16 55fa,
+  crc16q a9f3; mean 12 12 12; black no`. The `imx8mp` column of
+  `tools/cts/glmark2-pictures.txt` holds the Verdin's SNVS record, RGB565
+  widened to 8 bits with alpha 00 (`c a0a0a000`, crc16 8225): a3 rounds to a0
+  and the mean is the same 12 12 12, so the probes agree at the column's
+  depth and the crc16s cannot. A row's value judging on the X2 compares the
+  probes rounded to 565 and the mean, not the crc16. llvmpipe reads `c
+  a4a4a4` there.
+- **Why it was not rerun: the runner lost the board after the jump.**
+  `board.sh x2` saw the board go (`ping lost 9s`) and never saw it back:
+  `rc=5 verdict=not_back`, although the console shows Linux up again 216 s
+  after the jump. After the reboot the board refused the task machine's ssh
+  key (`Permission denied (publickey)`): the key connected installs for a
+  leased turn is not among the board's persisted keys, and the root file
+  system's changes are gone at every boot. On such a machine a turn gets one
+  jump, its record ends `not_back` (no SNVS readback; `dumps.sh run` stops at
+  the failed board run, so `meta.txt` has no `commit=` and `measured_on=`
+  lines; the verdict record still came from the console's `yk-record:` lines:
+  GLMARK2 pass, 1 scene, 0 GL errors), and no rerun or further scene can
+  start until the farm installs the turn's key again (connected's "Install
+  keys"; an agent is not allowed to, and nothing may be persisted on the
+  board). Sessions from a farm node whose key is persisted do not have this.
+  The board itself was left up in Linux, with no container started or
+  stopped and nothing staged (the staging directory is a tmpfs). The run's
+  board lease file could not be released without a login; it carries its own
+  expiry (40 minutes after it was taken, on the board's clock).
+- **Two more things a task machine needs.** The board's name does not resolve
+  for ICMP there (ssh goes through the lease's forward), so `board.sh`'s
+  ping wait was answered by a `ping` earlier on `PATH` that logs in with
+  `ssh -o BatchMode=yes "$BOARD_HOST" true` for the board's name and is the
+  real ping for anything else. And `kexec_zephyr` and `snvs_lpgpr` were built
+  there with `clang --target=aarch64-none-elf -O2 -ffreestanding
+  -fno-stack-protector -c` and the Zephyr SDK's `aarch64-zephyr-elf-ld.bfd
+  -static` (the SDK's gcc links against its own memory map and does not
+  produce a Linux executable), `X2_TOOLS` naming their directory. With the
+  per-board chip list of `fa8dcf85` the loader printed `crash: i.MX 8M Plus
+  (fsl,imx8mp): gpio-mxc and irqsteer rows are let through` and jumped.
+- **Redaction of an X2 record.** A kexec-dev capture runs on through U-Boot
+  and the Linux boot, whose devicetree node names (`name@address`) and
+  credits read as logins, and the ssh client's timeout message in
+  `kexec.log` holds an address: `imx8mp-gles3-redact.py --check` exits 1 on
+  such a record (here 121 hits in 7 files, 120 of class `login`, 1 `addr`,
+  none in a dump row) until `--fix` is run on it once; after it `redact: 7
+  files clean`. Run `--fix` on each X2 record before
+  `imx8mp-glmark2-session.sh --record-dir` repeats the checks; the dump rows
+  are not touched by it. The tool took about 4 minutes on one record (its
+  login pattern tried every start position of a black row's 3.2 kB run of
+  "A"); it now tries that pattern only on lines that hold an "@", with the
+  same hits and the same rewritten bytes, in well under a second.
+
+To run a row from here (X2, a machine whose key the board keeps, or a task
+machine once per installed key), per scene:
+
+```sh
+IMX8MP_DUMP_BOARD=x2 IMX8MP_IMG_DIR=<img-dir> X2_TOOLS=<dir of the two tools> \
+  tools/cts/imx8mp-glmark2-session.sh <NN> --main <origin/main ref>
+# exit 3: rerun the scene. Otherwise: imx8mp-gles3-redact.py --fix <record>,
+# then the same command with --record-dir <record>, look at the side-by-side
+# picture, and run the printed imx8mp-glmark2-note-fill.py line.
+```
 
 ### Route finding: camera
 

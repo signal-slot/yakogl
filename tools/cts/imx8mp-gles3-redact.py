@@ -13,6 +13,11 @@ and --fix replaces them too, so the writer of a summary rewords them.
 Armadillo-X2 patterns (EXTRA) also cover user@host without a dot, *.ts.net, IPv6, MAC addresses, USB serial
 numbers, /dev/serial/ paths and rfc2217:// (socket, telnet, ssh, tcp) URLs. Binary files (a NUL byte) are skipped,
 as grep -I does. Each DIR may also be a single file.
+
+The login and tailnet patterns start with an unbounded run of name characters, so on a line that is one long
+token without their literal (a 3.2 kB base64 row of a glmark2 frame dump) they try every start position: a
+record with one dump took about 4 minutes. Such a pattern is only tried on a line that holds its literal
+(NEEDS: "@", "ts.net"), which no match can lack, so the hits and the rewritten bytes are the same.
 """
 import argparse
 import os
@@ -45,15 +50,26 @@ EXTRA = [
     ("url", r"\b(rfc2217|socket|telnet|ssh|tcp)://[^\s\"'<>]+", "<url>"),
 ]
 COMPILED = [(n, re.compile(p.encode()), r.encode()) for n, p, r in PATTERNS + EXTRA]
+# The literal every match of a pattern of that name contains (module docstring); other names: no guard.
+NEEDS = {"login": b"@", "tailnet": b"ts.net"}
 # --fix extends the hit to the whole token (device number, full host name) so no tail is left behind.
 FIX = [
     (re.compile(rb"(rfc2217|socket|telnet|ssh|tcp)://[^\s\"'<>]+"), b"<url>"),
     (re.compile(rb"/dev/serial/[^\s\"']*"), b"<tty>"),
     (re.compile(rb"/dev/tty(USB|ACM)[0-9]*"), b"<tty>"),
-    (re.compile(rb"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.ts\.net\b"), b"<host>"),
+    (re.compile(rb"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\.ts\.net\b"), b"<host>", b"ts.net"),
     (COMPILED[1][1], b"<addr>"),
-    (re.compile(rb"[A-Za-z0-9._-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*"), b"<login>"),
-] + [(rx, rep) for n, rx, rep in COMPILED[3:] if n in ("tailnet", "ipv6", "mac", "usbserial")]
+    (re.compile(rb"[A-Za-z0-9._-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*"), b"<login>", b"@"),
+] + [(rx, rep) + ((NEEDS[n],) if n in NEEDS else ()) for n, rx, rep in COMPILED[3:]
+     if n in ("tailnet", "ipv6", "mac", "usbserial")]
+# A FIX entry with a third member is applied line by line, to the lines that hold that literal only: none of
+# those patterns can match across a line end, so the result is that of one substitution over the whole file.
+
+
+def sub_guarded(rx, rep, need, data):
+    if need not in data:
+        return data
+    return b"\n".join(rx.sub(rep, line) if need in line else line for line in data.split(b"\n"))
 
 
 def files(paths):
@@ -85,6 +101,8 @@ def check(paths):
         nfiles += 1
         for ln, line in enumerate(data.split(b"\n"), 1):
             for name, rx, _ in COMPILED:
+                if name in NEEDS and NEEDS[name] not in line:
+                    continue
                 if rx.search(line):
                     print(f"{path}:{ln}: {name}")
                     nhits += 1
@@ -103,8 +121,8 @@ def fix(paths):
             continue
         nfiles += 1
         out = data
-        for rx, rep in FIX:
-            out = rx.sub(rep, out)
+        for rx, rep, *need in FIX:
+            out = sub_guarded(rx, rep, need[0], out) if need else rx.sub(rep, out)
         if out != data:
             with open(path, "wb") as f:
                 f.write(out)

@@ -102,6 +102,28 @@ console=ttymxc1,115200 root=/dev/mmcblk2p2
 EOT
 if python3 -I "$tool" --check "$tmp/x2ok" >/dev/null 2>&1; then ok "legitimate X2 content not flagged"; else bad "legitimate X2 content flagged"; fi
 
+# a glmark2 frame dump: 600 black rows, each one 3.2 kB run of "A" (base64 of zero bytes; a row with colour is
+# broken up by "+" and "/" and was never slow). The login and tailnet patterns used to try every start position
+# of such a run: 64 s for this file, about 4 minutes for a real record with its copies of the console. With the
+# literal guard it is 0.15 s, so 30 s is a bound, not a measurement. The hits and the bytes around the rows stay.
+mkdir -p "$tmp/dump"
+python3 - "$tmp/dump/console.txt" <<'PY'
+import base64, sys
+rows = ["glmark2-fb: %d %04x %s" % (y, y, base64.b64encode(bytes(2400)).decode()) for y in range(600)]
+open(sys.argv[1], "w").write("\n".join(["boot"] + rows + ["glmark2-fb: end crc32 00000000", ""]))
+PY
+if timeout 30 python3 -I "$tool" --check "$tmp/dump" >/dev/null 2>&1; then ok "a 600-row frame dump is clean, within the bound"; else bad "a 600-row frame dump: not clean or over 30 s (rc $?)"; fi
+printf 'ethernet%s30be0000 up\n' "@" >> "$tmp/dump/console.txt"
+out=$(timeout 30 python3 -I "$tool" --check "$tmp/dump" 2>/dev/null); rc=$?
+if [ $rc -eq 1 ] && [ "$out" = "$tmp/dump/console.txt:603: login" ]; then ok "a name@name line after the dump is still the one hit"; else bad "hit after the dump: rc $rc, '$out'"; fi
+sha_rows=$(sed -n '2,601p' "$tmp/dump/console.txt" | sha256sum)
+if timeout 30 python3 -I "$tool" --fix "$tmp/dump" >/dev/null 2>&1 && [ "$(sed -n '603p' "$tmp/dump/console.txt")" = "<login> up" ] &&
+    [ "$(sed -n '2,601p' "$tmp/dump/console.txt" | sha256sum)" = "$sha_rows" ]; then
+    ok "--fix rewrites that line and leaves the 600 rows byte for byte"
+else
+    bad "--fix on the dump file"
+fi
+
 # committed i.MX8MP logs, if any
 set -- "$here"/log/*-imx8mp-*
 if [ -e "$1" ]; then
