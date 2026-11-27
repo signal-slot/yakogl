@@ -1558,8 +1558,10 @@ pub static yakogl_backend_v3d71: YakoglBackend = YakoglBackend {
     texture_released: None,
     surface_swapped: None,
     texture_uploaded: None,
-    /* backend71 refuses instancing (REF_INSTANCED): no divisor above 1 */
-    max_instance_divisor: 1,
+    /* backend71 draws instanced arrays in one draw (Mesa's
+     * VERTEX_ARRAY_INSTANCED_PRIMS); a divisor is the attribute record's
+     * 16-bit Instance Divisor (attr71::MAX_DIVISOR), as the 4.2 table's */
+    max_instance_divisor: 0xffff,
     wait_kick: Some(v3d71_wait_kick),
     /* nothing is sampled yet: false makes the GL core wait as for a GPU
      * reader, the safe answer */

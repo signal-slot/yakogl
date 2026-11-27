@@ -8,8 +8,10 @@
 //! `glVertexAttribDivisor` 1 from a second, 24-byte-stride buffer).
 //!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_instanced
+//! cargo test --no-default-features --features host-test,gpu-v3d71,shaderc-online,no-shader-table --test v3d71_instanced
 //! ```
+//!
+//! (`gpu-v3d` alone builds every test but the table's, [`table`].)
 //!
 //! Pinned from the clif, read as text:
 //!
@@ -25,7 +27,10 @@
 //! Compared with what yakogl's 7.1 modules give for the same GL calls:
 //! prim71 (`pack_draw`, decoded by the xml's own field positions), attr71
 //! (`plan`) and glue71 (`prim`, `attrs`) from the GL core's `GlesDraw`.
-//! What the 7.1 path cannot carry yet is an `#[ignore]`d test naming it.
+//! And what the 7.1 table (`yakogl_backend_v3d71`, through backend71's
+//! `Draw71` and the C builder v3d_job71.c) submits for the shape's draw: one
+//! `VERTEX_ARRAY_INSTANCED_PRIMS` with Mesa's fields and Mesa's attribute
+//! records, divisors included (module `table`).
 #![allow(dead_code)]
 
 /// The GL core's back-end types, as every test reaches them: glue71 reads
@@ -68,6 +73,9 @@ mod uniform71;
 mod zskeep71;
 
 use backend::*;
+
+#[cfg(feature = "gpu-v3d71")]
+mod v3d71_table_rig;
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const CLIF: &str = "tools/v3d/pi5/gl_instanced.clif";
@@ -453,19 +461,501 @@ fn the_shader_record_reads_no_instance_id_and_the_tiles_start_at_instance_0() {
     assert_eq!(only(&b, "SET_INSTANCEID").num("Instance ID"), 0);
 }
 
-/* ---- what the 7.1 path does not carry yet ------------------------------------------- */
+/* ---- the 7.1 table draws it ---------------------------------------------------------- */
 
-/// backend71 (the 7.1 table's `Draw71` builder) refuses every draw of more
-/// than one instance (`REF_INSTANCED`), although prim71, attr71, glue71,
-/// fill71 (`FilledDraw::instances`) and v3d_job71.c (the instanced packets)
-/// carry it. backend71 reaches the C builder through FFI, so this reads its
-/// text instead of linking it; it passes once the refusal is gone.
-#[test]
-#[ignore = "backend71::draw_of refuses instanced draws (REF_INSTANCED): Draw71 assembles one instance per draw"]
-fn backend71_assembles_an_instanced_draw() {
-    let src = include_str!("../src/v3d/backend71.rs");
-    assert!(
-        !src.contains("if fd.instances > 1 {"),
-        "backend71::draw_of still refuses gl_instanced's draw (3 instances)"
-    );
+/// `yakogl_backend_v3d71` (src/v3d/table71.rs) driven through the GL core's
+/// backend entries with the shape's draw, gl_test's `color_uv` program
+/// (tools/v3d/gltest-shaders71/ours_color_uv.h, read as data) in place of
+/// Mesa's: the OSAL is tests/v3d71_table_rig/mod.rs's mock, the C builder
+/// the real driver/src/v3d/v3d_job71.c, so the binning list and records read
+/// here are the bytes the Pi 5 image would submit (tests/v3d71_table_draw.rs).
+/// It needs `gpu-v3d71`.
+#[cfg(feature = "gpu-v3d71")]
+mod table {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    use super::v3d71_table_rig::{self, gpu_block, gpu_write, kicks, log_lines, rig, Kick};
+    use yakogl::shaderc::{ShcShader, ShcV3dUniform, ShcV3dVs};
+    use yakogl::v3d::table71;
+
+    fn num(s: &str) -> u64 {
+        let s = s.trim().trim_end_matches(['u', 'U', 'l', 'L']);
+        match s.strip_prefix("0x") {
+            Some(h) => u64::from_str_radix(h, 16).unwrap_or_else(|e| panic!("{s}: {e}")),
+            None => s.parse().unwrap_or_else(|e| panic!("{s}: {e}")),
+        }
+    }
+
+    /// The programs' headers, compiled in (the files are part of the binary).
+    const OURS_COLOR_UV: &str = include_str!("../tools/v3d/gltest-shaders71/ours_color_uv.h");
+
+    /// A program header as numbers: `#define`s, `{ ... }` defines and arrays.
+    struct CHeader {
+        defs: BTreeMap<String, u64>,
+        lists: BTreeMap<String, Vec<u64>>,
+    }
+
+    fn tokens(t: &str) -> Vec<u64> {
+        t.split([',', '{', '}', ' ', '\t']).filter(|s| !s.is_empty()).map(num).collect()
+    }
+
+    fn c_header(text: &str) -> CHeader {
+        let mut h = CHeader { defs: BTreeMap::new(), lists: BTreeMap::new() };
+        let mut cur: Option<(String, Vec<u64>)> = None;
+        for line in text.lines() {
+            let t = line.trim();
+            if let Some((name, mut v)) = cur.take() {
+                if t.starts_with("};") {
+                    h.lists.insert(name, v);
+                    continue;
+                }
+                v.extend(tokens(t));
+                cur = Some((name, v));
+                continue;
+            }
+            if let Some(d) = t.strip_prefix("#define ") {
+                let Some((n, v)) = d.split_once(' ') else { continue };
+                let v = v.split("/*").next().unwrap().trim();
+                if v.starts_with('{') {
+                    h.lists.insert(n.to_string(), tokens(v));
+                } else if v.starts_with(|c: char| c.is_ascii_digit()) {
+                    h.defs.insert(n.to_string(), num(v));
+                }
+            } else if t.starts_with("static const") && t.ends_with('{') {
+                let name = t.split('[').next().unwrap().split_whitespace().last().unwrap();
+                cur = Some((name.to_string(), vec![]));
+            }
+        }
+        h
+    }
+
+    impl CHeader {
+        fn d(&self, n: &str) -> u32 {
+            *self.defs.get(n).unwrap_or_else(|| panic!("{n}")) as u32
+        }
+        fn b(&self, n: &str) -> bool {
+            self.d(n) != 0
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct FieldDef {
+        name: String,
+        start: u32,
+        size: u32,
+        ty: String,
+        minus_one: bool,
+        default: Option<u64>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct PacketDef {
+        code: u8,
+        name: String,
+        fields: Vec<FieldDef>,
+        len: usize,
+    }
+
+    fn attr(tag: &str, k: &str) -> Option<String> {
+        let pat = format!(" {k}=\"");
+        let i = tag.find(&pat)? + pat.len();
+        let j = tag[i..].find('"')? + i;
+        Some(tag[i..j].to_string())
+    }
+
+    fn ver_ok(tag: &str) -> bool {
+        let min = attr(tag, "min_ver").map(|v| v.parse::<u32>().unwrap()).unwrap_or(0);
+        let max = attr(tag, "max_ver").map(|v| v.parse::<u32>().unwrap()).unwrap_or(999);
+        min <= 71 && 71 <= max
+    }
+
+    /// The CLIF name of a packet: its shortname or name, upper case, every run
+    /// of other characters one `_` (Mesa's clif dump, v3d_decoder.c).
+    fn clif_name(s: &str) -> String {
+        let mut out = String::new();
+        for c in s.chars() {
+            if c.is_ascii_alphanumeric() {
+                out.push(c.to_ascii_uppercase());
+            } else if !out.ends_with('_') {
+                out.push('_');
+            }
+        }
+        out.trim_matches('_').to_string()
+    }
+
+    fn packet_defs() -> Vec<PacketDef> {
+        let xml = read("third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml");
+        let mut defs = vec![];
+        let mut cur: Option<PacketDef> = None;
+        for raw in xml.lines() {
+            let line = raw.trim();
+            if line.starts_with("<packet ") {
+                let tag = line;
+                if ver_ok(tag) {
+                    let name = attr(tag, "shortname").or_else(|| attr(tag, "name")).unwrap();
+                    let code = attr(tag, "code").unwrap().parse().unwrap();
+                    let p = PacketDef { code, name: clif_name(&name), fields: vec![], len: 1 };
+                    if tag.ends_with("/>") {
+                        defs.push(p);
+                    } else {
+                        cur = Some(p);
+                    }
+                }
+                continue;
+            }
+            if line.starts_with("</packet>") {
+                if let Some(mut p) = cur.take() {
+                    let end = p.fields.iter().map(|f| f.start + f.size).max().unwrap_or(0);
+                    p.len = 1 + end.div_ceil(8) as usize;
+                    defs.push(p);
+                }
+                continue;
+            }
+            if let (Some(p), true) = (cur.as_mut(), line.starts_with("<field ")) {
+                if !ver_ok(line) {
+                    continue;
+                }
+                let start = attr(line, "start").unwrap();
+                let start = match start.strip_suffix('b') {
+                    Some(b) => b.parse::<u32>().unwrap() * 8,
+                    None => start.parse().unwrap(),
+                };
+                p.fields.push(FieldDef {
+                    name: attr(line, "name").unwrap(),
+                    start,
+                    size: attr(line, "size").unwrap().parse().unwrap(),
+                    ty: attr(line, "type").unwrap(),
+                    minus_one: attr(line, "minus_one").as_deref() == Some("true"),
+                    default: attr(line, "default").map(|v| v.parse().unwrap()),
+                });
+            }
+        }
+        defs
+    }
+
+    fn bits(body: &[u8], start: u32, size: u32) -> u64 {
+        let mut v = 0u64;
+        for i in 0..size {
+            let b = start + i;
+            if body[(b / 8) as usize] >> (b % 8) & 1 != 0 {
+                v |= 1 << i;
+            }
+        }
+        v
+    }
+
+    /// The packets of a list with their bodies (the bytes after the code).
+    fn walk<'d, 'b>(defs: &'d [PacketDef], bytes: &'b [u8], what: &str) -> Vec<(&'d PacketDef, &'b [u8])> {
+        let mut out = vec![];
+        let mut i = 0;
+        while i < bytes.len() {
+            let code = bytes[i];
+            let cands: Vec<&PacketDef> = defs.iter().filter(|d| d.code == code).collect();
+            let def = if cands.len() == 1 {
+                cands[0]
+            } else {
+                let body = &bytes[i + 1..];
+                *cands
+                    .iter()
+                    .find(|d| {
+                        d.fields
+                            .iter()
+                            .filter(|f| f.default.is_some())
+                            .all(|f| bits(body, f.start, f.size) == f.default.unwrap())
+                    })
+                    .unwrap_or_else(|| panic!("{what}: byte {i}: no 7.1 packet of code {code} matches"))
+            };
+            assert!(i + def.len <= bytes.len(), "{what}: {} at byte {i} runs past the list", def.name);
+            out.push((def, &bytes[i + 1..i + def.len]));
+            i += def.len;
+        }
+        out
+    }
+
+    /// gl_test's `color_uv` program as the online compiler's link hands it to
+    /// the GL core: a fragment `ShcShader` whose `v3d` half describes the three
+    /// programs (tools/v3d/gltest-shaders71/ours_color_uv.h, our 7.1 compiler's
+    /// pinned output, read as data). The code is one upload: the fragment
+    /// program at 0, the vertex program at 0x100, the coordinate program at
+    /// 0x200 (the offsets tests/v3d71_backend71_shapes.rs places them at).
+    fn color_uv() -> &'static ShcShader {
+        static P: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+        let p = *P.get_or_init(|| {
+            let h = c_header(OURS_COLOR_UV);
+            let up = "OURS71_COLOR_UV";
+            let list = |s: &str| -> (*const ShcV3dUniform, u32) {
+                let n = h.d(&format!("{up}_{}_NUM_UNIFORMS", s.to_ascii_uppercase()));
+                let words: Vec<ShcV3dUniform> = match h.lists.get(&format!("ours71_color_uv_{s}_uniforms")) {
+                    Some(v) => {
+                        v.chunks(2).map(|c| ShcV3dUniform { contents: c[0] as u32, data: c[1] as u32 }).collect()
+                    }
+                    None => vec![],
+                };
+                assert_eq!(words.len(), n as usize, "{s}: the uniform list");
+                (Box::leak(words.into_boxed_slice()).as_ptr(), n)
+            };
+            let vs = |s: &str, off: u32| -> ShcV3dVs {
+                let v = &h.lists[&format!("{up}_{s}_VATTR_SIZES")];
+                let (uniforms, num_uniforms) = list(&s.to_ascii_lowercase());
+                ShcV3dVs {
+                    code_off: off,
+                    code_bytes: h.d(&format!("{up}_{s}_NUM_WORDS")) * 8,
+                    uniforms,
+                    num_uniforms,
+                    vpm_input_size: h.d(&format!("{up}_{s}_VPM_INPUT_SIZE")),
+                    vpm_output_size: h.d(&format!("{up}_{s}_VPM_OUTPUT_SIZE")),
+                    vcm_cache_size: h.d(&format!("{up}_{s}_VCM_CACHE_SIZE")),
+                    threads: h.d(&format!("{up}_{s}_THREADS")) as u8,
+                    single_seg: h.b(&format!("{up}_{s}_SINGLE_SEG")) as u8,
+                    separate_segments: h.b(&format!("{up}_{s}_SEPARATE_SEGMENTS")) as u8,
+                    uses_vid: h.b(&format!("{up}_{s}_USES_VID")) as u8,
+                    uses_iid: h.b(&format!("{up}_{s}_USES_IID")) as u8,
+                    uses_biid: h.b(&format!("{up}_{s}_USES_BIID")) as u8,
+                    writes_psiz: h.b(&format!("{up}_{s}_WRITES_PSIZ")) as u8,
+                    vattr_sizes: core::array::from_fn(|i| v[i] as u8),
+                }
+            };
+            let mut sh = ShcShader::ZERO;
+            sh.usc_dw = 0x300 / 4;
+            sh.uses_discard = h.b(&format!("{up}_FS_USES_DISCARD")) as u8;
+            let v = &mut sh.v3d;
+            v.linked = 1;
+            v.num_records = h.d(&format!("{up}_NUM_ATTRS")) as u8;
+            for (loc, name) in ["A_POS", "A_COLOR", "A_UV"].iter().enumerate() {
+                v.record_of_location[loc] = h.d(&format!("{up}_ATTR_{name}_RECORD")) as u8;
+            }
+            let (uniforms, num_uniforms) = list("fs");
+            let f = &mut v.fs;
+            (f.code_off, f.code_bytes) = (0, h.d(&format!("{up}_FS_NUM_WORDS")) * 8);
+            (f.uniforms, f.num_uniforms) = (uniforms, num_uniforms);
+            f.num_inputs = h.d(&format!("{up}_FS_NUM_INPUTS"));
+            f.flat_shade_flags = h.d(&format!("{up}_FS_FLAT_SHADE_FLAGS"));
+            f.noperspective_flags = h.d(&format!("{up}_FS_NOPERSPECTIVE_FLAGS"));
+            f.centroid_flags = h.d(&format!("{up}_FS_CENTROID_FLAGS"));
+            f.threads = h.d(&format!("{up}_FS_THREADS")) as u8;
+            f.single_seg = h.b(&format!("{up}_FS_SINGLE_SEG")) as u8;
+            f.writes_z = h.b(&format!("{up}_FS_WRITES_Z")) as u8;
+            f.disable_ez = h.b(&format!("{up}_FS_DISABLE_EZ")) as u8;
+            f.uses_center_w = h.b(&format!("{up}_FS_USES_CENTER_W")) as u8;
+            f.lock_scoreboard_on_first_thrsw = h.b(&format!("{up}_FS_LOCK_SCOREBOARD_ON_FIRST_THRSW")) as u8;
+            f.uses_implicit_point_line_varyings = h.b(&format!("{up}_FS_USES_IMPLICIT_POINT_LINE_VARYINGS")) as u8;
+            f.uses_pid = h.b(&format!("{up}_FS_USES_PID")) as u8;
+            f.rt_mask = 1;
+            v.vs = vs("VS", 0x100);
+            v.cs = vs("CS", 0x200);
+            Box::leak(Box::new(sh)) as *const ShcShader as usize
+        });
+        // SAFETY: leaked above, never freed or written again.
+        unsafe { &*(p as *const ShcShader) }
+    }
+
+    const G_SIZE: u32 = 64;
+    const DS_ID: u32 = 200;
+
+    /// The GL core's side: a 64x64 RGBA8 window with a D24S8, its surface, the
+    /// program's code, the per-vertex positions (16-byte stride) and the
+    /// per-instance colour and uv (24-byte stride), as the shape's two buffers.
+    struct Core {
+        surface: u32,
+        code: u32,
+        vbo: u32,
+        ibo: u32,
+    }
+
+    impl Core {
+        fn new() -> Core {
+            let vbo = gpu_block(COUNT as usize * 16);
+            gpu_write(vbo, &(0..COUNT as usize * 16).map(|i| (i * 7 + 3) as u8).collect::<Vec<u8>>());
+            let ibo = gpu_block(INSTANCES as usize * 24);
+            gpu_write(ibo, &(0..INSTANCES as usize * 24).map(|i| (i * 5 + 1) as u8).collect::<Vec<u8>>());
+            Core { surface: gpu_block((G_SIZE * G_SIZE * 4) as usize), code: gpu_block(0x300), vbo, ibo }
+        }
+
+        /// tests/v3d71_table_draw.rs `Core::base`.
+        fn base(&self) -> GlesDraw {
+            let mut d = GlesDraw::ZERO;
+            d.target_gpu = u64::from(self.surface);
+            (d.target_w, d.target_h) = (G_SIZE, G_SIZE);
+            d.target_format = GLES_SURF_RGBA8888;
+            d.target_alpha_bits = 8;
+            d.targets[0] =
+                GlesDrawTarget { gpu: u64::from(self.surface), w: G_SIZE, h: G_SIZE, format: 0, out_shift: 0 };
+            d.num_targets = 1;
+            d.samples = 1;
+            d.viewport = [0, 0, G_SIZE as i32, G_SIZE as i32];
+            d.depth_range = [0.0, 1.0];
+            d.ds_persist = true;
+            (d.ds_id, d.depth_id, d.stencil_id) = (DS_ID, DS_ID, DS_ID);
+            (d.ds_w, d.ds_h) = (G_SIZE, G_SIZE);
+            d.prim = GLES_PRIM_TRIANGLES;
+            (d.color_write, d.color_mask) = (true, 0xf);
+            (d.stencil_write_mask, d.stencil_back_write_mask) = (0xff, 0xff);
+            d.sample_mask = 0xf;
+            d
+        }
+
+        fn clear(&self) -> GlesDraw {
+            let mut d = self.base();
+            (d.do_clear, d.clear_rgba, d.clear_color_mask) = (true, [0.0, 0.0, 1.0, 1.0], 0xf);
+            d
+        }
+
+        /// glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 3): `a_pos` per vertex,
+        /// `a_color` and `a_uv` at `divisor` from the second buffer (the
+        /// shape's `a_color` and `a_off`).
+        fn instanced(&self, divisor: u16) -> GlesDraw {
+            let mut d = self.base();
+            d.index_count = COUNT as u32;
+            d.instance_count = INSTANCES as u32;
+            d.line_width = 1.0;
+            d.fs = color_uv();
+            d.fs_usc_gpu = u64::from(self.code);
+            let arr = |vi_reg: u8, components: u8, stride: u32, offset: u32, buf: u32, per_instance: bool| GlesAttrib {
+                vi_reg,
+                components,
+                format: GLES_ATTRIBF_FLOAT32,
+                stride,
+                offset,
+                buffer_gpu: u64::from(buf),
+                per_instance: per_instance as u8,
+                divisor: if per_instance { divisor } else { 0 },
+                ..GlesAttrib::ZERO
+            };
+            d.attribs[0] = arr(0, 4, 16, 0, self.vbo, false);
+            d.attribs[1] = arr(1, 4, 24, 0, self.ibo, true);
+            d.attribs[2] = arr(2, 2, 24, 16, self.ibo, true);
+            d.num_attribs = 3;
+            (d.depth_func, d.depth_write) = (GLES_CMP_LESS, true);
+            (d.stencil_func, d.stencil_cmp_mask) = (GLES_CMP_ALWAYS, 0xff);
+            (d.stencil_back_func, d.stencil_back_cmp_mask) = (GLES_CMP_ALWAYS, 0xff);
+            for op in [
+                &mut d.stencil_sfail,
+                &mut d.stencil_dpfail,
+                &mut d.stencil_dppass,
+                &mut d.stencil_back_sfail,
+                &mut d.stencil_back_dpfail,
+                &mut d.stencil_back_dppass,
+            ] {
+                *op = GLES_SOP_KEEP;
+            }
+            d.cull = GLES_CULL_NONE;
+            d
+        }
+    }
+
+    /// The job of a clear and `d`, and the draws refused on the way.
+    fn one_job(c: &Core, d: &GlesDraw) -> (Kick, u32) {
+        let refused = table71::refused_draws();
+        assert_eq!(backend::draw(&c.clear()), 0, "{:?}", log_lines());
+        assert_eq!(backend::draw(d), 0, "{:?}", log_lines());
+        assert_eq!(backend::finish(), 0, "{:?}", log_lines());
+        let ks = kicks();
+        assert_eq!(ks.len(), 1, "one job: {:?}", log_lines());
+        (ks[0].clone(), table71::refused_draws() - refused)
+    }
+
+    /// The job's draw packets (`(name, bytes)`, the code included) and its
+    /// attribute records as [`MesaAttr`]s, the address relative to `bases`
+    /// (the record's address less the buffer it falls in).
+    fn ours(k: &Kick, bases: [u32; 2]) -> (Vec<(String, Vec<u8>)>, Vec<MesaAttr>) {
+        let defs = packet_defs();
+        let (mut draws, mut attrs) = (vec![], vec![]);
+        for (def, body) in walk(&defs, k.bcl(), "bcl") {
+            let name = def.name.as_str();
+            if name == "GL_SHADER" {
+                let field = |n: &str| {
+                    let f = def.fields.iter().find(|f| f.name == n).unwrap_or_else(|| panic!("GL_SHADER.{n}"));
+                    bits(body, f.start, f.size)
+                };
+                /* the address is in 32-byte units; the attribute records
+                 * follow the 32-byte record (tests/v3d71_table_draw.rs) */
+                let at = (field("address") as u32) << 5;
+                attrs.clear();
+                for i in 0..field("number of attribute arrays") as usize {
+                    let b = k.at(at + (record71::RECORD_SIZE + i * attr71::RECORD_BYTES) as u32, attr71::RECORD_BYTES);
+                    let get = |n: &str| {
+                        let (_, st, sz) = attr71::FIELDS.iter().find(|f| f.0 == n).unwrap_or_else(|| panic!("{n}"));
+                        bits(b, *st, *sz) as u32
+                    };
+                    let address = get("Address");
+                    let base = *bases.iter().filter(|&&b| b <= address).max().expect("a record in a buffer");
+                    attrs.push(MesaAttr {
+                        address: address - base,
+                        vec: match get("Vec size") {
+                            0 => 4,
+                            v => v,
+                        },
+                        ty: get("Type"),
+                        signed: get("Signed int type") != 0,
+                        normalized: get("Normalized int type") != 0,
+                        read_as_int: get("Read as int/uint") != 0,
+                        cs: get("Number of values read by Coordinate shader"),
+                        vs: get("Number of values read by Vertex shader"),
+                        divisor: get("Instance Divisor"),
+                        stride: get("Stride"),
+                        max_index: get("Maximum Index"),
+                    });
+                }
+            }
+            if name.contains("PRIM") {
+                draws.push((def.name.clone(), [&[def.code][..], body].concat()));
+            }
+        }
+        (draws, attrs)
+    }
+
+    /// The fields our records share with Mesa's whatever the program: the
+    /// shader's reads (`cs`, `vs`) are ours, not Mesa's.
+    fn layout(a: &MesaAttr) -> (u32, u32, u32, bool, bool, bool, u32, u32, u32) {
+        (a.address, a.vec, a.ty, a.signed, a.normalized, a.read_as_int, a.divisor, a.stride, a.max_index)
+    }
+
+    fn started() -> (v3d71_table_rig::Rig, Core) {
+        let g = rig();
+        assert_eq!(backend::init(), 0, "{:?}", log_lines());
+        (g, Core::new())
+    }
+
+    #[test]
+    fn the_table_draws_the_shape_as_mesas_one_instanced_packet() {
+        let (_g, c) = started();
+        let (k, refused) = one_job(&c, &c.instanced(1));
+        assert_eq!(refused, 0, "refused_draws() did not grow: {:?}", log_lines());
+        let (draws, attrs) = ours(&k, [c.vbo, c.ibo]);
+        assert_eq!(draws.len(), 1, "one draw packet: {draws:?}");
+        let (name, bytes) = &draws[0];
+        assert_eq!(name, "VERTEX_ARRAY_INSTANCED_PRIMS", "not one draw per instance");
+        let b = blocks();
+        let mesa = only(&b, "VERTEX_ARRAY_INSTANCED_PRIMS");
+        assert_eq!(xml_decode(PRIMS, bytes), clif_by_xml(mesa, PRIMS), "mode, length, instances, first vertex");
+        /* the records: Mesa's, address within its buffer, divisors included */
+        let m: Vec<_> = mesa_attrs()
+            .iter()
+            .map(|a| MesaAttr { address: a.address - if a.address >= IBO { IBO } else { VBO }, ..*a })
+            .collect();
+        assert_eq!(attrs.iter().map(layout).collect::<Vec<_>>(), m.iter().map(layout).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_divisor_above_1_is_one_draw_too() {
+        let (_g, c) = started();
+        assert_eq!(backend::max_instance_divisor(), attr71::MAX_DIVISOR, "the GL core hands every divisor over");
+        let (k, refused) = one_job(&c, &c.instanced(2));
+        assert_eq!(refused, 0, "refused_draws() did not grow: {:?}", log_lines());
+        let (draws, attrs) = ours(&k, [c.vbo, c.ibo]);
+        assert_eq!(draws.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(), ["VERTEX_ARRAY_INSTANCED_PRIMS"]);
+        assert_eq!(attrs.iter().map(|a| a.divisor).collect::<Vec<_>>(), [0, 2, 2]);
+    }
+
+    #[test]
+    fn one_instance_is_the_plain_packet() {
+        let (_g, c) = started();
+        let mut d = c.instanced(1);
+        d.instance_count = 1;
+        let (k, refused) = one_job(&c, &d);
+        assert_eq!(refused, 0);
+        let (draws, _) = ours(&k, [c.vbo, c.ibo]);
+        assert_eq!(draws.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(), ["VERTEX_ARRAY_PRIMS"]);
+    }
 }
