@@ -466,7 +466,7 @@ pi5)
     # line after each is the watchdog's tail, not an end), rpi5_wdog's FAIL
     # (its pass is the reset itself: the console goes quiet, so that run ends
     # at RUN_BOUND)
-    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|v3d_triangle: (PASS|FAIL)|v3d_tfu: (PASS|FAIL)|v3d_tex: FAIL|v3d_cube: FAIL|rpi5_tex: (done|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_mbox: (done|FAIL)|rpi5_(dispregs|dlmap): (done|FAIL)|rpi5_scanout(16|32): (PASS|FAIL)|rpi5_wdog: FAIL)'
+    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|v3d_triangle: (PASS|FAIL)|v3d_tfu: (PASS|FAIL)|v3d_tex: FAIL|v3d_cube: FAIL|rpi5_tex: (done|FAIL)|rpi5_cube_ours: (done|FAIL)|v3d_gl_test: FAIL|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_mbox: (done|FAIL)|rpi5_(dispregs|dlmap): (done|FAIL)|rpi5_scanout(16|32): (PASS|FAIL)|rpi5_wdog: FAIL)'
     LEGACY_RE=$END_RE_DEFAULT
     BOARD_HOST=${BOARD_HOST:-${PI5_HOST:-}}
     BOARD_UART=${BOARD_UART:-${PI5_UART:-}}
