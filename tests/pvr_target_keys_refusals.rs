@@ -100,8 +100,7 @@ fn single_class_is_not_a_mix() {
         &[GLES_SURF_RGBA8888],
         &[GLES_SURF_R32UI, GLES_SURF_R32UI],
         &[GLES_SURF_R32UI, GLES_SURF_R32UI, GLES_SURF_R32UI],
-        &[GLES_SURF_RGBA8888, GLES_SURF_RGBA16F],
-        &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888, GLES_SURF_R32F],
+        &[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888],
     ] {
         let d = draw(fmts);
         assert!(draw_target_keys(&d).is_ok(), "{fmts:?}");

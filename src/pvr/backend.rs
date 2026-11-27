@@ -7519,7 +7519,8 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     }
     if ntargets > 1
         && d.index_count != 0
-        && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
+        && (d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
+            || super::target_keys::draw_mixed_key(d).is_ok())
     {
         use super::target_keys::*;
         // SAFETY: the GL core's draw points `fs` at a live record or at nothing.

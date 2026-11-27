@@ -846,19 +846,18 @@ fn three_r16f_draw_from_r0_r1_r2() {
     assert_eq!(halves, [0x3800, 0x4000, 0x3400], "0.5, 2.0 and 0.25 as halves: {out:x?}");
 }
 
-/// RGBA16F beside two RGBA8 attachments: the GL core keys the draw with
-/// attachment 0's class, whose program lays all three outputs out as
-/// RGBA16F's, so the back end refuses it by name (no kick) rather than store
-/// the RGBA8 targets from registers holding halves. A mix of float classes
-/// has no key of its own yet.
+/// RGBA16F beside two RGBA8 attachments: a mix of float classes has a
+/// per-target key of its own (item fix-float-mix), so the draw is accepted:
+/// RGBA16F at r0-r1, the RGBA8 targets at r2 and r3, one kick of three
+/// targets (before the key it was refused by name).
 #[test]
-fn rgba16f_beside_rgba8_is_refused_by_name() {
+fn rgba16f_beside_rgba8_draws_with_a_per_target_key() {
     let _g = rig();
     let _f = Fbo::new(&[GL_RGBA16F, GL_RGBA8, GL_RGBA8]);
     let fs = array_fs("vec4", ["1.0", "0.5", "0.25"]);
     let (e, frame) = try_draw(&fs);
-    assert!(frame.is_none() && e == GL_INVALID_OPERATION, "refused, not drawn: {e:#x}: {:?}", logs());
-    let named = "draw refused: several colour outputs of one float class";
-    assert!(logs().iter().any(|l| l.contains(named)), "named: {:?}", logs());
-    assert!(KICKS.lock().unwrap().is_empty(), "no kick");
+    assert!(e == GL_NO_ERROR && frame.is_some(), "drawn: {e:#x}: {:?}", logs());
+    assert_eq!(frame.unwrap().num_rt, 3, "kick num_rt");
+    assert!(!logs().iter().any(|l| l.contains("draw refused")), "not refused: {:?}", logs());
+    assert_eq!(KICKS.lock().unwrap().len(), 1, "one kick");
 }
