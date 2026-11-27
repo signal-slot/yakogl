@@ -505,6 +505,51 @@ visible mark: S4 has no `info.*` case, so the renderer string was not
 printed. Still unmeasured: rows that stress the tile buffer and the tiler,
 the S1 `fbo`, `texture` and `multisample` rows.
 
+### Measured on the board: the whole dEQP-GLES2 tree (B8)
+
+Between 2026-11-25 and 2026-11-27 all 76 rows of the tree ran on the
+Verdin iMX95 in six sessions (S4, S1a, S1b, S2, S3a, S3b), from images built
+at `e63ab28e` (`tools/cts/log/*-imx95-gles2-S*-e63ab28e/`,
+`docs/es2-cts-failures.md` section N). The result is 17,165 mustpass cases:
+11,435 Pass, 5,233 Fail, 494 NotSupported, 3 QualityWarning, 0 Lost. Every
+row ended by PSCI, with no hang, no WDOG3 reset, no GPU restart (`osal(mali):
+restarts 0`) and no tiler OOM (`tiler OOMs 0 grown, 0 with no chunk`) on any
+of the 76 consoles.
+
+What it says about the G310:
+
+- No G310-only difference. Each of the 773 per-case differences from the
+  T6's `8ff01055` tree is a compiler effect: 526 cases move by a named commit
+  of `8ff01055..e63ab28e` and 247 stop on another refusal, against 0 hang or
+  Lost and 0 cause of this note's section 5 (`imx95-g310-cause.py`: 0
+  `tib-budget`, `tiler-levels`, `shader-present`, `renderer-name`). That
+  bears out section 5 for the compiler over the whole tree.
+- The tile budget (G310v2: colour 8192, Z 4096) and the 8 tiler levels left
+  no mark. `fbo` (709 Pass), `texture` (694 Pass, 113 Fail), `clipping`
+  (602 Pass), `rasterization` (49 Pass, 3 QualityWarning) and `multisample`
+  (16 NotSupported) have the T6's counts case for case, except for the 4
+  `fbo.render.recreate_colorbuffer` cases that `c4df367f` fixed. GLES2 has
+  no frame of 12 bytes a pixel or more, so the halved tile is never chosen.
+- The renderer name is the G310's: `Arm Mali-G310v2 (YakoGL)` on the
+  console, and `info.renderer` passes with the other five `info.*` cases.
+- One shader core (`SHADER_PRESENT 0x1`) shows only in time. Each row's time
+  is the image's run time up to PSCI SYSTEM_RESET (the ms of `rows.tsv`'s
+  exit line); the T6's is `chunks.tsv`'s `seconds`. Over the 76 rows that is
+  1,141 s against 450 s, a pooled ratio of **2.54**. Per row the ratio runs
+  from 0.12 (T6S1R08) to 5.61 (T6S2R06), median 2.45. Per T6 session the
+  ratio is S1 2.42, S2 3.29, S3 1.95 and S4 2.85. The longest row is
+  T6S2R06 at 56.1 s, 9 % of the 600 s lifetime (`fed until 600 s of uptime`
+  on every console). The forecast of the S1a subsection, no row above
+  300 s, held. S1a's 2.17 (rows 1-12 alone) was a fair scale for the tree.
+- Still not measured: the BBM record (U2; the module's Linux 6.6 lacks
+  `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT`, so every row's `bbm` is `not-read`),
+  `TEXTURE_FEATURES_0` and the other feature registers of the list above.
+
+The forecast of `docs/notes/mali-gles2-forecast.md` section 8 (10,960 Pass,
+10,957 to 10,963) is 475 Pass short of the measurement. It read three of the
+compiler commits; the measured gain comes mostly from the others, cause BW
+(277 cases) above all. Its hardware expectation ("no difference") held.
+
 ## Sample
 
 `tools/mali/testdata/g310v2-frames/` (its `README.md` says how each was
