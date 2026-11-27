@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image S03a4b: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S03a4b.console.txt
+S03a4b.console.txt: deqp: done: 95 passed, 18 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 113 cases begun, 113 with a result, 0 without
+mustpass cases with a result: 105 (of 113 seen)
+group                                       pass   fail    n/s  other
+shaders                                       87     18      0      0
+TOTAL                                         87     18      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  S03a4b: deqp: summary 113 cases begun, 113 with a result; deqp: done 95 passed, 18 failed, 0 not supported, 0 warnings; 02a2ed23 DONE: 113 cases, P 95 F 18 R 0 N 0 other 0; 113 result lines seen
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.mediump_vertex.mat4x3

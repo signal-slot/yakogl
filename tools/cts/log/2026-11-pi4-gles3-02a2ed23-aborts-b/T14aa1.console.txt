@@ -1,0 +1,165 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 02a2ed23, 2026-11-27, image T14aa1: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.26 [sdcard] pieeprom.upd not found
+  4.27 [sdcard] recover4.elf not found
+  4.27 [sdcard] recovery.elf not found
+  4.99 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.05 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.07 0x00d03114 0x00000000 0x00001fff
+  4.10 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.47 Starting start4.elf @ 0xfec00200 partition 1
+  4.44 XHCI-STOP
+  4.45 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.45 USBSTS 18
+  4.46 PCI0 reset
+  4.47 +
+
+MESS:00:00:04.481616:0: arasan: arasan_emmc_open
+MESS:00:00:04.483275:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.603499:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.616369:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.650652:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.652065:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.656449:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.819359:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.822186:0: brfs: File read: 170 bytes
+MESS:00:00:04.915030:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.919538:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.933520:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.432807:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.438355:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.447385:0: *** Restart logging
+MESS:00:00:05.449162:0: brfs: File read: 170 bytes
+MESS:00:00:05.527693:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.532725:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.546344:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.555095:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.558916:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.567674:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.573165:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.595182:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.610553:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.613844:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.654530:0: brfs: File read: 56249 bytes
+MESS:00:00:05.674222:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.739130:0: brfs: File read: 5971 bytes
+MESS:00:00:05.741866:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.784872:0: brfs: File read: 170 bytes
+MESS:00:00:05.788624:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.792031:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.797880:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.954589:0: brfs: File read: 145 bytes
+MESS:00:00:07.368512:0: brfs: File read: /mfs/sd/yakogl-T14aa1.bin
+MESS:00:00:07.371594:0: Loaded 'yakogl-T14aa1.bin' to 0x200000 size 0x1001f58
+MESS:00:00:07.378466:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.387243:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.393774:0: uart: Baud rate change done...
+MESS:00:00:07.395793:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build 02a2ed23
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.units.all_units.only_cube.0'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-<1.4.6-2>-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 112 MiB at phys 0x3397000, GPU VA 0x181000..0x7100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 33554432 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.units.all_units.only_cube.0'..
+  cube-bind: 0x14ec000 unit 0 kick 1 (draw)
+  cube(draw) @0x14ec000 256x256 x6: fmt 18, cpu 0x1a5eb000 - not dumped
+  cube-bind: 0x18ec000 unit 1 kick 1 (draw)
+  cube(draw) @0x18ec000 256x256 x6: fmt 16, cpu 0x1a9eb000 - not dumped
+  cube-bind: 0x1aec000 unit 2 kick 1 (draw)
+  cube(draw) @0x1aec000 256x256 x6: fmt 12, cpu 0x1abeb000 - not dumped
+  cube-bind: 0x1cec000 unit 3 kick 1 (draw)
+  cube(draw) @0x1cec000 256x256 x6: fmt 19, cpu 0x1adeb000 - not dumped
+  cube-bind: 0x20ec000 unit 4 kick 1 (draw)
+  cube(draw) @0x20ec000 256x256 x6: fmt 18, cpu 0x1b1eb000 - not dumped
+  cube-bind: 0x24ec000 unit 5 kick 1 (draw)
+  cube(draw) @0x24ec000 256x256 x6: fmt 17, cpu 0x1b5eb000 - not dumped
+  cube-bind: 0x26ec000 unit 6 kick 1 (draw)
+  cube(draw) @0x26ec000 256x256 x6: fmt 15, cpu 0x1b7eb000 - not dumped
+  cube-bind: 0x28ec000 unit 7 kick 1 (draw)
+  cube(draw) @0x28ec000 256x256 x6: fmt 16, cpu 0x1b9eb000 - not dumped
+  cube-bind: 0x2aec000 unit 8 kick 1 (draw)
+  cube(draw) @0x2aec000 256x256 x6: fmt 15, cpu 0x1bbeb000 - not dumped
+  cube-bind: 0x2cec000 unit 9 kick 1 (draw)
+  cube(draw) @0x2cec000 256x256 x6: fmt 16, cpu 0x1bdeb000 - not dumped
+  cube-bind: 0x2eec000 unit 10 kick 1 (draw)
+  cube(draw) @0x2eec000 256x256 x6: fmt 16, cpu 0x1bfeb000 - not dumped
+  cube-bind: 0x30ec000 unit 11 kick 1 (draw)
+  cube(draw) @0x30ec000 256x256 x6: fmt 0, cpu 0x1c1eb000 - not dumped
+  cube-bind: 0x32ec000 unit 12 kick 1 (draw)
+  cube(draw) @0x32ec000 256x256 x6: fmt 0, cpu 0x1c3eb000 - not dumped
+  cube-bind: 0x34ec000 unit 13 kick 1 (draw)
+  cube(draw) @0x34ec000 256x256 x6: fmt 17, cpu 0x1c5eb000 - not dumped
+  cube-bind: 0x36ec000 unit 14 kick 1 (draw)
+  cube(draw) @0x36ec000 256x256 x6, chain 9, written 9, max_level 12
+  cube(draw) level 0 (256x256 @0x0): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube(draw) level 1 (128x128 @0x300000): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube(draw) level 2 (64x64 @0x3c0000): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube(draw) level 3 (32x32 @0x3f0000): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube(draw) level 4 (16x16 @0x3fc000): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube(draw) level 5 (8x8 @0x3ff000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (4x4 @0x3ffc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 7 (2x2 @0x3fff00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 8 (1x1 @0x3fffc0): 584.2500 302.0000 45.7292 -3.8333 -51.0000 -129.5000
+  cube-bind: 0x3aec000 unit 15 kick 1 (draw)
+  cube(draw) @0x3aec000 256x256 x6: fmt 15, cpu 0x1cbeb000 - not dumped
+yakogl/v3d: tiled copies high-water 4206592 of 33554432 bytes
+yakogl/v3d: tiled copies high-water 12107776 of 33554432 bytes
+yakogl/v3d: tiled copies high-water 25800704 of 33554432 bytes
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.texture.units.all_units.only_cube.0
+v3d_deqp: case #0 P 1833ms k2/33 c20141/91990 r0 dEQP-GLES3.functional.texture.units.all_units.only_cube.0
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        1/1 (100.0%)
+  Failed:        0/1 (0.0%)
+  Not supported: 0/1 (0.0%)
+  Warnings:      0/1 (0.0%)
+  Waived:        0/1 (0.0%)
+deqp: done: 1 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 1 cases begun, 1 with a result, 0 without
+v3d_deqp DONE, all passed: build 02a2ed23, filter 'dEQP-GLES3.functional.texture.units.all_units.only_cube.0'
+  1 cases in 1833 ms, record at 1 s after boot, reset at ~250 s
+  totals: P 1  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 1 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 1 cases begun, 1 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 33; slowest #0 1833 ms
+  carve-out (KiB, of 114172): after #0 20141, last 20141, high-water 91990
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20096256 bytes used now, 94198528 at most, of 116912128; 0 frees held
+osal(v3d): pending frees: high-water 30/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 53 calls, 171495 map reads (3235 a call, at most 9052 in one); free runs 1, longest 96815872 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1 jobs ended; emitted 21, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 P
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 112 MiB at phys 0x3397000, GPU VA 0x181000..0x7100000
+driver: ... 8 more lines (UART)
+v3d_deqp: build 02a2ed23 DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0

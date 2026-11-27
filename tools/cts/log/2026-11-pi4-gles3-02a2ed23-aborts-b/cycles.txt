@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at 02a2ed23, 2026-11-27, the twenty tryboot cycles in run order: image sha256, Linux boot id before and after, reboot time (UTC), seconds to Linux, clean-up, run and end lines (README.md)
+== cycles
+S03a1 sha256=ae0b30c15b99a67a61ad1ed22ac172169256e68364039b77c7b88036a789b9d9 boot_id_before=a1353965-cb28-44d0-8dbc-5b1cf9e9be3c reboot=2026-11-27T15:07:31Z back_after=308s boot_id_after=fc689179-90ef-44b2-a39c-72eb52b96135 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   1 cases in 276 ms, record at 0 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20523, last 20523, high-water 20663
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
+S03a2a sha256=58d06f710638936474542a5b6af0acc073222b63b021a07368815b47061be2b6 boot_id_before=fc689179-90ef-44b2-a39c-72eb52b96135 reboot=2026-11-27T15:12:57Z back_after=304s boot_id_after=7f50a615-2d87-4da0-9b53-69f6ed835b4c cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   94 cases in 39892 ms, record at 39 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20589, last 20927, high-water 21713
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 94 cases, P 94 F 0 R 0 N 0 other 0
+S03a2b sha256=275b61ff61d7d8999fc611119a1a4036cb103efe5964eb4bc0b0d921f5f6a389 boot_id_before=7f50a615-2d87-4da0-9b53-69f6ed835b4c reboot=2026-11-27T15:18:07Z back_after=307s boot_id_after=eaa40016-ed84-49ab-900a-a3f0c9c79678 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   168 cases in 88037 ms, record at 88 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20406, last 21664, high-water 22918
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 168 cases, P 168 F 0 R 0 N 0 other 0
+S03a3a sha256=5a63a37dbf6ebaf7c96ce07f0a3e32c78c6bb2d5dd96a4331bfb0b34264d67f8 boot_id_before=eaa40016-ed84-49ab-900a-a3f0c9c79678 reboot=2026-11-27T15:23:22Z back_after=305s boot_id_after=a94123d5-0582-4491-aa67-8479f3177c63 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   83 cases in 121335 ms, record at 121 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20523, last 20927, high-water 21473
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 83 cases, P 83 F 0 R 0 N 0 other 0
+S03a3b sha256=ad4136cc8270560ea9857481e69fb681a87a9b2ecae3ba90b232451089d6fafe boot_id_before=a94123d5-0582-4491-aa67-8479f3177c63 reboot=2026-11-27T15:28:35Z back_after=306s boot_id_after=e9e44b00-7a4f-43cb-80a5-8e84e47ff69b cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   96 cases in 48200 ms, record at 48 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20531, last 20927, high-water 21653
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0
+S03a3c sha256=f50b431d60c67653fab4bc7b559d4c39f84f4a0a5b640d0180b50451882bf3bf boot_id_before=e9e44b00-7a4f-43cb-80a5-8e84e47ff69b reboot=2026-11-27T15:33:49Z back_after=305s boot_id_after=8113d5f1-7aee-4800-98d1-b4927792cdda cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   38 cases in 57179 ms, record at 57 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20807, last 21664, high-water 22919
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 38 cases, P 38 F 0 R 0 N 0 other 0
+S03a4a sha256=6b319532f8d1d5b39c81f5eb4d81fca45513200c6228360d4db96863a38ec228 boot_id_before=8113d5f1-7aee-4800-98d1-b4927792cdda reboot=2026-11-27T15:39:01Z back_after=304s boot_id_after=f87a6d34-6215-49e1-a109-365d82cf3552 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   87 cases in 58370 ms, record at 58 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20587, last 20781, high-water 21433
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 87 cases, P 87 F 0 R 0 N 0 other 0
+S03a4b sha256=1ecd8d706a1e20dc58b296b2c1628a371d1f0c94d498c3630bd3cee16406bd5e boot_id_before=f87a6d34-6215-49e1-a109-365d82cf3552 reboot=2026-11-27T15:44:16Z back_after=306s boot_id_after=3a874de3-1fc3-4a23-9d01-215fd2d4f6ec cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   113 cases in 35342 ms, record at 35 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20406, last 21977, high-water 23999
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 113 cases, P 95 F 18 R 0 N 0 other 0
+S03a5a sha256=82baa6d2dc67223a000d6c4a88af4062b9aaf235d283ab34a7ca08ed9fff9a2b boot_id_before=3a874de3-1fc3-4a23-9d01-215fd2d4f6ec reboot=2026-11-27T15:49:29Z back_after=299s boot_id_after=a35e57f7-b4ee-40dd-92ef-81be8c910486 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   76 cases in 53232 ms, record at 53 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20927, last 21664, high-water 22918
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 76 cases, P 76 F 0 R 0 N 0 other 0
+S03a5b sha256=c0d46c36e60fecaf9b5a0f5cc56f9c2c6a22629a84f9eb568db457ab47fe939c boot_id_before=a35e57f7-b4ee-40dd-92ef-81be8c910486 reboot=2026-11-27T15:54:41Z back_after=300s boot_id_after=9725808b-b304-4d55-8692-0e8f893cf95f cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   122 cases in 81292 ms, record at 81 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20406, last 20927, high-water 21900
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 122 cases, P 104 F 18 R 0 N 0 other 0
+S03a6a sha256=b58517741e3a7a13be8ebc578821a72e6ef708ce1fb90597c73226ccc4350467 boot_id_before=9725808b-b304-4d55-8692-0e8f893cf95f reboot=2026-11-27T15:59:51Z back_after=303s boot_id_after=3cff7462-c1bf-4d1f-a913-b3f1087d6fdd cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   54 cases in 56314 ms, record at 56 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20796, last 20927, high-water 21653
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 54 cases, P 54 F 0 R 0 N 0 other 0
+S03a6b sha256=3df716bee982821296ba24ecd6f0d2ca03c9838c53791fe347d6fe357ac21c7b boot_id_before=3cff7462-c1bf-4d1f-a913-b3f1087d6fdd reboot=2026-11-27T16:05:08Z back_after=305s boot_id_after=0bfadea7-13f6-4aa5-a4d1-80668416e19c cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   12 cases in 40508 ms, record at 40 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20807, last 21378, high-water 22347
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 12 cases, P 12 F 0 R 0 N 0 other 0
+S03a6c sha256=49d11692c2a9e9bba8afd950ce14e5b9917a2137e91a33428f973a9513c57d4e boot_id_before=0bfadea7-13f6-4aa5-a4d1-80668416e19c reboot=2026-11-27T16:10:24Z back_after=308s boot_id_after=ca930ee3-f6aa-456c-8ebb-3a994b853224 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   12 cases in 41297 ms, record at 41 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20800, last 21378, high-water 22347
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 12 cases, P 12 F 0 R 0 N 0 other 0
+S03a6d sha256=9ecbef5e869d72ffcab34278c80ae4062de849980c54317dcfd1c6d5c7051811 boot_id_before=ca930ee3-f6aa-456c-8ebb-3a994b853224 reboot=2026-11-27T16:15:41Z back_after=301s boot_id_after=54dbdf47-d813-428b-ab2c-963fb0a3cf6a cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   135 cases in 58495 ms, record at 58 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20406, last 21664, high-water 22919
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 135 cases, P 135 F 0 R 0 N 0 other 0
+S03a7a sha256=737b6dd00c285540ec60a639d41c3160f18919f9b43d0421f9f389bdb4ad8f63 boot_id_before=54dbdf47-d813-428b-ab2c-963fb0a3cf6a reboot=2026-11-27T16:20:50Z back_after=309s boot_id_after=201bc8ef-f059-4267-90a8-0c65c6fd4b68 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   96 cases in 46862 ms, record at 46 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 21664, last 21664, high-water 22823
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 96 cases, P 96 F 0 R 0 N 0 other 0
+S03a7b sha256=213ef54b8d439336bb41547679d6b0d14aaea34155df43734a9b857f211e69d2 boot_id_before=201bc8ef-f059-4267-90a8-0c65c6fd4b68 reboot=2026-11-27T16:26:11Z back_after=304s boot_id_after=4534b14b-c657-4b38-81d8-04c54e29df74 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   102 cases in 64273 ms, record at 64 s after boot, reset at ~250 s
+   carve-out (KiB, of 48636): after #0 20406, last 21230, high-water 22395
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 102 cases, P 84 F 18 R 0 N 0 other 0
+T14 sha256=3216497f4377f1cdf84971e95e3d35c9f08f87f4bf935c19052dd76bf8ddb430 boot_id_before=4534b14b-c657-4b38-81d8-04c54e29df74 reboot=2026-11-27T16:31:21Z back_after=302s boot_id_after=ea5fc02c-3e0d-4aaa-a1e6-ed12176c4354 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   225 cases in 27774 ms, record at 27 s after boot, reset at ~250 s
+   carve-out (KiB, of 114172): after #0 20141, last 20141, high-water 68111
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 225 cases, P 217 F 8 R 0 N 0 other 0
+T14a1 sha256=c8202d020f39ae31c2998745b865c31886d95c90975f47e549009567d5c3a2ff boot_id_before=ea5fc02c-3e0d-4aaa-a1e6-ed12176c4354 reboot=2026-11-27T16:36:34Z back_after=303s boot_id_after=125107b1-e087-4300-b676-e546445d3d73 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   1 cases in 959 ms, record at 1 s after boot, reset at ~250 s
+   carve-out (KiB, of 114172): after #0 20141, last 20141, high-water 63284
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 1 cases, P 0 F 1 R 0 N 0 other 0
+T14aa sha256=2cbf9d762529e4aecb4dcc75de2ba31fb3ed3a9b68f191a92d6dac7b119d0e2b boot_id_before=125107b1-e087-4300-b676-e546445d3d73 reboot=2026-11-27T16:41:44Z back_after=309s boot_id_after=2fe8da45-7b88-4a12-b33b-7d300b2aeeb4 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   47 cases in 23057 ms, record at 23 s after boot, reset at ~250 s
+   carve-out (KiB, of 114172): after #0 20141, last 20141, high-water 106295
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE: 47 cases, P 41 F 6 R 0 N 0 other 0
+T14aa1 sha256=1a8ad69c32193d48b0fca526f07a76644e4486dec35bbc382ada310adb727c44 boot_id_before=2fe8da45-7b88-4a12-b33b-7d300b2aeeb4 reboot=2026-11-27T16:47:02Z back_after=303s boot_id_after=545117b7-e826-4de1-a5f4-d1091bedbcd9 cleanup=staged image removed, tryboot.txt removed (read back: none left)
+   1 cases in 1833 ms, record at 1 s after boot, reset at ~250 s
+   carve-out (KiB, of 114172): after #0 20141, last 20141, high-water 91990
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build 02a2ed23 DONE, all passed: 1 cases, P 1 F 0 R 0 N 0 other 0
