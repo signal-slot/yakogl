@@ -37,6 +37,62 @@ pub const PBE_LINESTRIDE_UNIT_SIZE: u32 = 2;
 /// backend.rs `PVR_BACKEND_MAX_OUT_REGS`).
 pub const SPM_MAX_OUTPUT_DWORDS: u32 = 4;
 
+/// The SPM background-load shaders the back end ships (src/pvr/
+/// spm_load_*blob.rs, Mesa's `pvr_uscgen_spm_load` for one
+/// `pvr_spm_load_props` each, tools/pco_shc/gen_spm_load.py's VARIANTS).
+/// None has tile buffers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpmLoad {
+    /// { output_reg_count 1, is_multisampled 0 }: spm_load_blob.rs.
+    OneDword,
+    /// { output_reg_count 2, is_multisampled 0 }: spm_load_2dw_blob.rs, an
+    /// RGBA16F-class target's four halves.
+    TwoDwords,
+    /// { output_reg_count 1, is_multisampled 1 } at 4 samples:
+    /// spm_load_msaa4_blob.rs.
+    OneDwordMsaa4,
+}
+
+impl SpmLoad {
+    /// The output dwords a pixel the shader reloads (and the PR store
+    /// writes): Mesa's `dword_count` (pvr_arch_spm.c:780-786).
+    pub const fn output_dwords(self) -> u32 {
+        match self {
+            SpmLoad::OneDword | SpmLoad::OneDwordMsaa4 => 1,
+            SpmLoad::TwoDwords => 2,
+        }
+    }
+
+    /// The samples a pixel has in the scratch.
+    pub const fn samples(self) -> u32 {
+        match self {
+            SpmLoad::OneDword | SpmLoad::TwoDwords => 1,
+            SpmLoad::OneDwordMsaa4 => 4,
+        }
+    }
+
+    /// The bytes of scratch a `width` x `height` render with this shader
+    /// needs ([`scratch_size`], no tile buffers).
+    pub fn scratch_size(self, width: u32, height: u32) -> u64 {
+        scratch_size(width, height, self.samples(), self.output_dwords(), 0)
+    }
+}
+
+/// The shipped load shader for a frame of `output_dwords` output dwords a
+/// pixel at `samples` samples (no tile buffers): Mesa selects by
+/// output_reg_count and is_multisampled (`pvr_uscgen_spm_load_index`,
+/// pvr_arch_spm.c:788-794). `None` for a configuration no shipped blob
+/// covers (4 dwords, 2 dwords multisampled, 2 or 8 samples...): such a frame
+/// gets no partial-render state.
+pub fn spm_load_for(output_dwords: u32, samples: u32) -> Option<SpmLoad> {
+    match (output_dwords, samples.max(1)) {
+        (1, 1) => Some(SpmLoad::OneDword),
+        (2, 1) => Some(SpmLoad::TwoDwords),
+        (1, 4) => Some(SpmLoad::OneDwordMsaa4),
+        _ => None,
+    }
+}
+
 /// The bytes of SPM scratch a render of `width` x `height` pixels at
 /// `samples` samples needs, for a pass whose renders use at most
 /// `output_dwords` output registers a pixel and `tile_buffers` tile buffers.
@@ -184,6 +240,63 @@ mod tests {
         assert_eq!(scratch_size(801, 600, 1, 1, 0), 1_924_800);
         /* Mesa counts at least one output dword */
         assert_eq!(scratch_size(800, 600, 1, 0, 0), 1_920_000);
+    }
+
+    #[test]
+    fn spm_load_by_dwords_and_samples() {
+        assert_eq!(spm_load_for(1, 1), Some(SpmLoad::OneDword));
+        assert_eq!(spm_load_for(1, 0), Some(SpmLoad::OneDword), "0 samples is 1");
+        assert_eq!(spm_load_for(2, 1), Some(SpmLoad::TwoDwords));
+        assert_eq!(spm_load_for(1, 4), Some(SpmLoad::OneDwordMsaa4));
+        /* no blob for these */
+        for (d, s) in [(0, 1), (3, 1), (4, 1), (2, 4), (4, 4), (1, 2), (1, 8)] {
+            assert_eq!(spm_load_for(d, s), None, "{d} dwords x{s}");
+        }
+        for l in [SpmLoad::OneDword, SpmLoad::TwoDwords, SpmLoad::OneDwordMsaa4] {
+            assert_eq!(spm_load_for(l.output_dwords(), l.samples()), Some(l));
+        }
+    }
+
+    #[test]
+    fn scratch_size_of_each_load() {
+        /* 800x600 RGBA8: 800 x 600 x 4 B x 1 x 1 */
+        assert_eq!(SpmLoad::OneDword.scratch_size(800, 600), 1_920_000);
+        /* 800x600 RGBA16F: 800 x 600 x 4 B x 1 sample x 2 dwords */
+        assert_eq!(SpmLoad::TwoDwords.scratch_size(800, 600), 3_840_000);
+        /* 800x600 4x RGBA8: 800 x 600 x 4 B x 4 samples x 1 dword */
+        assert_eq!(SpmLoad::OneDwordMsaa4.scratch_size(800, 600), 7_680_000);
+        /* odd widths round the row up to 2 pixels: 802 x 601 x 4 B x 2 and
+         * x 4 */
+        assert_eq!(SpmLoad::TwoDwords.scratch_size(801, 601), 3_856_016);
+        assert_eq!(SpmLoad::OneDwordMsaa4.scratch_size(801, 601), 7_712_032);
+        /* case 217's 1024x1024 at 2 dwords and at 4x: 8 MiB and 16 MiB */
+        assert_eq!(SpmLoad::TwoDwords.scratch_size(1024, 1024), 8 << 20);
+        assert_eq!(SpmLoad::OneDwordMsaa4.scratch_size(1024, 1024), 16 << 20);
+        /* the PR store of each fills exactly its scratch */
+        for l in [SpmLoad::OneDword, SpmLoad::TwoDwords, SpmLoad::OneDwordMsaa4] {
+            for (w, h) in [(800, 600), (801, 601), (1024, 1024)] {
+                let pbe = pbe_state(w, h, l.output_dwords(), 0, l.samples(), 0).unwrap();
+                assert_eq!(pbe.bytes, l.scratch_size(w, h), "{l:?} {w}x{h}");
+            }
+        }
+    }
+
+    #[test]
+    fn pbe_words_of_the_2dw_and_msaa4_stores() {
+        /* 800x600 RGBA16F at 0x4_8010_0000: as the one-dword words but pack
+         * mode U32U32 (0x28 << 7 in STATE_WORD1); the register words do not
+         * depend on the dword count */
+        let one = pbe_state(800, 600, 1, 0, 1, 0x4_8010_0000).unwrap();
+        let two = pbe_state(800, 600, 2, 0, 1, 0x4_8010_0000).unwrap();
+        assert_eq!(two.state, [0x2004_0000, 0x0008_1401]);
+        assert_eq!(two.reg, one.reg);
+        assert_eq!(two.bytes, 3_840_000);
+        /* 4x: Mesa's PBE words do not depend on the sample count
+         * (pvr_spm_setup_pbe_state passes it to the size only), the store
+         * writes every sample */
+        let ms = pbe_state(800, 600, 1, 0, 4, 0x4_8010_0000).unwrap();
+        assert_eq!((ms.state, ms.reg), (one.state, one.reg));
+        assert_eq!(ms.bytes, 7_680_000);
     }
 
     #[test]

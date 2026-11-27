@@ -4,19 +4,21 @@
 //! back end gives a filled `frag_pr` block (`pr_fill`, src/pvr/backend.rs) with
 //! `PVR_BACKEND_OPT_PARTIAL_RENDER` on, and which an all-zero one (the
 //! driver's 3D_PR then stays a byte copy of the 3D). Written before the 2-dword
-//! and 4x MSAA SPM load shaders (tools/pco_shc/spm_load_2dw, spm_load_msaa4) are
+//! and 4x MSAA SPM load shaders (tools/pco_shc/spm_load_2dw, spm_load_msaa4) were
 //! wired, so that wiring is tested against it.
 //!
-//! Today only `spm_load_blob.rs` ships: Mesa 26.2.1's SPM load for
-//! {output_reg_count 1, tile_buffer_count 0, not multisampled}. What
-//! pr-wider-read found a frame needs, per kind, is in the comment of each case:
-//! Mesa picks the SPM load shader by output_reg_count (1, 2, 4, 8 dwords),
-//! tile_buffer_count (tile-buffer outputs after the registers) and sample count
-//! (the msaa load reads every sample).
+//! Three load shaders ship: Mesa 26.2.1's SPM load for {output_reg_count 1,
+//! tile_buffer_count 0, not multisampled} (`spm_load_blob.rs`), for
+//! {output_reg_count 2, 0, not multisampled} (`spm_load_2dw_blob.rs`, an
+//! RGBA16F target) and for {output_reg_count 1, 0, multisampled}
+//! (`spm_load_msaa4_blob.rs`, a 4x RGBA8 target); `spm::spm_load_for` selects
+//! one. What pr-wider-read found a frame needs, per kind, is in the comment of
+//! each case: Mesa picks the SPM load shader by output_reg_count (1, 2, 4, 8
+//! dwords), tile_buffer_count (tile-buffer outputs after the registers) and
+//! sample count (the msaa load reads every sample).
 //!
-//! Cases that expect a block the wiring will give carry `#[ignore]` with the
-//! reason; they assert the future outcome and fail today. Cases without it
-//! pin the exact outcome now. With the option off every case has a zero block.
+//! Every case pins the exact outcome. With the option off every case has a
+//! zero block. Nothing here ran on a board.
 //!
 //! The 4x cases need the `msaa-fbo` feature.
 //!
@@ -378,6 +380,7 @@ unsafe extern "C" fn pvr_pds_render_kick_usc_program(
     info: *mut PvrPdsRenderKickUscInfo,
 ) -> i32 {
     KICK_FS.lock().unwrap().push(fs_usc_exec_offset);
+    KICK_FS_EVER.lock().unwrap().push(fs_usc_exec_offset);
     // SAFETY: the backend's buffers (8 data words, 1 code word) and record.
     unsafe {
         for i in 0..8 {
@@ -724,41 +727,104 @@ fn mrt_gets_no_block_today() {
     off_is_zero("four RGBA8", &[GL_RGBA8; 4], 1);
 }
 
-/// RGBA16F (2 dwords per pixel): zero today. pr-wider-read: output_reg_count 2
-/// needs the 2-dword SPM load (tools/pco_shc/spm_load_2dw), not wired yet.
-#[test]
-fn rgba16f_gets_no_block_today() {
-    let _g = rig(4);
-    zero_today("RGBA16F", &[GL_RGBA16F], 1);
-    off_is_zero("RGBA16F", &[GL_RGBA16F], 1);
+/// The words of a committed load shader (tools/pco_shc/<variant>/spm_load.hex).
+fn hex_words(hex: &str) -> Vec<u32> {
+    hex.lines()
+        .filter(|l| !l.starts_with('#'))
+        .flat_map(|l| l.split_whitespace())
+        .map(|w| u32::from_str_radix(w.trim_start_matches("0x"), 16).unwrap())
+        .collect()
 }
 
-/// RGBA16F once the 2-dword SPM load is wired: a filled block.
+/// The filled block of a cleared 800x600 frame of `formats` x `samples`,
+/// pinned: the scratch (`bytes`, Mesa's size for `dwords` output dwords at
+/// `samples`), the PR PBE register words of `spm::pbe_state` over it (slot 0
+/// only), the PR end-of-tile's emit (its STATE words) and its data, the
+/// background load's three words, and that the load kick runs the code of
+/// `load_hex` (the variant's committed words, in the USC heap).
+fn filled_words(
+    what: &str,
+    formats: &[GLenum],
+    samples: GLsizei,
+    dwords: u32,
+    bytes: u32,
+    load_hex: &str,
+) -> PvrRenderKick {
+    let kicks = kicks_of(formats, samples, 1);
+    /* the frame's end-of-tile generations (clear_all's frame_of keeps them) */
+    let eot = EOT.lock().unwrap().clone();
+    let k = kicks.last().unwrap();
+    let p = &k.frag_pr;
+    assert!(!is_zero(p), "{what}, knob on: {p:?}");
+    assert_eq!((k.width, k.height, k.samples.max(1)), (SIZE as u32, HEIGHT as u32, samples as u32), "{what}");
+    assert_eq!(p.spm_scratch_bytes, bytes, "{what}");
+    let s = p.spm_scratch_gpu;
+    assert_eq!(with_platform(|pl| pl.allocs.get(&s).map(|a| a.size)), Some(bytes as usize), "{what}: the scratch");
+    let pbe = yakogl::pvr::spm::pbe_state(SIZE as u32, HEIGHT as u32, dwords, 0, samples as u32, s).unwrap();
+    assert_eq!(pbe.bytes, bytes as u64);
+    assert_eq!(p.pbe_word[0], [pbe.reg[0], pbe.reg[1]], "{what}");
+    assert!(p.pbe_word[1..].iter().all(|w| *w == [0, 0]), "{what}: {:x?}", p.pbe_word);
+    assert_eq!(p.reserved, 0);
+    assert_ne!(p.eot_pds_data, 0);
+    assert_ne!(p.eot_pds_data, k.frag.event_pixel_pds_data, "{what}: the PR's own slot");
+    assert_eq!(p.eot_pds_data_bytes, 16, "{what}: the stand-in's 4 data dwords");
+    assert!(eot.iter().any(|(_, e)| e[..2] == pbe.state && e[2..].iter().all(|&w| w == 0)), "{what}: the PR emit");
+    assert!(p.pds_pr_bgnd.iter().all(|&w| w != 0), "{what}: {:x?}", p.pds_pr_bgnd);
+    assert_ne!(p.pds_pr_bgnd[0], k.frag.pds_bgnd[0], "{what}: the load kick, not the clear's");
+    assert_eq!(p.isp_zlsctl, 0, "{what}: no depth/stencil buffer");
+    let want = hex_words(load_hex);
+    let ever = KICK_FS_EVER.lock().unwrap().clone();
+    let runs = ever.iter().any(|&off| gpu_words(HEAP_USC_BASE + off, want.len()).as_deref() == Some(&want[..]));
+    assert!(runs, "{what}: a load kick runs the variant's code");
+    *k
+}
+
+/// Every USC offset a kick-USC program was ever built for (the load shaders
+/// are built once, on the first frame that needs each).
+static KICK_FS_EVER: Mutex<Vec<u64>> = Mutex::new(Vec::new());
+
+/// RGBA16F (2 dwords per pixel): reloaded by the 2-dword SPM load
+/// (tools/pco_shc/spm_load_2dw; pr-wider-read: output_reg_count 2). The
+/// scratch is 800 x 600 x 4 B x 2 dwords; the PR store packs U32U32.
 #[test]
-#[ignore = "needs the 2-dword SPM load (tools/pco_shc/spm_load_2dw) wired into src/pvr: pr-spm-variants-wire"]
 fn rgba16f_gets_a_block_with_the_2dw_load() {
     let _g = rig(4);
     filled("RGBA16F", &[GL_RGBA16F], 1);
+    filled_words("RGBA16F", &[GL_RGBA16F], 1, 2, 3_840_000, include_str!("../tools/pco_shc/spm_load_2dw/spm_load.hex"));
+    off_is_zero("RGBA16F", &[GL_RGBA16F], 1);
 }
 
-/// 4x MSAA RGBA8: zero today (the guard is `samples <= 1`). pr-wider-read:
-/// Mesa's SPM load for msaa reads every sample (tools/pco_shc/spm_load_msaa4)
-/// and the scratch is sized by the sample count.
+/// 4x MSAA RGBA8: reloaded by the multisampled SPM load
+/// (tools/pco_shc/spm_load_msaa4), which reads every sample; the scratch is
+/// sized by the sample count (800 x 600 x 4 B x 4 samples). With its sample
+/// store and without it (the store's allocation refused) alike: the PR has
+/// one emit whatever the frame's.
 #[cfg(feature = "msaa-fbo")]
 #[test]
-fn msaa4_gets_no_block_today() {
+fn msaa4_gets_a_block_with_the_msaa4_load() {
     let _g = rig(4);
-    zero_today("4x RGBA8", &[GL_RGBA8], 4);
+    let hex = include_str!("../tools/pco_shc/spm_load_msaa4/spm_load.hex");
+    filled("4x RGBA8", &[GL_RGBA8], 4);
+    let k = filled_words("4x RGBA8", &[GL_RGBA8], 4, 1, 7_680_000, hex);
+    assert_eq!(k.frag.num_rt, 2, "the frame's emits: the target and its sample store");
+    /* a fresh back end, so the sample store is asked for (and refused) */
+    pvr_backend_shutdown();
+    assert_eq!(pvr_backend_init(), 0, "{:?}", logs());
+    with_platform(|p| p.refuse_big_once = true);
+    let k = filled_words("4x RGBA8 without a sample store", &[GL_RGBA8], 4, 1, 7_680_000, hex);
+    assert_eq!(k.frag.num_rt, 1, "the frame's one emit");
+    assert!(!with_platform(|p| p.refuse_big_once), "the sample store was asked for and refused");
     off_is_zero("4x RGBA8", &[GL_RGBA8], 4);
 }
 
-/// 4x MSAA once the 4x SPM load is wired: a filled block.
+/// 4x MSAA RGBA16F: no shipped load shader has two dwords multisampled
+/// (Mesa has one; tools/pco_shc does not generate it), so zero.
 #[cfg(feature = "msaa-fbo")]
 #[test]
-#[ignore = "needs the 4x MSAA SPM load (tools/pco_shc/spm_load_msaa4) wired into src/pvr: pr-spm-variants-wire"]
-fn msaa4_gets_a_block_with_the_msaa4_load() {
+fn msaa4_rgba16f_gets_no_block() {
     let _g = rig(4);
-    filled("4x RGBA8", &[GL_RGBA8], 4);
+    zero_today("4x RGBA16F", &[GL_RGBA16F], 4);
+    off_is_zero("4x RGBA16F", &[GL_RGBA16F], 4);
 }
 
 /// Three RGBA16F overrun the output registers (Mesa then uses tile buffers

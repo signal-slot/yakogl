@@ -7,10 +7,12 @@
 //! for, every kick kept).
 //!
 //! The back end fills the block (`pr_fill`, src/pvr/backend.rs) only for a
-//! frame the SPM background-load shader can reload: one attachment of one
-//! output dword, one sample, no tile buffer, no sample store, not a mipmap
-//! chain level (the guard before `pr_fill` in `flush`: `nrt == 1`,
-//! `!tb_emit`, `!store_samples`, `samples <= 1`, `frame_clip == (0, 0)`).
+//! frame a shipped SPM background-load shader can reload
+//! (`spm::spm_load_for`): one attachment (a 4x one with or without its sample
+//! store) of one output dword at one sample or 4x, or of two (RGBA16F) at one
+//! sample, no tile buffer, not a mipmap chain level (the guard before
+//! `pr_fill` in `flush`). tests/pvr_pr_eligibility.rs pins the RGBA16F and 4x
+//! blocks' words.
 //! Every other frame carries an all-zero block even with the knob on, and
 //! the firmware then has nothing to partially render with. Pinned, for a
 //! cleared frame of each kind (the in-crate tests in
@@ -19,8 +21,9 @@
 //!
 //! - one RGBA8 attachment at 800x600: a non-zero block (the scratch size
 //!   1_920_000 B is Mesa's);
-//! - an all-zero block: two and four colour attachments, an RGBA16F target
-//!   (two output dwords), a 4x multisampled target, a three-RGBA16F frame
+//! - a non-zero block: an RGBA16F target (two output dwords) and a 4x
+//!   multisampled RGBA8 target;
+//! - an all-zero block: two and four colour attachments, a three-RGBA16F frame
 //!   that overruns the output registers (the tile-buffer path when the
 //!   stand-in offers one; it is also `nrt > 1`: a lone tile-buffer frame
 //!   cannot be built, a single attachment never overruns four registers),
@@ -709,11 +712,9 @@ fn one_rgba8_attachment_at_800x600_gets_the_block() {
 #[test]
 fn ineligible_frames_carry_a_zero_block_knob_on_and_off() {
     let _g = rig(4);
-    let cases: [(&str, &[GLenum], GLsizei); 7] = [
+    let cases: [(&str, &[GLenum], GLsizei); 5] = [
         ("two RGBA8 attachments", &[GL_RGBA8, GL_RGBA8], 1),
         ("four RGBA8 attachments", &[GL_RGBA8; 4], 1),
-        ("RGBA16F (two output dwords)", &[GL_RGBA16F], 1),
-        ("4x multisampled RGBA8", &[GL_RGBA8], 4),
         ("three RGBA16F (overruns the output registers)", &[GL_RGBA16F; 3], 1),
         ("RGBA16F then RGBA8", &[GL_RGBA16F, GL_RGBA8], 1),
         /* a non-RGBA8-class attachment (R16F) makes the clear fall back to the one-dword clear program (so the
@@ -742,7 +743,9 @@ fn the_block_follows_the_frame_not_the_previous_one() {
         (&[GL_RGBA8][..], 1, true),
         (&[GL_RGBA8; 2][..], 1, false),
         (&[GL_RGBA8][..], 1, true),
-        (&[GL_RGBA8][..], 4, false),
+        (&[GL_RGBA8][..], 4, true),
+        (&[GL_RGBA8; 2][..], 1, false),
+        (&[GL_RGBA16F][..], 1, true),
         (&[GL_RGBA8][..], 1, true),
     ] {
         /* the PowerVR keeps a 4x framebuffer object only with msaa-fbo */
@@ -792,10 +795,11 @@ fn a_mipmap_chain_levels_frame_gets_no_block() {
 
 /// A 4x frame that is not a sample-store one (the store's allocation is
 /// refused: it reloads its resolved colour) has one attachment and the
-/// one-dword clear program, so only `samples <= 1` refuses it.
+/// one-dword clear program: the 4x load shader reloads it, as it does the
+/// sample-store frame.
 #[cfg(feature = "msaa-fbo")]
 #[test]
-fn a_4x_frame_without_a_sample_store_gets_no_block() {
+fn a_4x_frame_without_a_sample_store_gets_the_block() {
     let _g = rig(4);
     /* a fresh back end: an earlier 4x test leaves the sample store allocated (test order is not fixed) */
     pvr_backend_shutdown();
@@ -804,9 +808,8 @@ fn a_4x_frame_without_a_sample_store_gets_no_block() {
     let k = kicks_of(&[GL_RGBA8], 4, 1);
     assert!(!with_platform(|p| p.refuse_big_once), "the sample store was asked for and refused");
     assert_eq!(k[0].samples, 4);
-    for k in &k {
-        assert!(is_zero(&k.frag_pr), "{:?}", k.frag_pr);
-    }
+    assert!(!is_zero(&k.last().unwrap().frag_pr), "{:?}", k.last().unwrap().frag_pr);
+    assert_eq!(k.last().unwrap().frag_pr.spm_scratch_bytes, 7_680_000);
 }
 
 /// Without `msaa-fbo` (the PowerVR's `max_samples` 0) there is no 4x frame:
