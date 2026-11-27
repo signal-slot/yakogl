@@ -58,9 +58,12 @@ section 4, each in the commit that adds what the row runs
 | E8 | `tools/v3d/pi5/*.clif` and the `gltest-shaders71`, `gltest-mesa71` data | no row of their own: read by E1 and E2 | as E1/E2 | `tools/v3d/*` → `v3d v3d71` (`:229`) |
 
 What is **not** in the gate on the tip: any `gpu-v3d71` feature row (the feature
-does not exist, `Cargo.toml:96` is `gpu-v3d`, `gl-table:35` and `:256`); an
-`rpi_5` **gl_test** image row (the board files `rpi_5.conf` and `rpi_5.overlay` exist since 1bb98759, but `check.sh` has no row that builds them); any Pi 5 stage of `board-stage.sh` (`board-stage.sh:67`,
-`:175`, `:182`: `pi4` is the only Pi board); a dEQP image arm for `rpi_5`.
+exists since `9f286b5e` — `Cargo.toml:109` — but `check.sh` has no row that
+uses it); an `rpi_5` **gl_test** image row (the board files `rpi_5.conf` and
+`rpi_5.overlay` exist since 1bb98759 and the image links `-Werror` since
+`85afd0cf`, but `check.sh` has no row that builds it); any Pi 5 stage of
+`board-stage.sh` (`board-stage.sh:67`, `:175`, `:182`: `pi4` is the only Pi
+board). The dEQP image arm for `rpi_5` exists since `e4001734`.
 
 The Pi 4 row to copy is `check.sh:4955-4956`:
 `scope v3d gltest drivers samples` /
@@ -90,21 +93,35 @@ Feature sets and commands are as `docs/notes/v3d71-gl-table.md` section 4 decide
 
 ## 4. Order of the open items
 
-1. **`backend71`** (ready): adds `gpu-v3d71 = ["gpu-v3d"]` to `Cargo.toml` and
+1. **`backend71`** (done as `feat71`, `9f286b5e`: `gpu-v3d71 = ["gpu-v3d"]` is
+   in `Cargo.toml` (`:109`) and `table71` is the `gpu-v3d71` build's
+   `g_backend`; the zephyr 7.1 library build passes the feature to cargo
+   (`79c8e4f2`). The N1, N2 and N4 rows themselves are still open, they wait
+   for `check.sh`'s holder): adds `gpu-v3d71 = ["gpu-v3d"]` to `Cargo.toml` and
    `V3D71_CONFIG` plus N1, N2, N4 (and N3/N5 for its own tests) in the same
    commit, because a new feature joins `check.sh`'s lists then
    (`CLAUDE.md`, "Common failures"). Its `lib.rs` "exactly one GPU feature" and
    `shaderc-online` rules are in `gl-table:92-93`. It also adds `ffi71`'s
    layout check as a row-less cargo test. The cargo rows have no env; the first
    ones to go red are the 4.2 rows if `src/v3d/mod.rs` changes, so the hook is a
-   `mod` line or a cfg only (the plan's rule).
-2. **`gltest71`**: N6 (the rpi_5 gl_test image, `-Werror`) and N5. Both need
+   `mod` line or a cfg only (the plan's rule). No N3 row is needed for the 7.1
+   tests merged so far: every `tests/v3d71_*.rs` header names the 4.2
+   `V3D_CONFIG` feature set, so E2 runs them.
+2. **`gltest71`** (done: the `V3D71` branch and `main_rpi5.c` `dec352ac`, the
+   image links `-Werror` `85afd0cf`): N6 (the rpi_5 gl_test image, `-Werror`) and N5. Both need
    `ZEPHYR_WS`. N6 can only be green after `backend71` (the Kconfig help names
    the feature, `gl-table:114-118`) and `werrdry71` (the trial build) listed what
-   to fix; the board `.conf`/`.overlay` have merged (1bb98759, no row builds them yet); `backend71` has not (`Cargo.toml` has no `gpu-v3d71`, checked 2026-11-25), so N1 to N6 are all still open.
+   to fix — both happened (`9f286b5e`, `85afd0cf`); the board `.conf`/`.overlay`
+   have merged (1bb98759), so the only thing left for N5 and N6 is `check.sh`
+   itself (its holder has the row texts).
 3. **`stage71`**: N9 (and N8's `board-stage` side). Reaches `tools` only, so a
    PR of it runs no cargo or Zephyr row: it can land alone.
-4. **`board71`** (after 1 to 3): the board session; RESULTS and STATUS rows
+4. **`board71`** (after 1 to 3; **ran 2026-11-27, `d2dbaa7e`**: all six cases
+   FAIL for the one named cause of the product table recording nothing —
+   `docs/notes/rpi5-deqp-glmark2.md` section 2 — so it produced no pass to
+   record; its replay of the recorded console is in `board_selftest.sh`, the
+   row `:4258`'s file, and a re-run waits for a product-form 7.1 table): the
+   board session; RESULTS and STATUS rows
    (N10). Adds no row.
 5. **`mip71`, `cases71`, `board71-tex`, `texprobe71`, `texverdict71`**: N3 rows
    for their tests; N7 for the probe; N8 for `texverdict71`.
