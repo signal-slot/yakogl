@@ -41,7 +41,7 @@ use super::select::{
 };
 use super::select71::{interleave71, interleave71_sig, select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
-use super::vop71::{Instr71, Op71, Selected71, Uniform};
+use super::vop71::{AddOp71, Dst71, Instr71, MulOp71, Op71, Selected71, Src71, Uniform};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{self, IoKind};
 use crate::shaderc::online::powervr::unroll::Trip;
@@ -57,7 +57,8 @@ pub enum V3d71Error {
     Chain(V3dError),
     Select(Select71Error),
     /// [`Alloc71Error::DoesNotFit`] here: the values did not fit 2 threads'
-    /// registers at any selection pressure (no spilling yet).
+    /// registers at any selection pressure, in select71's order or
+    /// [`sunk71`]'s (no spilling yet).
     Alloc(Alloc71Error),
     Sched(Sched71Error),
     /// Instruction `.0` does not encode.
@@ -208,7 +209,20 @@ pub const TARGET71: Target = Target { vpm_size: 65536 };
 /// es100 and qpu_corpus_71 the signal-aware order never shortened a vertex
 /// or coordinate shader, so those are not built a third time.)
 pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code71<'a>, u32), V3d71Error> {
-    let sel71 = select71(sel, a)?;
+    build71_order(sel, single_seg, false, a)
+}
+
+/// [`build71`], with select71's operations first [`sunk71`] when `sink`.
+fn build71_order<'a>(
+    sel: &Selected<'_>,
+    single_seg: bool,
+    sink: bool,
+    a: &Arena<'a>,
+) -> Result<(Code71<'a>, u32), V3d71Error> {
+    let mut sel71 = select71(sel, a)?;
+    if sink {
+        sel71 = sunk71(&sel71, a)?;
+    }
     let four = tmu_input_writes(sel.ops) <= 16 / 4;
     let before = a.used();
     let plain = finish71(&sel71, four, single_seg, a)?;
@@ -317,21 +331,162 @@ fn starts_in_last_section(sel: &Selected<'_>) -> bool {
 
 /* chain-hook replaces this: chain.rs:249-264 `under_pressure`, with
  * build71 for build and alloc71's DoesNotFit (2 threads) for chain.rs's
- * DOES_NOT_FIT. */
+ * DOES_NOT_FIT. Then, 7.1 only, every pressure again with the operations
+ * [`sunk71`]: the last resort for a stage 4.2 fits only through its
+ * accumulators (none at 7.1), so a stage that fits today is built as
+ * before. */
 fn under_pressure71<'a>(
     stages: &[Pressure],
     select: impl Fn(Pressure) -> Result<Selected<'a>, SelectError>,
     single_seg: bool,
     a: &Arena<'a>,
 ) -> Result<(Selected<'a>, (Code71<'a>, u32)), V3d71Error> {
-    for &pr in stages {
-        let sel = select(pr)?;
-        match build71(&sel, single_seg && starts_in_last_section(&sel), a) {
-            Err(V3d71Error::Alloc(Alloc71Error::DoesNotFit)) => continue,
-            r => return Ok((sel, r?)),
+    for sink in [false, true] {
+        for &pr in stages {
+            let sel = select(pr)?;
+            match build71_order(&sel, single_seg && starts_in_last_section(&sel), sink, a) {
+                Err(V3d71Error::Alloc(Alloc71Error::DoesNotFit)) => continue,
+                r => return Ok((sel, r?)),
+            }
         }
     }
     Err(V3d71Error::Alloc(Alloc71Error::DoesNotFit))
+}
+
+/// An operation [`sunk71`] may move later: a plain ALU operation or a
+/// uniform load into a virtual register, reading only virtual registers
+/// and small immediates. Left in place: SFU operations (their latency),
+/// the VPM, TMU, TLB and flag operations, `multop`/`umul24` (a pair
+/// through rtop), lane-crossing and per-lane-state operations, and every
+/// reader of the payload or of ldvary's C term.
+fn sinkable71(o: &Op71) -> bool {
+    use AddOp71 as A;
+    use MulOp71 as M;
+    let plain = |s: &Src71| matches!(s, Src71::V(_) | Src71::Unpacked(..) | Src71::SmallImm(_) | Src71::None);
+    match *o {
+        Op71::Ldunif { .. } => true,
+        Op71::Add { op, dst: Dst71::V(_), a, b } => {
+            plain(&a)
+                && plain(&b)
+                && matches!(
+                    op,
+                    A::Fadd
+                        | A::Faddnf
+                        | A::Vfpack
+                        | A::Add
+                        | A::Sub
+                        | A::Fsub
+                        | A::Min
+                        | A::Max
+                        | A::Umin
+                        | A::Umax
+                        | A::Shl
+                        | A::Shr
+                        | A::Asr
+                        | A::Ror
+                        | A::Fmin
+                        | A::Fmax
+                        | A::Vfmin
+                        | A::Vfmax
+                        | A::Vfadd
+                        | A::Vfsub
+                        | A::Vfmov
+                        | A::Vfabs
+                        | A::Vfneg
+                        | A::Vfnab
+                        | A::And
+                        | A::Or
+                        | A::Xor
+                        | A::Vadd
+                        | A::Vsub
+                        | A::Not
+                        | A::Neg
+                        | A::Fround
+                        | A::Ftoin
+                        | A::Ftrunc
+                        | A::Ftoiz
+                        | A::Ffloor
+                        | A::Ftouz
+                        | A::Fceil
+                        | A::Ftoc
+                        | A::Itof
+                        | A::Clz
+                        | A::Utof
+                        | A::Fmov
+                        | A::Mov
+                        | A::Vpack
+                        | A::V8pack
+                        | A::V10pack
+                        | A::V11fpack
+                )
+        }
+        Op71::Mul { op, dst: Dst71::V(_), a, b } => {
+            plain(&a)
+                && plain(&b)
+                && matches!(
+                    op,
+                    M::Add
+                        | M::Sub
+                        | M::Vfmul
+                        | M::Smul24
+                        | M::Fmov
+                        | M::Mov
+                        | M::Fmul
+                        | M::Ftounorm16
+                        | M::Ftosnorm16
+                        | M::Vftounorm8
+                        | M::Vftosnorm8
+                        | M::Funpackunormlo
+                        | M::Funpackunormhi
+                        | M::Funpacksnormlo
+                        | M::Funpacksnormhi
+                        | M::Vftounorm10lo
+                        | M::Vftounorm10hi
+                        | M::V8dot
+                )
+        }
+        _ => false,
+    }
+}
+
+/// `sel` with each [`sinkable71`] operation moved down to just before the
+/// first operation that reads its result, the last first, so that a chain
+/// of them follows its consumer down: a vertex shader that computes every
+/// varying before its first `stvpmv` then computes each one next to its
+/// store, and holds a few values at a time where it held them all. (Mesa
+/// emits each output's VPM write where NIR stores it, `store_output` at
+/// nir_to_vir.c:3734-3736 through `emit_store_output_vs`, :3016-3034, so its
+/// register pressure is that of this order; for the GLES2 varyings limit
+/// shapes of tests/shaderc71_limits.rs its 7.1 vertex shaders and ours are
+/// the same length at the same 4 threads.) An operation stays above every [`Op71::CondMov`] or
+/// [`Op71::Copy`] that rewrites one of its operands (the value it reads
+/// would change), and a uniform load above every `ldvary` and read of its
+/// C term (its implicit rf0 write would land on C). A program with control
+/// flow, and one where nothing moves, is returned as it is.
+fn sunk71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, ArenaError> {
+    let ops = a.alloc_filled(sel.ops.len(), Op71::Thrsw)?;
+    ops.copy_from_slice(sel.ops);
+    if !sel.ops.iter().any(Op71::is_control_flow) {
+        for i in (0..ops.len()).rev() {
+            let o = ops[i];
+            let Some(v) = o.def() else { continue };
+            if !sinkable71(&o) {
+                continue;
+            }
+            let reads = o.uses();
+            let stop = ops[i + 1..].iter().position(|n| {
+                n.uses().iter().any(|u| u.vreg() == Some(v))
+                    || matches!(*n, Op71::CondMov { dst, .. } | Op71::Copy { dst, .. }
+                        if reads.iter().any(|r| r.vreg() == Some(dst)))
+                    || (matches!(o, Op71::Ldunif { .. })
+                        && (matches!(n, Op71::Ldvary { .. }) || n.uses().contains(&Src71::LdvaryC)))
+            });
+            /* a result nothing reads stays where it is */
+            let Some(k) = stop else { continue };
+            ops[i..=i + k].rotate_left(1);
+        }
+    }
+    Ok(Selected71 { ops, fragment: sel.fragment, vregs: sel.vregs })
 }
 
 /* chain-hook replaces this: chain.rs:266-276 `vertex`. */
@@ -898,5 +1053,68 @@ mod tests {
             compile_stage71(&sel, &a).err(),
             Some(V3d71Error::Verify(VerifyError { ip: 2, rule: "No program-end THRSW found" }))
         );
+    }
+
+    /* sunk71's operations: vregs as numbers */
+    fn sv(n: u32) -> Src71 {
+        Src71::V(super::super::vop71::V(n))
+    }
+    fn un(d: u32, data: u32) -> Op71 {
+        Op71::Ldunif { dst: super::super::vop71::V(d), u: Uniform { contents: 0, data } }
+    }
+    fn fadd(d: u32, x: u32, y: u32) -> Op71 {
+        Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(super::super::vop71::V(d)), a: sv(x), b: sv(y) }
+    }
+    fn st(addr: u32, x: u32) -> Op71 {
+        Op71::Add { op: AddOp71::Stvpmv, dst: Dst71::None, a: sv(addr), b: sv(x) }
+    }
+    fn sunk(ops: &[Op71], fragment: bool) -> std::vec::Vec<Op71> {
+        let mut buf = std::vec![0u8; 1 << 16];
+        let a = Arena::new(&mut buf);
+        let sel = Selected71 { ops, fragment, vregs: 64 };
+        sunk71(&sel, &a).unwrap().ops.to_vec()
+    }
+
+    #[test]
+    fn sunk71_computes_each_output_next_to_its_store() {
+        /* the shape of the GLES2 varyings limit: every output computed,
+         * then every output stored */
+        let ops = [un(0, 0), fadd(1, 0, 0), un(2, 1), fadd(3, 2, 2), un(4, 9), st(4, 1), un(5, 9), st(5, 3)];
+        let want = [un(4, 9), un(0, 0), fadd(1, 0, 0), st(4, 1), un(5, 9), un(2, 1), fadd(3, 2, 2), st(5, 3)];
+        assert_eq!(sunk(&ops, false), want);
+        /* each value already next to its reader: nothing moves */
+        let tight = [un(0, 0), fadd(1, 0, 0), st(0, 1)];
+        assert_eq!(sunk(&tight, false), tight);
+        /* a result nothing reads stays where it is */
+        let dead = [un(0, 0), fadd(1, 0, 0), un(2, 1), st(2, 0)];
+        assert_eq!(sunk(&dead, false), dead);
+    }
+
+    #[test]
+    fn sunk71_keeps_side_effects_rewrites_and_ldvary_c_in_order() {
+        /* a read of an operand stays above a CondMov that rewrites it */
+        let cm = Op71::CondMov { dst: super::super::vop71::V(0), src: sv(9), cond: super::super::isa::Cond::IfA };
+        let ops = [un(0, 0), fadd(1, 0, 0), cm, un(2, 1), st(2, 1)];
+        assert_eq!(sunk(&ops, false), [un(0, 0), fadd(1, 0, 0), cm, un(2, 1), st(2, 1)]);
+        /* a uniform load stays above an ldvary and a read of its C */
+        let lv = Op71::Ldvary { dst: super::super::vop71::V(3) };
+        let c = Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(super::super::vop71::V(4)), a: sv(3), b: Src71::LdvaryC };
+        let ops = [un(0, 0), lv, c, fadd(5, 0, 4)];
+        let got = sunk(&ops, true);
+        assert_eq!(got[0], un(0, 0), "{got:?}");
+        /* an SFU, a VPM read and a stvpmv never move */
+        let rcp = Op71::Sfu { op: super::super::vop71::Sfu71::Recip, dst: super::super::vop71::V(1), a: sv(0) };
+        let ld =
+            Op71::Add { op: AddOp71::LdvpmvIn, dst: Dst71::V(super::super::vop71::V(2)), a: sv(0), b: Src71::None };
+        let ops = [un(0, 0), rcp, ld, un(3, 1), st(3, 3), st(3, 1), st(3, 2)];
+        let got = sunk(&ops, false);
+        assert_eq!(&got[1..3], &[rcp, ld]);
+        assert_eq!(&got[4..], &[st(3, 3), st(3, 1), st(3, 2)]);
+    }
+
+    #[test]
+    fn sunk71_leaves_a_program_with_control_flow_as_it_is() {
+        let ops = [un(0, 0), fadd(1, 0, 0), Op71::LoopHead, un(2, 1), st(2, 1)];
+        assert_eq!(sunk(&ops, false), ops);
     }
 }
