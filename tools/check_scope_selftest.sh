@@ -380,6 +380,10 @@ expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
 out=$(plan tools/probes/verdin_imx95/imx95_scmi/src/main.c)
 expect "verdin_imx95 probe: the probe images row" '^plan  zephyr  verdin_imx95 probe images' "$out"
+# the glmark2 image for the Verdin iMX95 (panel on, built only): a change under
+# its sample directory plans the row
+out=$(plan driver/samples/zephyr/glmark2/CMakeLists.txt)
+expect "verdin_imx95 glmark2 sample: the glmark2 iMX95 image row" '^plan  zephyr  verdin_imx95 glmark2 image' "$out"
 out=$(plan driver/zephyr/lib/board/rpi5/rpi_wdog.c)
 expect "board layer: the rpi_5 probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 # the Raspberry Pi Zero 2 W's carried files: its image row and the row that
