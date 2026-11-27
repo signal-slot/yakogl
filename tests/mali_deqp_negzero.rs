@@ -58,7 +58,7 @@ fn negzero_constglobal_reduced() {
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (its constant fused multiply-adds fold now)"]
+#[ignore = "refused: control flow (its vertex kernels are lowered, arith step 2; an `if` is next)"]
 fn negzero_constglobal_vs() {
     mali_ref::assert_matches("deqp_negzero_constglobal_vs");
 }
@@ -103,7 +103,7 @@ const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_constglobal_fs", ARITH),
-    ("deqp_negzero_constglobal_vs", ARITH),
+    ("deqp_negzero_constglobal_vs", "control flow (if, a loop, a return before the end)"),
     ("deqp_negzero_mainbuiltin_vs", ARITH),
     ("deqp_negzero_mainbuiltin_fs", ARITH),
     ("deqp_negzero_mainplain_vs", ARITH),

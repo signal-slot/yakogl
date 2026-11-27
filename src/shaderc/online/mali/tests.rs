@@ -1153,8 +1153,13 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         .collect();
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
-        /* `abs`, `fract` and `sqrt` are taken; `exp2` is not */
-        (VS, "attribute vec4 p; void main(){ gl_Position = exp2(p); }", MaliError::Arithmetic),
+        /* `abs`, `fract`, `sqrt` and the highp kernels are taken; a
+         * mediump `max` of two computed operands is not */
+        (
+            VS,
+            "attribute mediump vec4 p; attribute mediump vec4 q; varying mediump vec4 v; void main(){ gl_Position = p; v = max(p, q); }",
+            MaliError::Arithmetic,
+        ),
         /* a constant times a product with a constant across a change of
          * width: GLSL's reassociate_constant moves it (glsl.rs), which is
          * not transcribed for a vector times a scalar product */
@@ -2773,14 +2778,16 @@ fn a_vertex_folded_saturate_is_byte_equal_to_mesa_26_2_1() {
 }
 
 /// The reductions and clamps no reference draws stay refused, at the
-/// arithmetic gap, rather than guessed: a plain two-operand `max`, `any`
-/// of a four-lane compare, `all` over three lanes, `any` read in another
-/// lane order than the reference's.
+/// arithmetic gap, rather than guessed: a plain two-operand `max` of
+/// mediump operands (Mesa's fp16 pair, arith step 6; the highp one is
+/// deqp_arith_op_common_max_vs_highp's `FMAX.f32`), `any` of a four-lane
+/// compare, `all` over three lanes, `any` read in another lane order than
+/// the reference's.
 #[test]
 fn vertex_reductions_and_bounds_no_reference_draws_are_refused() {
     for src in [
-        "attribute vec4 p; attribute vec4 q; varying vec4 v; void main(){ gl_Position = p; v = max(p, q); }",
-        "attribute vec4 p; attribute vec4 q; varying vec4 v; void main(){ gl_Position = p; v = min(p, q); }",
+        "attribute mediump vec4 p; attribute mediump vec4 q; varying mediump vec4 v; void main(){ gl_Position = p; v = max(p, q); }",
+        "attribute mediump vec4 p; attribute mediump vec4 q; varying mediump vec4 v; void main(){ gl_Position = p; v = min(p, q); }",
         "attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(p, vec4(0.5))) ? 1.0 : 0.0); }",
         "attribute vec4 p; attribute vec3 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(all(equal(n, vec3(0.0))) ? 1.0 : 0.0); }",
         "attribute vec4 p; attribute vec3 n; varying vec4 v; void main(){ gl_Position = p; v = vec4(any(greaterThan(n.zyx, vec3(0.5))) ? 1.0 : 0.0); }",

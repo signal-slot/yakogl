@@ -258,6 +258,52 @@ pub fn fexp2(p: &mut Prog<'_>, x: Src, log2_base: Src) -> Result<u16, MaliError>
     ins(p, Op::FexpF32, &[fixed, scale])
 }
 
+/// `bi_lower_fsincos_32(dst, x, cos)` (bifrost_compile.c:2552) of the fp32
+/// value `x`: the argument's sixty-fourths of a quarter turn (`FMA.f32 x,
+/// 2/pi, bias`), the residue (`FADD.f32 -bias`, `FMA.f32 t, -pi/2, x`), the
+/// two table reads, `e * e / 2` (`FMA_RSCALE.f32`, scale -1), then the
+/// result's three instructions (deqp_arith_op_angle_sin_vs_highp words
+/// 2-10). `sin` and `cos` of one `x` (`tan`'s quotient) share everything
+/// before those three: `nir_opt_cse` of the lowered expansions, here a
+/// look-up of the instructions already made in the block
+/// (deqp_arith_op_angle_tan_vs_highp: one `FSIN_TABLE.u6`, one
+/// `FCOS_TABLE.u6`).
+pub fn fsincos(p: &mut Prog<'_>, x: Src, cos: bool) -> Result<u16, MaliError> {
+    const TWO_OVER_PI: u32 = 0x3f22_f98c;
+    const MPI_OVER_TWO: u32 = 0xbfc9_0fd0;
+    const SINCOS_BIAS: u32 = 0x4940_0000;
+    let c = |bits: u32| Src::of(Idx::Const(bits));
+    let neg = |s: Src| Src { neg: !s.neg, ..s };
+    let shared = |p: &mut Prog<'_>, op: Op, s: &[Src]| -> Result<Src, MaliError> {
+        let made = p.as_slice().iter().find(|i| {
+            i.op == op
+                && i.block == p.cur
+                && i.nd == 1
+                && i.clamp == 0
+                && i.ns as usize == s.len()
+                && i.src[..s.len()] == *s
+        });
+        match made.map(|i| i.dest[0].idx) {
+            Some(Idx::Ssa(v, 0)) => Ok(Src::ssa(v)),
+            _ => Ok(Src::ssa(ins(p, op, s)?)),
+        }
+    };
+    let x_u6 = shared(p, Op::FmaF32, &[x, c(TWO_OVER_PI), c(SINCOS_BIAS)])?;
+    /* `FADD_IMM` once fused (opt.rs `fuse_add_imm`) */
+    let t = shared(p, Op::FaddF32, &[x_u6, neg(c(SINCOS_BIAS))])?;
+    let e = shared(p, Op::FmaF32, &[t, c(MPI_OVER_TWO), x])?;
+    let sinx = shared(p, Op::FsinTableU6, &[x_u6])?;
+    let cosx = shared(p, Op::FcosTableU6, &[x_u6])?;
+    /* e * e * 2^-1, the scale an integer source */
+    let e2h = shared(p, Op::FmaRscaleF32, &[e, e, NEG_ZERO, c(0xffff_ffff)])?;
+    let quad = Src::ssa(ins(p, Op::FmaF32, &[neg(e2h), if cos { cosx } else { sinx }, NEG_ZERO])?);
+    let t = p.temp()?;
+    let mut i = Ins::new(Op::FmaF32, &[Dest::ssa(t)], &[e, if cos { neg(sinx) } else { cosx }, quad]);
+    i.clamp = clamp::M1_1;
+    p.push(i)?;
+    ins(p, Op::FaddF32, &[Src::ssa(t), if cos { cosx } else { sinx }])
+}
+
 /// The fraction bits of `bi_fexp_32`'s fixed point (`bi_imm_u32(24)`).
 const EXP2_FIXED_BITS: u32 = 24;
 
@@ -329,6 +375,13 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             let l = Src::ssa(flog2(p, s[0])?);
             fexp2(p, s[1], l)?
         }
+        /* the fp32 kernels of a vertex shader's built-ins (arith step 2):
+         * `bi_lower_fsincos_32`, `bi_flog2_32`, `bi_fexp_32` on the value
+         * as it is, no widening and no narrowing */
+        (Alu::Fsin, 32, 1) => fsincos(p, s[0], false)?,
+        (Alu::Fcos, 32, 1) => fsincos(p, s[0], true)?,
+        (Alu::Flog2, 32, 1) => flog2(p, s[0])?,
+        (Alu::Fexp2, 32, 1) => fexp2(p, s[0], ONE)?,
         (Alu::Fmin, 16, 2) => ins(p, Op::FminV2f16, &s[..2])?,
         (Alu::Frsq, 16, 1) => ins(p, Op::FrsqF16, &[lone(s[0])])?,
         (Alu::Frcp, 16, 1) => ins(p, Op::FrcpF16, &[lone(s[0])])?,

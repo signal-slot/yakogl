@@ -61,6 +61,32 @@ const LOWERED: &[&str] = &[
     "op_common_floor_fs_highp",
     "op_common_max_fs_highp",
     "op_common_min_fs_highp",
+    /* arith step 2: highp vertex `ceil` (`FROUND.f32.rtp`), `sign` (two
+     * `FCMP_OR.f32.lt.f1` and an `FADD.f32`), `min`, `max`, `clamp` of two
+     * computed operands (`FMAX.f32`, `FMIN.f32`), each narrowed where the
+     * mediump `color` takes it */
+    "op_common_ceil_vs_highp",
+    "op_common_clamp_vs_highp",
+    "op_common_max_vs_highp",
+    "op_common_min_vs_highp",
+    "op_common_sign_vs_highp",
+    /* arith step 2, the kernels: vertex `sin`, `cos`, `log2`, `exp2` and
+     * `pow` at fp32 (the mediump references' words are the highp ones'),
+     * highp `tan` (shared reduction and tables), `exp`, `log` */
+    "op_angle_cos_vs_highp",
+    "op_angle_cos_vs_mediump",
+    "op_angle_sin_vs_highp",
+    "op_angle_sin_vs_mediump",
+    "op_angle_tan_vs_highp",
+    "op_exponential_exp2_vs_highp",
+    "op_exponential_exp2_vs_mediump",
+    "op_exponential_exp_vs_highp",
+    "op_exponential_log2_vs_highp",
+    "op_exponential_log2_vs_mediump",
+    "op_exponential_log_vs_highp",
+    "op_exponential_pow_vs_highp",
+    "op_exponential_pow_vs_mediump",
+    "random_fexp2_vs_none",
 ];
 
 /// The references that compile with other words than Mesa's. None yet.
@@ -147,23 +173,18 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.angle.cos fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.cos.mediump_float_fragment */
     ("op_angle_cos_fs_mediump", ARITH),
     /* op.angle.cos vs highp: 4 cases of shaders.operator.angle_and_trigonometry.cos.highp_float_vertex */
-    ("op_angle_cos_vs_highp", ARITH),
     /* op.angle.cos vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.cos.mediump_float_vertex */
-    ("op_angle_cos_vs_mediump", ARITH),
     /* op.angle.sin fs highp: 4 cases of shaders.operator.angle_and_trigonometry.sin.highp_float_fragment */
     ("op_angle_sin_fs_highp", ARITH),
     /* op.angle.sin fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.sin.mediump_float_fragment */
     ("op_angle_sin_fs_mediump", ARITH),
     /* op.angle.sin vs highp: 4 cases of shaders.operator.angle_and_trigonometry.sin.highp_float_vertex */
-    ("op_angle_sin_vs_highp", ARITH),
     /* op.angle.sin vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.sin.mediump_float_vertex */
-    ("op_angle_sin_vs_mediump", ARITH),
     /* op.angle.tan fs highp: 4 cases of shaders.operator.angle_and_trigonometry.tan.highp_float_fragment */
     ("op_angle_tan_fs_highp", ARITH),
     /* op.angle.tan fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.tan.mediump_float_fragment */
     ("op_angle_tan_fs_mediump", ARITH),
     /* op.angle.tan vs highp: 4 cases of shaders.operator.angle_and_trigonometry.tan.highp_float_vertex */
-    ("op_angle_tan_vs_highp", ARITH),
     /* op.angle.tan vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.tan.mediump_float_vertex */
     ("op_angle_tan_vs_mediump", ARITH),
     /* op.binary.add_assign fs mediump: 8 cases of shaders.operator.binary_operator.add_assign_effect.mediump_vec3_float_fragment */
@@ -199,19 +220,15 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.abs fs mediump: 2 cases of shaders.operator.common_functions.abs.mediump_vec3_fragment */
     ("op_common_abs_fs_mediump", OPERAND),
     /* op.common.ceil vs highp: 4 cases of shaders.operator.common_functions.ceil.highp_float_vertex */
-    ("op_common_ceil_vs_highp", ARITH),
     /* op.common.ceil vs mediump: 8 cases of shaders.operator.common_functions.ceil.mediump_float_vertex */
     ("op_common_ceil_vs_mediump", ARITH),
     /* op.common.clamp vs highp: 7 cases of shaders.operator.common_functions.clamp.highp_float_vertex */
-    ("op_common_clamp_vs_highp", ARITH),
     /* op.common.clamp vs mediump: 14 cases of shaders.operator.common_functions.clamp.mediump_float_vertex */
     ("op_common_clamp_vs_mediump", ARITH),
     /* op.common.max vs highp: 7 cases of shaders.operator.common_functions.max.highp_float_vertex */
-    ("op_common_max_vs_highp", ARITH),
     /* op.common.max vs mediump: 14 cases of shaders.operator.common_functions.max.mediump_float_vertex */
     ("op_common_max_vs_mediump", ARITH),
     /* op.common.min vs highp: 7 cases of shaders.operator.common_functions.min.highp_float_vertex */
-    ("op_common_min_vs_highp", ARITH),
     /* op.common.min vs mediump: 14 cases of shaders.operator.common_functions.min.mediump_float_vertex */
     ("op_common_min_vs_mediump", ARITH),
     /* op.common.mix fs mediump: 4 cases of shaders.operator.common_functions.mix.mediump_vec3_float_fragment */
@@ -222,7 +239,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.common.sign fs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_fragment */
     ("op_common_sign_fs_highp", ARITH),
     /* op.common.sign vs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_vertex */
-    ("op_common_sign_vs_highp", ARITH),
     /* op.common.sign vs mediump: 8 cases of shaders.operator.common_functions.sign.mediump_float_vertex */
     ("op_common_sign_vs_mediump", ARITH),
     /* op.common.smoothstep fs highp: 7 cases of shaders.operator.common_functions.smoothstep.highp_float_fragment */
@@ -234,11 +250,8 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.exponential.exp2 fs mediump: 2 cases of shaders.operator.exponential.exp2.mediump_vec3_fragment */
     ("op_exponential_exp2_fs_mediump", OPERAND),
     /* op.exponential.exp2 vs highp: 4 cases of shaders.operator.exponential.exp2.highp_float_vertex */
-    ("op_exponential_exp2_vs_highp", ARITH),
     /* op.exponential.exp2 vs mediump: 4 cases of shaders.operator.exponential.exp2.mediump_float_vertex */
-    ("op_exponential_exp2_vs_mediump", ARITH),
     /* op.exponential.exp vs highp: 4 cases of shaders.operator.exponential.exp.highp_float_vertex */
-    ("op_exponential_exp_vs_highp", ARITH),
     /* op.exponential.exp vs mediump: 4 cases of shaders.operator.exponential.exp.mediump_float_vertex */
     ("op_exponential_exp_vs_mediump", ARITH),
     /* op.exponential.log2 fs highp: 4 cases of shaders.operator.exponential.log2.highp_float_fragment */
@@ -246,15 +259,12 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.exponential.log2 fs mediump: 4 cases of shaders.operator.exponential.log2.mediump_float_fragment */
     ("op_exponential_log2_fs_mediump", ARITH),
     /* op.exponential.log2 vs highp: 4 cases of shaders.operator.exponential.log2.highp_float_vertex */
-    ("op_exponential_log2_vs_highp", ARITH),
     /* op.exponential.log2 vs mediump: 4 cases of shaders.operator.exponential.log2.mediump_float_vertex */
-    ("op_exponential_log2_vs_mediump", ARITH),
     /* op.exponential.log fs highp: 4 cases of shaders.operator.exponential.log.highp_float_fragment */
     ("op_exponential_log_fs_highp", ARITH),
     /* op.exponential.log fs mediump: 4 cases of shaders.operator.exponential.log.mediump_float_fragment */
     ("op_exponential_log_fs_mediump", ARITH),
     /* op.exponential.log vs highp: 4 cases of shaders.operator.exponential.log.highp_float_vertex */
-    ("op_exponential_log_vs_highp", ARITH),
     /* op.exponential.log vs mediump: 4 cases of shaders.operator.exponential.log.mediump_float_vertex */
     ("op_exponential_log_vs_mediump", ARITH),
     /* op.exponential.pow fs highp: 4 cases of shaders.operator.exponential.pow.highp_float_fragment */
@@ -262,9 +272,7 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.exponential.pow fs mediump: 4 cases of shaders.operator.exponential.pow.mediump_float_fragment */
     ("op_exponential_pow_fs_mediump", ARITH),
     /* op.exponential.pow vs highp: 4 cases of shaders.operator.exponential.pow.highp_float_vertex */
-    ("op_exponential_pow_vs_highp", ARITH),
     /* op.exponential.pow vs mediump: 4 cases of shaders.operator.exponential.pow.mediump_float_vertex */
-    ("op_exponential_pow_vs_mediump", ARITH),
     /* op.geometric.cross fs mediump: 1 cases of shaders.operator.geometric.cross.mediump_vec3_fragment */
     ("op_geometric_cross_fs_mediump", OPERAND),
     /* op.geometric.faceforward fs highp: 4 cases of shaders.operator.geometric.faceforward.highp_float_fragment */
@@ -318,7 +326,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* random.fexp2 fs mediump: 33 cases of shaders.random.all_features.fragment.17 */
     ("random_fexp2_fs_mediump", ARITH),
     /* random.fexp2 vs none: 46 cases of shaders.random.all_features.vertex.11 */
-    ("random_fexp2_vs_none", ARITH),
     /* random.flog2 fs mediump: 41 cases of shaders.random.all_features.fragment.1 */
     ("random_flog2_fs_mediump", ARITH),
     /* random.flog2 vs none: 24 cases of shaders.random.all_features.vertex.20 */
@@ -514,13 +521,11 @@ fn op_angle_cos_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.cos, vs, highp; 4 cases)"]
 fn op_angle_cos_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_cos_vs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.cos, vs, mediump; 8 cases)"]
 fn op_angle_cos_vs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_angle_cos_vs_mediump");
 }
@@ -538,13 +543,11 @@ fn op_angle_sin_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.sin, vs, highp; 4 cases)"]
 fn op_angle_sin_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_sin_vs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.sin, vs, mediump; 8 cases)"]
 fn op_angle_sin_vs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_angle_sin_vs_mediump");
 }
@@ -562,7 +565,6 @@ fn op_angle_tan_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.tan, vs, highp; 4 cases)"]
 fn op_angle_tan_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_tan_vs_highp");
 }
@@ -704,7 +706,6 @@ fn op_common_ceil_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.ceil, vs, highp; 4 cases)"]
 fn op_common_ceil_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_ceil_vs_highp");
 }
@@ -726,7 +727,6 @@ fn op_common_clamp_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.clamp, vs, highp; 7 cases)"]
 fn op_common_clamp_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_clamp_vs_highp");
 }
@@ -758,7 +758,6 @@ fn op_common_max_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.max, vs, highp; 7 cases)"]
 fn op_common_max_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_max_vs_highp");
 }
@@ -780,7 +779,6 @@ fn op_common_min_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.min, vs, highp; 7 cases)"]
 fn op_common_min_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_min_vs_highp");
 }
@@ -820,7 +818,6 @@ fn op_common_sign_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.sign, vs, highp; 4 cases)"]
 fn op_common_sign_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_common_sign_vs_highp");
 }
@@ -856,19 +853,16 @@ fn op_exponential_exp2_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.exp2, vs, highp; 4 cases)"]
 fn op_exponential_exp2_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_exp2_vs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.exp2, vs, mediump; 4 cases)"]
 fn op_exponential_exp2_vs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_exp2_vs_mediump");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.exp, vs, highp; 4 cases)"]
 fn op_exponential_exp_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_exp_vs_highp");
 }
@@ -892,13 +886,11 @@ fn op_exponential_log2_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log2, vs, highp; 4 cases)"]
 fn op_exponential_log2_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log2_vs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log2, vs, mediump; 4 cases)"]
 fn op_exponential_log2_vs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log2_vs_mediump");
 }
@@ -916,7 +908,6 @@ fn op_exponential_log_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log, vs, highp; 4 cases)"]
 fn op_exponential_log_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log_vs_highp");
 }
@@ -940,13 +931,11 @@ fn op_exponential_pow_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.pow, vs, highp; 4 cases)"]
 fn op_exponential_pow_vs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_pow_vs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.pow, vs, mediump; 4 cases)"]
 fn op_exponential_pow_vs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_pow_vs_mediump");
 }
@@ -1118,7 +1107,6 @@ fn random_fexp2_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (random.fexp2, vs, none; 46 cases)"]
 fn random_fexp2_vs_none() {
     mali_ref::assert_matches("deqp_arith_random_fexp2_vs_none");
 }

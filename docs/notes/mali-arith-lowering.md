@@ -500,6 +500,26 @@ kernel. Un-ignore the 21 vertex refs of the table (list in 3.1: `op_angle_{sin,c
 (`vsarith_*`: `vs_clamp` rules, `vsarith_182_fsat`), `mali_vs_fma.rs`, the glmark2 corpus (`fract(sqrt(..))`, `pow`): `vs_clamp`'s second-operand rule is the
 most pinned; `mali-vs-compare-clamp.md` section 3 and `mali-vs-alu-ops.md` hold its references. Needs 1b's `transc32`.
 
+**Landed (train 2), in part.** The highp `ceil` (`FROUND.f32.rtp`), `sign` (two `FCMP_OR.f32.lt.f1` and an `FADD.f32 a, b.neg`) and the
+`min`/`max`/`clamp` of two computed operands (plain `FMAX.f32`/`FMIN.f32`, in the walk's op arm before `vs_clamp`) are byte-equal:
+`op_common_{ceil,sign,min,max,clamp}_vs_highp` (29 cases). Their results are narrowed where the mediump `color` takes them (`vs_stored_sum`
+now knows `Fceil`, `Fmax`, `Fmin` beside `Fadd`). Mediump operands stay refused (step 6's fp16 words).
+
+The kernels landed too, as rows of `emit.rs` (`(Fsin|Fcos|Flog2|Fexp2, 32, 1)`: `fsincos`, `flog2`, `fexp2`; no envelope), with
+the walk's op arm making the nodes and `exp2(log2(a) * b)` the one `fpow`. `tan`'s `sin` and `cos` share the reduction and the
+table reads (`fsincos` reuses the block's instructions). Byte-equal: `op_angle_{sin,cos}_vs_{highp,mediump}`, `op_angle_tan_vs_highp`,
+`op_exponential_{exp2,log2,pow}_vs_{highp,mediump}`, `op_exponential_{exp,log}_vs_highp`, `random_fexp2_vs_none` (14 references).
+A mediump operation on a kernel's result, or a kernel of a computed mediump operand, stays `Arithmetic`: `op_angle_tan_vs_mediump`,
+`op_exponential_{exp,log}_vs_mediump` compiled to fp32 words where Mesa's tails are fp16 (step 6), so they are refused, not accepted.
+Not landed: `random_{flog2,fsin}_vs_none` (other ops of the program) and `other_fmin_vs`.
+
+The references are the scalar `float` case of each bucket. The `vec2`, `vec3` and `vec4` cases of the same operator suites were
+drawn with the drm-shim for this step and compared (HOST-ONLY, not committed): a highp result's narrowing stands after every lane's
+operation (`vs_narrow_assigned`: the vector's `f2fmp` at the assignment), a mediump lane's right after its kernel; `sign` is built on
+the vector (every lane's `0 < x`, then every `x < 0`, then the sums). With that, 66 of the 72 vector and scalar variants of `ceil sign
+min max clamp sin cos tan exp2 exp log2 log pow` that compile are byte-equal and none differs; the six that differed are refused:
+mediump `sin`/`cos` of a vec3 or vec4 and mediump `exp2`/`log2` of a vec4 (Mesa's lane order there is another).
+
 **Step 4 (fs-pairs + `min max clamp`, 216).** Widen the pair builder's admitted forms (`ADMITTED`, ~9807, and the arms at 9012,
 9345, 8391/8472 that raise `FsOperandForm`): a lane alone first in a sum, a uniform first (`op_binary_{add,sub}*`:
 `FADD.v2f16 r1, r1^, r0.h00` with a **narrowed varying** `FADD.f32 r.h0, r, 0x0.neg` as one side and `V2F32_TO_V2F16` as the pair), `.neg/.abs`

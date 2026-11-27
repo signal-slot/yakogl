@@ -78,7 +78,7 @@ fn constrnd_lod_const_vs() {
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (log2(30.0) of a constant, Mesa's libm fold; then cos and log of an attribute, plan #367's vertex ARITH)"]
+#[ignore = "refused: a fused multiply-add other than a matrix product's (its cos and log of an attribute are lowered, arith step 2; atan's polynomial of an attribute is next)"]
 fn constrnd_atan_const_vs() {
     mali_ref::assert_matches("deqp_constrnd_atan_const_vs");
 }
@@ -95,7 +95,7 @@ const REFUSED: &[(&str, &str)] = &[
     ),
     ("deqp_constrnd_sqrt_zero_vs", ARITH),
     ("deqp_constrnd_int_bits_vs", "a shape Mesa's algebraic rules rewrite without a reference"),
-    ("deqp_constrnd_atan_const_vs", ARITH),
+    ("deqp_constrnd_atan_const_vs", "a fused multiply-add other than a matrix product's (a built-in function's)"),
 ];
 
 #[test]
