@@ -1572,3 +1572,44 @@ HOST-ONLY. Five references move; no glmark2 verdict moves
 
 `CapEdit::Add` now takes any immediate for the pre-header limit, because a
 counted loop's limit is its own entry count.
+
+## 13. The bool uniform's select and the fp16 float counter (spike-loops-rest4, at 7c30276c)
+
+HOST-ONLY. Two references become Mesa's words with the cap
+(`CapEdit` compares in `src/shaderc/online/mali/tests.rs`); no glmark2
+verdict moves (`mali_glmark2_corpus`).
+
+1. **`fs_select`.** The bound `ub_true ? ui_three : 0` is a select of a
+   32-bit int uniform word and a constant on the bool uniform's word: a
+   32-bit `bcsel` node (`Fs::int32`), Mesa's `MOV.i32 r1, u2.w1` and
+   `CSEL.u32.eq r1, u2.w0, 0x0, 0x0, r1^` in the header (nir_fs.rs, the
+   walk's `Bcsel` arm, `Fs::int_word`). The scalar select's lanes past its
+   word (the `ConstI32` arm has four) have no value. `check_deqp_loop`
+   gives a `bool` uniform gl_ref.py's word (`~0` where its component is
+   even). `deqp_loops2_fs_do_uni_select_iteration_count`, the do-while
+   form, compiles too; its counter's step stands before the select (Mesa's
+   after), so it is not Mesa's words with the cap alone.
+2. **`fs_float_uni`.** A lone fp16 lane carried by a constant (the
+   `mediump float ndx = 0.05` counter) is one 16-bit phi of one lane, its
+   start the constant's fp16 bits (`#0x2A66`, `mesa_fold::f32_to_f16`);
+   the head test `ndx < uf_one` is the inverse compare of a 16-bit mask
+   (`FCMP_OR.v2f16.ge`, `Fs::inverse_compare`), and the cap's `LSHIFT_OR`
+   ORs its compare in. A lone lane entering with a computed value
+   (glmark2's `gm2_intloop_uniform_fs`, `U16_TO_U32` copies, #367's) stays
+   `LoopMediump`.
+3. **A kept loop's tests are liveness roots** (`Fs::mark_live`): the
+   varying lanes the head test reads are then converted by
+   `convert_inputs16`. Without this, `deqp_loops2_fs_for_dyn_basic_mediump_float`
+   (`ndx < uf_one * one`, `one` a varying) compiled to an `FMA.v2f16` on
+   the fp32 load. With it, that reference and
+   `deqp_loops2_fs_do_uni_basic_mediump_float` are Mesa's words with the cap.
+
+**Left:** `fs_vec_dyn` (F10 ladders, a second kept loop), `fs_idx_dyn`
+(FMA, #367), `vs_idx_dyn` and `vs_idx_static` (Mesa's reassociated FMA
+chains of the unrolled constant products, `FMA.v2f16 r2, r0,
+0x38000000.h11, r0`, and immediate varying offsets: constop/FMA), every
+vertex kept loop (`vs_for_uni`, `vs_float_uni`, `vs_dowhile_uni`,
+`vs_select`, `vs_vector`, loops4: `vs_kept_begin` refuses a mediump float
+local carried from a run-time value), loops3 `vs_fn_*` (a loop that is not
+`vs_loop_shape`, `put_loop`), gaps `loops_fs_kept_for_index` (a local array
+read by the counter in a mediump kept loop, `array_read_by_counter`).

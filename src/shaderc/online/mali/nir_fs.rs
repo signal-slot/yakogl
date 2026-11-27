@@ -2148,6 +2148,18 @@ impl<'s> Fs<'s> {
                 push(&mut self.live, &mut stack, &mut n, Val::Lane(k as u16, 0));
             }
         }
+        /* a kept loop's tests: what its branches read (the fp16 counter's
+         * compare with `uf_one * one` of a varying, which
+         * [`convert_inputs16`] converts; deqp_loops2_fs_for_dyn_basic_
+         * mediump_float) */
+        if self.nir.nloops > 0 {
+            for k in 0..self.nir.nifs {
+                let r = self.nir.ifs[k];
+                if r.live {
+                    push(&mut self.live, &mut stack, &mut n, r.cond);
+                }
+            }
+        }
         while n > 0 {
             n -= 1;
             let nd = self.nir.nodes[stack[n] as usize];
@@ -2586,6 +2598,12 @@ impl<'s> Fs<'s> {
         let op = match nd.kind {
             Kind::Alu(Alu::Fcmp(x)) if nd.bits == 32 => Alu::Fcmp(inv(x)),
             Kind::Alu(Alu::Icmp(x)) if nd.bits == 32 => Alu::Icmp(inv(x)),
+            /* an fp16 compare's 16-bit mask (a mediump kept loop's fp16
+             * float counter, deqp_loops_fs_float_uni: `FCMP_OR.v2f16.ge`) */
+            Kind::Alu(Alu::Fcmp(x)) if nd.bits == 16 && nd.width == 1 => {
+                let at = self.origin[n as usize] as usize;
+                return self.node(Alu::Fcmp(inv(x)), nd.src, at);
+            }
             _ => return Err(MaliError::IfForm),
         };
         let at = self.origin[n as usize] as usize;
@@ -4896,6 +4914,15 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// `v` is a 32-bit uniform word of a mediump shader (an int or bool
+    /// uniform, read as its word).
+    fn int_word(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, _) if matches!(
+            self.nir.nodes[n as usize],
+            NirNode { kind: Kind::Uniform { .. }, bits: 32, .. }
+        ))
+    }
+
     /// `v` is the `f2fmp` of a 32-bit uniform word in a mediump shader (the
     /// walk's read of a float uniform Mesa keeps fp32): its front-end dword.
     fn wide_uniform(&self, v: Val) -> Option<u16> {
@@ -6143,12 +6170,19 @@ fn walk_kept_loop(
                 nphi += 1;
                 continue;
             }
-            /* a lone fp16 lane carried (`U16_TO_U32` copies; glmark2 loop's
-             * fragment shader 3678, gm2_intloop_uniform_fs, plan #367's):
-             * no row lowered here */
-            if bits == 16 {
-                return Err(MaliError::LoopMediump);
-            }
+            /* a lone fp16 lane carried: one 16-bit phi of one lane, a
+             * constant before the loop its fp16 bits (deqp_loops_fs_float_uni's
+             * `mediump float ndx = 0.05`, `IADD_IMM.i32.reconverge r2, 0x0,
+             * #0x2A66`). Another source (a computed lane: glmark2 loop's
+             * fragment shader 3678, gm2_intloop_uniform_fs, `U16_TO_U32`
+             * copies, plan #367's) has no reference here */
+            let v = match v {
+                Val::Const(k) if bits == 16 => {
+                    Val::Const(u32::from(crate::shaderc::online::mesa_fold::f32_to_f16(f32::from_bits(k))))
+                }
+                _ if bits == 16 => return Err(MaliError::LoopMediump),
+                _ => v,
+            };
             let id = f.nir.push_node(NirNode { kind: Kind::Phi, src: [v, Val::Undef, Val::Undef], bits, width: 1 })?;
             f.origin[id as usize] = last as u16;
             locals[l][c] = Val::Lane(id, 0);
@@ -7734,6 +7768,25 @@ fn walk_nodes(
                         _ if y == z => y,
                         (_, Val::Const(F32_ONE), Val::Const(0)) => f.op32(Alu::B2f, [c, Val::Undef, Val::Undef], at)?,
                         (_, Val::Const(_), Val::Const(_)) => f.op32(Alu::Bcsel, [c, y, z], at)?,
+                        /* the lanes of such a select (below) past its scalar
+                         * word's (the constant arm's four of a `ConstI32`):
+                         * no value */
+                        (_, Val::Undef, _) | (_, _, Val::Undef)
+                            if i > 0
+                                && s[1..].iter().any(|o| usize::from(m.comps_of(o.val)) <= i)
+                                && s[1..].iter().any(|o| f.int_word(lane(vals, *o, 0))) =>
+                        {
+                            Val::Undef
+                        }
+                        /* an int's select of a 32-bit uniform word and a
+                         * constant on a bool uniform (deqp_loops_fs_select's
+                         * `ub_true ? ui_three : 0` bound): a 32-bit node,
+                         * `CSEL.u32` on the bool's word */
+                        (_, Val::Lane(..), Val::Const(_)) | (_, Val::Const(_), Val::Lane(..))
+                            if f.bool32(c) && [y, z].iter().any(|&v| f.int_word(v)) =>
+                        {
+                            f.int32(Alu::Bcsel, [c, y, z], at)?
+                        }
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }
