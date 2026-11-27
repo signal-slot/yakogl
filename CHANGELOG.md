@@ -23,18 +23,17 @@ records at the tip.
   `flush_finish` timing cases pass without dEQP's warning and the
   combined 1x + ms4 row reads 17,142 (the ms4 row is still from
   `e9901869a`); i.MX8MP 17,318 at `0fbe61a3`; Pi 4 17,126 at `46f93767`.
-- glmark2-es2 on the AM62P reads 468: 33 scenes, 0 failed, 0 GL errors
-  (2026-11-01, record `99156df8`; shadow 10.62, refract 35.09 and
-  terrain 83.06 ms a frame). Common-set re-runs since: i.MX8MP 42 (33
-  scenes, 0 failed, 0 GL errors, main `f87dde43`, 2026-11-07) and Pi 4
-  195 (33 scenes, 0 failed, 0 GL errors, main `bdd2ba1c`, 2026-11-25;
-  pictures 28 of 33 match); the figures are the "Common set" rows of
+- glmark2-es2 on the AM62P reads 489: 33 scenes, 0 failed, 0 GL errors
+  (main `b884868c`, 2026-11-27, record `031e7bef`; shadow 10.56, refract
+  34.83 and terrain 79.90 ms a frame; 468 on 2026-11-01). Common-set
+  re-runs since: i.MX8MP 42 (33 scenes, 0 failed, 0 GL errors, main
+  `f87dde43`, 2026-11-07) and Pi 4 195 (33 scenes, 0 failed, 0 GL
+  errors, main `bdd2ba1c`, 2026-11-25; pictures 28 of 33 match); the figures are the "Common set" rows of
   `tools/cts/RESULTS.md`. The README table stays #1196's one-commit table.
-- `gl_test` on the common set: the AM62P 49 of 50 — case 20 `etc` fails
-  its first check alone, a stale expectation, its other 16 checks pass
-  (record `99156df8`); the i.MX8MP 49 of 49 run, case 16 skipped, from
-  main `f87dde43` (`8737e5a3`); the Pi 4 13 of 13 from main `bdd2ba1c`
-  (2026-11-25).
+- `gl_test` on the common set: the AM62P 50 of 50 from main `b884868c`
+  (2026-11-27, `031e7bef`; case 20 `etc` passes now); the i.MX8MP 49 of
+  49 run, case 16 skipped, from main `f87dde43` (`8737e5a3`); the Pi 4 13
+  of 13 from main `bdd2ba1c` (2026-11-25).
 - `gl_test` on the NanoPC-T6 (its own Linux, panthor): 165 of 256 cases
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
@@ -120,8 +119,11 @@ records at the tip.
 - The last green full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
   (2026-11-11, `4946e879`); green means that one commit. The full run at
   `760aad3d` (2026-11-14) is not green: 9 rows failed on the redaction
-  scan's fixture values, fixed at `31608f8e`, and a full disk cut the rest;
-  the gate is re-run on the commit to publish (checklist line 12).
+  scan's fixture values, fixed at `31608f8e`, and a full disk cut the rest.
+  The full run at `4f34ffb8` (2026-11-27) reads 540 ok, 15 failed, 0
+  gap(s): 14 clippy rows on a newer clippy's warnings (fixed by
+  `36c51e9a` and `6a54408d`) and one self-test fixture. The gate is re-run
+  on the commit to publish (checklist line 12).
 
 ### Added
 
@@ -343,6 +345,12 @@ records at the tip.
   `tools/cts/x2-scene-table.py` prints the X2 slow-scene rows from
   records (`edab7cf3`); `tools/cts/host-deqp-run.sh --compare` reads indented
   result lines and refuses an empty side (`8816ebb4`, `615c5ba4`).
+- Tools: `tools/release/doc-path-check.py`, the path check of release
+  checklist lines 1 and 5: it resolves a document's backticked spans
+  (brace lists expanded, bare names to exactly one tracked file) against
+  the tracked files of a commit, optionally for one section, says
+  resolved, non-path or missing for each and exits 1 on a missing one;
+  `--self-test` runs its checks on a synthetic tree (`644e5201`).
 - Tests: flat shading on V3D and GC7000UL, `tests/es3_flatshade_guard.rs`
   (`bab1374f`); `tests/es3_float_target.rs` pins that a float colour
   target is NotSupported or works, never an incomplete FBO
