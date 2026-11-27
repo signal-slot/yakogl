@@ -22,6 +22,18 @@ clocks were not the cause (U28). The down returns early, so the LDB PLL and
 the display domain are not turned off by it; the PSCI reset follows, and the
 board returns to Linux.
 
+Two fixes for it were tried on the board and did not clear it: the FrameGen0
+stop ahead of the LDB clock gate (7790a11e) and the `FGSLR` shadow token
+after `FGENABLE` = 0 (e10f44b8); `NotStopped(fgensts: 1)` stayed. The stop
+budget was about two frames (33 ms) where Linux waits up to 1 s. The stop now
+waits up to 1 s (`display::STOP_WAIT_US`, `dpu::wait_stopped` in 100 us
+steps) and reads `FGTIMESTAMP` (frame index 31:14, line index 13:0) when the
+wait starts and ends. The console prints it: on success `FrameGen0 stopped
+after N us (P polls), frame counter A -> B (FGTIMESTAMP 0x... -> 0x...)`; on
+failure `FrameGen0 still running (FGENSTS 1) after N us, P polls: frame
+counter A -> B (K frames; frozen: the pixel clock is dead | moving: the stop
+is slow)`. Not yet run on the board (host-tested only).
+
 **The board** (owner, 2026-11-24; this replaces the statement of
 2026-11-21 the X4 work was built on): a Toradex Verdin iMX95 module ("Toradex
 Verdin iMX95 WB", 8 GB) on a Toradex Mallow carrier with a **Toradex
@@ -966,4 +978,4 @@ Which result picks which route:
 | U25 | X12: the backlight pads' settings (GPIO_IO06, XSPI1_DATA4): the board devicetree uses TPM6's (FSEL "slightly fast", DSE x4); Linux's pinctrl words for them were not read | `/proc/device-tree` under Linux (the overlay's pinctrl group), or `ml:imx95-verdin.dtsi` |
 | U26 | Half answered on the board (2026-11-27, 70a3f06f): the up line reads `TPM5 at 24000000 Hz` and the camera sees the panel lit, so the clock is AP-NS's to enable and the enable on GPIO5_IO04 rises. Still open, as read: TPM5's SCMI clock (154): AP-NS's permission (Toradex's configuration gives AP-NS the LPTPM5 resource; the clock line was not found in `config_scmi.h` as read) and its rate (24 MHz assumed, as TPM6's); whether GPIO5's registers answer without a clock of ours (Linux drives the enable; our image does not turn any GPIO clock on) | `imx95_lvds_ids` (clock 154's state, rate, permissions); the first cold run (the backlight lights, the enable rises) |
 | U27 | X12: the display CSR's +0x14 (0x1A150A00, a reserved word in the header), `AXCACHE_CONTROL` 0x00330303 and `QOS_SETTING` 0x33 under Linux: written by Linux or reset values? The path writes none of them | `imx95_lvds_ids` reads them after DISPLAY comes on, before any write |
-| U28 | X12: why FrameGen0 does not stop. After `FGENABLE` = 0, `FGENSTS` still reads 1 (`FGCHSTAT` 0x101) when the two-frame wait (about 33 ms) runs out, with the LDB clocks still on (7790a11e's order, on the board 2026-11-27 at 70a3f06f: `display down: -5`, records `20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`). `dpu::stop` wrote `FGENABLE` alone while `FGSTCTRL.SHDEN` is set, so the write may wait in the shadow. Linux writes no token there (`dc_crtc_atomic_disable` in `drivers/gpu/drm/imx/dc/dc-crtc.c` and NXP's `dpu95_crtc_disable`: `FGENABLE` 0, then up to 1 s for the sequence-complete interrupt); the token is ours. `dpu::stop` now writes `FGSLR.SHDTOKGEN` after `FGENABLE` = 0 (host-tested, not yet on the board) | the triangle run again with the token (`display down: 0`); if it still fails, a longer budget (Linux waits up to 1 s) and a frame-counter read to tell a stuck frame generator from a slow one |
+| U28 | X12: why FrameGen0 does not stop. After `FGENABLE` = 0, `FGENSTS` still reads 1 (`FGCHSTAT` 0x101) when the two-frame wait (about 33 ms) runs out, with the LDB clocks still on (7790a11e's order, on the board 2026-11-27 at 70a3f06f: `display down: -5`, records `20261127-1520-triangle-70a3f06f` and `20261127-1523-gl_test-panel-70a3f06f`). `dpu::stop` wrote `FGENABLE` alone while `FGSTCTRL.SHDEN` is set, so the write may wait in the shadow. Linux writes no token there (`dc_crtc_atomic_disable` in `drivers/gpu/drm/imx/dc/dc-crtc.c` and NXP's `dpu95_crtc_disable`: `FGENABLE` 0, then up to 1 s for the sequence-complete interrupt); the token is ours. `dpu::stop` writes `FGSLR.SHDTOKGEN` after `FGENABLE` = 0 (e10f44b8): the board still read `fgensts 1` with it. The stop now waits up to 1 s as Linux does and reports `FGTIMESTAMP`'s frame index at the start and the end of the wait and the time waited (host-tested, not yet on the board) | the triangle run again: `display down: 0` and the "FrameGen0 stopped after" line, or the failure line's counters: frozen (the pixel clock is dead: look at what stops it, e.g. the LDB PLL or `DSIP_CLK0_SEL`) or moving (the stop is slow: a longer wait or a different latch) |

@@ -459,6 +459,100 @@ fn a_framegen_that_does_not_stop_keeps_the_power_on() {
     let s = display::start(&m, &Bases::PHYS, &p, &mut d).unwrap();
     m.faults.fg_stuck = true;
     let e = display::stop(&mut t, &m, &Bases::PHYS, &s, &mut d).unwrap_err();
-    assert!(matches!(e, Error::NotStopped(st) if st.fgensts == 1));
+    let Error::NotStopped(st) = e else { panic!("{e:?}") };
+    assert_eq!(st.fgensts, 1);
+    // the error carries the frame counter and the wait; the stuck model's
+    // frame counter moves with every read, so this is the "slow" kind
+    let w = st.stop.expect("the wait is in the error");
+    assert_eq!(w.waited_us, display::STOP_WAIT_US);
+    assert_eq!(w.polls, display::STOP_WAIT_US / dpu::POLL_STEP_US + 1);
+    assert!(w.frames() > 0 && w.frame_end() > w.frame_start(), "{w:?}");
     assert!(t.0.borrow().on(13));
+}
+
+/// Linux waits up to 1 s for the FrameGen to shut down.
+#[test]
+fn the_stop_budget_is_one_second_in_poll_steps() {
+    assert_eq!(display::STOP_WAIT_US, 1_000_000);
+    let (mut t, mut m) = rig();
+    let mut d = nodelay();
+    let p = display::prepare(&mut t, &m, &Bases::PHYS, &cfg(), &mut d).unwrap();
+    let s = display::start(&m, &Bases::PHYS, &p, &mut d).unwrap();
+    m.faults.fg_stuck = true;
+    let mut steps = Vec::new();
+    display::stop(&mut t, &m, &Bases::PHYS, &s, &mut |us| steps.push(us)).unwrap_err();
+    assert!(steps.iter().all(|&us| us == dpu::POLL_STEP_US));
+    assert_eq!(steps.iter().sum::<u32>(), 1_000_000);
+}
+
+/// A register file that reads FGENSTS 1 for ever, FGTIMESTAMP frozen or
+/// moving, and logs the reads.
+struct Fg {
+    moving: bool,
+    stop_at_poll: Option<u32>,
+    log: RefCell<Vec<u32>>,
+    ts: std::cell::Cell<u32>,
+    ensts: std::cell::Cell<u32>,
+}
+
+impl Fg {
+    fn new(moving: bool, stop_at_poll: Option<u32>) -> Fg {
+        Fg {
+            moving,
+            stop_at_poll,
+            log: RefCell::new(vec![]),
+            ts: std::cell::Cell::new(7 << 14 | 100),
+            ensts: std::cell::Cell::new(0),
+        }
+    }
+}
+
+impl crate::mmio::Mmio for Fg {
+    fn read32(&self, addr: usize) -> u32 {
+        let off = (addr - 0x4b00_0000) as u32;
+        self.log.borrow_mut().push(off);
+        match off {
+            0x2b_0094 => {
+                let n = self.ensts.get() + 1;
+                self.ensts.set(n);
+                u32::from(self.stop_at_poll.map_or(true, |p| n < p))
+            }
+            0x2b_0098 => {
+                if self.moving {
+                    self.ts.set(self.ts.get() + (1 << 14));
+                }
+                self.ts.get()
+            }
+            _ => 0,
+        }
+    }
+    fn write32(&self, _: usize, _: u32) {}
+    fn read8(&self, _: usize) -> u8 {
+        0
+    }
+    fn write8(&self, _: usize, _: u8) {}
+}
+
+#[test]
+fn a_frozen_frame_counter_reads_the_same_at_the_start_and_the_end() {
+    let m = Fg::new(false, None);
+    let mut waited = 0;
+    let st = dpu::wait_stopped(&m, 0x4b00_0000, 1_000_000, &mut |us| waited += us).unwrap_err();
+    let w = st.stop.unwrap();
+    assert_eq!((w.frame_start(), w.frame_end(), w.frames()), (7, 7, 0));
+    assert_eq!((w.ts_start, w.ts_end), (7 << 14 | 100, 7 << 14 | 100));
+    assert_eq!((w.waited_us, w.polls, waited), (1_000_000, 10_001, 1_000_000));
+}
+
+#[test]
+fn counter_reads_come_first_and_last_in_the_logged_order() {
+    let m = Fg::new(true, Some(3));
+    let w = dpu::wait_stopped(&m, 0x4b00_0000, 1_000_000, &mut |_| {}).unwrap();
+    let log = m.log.borrow();
+    // FGTIMESTAMP, then per poll FGENABLE, FGENSTS, FGCHSTAT, then FGTIMESTAMP
+    assert_eq!(log.first(), Some(&0x2b_0098));
+    assert_eq!(log.last(), Some(&0x2b_0098));
+    assert_eq!(log.iter().filter(|&&o| o == 0x2b_0098).count(), 2);
+    assert_eq!((w.polls, w.waited_us), (3, 2 * dpu::POLL_STEP_US));
+    assert_eq!((w.frame_start(), w.frame_end(), w.frames()), (8, 9, 1));
 }

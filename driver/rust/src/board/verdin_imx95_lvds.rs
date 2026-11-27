@@ -220,12 +220,25 @@ pub fn display_down<T: Transport>(
     backlight_off(t, m, cfg)?;
     let mut delay = |us: u32| env.busy_wait_us(us);
     dpu::stop(m, cfg.display.dpu);
-    let budget = 2 * display::frame_us(&stream.prepared.mode, stream.prepared.pix_hz);
-    let stopped = dpu::wait_stopped(m, cfg.display.dpu, budget, &mut delay).map_err(display::Error::NotStopped);
+    let stopped =
+        dpu::wait_stopped(m, cfg.display.dpu, display::STOP_WAIT_US, &mut delay).map_err(display::Error::NotStopped);
     ldb::down(m, cfg.ldb);
     // the pixel link off, the power; no second wait when the first failed
     match stopped {
-        Ok(_) => display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display),
+        Ok(w) => {
+            ylog!(
+                env,
+                Inf,
+                "verdin-imx95 X12: FrameGen0 stopped after {} us ({} polls), frame counter {} -> {} (FGTIMESTAMP 0x{:08x} -> 0x{:08x})",
+                w.waited_us,
+                w.polls,
+                w.frame_start(),
+                w.frame_end(),
+                w.ts_start,
+                w.ts_end
+            );
+            display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display)
+        }
         Err(e) => Err(Error::Display(e)),
     }
 }
