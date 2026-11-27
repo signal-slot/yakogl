@@ -303,6 +303,33 @@ int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset,
                                            uint32_t *code_out,
                                            struct pvr_pds_render_vertex_info *info);
 
+/* The limits every vertex program of (2)-(4) is checked against before a
+ * word is written (the program is refused, -1, beyond them):
+ *
+ * - its data segment against PVR_PDS_VERTEX_MAX_DATA_DW, the need of
+ *   PVR_PDS_VERTEX_MAX_STREAMS streams with both ids and a base (the
+ *   divisor's multiplier sits in its stream's block, word 8s+3);
+ * - its code segment against PVR_PDS_VERTEX_MAX_CODE_DW plus
+ *   PVR_PDS_VERTEX_DIVIDE_CODE_DW for every per_instance stream with a
+ *   divisor above 1: Mesa's instance divide (pvr_pds.c pvr_pds_vertex_shader)
+ *   is one SFTLP32 for a power of two and two LIMM, the MAD and two SFTLP64
+ *   (the shift is shift + 31 > 31) for any other divisor;
+ * - its PDS temps against PVR_PDS_VERTEX_MAX_TEMPS, Mesa's temp block
+ *   (pvr_pds.c PVR_PDS_TEMPS_BLOCK_SIZE, file-local there), counted the way
+ *   pvr_pds_get_temps() allocates them: IR0, IR1, then each stream in order,
+ *   two temps 64-bit aligned for a multiply, one for a shift. Mesa only
+ *   asserts that limit (and the driver builds with NDEBUG), so it is
+ *   counted here before Mesa runs: 15 streams with odd divisors fit, 16 do
+ *   not.
+ *
+ * So data_out must hold PVR_PDS_VERTEX_MAX_DATA_DW dwords and code_out
+ * PVR_PDS_VERTEX_MAX_CODE_DW + PVR_PDS_VERTEX_DIVIDE_CODE_DW * (the streams
+ * with a divisor above 1) dwords; info reports the exact sizes. */
+#define PVR_PDS_VERTEX_MAX_DATA_DW (8u * PVR_PDS_VERTEX_MAX_STREAMS + 8u + 2u)
+#define PVR_PDS_VERTEX_MAX_CODE_DW (PVR_PDS_VERTEX_MAX_STREAMS + 4u + 1u)
+#define PVR_PDS_VERTEX_DIVIDE_CODE_DW 5u
+#define PVR_PDS_VERTEX_MAX_TEMPS 32u
+
 /* ------------------------------------------------------------------------- *
  * 5. Coefficient-loading (DOUTI) PDS program for the fragment varyings
  *    (TA_STATE_PDS_VARYINGBASE). Port of pvr_pds_coefficient_loading()

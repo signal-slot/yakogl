@@ -21,6 +21,9 @@
  *
  * Prints
  *   sizes data=<dw> code=<dw> temps=<n> want_temps=<n>
+ * or, exit status 1, when the generator refuses the program (more temps
+ * than Mesa's block, PVR_PDS_VERTEX_MAX_TEMPS)
+ *   generator refused want_temps=<n>
  *   s=<s> d=<divisor> mult=0x<data word 8s+3> stride_ok=<0|1> code_ok=<0|1>
  * where stride_ok says the stride sits at data word 8s+2, and code_ok that
  * the code segment holds the stream's instance divide exactly as Mesa's
@@ -96,7 +99,8 @@ int main(int argc, char **argv)
    if (pvr_pds_render_vertex_program_ids_base(0x400, 8, st, n, 0, 4 * n,
                                               (4 * n + 1) | PVR_PDS_ID_BASE_TO_STREAMS, 5, data,
                                               code, &info)) {
-      printf("generator refused\n");
+      /* above Mesa's 32 temps: refused before Mesa's allocator asserts */
+      printf("generator refused want_temps=%u\n", temps);
       return 1;
    }
    printf("sizes data=%u code=%u temps=%u want_temps=%u\n", info.data_size_dw, info.code_size_dw,
