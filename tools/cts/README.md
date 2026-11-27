@@ -1368,9 +1368,9 @@ credentials, set by the session; never in a file, a log or a commit).
 
    Their selftests are `imx95-redact-check-selftest.sh` and
    `mali-slice-redact-selftest.sh`. A host name of the form
-   `verdin-imx95-<hex>` is caught by `imx95-redact-check.py` (somhost), not
-   by `tools/release/redaction-scan.py`, whose `som-serial` class lists only
-   the AM62P and i.MX8MP modules.
+   `verdin-imx95-<hex>` is caught by `imx95-redact-check.py` (somhost) and by
+   `tools/release/redaction-scan.py`, whose `som-serial` class lists the
+   AM62P, i.MX8MP and iMX95 modules.
 
 8. The slice and the diff. `imx95-uart-slice.py` reads the session's
    `console/<label>.log` and `rows.tsv` and writes, in the same directory,
