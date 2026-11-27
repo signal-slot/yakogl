@@ -12,7 +12,7 @@
 
 /// `cdns_dphy_tx_bands[]`: the lower edge of each PCS band, in Mbit/s per
 /// lane. Band `i` covers `[TX_BANDS_MBPS[i], TX_BANDS_MBPS[i + 1])`; the TRM
-/// (14.8.6.3.2.10) names band 0 only, "Data Rate [80_100] MHz".
+/// (14.8.6.3.2.10) names band 0 only, "Data Rate \[80_100\] MHz".
 pub const TX_BANDS_MBPS: [u32; 24] = [
     80, 100, 120, 160, 200, 240, 320, 390, 450, 510, 560, 640,
     690, 770, 870, 950, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500,

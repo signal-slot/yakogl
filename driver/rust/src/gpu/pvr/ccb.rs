@@ -468,7 +468,7 @@ const ATMAX_SAID_MASK: u32 = (1 << ATMAX_AWAITING_SHIFT) - 1;
 /// Said once per list per run, at warning level, never with the
 /// `render: stopped` prefix tools/cts/pr-verdict.py keys on. The list's
 /// wait is armed until a partial-render notice clears it
-/// ([`partial_render_arrived`]).
+/// (`partial_render_arrived`).
 pub fn at_maximum_awaits_pr(k: &mut YdPvrKm, grows: u32, ooms_after: u32) {
     let Some(i) = at_maximum_list(k, grows, ooms_after) else {
         return;

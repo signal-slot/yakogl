@@ -38,7 +38,7 @@ pub enum Error {
     BadTimeout,
 }
 
-/// The SMC conduit, injectable: the board's is [`ArchSmc`], the host tests'
+/// The SMC conduit, injectable: the board's is `ArchSmc`, the host tests'
 /// a scripted fake. Arguments and results are x0..x3.
 pub trait Smc {
     fn call(&mut self, args: [u64; 4]) -> [u64; 4];

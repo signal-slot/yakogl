@@ -165,7 +165,7 @@ pub struct PvrRenderFragRegs {
 /// the 3D command. Not all zero, with the knob: the 3D_PR takes its PBE
 /// register words (the whole array) and its EOT PDS data (dword 15) from
 /// here, its ISP_ZLSCTL (dwords 24-25) from `isp_zlsctl` when that is not
-/// zero, and both commands carry [`FRAG_FLAGS_SPMSCRATCHBUFFER`].
+/// zero, and both commands carry `FRAG_FLAGS_SPMSCRATCHBUFFER`.
 /// `spm_scratch_*` and `eot_pds_data_bytes` are the backend's bookkeeping
 /// (no command word); `pds_pr_bgnd` is not written into the 3D_PR yet.
 #[repr(C)]
@@ -2150,7 +2150,7 @@ fn fwccb_service_r(k: &mut YdPvrKm, r: &mut YdPvrRender) -> i32 {
 }
 
 /// Grows served in one FWCCB batch from which the batch is a runaway's
-/// ([`runaway_dump`]). In every clean run each served grow was alone in
+/// (`runaway_dump`). In every clean run each served grow was alone in
 /// its batch; fwccb-2 served 12 in one batch, and ab3-on 12. d320c8a5's
 /// terrain served 2 in one, and its run was otherwise clean.
 pub const RUNAWAY_BATCH: u32 = 2;
@@ -2419,7 +2419,7 @@ fn stopped(k: &mut YdPvrKm, fence: u32, who: &str) -> i32 {
 /// firmware's FWCCB requests meanwhile; `who` names the call site in the
 /// log. The UFO is read every [`WAIT_POLL_US`]. 0, -EIO on a hardware
 /// recovery during the wait, -ESHUTDOWN once the render service stopped
-/// ([`stopped`]), -ETIMEDOUT.
+/// (`stopped`), -ETIMEDOUT.
 pub fn wait_for(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms: u32, who: &str) -> i32 {
     wait_for_at(k, r, fence, timeout_ms, who, who)
 }
