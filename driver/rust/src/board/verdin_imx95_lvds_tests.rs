@@ -224,7 +224,7 @@ fn the_steps_in_the_notes_order() {
 }
 
 #[test]
-fn down_turns_the_backlight_off_first_then_the_ldb_then_the_stream_and_power() {
+fn down_turns_the_backlight_off_first_then_stops_frame_gen_then_the_ldb_then_the_power() {
     let r = rig();
     let mut sm = r.sm;
     let cfg = Config::verdin(FB);
@@ -235,12 +235,14 @@ fn down_turns_the_backlight_off_first_then_the_ldb_then_the_stream_and_power() {
     let en_off = pos(log, &Ev::W(PCOR, 1 << 4));
     let tpm_off = pos(log, &Ev::Scmi(scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET, vec![154, 0, 0]));
     let phy_off = pos(log, &Ev::W(dm::LDB + 0x8, 0));
+    let gate = pos(log, &Ev::W(dm::LDB, 0x1E));
     let pl_off = pos(log, &Ev::W(dm::CSR + 0x8, 0x2));
     let fg_off = pos(log, &Ev::W(FGENABLE, 0));
     let pll_off = pos(log, &Ev::Scmi(scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET, vec![37, 0, 0]));
     let pd_off = pos(log, &Ev::Scmi(scmi::PROTO_POWER, scmi::POWER_STATE_SET, vec![0, 13, 0x4000_0000]));
-    assert!(en_off < tpm_off && tpm_off < phy_off && phy_off < pl_off && pl_off < fg_off);
-    assert!(fg_off < pll_off && pll_off < pd_off);
+    // FrameGen0 stops before any LDB register is touched
+    assert!(en_off < tpm_off && tpm_off < fg_off && fg_off < phy_off && phy_off < gate && gate < pl_off);
+    assert!(pl_off < pll_off && pll_off < pd_off);
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
 }
@@ -287,4 +289,37 @@ fn a_dpu_that_never_syncs_leaves_the_backlight_dark() {
     assert!(r.log.borrow().contains(&Ev::W(dm::LDB + 0x8, 0x1075)));
     assert!(!r.log.borrow().iter().any(|e| matches!(e, Ev::Scmi(_, _, w) if w.first() == Some(&154))));
     assert!(!r.log.borrow().iter().any(|e| matches!(*e, Ev::W(a, _) if a == PSOR)));
+}
+
+/// FrameGen0's enable status clears only when the running frame ends, and a
+/// frame ends only while the LDB's clocks run (board record
+/// 20261127-1806-triangle-472630df: `NotStopped(fgensts: 1)`). Gating the
+/// LDB first leaves the status at 1 for ever.
+#[test]
+fn down_waits_for_the_last_frame_before_it_gates_the_ldb() {
+    let mut r = rig();
+    r.m.display.faults.frame_end_needed = true;
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.log.borrow_mut().clear();
+    display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap();
+    assert!(!sm.sm.borrow().on(13));
+    assert!(r.m.display.refused().is_empty());
+}
+
+/// When the stop fails the LDB is still down, the first error comes back and
+/// the display's power stays on.
+#[test]
+fn a_frame_gen_that_never_stops_still_brings_the_ldb_down_and_returns_not_stopped() {
+    let mut r = rig();
+    r.m.display.faults.fg_stuck = true;
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.log.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    assert!(matches!(e, Error::Display(display::Error::NotStopped(_))), "{e:?}");
+    assert!(r.log.borrow().contains(&Ev::W(dm::LDB, 0x1E)));
+    assert!(sm.sm.borrow().on(13));
 }
