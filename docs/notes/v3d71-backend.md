@@ -983,11 +983,13 @@ host-test,gpu-v3d,shaderc-online,no-shader-table`. The corpora marked
 |---|---|---|---|---|---|
 | tools/shaders/es100 | `v3d71_online_corpus.rs` | 126 | 126 | 0 | 124 of 126 (`es100_counts_71.tsv`) |
 | qpu_corpus_71 | `v3d71_online_corpus.rs` | 1090 | 874 | 216 (listed) | counts in `qpu_counts_71.tsv` |
-| tools/shaders outside es100 | `shaderc71_tree_corpus.rs` | 198 sources | 190 programs | 18 listed (`-v3d71-tree.txt`) | none |
+| tools/shaders outside es100 | `shaderc71_tree_corpus.rs` | 199 sources (`SOURCES`) | 191 programs (`COMPILED`) | 18 listed (`known-uncompilable-v3d71-tree.txt`) | none |
 | glmark2-es2 (external) | `shaderc71_glmark2_corpus.rs` | 69 shaders, 93 pairs | 69 pairs link | 0 (no list) | 69 of 93 (`glmark2_counts_71.tsv`) |
 | dEQP-GLES2 `.test` library (external) | `shaderc71_es2_corpus.rs` | 1778 | 1778 | 0 (list empty) | 1819 of 1832 stage rows (`deqp_es2_lib_counts_71.tsv`) |
 | dEQP-GLES2 harvested programs (external) | `shaderc71_deqp_programs.rs` | 10599 | 9720 | 879, 6 of them 7.1-only | 9760 of 10599 (`deqp_es2_gen_counts_71.tsv`) |
-| in-tree dEQP repro shaders | `shaderc71_deqp_repro.rs` | 3 | 3 (4.2: 3) | 0 | 4 rows, 3 compiled, 1 refused (`deqp_repro_counts_71.tsv`) |
+| in-tree dEQP repro shaders | `shaderc71_deqp_repro.rs` | 3 (`PROGRAMS`) | 3 (`COMPILE_71`; 4.2: `COMPILE_42` 3) | 0 (`REFUSED_71` empty) | 4 rows, 3 compiled, 1 refused (`deqp_repro_counts_71.tsv` header) |
+| tools/mali/testdata pairs | `shaderc71_mali_testdata.rs` | 1818 (`PAIRS`) | 1815 (`COMPILED_71`; 4.2: `COMPILED_42` 1814) | 3; `ONLY_71_REFUSED` 0, `known-uncompilable-v3d71-mali.txt` empty | 1454 of 1515 (`mali_testdata_counts_71.tsv` header) |
+| GLES2 implementation-limit shaders | `shaderc71_limits.rs` | 19 (`PROGRAMS`) | 17 (`COMPILED_71`; 4.2: `COMPILED_42` 19) | 2, both 7.1-only (`EXPECTED_REFUSED_71`: varyings14, varyings15) | none |
 
 - **glmark2**: the other 24 of the 93 pairs are the cross product of an
   index entry's vertex and fragment shaders in which the fragment shader
@@ -1012,18 +1014,21 @@ host-test,gpu-v3d,shaderc-online,no-shader-table`. The corpora marked
 - **Prims**: `shaderc71_prims.rs` compiles es100 at Triangles, Points and
   Lines: 126 of 126 at each (`ES100_COMPILED`), 2 sources read
   `gl_PointCoord` (the only ones whose Lines variant differs).
-- **Cost ceilings** (`shaderc71_count_bounds.rs`, measured at `b953cc96`):
-  es100 12973 words, 1502 threads, 0 programs over 2x Mesa; qpu_corpus_71
-  107796 words, 10408 threads, 164 over 2x. Pins: `COUNT_CEILING` 120769,
+- **Cost ceilings** (`shaderc71_count_bounds.rs`; the file's header gives
+  the sums at `b953cc96`, es100 12973 words and qpu_corpus_71 107796, and
+  after the FMOV-unpack and interleave change es100 12918 and qpu_corpus_71
+  107117; threads 10408 for qpu_corpus_71 and 164 over 2x Mesa). Pins: `COUNT_CEILING` 120035,
   `THREAD_FLOOR` 11910, `OVER_2X_CEILING` 164.
 - **Robustness**: `shaderc71_malformed.rs` pins 27 front-end errors, 3 link
   errors and 6 successes over its fixed inputs (never a panic);
   `shaderc71_determinism.rs` compiles the 126 es100 programs forward,
   reversed and interleaved and compares the words.
-- **Not here**: `tools/mali/testdata` at 7.1 has no test on the tip (Mesa's
-  table: 1515 programs, 1454 compiled, 61 refused,
-  `mali_testdata_counts_71.tsv`), and the `tests/mali_deqp_*.rs` shaders have
-  none either; their counts are the item that adds them to give.
+- **Mali testdata**: `shaderc71_mali_testdata.rs` pins `PAIRS` 1818,
+  `COMPILED_42` 1814, `COMPILED_71` 1815, `ONLY_71_REFUSED` 0. Mesa's table
+  counts 1515 programs, 1454 compiled, 61 refused
+  (`mali_testdata_counts_71.tsv` header; it keys programs differently from the
+  test's pairs). The `tests/mali_deqp_*.rs` shaders are covered by
+  `shaderc71_deqp_repro.rs` (`deqp_repro_counts_71.tsv`).
 
 ### The 7.1 unit rows (`--lib`: 53 passed)
 
