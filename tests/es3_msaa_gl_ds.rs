@@ -322,6 +322,7 @@ fn ds_fbo(samples: GLsizei, format: GLenum) -> Fbo {
     assert_eq!(e, GL_NO_ERROR, "storage {samples} x {format:#x}");
     let point = match format {
         GL_DEPTH24_STENCIL8 | GL_DEPTH32F_STENCIL8 => GL_DEPTH_STENCIL_ATTACHMENT,
+        GL_STENCIL_INDEX8 => GL_STENCIL_ATTACHMENT,
         _ => GL_DEPTH_ATTACHMENT,
     };
     // SAFETY: a renderbuffer this test made, on the bound framebuffer.
@@ -332,7 +333,7 @@ fn ds_fbo(samples: GLsizei, format: GLenum) -> Fbo {
 }
 
 fn has_stencil(format: GLenum) -> bool {
-    matches!(format, GL_DEPTH24_STENCIL8 | GL_DEPTH32F_STENCIL8)
+    matches!(format, GL_DEPTH24_STENCIL8 | GL_DEPTH32F_STENCIL8 | GL_STENCIL_INDEX8)
 }
 
 /// The writes of a plane with pixels in them (a write of none is the "can it
@@ -509,4 +510,276 @@ fn stencil_bit_with_a_depth_only_draw_side_is_a_no_op() {
     let dst = ds_fbo(0, GL_DEPTH_COMPONENT24);
     assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, S, GL_NEAREST), GL_NO_ERROR);
     assert!(writes().is_empty(), "no stencil plane to write");
+}
+
+/* ---- a destination no frame has drawn into (msaa-ds-design Option B) ------- */
+
+/// The objects the stand-in below holds a depth/stencil buffer for: those a
+/// draw named (`GlesDraw::depth_id` / `stencil_id`).
+static HELD: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+/// What one draw the stand-in got asked for, of the fields a clear sets.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SeenDraw {
+    depth_id: u32,
+    stencil_id: u32,
+    do_clear_depth: bool,
+    clear_depth: f32,
+    do_clear_stencil: bool,
+    clear_stencil: u8,
+    clear_stencil_write_mask: u8,
+    scissor: bool,
+    color_write: bool,
+    index_count: u32,
+}
+
+/// Every draw the stand-in got.
+static DRAWS: Mutex<Vec<SeenDraw>> = Mutex::new(Vec::new());
+
+unsafe extern "C" fn b_draw_holds(d: *const backend::GlesDraw) -> i32 {
+    let d = &*d;
+    DRAWS.lock().unwrap().push(SeenDraw {
+        depth_id: d.depth_id,
+        stencil_id: d.stencil_id,
+        do_clear_depth: d.do_clear_depth,
+        clear_depth: d.clear_depth,
+        do_clear_stencil: d.do_clear_stencil,
+        clear_stencil: d.clear_stencil,
+        clear_stencil_write_mask: d.clear_stencil_write_mask,
+        scissor: d.scissor,
+        color_write: d.color_write,
+        index_count: d.index_count,
+    });
+    let mut held = HELD.lock().unwrap();
+    held.extend([d.depth_id, d.stencil_id].into_iter().filter(|&id| id != 0));
+    0
+}
+
+/// `ds_write` of a back end that makes an object's buffer on its first draw
+/// (the PowerVR before plan #400, the V3D): 1, "nothing held", for an object
+/// no draw named.
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn b_ds_write_held(
+    id: u32,
+    plane: u32,
+    src: *const c_void,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    pitch: u32,
+) -> i32 {
+    if !HELD.lock().unwrap().contains(&id) {
+        return 1;
+    }
+    b_ds_write(id, plane, src, x, y, w, h, pitch)
+}
+
+/// `ds_write` that never holds a buffer, a clear or not.
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn b_ds_write_never(
+    _id: u32,
+    _plane: u32,
+    _src: *const c_void,
+    _x: u32,
+    _y: u32,
+    _w: u32,
+    _h: u32,
+    _pitch: u32,
+) -> i32 {
+    1
+}
+
+/// [`BACKEND_MS4_DS`] whose `ds_write` answers 1 for an object no draw named.
+static BACKEND_MS4_DS_HELD: YakoglBackend =
+    YakoglBackend { draw: Some(b_draw_holds), ds_write: Some(b_ds_write_held), ..BACKEND_MS4_DS };
+
+/// [`BACKEND_MS4_DS_HELD`] whose `ds_write` holds nothing even after a clear.
+static BACKEND_MS4_DS_NEVER: YakoglBackend = YakoglBackend { ds_write: Some(b_ds_write_never), ..BACKEND_MS4_DS_HELD };
+
+/// [`BACKEND_MS4_DS`] without `ds_write`: it reads planes but cannot write one.
+static BACKEND_MS4_NO_WRITE: YakoglBackend =
+    YakoglBackend { draw: Some(b_draw_holds), ds_write: None, ..BACKEND_MS4_DS };
+
+fn context_held(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
+    let g = context_on(table);
+    HELD.lock().unwrap().clear();
+    DRAWS.lock().unwrap().clear();
+    g
+}
+
+/// The renderbuffer serial id the back end sees for the destination: the
+/// one `ds_write` writes.
+fn dst_object(format: GLenum, mask: GLbitfield) -> u32 {
+    let w = writes();
+    assert!(!w.is_empty(), "{format:#x} mask {mask:#x}: a plane was written");
+    w[0].0
+}
+
+/// A 4x `format` resolved into a fresh 1x one that no frame drew into: the
+/// GL core clears the destination's refused planes first, the resolve then
+/// goes ahead with no error.
+fn undrawn_case(format: GLenum, mask: GLbitfield) {
+    let _g = context_held(&BACKEND_MS4_DS_HELD);
+    let src = ds_fbo(4, format);
+    let dst = ds_fbo(0, format);
+    DRAWS.lock().unwrap().clear();
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, mask, GL_NEAREST), GL_NO_ERROR, "{format:#x} mask {mask:#x}");
+    let id = dst_object(format, mask);
+    let depth = mask & D != 0 && format != GL_STENCIL_INDEX8;
+    let stencil = mask & S != 0 && has_stencil(format);
+    let draws = DRAWS.lock().unwrap().clone();
+    let clears: Vec<SeenDraw> = draws.iter().copied().filter(|d| d.depth_id == id || d.stencil_id == id).collect();
+    assert_eq!(clears.len(), 1, "one clear of the destination: {draws:?}");
+    let k = clears[0];
+    assert_eq!((k.do_clear_depth, k.do_clear_stencil), (depth, stencil), "the refused planes: {k:?}");
+    if depth {
+        assert_eq!(k.clear_depth, 1.0, "{k:?}");
+    }
+    if stencil {
+        assert_eq!((k.clear_stencil, k.clear_stencil_write_mask), (0, 0xff), "{k:?}");
+    }
+    assert!(!k.scissor && !k.color_write && k.index_count == 0, "a whole-plane depth/stencil-only clear: {k:?}");
+    assert_eq!(draws.len(), 1, "nothing else drawn: {draws:?}");
+    /* the resolve wrote what the source holds, over the whole plane */
+    let mut want: Vec<(u32, u32)> = Vec::new();
+    if depth {
+        want.push((backend::DS_PLANE_DEPTH, DEPTH.to_bits()));
+    }
+    if stencil {
+        want.push((backend::DS_PLANE_STENCIL, STENCIL as u32));
+    }
+    let w = writes();
+    assert_eq!(w.iter().map(|w| (w.1, w.6)).collect::<Vec<_>>(), want, "{w:?}");
+    assert!(w.iter().all(|w| (w.0, w.2, w.3, w.4, w.5) == (id, 0, 0, 8, 8)), "{w:?}");
+}
+
+#[test]
+fn undrawn_destination_depth16() {
+    undrawn_case(GL_DEPTH_COMPONENT16, D);
+}
+#[test]
+fn undrawn_destination_depth24_stencil8_both() {
+    undrawn_case(GL_DEPTH24_STENCIL8, D | S);
+}
+#[test]
+fn undrawn_destination_depth24_stencil8_stencil() {
+    undrawn_case(GL_DEPTH24_STENCIL8, S);
+}
+#[test]
+fn undrawn_destination_depth32f_stencil8_depth() {
+    undrawn_case(GL_DEPTH32F_STENCIL8, D);
+}
+#[test]
+fn undrawn_destination_stencil8() {
+    undrawn_case(GL_STENCIL_INDEX8, S);
+}
+
+/// A destination a frame already holds is not cleared again: the probe
+/// answers 0 and the blit is the resolve alone.
+#[test]
+fn held_destination_is_not_cleared() {
+    let _g = context_held(&BACKEND_MS4_DS_HELD);
+    let src = ds_fbo(4, GL_DEPTH24_STENCIL8);
+    let dst = ds_fbo(0, GL_DEPTH24_STENCIL8);
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, D | S, GL_NEAREST), GL_NO_ERROR);
+    DRAWS.lock().unwrap().clear();
+    DS_WRITES.lock().unwrap().clear();
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, D | S, GL_NEAREST), GL_NO_ERROR);
+    assert!(DRAWS.lock().unwrap().is_empty(), "no second clear: {:?}", DRAWS.lock().unwrap());
+    assert_eq!(writes().len(), 2, "both planes written");
+}
+
+fn getb(pname: GLenum) -> Vec<GLboolean> {
+    let mut v = [7 as GLboolean; 4];
+    // SAFETY: room for four values.
+    unsafe { glGetBooleanv(pname, v.as_mut_ptr()) };
+    assert_eq!(err(), GL_NO_ERROR);
+    v.to_vec()
+}
+
+fn getf(pname: GLenum) -> GLfloat {
+    let mut v: GLfloat = -7.0;
+    // SAFETY: one GLfloat out.
+    unsafe { glGetFloatv(pname, &mut v) };
+    assert_eq!(err(), GL_NO_ERROR);
+    v
+}
+
+/// The clear the GL core issues for an undrawn destination runs under its
+/// own scissor, masks and clear values: the application's are as they were
+/// afterwards, and its pending clear state did not leak into it.
+#[test]
+fn undrawn_destination_leaves_state_unchanged() {
+    let _g = context_held(&BACKEND_MS4_DS_HELD);
+    let src = ds_fbo(4, GL_DEPTH24_STENCIL8);
+    let dst = ds_fbo(0, GL_DEPTH24_STENCIL8);
+    // SAFETY: plain GL calls.
+    unsafe {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(1, 2, 3, 4);
+        glDepthMask(GL_FALSE as GLboolean);
+        glStencilMask(0x0f);
+        glColorMask(0, 1, 0, 1);
+        glClearDepthf(0.25);
+        glClearStencil(7);
+    }
+    DRAWS.lock().unwrap().clear();
+    /* the scissor cuts the resolve, not the clear before it */
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, D | S, GL_NEAREST), GL_NO_ERROR);
+    let draws = DRAWS.lock().unwrap().clone();
+    assert_eq!(draws.len(), 1, "{draws:?}");
+    let k = draws[0];
+    assert!(k.do_clear_depth && k.do_clear_stencil, "{k:?}");
+    assert_eq!((k.clear_depth, k.clear_stencil, k.clear_stencil_write_mask), (1.0, 0, 0xff), "{k:?}");
+    assert!(!k.scissor && !k.color_write, "{k:?}");
+    // SAFETY: plain GL call.
+    assert_eq!(unsafe { glIsEnabled(GL_SCISSOR_TEST) }, GL_TRUE as GLboolean);
+    let mut b = [0; 4];
+    // SAFETY: room for four values.
+    unsafe { glGetIntegerv(GL_SCISSOR_BOX, b.as_mut_ptr()) };
+    assert_eq!(b, [1, 2, 3, 4]);
+    assert_eq!(getb(GL_DEPTH_WRITEMASK)[0], GL_FALSE as GLboolean);
+    assert_eq!(geti(GL_STENCIL_WRITEMASK), 0x0f);
+    assert_eq!(geti(GL_STENCIL_BACK_WRITEMASK), 0x0f);
+    assert_eq!(getb(GL_COLOR_WRITEMASK), vec![0, 1, 0, 1]);
+    assert_eq!(getf(GL_DEPTH_CLEAR_VALUE), 0.25);
+    assert_eq!(geti(GL_STENCIL_CLEAR_VALUE), 7);
+    // SAFETY: plain GL calls: the state put back for the next test.
+    unsafe {
+        glDisable(GL_SCISSOR_TEST);
+        glScissor(0, 0, 8, 8);
+        glDepthMask(GL_TRUE as GLboolean);
+        glStencilMask(0xff);
+        glColorMask(1, 1, 1, 1);
+        glClearDepthf(1.0);
+        glClearStencil(0);
+    }
+}
+
+/// A back end that still holds nothing after the clear: the blit is refused
+/// whole, as before, with nothing written.
+#[test]
+fn destination_still_unheld_after_the_clear_is_refused() {
+    let _g = context_held(&BACKEND_MS4_DS_NEVER);
+    let src = ds_fbo(4, GL_DEPTH24_STENCIL8);
+    let dst = ds_fbo(0, GL_DEPTH24_STENCIL8);
+    DRAWS.lock().unwrap().clear();
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, D | S, GL_NEAREST), GL_INVALID_OPERATION);
+    assert_eq!(DRAWS.lock().unwrap().len(), 1, "the clear was tried once");
+    assert!(writes().is_empty(), "nothing copied");
+}
+
+/// A back end without `ds_write` is refused as today, with no clear issued.
+#[test]
+fn back_end_without_ds_write_is_still_refused() {
+    let _g = context_held(&BACKEND_MS4_NO_WRITE);
+    let src = ds_fbo(4, GL_DEPTH24_STENCIL8);
+    let dst = ds_fbo(0, GL_DEPTH24_STENCIL8);
+    DRAWS.lock().unwrap().clear();
+    for mask in [D, S, D | S] {
+        assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, mask, GL_NEAREST), GL_INVALID_OPERATION, "{mask:#x}");
+    }
+    assert!(DRAWS.lock().unwrap().is_empty(), "no clear: {:?}", DRAWS.lock().unwrap());
+    assert!(writes().is_empty(), "nothing copied");
 }
