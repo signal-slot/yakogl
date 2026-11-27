@@ -1331,7 +1331,10 @@ AA=01; BB=13; ROWS=0-12                              # the session's slice (tabl
    README records the sha256 it ran (step 3). Never set `IMX8MP_CONSOLE=1` (the Verdin's UART3; the build refuses
    it with `x2`). Every later step runs from the integration tip's checkout.
 2. **The loader and the record tool**, once per checkout (gitignored, never committed): step 2 of "Running a GLES3
-   slice on the Armadillo-X2". On a host with neither `aarch64-linux-gcc` nor `lld`, this campaign's tools were
+   slice on the Armadillo-X2", but build `kexec_zephyr` and `snvs_lpgpr` from **the tip checkout the session runs
+   in** (`driver/tools/kexec-zephyr/` there), never from C's worktree of step 1: C's `crash_irq.h` has no
+   allowance for the X2's gpio-mxc and irqsteer, so a loader built at C refuses the jump (session s07). Only the
+   table image stays built at C. On a host with neither `aarch64-linux-gcc` nor `lld`, this campaign's tools were
    built with clang and the Zephyr SDK's linker: `clang --target=aarch64-linux-gnu -O2 -ffreestanding
    -fno-stack-protector -fno-pic -c -o $TMPDIR/$t.o $t.c && aarch64-zephyr-elf-ld.bfd -static -nostdlib -e _start
    -o $t $TMPDIR/$t.o` (static aarch64 ELF, entry at 0x400000; not yet run on the board when this was written).
@@ -1356,6 +1359,17 @@ AA=01; BB=13; ROWS=0-12                              # the session's slice (tabl
    x2` (`kexec-dev`) does not read it: it waits at most 1500 s for Linux after each jump, and WDOG1 (600 s,
    `gc_wdog_arm: armed`) is the image's own bound. Leave it unset; a risk row that needs longer than 1500 s
    back is a board that did not come back (rc 5): stop the session, no retry.
+   **No second jump after a `not_back`.** If a row ends `not_back` (or rc 5, `the board did not come back`), stop
+   the session: do not rerun that row, start no later row or slice, and do not retry the jump. s07's board came
+   back only about 3.5 h after a `not_back`; a second jump on a board in an unknown state risks bricking it.
+   Report it as needing a person.
+
+   **The X2 console is read through the console MCP.** On the runner machines the X2's UART2 is reachable only
+   through the console resource (target `x2-console`, via the console MCP), not as a local `BOARD_UART` device:
+   leave `BOARD_UART` unset for `board.sh`. Read the console through the MCP during and after the run, note what
+   it showed (recoveries, watchdog stops, or nothing) in the slice README's words, and save nothing from it into
+   the tree: no `console.txt`, `e<NN>.console.txt` or `console-scan.txt` is committed for an X2 session read this
+   way.
 7. **Scan the console** when `BOARD_UART` was set: `python3 -I tools/cts/imx8mp-console-scan.py --fail-dark --watch
    <the slice's risk entries, 0-based> $(ls -d "$REC"/*/ | grep -v -e '-p[0-9]\+-[0-9a-f]\{8\}/$') | tee
    $TMPDIR/console-scan.txt`. Use `--fail-dark` on every X2 session with a console: an empty or NUL-only capture
