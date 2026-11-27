@@ -107,9 +107,9 @@ int gc_render_init(const struct device *dev);
  *
  * `gc_render_init()` uses its `dev` for exactly two things -- device_is_ready()
  * and gc_alive() -- and everything after that works on the one `struct gc_dev`.
- * A host that is not Zephyr (the Linux module in tools/gclab, which powers and
- * clocks the GPU through the kernel's genpd and clk drivers and then attaches
- * with gc_bringup_attach()) has already established both facts for itself and
+ * A host that is not Zephyr (the retired Linux module `gclab`, which powered
+ * and clocked the GPU through the kernel's genpd and clk drivers and then
+ * attached with gc_bringup_attach()) has already established both facts and
  * has no Zephyr device to offer, so it calls this instead. The caller must have
  * published the register block and the carveout first (gc_dev_publish()).
  *
@@ -159,7 +159,7 @@ int gc_render_alloc(size_t size, size_t align, struct gc_bo *out);
  * of the last submit that read it. This matters more than it used to: a
  * freed block is handed straight out again, so freeing one the GPU is still
  * reading now corrupts a picture instead of merely leaking. YakoGL's OSAL
- * (yakogl/src/osal/zephyr_gc.c) holds its frees until the fence for exactly
+ * (src/osal/zephyr_gc.c) holds its frees until the fence for exactly
  * that reason. */
 void gc_render_free(const struct gc_bo *bo);
 

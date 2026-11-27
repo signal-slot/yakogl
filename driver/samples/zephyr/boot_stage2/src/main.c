@@ -16,7 +16,7 @@
  * Zephyr's SD stack and the TI AM654 SDHCI driver, or the linked bytes), the
  * log, clearing the zero ranges, quiescing the controller and the cache
  * maintenance. The header check, the CRC-32s, the decoders and the jump are
- * Rust (loader/, include/boot_stage2.h).
+ * Rust (loader/, with the C view in loader/include/boot_stage2.h).
  */
 
 #include <zephyr/kernel.h>
@@ -100,7 +100,8 @@ static inline uint64_t cntpct(void)
 #ifdef CONFIG_BOOT_STAGE2_RESTART
 /*
  * Every entry is a first entry (BOOT_STAGE2_RESTART). The A53 image suspends
- * to this loader's entry point (cluster/a53_power.h) and TF-A resumes core 0
+ * to this loader's entry point (driver/samples/zephyr/cluster/include/
+ * cluster/a53_power.h) and TF-A resumes core 0
  * at __start with the MMU and caches off, at the EL it gave BL33 at power-on:
  * psci_get_ns_ep_info() takes the mode from SCR_EL3.HCE, not from the caller,
  * and HCE is set because imx8mp_bl31_setup.c entered BL33 at EL2. Nothing is

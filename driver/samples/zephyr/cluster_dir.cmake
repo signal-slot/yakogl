@@ -6,7 +6,7 @@
 # Two things in these samples have to be the same on both cores, because an
 # agreement that is typed twice is not one:
 #
-#   include/cluster/frame_ring.h   the frame-ring protocol (route 3)
+#   cluster/include/cluster/frame_ring.h   the frame-ring protocol (route 3)
 #   ui/<panel>/cluster-layout.slint  where every element of the cluster goes
 #
 # The second is why this resolution is not inside the route-3 block: the rich
@@ -14,7 +14,8 @@
 # over it, so every Slint build needs it, ring or no ring.
 #
 # Both live in this repository, in cluster/ next to this file (with
-# ui_layout.h and scripts/gen_layout_slint.py, which generates the layouts).
+# ui_layout.h and cluster/scripts/gen_layout_slint.py, which generates the
+# layouts).
 # -DCLUSTER_DIR=<tree> still names another tree with the same layout, for a
 # safety-core repository that carries its own copy. The environment variable
 # of that name is no longer read: it used to name the platform checkout that

@@ -3,7 +3,7 @@
  * V3D 7.1 (the Pi 5's V3D 7.1.10) texture records: the TEXTURE_SHADER_STATE
  * and SAMPLER_STATE the TMU reads through the P0/P1 uniforms, and the TMU
  * configuration parameter 2 where it differs from 4.2. The 4.2 records stay
- * in v3d_tex.c/.h (unchanged); this file only adds what 7.1 needs.
+ * in v3d_tex.c and v3d_tex.h (unchanged); this file only adds what 7.1 needs.
  *
  * After Mesa 26.2.1 (MIT), with the code each part follows:
  *   v3d_tex71_pack_state  v3d_setup_texture_shader_state and

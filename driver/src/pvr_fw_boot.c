@@ -300,8 +300,8 @@ static void rgx_layer_init(mm_reg_t regs)
 }
 
 /* The DDK firmware is embedded at build time from a LOCAL copy the integrator
- * makes with tools/mkfwblob.sh (src/fw/pvr_fw_blob.h, gitignored: the blob is
- * TI/Img property and is never committed). */
+ * makes with tools/mkfwblob.sh (driver/src/fw/pvr_fw_blob.h, gitignored: the
+ * blob is TI/Img property and is never committed). */
 #include "fw/pvr_fw_blob.h"
 
 static int ddk_fw_get_blob(const uint8_t **fw_out, uint32_t *size_out)

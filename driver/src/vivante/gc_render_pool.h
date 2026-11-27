@@ -5,8 +5,8 @@
  * free list, as static functions over an explicit state so that a host test
  * can exercise the shipped code rather than a copy of it.
  *
- * Its PowerVR twin was src/pvr_render_pool.h, extracted for the same reason
- * (now Rust, driver/rust/src/gpu/pvr/pool.rs, tested there):
+ * Its PowerVR twin was the C `pvr_render_pool.h`, extracted for the same
+ * reason (now Rust, driver/rust/src/gpu/pvr/pool.rs, tested there):
  * a pool test that tests a transcription of the pool is worth very little.
  *
  * The carveout is identity-mapped and permanently mapped in the GPU MMU, so
@@ -39,11 +39,11 @@
 
 /* How many free blocks the list can hold. 128 was chosen on the assumption that
  * a UI reuses a stable handful of sizes, and nothing had measured it. The host
- * test did (driver/tools/gclab/pooltest, 200k mixed ops), and the assumption is
- * only half right: the number needed does NOT grow with how many allocations
- * are live -- 256 live or 8192, the peak is the same -- but it does grow with
- * how many distinct sizes and alignments the workload uses, because that is
- * what decides how many holes coalescing cannot close.
+ * test did (the pool test the retired `gclab` built, 200k mixed ops), and the
+ * assumption is only half right: the number needed does NOT grow with how many
+ * allocations are live -- 256 live or 8192, the peak is the same -- but it does
+ * grow with how many distinct sizes and alignments the workload uses, because
+ * that is what decides how many holes coalescing cannot close.
  *
  *   workload                             peak free blocks    dropped
  *   15 sizes x 6 alignments (3 seeds)       215 / 313 / 222   3.3 %

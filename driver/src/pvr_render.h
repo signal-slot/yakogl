@@ -19,7 +19,7 @@
  * render in pvr_fw_boot.c (pvr_render_ta3d), made reusable and per-frame.
  *
  * Who calls it:
- *   - YakoGL's Zephyr OSAL (yakogl/src/osal/zephyr.c) forwards
+ *   - YakoGL's Zephyr OSAL (src/osal/zephyr.c) forwards
  *     gpu_alloc / submit / wait / query here.
  *   - The YakoGL PowerVR backend fills `struct pvr_render_kick` (the
  *     per-render register block it generates: VDM stream base, PPP control,

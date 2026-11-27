@@ -7395,11 +7395,11 @@ static int case_es3vol(void)
 	 *
 	 * It passed on the PowerVR because that backend has no sampler3D: the
 	 * glsl2usc rewrite turns one into a grid of slices and blends adjacent
-	 * ones with mix() unconditionally (tools/glsl2usc.py, "sampled with a z
-	 * blend"), so it returns a blend whatever the filter says. The Vivante
-	 * texture unit samples the volume itself and honours NEAREST, so it
-	 * returned 50 and the check failed. The expectation was encoding one
-	 * backend's emulation rather than GL.
+	 * ones with mix() unconditionally (tools/yakogl-tools/src/glsl.rs,
+	 * "sampled with a z blend"), so it returns a blend whatever the filter
+	 * says. The Vivante texture unit samples the volume itself and honours
+	 * NEAREST, so it returned 50 and the check failed. The expectation was
+	 * encoding one backend's emulation rather than GL.
 	 *
 	 * Check 1 is unaffected: it samples slice 2's exact centre, where a
 	 * linear blend has weight 0, and every texel within a slice is the same
@@ -9233,9 +9233,9 @@ static int case_polyunit(void)
  * space onto the viewport rectangle: put the clear through the application's
  * viewport and it clears only that rectangle, leaving the rest of the surface
  * holding the previous frame. That is exactly what the GC7000 backend did
- * (measured by cts-runner with driver/tools/gclab/user/clear_viewport.c: a
- * 32x32 viewport on a 64x64 surface left 3072 of 4096 pixels standing, first
- * at (32,0), on both pairs with glGetError 0).
+ * (measured by cts-runner with the retired `gclab` user probe
+ * clear_viewport.c: a 32x32 viewport on a 64x64 surface left 3072 of 4096
+ * pixels standing, first at (32,0), on both pairs with glGetError 0).
  *
  * The failure is invisible in any single-frame test, which is why it survived:
  * every case that clears and draws at a full viewport passes. It shows up as
@@ -13585,8 +13585,9 @@ static int case_uniidx_tex(int which)
 extern int pvr_debug_set_narrow_la(int mode);
 #define NARROWLA_ARMS 3
 #elif defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
-/* the GC7000's opt-in (vivante/backend.rs gc_debug_narrow_la, a test knob):
- * arm 0 expanded into RGBA8, arm 1 narrow with the unit's L8 / A8 / A8L8 */
+/* the GC7000's opt-in (src/vivante/backend.rs gc_debug_narrow_la, a test
+ * knob): arm 0 expanded into RGBA8, arm 1 narrow with the unit's
+ * L8 / A8 / A8L8 */
 extern int gc_debug_set_narrow_la(int on);
 #define NARROWLA_ARMS 2
 #else
@@ -18637,7 +18638,8 @@ static int case_splitkick(void)
  * The top half computes it in the fragment shader (es3trunc_fs.frag), the
  * bottom half in the vertex shader (es3trunc_vsc.vert, the colour passed
  * through). Host: tests/usc_limits.rs gl_test_case_199_* (PowerVR) and
- * v3d/chain.rs trunc_shifts_and_integer_min_max_are_one_operation_each.
+ * src/shaderc/online/v3d/chain.rs
+ * trunc_shifts_and_integer_min_max_are_one_operation_each.
  * ------------------------------------------------------------------------- */
 
 static int case_es3trunc(void)

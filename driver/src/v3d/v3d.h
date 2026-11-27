@@ -15,10 +15,11 @@
  * hardware needs from it, and names the Mesa simulator function that
  * programs the same thing where there is one.
  *
- * The same file builds for Zephyr and, through driver/tools/gclab-style shims,
- * for a Linux harness and a host mock test. Under Linux the kernel's genpd owns
- * the PM and ASB registers, so the harness skips v3d_power_on() (as gclab skips
- * gc_init()'s GPC/CCM part) and starts at v3d_identify().
+ * The same file builds for Zephyr and, through `gclab`-style shims (those of
+ * the retired Linux module), for a Linux harness and a host mock test. Under
+ * Linux the kernel's genpd owns the PM and ASB registers, so the harness skips
+ * v3d_power_on() (as `gclab` skipped gc_init()'s GPC/CCM part) and starts at
+ * v3d_identify().
  */
 #ifndef V3D_H
 #define V3D_H

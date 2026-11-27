@@ -12,7 +12,7 @@
 #include <zephyr/sys/sys_io.h>
 #include "pvr_ddk.h"
 
-/* GPU-visible DDR carveout (see docs/gpu-port-plan.md).  Physically contiguous,
+/* GPU-visible DDR carveout.  Physically contiguous,
  * mapped CPU-non-cached so it is coherent with the non-coherent GPU.
  * Its physical base is chosen at runtime (pvr_carveout_phys): the device
  * tree memory-region on Zephyr (src/pvr_bringup.c). Bare metal builds place it at

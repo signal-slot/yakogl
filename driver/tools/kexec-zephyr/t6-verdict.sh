@@ -622,9 +622,10 @@ display_cmu() { (((16#${V[CMU]} & 0x3f) == 0x15)); }
 # t6_cold's stage names (soc::rk3588_display_chain::stage), by number
 COLD_STAGES=(none START POWER GRF PHY DCLK CONTROLLER VOP VIDEO)
 
-# The cold chain's lines (the drivers crate: board/nanopc_t6_display_cold.rs
-# and soc/rk3588_display_chain.rs), the same for t6_cold and for a GL image
-# whose first show is the cold chain.
+# The cold chain's lines (the drivers crate:
+# driver/rust/src/board/nanopc_t6_display_cold.rs and
+# driver/rust/src/soc/rk3588_display_chain.rs), the same for t6_cold and
+# for a GL image whose first show is the cold chain.
 #
 # table_cold_stages <last>: what the chain found before it wrote, then its
 # stages 1 to <last>; no stage may fail.
@@ -687,12 +688,14 @@ picture_timing() {
 	done
 }
 
-# the hold fits the build's rules (common/t6_picture.c): a multiple of 10,
-# at least 30, and ended 10 s before the watchdog's lifetime at least
+# the hold fits the build's rules
+# (tools/probes/nanopc_t6/common/t6_picture.c): a multiple of 10, at least 30,
+# and ended 10 s before the watchdog's lifetime at least
 picture_hold_fits() { ((HOLD_S % 10 == 0 && HOLD_S >= 30 && HOLD_S + 10 < LIFE_S)); }
 
 # table_picture_status <probe> [any]: the hold and the read-backs after it,
-# as common/t6_picture.c prints them for both display probes.
+# as tools/probes/nanopc_t6/common/t6_picture.c prints them for both display
+# probes.
 table_picture_status() {
 	local p=$1
 	# the hold of picture_timing, a line every 10 s; one after them is
@@ -889,9 +892,11 @@ table_t6_submit() {
 }
 
 # ---- triangle ---------------------------------------------------------------
-# examples/triangle (src/main.c, check/src/lib.rs) on the board layer
-# (driver/zephyr/lib/board/nanopc_t6/board_nanopc_t6.c, common/board.c): the
-# first GL image judged here. A PASS says:
+# examples/triangle (examples/triangle/src/main.c,
+# examples/triangle/check/src/lib.rs) on the board layer
+# (driver/zephyr/lib/board/nanopc_t6/board_nanopc_t6.c,
+# driver/zephyr/lib/board/common/board.c): the first GL image judged here.
+# A PASS says:
 #  - the window came up at the size the scene asks for, and GL names the GPU;
 #  - the first show put the window on the screen: by the cold chain when no
 #    picture was left running (the kexec route and U-Boot: the adopt stops

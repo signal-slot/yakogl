@@ -19,7 +19,8 @@
  *    UART once (tap() writes every character to the UART first);
  *  - the EGL default display: passed through. The 7.1 OSAL takes the V3D's
  *    clock switch from the board layer when it gets no platform
- *    (osal_zephyr_v3d_default_platform, rpi5/rpi5_v3d.c), so the Pi 4's
+ *    (osal_zephyr_v3d_default_platform,
+ *    driver/zephyr/lib/board/rpi5/rpi5_v3d.c), so the Pi 4's
  *    --wrap=eglGetDisplay is not linked (CMakeLists.txt, V3D71 branch).
  *
  * The watchdog is the board layer's (CONFIG_YAKOGL_RPI5_WDOG, armed before

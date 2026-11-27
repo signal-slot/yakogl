@@ -7,8 +7,9 @@
  * i.MX8MP's yakogl_gc_board.
  *
  * Before main() the board layer has powered the GPU for the driver
- * (stm32mp2/gc_power_mp2.c: SCMI over OP-TEE, the RCC; it refuses any part
- * but 0x8000/0x6205 with a PSCI reset) and armed OP-TEE's watchdog, which it
+ * (driver/zephyr/lib/board/stm32mp2/gc_power_mp2.c: SCMI over OP-TEE, the
+ * RCC; it refuses any part but 0x8000/0x6205 with a PSCI reset) and armed
+ * OP-TEE's watchdog, which it
  * feeds until CONFIG_YAKOGL_STM32MP2_LIFETIME_S; there the layer resets the
  * board whatever the suite is doing. board_finish() ends the run with the
  * record and PSCI SYSTEM_RESET back into ST's Linux.

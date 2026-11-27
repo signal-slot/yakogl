@@ -153,7 +153,8 @@ grep -qF 'T6:G go: SCTLR_EL2' <<<"$(strings -n 8 "$IMG")" || refuse "$IMG has no
 period_s=$(( ((1 << (16 + top)) + 23999999) / 24000000 ))
 if [ "$proof" = 1 ]; then image_wait=$((period_s + 10)); else image_wait=$((lifetime + period_s)); fi
 # The image's own bound, from its marker: gl_test's image is fed for 300 s
-# and a dEQP row's for 600 s (their boards/nanopc_t6.conf), so they wait
+# and a dEQP row's for 600 s (each image's own nanopc_t6.conf under its
+# boards/), so they wait
 # about 6 and 11 minutes. U-Boot, its prompt and the load take well under a
 # minute.
 image_wait=$((image_wait + 60))

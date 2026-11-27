@@ -84,8 +84,10 @@ if(CONFIG_YAKOGL_GPU_V3D71)
   # The 7.1 table (docs/notes/v3d71-gl-table.md) through the same GL core and
   # in-process compiler. No screen: the console is the board's UART. The
   # board layer (YAKOGL_GPU_V3D71 selects YAKOGL_RPI5_WDOG and
-  # YAKOGL_RPI5_MBOX, driver/zephyr/lib/board) builds rpi4/rpi_wdog.c and
-  # rpi4/rpi_mbox.c, so this branch adds neither; the watchdog's hold is
+  # YAKOGL_RPI5_MBOX, driver/zephyr/lib/board) builds
+  # driver/zephyr/lib/board/rpi4/rpi_wdog.c and
+  # driver/zephyr/lib/board/rpi4/rpi_mbox.c, so this branch adds neither; the
+  # watchdog's hold is
   # YAKOGL_RPI5_WDOG_HOLD_S (boards/rpi_5.conf, the Kconfig).
   if(NOT CONFIG_YAKOGL_RPI5_WDOG OR NOT CONFIG_YAKOGL_RPI5_MBOX)
     message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_RPI5_WDOG and CONFIG_YAKOGL_RPI5_MBOX are off (YAKOGL_GPU_V3D71 selects them)")

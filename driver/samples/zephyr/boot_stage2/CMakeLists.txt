@@ -25,9 +25,9 @@ target_sources(app PRIVATE src/main.c)
 target_include_directories(app PRIVATE loader/include)
 
 # BOOT_STAGE2_RESTART: the loader is entered again after the A53 image's
-# SYSTEM_SUSPEND (cluster/a53_power.h). The noinit room for the copy of the
-# initialised RAM data that makes every entry a first entry (src/main.c,
-# "Every entry is a first entry").
+# SYSTEM_SUSPEND (driver/samples/zephyr/cluster/include/cluster/a53_power.h).
+# The noinit room for the copy of the initialised RAM data that makes every
+# entry a first entry (src/main.c, "Every entry is a first entry").
 if(CONFIG_BOOT_STAGE2_RESTART)
   target_include_directories(app PRIVATE ../cluster/include)
   zephyr_linker_sources(NOINIT data_snapshot.ld)
