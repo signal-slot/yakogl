@@ -2294,7 +2294,11 @@ fn sensitivity_of(rec: &Base) -> LodKey {
     }
     let (mip, switch) = crate::shaderc::lod_variants_enabled();
     let kill = SAMPLE_KILL_VARIANTS && rec.stage == SHC_STAGE_FRAGMENT;
-    if cfg!(feature = "gpu-v3d") || !(mip || switch || kill) {
+    /* the Mali's vertex cube bindings in a build that reports ES 2.0: the
+     * `cube_noseam` variant reads such a cube as the 2D array of its faces
+     * (docs/notes/mali-cube-noseam.md) */
+    let noseam = cfg!(feature = "gpu-mali") && crate::REPORT_ES2 && rec.stage == SHC_STAGE_VERTEX;
+    if cfg!(feature = "gpu-v3d") || !(mip || switch || kill || noseam) {
         return LodKey::NONE;
     }
     /* the gradients the record's own compile asked about: its constant W,
@@ -2341,9 +2345,21 @@ fn sensitivity_of(rec: &Base) -> LodKey {
         #[cfg(not(feature = "gpu-powervr"))]
         let mip_free = 0;
         let sample_kill = kill && !m.instrs.iter().any(|op| matches!(op, ir::Op::Discard));
-        LodKey { mip_free, mag_switch, sample_kill, ret32: 0, cube_noseam: 0, fixed_depth: 0 }
+        let cube_noseam = if noseam { mali_cube_bindings(m) } else { 0 };
+        LodKey { mip_free, mag_switch, sample_kill, ret32: 0, cube_noseam, fixed_depth: 0 }
     })
     .unwrap_or(LodKey::NONE)
+}
+
+/// The cube bindings below 15 a Mali vertex stage reads with a look-up
+/// ([`LodKey::cube_noseam`], the bits [`LodKey::bits`] keeps): the bindings
+/// whose cube the `cube_noseam` variant reads as a six-layer 2D array
+/// (docs/notes/mali-cube-noseam.md).
+fn mali_cube_bindings(m: &ir::Module<'_>) -> u32 {
+    m.instrs.iter().fold(0u32, |acc, op| match *op {
+        ir::Op::Tex { sampler, dim: ir::TexDim::Cube, .. } if sampler < 15 => acc | 1 << sampler,
+        _ => acc,
+    })
 }
 
 /// A V3D stage's [`LodKey`] sensitivity (see [`sensitivity_of`]): of
@@ -4128,11 +4144,14 @@ void main (void)
     fn the_sensitivity_names_the_look_ups_the_key_can_change() {
         let _serial = test_lock();
         let vs = compile_out(SHC_STAGE_VERTEX, VS_CUBE_LOD);
-        /* the remap is for an ES 2.0 report only (`sensitivity_of`) */
+        /* the remap is for an ES 2.0 report only (`sensitivity_of`), and so
+         * is the Mali's six-layer read of a vertex cube (`cube_noseam`,
+         * docs/notes/mali-cube-noseam.md), which switch (b) does not gate */
         let es2 = u32::from(crate::REPORT_ES2);
+        let noseam = es2 & u32::from(cfg!(feature = "gpu-mali"));
         assert_eq!(
             sensitivity(&vs),
-            LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0, cube_noseam: 0, fixed_depth: 0 }
+            LodKey { mip_free: 0, mag_switch: es2, sample_kill: false, ret32: 0, cube_noseam: noseam, fixed_depth: 0 }
         );
         let plain = compile_out(SHC_STAGE_FRAGMENT, FS_READS_V);
         /* the PowerVR's fragment shaders are all sensitive to the sample
@@ -4152,7 +4171,7 @@ void main (void)
             release(&fs);
         }
         crate::shaderc::shc_set_lod_variants(-1, 0);
-        assert_eq!(sensitivity(&vs), LodKey::NONE, "switch (b) off");
+        assert_eq!(sensitivity(&vs), LodKey { cube_noseam: noseam, ..LodKey::NONE }, "switch (b) off");
         crate::shaderc::shc_set_lod_variants(-1, 1);
         assert_eq!(sensitivity(&ShcShader::ZERO), LodKey::NONE, "not this back end's");
         release(&plain);

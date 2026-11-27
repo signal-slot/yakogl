@@ -118,6 +118,7 @@ pub(super) struct Info {
     pub sampler: Option<u8>,
     pub samplers: Vec<u8>,
     pub cube_samplers: u64,
+    pub cube_layers: u64,
     pub helper_threads: bool,
     pub can_discard: bool,
     pub ubo: Vec<super::UboRow>,
@@ -141,6 +142,7 @@ impl Info {
             sampler: r.sampler,
             samplers: r.samplers.to_vec(),
             cube_samplers: r.cube_samplers,
+            cube_layers: r.cube_layers,
             helper_threads: r.helper_threads,
             can_discard: r.can_discard,
             ubo: r.ubo.to_vec(),
@@ -166,6 +168,7 @@ impl Info {
             sampler: self.sampler,
             samplers: &self.samplers,
             cube_samplers: self.cube_samplers,
+            cube_layers: self.cube_layers,
             helper_threads: self.helper_threads,
             can_discard: self.can_discard,
             ubo: &self.ubo,
@@ -1669,6 +1672,7 @@ fn a_freed_record_gives_no_mali_record_and_a_stale_handle_never_a_newer_one() {
         sampler: None,
         samplers: &[],
         cube_samplers: 0,
+        cube_layers: 0,
         helper_threads: false,
         can_discard: false,
         ubo: &[],
@@ -10230,6 +10234,79 @@ fn a_keyed_vertex_cube_look_up_switches_to_magnification_at_one_half() {
     let has = |code: &[String], what: &str| code.iter().any(|t| t.contains(what));
     assert!(!has(&plain, "CMP") && !has(&plain, "CSEL"), "{plain:#?}");
     assert!(has(&keyed, "CMP") || has(&keyed, "CSEL"), "no compare or select for c = 0.5:\n{keyed:#?}");
+}
+
+/// The reference's vertex cube look-up compiled with the given
+/// `cube_noseam` key (docs/notes/mali-cube-noseam.md), as a sampler-state
+/// variant is: the program's instructions as text, and the record.
+fn vcube_noseam(cube_noseam: u32) -> (Vec<String>, Info) {
+    let vs = include_str!("../../../../tools/mali/testdata/pan_tex_ref/vcube.vert");
+    let key = crate::shaderc::LodKey { cube_noseam, ..crate::shaderc::LodKey::NONE };
+    let old = crate::shaderc::set_compile_lod_key(key);
+    let s = compile_alone(SHC_STAGE_VERTEX, vs);
+    crate::shaderc::set_compile_lod_key(old);
+    let s = s.expect("vcube.vert compiles");
+    (trim(&s.code).iter().map(|w| text(*w)).collect(), s.info)
+}
+
+/// The `cube_noseam` variant (docs/notes/mali-cube-noseam.md): with the key
+/// of its binding, the vertex cube look-up keeps the face sequence
+/// (`CUBEFACE1`, `CUBEFACE2_V9`, `CUBE_SSEL`, `CUBE_TSEL`), drops the `MUX`
+/// that packs the face above S, takes the face's layer `u2f32(face >> 29)`
+/// (`RSHIFT_OR`, `U32_TO_F32`) and reads a 2D array at that layer and the
+/// explicit level, four staging words as Mesa stages a `sampler2DArray`
+/// `textureLod` (`TEX_SINGLE ... .2d.array_enable.explicit`, pan_shc on
+/// Mesa 26.2.1). The record names the look-up's descriptor in
+/// `cube_layers`. Without the key, or with a key of another binding, the
+/// program is the plain cube look-up, `cube_layers` 0.
+#[test]
+fn a_keyed_vertex_cube_look_up_reads_the_face_as_an_array_layer() {
+    let _serial = store::test_lock();
+    let (plain, pi) = vcube_noseam(0);
+    let (keyed, ki) = vcube_noseam(1);
+    assert_eq!(vcube_noseam(1 << 3).0, plain, "a key of another binding");
+    let has = |code: &[String], what: &str| code.iter().any(|t| t.contains(what));
+    let tex = |code: &[String]| code.iter().find(|t| t.contains("TEX_SINGLE")).cloned().unwrap_or_default();
+    assert!(has(&plain, "MUX") && tex(&plain).contains(".cube.explicit"), "{plain:#?}");
+    assert_eq!((pi.cube_samplers, pi.cube_layers), (1, 0));
+    for op in ["CUBEFACE1", "CUBEFACE2", "CUBE_SSEL", "CUBE_TSEL", "RSHIFT_OR", "U32_TO_F32"] {
+        assert!(has(&keyed, op), "no {op}:\n{keyed:#?}");
+    }
+    assert!(!has(&keyed, "MUX"), "the face is still packed above S:\n{keyed:#?}");
+    let t = tex(&keyed);
+    /* the staging operand, after the destination: S, T, the layer, the level */
+    let staged = t.split(", @").nth(1).and_then(|x| x.split(',').next()).map(|x| x.split(':').count());
+    assert!(t.contains(".2d.array_enable.explicit") && staged == Some(4), "{t}\n{keyed:#?}");
+    assert_eq!((ki.cube_samplers, ki.cube_layers), (1, 1));
+}
+
+/// The look-up the `cube_noseam` variant ends in is Mesa's 2D-array
+/// look-up at an explicit level: Mesa 26.2.1's own compiler (pan_shc,
+/// tools/mali/README-pan_shc.md) on `vcube_layers.vert`, a vertex
+/// `textureLod(sampler2DArray, vec3, float)`, writes
+/// `TEX_SINGLE.slot1.reserved.32.2d.array_enable.explicit` with four
+/// staging registers (S, T, the fp32 layer as the coordinate's third lane,
+/// the 8.8 level) and four results
+/// (tools/mali/testdata/pan_tex_ref/vcube_layers.pan_shc.disasm). The keyed
+/// vcube.vert's look-up has the same operation, modifiers and operand
+/// shapes; the registers are the allocator's.
+#[test]
+fn the_keyed_vertex_cube_look_up_is_mesa_s_array_look_up() {
+    let _serial = store::test_lock();
+    let disasm = include_str!("../../../../tools/mali/testdata/pan_tex_ref/vcube_layers.pan_shc.disasm");
+    let mesa = disasm
+        .lines()
+        .find_map(|l| l.split_once("    ").map(|(_, t)| t.trim()).filter(|t| t.starts_with("TEX_SINGLE")))
+        .expect("the reference's TEX_SINGLE");
+    let (keyed, _) = vcube_noseam(1);
+    let ours = keyed.iter().find(|t| t.starts_with("TEX_SINGLE")).expect("the keyed TEX_SINGLE");
+    /* the mnemonic, then per operand its register count */
+    let shape = |t: &str| -> (String, Vec<usize>) {
+        let (op, rest) = t.split_once(' ').unwrap_or((t, ""));
+        (op.to_string(), rest.split(", ").map(|o| o.split(':').count()).collect())
+    };
+    assert_eq!(shape(ours), shape(mesa), "ours: {ours}\nMesa's: {mesa}");
+    assert_eq!(shape(mesa).1, [4, 4, 2], "{mesa}");
 }
 
 /// The dEQP `uniform_api` compare chain's shader objects (glCompileShader:
