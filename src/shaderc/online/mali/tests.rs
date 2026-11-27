@@ -7112,7 +7112,7 @@ fn the_builtin_population_is_byte_equal_to_mesa_26_2_1() {
 
 /// Cases 45 (dynidx.frag) and 98 (uniloop.frag): vid.vert's programs for a
 /// fragment shader that reads no varying (the position program alone,
-/// builtin_45/98.expect.json, the varying's gl_VertexID code dead). Both
+/// tools/mali/testdata/builtin_45.expect.json and builtin_98.expect.json, the varying's gl_VertexID code dead). Both
 /// fragment programs are Mesa's with the kept-loop cap ([`CapEdit`];
 /// [`builtin_98_is_mesa_26_2_1_with_the_loop_cap`],
 /// [`builtin_45_is_mesa_26_2_1_with_the_loop_cap`]).

@@ -1858,7 +1858,7 @@ fn emit_raster_state(c: &mut GcCmd, d: &GcDraw) {
      * shrinks it to that rectangle and leaves the rest of the surface
      * standing -- which is what the board measured: a 32x32 viewport on a
      * 64x64 surface left 3072 of 4096 pixels untouched, first at (32,0)
-     * (cts-runner, driver/tools/gclab/user/clear_viewport.c, both pairs,
+     * (cts-runner clear_viewport probe, both pairs,
      * glGetError 0).
      *
      * ES 2.0 3.7.3 lists what affects a clear -- the scissor test, the

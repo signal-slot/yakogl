@@ -5,7 +5,7 @@
  * (include/gles_osal.h states the contract). Every OSAL (zephyr.c,
  * zephyr_gc.c, zephyr_v3d.c, baremetal.c, linux.c) calls
  * it before its memcpy, so all six refuse the same arguments. Plain C with
- * no OS in it, so the host checks it (tools/osal_bounds_check.c).
+ * no OS in it, so the host checks it (tools/osal/osal_bounds_check.c).
  *
  * The range test is written so that nothing in it can wrap: `off + n` wraps
  * for a large `n` (off 16, n SIZE_MAX - 7 gives 8), passes a

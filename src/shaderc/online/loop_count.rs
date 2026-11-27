@@ -6,7 +6,7 @@
 //! gives a recognized loop its exact count as the guard, and the shared
 //! unroller (powervr/unroll.rs `trip_count`, used by the PowerVR and the V3D)
 //! asks it once its own simulation has followed 256 passes (its MAX_ITERATIONS). Moved out of
-//! select.rs by the (C') proposal (.claude/worktrees/proposal-loop-cap-constant-bounds.md).
+//! select.rs by the (C') proposal.
 
 use super::ir;
 

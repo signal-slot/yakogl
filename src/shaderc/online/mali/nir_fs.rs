@@ -13508,7 +13508,7 @@ fn src32(f: &Fs<'_>, lv: &Leaves, val: &[Option<Src>], v: Val) -> Result<Src, Ma
 /// == 2`, `F16_TO_S32` of the uniform's fp16 half) or a bool uniform's word
 /// itself (case 112): uniform words read by the selects, no load either,
 /// the colour still constants and selects of constants
-/// (intbig_case72/112.expect.json).
+/// (tools/mali/testdata/intbig_case72.expect.json and intbig_case112.expect.json).
 ///
 /// The integers may also be `F16_TO_S32` of fp16 products of varying lanes
 /// (int_compare's `int(3.0 * v_color.r)` and `.g`), when those pair
