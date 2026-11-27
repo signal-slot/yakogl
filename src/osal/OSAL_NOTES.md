@@ -14,8 +14,9 @@ a different driver: `zephyr.c` for the PowerVR BXS-4-64, `zephyr_gc.c` for
 the Vivante GC7000UL, `zephyr_v3d.c` for the Broadcom V3D 4.2,
 `zephyr_v3d71.c` for the Broadcom V3D 7.1 and `zephyr_mali.c` for the Arm
 Mali (G610, and the G310 built only). All define `osal_zephyr_ops`, the
-module build compiles exactly one of them (`CONFIG_YAKOGL_GPU_*`, plus
-`CONFIG_YAKOGL_GPU_V3D71` on top of `CONFIG_YAKOGL_GPU_V3D`), and nothing
+module build compiles exactly one of them (chosen by the Kconfig symbol of
+the GPU, `zephyr/Kconfig`; the V3D 7.1's symbol `CONFIG_YAKOGL_GPU_V3D71`
+is set on top of the V3D 4.2's), and nothing
 above the OSAL knows which. Two more files serve them all:
 `zephyr_timing.c` (always) and `zephyr_shaderc_scratch.c` (with the
 in-process compiler, `CONFIG_YAKOGL_SHADERC_ONLINE`).
@@ -26,17 +27,17 @@ in-process compiler, `CONFIG_YAKOGL_SHADERC_ONLINE`).
 |-------------------|---------------------------------------------------------------|
 | `osal_internal.h` | Private backend↔OSAL contract, the C view: the kick descriptor's shape per GPU (see below), the `OSAL_QUERY_*` ids and the structs they fill, the Zephyr init args (`struct osal_zephyr_init`, `osal_zephyr_v3d_init`, `osal_zephyr_mali_init`), the run-end reports, the GPU-MMU L0 PTE flags, the weak `yakogl_zephyr_present`, and the `g_osal` selection decls. Not part of the public interface. Its Rust mirror is `mod.rs` / `render.rs` / `mali.rs`; the generated layout pins (`src/abi_layout.rs` / `src/abi_layout_check.c`, `yakogl-tools abi-layout`) fail the build when the two drift. |
 | `zephyr.c`        | Zephyr backend for the PowerVR — wraps the silicon-proven bring-up driver. |
-| `zephyr_gc.c`     | Zephyr backend for the Vivante GC7000UL — wraps the driver's render service (`driver/src/vivante/gc_render.h`). Compiled instead of `zephyr.c` when `CONFIG_YAKOGL_GPU_VIVANTE=y`. |
-| `zephyr_v3d.c`, `zephyr_v3d.h` | Zephyr backend for the Broadcom V3D 4.2 (Raspberry Pi 4). The V3D has no firmware, no ring and no Zephyr driver, so this file is the whole render service, on the driver's OS-free steps (`driver/src/v3d/v3d_hw.c`). `zephyr_v3d.h` holds the instruments it offers a V3D sample (memory use, free runs, held frees). Compiled for `CONFIG_YAKOGL_GPU_V3D=y`. |
-| `zephyr_v3d71.c`, `zephyr_v3d71.h` | The same for the V3D 7.1 (Raspberry Pi 5, BCM2712), on `v3d_hw.c`'s BCM2712 path; it shares the 4.2 OSAL's allocator and free rule (`v3d_granules.h`, `v3d_frees.h`) and instruments (`zephyr_v3d.h`), and refuses init unless the PM watchdog is armed. `zephyr_v3d71.h` adds the 7.1 TFU job. Compiled instead of `zephyr_v3d.c` for `CONFIG_YAKOGL_GPU_V3D71=y`. |
-| `zephyr_mali.c`, `zephyr_mali_board.h` | Zephyr backend for the Arm Mali (the NanoPC-T6's Mali-G610; the Verdin iMX95's Mali-G310, built and host-tested only). The OSAL's logic is Rust in the drivers crate (`driver/rust/src/board/nanopc_t6_osal.rs`, the `yd_t6_osal_*` entries: the GPU and its CSF firmware brought up, one group with one stream, a carve-out, each kick one job on the ring); this file holds the image's GPU memory, the log and the table. What depends on the SoC (register mappings, power-on, the watchdog) is the board's half, declared in `zephyr_mali_board.h` and implemented once per board under `driver/zephyr/lib/board/`. Compiled for `CONFIG_YAKOGL_GPU_MALI=y`. |
+| `zephyr_gc.c`     | Zephyr backend for the Vivante GC7000UL — wraps the driver's render service (`driver/src/vivante/gc_render.h`). Compiled instead of `zephyr.c` for the Vivante Kconfig symbol (`zephyr/CMakeLists.txt`). |
+| `zephyr_v3d.c`, `zephyr_v3d.h` | Zephyr backend for the Broadcom V3D 4.2 (Raspberry Pi 4). The V3D has no firmware, no ring and no Zephyr driver, so this file is the whole render service, on the driver's OS-free steps (`driver/src/v3d/v3d_hw.c`). `zephyr_v3d.h` holds the instruments it offers a V3D sample (memory use, free runs, held frees). Compiled for the V3D 4.2's Kconfig symbol (`zephyr/CMakeLists.txt`). |
+| `zephyr_v3d71.c`, `zephyr_v3d71.h` | The same for the V3D 7.1 (Raspberry Pi 5, BCM2712), on the BCM2712 path of `driver/src/v3d/v3d_hw.c`; it shares the 4.2 OSAL's allocator and free rule (`v3d_granules.h`, `v3d_frees.h`) and instruments (`zephyr_v3d.h`), and refuses init unless the PM watchdog is armed. `zephyr_v3d71.h` adds the 7.1 TFU job. Compiled instead of `zephyr_v3d.c` for `CONFIG_YAKOGL_GPU_V3D71`. |
+| `zephyr_mali.c`, `zephyr_mali_board.h` | Zephyr backend for the Arm Mali (the NanoPC-T6's Mali-G610; the Verdin iMX95's Mali-G310, built and host-tested only). The OSAL's logic is Rust in the drivers crate (`driver/rust/src/board/nanopc_t6_osal.rs`, the `yd_t6_osal_*` entries: the GPU and its CSF firmware brought up, one group with one stream, a carve-out, each kick one job on the ring); this file holds the image's GPU memory, the log and the table. What depends on the SoC (register mappings, power-on, the watchdog) is the board's half, declared in `zephyr_mali_board.h` and implemented once per board under `driver/zephyr/lib/board/`. Compiled for `CONFIG_YAKOGL_GPU_MALI`. |
 | `zephyr_shaderc_scratch.c` | The memory the in-process shader compiler works in: one static region, lent once at boot, sized by `CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES`. Linked beside any Zephyr OSAL when the compiler is built in. |
 | `zephyr_timing.c` | The time answers a Zephyr OSAL gives (`OSAL_QUERY_CLOCK_NS`, `OSAL_QUERY_DRAW_STATS`, through `osal_zephyr_timing_query()`), in one place so the OSALs cannot drift apart. |
 | `baremetal.c`     | Bare-metal backend skeleton — direct MMIO + static carveout; proves the portability seam (2nd backend, same interface). The board registers its addresses and hooks first (`include/gles_osal_baremetal.h`, `osal_bm_board_config()`); init refuses without them (see below). |
 | `linux.c`         | Host backend with no GPU: malloc'd GPU memory, fake device VAs per heap, submits complete at once. Runs the GL core, a GPU backend (PowerVR, Vivante, or the V3D with a model of the Pi 4's carve-out and its Zephyr OSAL's allocator and free rule) and the shader compiler on a Linux host under ASan/valgrind with a real application's call stream (`-DYAKOGL_OSAL=linux`, `-DYAKOGL_GPU=powervr|vivante|v3d`); the host harness `tools/hostharness/` links it (its recording OSAL can allocate through it). Renders nothing. |
-| `osal_bounds.h`   | `osal_gpu_copy_ok()`: the one argument check every OSAL's `gpu_write` / `gpu_read` makes before its `memcpy` (NULL `mem`, `mem->cpu` or buffer, and `off > size || n > size - off`, a form in which `off + n` cannot wrap). The contract is in `include/gles_osal.h`; the host checks it with `tools/osal/osal_bounds_check.c`. |
+| `osal_bounds.h`   | `osal_gpu_copy_ok()`: the one argument check every OSAL that has a `gpu_write` / `gpu_read` (all but the Mali's, whose two are NULL) makes before its `memcpy` (NULL `mem`, `mem->cpu` or buffer, and `off > size || n > size - off`, a form in which `off + n` cannot wrap). The contract is in `include/gles_osal.h`; the host checks it with `tools/osal/osal_bounds_check.c`. |
 | `osal_log.h`      | The one line buffer (`OSAL_LOG_LINE_MAX`) a Zephyr OSAL's `log` formats into before it prints, so a core line reaches the log whole. Host check: `tools/osal/osal_log_check.c`. |
-| `pending_frees.h` | The queue of frees held until the kick that may read them completes, and its rule on a full queue (wait for the oldest kick, or refuse and count). Used by `zephyr.c`, `zephyr_gc.c`, `zephyr_v3d.c`, `zephyr_v3d71.c` and `linux.c`'s V3D model. Host check: `tools/osal/pending_frees_check.c`. |
+| `pending_frees.h` | The queue of frees held until the kick that may read them completes, and its rule on a full queue (wait for the oldest kick, or refuse and count). Included by `zephyr.c`, and through `gc_frees.h` and `v3d_frees.h` used by `zephyr_gc.c`, `zephyr_v3d.c`, `zephyr_v3d71.c` and `linux.c`'s V3D model. Host check: `tools/osal/pending_frees_check.c`. |
 | `gc_frees.h`, `gc_cache_range.h` | The GC7000 OSAL's free rule (which fence a free waits for) and its "is this range inside the non-cacheable carve-out" test. Host checks: `tools/gc/osal_frees_check.c`, `tools/osal/gc_cache_range_check.c`. |
 | `v3d_frees.h`, `v3d_granules.h` | The V3D OSALs' free rule and their carve-out allocator (a granule bitmap, first fit, small blocks from the top opt-in). Host checks: `tools/v3d/osal_frees_check.c`, `tools/v3d/osal_granules_check.c`. |
 | `linux_heap.h`    | `linux.c`'s fake device-VA allocator: a finite range per heap, first fit over a coalescing free list. Host check: `tools/osal/linux_heap_check.c`. |
@@ -47,16 +48,16 @@ in-process compiler, `CONFIG_YAKOGL_SHADERC_ONLINE`).
 Build files: `CMakeLists.txt` (host/Linux/generic → `libyakogl.a`; options
 `YAKOGL_OSAL=zephyr|baremetal|linux`, default `linux`, and
 `YAKOGL_GPU=powervr|vivante|v3d`, where `v3d` needs the Linux OSAL),
-`zephyr/{CMakeLists.txt,Kconfig,module.yml}` (Zephyr module,
-`CONFIG_YAKOGL`), `baremetal.mk` (cross-compile → `libyakogl.a`,
+`zephyr/CMakeLists.txt`, `zephyr/Kconfig` and `zephyr/module.yml` (the Zephyr
+module, Kconfig symbol YAKOGL), `baremetal.mk` (cross-compile → `libyakogl.a`,
 `GPU=powervr|vivante`). Each has cargo build the archive crate `capi/` (the
 `yakogl` crate with the matching `osal-*` and `gpu-*` features, plus a panic
 handler) and compiles the one OSAL TU (plus the layout pins
 `src/abi_layout_check.c` and the GPU's FFI pins, e.g.
-`src/pvr/ffi_layout_check.c`, and, outside Zephyr, the driver's command
-generators). CMake and `baremetal.mk` post-process the cargo static library
+`src/pvr/ffi_layout_check.c`, and, for the PowerVR outside Zephyr, the driver's command
+generators; for the V3D (CMake, Linux OSAL) its job builder). CMake and `baremetal.mk` post-process the cargo static library
 with `capi/assemble.cmake`, which appends the C objects with `ar`; Zephyr
-links the Rust archive next to the `zephyr_library` that holds the selected
+links the Rust archive next to the Zephyr library that holds the selected
 OSAL. With `YAKOGL_RUST_LINKAGE=external` (`RUST_LINKAGE=external` in
 `baremetal.mk`) only the C parts are built and the application links the
 crate into its own Rust static library.
@@ -80,7 +81,7 @@ On a `YAKOGL_GPU_VIVANTE` build the descriptor is `struct gc_kick`
 (`src/vivante/gc_kick.h`) instead: a command stream in GPU memory. The GC7000
 has no firmware, so there is nothing to hand a register block to — the OSAL
 gives the stream to `gc_render_submit()`, which appends the hardware's
-epilogue (cache flushes, the FE/PE semaphore pair, the `EVENT`), allocates
+epilogue (cache flushes, the FE/PE semaphore pair, the EVENT), allocates
 the event and returns a monotonic fence.
 
 The V3D OSALs take `struct v3d_kick` (`src/v3d/v3d_kick.h`), and the Mali
@@ -91,7 +92,7 @@ OSAL takes `struct osal_mali_kick` (`osal_internal.h`, `mali.rs`).
 | osal op        | Driver plumbing wrapped                                        | where |
 |----------------|----------------------------------------------------------------|-------|
 | `init`         | GPU already powered/booted by the pvr DT driver (`driver/src/pvr_bringup.c` → `pvr_fw_boot`); `pvr_render_init()` builds the render service objects once | `driver/src/pvr_render.c` |
-| `gpu_alloc`    | `pvr_render_alloc()`: page-aligned render-pool span, mapped at the next free VA of the heap named by the base VA (GENERAL / PDS / USC) | `driver/src/pvr_render.c`, `pvr_gpu_bo_alloc` (`driver/src/pvr_drv.h`) |
+| `gpu_alloc`    | `pvr_render_alloc()`: page-aligned render-pool span, mapped at the next free VA of the heap named by the base VA (GENERAL / PDS / USC) | `driver/src/pvr_render.c`, the driver's `driver/src/pvr_drv.h` |
 | `gpu_free`     | Deferred (`pending_frees.h`): the block is held until a fence at or past the newest kick that may read it has completed, then goes back to the render pool's free list (`pvr_render_free`, from `drain_pending_frees`, run from `wait` and `completed`). With `CONFIG_YAKOGL_PVR_POOL_RECLAIM` (on by default) that kick is the one being recorded while a frame is open, else the last one submitted (`pvr_backend_free_fence`), and a refused allocation waits for the last kick and retries; without it, always the kick being recorded (`s_last_submitted + 1`). A GL object freed while the GPU still reads it is therefore safe. | `driver/src/pvr_render.c` |
 | `mmu_map`      | `pvr_mmu_map` for an explicit VA→phys range                    | `driver/src/pvr_drv.h` |
 | `map_phys`     | `pvr_render_map_phys`: caller-owned pages (scan-out) at a fresh heap VA, no pool memory | `driver/src/pvr_render.h` |
@@ -117,7 +118,7 @@ OSAL takes `struct osal_mali_kick` (`osal_internal.h`, `mali.rs`).
 | `gpu_free` | **Deferred** (`gc_frees.h`, on `pending_frees.h`): the block is held until the newest kick that may read it has completed — the kick being recorded while the backend records a frame (`OSAL_QUERY_GC_FRAME_OPEN`), else the last kick submitted; a block whose kick has already completed goes back at once. A held block goes straight to the pool (`gc_render_free_retired`), since it has waited for its own kick. The pool has a real free list, so memory handed back early would be handed straight out again — to a caller that writes it while the GPU is still reading it. |
 | `mmu_map` | **absent.** The service maps at a VA it chooses; `map_phys` is the entry point, and `src/gl/egl.rs` prefers it anyway. |
 | `map_phys` | `gc_render_map_phys()`. A range already inside the carveout comes back with its identity VA and the carveout's own CPU view — which is what `glReadPixels` on a window surface reads through. |
-| `gpu_write` / `gpu_read` / `cache_*` | `memcpy` + `gc_render_cache_flush` / `_invd`, skipped for a range inside the carveout (`gc_cache_range.h`: its mapping is Normal non-cacheable, so maintenance there only costs time) and kept for anything else. |
+| `gpu_write` / `gpu_read` / `cache_*` | `memcpy` + `gc_render_cache_flush` / `gc_render_cache_invd`, skipped for a range inside the carveout (`gc_cache_range.h`: its mapping is Normal non-cacheable, so maintenance there only costs time) and kept for anything else. |
 | `submit` | `gc_render_submit(&(struct gc_submit){...}, &fence)` with `GC_SUBMIT_FLUSH_ALL`: the backend does not say which caches its frame dirtied, and a missing flush shows a stale picture rather than an error. |
 | `wait` | `gc_render_wait(fence, ms)`. `timeout_us < 0` becomes a bounded 2 s, not forever: a board booted by kexec has no way back except its own reset, so a stalled GPU has to become a failed sample. `-ETIMEDOUT` becomes the contract's `1`; the driver has already dumped the hardware state. |
 | `completed` | `gc_render_completed()`. |
@@ -164,7 +165,7 @@ Two different things print them:
   then zeroes the heaps (`linux.c`) or marks the OSAL down so the next `init`
   runs again (the Zephyr OSALs). The product never calls it: `eglTerminate`
   keeps the backend and its GPU memory for the next `eglInitialize`
-  (`pvr_backend_init` / `gc_init` return early when already up), so a
+  (the PowerVR and Vivante backends' init return early when already up), so a
   shutdown there would leave the backend drawing through memory that is gone.
 - **the report** only prints and changes nothing. Zephyr:
   `osal_zephyr_diag_print()` (`zephyr.c`, `zephyr_gc.c`),
@@ -172,7 +173,7 @@ Two different things print them:
   `osal_mali_diag_print()` (`zephyr_mali.c`), called at the end of a run by
   the gl_test and dEQP samples (`driver/samples/zephyr/gl_test/src/main_*.c`,
   `driver/samples/zephyr/deqp/src/`) and, for the PowerVR, by the board
-  library's `board_finish()` (`driver/zephyr/lib/board/common/board.c`).
+  library's finish step (`driver/zephyr/lib/board/common/board.c`).
   Linux: a destructor in `linux.c` prints the same lines at process exit,
   when the OSAL came up and shutdown has not already printed them.
 
@@ -181,43 +182,43 @@ Two different things print them:
 A negative errno is a number, and the number for a name depends on the C
 library. The ones our code uses that differ (Zephyr's minimal libc and
 picolibc agree with each other, zephyr af17c0c8aa2a; Linux is
-`asm-generic/errno.h`, and glibc's `ENOTSUP` is `EOPNOTSUPP`):
+asm-generic/errno.h, and glibc's `ENOTSUP` is Linux's EOPNOTSUPP):
 
 | name | Zephyr (minimal, picolibc) | Linux |
 |---|---:|---:|
-| `ESHUTDOWN` | 110 | 108 |
+| ESHUTDOWN | 110 | 108 |
 | `ETIMEDOUT` | 116 | 110 |
-| `EMSGSIZE` | 122 | 90 |
+| EMSGSIZE | 122 | 90 |
 | `ENOTSUP` | 134 | 95 |
-| `ECANCELED` | 140 | 125 |
+| ECANCELED | 140 | 125 |
 
-So Zephyr's `ESHUTDOWN` is Linux's `ETIMEDOUT`. The names below 35 and
+So Zephyr's ESHUTDOWN is Linux's ETIMEDOUT. The names below 35 and
 `ENODATA` (61) are the same in both.
 
 **The rule: a Rust crate uses the numbering of the C library on the other
 side of its boundary, and a number is never translated in between.** There
 is one table file, `driver/rust/src/errno_numbers.rs`, with both numberings
-(`ZEPHYR`, `LINUX`) and each value's header line. Where a number crosses:
+(ZEPHYR, LINUX) and each value's header line. Where a number crosses:
 
 1. **The driver crate (`driver/rust`) to C.** `yakogl_drivers::errno` is
-   `ZEPHYR`, its only C library. Its C callers (`driver/src/*.c`,
-   `src/osal/zephyr*.c`, the Zephyr samples) compare against `errno.h`, and
+   ZEPHYR, its only C library. Its C callers (`driver/src/*.c`,
+   `src/osal/zephyr*.c`, the Zephyr samples) compare against errno.h, and
    in a Zephyr image both sides are Zephyr's (for example `zephyr.c`
    `z_wait`: `rc == -ETIMEDOUT` on `pvr_render_wait`'s result). A host
    program that links the crate under glibc translates in its own shim, as
    `tools/pvr/km/record_c.c` does by pinning `ETIMEDOUT` to 116.
 2. **The C OSAL to the YakoGL crate (`src/`).** The crate's `util::E*` come
-   from `errno_numbers::numbering(osal-zephyr)` (`src/util.rs`): `ZEPHYR`
-   for the Zephyr OSALs, `LINUX` for `linux.c` (glibc) and for
-   `baremetal.c`, whose literal -95 for `ENOTSUP` is `LINUX`'s. So
+   from `errno_numbers::numbering(osal-zephyr)` (`src/util.rs`): ZEPHYR
+   for the Zephyr OSALs, LINUX for `linux.c` (glibc) and for
+   `baremetal.c`, whose literal -95 for `ENOTSUP` is LINUX's. So
    `src/gl/egl.rs` recognises a Zephyr OSAL's "no vsync" (`-ENOTSUP`, -134),
    and `src/gl/draw.rs` tells the backend gap (`-ENOTSUP`,
-   `GL_INVALID_OPERATION`) from a lost draw (`GL_OUT_OF_MEMORY`). The host
-   test `zephyr_osal_reads_zephyr_numbers` (`src/util.rs`) asserts what an
+   GL_INVALID_OPERATION) from a lost draw (GL_OUT_OF_MEMORY). The host
+   test zephyr_osal_reads_zephyr_numbers (`src/util.rs`) asserts what an
    `osal-zephyr` build gets: `ETIMEDOUT` is 116, not 110, and `ENOTSUP` is
    134.
 3. **Logs and records to the tools.** The tools print rc values as numbers
-   and name none. Read a Zephyr console's -110 as `ESHUTDOWN` (the driver's
+   and name none. Read a Zephyr console's -110 as ESHUTDOWN (the driver's
    stopped render service) and -116 as `ETIMEDOUT`.
 
 ## Status
@@ -289,7 +290,7 @@ backend.
 
 `struct osal_ops` and `struct osal_gpu_mem` are sufficient to implement the
 OSAL. Observations:
-- `include/gles_osal.h` has no `unmap`/`mmu_unmap`: an allocator that hands
+- `include/gles_osal.h` has no unmap or mmu_unmap op: an allocator that hands
   a VA range to a different mapping would need one.
 - The opaque `kick_desc` requires an out-of-band shape agreement per GPU —
   provided by `osal_internal.h` (see the contract section above).
