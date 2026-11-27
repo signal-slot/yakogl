@@ -199,6 +199,11 @@ pub(crate) struct GcState {
     /// (mipmap.rs; 0 for none): what `gc_return_mipmap_chain` waits for
     /// before the GL core reads or writes a chain's texels on the CPU.
     pub(super) mip_fence: i64,
+    /// The kick that holds the last level of the newest GPU-made mipmap
+    /// chain when the chain stays in the open kick (`gc_chain_open_kick`,
+    /// docs/notes/gc-kick-continue.md C5; 0 for none, and always 0 with the
+    /// knob off): what `gc_return_mipmap_chain` waits for then, by kick id.
+    pub(super) mip_kick: u32,
     /// GPU mipmap chains made, and asked for but left to the CPU, since
     /// init (`gc_backend_mip_chains`).
     pub(super) mip_chains: u32,
@@ -260,6 +265,7 @@ impl GcState {
         clear_ps_code: OsalGpuMem::ZERO,
         mipgen_ps_code: OsalGpuMem::ZERO,
         mip_fence: 0,
+        mip_kick: 0,
         mip_chains: 0,
         mip_chains_refused: 0,
         chain_stream: false,
@@ -3461,6 +3467,38 @@ pub(super) fn completed_fence() -> i64 {
         // SAFETY: a plain query of the OSAL.
         Some(f) => unsafe { f() },
         None => i64::MAX, /* no way to ask: nothing is ever still pending */
+    }
+}
+
+/// The GPU mipmap chain stays in the open kick (mipmap.rs,
+/// docs/notes/gc-kick-continue.md C5): no submit before or after the chain,
+/// and `gc_return_mipmap_chain` waits for the chain's kick by its id. Off
+/// unless this is set, until a board has run it. A test knob: it and its
+/// setter exist only with the `test-knobs` feature, and a build without it
+/// submits every chain before glGenerateMipmap returns, as before.
+#[cfg(feature = "test-knobs")]
+#[no_mangle]
+pub static mut gc_debug_chain_open_kick: i32 = 0;
+
+/// Set [`gc_debug_chain_open_kick`].
+#[cfg(feature = "test-knobs")]
+#[no_mangle]
+pub extern "C" fn gc_debug_set_chain_open_kick(on: i32) {
+    // SAFETY: single-threaded by contract; a plain store of an int.
+    unsafe { core::ptr::addr_of_mut!(gc_debug_chain_open_kick).write(on) }
+}
+
+/// `gc_debug_chain_open_kick` is set; false in a build without `test-knobs`.
+pub(super) fn chain_open_kick_on() -> bool {
+    #[cfg(feature = "test-knobs")]
+    {
+        // SAFETY: single-threaded by contract; a plain read of an int only
+        // the setter writes.
+        unsafe { core::ptr::addr_of!(gc_debug_chain_open_kick).read() != 0 }
+    }
+    #[cfg(not(feature = "test-knobs"))]
+    {
+        false
     }
 }
 

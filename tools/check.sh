@@ -1948,6 +1948,30 @@ knobs_file_tests() {
   printf '%s\n' "$out" | grep -E '^test result'
   printf '%s\n' "$out" | tests_as_declared "tests/$1.rs"
 }
+# Plan #355's vivante test files that no other row compiles, each with the
+# feature set of its header; every #[test] of each must pass
+# (tests_as_declared). gc_chain_open_kick: the mipmap chain in the open kick
+# behind gc_chain_open_kick (docs/notes/gc-kick-continue.md C5);
+# gc_scene_kicks_tiled and gc_scene_kicks_depth_tpu: glmark2's slow scenes
+# with gc_tiled_rt and the depth-sample knob; gc_tiled_ez_golden: the knob-on
+# W4/W5 words against Mesa's golden; gc_ts_resolve_interp and
+# gc_depth_format_ts: the TS-sourced RS resolve and the TS-aware depth read,
+# pure (no knob, no compiler).
+tests_row gc_chain_open_kick
+step "test    $KNOBS_CONFIG (tests/gc_chain_open_kick.rs, every declared test)" knobs_file_tests gc_chain_open_kick
+tests_row gc_scene_kicks_tiled
+step "test    $KNOBS_CONFIG (tests/gc_scene_kicks_tiled.rs, every declared test)" knobs_file_tests gc_scene_kicks_tiled
+tests_row gc_scene_kicks_depth_tpu
+step "test    $KNOBS_CONFIG,report-es2 (tests/gc_scene_kicks_depth_tpu.rs, every declared test)" \
+  knobs_file_tests gc_scene_kicks_depth_tpu "$KNOBS_CONFIG,report-es2"
+tests_row gc_tiled_ez_golden
+step "test    $KNOBS_CONFIG (tests/gc_tiled_ez_golden.rs, every declared test)" knobs_file_tests gc_tiled_ez_golden
+tests_row gc_ts_resolve_interp
+step "test    host-test,gpu-vivante (tests/gc_ts_resolve_interp.rs, every declared test)" \
+  knobs_file_tests gc_ts_resolve_interp "host-test,gpu-vivante"
+tests_row gc_depth_format_ts
+step "test    host-test,gpu-vivante (tests/gc_depth_format_ts.rs, every declared test)" \
+  knobs_file_tests gc_depth_format_ts "host-test,gpu-vivante"
 tests_row gc_kick_diff
 step "test    $KNOBS_CONFIG (tests/gc_kick_diff.rs, every declared test)" knobs_file_tests gc_kick_diff
 tests_row gc_tiled_rt
@@ -4190,7 +4214,7 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # The test knobs the "no test knob" row requires of each GPU's test-knobs
 # archive (check_knobs_absent, below); here because that row's key holds
 # them.
-KNOB_VIVANTE_SYMBOLS="gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
+KNOB_VIVANTE_SYMBOLS="gc_debug_chain_open_kick gc_debug_set_chain_open_kick gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
 gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_draw_targets pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
