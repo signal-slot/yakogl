@@ -63,7 +63,9 @@ echo "3 filter:  $(grep -vc '^#' "$OUT/notpass-run.tsv") rows without NoResult -
 
 # 4 compare (vivante host rows only: the host file mixes GPUs)
 awk -F'\t' '/^#/ || $1=="gpu" || $1=="vivante"' $HOST >"$OUT/host-vivante.tsv"
-{ awk '/^#/{print; next} {exit}' $CMP
+# the header comments of the committed list, without its "# boards:" line: compare.py passes the one of
+# notpass-run.tsv through (merge.py writes it once a slice ran on the Armadillo-X2)
+{ awk '/^# boards: /{next} /^#/{print; next} {exit}' $CMP
   py $C/imx8mp-gles3-compare.py --tsv --causes $C/imx8mp-gles3-causes.tsv --table $C/imx8mp-gles3-tree.txt \
     "$OUT/notpass-run.tsv" "$OUT/host-vivante.tsv"; } >"$OUT/compare.tsv" || { echo "stop: compare.py failed" >&2; exit 1; }
 echo "4 compare: $(grep -vc '^#' "$OUT/compare.tsv") rows (host vivante $(grep -c '^vivante' "$OUT/host-vivante.tsv")) -> compare.tsv"
