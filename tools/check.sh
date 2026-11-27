@@ -3761,6 +3761,17 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # next pull request that reaches `tools`. Host only, under a second.
   step "tools   one-commit-rehearsal-selftest.sh (one-commit docs edit on synthetic records)" no_board_env bash tools/cts/one-commit-rehearsal-selftest.sh
   scope tools
+  # tools/cts/imx8mp-gles3-*-selftest.sh that tools/cts/cts-selftest.sh's gl3check
+  # rows do not run. Host only, no board; an edit of any tools/cts file reaches them.
+  step "tools   imx8mp-gles3-acceptance-selftest.sh (the campaign acceptance script on a fake repository, one case per check)" no_board_env bash tools/cts/imx8mp-gles3-acceptance-selftest.sh
+  step "tools   imx8mp-gles3-compare-selftest.sh (the 9bc82915 comparison on synthetic lists, the cause map and the entry map)" no_board_env bash tools/cts/imx8mp-gles3-compare-selftest.sh
+  step "tools   imx8mp-gles3-e2e-selftest.sh (the end-of-campaign chain over a synthetic 133-entry campaign)" no_board_env bash tools/cts/imx8mp-gles3-e2e-selftest.sh
+  step "tools   imx8mp-gles3-env-selftest.sh (the i.MX8MP env, stage-1 and artefact scripts refusing by variable name)" no_board_env bash tools/cts/imx8mp-gles3-env-selftest.sh
+  step "tools   imx8mp-gles3-finish-selftest.sh (the campaign finish script, partial run, against the committed notpass and compare lists)" no_board_env bash tools/cts/imx8mp-gles3-finish-selftest.sh
+  step "tools   imx8mp-gles3-issues-selftest.sh (the cause-grouped issue lister on synthetic compare output)" no_board_env bash tools/cts/imx8mp-gles3-issues-selftest.sh
+  step "tools   imx8mp-gles3-redact-selftest.sh (the board-record redactor and the committed i.MX8MP logs clean)" no_board_env bash tools/cts/imx8mp-gles3-redact-selftest.sh
+  step "tools   imx8mp-gles3-slice-selftest.sh (the slice README builder against its own fixture)" no_board_env bash tools/cts/imx8mp-gles3-slice-selftest.sh
+  step "tools   imx8mp-gles3-times-selftest.sh (the per-entry run-time estimator on a synthetic slice)" no_board_env bash tools/cts/imx8mp-gles3-times-selftest.sh
   # The NanoPC-T6's dEQP-GLES2 runner, tools/cts/mali-deqp-run.sh, against a
   # fake board (ssh, scp and deqp-gles2 stubs: a clean run, a crash with
   # resume, a hang, a panthor reset, lost ssh, --dry-run without ssh, the hold
