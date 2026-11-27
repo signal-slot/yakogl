@@ -10,12 +10,12 @@ proves, before any board, that the Rust does what the C it replaced did.
 | file | what |
 |---|---|
 | `rec.h` | the recording platform: a 64 MiB carveout at 0xC0000000 in host memory, a register file, and the record both sides write (cleans `F`, invalidates `I`, barriers `B`, waits `D`, register writes `W` and reads `R`, log lines `L<level>`, results `=`, and at the end every non-zero word of the carveout `M`) |
-| `scenario.h` | the scenarios, over a table of functions each side fills: `mem` (the allocators, the page tables), `ccb` (130 KCCB posts, the FWCCB service: grows from a pool and from a reserve, refusals, reconstructions, a context reset, an unknown command; the freelist audit), `fwinit` (the FWIF structures, the boot wait: started on the third tick, then a timeout with its trace and assert dump), `render` (a firmware model takes the kicks: renders of several sizes and sample counts, separate and combined kicks, the member-in-flight and UFO-ring waits, a dropped kick and the re-post, the MMUCACHE probes, a hardware recovery, two stalls with their dumps, HWRT recycles with and without the cleanup, a refused cleanup, the client CCBs round the ring); `render-pr` (Rust only: the same start with the partial-render knob on, see below) |
+| `scenario.h` | the scenarios, over a table of functions each side fills: `mem` (the allocators, the page tables), `ccb` (130 KCCB posts, the FWCCB service: grows from a pool and from a reserve, refusals, reconstructions, a context reset, an unknown command; the freelist audit), `fwinit` (the FWIF structures, the boot wait: started on the third tick, then a timeout with its trace and assert dump), `render` (a firmware model takes the kicks: renders of several sizes and sample counts, separate and combined kicks, the member-in-flight and UFO-ring waits, a dropped kick and the re-post, the MMUCACHE probes, a hardware recovery, two stalls with their dumps, HWRT recycles with and without the cleanup, a refused cleanup, the client CCBs round the ring); `render-pr` (Rust only: the same start with the partial-render knob on, see below), `render-pr-zs` (Rust only: one knob-on kick with a filled frag_pr that includes `isp_zlsctl`) |
 | `record_c.sh`, `record_c.c` | cut the C out of origin/main 674ea1cf (`pvr_fw_boot.c`: allocators, MMU, FWIF globals, CCB, freelists, FWIF setup, boot wait, accessors; `pvr_render.c` whole) and run the scenarios on it; `record_c_verbose` is the same with `PVR_RENDER_VERBOSE` |
 | `km_check.c` | the same scenarios on the Rust (`libyakogl_drivers.a` for the host, feature `pvr`), `km_check render-pr` (no C counterpart), and `km_check pins`, the Rust layout numbers as `PIN(value, expression)` lines |
 | `pins_check.c` | compiles those lines into `_Static_assert`s against the vendored DDK headers (driver/tools/offsetof's way), compares the alignment-check table with `RGXFW_ALIGN_CHECKS_INIT_KM` and the MH tag names with `rgxmhdefs_km.h` |
 | `rec_normalize.py` | sorts each run of consecutive `R`/`I` lines (see below) |
-| `records.sha256` | the hashes the records must have (the records are not committed: about 2 MB of text); `render-pr.norm` is the Rust's own record, not the C's |
+| `records.sha256` | the hashes the records must have (the records are not committed: about 2 MB of text); `render-pr.norm` and `render-pr-zs.norm` are the Rust's own records, not the C's |
 | `fwinit-step7.diff` | the object table of the FWIF structures before and after the switch to the DDK sizes |
 | `hostshim/` | the Zephyr headers the cut-out C includes |
 
@@ -118,6 +118,16 @@ gate needs only the hashes, not the commit.
   passes FENCE_PR without testing it (it only knows FENCE and UPDATE); it
   does not run a partial render. `km_check render-pr` reproduces the record;
   there is no C record to diff it against.
+- `render-pr-zs` (Rust only; hashed after `rec_normalize.py`): the same start
+  with the knob on and one 1024x600 kick whose `frag_pr` is filled with
+  fixed values: SPM scratch at `SC_GENERAL + 0xB000` (1,920,000 bytes), PR
+  PBE pairs 0xE0..0xE7, EOT data 0xC8 (44 bytes) and `isp_zlsctl`
+  0x0000000200000034; `pds_pr_bgnd` stays zero (it is not written into the
+  3D_PR yet). Both commands carry the SPM scratch flag (0x00080180) and the
+  3D_PR differs from the 3D in 13 dwords: dw15 0xc8 (the PR EOT data),
+  dw24/25 0x34/0x2 (ISP_ZLSCTL), dw30..44 the PBE words 0xE0..0xE7. Where
+  `render-pr` pins the 3D_PR with a zero `isp_zlsctl`, this one pins the
+  ZLSCTL words. `km_check render-pr-zs` reproduces the record.
 
 ## Not covered
 

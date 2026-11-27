@@ -3096,6 +3096,8 @@ if command -v cc >/dev/null 2>&1; then
     # render-pr: the partial-render knob on, Rust only (no C counterpart)
     "$d/km_check" render-pr > "$d/render-pr.rec" || return 1
     python3 tools/pvr/km/rec_normalize.py < "$d/render-pr.rec" > "$d/render-pr.norm" || return 1
+    "$d/km_check" render-pr-zs > "$d/render-pr-zs.rec" || return 1
+    python3 tools/pvr/km/rec_normalize.py < "$d/render-pr-zs.rec" > "$d/render-pr-zs.norm" || return 1
     cp tools/pvr/km/records.sha256 "$d/" || return 1
     (cd "$d" && sha256sum --quiet -c records.sha256) || {
       echo "a kernel-side record moved: tools/pvr/km/README.md says how to diff it against the C"

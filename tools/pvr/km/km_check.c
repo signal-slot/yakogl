@@ -31,6 +31,9 @@
  *                    the render service with the partial-render knob on
  *                    (Rust only: the C of 674ea1cf has no partial render);
  *                    must equal render-pr.norm in records.sha256
+ *   km_check render-pr-zs
+ *                    one knob-on kick with a filled frag_pr incl. isp_zlsctl
+ *                    (pds_pr_bgnd zero); must equal render-pr-zs.norm
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -381,6 +384,12 @@ int main(int argc, char **argv)
 		rec_dump_memory();
 		return 0;
 	}
-	fprintf(stderr, "usage: km_check pins|mem|ccb|fwinit-former|fwinit|render|render-verbose|render-pr\n");
+	if (argc == 2 && !strcmp(argv[1], "render-pr-zs")) {
+		km_setup();
+		scenario_render_pr_zs(&r_api);
+		rec_dump_memory();
+		return 0;
+	}
+	fprintf(stderr, "usage: km_check pins|mem|ccb|fwinit-former|fwinit|render|render-verbose|render-pr|render-pr-zs\n");
 	return 2;
 }
