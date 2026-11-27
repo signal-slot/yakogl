@@ -330,3 +330,69 @@ finished pair and samples it (8 words). Ours moves `v.x / 24.0` and
 (its FAU word, the program's uniform upload): a new item, not this one. The
 pair compiles and draws the same values meanwhile; the test pins the
 difference so that the item that closes it updates the pin.
+
+## TEX_COORD2: two computed lanes of a wider varying (plan #367 lower-train-2)
+
+**Status: lowered** for the form below (from proto-texcoord2). References:
+`tools/mali/testdata/gm2_nbshrf_3..5` (Mesa 26.2.1 on drm-shim, 931d5325,
+drawn with `--uniform-values`; their fragment programs read no uniform),
+pinned by `tests/mali_texcoord2.rs`. pan_shc's verdicts are cases.txt's
+`gm2_nbshrf_3..5` lines (`differs:mediump`: no lower_precision on its SPIR-V
+path).
+
+The refusal was in `select` (`nir_fs.rs`, the lone computed coordinate of
+two distinct lanes): the tree under the vectorised pair had to be
+gl_FragCoord's word and constants (`frag_coord_tree`, ideas df64). A
+varying's lanes there were `TexCoord`.
+
+What Mesa emits (measured, `gm2_nbshrf_4`, `texture2D(m, sc.st * 0.5 + 0.5)` of
+a `vec4 sc`):
+
+```text
+LD_VAR_BUF_IMM.f32.slot0.v4.src_f32.center.store.wait0 @r0:r1:r2:r3, r61^, index:0x0
+V2F32_TO_V2F16 r0, r0^, r1^
+FMA.v2f16 r0, r0^, 0x38000000.h11, 0x38000000.h11
+F16_TO_F32 r1, r0.h0
+F16_TO_F32 r0, r0^.h1
+MOV.i32 r2, r1^
+MOV.i32 r3, r0^
+MOV.i32 r0, u2.w0
+MOV.i32 r1, 0x0
+TEX_SINGLE.slot1.skip.reserved.16.2d.computed.wait0126 @r0:r1, @r2:r3, [r0^:r1^]
+```
+
+The load stays the slot's width (`.v4`, the lanes past the coordinate
+unread), lanes 0 and 1 are narrowed as one pair, the coordinate is one
+two-lane `FMA`, and the look-up reads it widened, the tail ideas df64 already
+has. The pair graph's tree is `Ffma(Half { k, h: 0, H01 }, Const, Const)`, so
+the walk, the load layout and the conversions were already right; only the
+admission was missing.
+
+The lowering (`varying_coord_tree`): the coordinate pair is admitted when it
+is `Ffma` of the converted first pair of one load and two splat constants
+(both halves equal), and no other leaf of the colour reads that load. With
+it, `gm2_nbshrf_4` is byte-equal in all three regions and the facts. A sweep
+of the 1,810 `tools/mali/testdata` pairs moves nothing else.
+
+Still refused (`TexCoord`), with no reference, pinned by the test:
+
+| form | why |
+|---|---|
+| `v.st + 0.25`, `v.st * 0.5` (an add or product alone) | Mesa fuses an add of a constant into `FADD_IMM.v2f16` (gm2_constfold_5, 6) and folds a product with 2.0 into `fadd(a, a)`. Neither is measured for this form |
+| a constant pair of two values (`vec2(0.5, 0.25)`) | gm2_constfold_5, 6's `TextureCoord + vec2(k, 0.0)` is `FADD_IMM.v2f16 r0, r0^, #0x951F`; admitting it reaches a back-end defect (`IrIndex`), so it stays refused (CONST_FOLD, tests/mali_const_fold.rs) |
+| lanes 2 and 3 (`v.zw * 0.5 + 0.5`) | not measured |
+| a uniform, a negation | not measured |
+| the colour reading another lane of the same load (`* v.z`) | gm2_nbshrf_5 is that shape |
+
+**gm2_nbshrf_3 and _5, and shadow.** glmark2's shadow fs cf4b is
+`ShadowCoord / ShadowCoord.w`, `.z += 0.1505`, the look-up at `.st`, then
+`if (ShadowCoord.w > 0.0 && d < sc.z)`. Mesa draws (measured, _3):
+`V2F32_TO_V2F16 r0, r0^, r1^`, `FADD.f32 r1.h0, r3^, 0x0.neg`, `FRCP.f16
+r1, r1^.h00`, `FMA.v2f16 r0, r0^, r1^.h00, 0x0.neg`, then the same tail. In
+_5 the load is shared with the compare: `V2F32_TO_V2F16 r1, r2^, r3^`,
+`FRCP.f16 r2, r1.h11`, z as `FMA.v2f16 r2, r1.h00, r2^.h00, 0x34000000.h11`.
+The fragment divide of mediump lanes is on main (dbdfb25b), so both now get
+past the divide and stop at the colour's lanes (FRAGCOLOR_LANE), as shadow fs
+cf4b does. Once that lowers, `varying_coord_tree` needs two more forms:
+`Fmul(Half { k, 0, H01 }, <the reciprocal of lane 3 of load k>)` (_3), and
+the shared load (lanes 2 and 3 read by the compare, _5).
