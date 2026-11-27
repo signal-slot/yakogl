@@ -9783,7 +9783,16 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
              * varyings in (`compact_varyings`; gm2_fclane_2's `t0` and `t1`,
              * `LD_VAR_BUF_IMM ... .v4 @r4:r5:r6:r7` then `TEX_SINGLE ...
              * @r6:r7, @r6:r7` and `TEX_SINGLE ... @r4:r5, @r4:r5`) */
-            if k != k1 || !matches!((x, y), (0, 1) | (2, 3)) {
+            /* or lanes 1 and 2 of a slot whose lane 0 another varying
+             * took (`nir_opt_varyings`: the texture scene's 425b, Color's
+             * three equal lanes one component and its constant alpha gone,
+             * `LD_VAR_BUF_IMM ... .v3 @r0:r1:r2`, then `MOV.i32 r4, r1^`,
+             * `MOV.i32 r5, r2^` into the staging pair: gm2_tc425_1;
+             * docs/notes/mali-texcoord-varyings.md). In a highp shader
+             * Mesa keeps the lowp sampler's texel at fp16 (gm2_tc425_2),
+             * which this walk does not: no form there yet */
+            let mid = (x, y) == (1, 2) && !f.prec.highp;
+            if k != k1 || !(matches!((x, y), (0, 1) | (2, 3)) || mid) {
                 return Err(MaliError::TexCoord);
             }
             f.look_ups[j].load = Some(k);
@@ -11945,6 +11954,13 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * a sum is not (deqp_arith_op_binary_add_assign_fs_mediump) */
     let cross = pr.nodes[..pr.n].iter().any(|n| matches!(*n, P::Leaf(Leaf::Lanes { k, e, .. }) if k != e));
     let admitted = if cross { ADMITTED | prod(Form::Mk, Place::AddA) | prod(Form::Op, Place::AddB) } else { ADMITTED };
+    /* the texture scene's `texel * Color` beside a coordinate in lanes 1
+     * and 2 of Color's load, Color's three equal lanes one component and
+     * its alpha the constant 1.0: the zw pair times `MKVEC.v2i16 r0,
+     * r0^.h0, u2.w1.h0` (gm2_tc425_1, docs/notes/mali-texcoord-varyings.md);
+     * in no other shader (deqp_arith_op_binary_mul_fs_mediump's differs) */
+    let mid = f.live_look_ups().any(|(_, t)| t.load.is_some() && t.load_lane == 1);
+    let admitted = if mid { admitted | prod(Form::Mk, Place::MulB) } else { admitted };
     if f.prods & !admitted != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
     }
@@ -12109,12 +12125,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let conv_order = conversion_order(f, &pr, roots, &mut conv_form)?;
     /* a coordinate is read as fp32, not converted (one load may be the
      * coordinate of several look-ups: texmore_2's `@r0:r1`) */
-    if f.live_look_ups().any(|(_, t)| t.load.is_some_and(|k| used[k as usize] != 0)) {
+    /* a coordinate in lanes 1 and 2 shares its load with lane 0, which
+     * the colour converts (gm2_tc425_1: `FADD.f32 r0.h0, r0^, 0x0.neg` of
+     * Color's one component beside the coordinate's `MOV.i32 r4, r1^`,
+     * `MOV.i32 r5, r2^`): only its own lanes must stay unconverted */
+    let own = |t: &TexLookup| if t.load_lane == 1 { 6u8 } else { 0xf };
+    if f.live_look_ups().any(|(_, t)| t.load.is_some_and(|k| used[k as usize] & own(t) != 0)) {
         return Err(MaliError::TexCoordShared);
     }
     for (_, t) in f.live_look_ups() {
         if let Some(k) = t.load {
-            used[k as usize] = 3;
+            if t.load_lane == 1 {
+                used[k as usize] |= 6;
+            } else {
+                used[k as usize] = 3;
+            }
         }
     }
     /* so are a cube direction's raw lanes (varyconst_101_cubebias) */
@@ -12294,6 +12319,14 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         match what {
             LOAD => {
                 load(p, f, x as usize, &mut lv)?;
+                /* a load whose lanes 1 and 2 are a look-up's coordinate
+                 * (gm2_tc425_1): the colour's `f2fmp` of its lane 0 stands
+                 * where the colour reads it, after the look-up (`FADD.f32
+                 * .wait1 r0.h0` after `TEX_SINGLE`), so its conversions
+                 * follow that look-up */
+                if f.live_look_ups().any(|(_, t)| t.load == Some(x) && t.load_lane == 1) {
+                    continue;
+                }
                 for &c in conv_order.at_load[x as usize].iter().take_while(|&&c| c != NO_LANE) {
                     conversion(p, f, x as usize, c, &conv_form, &mut lv, &mut rows)?;
                 }
@@ -12395,6 +12428,15 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                     (None, None) => 0,
                 };
                 tex(p, f, x as usize, &mut lv, (n > 0).then_some(&staging[..n]))?;
+                let t = f.look_ups().get(x as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex))?;
+                if let (Some(k), 1) = (t.load, t.load_lane) {
+                    let first = f.live_look_ups().find(|(_, u)| u.load == Some(k) && u.load_lane == 1).map(|(j, _)| j);
+                    if first == Some(x as usize) {
+                        for &c in conv_order.at_load[k as usize].iter().take_while(|&&c| c != NO_LANE) {
+                            conversion(p, f, k as usize, c, &conv_form, &mut lv, &mut rows)?;
+                        }
+                    }
+                }
                 /* a colour that is the texel whole: `bi_emit_tex_valhall`
                  * collects the split words into the look-up's value right
                  * after it (bifrost_compile.c), so its moves stand before
