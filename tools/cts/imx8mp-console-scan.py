@@ -99,12 +99,12 @@ RECOVERY = re.compile(
 # the starts.
 RECOVERY_START = re.compile(r'recovering the GPU \(')
 
-# driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c:
-#   :121 "gc_wdog_arm: armed WCR ... expiry %u ms, fed for %u s"   (the image's boot, WDOG1 running)
-#   :112 "gc_wdog_arm: FAILED (rc %d, refusal %u): ...: resetting the SoC now"
-#   :173 "gc_wdog_arm: feeding bound of %u s over; WDOG1 resets the SoC within %u ms"  (the watchdog end)
-#   :144 "gc_wdog_arm: proof FAILED: no WDOG1 reset within %u s of arming: software reset"
-#   :158 "gc_wdog_arm: proof: sample finished; waiting for WDOG1 ..."
+# driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c (by function; lines drift):
+#   wdog_arm_init: "gc_wdog_arm: armed WCR ... expiry %u ms, fed for %u s"   (the image's boot, WDOG1 running)
+#   wdog_arm_init: "gc_wdog_arm: FAILED (rc %d, refusal %u): ...: resetting the SoC now"
+#   feed_tick: "gc_wdog_arm: feeding bound of %u s over; WDOG1 resets the SoC within %u ms"  (the watchdog end)
+#   proof_backstop: "gc_wdog_arm: proof FAILED: no WDOG1 reset within %u s of arming: software reset"
+#   gc_wdog_arm_proof_hold: "gc_wdog_arm: proof: sample finished; waiting for WDOG1 ..."
 WDOG_ARMED = re.compile(r'gc_wdog_arm: armed')
 WDOG_END = re.compile(r'gc_wdog_arm: (FAILED|feeding bound|proof FAILED|proof: )')
 # The RTI feeder of the AM62P/Pi 4 images ("RTI feeder lifetime over",
