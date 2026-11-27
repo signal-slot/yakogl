@@ -4515,6 +4515,15 @@ fn vs_zero_and(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
      * u6.w1, r0^` of the reference: z, then the max so far) */
     let word = |v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
     let (x, y) = if !word(x) && word(y) { (y, x) } else { (x, y) };
+    /* two words of two loads (an int array's elements): the later load
+     * first, as `ior` of two bool elements ([`vs_b2f_and`];
+     * deqp_vsuarr_init_int: `MOV.i32 r0, u5.w1` of `u_var[0]`, then
+     * `CSEL.u32.gt r0, u6.w0, r0^, u6.w0, r0^` of `u_var[1]`). Lanes of
+     * one load keep theirs (deqp_vs16ref_uapi_ivec3: x first) */
+    let (x, y) = match (x, y) {
+        (Val::Lane(a, _), Val::Lane(b, _)) if word(x) && word(y) && a < b => (y, x),
+        _ => (x, y),
+    };
     let mx = vs.alu(Alu::Umax, x, y, u)?;
     let c = vs.alu(Alu::Icmp(Cmpf::Eq), mx, Val::Const(0), u)?;
     vs.alu(Alu::B2f, c, u, u)
@@ -4540,6 +4549,19 @@ fn vs_b2f_mask(vs: &Nir<'_>, m: &Module<'_>, v: Val) -> Option<(bool, Val)> {
 /// (nir_opt_algebraic.py:1679).
 fn vs_b2f_and(vs: &mut Nir<'_>, m: &Module<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
     let u = Val::Undef;
+    /* both booleans negated: `iand(inot(a), inot(b))` is `inot(ior(a,
+     * b))` (nir_opt_algebraic.py's De Morgan rule) and its `b2f` the
+     * `bcsel(ior, 0.0, 1.0)` the next product reads as negated again
+     * (deqp_vsuarr_init_bool's three `== false`: `MOV.i32 r0, u5.w1`,
+     * `LSHIFT_OR.i32 r0, u6.w0, 0x0.b00, r0^`, `LSHIFT_OR.i32 r0, r0^,
+     * 0x0.b00, u6.w1`, then `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`):
+     * two words the later first, a computed value before a word */
+    if let (Some((false, a)), Some((false, b))) = (vs_b2f_mask(vs, m, p), vs_b2f_mask(vs, m, q)) {
+        let word = |v: Val| matches!(v, Val::Lane(n, _) if matches!(vs.nodes[n as usize].kind, Kind::Uniform { .. }));
+        let (x, y) = if word(a) { (b, a) } else { (a, b) };
+        let o = vs.alu(Alu::Ior, x, y, u)?;
+        return vs.alu(Alu::Bcsel, o, Val::Const(F32_ZERO), Val::Const(F32_ONE));
+    }
     let mask = |vs: &mut Nir<'_>, v: Val| -> Result<Val, MaliError> {
         match vs_b2f_mask(vs, m, v) {
             Some((true, a)) => Ok(a),

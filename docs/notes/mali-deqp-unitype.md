@@ -1011,3 +1011,16 @@ tip:
 | `vsapi_struct` | differs: 13 words against Mesa's 17 | Mesa narrows the five fp32 struct members two at a time (`V2F32_TO_V2F16 r0, u6.w1, r0^` of `m1.y, m1.z`; `r1` of `m0, m1.x`; `FADD.f32 r2.h0, u7.w1, 0x0.neg` of `m1.w` alone). `nir_opt_vectorize` then re-pairs the lanes with `MKVEC.v2i16` for a tree of `FMAX.v2f16` with `.abs` sources. One `FCMP_OR.v2f16.lt.m1` follows against the fp16 pair `0x2a662a66` of 0.05, then `S16_TO_S32` and `CSEL.u32.eq`. `vs_cmp_and` builds that tree for fp16 uniforms (`vsapi_mat2`). For fp32 members, the walk keeps an fp32 `FCMP_OR` per lane and their product. The lowering needs (a) the narrowed members as `vs_cmp_side`s and (b) Mesa's vectorizer's pairing of a five-leaf `fmax` tree, the `MKVEC` pairs and their `.h00`/`.h11` order. |
 | `fsmat3_mediump` | refused, `FsOperandForm` (a lane alone first in a sum, a uniform first) | `vec16.rs`'s column chunks with the `v_coords` varying narrowed once. That route has no varying layout. |
 | `fsmulti` | refused, `FragColorLane` | the float, ivec3, mat3 and bvec2 compares in one product of the colour (intval's fragment compare forms) |
+
+## lower-uniform-rest3 (at 7f72cb46)
+
+spike-uniform-rest3's lowering and its pin moves were already at the
+integration tip. They cover the int and bool array elements, the
+`bvec2 ==` reduction of bool uniforms, and two mediump float uniforms'
+halves paired by `MKVEC.v2i16` (unifmp `rsg_sconv12`). So no unitype
+change lands here. The two vertex references it does lower are
+`deqp_vsuarr_init_int` and `init_bool` (`docs/notes/mali-deqp-uniarray.md`
+section 11). Their int and bool uniform words follow this note's
+sections 3.3 and 3.4: Mesa narrows neither. `tests/mali_deqp_unitype.rs`
+still ignores `vsapi_struct` (differs) and `fsmulti` (`FragColorLane`),
+for the reasons in the table above.
