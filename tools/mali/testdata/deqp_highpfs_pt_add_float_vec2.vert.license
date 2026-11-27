@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #387 item highpfs-refs pair: dEQP-GLES2.functional.shaders.operator.binary_operator.add.mediump_float_vec2_fragment, generated through the ShaderOperatorCase template (VK-GL-CTS 93bca01, modules/gles2/functional/es2fShaderOperatorTests.cpp), docs/notes/mali-highpfs-lowering.md.
