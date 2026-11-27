@@ -7,7 +7,8 @@
 //! dEQP writes them (`docs/notes/mali-deqp-loops4.md`), drawn on Mesa's
 //! drm-shim with `tools/mali/deqp_ref.sh --instrument shim`.
 //!
-//! Every pair is refused at the tip and [`refusals_pinned`] asserts the exact
+//! Every pair compiles since spike-vsloop-rest ([`CAPPED`]); a refused one
+//! would be in [`REFUSALS`], whose [`refusals_pinned`] asserts the exact
 //! `MaliError` text. The lowering that lifts one moves its entry from
 //! [`REFUSALS`] to [`MATCHED`] in the same commit. A kept loop carries the pass
 //! counter the walk adds, which the shared compare does not edit: compare it
@@ -20,26 +21,28 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// `MaliError::LoopVertex`.
-const LOOP_VERTEX: &str = "a loop in a vertex shader";
-
 /// Every reference (without the `deqp_loops4_` prefix) still refused, with the
 /// first refusal of its pair at the tip, without the "Valhall: " prefix and
 /// the " is not lowered yet" suffix.
-const REFUSALS: &[(&str, &str)] = &[
-    ("vs_do_uni_basic_lowp_float", LOOP_VERTEX),
-    ("vs_for_dyn_basic_highp_float", LOOP_VERTEX),
-    ("vs_for_dyn_basic_lowp_float", LOOP_VERTEX),
-    ("vs_for_uni_basic_mediump_float", LOOP_VERTEX),
-    ("vs_wh_dyn_basic_lowp_float", LOOP_VERTEX),
-    ("vs_wh_dyn_basic_mediump_float", LOOP_VERTEX),
-    ("vs_wh_uni_basic_highp_float", LOOP_VERTEX),
-    ("vs_wh_uni_basic_lowp_float", LOOP_VERTEX),
-    ("vs_wh_uni_basic_mediump_float", LOOP_VERTEX),
+const REFUSALS: &[(&str, &str)] = &[];
+
+/// Kept loops whose pair compiles: Mesa's words with the loop cap's,
+/// compared in `src/shaderc/online/mali/tests.rs` (spike-vsloop-rest: `res`
+/// carried as 16-bit pairs, an fp16 counter one 16-bit phi).
+const CAPPED: &[&str] = &[
+    "vs_do_uni_basic_lowp_float",
+    "vs_for_dyn_basic_highp_float",
+    "vs_for_dyn_basic_lowp_float",
+    "vs_for_uni_basic_mediump_float",
+    "vs_wh_dyn_basic_lowp_float",
+    "vs_wh_dyn_basic_mediump_float",
+    "vs_wh_uni_basic_highp_float",
+    "vs_wh_uni_basic_lowp_float",
+    "vs_wh_uni_basic_mediump_float",
 ];
 
 /// References whose pair compiles and matches Mesa's words byte for byte
-/// (`mali_ref::assert_matches`). Empty until a lowering lifts a refusal.
+/// (`mali_ref::assert_matches`). Empty: every kept loop carries the cap.
 const MATCHED: &[&str] = &[];
 
 fn refusal(name: &str) -> Result<(), String> {
@@ -64,7 +67,7 @@ fn refusals_pinned() {
 /// The compares that become the gate once a refusal is lifted (`--ignored`).
 /// Each fails at the tip with its refusal.
 #[test]
-#[ignore = "refused at the tip: S8 of mali-loops-lowering.md"]
+#[ignore = "none refused at the tip (S8 of mali-loops-lowering.md, spike-vsloop-rest)"]
 fn compares() {
     for (name, _) in REFUSALS {
         mali_ref::assert_matches(&format!("deqp_loops4_{name}"));
@@ -73,7 +76,7 @@ fn compares() {
 
 #[test]
 fn matched_compile() {
-    for name in MATCHED {
+    for name in MATCHED.iter().chain(CAPPED) {
         refusal(name).unwrap_or_else(|e| panic!("{name} is MATCHED but is refused: {e}"));
     }
 }
@@ -90,8 +93,11 @@ fn references_listed() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSALS.iter().map(|(n, _)| n.to_string()).chain(MATCHED.iter().map(|n| n.to_string())).collect();
+    let mut listed: Vec<String> = REFUSALS
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .chain(MATCHED.iter().chain(CAPPED).map(|n| n.to_string()))
+        .collect();
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops4_* reference is not listed, or the other way round");
 }

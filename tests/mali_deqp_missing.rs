@@ -25,12 +25,12 @@ const MATCHED: &[&str] = &["loops_vs_for_constant"];
 /// The references that compile and differ from their expect.json: the kept
 /// mediump loop's words are Mesa's with the loop cap's (20 words against 17;
 /// compared for `deqp_loops_fs_for_uni`, the same pair, in
-/// `src/shaderc/online/mali/tests.rs`).
-const DIFFERS: &[&str] = &["loops_fs_kept_for"];
+/// `src/shaderc/online/mali/tests.rs`; the vertex one's 27 against 24, for
+/// `deqp_loops_vs_for_uni`).
+const DIFFERS: &[&str] = &["loops_fs_kept_for", "loops_vs_for_uniform"];
 
 /// Every refused reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    ("loops_vs_for_uniform", "Valhall: a loop in a vertex shader is not lowered yet"),
     (
         "mixprec_fs_highp_declared",
         "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet",
@@ -47,7 +47,7 @@ fn loops_vs_for_constant() {
 /// loops/vs_for_uniform: the same loop bounded by an int uniform
 /// (`loops.for_uniform_iterations.basic_mediump_int_vertex`).
 #[test]
-#[ignore = "refused: a loop in a vertex shader; pinned by refusals_pinned"]
+#[ignore = "differs: the kept loop's words are Mesa's with the loop cap's; pinned by refusals_pinned"]
 fn loops_vs_for_uniform() {
     mali_ref::assert_matches("deqp_missing_loops_vs_for_uniform");
 }

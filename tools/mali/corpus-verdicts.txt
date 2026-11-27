@@ -67,7 +67,7 @@ tools/shaders/es100/loop_nested.dowhile.frag: Valhall: control flow (if, a loop,
 tools/shaders/es100/loop_nested.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loop_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
 tools/shaders/es100/loop_nested.while.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
-tools/shaders/es100/loop_uniform.dowhile.vert: Valhall: a loop in a vertex shader is not lowered yet
+tools/shaders/es100/loop_uniform.dowhile.vert: ok
 tools/shaders/es100/loop_uniform.frag: ok
 tools/shaders/es100/loopcarry.frag: ok
 tools/shaders/es100/matattr.frag: ok

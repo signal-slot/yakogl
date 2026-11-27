@@ -14,7 +14,10 @@
 //! The mediump kept loops of `fs_for_uni`, `fs_while_uni`, `fs_dowhile_uni`,
 //! `fs_cond_break`, `fs_cond_continue`, `fs_double_continue`, `fs_mixed` and
 //! `fs_inf_break` compile (note section 10), as do `fs_select` and
-//! `fs_float_uni` (section 13): each is a compile check here.
+//! `fs_float_uni` (section 13): each is a compile check here. So are the
+//! vertex kept loops `vs_for_uni`, `vs_vector`, `vs_select`,
+//! `vs_dowhile_uni` and `vs_float_uni` (spike-vsloop-rest: `res` carried
+//! as 16-bit pairs in the varying program).
 //! A kept-loop reference carries the pass counter in its words, which the
 //! shared compare does not edit: its lowering compares it with `CapEdit` in
 //! `src/shaderc/online/mali/tests.rs` and turns its test here into a compile
@@ -176,16 +179,22 @@ fn vs_dowhile_const() {
     mali_ref::assert_matches("deqp_loops_vs_dowhile_const");
 }
 
+/// Compiles (the vertex kept loop's fp16 pairs, Mesa's do-while: the pairs'
+/// `vec2`s after the head test). A kept loop: its words are Mesa's with the
+/// loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_vs_dowhile_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop in a vertex shader (its mediump vec4 local carried at fp16 across the kept loop, MKVEC.v2i16 in the body; since plan #387 intval-vs16 the mediump int bound is read as its word)"]
 fn vs_dowhile_uni() {
-    mali_ref::assert_matches("deqp_loops_vs_dowhile_uni");
+    compiles("deqp_loops_vs_dowhile_uni");
 }
 
+/// Compiles (the vertex kept loop's fp16 pairs and the fp32 counter's
+/// `FCMP_OR.f32` head). A kept loop: its words are Mesa's with the loop cap's,
+/// compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_vs_float_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-2"]
 fn vs_float_uni() {
-    mali_ref::assert_matches("deqp_loops_vs_float_uni");
+    compiles("deqp_loops_vs_float_uni");
 }
 
 /// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
@@ -195,10 +204,13 @@ fn vs_for_const() {
     mali_ref::assert_matches("deqp_loops_vs_for_const");
 }
 
+/// Compiles (the vertex kept loop: `res` carried as two 16-bit `vec2` phis in
+/// the varying program). A kept loop: its words are Mesa's with the loop cap's,
+/// compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_vs_for_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop in a vertex shader (its mediump locals carried at fp16; the mediump int bound is read as its word since plan #387 intval-vs16), then lower-loops-2"]
 fn vs_for_uni() {
-    mali_ref::assert_matches("deqp_loops_vs_for_uni");
+    compiles("deqp_loops_vs_for_uni");
 }
 
 #[test]
@@ -221,16 +233,22 @@ fn vs_nested_const() {
     mali_ref::assert_matches("deqp_loops_vs_nested_const");
 }
 
+/// Compiles (the vertex kept loop, its bound the `CSEL.u32` on the bool
+/// uniform's word). A kept loop: its words are Mesa's with the loop cap's,
+/// compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_vs_select_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop in a vertex shader (the int uniform of the bound's select is read as its word since plan #387 intval-vs16), then lower-loops-2"]
 fn vs_select() {
-    mali_ref::assert_matches("deqp_loops_vs_select");
+    compiles("deqp_loops_vs_select");
 }
 
+/// Compiles (the vertex kept loop, the `ivec4` counter one scalar phi). A kept
+/// loop: its words are Mesa's with the loop cap's, compared in
+/// `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_vs_vector_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop in a vertex shader (the int uniform is read as its word since plan #387 intval-vs16), then lower-loops-2"]
 fn vs_vector() {
-    mali_ref::assert_matches("deqp_loops_vs_vector");
+    compiles("deqp_loops_vs_vector");
 }
 
 /// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
@@ -253,13 +271,8 @@ fn compiles(name: &str) {
 /// prefix and the " is not lowered yet" suffix.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_loops_fs_vec_dyn", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
-    ("deqp_loops_vs_dowhile_uni", "a loop in a vertex shader"),
-    ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),
-    ("deqp_loops_vs_for_uni", "a loop in a vertex shader"),
     ("deqp_loops_vs_idx_dyn", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
     ("deqp_loops_vs_idx_static", "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add)"),
-    ("deqp_loops_vs_select", "a loop in a vertex shader"),
-    ("deqp_loops_vs_vector", "a loop in a vertex shader"),
 ];
 
 #[test]

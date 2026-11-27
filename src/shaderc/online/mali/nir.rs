@@ -4962,7 +4962,7 @@ fn vs_put_side(m: &Module<'_>, r: ir::Range, steps: &mut [Step], k: &mut usize) 
 /// loop, a jump, a look-up or more than [`PEEPHOLE_LIMIT_GL`] operations
 /// under it stays refused, at the `if`'s place in the walk (an earlier
 /// refusal comes first).
-fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliError> {
+fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s mut [Step], MaliError> {
     let nodes = m.nodes_of(m.body);
     let flat = |then_: ir::Range, else_: ir::Range| -> Result<usize, MaliError> {
         Ok(vs_side(m, then_, 1)? + vs_side(m, else_, 1)?)
@@ -5021,7 +5021,7 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
             _ => put!(Step::Refuse(MaliError::ControlFlow)),
         }
     }
-    Ok(&steps[..k])
+    Ok(&mut steps[..k])
 }
 
 /// The IR values no output of the vertex shader reads, `dead[v]` set for
@@ -5376,6 +5376,50 @@ enum VsLoop {
     Kept,
 }
 
+/// The halves `v0` and `v1` as the pair a kept loop's phi takes from the
+/// latch ([`vs_kept_end`]): the two-lane node they are, else their `vec2`
+/// put at `at` in the order (the place after the body's last store to
+/// their local, before the counter's step: deqp_loops_vs_for_uni's
+/// `MKVEC.v2i16` pair before `IADD_IMM.i32 r2, r2^, #0x1`), or at the end
+/// when the body stores no other way.
+fn vs_latch_vec16(vs: &mut Nir<'_>, v0: Val, v1: Val, at: usize) -> Result<Val, MaliError> {
+    if let (Val::Lane(n, 0), Val::Lane(m, 1)) = (v0, v1) {
+        if n == m && vs.nodes[n as usize].width == 2 && vs.nodes[n as usize].bits == 16 {
+            return Ok(v0);
+        }
+    }
+    let nd = NirNode { kind: Kind::Alu(Alu::Vec2), src: [v0, v1, Val::Undef], bits: 16, width: 2 };
+    let id = if at < vs.len { vs.insert_before(at, nd)? } else { vs.push_node(nd)? };
+    Ok(Val::Lane(id, 0))
+}
+
+/// The operands of a mediump `a < b` in a kept loop whose lanes are 16-bit
+/// values ([`vs_lane16`]: the fp16 counter's phi or its step, an fp16
+/// uniform's lane): Mesa's 16-bit compare of the fp16 counter
+/// (`FCMP_OR.v2f16.ge.m1 r1, r2.h00, u6.w0.h00`, the head's inverse,
+/// deqp_loops4_vs_for_uni_basic_mediump_float; the do-while's, of the
+/// stepped counter, deqp_loops4_vs_do_uni_basic_lowp_float).
+/// None for any other compare, which keeps the fp32 walk.
+fn vs_kept_cmp16(vs: &Nir<'_>, w: &Walk<'_>, s: &[ir::Src; 3]) -> Option<[Val; 2]> {
+    let x = vs_lane16(vs, lane(w, s[0], 0), false)?;
+    let y = vs_lane16(vs, lane(w, s[1], 0), false)?;
+    (vs_is_f16(vs, x) && vs_is_f16(vs, y)).then_some([x, y])
+}
+
+/// Node list `nodes` (a loop body) loads local `l` somewhere.
+fn reads_local(m: &Module<'_>, nodes: &[IrNode], l: usize) -> bool {
+    nodes.iter().any(|nd| match *nd {
+        IrNode::Instr(id) => matches!(m.instr(id), Some(IrOp::LoadLocal { local, .. }) if local.0 as usize == l),
+        IrNode::If { then_, else_, .. } => reads_local(m, m.nodes_of(then_), l) || reads_local(m, m.nodes_of(else_), l),
+        IrNode::Loop { body } => reads_local(m, m.nodes_of(body), l),
+        _ => false,
+    })
+}
+
+/// The flag on a [`KeptLoop`] phi's lane: the phi is a 16-bit pair of
+/// lanes `c` and `c + 1`.
+const VS_PAIR: u8 = 0x80;
+
 /// A vertex loop Mesa keeps ([`vs_kept_begin`]).
 #[derive(Clone, Copy)]
 struct KeptLoop {
@@ -5395,7 +5439,15 @@ struct KeptLoop {
     brk_locals: [[Val; 4]; MAX_LOCALS],
     /// The nodes of the loop start here ([`vs_kept_end`]).
     first: usize,
+    /// Per local carried as 16-bit pairs ([`VS_PAIR`]), at most
+    /// [`VS_PAIR_LOCALS`]: the local, and the place in the order right
+    /// after the body's last store to it, where its pairs' `vec2`s stand.
+    pair_at: [(u8, u16); VS_PAIR_LOCALS],
+    npair: usize,
 }
+
+/// The locals one kept vertex loop carries as 16-bit pairs.
+const VS_PAIR_LOCALS: usize = 4;
 
 /// A loop of [`vs_loop_shape`]'s form whose head test reads a run-time
 /// value (an `int` uniform's word: gm2_cf_loop_uni_vs, glmark2 loop's vs
@@ -5432,18 +5484,36 @@ fn vs_kept_begin(
             _ => {}
         }
     }
-    /* a mediump float local the body stores: Mesa carries it at fp16
-     * across the loop (`MKVEC.v2i16` in the body, the narrowing before it;
-     * deqp_loops_vs_dowhile_uni's `res = res.yzwx`), which this fp32 phi
-     * does not; a mediump int is 32 bits and is carried as it is */
+    /* a mediump float local the body stores, entering with a run-time
+     * value (an attribute's): Mesa carries it at fp16 across the loop, each
+     * aligned pair of lanes one 16-bit `vec2` phi (`V2F32_TO_V2F16` before
+     * the loop, `MKVEC.v2i16` in the body; deqp_loops_vs_for_uni's `res =
+     * res.yzwx`, `pair16` below). A loop that starts from constants meets
+     * the link's refusals of its varyings first (deqp_varylink2_loop_*,
+     * deqp_posvary_loop_phi_array); a mediump int is 32 bits and is
+     * carried as it is */
+    let mut pair16 = [false; MAX_LOCALS];
     for (l, &mask) in masks.iter().enumerate() {
         let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
-        /* entering with a run-time value (an attribute's): a loop that
-         * starts from constants meets the link's refusals of its varyings
-         * first (deqp_varylink2_loop_*, deqp_posvary_loop_phi_array) */
         let runtime = (0..4).any(|c| mask & (1 << c) != 0 && matches!(locals[l][c], Val::Lane(..)));
         if mask != 0 && float && runtime && m.local_prec_of(ir::LocalId(l as u32)) == Prec::Medium {
-            return Err(MaliError::LoopVertex);
+            /* every aligned pair the body stores whole, each lane a 32-bit
+             * value before the loop: no other form has a reference */
+            for c in (0..4).step_by(2) {
+                let pm = (mask >> c) & 3;
+                if pm == 0 {
+                    continue;
+                }
+                let ok = pm == 3
+                    && [locals[l][c], locals[l][c + 1]].iter().all(|v| match *v {
+                        Val::Lane(n, _) => vs.nodes[n as usize].bits == 32,
+                        _ => false,
+                    });
+                if !ok {
+                    return Err(MaliError::LoopVertex);
+                }
+            }
+            pair16[l] = true;
         }
     }
     let init = |l: ir::LocalId, _float: bool| match locals.get(l.0 as usize).map(|v| v[0]) {
@@ -5455,6 +5525,32 @@ fn vs_kept_begin(
     let lp = vs.nloops as u8;
     vs.nloops += 1;
     let pre = vs.cur;
+    let any_pair = pair16.iter().any(|&p| p);
+    /* a mediump float local the body reads and does not store, holding an
+     * attribute's lanes: narrowed before the loop, where lower_precision's
+     * `f2fmp` of its assignment stands, not at the body's first 16-bit
+     * reader (deqp_loops4_vs_wh_dyn_basic_mediump_float's `one = a_one`:
+     * `FADD.f32 r0.h0, r0^, 0x0.neg` before the carried pairs' narrowing;
+     * CSE'd with the reader's, [`vs_narrow_input`]; [`dce`] drops one no
+     * 16-bit operation reads) */
+    if any_pair {
+        for (l, d) in m.locals.iter().enumerate().take(MAX_LOCALS) {
+            if masks[l] != 0
+                || d.ty.scalar != ir::ScalarType::F32
+                || m.local_prec_of(ir::LocalId(l as u32)) != Prec::Medium
+                || !reads_local(m, nodes, l)
+            {
+                continue;
+            }
+            for c in 0..usize::from(d.ty.comps.min(4)) {
+                if let Val::Lane(n, k) = locals[l][c] {
+                    if matches!(vs.nodes[n as usize], NirNode { kind: Kind::Input { .. }, bits: 32, .. }) {
+                        vs_narrow_input(vs, n, k)?;
+                    }
+                }
+            }
+        }
+    }
     let header = vs.new_block(pre)?;
     vs.cur = header;
     let reg = registration_order(m);
@@ -5478,8 +5574,36 @@ fn vs_kept_begin(
         brk: 0,
         brk_locals: *locals,
         first: vs.n,
+        pair_at: [(0, 0); VS_PAIR_LOCALS],
+        npair: 0,
     };
     for &(_, l) in &order[..nl] {
+        if pair16[l] {
+            if s.npair == VS_PAIR_LOCALS {
+                return Err(MaliError::LoopVertex);
+            }
+            s.pair_at[s.npair] = (l as u8, u16::MAX);
+            s.npair += 1;
+            /* the pairs' narrowing in the pre-header, then their phis */
+            for c in (0..4).step_by(2) {
+                if masks[l] & (3 << c) == 0 {
+                    continue;
+                }
+                if s.nphi == s.phis.len() {
+                    return Err(MaliError::LoopVertex);
+                }
+                let src = [locals[l][c], locals[l][c + 1], Val::Undef];
+                let w = vs.push_node(NirNode { kind: Kind::Alu(Alu::F2f16), src, bits: 16, width: 2 })?;
+                vs.block[w as usize] = pre;
+                let src = [Val::Lane(w, 0), Val::Undef, Val::Undef];
+                let id = vs.push_node(NirNode { kind: Kind::Phi, src, bits: 16, width: 2 })?;
+                locals[l][c] = Val::Lane(id, 0);
+                locals[l][c + 1] = Val::Lane(id, 1);
+                s.phis[s.nphi] = (id, l as u8, c as u8 | VS_PAIR);
+                s.nphi += 1;
+            }
+            continue;
+        }
         for c in 0..4 {
             if masks[l] & (1 << c) == 0 {
                 continue;
@@ -5500,6 +5624,22 @@ fn vs_kept_begin(
             if bits != 32 || s.nphi == s.phis.len() {
                 return Err(MaliError::LoopVertex);
             }
+            /* a lone mediump float lane carried from a constant: one 16-bit
+             * phi of one lane, its start the constant's fp16 bits (the
+             * `mediump float ndx = 0.05` counter of
+             * deqp_loops4_vs_for_uni_basic_mediump_float, `IADD_IMM.i32
+             * .reconverge r2, 0x0, #0x2A66`; the fragment walk's
+             * `walk_kept_loop` form), in a loop that carries fp16 pairs: a
+             * mediump scalar alone (deqp_varylink2_loop_bcast's `res +=
+             * tmp[i]`) has no vertex reference of this form and keeps its
+             * fp32 phi */
+            let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
+            let (v, bits) = match v {
+                Val::Const(k) if any_pair && float && m.local_prec_of(ir::LocalId(l as u32)) == Prec::Medium => {
+                    (Val::Const(u32::from(crate::shaderc::online::mesa_fold::f32_to_f16(f32::from_bits(k)))), 16)
+                }
+                _ => (v, bits),
+            };
             let id = vs.push_node(NirNode { kind: Kind::Phi, src: [v, Val::Undef, Val::Undef], bits, width: 1 })?;
             locals[l][c] = Val::Lane(id, 0);
             s.phis[s.nphi] = (id, l as u8, c as u8);
@@ -5522,14 +5662,30 @@ fn vs_kept_head(vs: &mut Nir<'_>, s: &mut KeptLoop, c: Val, locals: &[[Val; 4]; 
     let Val::Lane(n, 0) = c else { return Err(MaliError::LoopVertex) };
     let nd = vs.nodes[n as usize];
     let inv = match nd.kind {
-        Kind::Alu(Alu::Icmp(Cmpf::Lt)) => Cmpf::Ge,
-        Kind::Alu(Alu::Icmp(Cmpf::Ge)) => Cmpf::Lt,
-        Kind::Alu(Alu::Icmp(Cmpf::Eq)) => Cmpf::Ne,
-        Kind::Alu(Alu::Icmp(Cmpf::Ne)) => Cmpf::Eq,
-        /* a float or unsigned test has no vertex reference */
+        Kind::Alu(Alu::Icmp(Cmpf::Lt)) => Alu::Icmp(Cmpf::Ge),
+        Kind::Alu(Alu::Icmp(Cmpf::Ge)) => Alu::Icmp(Cmpf::Lt),
+        Kind::Alu(Alu::Icmp(Cmpf::Eq)) => Alu::Icmp(Cmpf::Ne),
+        Kind::Alu(Alu::Icmp(Cmpf::Ne)) => Alu::Icmp(Cmpf::Eq),
+        /* a float counter's `ndx < uf_one`: `inot(flt(a, b))` is
+         * `fge(a, b)` (nir_opt_algebraic.py), `FCMP_OR.f32.ge.m1`
+         * (deqp_loops_vs_float_uni) or at 16 bits `FCMP_OR.v2f16.ge.m1`;
+         * the cap's compare is OR-ed in by its own `LSHIFT_OR`, as the
+         * fragment walk's float tests */
+        Kind::Alu(Alu::Fcmp(Cmpf::Lt)) => Alu::Fcmp(Cmpf::Ge),
+        /* an unsigned or other float test has no vertex reference */
         _ => return Err(MaliError::LoopVertex),
     };
-    let test = vs.alu(Alu::Icmp(inv), nd.src[0], nd.src[1], Val::Undef)?;
+    /* a 16-bit test (the fp16 counter's, [`vs_kept_cmp16`]) stays one:
+     * `FCMP_OR.v2f16.ge.m1`, its mask OR-ed with the cap's as `.h0` */
+    let test = if nd.bits == 16 {
+        let u = Val::Undef;
+        Val::Lane(
+            vs.push_node(NirNode { kind: Kind::Alu(inv), src: [nd.src[0], nd.src[1], u], bits: 16, width: 1 })?,
+            0,
+        )
+    } else {
+        vs.alu(inv, nd.src[0], nd.src[1], Val::Undef)?
+    };
     let next = vs.alu(Alu::Iadd, Val::Lane(s.cap_phi, 0), Val::Const(u32::MAX), Val::Undef)?;
     let stop = vs.alu(Alu::Icmp(Cmpf::Lt), next, Val::Const(0), Val::Undef)?;
     let cond = vs.alu(Alu::Ior, test, stop, Val::Undef)?;
@@ -5567,7 +5723,7 @@ fn vs_kept_head(vs: &mut Nir<'_>, s: &mut KeptLoop, c: Val, locals: &[[Val; 4]; 
 /// test's `break` alone, with the locals there. A load or look-up first
 /// made in the loop (its node would stand in a block the exit does not
 /// follow) has no reference.
-fn vs_kept_end(vs: &mut Nir<'_>, s: &KeptLoop, locals: &mut [[Val; 4]; MAX_LOCALS]) -> Result<(), MaliError> {
+fn vs_kept_end(vs: &mut Nir<'_>, s: &mut KeptLoop, locals: &mut [[Val; 4]; MAX_LOCALS]) -> Result<(), MaliError> {
     if s.next == Val::Undef {
         return Err(MaliError::LoopVertex);
     }
@@ -5579,7 +5735,33 @@ fn vs_kept_end(vs: &mut Nir<'_>, s: &KeptLoop, locals: &mut [[Val; 4]; MAX_LOCAL
         }
     }
     let latch = vs.cur;
+    /* a pair's `vec2` at the latch, the later pair's first
+     * (deqp_loops_vs_for_uni: `MKVEC.v2i16 r1, r3.h1, r0.h0` of `res.zw`
+     * before `res.xy`'s, as the fragment walk's `walk_kept_loop`) */
+    for &(id, l, c) in s.phis[..s.nphi].iter().rev() {
+        if c & VS_PAIR == 0 {
+            continue;
+        }
+        let c = usize::from(c & !VS_PAIR);
+        let (v0, v1) = (locals[l as usize][c], locals[l as usize][c + 1]);
+        if (v0, v1) == (Val::Lane(id, 0), Val::Lane(id, 1)) || !vs_is_f16(vs, v0) || !vs_is_f16(vs, v1) {
+            return Err(MaliError::LoopVertex);
+        }
+        let at = s.pair_at[..s.npair].iter().find(|p| p.0 == l).map_or(u16::MAX, |p| p.1);
+        let len = vs.len;
+        vs.nodes[id as usize].src[1] = vs_latch_vec16(vs, v0, v1, usize::from(at))?;
+        /* a `vec2` put at `at`: what stands there moves one on, and the
+         * next one put there goes after it (the earlier pair's last) */
+        if vs.len > len && usize::from(at) < len {
+            for p in s.pair_at[..s.npair].iter_mut().filter(|p| p.1 >= at && p.1 != u16::MAX) {
+                p.1 += 1;
+            }
+        }
+    }
     for &(id, l, c) in &s.phis[..s.nphi] {
+        if c & VS_PAIR != 0 {
+            continue;
+        }
         let v = locals[l as usize][c as usize];
         /* a lane the body leaves as it found it (`nir_opt_remove_phis`) */
         if v == Val::Lane(id, 0) || v == Val::Undef {
@@ -5823,7 +6005,39 @@ fn walk<'s>(
                     return Err(MaliError::Defect(Defect::IrIndex));
                 };
                 let guess = super::nir_fs::guessed_trips(m, m.nodes_of(body));
-                let counted = super::nir_fs::ir_folds(m, head.val, &w.locals, 0) || guess.is_some();
+                let mut counted = super::nir_fs::ir_folds(m, head.val, &w.locals, 0) || guess.is_some();
+                let mut past_limit = false;
+                /* a counted loop past `max_unroll_iterations` passes, its
+                 * carried mediump vector in 16-bit pairs: Mesa keeps it
+                 * (nir_opt_loop_unroll.c:1112-1150), the bound a pushed
+                 * word (deqp_loops2_vs_do_con_101_iterations: `ICMP_OR.s32
+                 * .ge.m1 r1, r2, u5.w1, 0x0` of the 101) */
+                if counted && guess.is_none() && matches!(lp, VsLoop::None) {
+                    let init = |l: ir::LocalId, _float: bool| match w.locals.get(l.0 as usize).map(|v| v[0]) {
+                        Some(Val::Const(bits)) => Some(bits),
+                        _ => None,
+                    };
+                    let entries = crate::shaderc::online::loop_count::constant_loop_entries(m, body, &init);
+                    if entries.is_some_and(|e| e as usize > super::nir_fs::MAX_UNROLL_ITERATIONS + 1) {
+                        counted = false;
+                        past_limit = true;
+                        /* the do-while Mesa makes of it, its first test
+                         * folded (the fragment walk's `rotated_loop`): the
+                         * body after the head test first, then the steps
+                         * before it and the test, on the stepped counter
+                         * (deqp_shapes loops_vs_for_constant, `for (i = 0;
+                         * i < 101; i++)`: Mesa's words those of
+                         * deqp_loops2_vs_do_con_101_iterations). Taken for
+                         * a body of instructions alone */
+                        let end = end as usize;
+                        let h = (k..end).find(|&j| matches!(steps[j], Step::Head(_)));
+                        if let Some(h) =
+                            h.filter(|&h| (k..end).all(|j| j == h || matches!(steps[j], Step::Instr(_))) && h + 1 < end)
+                        {
+                            steps[k..end].rotate_left(h - k + 1);
+                        }
+                    }
+                }
                 /* a loop in a loop: both unrolled, or no reference */
                 if !matches!(lp, VsLoop::None) {
                     if matches!(lp, VsLoop::Kept) || !counted || nouter == outer.len() {
@@ -5835,13 +6049,24 @@ fn walk<'s>(
                 lp = if counted {
                     VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n, guess }
                 } else {
-                    kept_loop = Some(vs_kept_begin(&mut vs, m, body, &mut w.locals)?);
+                    let s = vs_kept_begin(&mut vs, m, body, &mut w.locals)?;
+                    /* a counted loop kept past the limit with no fp16 pair
+                     * carried (a highp one) has no vertex reference
+                     * (mali_int_loops.rs `a_counted_loop_of_33_passes_stays_refused`) */
+                    if past_limit && s.npair == 0 {
+                        return Err(MaliError::LoopVertex);
+                    }
+                    kept_loop = Some(s);
                     VsLoop::Kept
                 };
                 continue;
             }
             Step::Head(src) => {
-                let mut c = vs_widen(&mut vs, lane(w, src, 0))?;
+                /* a kept loop's 16-bit test is taken as it is ([`vs_kept_head`]) */
+                let mut c = match (lp, lane(w, src, 0)) {
+                    (VsLoop::Kept, c) if vs_is_mask16(&vs, c) => c,
+                    (_, c) => vs_widen(&mut vs, c)?,
+                };
                 if let (VsLoop::Unroll { guess: Some(trips), .. }, false, Some(&IrOp::Alu(AluOp::Ilt, [a, _, _]))) =
                     (lp, matches!(c, Val::Const(_)), m.def(src.val))
                 {
@@ -5883,8 +6108,8 @@ fn walk<'s>(
                         k = begin as usize + 1;
                     }
                     VsLoop::Kept => {
-                        let s = kept_loop.take().ok_or(MaliError::Defect(Defect::IrIndex))?;
-                        vs_kept_end(&mut vs, &s, &mut w.locals)?;
+                        let mut s = kept_loop.take().ok_or(MaliError::Defect(Defect::IrIndex))?;
+                        vs_kept_end(&mut vs, &mut s, &mut w.locals)?;
                         lp = VsLoop::None;
                     }
                     VsLoop::None => return Err(MaliError::Defect(Defect::IrIndex)),
@@ -6106,6 +6331,18 @@ fn walk<'s>(
                         s[i] = *t;
                     }
                 }
+                /* a local a kept loop carries as 16-bit pairs: its `vec2`s
+                 * stand after its last store ([`vs_latch_vec16`]); one stored
+                 * before the head test (a `do .. while`) has them after the
+                 * test, in the latch, and the exit reads the phis' halves
+                 * (deqp_loops_vs_dowhile_uni: Mesa's `MKVEC.v2i16` pair after
+                 * the `BRANCHZ`, `F16_TO_F32 r0, r0^.h1` of the exit) */
+                if let Some(kl) = kept_loop.as_mut().filter(|kl| kl.next != Val::Undef) {
+                    let n = kl.npair;
+                    if let Some(p) = kl.pair_at[..n].iter_mut().find(|p| u32::from(p.0) == local.0) {
+                        p.1 = vs.len as u16;
+                    }
+                }
             }
             IrOp::LoadLocal { .. } | IrOp::StoreLocal { .. } => return Err(MaliError::IndexedLocal),
             IrOp::StoreOutput { slot, src } => {
@@ -6178,6 +6415,17 @@ fn walk<'s>(
                 if vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width)? =>
             {
                 vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
+            }
+            /* a kept loop's head test of its fp16 counter ([`vs_kept_cmp16`]) */
+            IrOp::Alu(AluOp::Flt, s)
+                if kept_loop.is_some()
+                    && width == 1
+                    && vs_class_of(&vs, m, ValueId(id.0))? == Prec::Medium
+                    && vs_kept_cmp16(&vs, w, &s).is_some() =>
+            {
+                let [x, y] = vs_kept_cmp16(&vs, w, &s).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let nd = NirNode { kind: Kind::Alu(Alu::Fcmp(Cmpf::Lt)), src: [x, y, Val::Undef], bits: 16, width: 1 };
+                out[0] = Val::Lane(vs.push_node(nd)?, 0);
             }
             /* `abs` of a mediump local's lanes (mediump attributes'): fp16,
              * one lane at a time ([`vs_fabs16`]) */
@@ -8071,9 +8319,15 @@ fn move_before_users(vs: &mut Nir<'_>, scratch: &Arena<'_>, movable: fn(Kind) ->
         if !movable(vs.nodes[id as usize].kind) {
             continue;
         }
-        /* the first user: the user with the largest index */
+        /* the first user: the user with the largest index. A loop
+         * header's phi is no user here: it stands before the latch value
+         * it reads (`nir_opt_move` moves within a block, and skips a phi;
+         * deqp_loops_vs_for_uni's `MKVEC.v2i16` of the latch) */
         let mut first: Option<usize> = None;
         for (u, _) in vs.uses(id) {
+            if vs.nodes[u as usize].kind == Kind::Phi {
+                continue;
+            }
             let at = vs.order[..vs.len].iter().position(|&x| x == u).ok_or(MaliError::Defect(Defect::IrIndex))?;
             if first.is_none_or(|f| index[u as usize] > index[vs.order[f] as usize]) {
                 first = Some(at);

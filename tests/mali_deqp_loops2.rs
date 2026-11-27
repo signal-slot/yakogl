@@ -84,14 +84,10 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_wh_dyn_basic_highp_float", MIXED),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
-    ("vs_do_con_101_iterations", LOOP_VERTEX),
     ("vs_do_con_nested", LOOP_VERTEX),
-    ("vs_do_dyn_basic_highp_float", LOOP_VERTEX),
     ("vs_do_dyn_conditional_body", LOOP_VERTEX),
     ("vs_do_dyn_conditional_break", LOOP_VERTEX),
     ("vs_do_dyn_nested_sequence", LOOP_VERTEX),
-    ("vs_do_uni_basic_highp_float", LOOP_VERTEX),
-    ("vs_do_uni_basic_mediump_float", LOOP_VERTEX),
     ("vs_do_uni_conditional_body", LOOP_VERTEX),
     ("vs_do_uni_conditional_break", LOOP_VERTEX),
     ("vs_do_uni_conditional_continue", LOOP_VERTEX),
@@ -100,11 +96,9 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_fn_after_seq", LOOP_VERTEX),
     ("vs_fn_mixed", LOOP_VERTEX),
     ("vs_fn_return_in_loop", LOOP_VERTEX),
-    ("vs_for_dyn_basic_mediump_float", LOOP_VERTEX),
     ("vs_for_dyn_conditional_body", LOOP_VERTEX),
     ("vs_for_dyn_conditional_break", LOOP_VERTEX),
     ("vs_for_dyn_nested", LOOP_VERTEX),
-    ("vs_for_uni_basic_lowp_float", LOOP_VERTEX),
     ("vs_for_uni_conditional_body", LOOP_VERTEX),
     ("vs_for_uni_conditional_break", LOOP_VERTEX),
     ("vs_for_uni_conditional_continue", LOOP_VERTEX),
@@ -133,8 +127,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_ret_static_dyn", LOOP_VERTEX),
     ("vs_ret_static_loop_always", LOOP_VERTEX),
     ("vs_ret_static_loop_never", LOOP_VERTEX),
-    ("vs_wh_con_101_iterations", LOOP_VERTEX),
-    ("vs_wh_dyn_basic_highp_float", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_body", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_break", LOOP_VERTEX),
     ("vs_wh_dyn_nested_sequence", LOOP_VERTEX),
@@ -166,6 +158,18 @@ const REFUSALS: &[(&str, &str)] = &[
 /// loops' `fs_float_uni`); the second's bound reads a varying, converted
 /// since a kept loop's tests are roots of the liveness `convert_inputs16`
 /// reads (nir_fs.rs `mark_live`).
+/// The six vertex kept loops of a float counter compile since the carried
+/// mediump `res` is two 16-bit pairs in the varying program (nir.rs
+/// `vs_kept_begin`), an fp16 counter one 16-bit phi; the `true` ones are
+/// Mesa's words with the cap's (`CapEdit` compares in tests.rs).
+/// `vs_do_dyn_basic_highp_float` is `false`: its two fp32 products in the
+/// header (the step's `uf_third * one` and the bound's `uf_one * one`)
+/// stand in the source's order, Mesa's the other way round. The two
+/// 101-pass constant loops compile since a counted vertex loop past the
+/// unroll limit is kept: `vs_do_con_101_iterations` is Mesa's words with the
+/// cap's; `vs_wh_con_101_iterations` (`while (i++ < 101)`) is `false`, its
+/// `i + 1` before the compare of the old `i` (Mesa's after), as the fragment
+/// twin `fs_wh_con_101_iterations`.
 const COMPILED: &[(&str, bool)] = &[
     ("fs_disc_texture", false),
     ("fs_do_con_select_iteration_count", true),
@@ -196,6 +200,14 @@ const COMPILED: &[(&str, bool)] = &[
     ("fs_wh_uni_conditional_break", true),
     ("fs_wh_uni_conditional_continue", false),
     ("fs_wh_uni_double_continue", false),
+    ("vs_do_con_101_iterations", true),
+    ("vs_do_dyn_basic_highp_float", false),
+    ("vs_do_uni_basic_highp_float", true),
+    ("vs_do_uni_basic_mediump_float", true),
+    ("vs_for_dyn_basic_mediump_float", true),
+    ("vs_for_uni_basic_lowp_float", true),
+    ("vs_wh_con_101_iterations", false),
+    ("vs_wh_dyn_basic_highp_float", true),
 ];
 
 #[test]

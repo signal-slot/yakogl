@@ -888,7 +888,8 @@ pub fn vs_variant(
              * `vs_alu16`; deqp_intval_opvs_add_int_highp's `F16_TO_F32 r1,
              * r0.h0` and `r0, r0^.h1`) */
             nir::Val::Lane(n, c)
-                if matches!(vs.nodes[n as usize].kind, nir::Kind::Alu(_)) && vs.nodes[n as usize].bits == 16 =>
+                if matches!(vs.nodes[n as usize].kind, nir::Kind::Alu(_) | nir::Kind::Phi)
+                    && vs.nodes[n as usize].bits == 16 =>
             {
                 let s = lanes[n as usize][0];
                 if s.idx == Idx::Null {
