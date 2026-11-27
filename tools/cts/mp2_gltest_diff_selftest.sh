@@ -113,6 +113,20 @@ chk "verdict after sub-skip wins" grep -q 'new 1,' <<<"$(run "$D/w.log")"
 printf 'gl_test: case 4 d: FAIL\ngl_test: case 4 d: x; SKIP sub\n' >"$D/w2.log"
 chk "sub-skip after verdict ignored" grep -q 'new 1,' <<<"$(run "$D/w2.log")"
 
+# patch D: the glmark2 cell quotes "N of N run, case N skipped" too; the
+# gl_test column (named by the table header) is the baseline, so 2 stays flaky
+RQ=$HERE/testdata/mp2-p9-gltest/RESULTS-glmark2-quotes-gltest.md
+out=$(python3 -I "$TOOL" --results "$RQ" --set "$D/lib.rs" --expected "$D/exp.txt" "$D/bad.log")
+chk "gl_test column: flaky 2 found though the glmark2 cell matches first" grep -qx 'mp2-gltest-diff: new 1, flaky 1, expected 1, missing 1' <<<"$out"
+# no table header naming gl_test: the first cell that reads the pattern
+sed '/^| Board/d' "$RQ" >"$D/nohead.md"
+out=$(python3 -I "$TOOL" --results "$D/nohead.md" --set "$D/lib.rs" --expected "$D/exp.txt" "$D/bad.log")
+chk "no header: falls back to the first matching cell" grep -q 'mp2-gltest-diff: new ' <<<"$out"
+# the header names gl_test but the row's gl_test cell has no pattern: no cell
+sed 's/| 4 of 4 run, case 5 skipped (#4); cases 2 and 3 nondeterministic (#5) |/| 4 run |/' "$RQ" >"$D/nocell.md"
+python3 -I "$TOOL" --results "$D/nocell.md" --set "$D/lib.rs" "$D/bad.log" >/dev/null 2>&1
+chk "gl_test cell without the pattern: exit 2" test $? -eq 2
+
 # error exits
 run "$D/nonexistent" >/dev/null; chk "missing input exits 2" test $? -eq 2
 python3 -I "$TOOL" --results "$D/lib.rs" "$D/clean.log" >/dev/null 2>&1

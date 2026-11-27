@@ -83,14 +83,27 @@ def set_order(src):
 
 
 def baseline(text):
-    """(skipped, flaky) of the i.MX8MP row's gl_test cell."""
+    """(skipped, flaky) of the i.MX8MP row's gl_test cell: the cell under the
+    table header's "gl_test" column; a table with no such header falls back to
+    the row's first cell that reads 'N of N run, case N skipped'."""
     cell = None
+    col = None  # the gl_test column of the table the row is in
+    pat = re.compile(r"\d+ of \d+ run, case \d+ skipped")
     for l in text.splitlines():
+        if l.startswith("|") and "gl_test" in l and not l.startswith("| i.MX8MP"):
+            heads = [h.strip() for h in l.strip().strip("|").split("|")]
+            if "gl_test" in heads:
+                col = heads.index("gl_test")
+                continue
         if l.startswith("| i.MX8MP"):
-            for c in l.split("|")[2:]:
-                if re.search(r"\d+ of \d+ run, case \d+ skipped", c):
-                    cell = c
-                    break
+            cells = l.strip().strip("|").split("|")
+            # the column the table header names gl_test: another cell of the
+            # row (the glmark2 one) may quote "49 of 49 run, case 16 skipped"
+            # for its own re-run and carry no "nondeterministic"
+            if col is not None and col < len(cells) and pat.search(cells[col]):
+                cell = cells[col]
+            elif col is None:
+                cell = next((c for c in cells[1:] if pat.search(c)), None)
         if cell:
             break
     if cell is None:

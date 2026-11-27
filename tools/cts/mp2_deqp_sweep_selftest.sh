@@ -92,6 +92,39 @@ out=$(sw "$D/zephyr.bin" "$D/o2" 2>&1)
 chk "resume: all done, nothing run" test ! -s "$D/calls.txt"
 chk "resume: diff still called" grep -q '^mp2-p9-diff: ' <<<"$out"
 
+# patch A: a log that stops part way (a lifetime end) is not a done shard
+: > "$D/calls.txt"
+printf 'deqp: Pass %s\n' "$(sed -n 3p "$D/cases.txt")" > "$D/o2/shard-0001.log"   # shard 1 is cases 3 and 4
+out=$(sw "$D/zephyr.bin" "$D/o2" 2>&1)
+chk "partial log: the shard runs again" grep -q 'shard-0001$' "$D/calls.txt"
+chk "partial log: nothing else runs" test "$(wc -l < "$D/calls.txt")" -eq 1
+chk "partial log: rerun log holds both cases" test "$(grep -c '^deqp: Pass' "$D/o2/shard-0001.log")" -eq 2
+: > "$D/calls.txt"
+printf 'x 10:00:01 deqp: Pass %s\r\n10:00:02 deqp: Fail %s\r\n' "$(sed -n 3p "$D/cases.txt")" "$(sed -n 4p "$D/cases.txt")" > "$D/o2/shard-0001.log"
+out=$(sw "$D/zephyr.bin" "$D/o2" 2>&1)
+chk "stamped CRLF log with every case: skipped" test ! -s "$D/calls.txt"
+
+# patch C: the diff gets --cases, so cases outside the sweep are not missing
+echo "cases for the diff"
+out=$(sw --dry-run "$D/zephyr.bin" "$D/o1" 2>&1)
+chk "dry: diff gets --cases OUT/cases.txt" grep -q "mp2-p9-diff.py .*--cases $D/o1/cases.txt " <<<"$out"
+: > "$D/calls.txt"
+out=$(sw --first 1 --last 1 "$D/zephyr.bin" "$D/o8" 2>&1)
+chk "one shard of three: only the sweep's 4 other cases are missing" grep -q '^mp2-p9-diff: .*missing 4$' <<<"$out"
+
+# patch B: the shard split gets the image's slot room as --max-bytes
+python3 -I - "$D/small.bin" <<'PY'
+import os, struct, sys
+slot = b"yakogl-deqp-case-slot/1\0" + struct.pack("<IiI", 111, -1, 0) + bytes(111)
+open(sys.argv[1], "wb").write(os.urandom(0x800) + slot + os.urandom(1024))
+PY
+out=$(sw --dry-run "$D/small.bin" "$D/o9" 2>&1)
+chk "dry: --max-bytes is the slot room (110)" grep -q 'mp2-deqp-shards.py .*--max-bytes 110$' <<<"$out"
+out=$(bash "$SWEEP" --report-only --case-list "$D/cases.txt" --budget-ms 100000 "$D/small.bin" "$D/o9" 2>&1)
+chk "small slot: 6 cases in 3 shards (2 fit 110 bytes, 3 do not)" test "$(ls "$D"/o9/shards/shard-*.txt | wc -l)" -eq 3
+out=$(bash "$SWEEP" --report-only --case-list "$D/cases.txt" --budget-ms 100000 "$D/zephyr.bin" "$D/o10" 2>&1)
+chk "room 4096: one shard" test "$(ls "$D"/o10/shards/shard-*.txt | wc -l)" -eq 1
+
 echo "range"
 : > "$D/calls.txt"
 out=$(sw --first 2 --last 2 "$D/zephyr.bin" "$D/o3" 2>&1); rc=$?

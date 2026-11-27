@@ -13,15 +13,16 @@
 # the mustpass cases of gles2-mustpass.txt that a listed group covers and no
 # exclusion covers; a --case-list FILE is taken as one case per line as it
 # is, minus --exclude if given) is written to OUT/cases.txt and split by
-# mp2-deqp-shards.py into OUT/shards/; (2) for each shard (--first/--last
+# mp2-deqp-shards.py into OUT/shards/ (--max-bytes: the image's slot room); (2) for each shard (--first/--last
 # pick a range of shard numbers, to resume or split a sweep)
 # mp2-deqp-slot.py writes the shard's case list into a copy of <zephyr.bin>,
 # OUT/slot-NNNN.bin, and the runner runs it:
 # RUNNER run <bin> OUT/run/shard-NNNN shard-NNNN; (3) the shard's log
 # OUT/shard-NNNN.log is the runner's own output plus every console.txt it left
 # under OUT/run/shard-NNNN; a shard whose log already holds a
-# "deqp: <Status> <case>" result line is skipped; (4) mp2-p9-diff.py reads all
-# logs, given --exclude of the exclude file in use, so the names pending Q11
+# "deqp: <Status> <case>" result line for every case of the shard is skipped (a
+# log that stops part way, as a lifetime end leaves one, is run again); (4) mp2-p9-diff.py reads all
+# logs, given --cases OUT/cases.txt (only those cases can be missing) and --exclude of the exclude file in use, so the names pending Q11
 # are "excluded", not "missing" (its exit 1, new failures or missing cases, is
 # this script's); (5) mp2-log-redact-check.sh OUT: a hit (or an unreadable
 # input) makes the sweep exit 1, the logs must be redacted before commit.
@@ -135,6 +136,10 @@ CASES=$OUT/cases.txt
 SARGS=(--out "$SH")
 [ -z "$BUDGET" ] || SARGS+=(--budget-ms "$BUDGET")
 [ -z "$TIMES" ] || SARGS+=(--times "$TIMES")
+# a shard's filter must fit the image's slot: --max-bytes is the slot's room
+ROOM=
+[ -f "$BIN" ] && ROOM=$("$PY" -I "$HERE/mp2-deqp-slot.py" show "$BIN" 2>/dev/null | sed -n 's/^mp2-deqp-slot: slot at [^,]*, room \([0-9][0-9]*\) bytes.*/\1/p' | head -n 1)
+[ -z "$ROOM" ] || SARGS+=(--max-bytes "$ROOM")
 if [ "$DRY" = 1 ]; then
     n=$(expand_cases | wc -l)
     echo "mp2-deqp-sweep: dry run: $n cases from $LIST (exclude: $XF)"
@@ -145,7 +150,7 @@ if [ "$DRY" = 1 ]; then
     echo "$PY -I $HERE/mp2-deqp-slot.py write $BIN --case-list $SH/shard-NNNN.txt -o $OUT/slot-NNNN.bin"
     echo "$RUNNER run $OUT/slot-NNNN.bin $OUT/run/shard-NNNN shard-NNNN > $OUT/shard-NNNN.log 2>&1"
     echo "cat the console.txt files under $OUT/run/shard-NNNN >> $OUT/shard-NNNN.log"
-    echo "$PY -I $HERE/mp2-p9-diff.py ${REPORT:-} ${EXCL:+--exclude $EXCL }$OUT/shard-*.log"
+    echo "$PY -I $HERE/mp2-p9-diff.py ${REPORT:-} --cases $CASES ${EXCL:+--exclude $EXCL }$OUT/shard-*.log"
     echo "bash $HERE/mp2-log-redact-check.sh $OUT   (a hit: exit 1)"
     exit 0
 fi
@@ -178,14 +183,20 @@ on_sig() {   # on_sig <INT|TERM> <exit>: pass it to the runner (its own undo run
 }
 trap 'on_sig INT 130' INT
 trap 'on_sig TERM 143' TERM
+shard_done() {   # shard_done <log> <shard file>: the log has a "deqp: <Status> <case>" line for every case
+    [ -f "$1" ] || return 1
+    awk 'NR == FNR { if (match($0, /(^|[^A-Za-z])deqp: [A-Za-z]+ [^ \r]+/)) { t = substr($0, RSTART, RLENGTH); n = split(t, f, " "); got[f[n]] = 1 } next }
+         $0 != "" { n++; if (!($0 in got)) bad = 1 }
+         END { exit (bad || !n) }' "$1" "$2"
+}
 for i in "${IDX[@]}"; do
     n=$((10#$i))
     [ "$n" -ge "$FIRST" ] || continue
     [ -z "$LAST" ] || [ "$n" -le "$LAST" ] || continue
     nnnn=$(printf '%04d' "$n")
     log=$OUT/shard-$nnnn.log
-    if [ -f "$log" ] && grep -aqE '(^|[^A-Za-z])deqp: [A-Za-z]+ [^ ]' "$log"; then
-        echo "mp2-deqp-sweep: shard $nnnn has a result in $log, skipped"
+    if shard_done "$log" "$SH/shard-$nnnn.txt"; then
+        echo "mp2-deqp-sweep: shard $nnnn has a result for every case in $log, skipped"
         skipped=$((skipped + 1)); continue
     fi
     bin=$OUT/slot-$nnnn.bin
@@ -231,7 +242,7 @@ echo "mp2-deqp-sweep: $ran run, $skipped skipped, $fails failed, $lifetimes life
 shopt -s nullglob
 LOGS=("$OUT"/shard-*.log)
 [ ${#LOGS[@]} -gt 0 ] || die "no shard logs under $OUT"
-"$PY" -I "$HERE/mp2-p9-diff.py" ${REPORT:+"$REPORT"} ${EXCL:+--exclude "$EXCL"} "${LOGS[@]}"
+"$PY" -I "$HERE/mp2-p9-diff.py" ${REPORT:+"$REPORT"} --cases "$CASES" ${EXCL:+--exclude "$EXCL"} "${LOGS[@]}"
 drc=$?
 bash "$HERE/mp2-log-redact-check.sh" "$OUT"
 rrc=$?
