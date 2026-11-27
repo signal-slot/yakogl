@@ -2235,6 +2235,23 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// `v` is `fmul(flog2(a), y)` (either order) of two varyings' lanes:
+    /// Some((a, y)), the operands of the `fpow` an `exp2` of it is, both
+    /// read as their loads' fp32 words ([`Leaf::RawLane`];
+    /// deqp_arith_op_exponential_pow_fs_mediump's `pow(in0, in1)`).
+    fn pow_lanes(&self, v: Val) -> Option<(Val, Val)> {
+        let (Alu::Fmul, [p, q, _]) = self.alu_of(v)? else { return None };
+        let log_of = |l: Val| match self.alu_of(l) {
+            Some((Alu::Flog2, [a, ..])) if self.varying_lane(a) => Some(a),
+            _ => None,
+        };
+        match (log_of(p), log_of(q)) {
+            (Some(a), None) if self.varying_lane(q) => Some((a, q)),
+            (None, Some(a)) if self.varying_lane(p) => Some((a, p)),
+            _ => None,
+        }
+    }
+
     /// `x * y` is `smoothstep`'s last product as the front end writes it
     /// (builtin_call.rs): `x` the 16-bit `t * t` and `y` `ffma(-2.0, t,
     /// 3.0)` of the same `t`, a saturate. Some(`t`).
@@ -4719,6 +4736,11 @@ impl<'s> Fs<'s> {
             b -= 1;
         }
         b
+    }
+
+    /// Lane `v` is a lane of a generic varying's fp32 load.
+    fn varying_lane(&self, v: Val) -> bool {
+        self.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
     }
 
     /// The input a lane is (location, component), if it is one.
@@ -7675,7 +7697,11 @@ fn walk_nodes(
                          * e0)`, whose operands Mesa loads in another order
                          * (`x - e0` first, op_common_smoothstep_fs_mediump):
                          * not lowered */
-                        if f.input_lane(x).is_none() && f.uniform_dword(x).is_none() {
+                        /* and `tan`'s `1.0 / cos(x)` of a varying's lane
+                         * (deqp_arith_op_angle_tan_fs_mediump: `FRCP.f16 r0,
+                         * r0^.h00` of the narrowed cosine) */
+                        let tan = matches!(f.alu_of(x), Some((Alu::Fcos, _))) && raw_transc(f, x);
+                        if f.input_lane(x).is_none() && f.uniform_dword(x).is_none() && !tan {
                             return Err(MaliError::Arithmetic);
                         }
                         *o = f.node(Alu::Frcp, [x, Val::Undef, Val::Undef], at)?;
@@ -7872,6 +7898,16 @@ fn walk_nodes(
                     /* `log2` of a computed fp16 lane too (`pow`'s, gm2_fsarith_1:
                      * `F16_TO_F32 r0, r0^.h0`, then `FREXPE.f32.log`) */
                     let computed = op == Alu::Flog2 && f.is_f16(x);
+                    /* of a mediump varying's lane: the kernel on the
+                     * load's fp32 word itself, its `f2fmp` gone at the
+                     * link as `exp2`'s (arith step 1b; deqp_arith_op_angle
+                     * _sin_fs_mediump: `FMA.f32 r0, r2, u2.w0, u2.w1` of
+                     * the loaded lane, no `F16_TO_F32`; [`Leaf::RawLane`]) */
+                    let xv = f.fp16_operand(x);
+                    if f.varying_lane(xv) {
+                        *o = f.node(op, [xv, Val::Undef, Val::Undef], at)?;
+                        continue;
+                    }
                     if !computed && (f.alu_of(x).is_some() || f.uniform_dword(x).is_none()) {
                         return Err(MaliError::Arithmetic);
                     }
@@ -7900,6 +7936,10 @@ fn walk_nodes(
                      * `FMA_RSCALE.f32 r0, u8.w1, r0^, 0x0.neg, r2^` of 100.0).
                      * A constant `b` only, other than the exponents :1882-1886
                      * rewrite (1.0 to 4.0) */
+                    if let Some((a, y)) = f.pow_lanes(x) {
+                        *o = f.node(Alu::Fpow, [a, y, Val::Undef], at)?;
+                        continue;
+                    }
                     if let Some((a, b)) = f.pow_of(x) {
                         if matches!(f32::from_bits(b), 1.0 | 2.0 | 3.0 | 4.0) {
                             return Err(MaliError::AlgebraicForm);
@@ -10147,6 +10187,14 @@ enum Leaf {
         k: u8,
         h: u8,
     },
+    /// Lane `c` of load `k` as the load's fp32 word, not converted: the
+    /// operand of `sin`, `cos` or `log2` of a varying's lane
+    /// ([`transc_rows`] without its widening; deqp_arith_op_angle_sin_fs
+    /// _mediump).
+    RawLane {
+        k: u8,
+        c: u8,
+    },
     /// Half `h` of node `x`, an operation of two lanes, read by an operation
     /// of one ([`lane_tree`]; gm2_fsarith_1's `r2.h11` of the matrix
     /// product's x and y pair in the dot product).
@@ -10279,7 +10327,7 @@ impl Pairs {
              * them alone */
             P::Leaf(Leaf::Frag | Leaf::FragLane(_)) => Form::Mk,
             /* read by its `exp2` alone, whose sources are not noted */
-            P::Leaf(Leaf::Raw { .. }) => Form::Half,
+            P::Leaf(Leaf::Raw { .. } | Leaf::RawLane { .. }) => Form::Half,
             P::Leaf(Leaf::Part { .. }) => Form::Half,
             /* a conversion's value, as a varying pair's */
             P::Leaf(Leaf::Wide { .. } | Leaf::IntWide { .. }) => Form::Half,
@@ -10477,6 +10525,14 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
     /* a mediump tree's constant is rounded to fp16 ([`f16_rtne`]) */
     let f16 = |bits: u32| f16_rtne(bits).ok_or(MaliError::Fp16Inexact);
     let place = (f.key(a), pair);
+    /* a built-in on a varying's fp32 word ([`raw_transc`]) is drawn as a
+     * lane alone beside a constant (the operator suites' `color.x = res`,
+     * the constant under `color * 0.5 + 0.5` a tree of constants): beside
+     * another lane (`vec4(sin(v.x), cos(v.y), ..)`), or second in its
+     * word, no reference */
+    if (has_raw_transc(f, a, 0) && !const_tree(f, b, 0)) || has_raw_transc(f, b, 0) {
+        return Err(MaliError::Arithmetic);
+    }
     let p = match (f.alu_of(a), f.alu_of(b)) {
         /* a float array's indexed read, or a sum of them, and 0.0:
          * nir_opt_vectorize pairs nothing with the constant, so the sum
@@ -10660,7 +10716,7 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
         (Some((op, _)), None)
             if matches!(b, Val::Const(_))
                 && (op != Alu::Bcsel || lone_select(f, a))
-                && !is_transc(op)
+                && (!is_transc(op) || raw_transc(f, a))
                 && !is_deriv(op) =>
         {
             let Val::Const(c) = b else { return Err(MaliError::Defect(Defect::IrIndex)) };
@@ -11234,6 +11290,36 @@ const fn is_transc(op: Alu) -> bool {
     matches!(op, Alu::Fsin | Alu::Fcos | Alu::Flog2 | Alu::Fexp2 | Alu::Fpow)
 }
 
+/// Lane `v` is `sin`, `cos` or `log2` of a varying's lane, evaluated on
+/// the load's fp32 word ([`Leaf::RawLane`]).
+fn raw_transc(f: &Fs<'_>, v: Val) -> bool {
+    match f.alu_of(v) {
+        Some((Alu::Fsin | Alu::Fcos | Alu::Flog2, [x, ..])) => f.varying_lane(x),
+        Some((Alu::Fpow, [x, y, _])) => f.varying_lane(x) && f.varying_lane(y),
+        _ => false,
+    }
+}
+
+/// Lane `v`'s tree holds one of [`raw_transc`]'s.
+fn has_raw_transc(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+    match f.alu_of(v) {
+        _ if raw_transc(f, v) => true,
+        Some((op, s)) if depth < 8 => {
+            s[..op.arity()].iter().any(|&x| x != Val::Undef && has_raw_transc(f, x, depth + 1))
+        }
+        _ => false,
+    }
+}
+
+/// Lane `v` is a constant, or operations on constants alone.
+fn const_tree(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+    match (v, f.alu_of(v)) {
+        (Val::Const(_), _) => true,
+        (_, Some((op, s))) if depth < 8 => s[..op.arity()].iter().all(|&x| const_tree(f, x, depth + 1)),
+        _ => false,
+    }
+}
+
 /// `op` is `ddx` or `ddy` ([`Alu::Fddx`]).
 const fn is_deriv(op: Alu) -> bool {
     matches!(op, Alu::Fddx | Alu::Fddy)
@@ -11397,7 +11483,10 @@ fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
      * of [`vec_tree`]'s forms (fsvec_length_mediump's `U16_TO_U32 r0,
      * r0^.h0` of the length) and of a uniform's sums ([`uniform_sum`],
      * [`uniform_tree`]), for no other (a texel's has no reference) */
-    if half == 0 && !vec_tree(f, a) && !uniform_sum(f, a) && !uniform_tree(f, a) {
+    /* and for `pow` of two varyings' lanes ([`raw_transc`];
+     * deqp_arith_op_exponential_pow_fs_mediump: `FADD.f32 r0.h0`, then
+     * `U16_TO_U32 r0, r0^.h0`) */
+    if half == 0 && !vec_tree(f, a) && !uniform_sum(f, a) && !uniform_tree(f, a) && !raw_transc(f, a) {
         return Err(MaliError::ColourZeroHalf);
     }
     pr.hint = Some(2 * pair as usize);
@@ -11777,6 +11866,28 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let x = lane_tree(f, pr, a, pair, ubo)?;
             let k = lone_node(pr, P::Leaf(Leaf::Const(b)), place)?;
             P::Op(Alu::Fpow, [x, k, 0])
+        }
+        /* `sin`, `cos`, `log2` of a varying's lane: its fp32 word
+         * ([`Leaf::RawLane`]) */
+        (Some((op @ (Alu::Fsin | Alu::Fcos | Alu::Flog2), s)), ..) if f.varying_lane(s[0]) => {
+            let Some((loc, i)) = f.input_lane(s[0]) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let (k, c) = index(f, loc, i)?;
+            let raw = pr.push(P::Leaf(Leaf::RawLane { k, c }), place)?;
+            P::Op(op, [raw, 0, 0])
+        }
+        /* `pow(a, y)` of two varyings' lanes: both fp32 words. The one
+         * `fpow` reads both loads, and `nir_opt_move` walks the block
+         * backwards putting each load right before it: `y`'s load stands
+         * first (deqp_arith_op_exponential_pow_fs_mediump: `in1`'s
+         * `LD_VAR_BUF_IMM`, index 0x10, then `in0`'s) */
+        (Some((Alu::Fpow, [a, y, _])), ..) if f.varying_lane(a) && f.varying_lane(y) => {
+            let mut raw = [0u8; 2];
+            for (r, v) in raw.iter_mut().zip([y, a]) {
+                let Some((loc, i)) = f.input_lane(v) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                let (k, c) = index(f, loc, i)?;
+                *r = pr.push(P::Leaf(Leaf::RawLane { k, c }), place)?;
+            }
+            P::Op(Alu::Fpow, [raw[1], raw[0], 0])
         }
         (Some((op, s)), ..) if is_transc(op) => P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0]),
         /* `dFdx`, `dFdy` of a varying's lane or the narrowed position's,
@@ -12387,6 +12498,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             used[k as usize] |= 3 << (2 * h);
             continue;
         }
+        if let P::Leaf(Leaf::RawLane { k, c }) = *x {
+            used[k as usize] |= 1 << c;
+            continue;
+        }
         let (lanes, pair) = match *x {
             P::Leaf(Leaf::Half { k, h, .. }) => ([(k, 2 * h), (k, 2 * h + 1)], true),
             P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, .. } | Leaf::MkInt { k, c, .. }) => {
@@ -12519,6 +12634,35 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         }
         events[ne] = (v.key(), 0, LOAD, k as u8);
         ne += 1;
+    }
+    /* `pow(a, y)` of two loads' fp32 words ([`Leaf::RawLane`]), each load
+     * read by it alone and converted nowhere: `nir_opt_move` walks the
+     * block backwards and puts each load right before the one `fpow`, so
+     * the loads stand in the reverse of their order, `y`'s first
+     * (deqp_arith_op_exponential_pow_fs_mediump: index 0x10, then 0x0) */
+    for i in (0..pr.n).filter(|&i| live[i]) {
+        let P::Op(Alu::Fpow, [a, y, _]) = pr.nodes[i] else { continue };
+        let (P::Leaf(Leaf::RawLane { k: ka, .. }), P::Leaf(Leaf::RawLane { k: ky, .. })) =
+            (pr.nodes[a as usize], pr.nodes[y as usize])
+        else {
+            continue;
+        };
+        let alone = |k: u8| {
+            let raw = (0..pr.n)
+                .filter(|&j| live[j] && matches!(pr.nodes[j], P::Leaf(Leaf::RawLane { k: l, .. }) if l == k))
+                .count();
+            let at_store = conv_order.at_store[..conv_order.n].iter().any(|s| s.0 == k);
+            raw == 1 && conv_order.at_load[k as usize][0] == NO_LANE && !at_store
+        };
+        if ka == ky || !alone(ka) || !alone(ky) {
+            continue;
+        }
+        let at = |k: u8| events[..ne].iter().position(|e| e.2 == LOAD && e.3 == k);
+        if let (Some(ea), Some(ey)) = (at(ka), at(ky)) {
+            if events[ea].0 < events[ey].0 {
+                (events[ea].0, events[ey].0) = (events[ey].0, events[ea].0);
+            }
+        }
     }
     /* the narrowed position, where gl_FragCoord is read (its fp32 build,
      * the narrowings and the word: [`frag16`]; the lanes alone for a
@@ -16310,7 +16454,7 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(Swz::H00)
         }
         /* read by its `exp2` alone ([`op`]) */
-        P::Leaf(Leaf::Raw { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
+        P::Leaf(Leaf::Raw { .. } | Leaf::RawLane { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
         P::Leaf(Leaf::Part { x, h }) => {
             val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(if h == 0 { Swz::H00 } else { Swz::H11 })
         }
@@ -16357,6 +16501,21 @@ fn op(
             *d = Src::ssa(exp2_rows(p, Src::ssa(w), Src::of(Idx::Const(F32_ONE)))?);
         }
         val[x as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &e)?));
+        return Ok(());
+    }
+    /* `sin`, `cos`, `log2` of a load's fp32 word ([`Leaf::RawLane`]): the
+     * expansion with no widening, narrowed alone */
+    if let P::Leaf(Leaf::RawLane { k, c }) = pr.nodes[srcs[0] as usize] {
+        let word = |k: u8, c: u8| {
+            lv.raw.get(k as usize).and_then(|r| r[c as usize & 3]).ok_or(MaliError::Defect(Defect::IrIndex))
+        };
+        /* `pow`'s exponent, the other load's word */
+        let y = match (a, pr.nodes[srcs[1] as usize]) {
+            (Alu::Fpow, P::Leaf(Leaf::RawLane { k, c })) => Src::ssa(word(k, c)?),
+            (Alu::Fpow, _) => return Err(MaliError::Defect(Defect::IrIndex)),
+            _ => Src::NULL,
+        };
+        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, Src::ssa(word(k, c)?), y, false)?));
         return Ok(());
     }
     /* `fadd(vec2(z, c), vec2(z, 0.0))` of one lane `z` ([`vectorise`]'s `x
@@ -16447,7 +16606,7 @@ fn op(
             (Alu::Fpow, _) => return Err(MaliError::Defect(Defect::IrIndex)),
             _ => Src::NULL,
         };
-        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0], k)?));
+        val[x as usize] = Some(Src::ssa(transc_rows(p, rows, a, s[0], k, true)?));
         return Ok(());
     }
     /* a derivative reads its operand as one register word (`CLPER.i32`
@@ -16484,12 +16643,32 @@ const SINCOS_BIAS: u32 = 0x4940_0000;
 /// `bi_lower_fsincos_32` (bifrost_compile.c:2552) and `bi_flog2_32` (:2499),
 /// in their call order (fsarith_77_transc.expect.json words 0-28;
 /// docs/notes/mali-transcendentals.md).
-fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src, k: Src) -> Result<u16, MaliError> {
+/// With `widen` false `x` is an fp32 value already (a varying's loaded
+/// word, [`Leaf::RawLane`]) and the `F16_TO_F32` is not made.
+fn transc_rows(p: &mut Prog<'_>, rows: &mut u128, a: Alu, x: Src, k: Src, widen: bool) -> Result<u16, MaliError> {
     let c = |bits: u32| Src::of(Idx::Const(bits));
     let neg = |s: Src| Src { neg: !s.neg, ..s };
     let neg_zero = neg(c(0));
-    let x = Src::ssa(row(p, rows, Row { op: Alu::F2f32, bits: 32, width: 1 }, &[x])?);
-    let mut ins = |op: Op, s: &[Src]| -> Result<Src, MaliError> { Ok(Src::ssa(alu(p, op, s)?)) };
+    let x = if widen { Src::ssa(row(p, rows, Row { op: Alu::F2f32, bits: 32, width: 1 }, &[x])?) } else { x };
+    /* `sin` and `cos` of one fp32 word (`tan`'s quotient) share the
+     * reduction and both table reads (`nir_opt_cse` of the lowered
+     * expansions; deqp_arith_op_angle_tan_fs_mediump: one `FSIN_TABLE.u6`
+     * and one `FCOS_TABLE.u6`, then each result's three instructions) */
+    let mut ins = |op: Op, s: &[Src]| -> Result<Src, MaliError> {
+        let made = p.as_slice().iter().find(|i| {
+            !widen
+                && i.op == op
+                && i.block == p.cur
+                && i.nd == 1
+                && i.clamp == 0
+                && i.ns as usize == s.len()
+                && i.src[..s.len()] == *s
+        });
+        match made.map(|i| i.dest[0].idx) {
+            Some(Idx::Ssa(v, 0)) => Ok(Src::ssa(v)),
+            _ => Ok(Src::ssa(alu(p, op, s)?)),
+        }
+    };
     let r = match a {
         Alu::Fsin | Alu::Fcos => {
             let cos = a == Alu::Fcos;
