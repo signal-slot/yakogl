@@ -1,0 +1,75 @@
+glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+=======================================================
+    glmark2 2023.01
+=======================================================
+glmark2-mem: entry 0 [build] use-vbo=false: before setup: osal mem: pool used 1, high-water 2 bytes
+[build] use-vbo=false: FPS: 250 FrameTime: 4.000 ms
+glmark2-mem: entry 1 [build] use-vbo=true: before setup: osal mem: pool used 1, high-water 2 bytes
+[build] use-vbo=true: FPS: 181 FrameTime: 5.500 ms
+glmark2-mem: entry 2 [texture] texture-filter=nearest: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=nearest: FPS: 142 FrameTime: 7.000 ms
+glmark2-mem: entry 3 [texture] texture-filter=linear: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=linear: FPS: 117 FrameTime: 8.500 ms
+glmark2-mem: entry 4 [texture] texture-filter=mipmap: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=mipmap: Set up failed
+glmark2-mem: entry 5 [shading] shading=gouraud: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=gouraud: FPS: 86 FrameTime: 11.500 ms
+glmark2-mem: entry 6 [shading] shading=blinn-phong-inf: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=blinn-phong-inf: FPS: 76 FrameTime: 13.000 ms
+glmark2-mem: entry 7 [shading] shading=phong: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=phong: FPS: 68 FrameTime: 14.500 ms
+glmark2-mem: entry 8 [shading] shading=cel: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=cel: FPS: 62 FrameTime: 16.000 ms
+glmark2-mem: entry 9 [bump] bump-render=high-poly: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=high-poly: FPS: 57 FrameTime: 17.500 ms
+glmark2-mem: entry 10 [bump] bump-render=normals: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=normals: FPS: 52 FrameTime: 19.000 ms
+glmark2-mem: entry 11 [bump] bump-render=height: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=height: FPS: 48 FrameTime: 20.500 ms
+glmark2-mem: entry 12 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: before setup: osal mem: pool used 1, high-water 2 bytes
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 45 FrameTime: 22.000 ms
+glmark2-mem: entry 13 [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: before setup: osal mem: pool used 1, high-water 2 bytes
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 42 FrameTime: 23.500 ms
+glmark2-mem: entry 14 [pulsar] light=false:quads=5:texture=false: before setup: osal mem: pool used 1, high-water 2 bytes
+[pulsar] light=false:quads=5:texture=false: FPS: 40 FrameTime: 25.000 ms
+glmark2-mem: entry 15 [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: before setup: osal mem: pool used 1, high-water 2 bytes
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: FPS: 37 FrameTime: 26.500 ms
+glmark2-mem: entry 16 [desktop] effect=shadow:windows=4: before setup: osal mem: pool used 1, high-water 2 bytes
+[desktop] effect=shadow:windows=4: FPS: 35 FrameTime: 28.000 ms
+glmark2-mem: entry 17 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: before setup: osal mem: pool used 1, high-water 2 bytes
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 33 FrameTime: 29.500 ms
+glmark2-mem: entry 18 [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: before setup: osal mem: pool used 1, high-water 2 bytes
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 32 FrameTime: 31.000 ms
+glmark2-mem: entry 19 [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: before setup: osal mem: pool used 1, high-water 2 bytes
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 30 FrameTime: 32.500 ms
+glmark2-mem: entry 20 [ideas] speed=duration: before setup: osal mem: pool used 1, high-water 2 bytes
+[ideas] speed=duration: Unsupported
+glmark2-mem: entry 21 [jellyfish] <default>: before setup: osal mem: pool used 1, high-water 2 bytes
+[jellyfish] <default>: FPS: 28 FrameTime: 35.500 ms
+glmark2-mem: entry 22 [terrain] <default>: before setup: osal mem: pool used 1, high-water 2 bytes
+[terrain] <default>: FPS: 27 FrameTime: 37.000 ms
+glmark2-mem: entry 23 [shadow] <default>: before setup: osal mem: pool used 1, high-water 2 bytes
+[shadow] <default>: FPS: 25 FrameTime: 38.500 ms
+glmark2-mem: entry 24 [refract] <default>: before setup: osal mem: pool used 1, high-water 2 bytes
+[refract] <default>: FPS: 25 FrameTime: 40.000 ms
+glmark2-mem: entry 25 [conditionals] fragment-steps=0:vertex-steps=0: before setup: osal mem: pool used 1, high-water 2 bytes
+[conditionals] fragment-steps=0:vertex-steps=0: FPS: 24 FrameTime: 41.500 ms
+glmark2-mem: entry 26 [conditionals] fragment-steps=5:vertex-steps=0: before setup: osal mem: pool used 1, high-water 2 bytes
+[conditionals] fragment-steps=5:vertex-steps=0: FPS: 23 FrameTime: 43.000 ms
+glmark2-mem: entry 27 [conditionals] fragment-steps=0:vertex-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[conditionals] fragment-steps=0:vertex-steps=5: FPS: 22 FrameTime: 44.500 ms
+glmark2-mem: entry 28 [function] fragment-complexity=low:fragment-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[function] fragment-complexity=low:fragment-steps=5: FPS: 21 FrameTime: 46.000 ms
+glmark2-mem: entry 29 [function] fragment-complexity=medium:fragment-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[function] fragment-complexity=medium:fragment-steps=5: FPS: 21 FrameTime: 47.500 ms
+glmark2-mem: entry 30 [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 20 FrameTime: 49.000 ms
+glmark2-mem: entry 31 [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 19 FrameTime: 50.500 ms
+glmark2-mem: entry 32 [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: before setup: osal mem: pool used 1, high-water 2 bytes
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 19 FrameTime: 52.000 ms
+=======================================================
+                                  glmark2 Score: 280
+=======================================================
+glmark2: score 280: 31 scenes ran, 1 failed, 1 unsupported (33 list entries)
+glmark2: FAIL rc=1

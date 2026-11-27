@@ -1,0 +1,29 @@
+glmark2: upstream 22c527cb (2023.01), size 800x600, args ""
+=======================================================
+    glmark2 2023.01
+=======================================================
+glmark2-mem: entry 0 [build] use-vbo=false: before setup: osal mem: pool used 1, high-water 2 bytes
+[build] use-vbo=false: FPS: 250 FrameTime: 4.000 ms
+glmark2-mem: entry 1 [build] use-vbo=true: before setup: osal mem: pool used 1, high-water 2 bytes
+[build] use-vbo=true: FPS: 181 FrameTime: 5.500 ms
+glmark2-mem: entry 2 [texture] texture-filter=nearest: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=nearest: FPS: 142 FrameTime: 7.000 ms
+glmark2-mem: entry 3 [texture] texture-filter=linear: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=linear: FPS: 117 FrameTime: 8.500 ms
+glmark2-mem: entry 4 [texture] texture-filter=mipmap: before setup: osal mem: pool used 1, high-water 2 bytes
+[texture] texture-filter=mipmap: FPS: 100 FrameTime: 10.000 ms
+glmark2-mem: entry 5 [shading] shading=gouraud: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=gouraud: FPS: 86 FrameTime: 11.500 ms
+glmark2-mem: entry 6 [shading] shading=blinn-phong-inf: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=blinn-phong-inf: FPS: 76 FrameTime: 13.000 ms
+glmark2-mem: entry 7 [shading] shading=phong: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=phong: FPS: 68 FrameTime: 14.500 ms
+glmark2-mem: entry 8 [shading] shading=cel: before setup: osal mem: pool used 1, high-water 2 bytes
+[shading] shading=cel: FPS: 62 FrameTime: 16.000 ms
+glmark2-mem: entry 9 [bump] bump-render=high-poly: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=high-poly: FPS: 57 FrameTime: 17.500 ms
+glmark2-mem: entry 10 [bump] bump-render=normals: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=normals: FPS: 52 FrameTime: 19.000 ms
+glmark2-mem: entry 11 [bump] bump-render=height: before setup: osal mem: pool used 1, high-water 2 bytes
+[bump] bump-render=height: FPS: 48 FrameTime: 20.500 ms
+glmark2-mem: entry 12 [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: before setup: osal mem: pool used 1, high-water 2 bytes

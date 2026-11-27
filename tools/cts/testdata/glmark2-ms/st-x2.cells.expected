@@ -1,0 +1,8 @@
+rc 1
+-- stdout
+-- stderr
+FAIL: scene started, no result line: [terrain] <default>
+FAIL: scene started, no result line: [refract] <default>
+FAIL: summary says 33 scenes ran, 31 result lines read
+FAIL: no ms a frame for terrain
+FAIL: no ms a frame for refract

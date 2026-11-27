@@ -1,0 +1,21 @@
+rc 1
+-- stdout
+| scene | FrameTime ms | FPS |
+|---|---:|---:|
+| [build] use-vbo=false | 4.00 | 250 |
+| [build] use-vbo=true | 5.50 | 181 |
+| [texture] texture-filter=nearest | 7.00 | 142 |
+| [texture] texture-filter=linear | 8.50 | 117 |
+| [texture] texture-filter=mipmap | 10.00 | 100 |
+| [shading] shading=gouraud | 11.50 | 86 |
+| [shading] shading=blinn-phong-inf | 13.00 | 76 |
+| [shading] shading=phong | 14.50 | 68 |
+| [shading] shading=cel | 16.00 | 62 |
+| [bump] bump-render=high-poly | 17.50 | 57 |
+| [bump] bump-render=normals | 19.00 | 52 |
+| [bump] bump-render=height | 20.50 | 48 |
+
+glmark2 Score: -
+-- stderr
+FAIL: scene started, no result line: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;
+FAIL: no glmark2 score line
