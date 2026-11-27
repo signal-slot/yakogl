@@ -54,8 +54,7 @@ const NOT_COMPILED_42: &[&str] = &[
     "gm2_locals_vsum",
 ];
 /// The pairs the 7.1 back end does not compile, by key.
-const NOT_COMPILED_71: &[&str] =
-    &["deqp_defects_encode_max_cond_float", "deqp_defects_encode_reduced", "gm2_locals_vsum"];
+const NOT_COMPILED_71: &[&str] = &["deqp_defects_encode_max_cond_float", "deqp_defects_encode_reduced"];
 
 fn pairs(dir: &Path, root: &Path, out: &mut Vec<(String, PathBuf, PathBuf)>) {
     for e in std::fs::read_dir(dir).expect("tools/mali/testdata is readable") {

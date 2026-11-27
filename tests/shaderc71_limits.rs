@@ -39,20 +39,18 @@ const PROGRAMS: usize = 19;
 /// Programs 4.2 compiles and links (all of them).
 const COMPILED_42: usize = 19;
 /// Programs 7.1 compiles (the rest are in `EXPECTED_REFUSED_71`).
-const COMPILED_71: usize = 17;
+const COMPILED_71: usize = 19;
 
 /// 7.1-only refusals: (program name, exact refusal text, reason).
 ///
 /// Each program here compiles at 4.2. Every entry is checked in both
-/// directions (see the header), so the list cannot go stale.
-const EXPECTED_REFUSED_71: &[(&str, &str, &str)] = &[
-    // The 7.1 register allocator (alloc71.rs, the `DoesNotFit` return near
-    // :326; chain71.rs:230-232 turns it into the link error) cannot fit an FS
-    // that keeps this many varyings live at once. 4.2 compiles it.
-    ("varyings15", "Alloc(DoesNotFit)", "15 varyings all live in the FS: 7.1 allocator does not fit"),
-    // The same refusal one step below the limit: 14 vec4 varyings all live.
-    ("varyings14", "Alloc(DoesNotFit)", "14 varyings all live in the FS: 7.1 allocator does not fit"),
-];
+/// directions (see the header), so the list cannot go stale. Empty since
+/// varyings14 and varyings15 compile: their vertex shader computed every
+/// varying before its first `stvpmv`, more values live at once than
+/// rf4..rf63 hold (4.2 fits them through its accumulators), and chain71 now
+/// retries such a stage with each value computed next to its first read
+/// (`sunk71`).
+const EXPECTED_REFUSED_71: &[(&str, &str, &str)] = &[];
 
 const VS_PLAIN: &str = "attribute vec4 p; void main() { gl_Position = p; }";
 const FS_PLAIN: &str = "precision mediump float; void main() { gl_FragColor = vec4(1.0); }";
