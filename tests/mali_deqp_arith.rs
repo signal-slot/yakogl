@@ -87,6 +87,16 @@ const LOWERED: &[&str] = &[
     "op_exponential_pow_vs_highp",
     "op_exponential_pow_vs_mediump",
     "random_fexp2_vs_none",
+    /* arith step 1b: `sin`, `cos`, `log2` of a mediump varying's lane, the
+     * fp32 kernel on the load's own word and the result narrowed; `tan`'s
+     * shared reduction and tables; `log`'s fp16 product after the
+     * narrowing; `pow` of two varyings' lanes */
+    "op_angle_cos_fs_mediump",
+    "op_angle_sin_fs_mediump",
+    "op_angle_tan_fs_mediump",
+    "op_exponential_log2_fs_mediump",
+    "op_exponential_log_fs_mediump",
+    "op_exponential_pow_fs_mediump",
 ];
 
 /// The references that compile with other words than Mesa's. None yet.
@@ -107,6 +117,11 @@ const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no 
 /// `MaliError::ColourForm`: `smoothstep`'s `ffma` likewise, met at the
 /// colour's lane.
 const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// `MaliError::MixedPrecision`: the highp `sin cos tan log2 log pow` of a
+/// highp varying's lane past the kernel's operand rule (arith step 1b):
+/// the fp32 result beside the mediump `color` is the highp island's
+/// (`mali-mixcol-lowering.md` M3), not this family's.
+const MIXED: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
 /// `MaliError::Rebalance`.
 const CHAIN: &str = "Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet";
 /// `random_frcp_fs_mediump` past its reciprocal (arith step 1a): its
@@ -169,21 +184,18 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.angle.atan fs mediump: 4 cases of shaders.operator.angle_and_trigonometry.atan.mediump_float_fragment */
     ("op_angle_atan_fs_mediump", ARITH),
     /* op.angle.cos fs highp: 4 cases of shaders.operator.angle_and_trigonometry.cos.highp_float_fragment */
-    ("op_angle_cos_fs_highp", ARITH),
+    ("op_angle_cos_fs_highp", MIXED),
     /* op.angle.cos fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.cos.mediump_float_fragment */
-    ("op_angle_cos_fs_mediump", ARITH),
     /* op.angle.cos vs highp: 4 cases of shaders.operator.angle_and_trigonometry.cos.highp_float_vertex */
     /* op.angle.cos vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.cos.mediump_float_vertex */
     /* op.angle.sin fs highp: 4 cases of shaders.operator.angle_and_trigonometry.sin.highp_float_fragment */
-    ("op_angle_sin_fs_highp", ARITH),
+    ("op_angle_sin_fs_highp", MIXED),
     /* op.angle.sin fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.sin.mediump_float_fragment */
-    ("op_angle_sin_fs_mediump", ARITH),
     /* op.angle.sin vs highp: 4 cases of shaders.operator.angle_and_trigonometry.sin.highp_float_vertex */
     /* op.angle.sin vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.sin.mediump_float_vertex */
     /* op.angle.tan fs highp: 4 cases of shaders.operator.angle_and_trigonometry.tan.highp_float_fragment */
-    ("op_angle_tan_fs_highp", ARITH),
+    ("op_angle_tan_fs_highp", MIXED),
     /* op.angle.tan fs mediump: 8 cases of shaders.operator.angle_and_trigonometry.tan.mediump_float_fragment */
-    ("op_angle_tan_fs_mediump", ARITH),
     /* op.angle.tan vs highp: 4 cases of shaders.operator.angle_and_trigonometry.tan.highp_float_vertex */
     /* op.angle.tan vs mediump: 8 cases of shaders.operator.angle_and_trigonometry.tan.mediump_float_vertex */
     ("op_angle_tan_vs_mediump", ARITH),
@@ -255,22 +267,19 @@ const REFUSED: &[(&str, &str)] = &[
     /* op.exponential.exp vs mediump: 4 cases of shaders.operator.exponential.exp.mediump_float_vertex */
     ("op_exponential_exp_vs_mediump", ARITH),
     /* op.exponential.log2 fs highp: 4 cases of shaders.operator.exponential.log2.highp_float_fragment */
-    ("op_exponential_log2_fs_highp", ARITH),
+    ("op_exponential_log2_fs_highp", MIXED),
     /* op.exponential.log2 fs mediump: 4 cases of shaders.operator.exponential.log2.mediump_float_fragment */
-    ("op_exponential_log2_fs_mediump", ARITH),
     /* op.exponential.log2 vs highp: 4 cases of shaders.operator.exponential.log2.highp_float_vertex */
     /* op.exponential.log2 vs mediump: 4 cases of shaders.operator.exponential.log2.mediump_float_vertex */
     /* op.exponential.log fs highp: 4 cases of shaders.operator.exponential.log.highp_float_fragment */
-    ("op_exponential_log_fs_highp", ARITH),
+    ("op_exponential_log_fs_highp", MIXED),
     /* op.exponential.log fs mediump: 4 cases of shaders.operator.exponential.log.mediump_float_fragment */
-    ("op_exponential_log_fs_mediump", ARITH),
     /* op.exponential.log vs highp: 4 cases of shaders.operator.exponential.log.highp_float_vertex */
     /* op.exponential.log vs mediump: 4 cases of shaders.operator.exponential.log.mediump_float_vertex */
     ("op_exponential_log_vs_mediump", ARITH),
     /* op.exponential.pow fs highp: 4 cases of shaders.operator.exponential.pow.highp_float_fragment */
-    ("op_exponential_pow_fs_highp", ARITH),
+    ("op_exponential_pow_fs_highp", MIXED),
     /* op.exponential.pow fs mediump: 4 cases of shaders.operator.exponential.pow.mediump_float_fragment */
-    ("op_exponential_pow_fs_mediump", ARITH),
     /* op.exponential.pow vs highp: 4 cases of shaders.operator.exponential.pow.highp_float_vertex */
     /* op.exponential.pow vs mediump: 4 cases of shaders.operator.exponential.pow.mediump_float_vertex */
     /* op.geometric.cross fs mediump: 1 cases of shaders.operator.geometric.cross.mediump_vec3_fragment */
@@ -509,13 +518,12 @@ fn op_angle_atan_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.cos, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.angle.cos, fs, highp; 4 cases)"]
 fn op_angle_cos_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_cos_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.cos, fs, mediump; 8 cases)"]
 fn op_angle_cos_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_angle_cos_fs_mediump");
 }
@@ -531,13 +539,12 @@ fn op_angle_cos_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.sin, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.angle.sin, fs, highp; 4 cases)"]
 fn op_angle_sin_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_sin_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.sin, fs, mediump; 8 cases)"]
 fn op_angle_sin_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_angle_sin_fs_mediump");
 }
@@ -553,13 +560,12 @@ fn op_angle_sin_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.tan, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.angle.tan, fs, highp; 4 cases)"]
 fn op_angle_tan_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_angle_tan_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.angle.tan, fs, mediump; 8 cases)"]
 fn op_angle_tan_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_angle_tan_fs_mediump");
 }
@@ -874,13 +880,12 @@ fn op_exponential_exp_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log2, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.exponential.log2, fs, highp; 4 cases)"]
 fn op_exponential_log2_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log2_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log2, fs, mediump; 4 cases)"]
 fn op_exponential_log2_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log2_fs_mediump");
 }
@@ -896,13 +901,12 @@ fn op_exponential_log2_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.exponential.log, fs, highp; 4 cases)"]
 fn op_exponential_log_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.log, fs, mediump; 4 cases)"]
 fn op_exponential_log_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_log_fs_mediump");
 }
@@ -919,13 +923,12 @@ fn op_exponential_log_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.pow, fs, highp; 4 cases)"]
+#[ignore = "refused: mixed precision (op.exponential.pow, fs, highp; 4 cases)"]
 fn op_exponential_pow_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_exponential_pow_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.exponential.pow, fs, mediump; 4 cases)"]
 fn op_exponential_pow_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_exponential_pow_fs_mediump");
 }

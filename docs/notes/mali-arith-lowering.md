@@ -433,7 +433,16 @@ byte-equal before). Left refused:
 - `random_frcp_fs_mediump`: its reciprocal is lowered, a projective look-up
   is next (`TexKind`).
 
-Step 1b is not landed.
+**Step 1b landed with train 2, for the mediump references.** `sin`, `cos`, `log2` of a mediump varying's lane are the fp32
+kernel on the load's own word (`Leaf::RawLane`; `transc_rows` without its `F16_TO_F32`) and one narrowing; `tan`'s `sin` and `cos`
+share the reduction and both table reads (a look-up of the instructions already made in the block, as `nir_opt_cse` leaves them),
+and its `1.0 / cos(x)` is one `FRCP.f16`; `log` is `log2`'s narrowed lane times ln 2 at fp16; `pow(a, y)` of two varyings' lanes
+reads both words, `y`'s load first (`nir_opt_move` walks the block backwards). Byte-equal: `op_angle_{sin,cos,tan}_fs_mediump`,
+`op_exponential_{log2,log,pow}_fs_mediump`. The forms are those the operator suites draw: such a lane beside a constant in its word;
+beside another lane (`vec4(sin(v.x), cos(v.y), ..)`) it stays `Arithmetic`. Not landed: the six `*_fs_highp` references (now
+`MixedPrecision`: the fp32 result beside the mediump `color` is mixcol M3's), `other_fsin_fs_none` and the random programs
+(`random_{fsin,fcos,flog2}_fs_mediump`: computed operands, other ops), and the `transc32` factoring for the vertex walk (step 2's
+kernels).
 
 ### 4.2 Step 1b: fp32 transcendentals of a lane
 
