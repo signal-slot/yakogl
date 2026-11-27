@@ -1,0 +1,594 @@
+board-stm32mp2.sh <board-host>: shard-0100: build 66fcaa3a boot uboot-sd image sha256 4a100a3029930e0b footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0100 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=70s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0100/20261127-0623-shard-0100-4a100a30/INDEX.txt
+# console excerpt: the A35 console of this run as the farm serial tool returned it, from the case results to the PSCI line (the boot text before and after is not copied); verdicts are read from it
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.13'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.13
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.15'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.15
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.2'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.2
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.21'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.21
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.23'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.26'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.28'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.34'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.34
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.4'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.40'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.40
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.42'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.47'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.47
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.49'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.49
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.51'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.51
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.52'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.52
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.55'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.55
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.56'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.56
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.57'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.58'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.58
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.59'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.63'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.63
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.64'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.64
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.66'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.73'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.74'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.74
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.75'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.76'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.76
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.77'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.77
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.78'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.78
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.8'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.8
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.80'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.80
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.81'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.81
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.83'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.83
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.85'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.85
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.86'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.89'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.9'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.9
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.92'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.92
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.95'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.96'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.96
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.97'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.97
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.98'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.99'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.99
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.1'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.10'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.11'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.13'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.13
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.2'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.23'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.26'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.28'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.35
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        97/125 (77.6%)
+  Failed:        28/125 (22.4%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 97 passed, 28 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 8384 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 7221 ms

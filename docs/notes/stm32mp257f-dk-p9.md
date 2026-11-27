@@ -478,9 +478,9 @@ replaces it.
   125 of its cases: no hang, no refusal and no lifetime cut-off, and at most
   3.8 % of the lifetime (4.7 to 23.0 s of image time).
 
-`mp2-p9-diff: shared 0, new 535, fixed 3, missing 0, excluded 21`
+`mp2-p9-diff: shared 0, new 913, fixed 3, missing 0, excluded 21`
 
-This line covers slices 1-4 (shards 0-91, image `66fcaa3a`) and is replaced as later slices land.
+This line covers slices 1-5 (shards 0-114, image `66fcaa3a`) and is replaced as later slices land.
 
 ### Q11: the measured line width
 

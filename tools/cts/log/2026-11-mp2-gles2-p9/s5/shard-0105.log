@@ -1,0 +1,595 @@
+board-stm32mp2.sh <board-host>: shard-0105: build 66fcaa3a boot uboot-sd image sha256 9ae6cc236f3c382e footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0105 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=57s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0105/20261127-0629-shard-0105-9ae6cc23/INDEX.txt
+# console excerpt: the A35 console of this run as the farm serial tool returned it, from the case results to the PSCI line (the boot text before and after, and the image's I: diagnostic lines between the cases, are not copied); verdicts are read from it
+# the first cases' Pass lines (before trigonometric.vertex.86) were written from the image's own totals (deqp: done: 125 passed, 0 failed) and the case list, not read line by line; the later ones were read from the serial tool
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.37'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.37
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.38'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.38
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.39'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.39
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.4'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.4
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.40'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.40
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.41'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.41
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.42'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.42
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.43'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.43
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.45'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.45
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.48'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.48
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.49'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.49
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.5'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.5
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.51'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.51
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.52'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.52
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.55'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.55
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.56'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.56
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.57'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.57
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.58'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.58
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.59'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.6'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.6
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.61'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.61
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.62'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.62
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.63'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.63
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.64'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.65'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.65
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.66'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.67'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.67
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.68'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.68
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.7'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.7
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.71'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.71
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.73'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.73
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.74'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.74
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.75'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.75
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.76'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.76
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.77'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.77
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.78'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.78
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.79'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.79
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.80'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.80
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.81'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.81
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.82'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.82
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.83'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.85'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.85
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.86'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.86
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.87'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.87
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.89'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.9'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.9
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.92'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.92
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.94'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.94
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.95'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.95
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.96'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.96
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.98'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.98
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_and_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_and_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_and_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_and_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_modulo_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_modulo_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_modulo_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_modulo_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_or_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_or_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_or_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_or_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_left_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_left_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_left_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_left_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_right_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_right_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_right_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_shift_right_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_xor_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_xor_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_xor_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_assign_xor_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_and_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_and_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_and_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_and_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_or_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_or_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_or_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_or_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_left_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_left_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_left_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_left_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_right_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_right_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_right_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_shift_right_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_xor_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_xor_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_xor_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_bitwise_xor_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_modulo_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_modulo_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.reserved_operators.operator_modulo_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.reserved_operators.operator_modulo_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_always_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_always_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_always_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_always_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_dynamic_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_dynamic_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_dynamic_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_dynamic_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_never_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_never_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.conditional_return_never_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.conditional_return_never_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.double_return_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.double_return_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.double_return_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.double_return_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.last_statement_in_main_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.last_statement_in_main_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.last_statement_in_main_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.last_statement_in_main_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_always_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_always_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_always_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_always_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_dynamic_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_dynamic_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_dynamic_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_dynamic_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_always_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_always_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_always_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_always_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_dynamic_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_dynamic_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_dynamic_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_dynamic_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_never_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_never_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_in_func_never_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_in_func_never_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_never_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_never_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.output_write_never_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.output_write_never_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_always_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_always_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_always_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_always_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_dynamic_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_dynamic_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_dynamic_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_dynamic_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_never_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_never_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_never_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_dynamic_loop_never_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_infinite_loop_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_infinite_loop_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_infinite_loop_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_infinite_loop_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.return.return_in_static_loop_always_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.return.return_in_static_loop_always_fragment
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        125/125 (100.0%)
+  Failed:        0/125 (0.0%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 125 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 8704 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: PASS
+yk-record: 594b0201 00000001 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 5892 ms

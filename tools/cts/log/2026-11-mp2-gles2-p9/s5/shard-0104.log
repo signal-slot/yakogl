@@ -1,0 +1,594 @@
+board-stm32mp2.sh <board-host>: shard-0104: build 66fcaa3a boot uboot-sd image sha256 0ef757b321bc8e48 footprint 200151040
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+board-stm32mp2.sh stm32mp257f-dk: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in /run/user/1000/yakogl-locks/board-a032230af4be.mp2-left):
+  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-*.bin and once-*.bin.part
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+console lines of ours:
+  none (no console: MP2_NO_CONSOLE=1)
+board-stm32mp2.sh stm32mp257f-dk shard-0104 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=70s
+board-stm32mp2.sh <board-host>: record <repo>/build/mp2-p9/run/shard-0104/20261127-0628-shard-0104-0ef757b3/INDEX.txt
+# console excerpt: the A35 console of this run as the farm serial tool returned it, from the case results to the PSCI line (the boot text before and after is not copied); verdicts are read from it
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.13'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.13
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.17'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.17
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.18'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.18
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.19'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.19
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.2'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.22'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.22
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.23'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.23
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.25'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.25
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.26'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.27'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.27
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.28'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.28
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.29'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.29
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.30'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.30
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.32'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.32
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.34'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.34
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.35
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.36'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.36
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.37'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.37
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.38'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.38
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.39'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.39
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.4'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.4
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.40'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.40
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.41'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.41
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.42'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.42
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.43'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.43
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.44'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.44
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.45'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.45
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.46'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.46
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.47'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.47
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.48'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.48
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.49'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.49
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.5'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.5
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.50'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.50
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.51'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.51
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.52'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.52
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.53'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.53
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.54'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.54
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.55'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.55
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.56'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.56
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.57'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.57
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.58'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.58
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.59'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.59
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.6'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.6
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.60'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.60
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.61'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.61
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.62'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.62
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.63'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.63
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.64'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.65'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.65
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.66'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.66
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.67'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.67
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.68'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.68
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.69'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.69
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.7'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.7
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.70'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.70
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.71'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.71
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.72'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.72
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.73'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.73
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.74'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.74
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.75'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.75
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.76'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.76
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.77'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.77
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.78'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.78
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.79'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.79
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.8'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.8
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.80'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.80
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.81'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.81
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.82'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.82
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.83'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.83
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.84'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.84
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.85'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.85
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.86'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.86
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.87'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.87
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.88'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.88
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.89'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.89
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.9'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.9
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.90'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.90
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.91'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.91
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.92'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.92
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.93'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.93
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.94'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.94
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.95'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.95
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.96'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.96
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.97'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.97
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.98'..
+deqp: Fail dEQP-GLES2.functional.shaders.random.trigonometric.fragment.98
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.fragment.99'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.fragment.99
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.0'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.0
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.1'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.1
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.10'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.10
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.11'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.11
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.12'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.12
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.13'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.13
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.14'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.14
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.15'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.15
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.16'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.16
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.17'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.17
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.18'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.18
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.19'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.19
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.2'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.2
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.20'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.20
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.21'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.21
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.22'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.22
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.23'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.23
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.24'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.24
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.25'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.25
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.26'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.26
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.27'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.27
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.28'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.28
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.29'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.29
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.3'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.3
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.30'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.30
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.31'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.31
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.32'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.33'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.33
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.34'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.34
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.trigonometric.vertex.35'..
+deqp: Pass dEQP-GLES2.functional.shaders.random.trigonometric.vertex.35
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        67/125 (53.6%)
+  Failed:        58/125 (46.4%)
+  Not supported: 0/125 (0.0%)
+  Warnings:      0/125 (0.0%)
+  Waived:        0/125 (0.0%)
+deqp: done: 67 passed, 58 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 125 cases begun, 125 with a result, 0 without
+shaderc: keep high-water 9280 of 1048576 bytes (0 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+mp2: board: run over: PSCI SYSTEM_RESET at 8960 ms
