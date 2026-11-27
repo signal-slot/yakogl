@@ -5449,7 +5449,7 @@ fn ds_seed_depth(b: &mut Backend, d: &GlesDraw, (ds, _): (DsStore, DsStore)) -> 
 /// implementation (note docs/notes/es3-msaa-renderbuffers.md (b)8); which
 /// sample the BXS-4-64 stores there is BOARD-UNVERIFIED ((e) open point 6).
 /// `None` when the buffer is smaller than that layout.
-fn ds_sample0(s: &DsBuf) -> Option<(usize, impl Fn(u32, u32) -> usize)> {
+fn ds_sample0(s: &DsBuf) -> Option<DsSample0> {
     let (sx, sy) = match s.samples {
         4 => (2usize, 2usize),
         2 => (1, 2),
@@ -5457,7 +5457,38 @@ fn ds_sample0(s: &DsBuf) -> Option<(usize, impl Fn(u32, u32) -> usize)> {
     };
     let row = s.w.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize * sx;
     let bytes = ds_bytes(s.w, s.h, s.samples)?;
-    (bytes <= s.mem.size).then_some((bytes / 4, move |x: u32, y: u32| y as usize * sy * row + x as usize * sx))
+    (bytes <= s.mem.size).then_some(DsSample0 { n: bytes / 4, row, sx, sy })
+}
+
+/// Where [`ds_sample0`] finds each pixel's first sample: pixel (x, y) is
+/// word `y * sy * row + x * sx` of the buffer's `n` words (the `words`,
+/// `stride`, `sx`, `sy` of [`ds_retention::d24s8_depth_rows`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DsSample0 {
+    /// Words of the layout, all inside the allocation.
+    n: usize,
+    /// Words a source row (the aligned width, times 2 at 4x).
+    row: usize,
+    /// Word step a pixel along a row: 2 at 4x, else 1.
+    sx: usize,
+    /// Source rows a pixel row: 2 at 2x and 4x, else 1.
+    sy: usize,
+}
+
+/// `h` rows of `pitch` elements at `dst`, less the last row's padding, as a
+/// slice (empty when `h` or the last row's `w` is 0).
+///
+/// # Safety
+/// `dst` holds `h` rows of `pitch` elements, `w <= pitch`, writable and
+/// aliased by nothing else while the slice lives.
+unsafe fn ds_dst_rows<'a, T>(dst: *mut T, w: u32, h: u32, pitch: u32) -> &'a mut [T] {
+    let len = match h {
+        0 => 0,
+        _ => (h as usize - 1) * pitch as usize + w as usize,
+    };
+    // SAFETY: the caller's contract; `len` ends at the last row's `w`-th
+    // element, inside the rows.
+    unsafe { core::slice::from_raw_parts_mut(dst, len) }
 }
 
 /// Bytes of the packed D24S8 buffer of a w x h target (whole ZLS tiles, per
@@ -5865,8 +5896,8 @@ pub unsafe extern "C" fn pvr_backend_depth_resolve(id: u32, dst: *mut f32, w: u3
         return -crate::util::EBUSY;
     }
     let fill = |v: f32| {
-        // SAFETY: the caller's contract.
-        unsafe { ds_retention::write_depth_texels(dst, w, h, pitch, |_, _| Some(v)) };
+        // SAFETY: the caller's contract; the slice is dropped before return.
+        ds_retention::fill_depth_rows(unsafe { ds_dst_rows(dst, w, h, pitch) }, w, h, pitch, v);
         0
     };
     let held =
@@ -5884,22 +5915,19 @@ pub unsafe extern "C" fn pvr_backend_depth_resolve(id: u32, dst: *mut f32, w: u3
         return 1;
     }
     /* a multisampled buffer reads one sample a pixel ([`ds_sample0`]) */
-    let Some((n, at)) = ds_sample0(s) else {
+    let Some(l) = ds_sample0(s) else {
         return -crate::util::EINVAL;
     };
-    // SAFETY: a live, CPU-mapped allocation of at least n words (checked
+    // SAFETY: a live, CPU-mapped allocation of at least l.n words (checked
     // by ds_sample0), which no pending kick writes (the GL core waited).
     let words = unsafe {
-        osal::cache_invd(s.mem.cpu, n * 4);
-        core::slice::from_raw_parts(s.mem.cpu as *const u32, n)
+        osal::cache_invd(s.mem.cpu, l.n * 4);
+        core::slice::from_raw_parts(s.mem.cpu as *const u32, l.n)
     };
-    let (sw, sh) = (s.w, s.h);
-    // SAFETY: the caller's contract.
-    unsafe {
-        ds_retention::write_depth_texels(dst, w, h, pitch, |x, y| {
-            (x < sw && y < sh).then(|| ds_retention::unorm24_depth(words[at(x, y)]))
-        })
-    };
+    /* the min(w, s.w) x min(h, s.h) corner, by rows; the rest stays */
+    // SAFETY: the caller's contract; `dst` is not the buffer's memory.
+    let rows = unsafe { ds_dst_rows(dst, w, h, pitch) };
+    ds_retention::d24s8_depth_rows(words, l.row, l.sx, l.sy, s.w, s.h, rows, w, h, pitch);
     0
 }
 
@@ -5937,12 +5965,8 @@ pub unsafe extern "C" fn pvr_backend_stencil_resolve(id: u32, dst: *mut u8, w: u
         return -crate::util::EBUSY;
     }
     let fill = |v: u32| {
-        for y in 0..h as usize {
-            for x in 0..w as usize {
-                // SAFETY: the caller's contract: (x, y) is inside the rows.
-                unsafe { dst.add(y * pitch as usize + x).write(v as u8) };
-            }
-        }
+        // SAFETY: the caller's contract; the slice is dropped before return.
+        ds_retention::fill_stencil_rows(unsafe { ds_dst_rows(dst, w, h, pitch) }, w, h, pitch, v as u8);
         0
     };
     let held = ds_plane_buf(b, STENCIL, id).map(|i| &b.ds[i]);
@@ -5960,21 +5984,18 @@ pub unsafe extern "C" fn pvr_backend_stencil_resolve(id: u32, dst: *mut u8, w: u
         return 1;
     }
     /* a multisampled buffer reads one sample a pixel ([`ds_sample0`]) */
-    let Some((n, at)) = ds_sample0(s) else {
+    let Some(l) = ds_sample0(s) else {
         return -crate::util::EINVAL;
     };
-    // SAFETY: a live, CPU-mapped allocation of at least n words (checked
+    // SAFETY: a live, CPU-mapped allocation of at least l.n words (checked
     // by ds_sample0), which no pending kick writes (the GL core waited).
     let words = unsafe {
-        osal::cache_invd(s.mem.cpu, n * 4);
-        core::slice::from_raw_parts(s.mem.cpu as *const u32, n)
+        osal::cache_invd(s.mem.cpu, l.n * 4);
+        core::slice::from_raw_parts(s.mem.cpu as *const u32, l.n)
     };
-    for y in 0..h.min(s.h) {
-        for x in 0..w.min(s.w) {
-            // SAFETY: the caller's contract: (x, y) is inside the rows.
-            unsafe { dst.add(y as usize * pitch as usize + x as usize).write((words[at(x, y)] >> 24) as u8) };
-        }
-    }
+    // SAFETY: the caller's contract; `dst` is not the buffer's memory.
+    let rows = unsafe { ds_dst_rows(dst, w, h, pitch) };
+    ds_retention::d24s8_stencil_rows(words, l.row, l.sx, l.sy, s.w, s.h, rows, w, h, pitch);
     0
 }
 

@@ -7663,3 +7663,38 @@ fn spm_load_blob_matches_its_generator() {
         assert_eq!(off, 200, "{groups} groups end at the last byte");
     }
 }
+
+/// `ds_sample0`'s layout as the row resolves take it: the row stride (the
+/// ZLS-tile-aligned width, doubled at 4x), the 4x / 2x / 1x steps, the word
+/// count, and `None` (-EINVAL in the resolves) one byte short of it. With
+/// `crate::msaa_hw::pvr::ds_sample0_word` naming the same word for the last
+/// pixel, the rows read what the per-texel `at(x, y)` read.
+#[test]
+fn ds_sample0_gives_the_row_layout_the_resolves_read() {
+    for (samples, sx, sy) in [(1, 1, 1), (2, 1, 2), (4, 2, 2)] {
+        let (w, h) = (33u32, 5u32);
+        let bytes = ds_bytes(w, h, samples).unwrap();
+        let s = DsBuf { w, h, samples, mem: OsalGpuMem { size: bytes, ..OsalGpuMem::ZERO }, ..DsBuf::ZERO };
+        let l = ds_sample0(&s).unwrap();
+        assert_eq!(l, DsSample0 { n: bytes / 4, row: 64 * sx, sx, sy }, "{samples} samples");
+        let last = (h as usize - 1) * l.sy * l.row + (w as usize - 1) * l.sx;
+        assert_eq!(last as u64, crate::msaa_hw::pvr::ds_sample0_word(w, samples, w - 1, h - 1), "{samples} samples");
+        assert!(last < l.n);
+        let short = DsBuf { mem: OsalGpuMem { size: bytes - 1, ..OsalGpuMem::ZERO }, ..s };
+        assert!(ds_sample0(&short).is_none(), "{samples} samples");
+    }
+}
+
+/// `ds_dst_rows` covers `h` rows of `pitch` less the last row's padding, and
+/// nothing when `h` is 0 (the pointer then is never read).
+#[test]
+fn ds_dst_rows_ends_at_the_last_rows_width() {
+    let mut buf = [0f32; 3 * 8];
+    // SAFETY: `buf` holds 3 rows of 8.
+    unsafe {
+        assert_eq!(ds_dst_rows(buf.as_mut_ptr(), 5, 3, 8).len(), 2 * 8 + 5);
+        assert_eq!(ds_dst_rows(buf.as_mut_ptr(), 8, 3, 8).len(), 3 * 8);
+        assert_eq!(ds_dst_rows(buf.as_mut_ptr(), 5, 0, 8).len(), 0);
+        assert_eq!(ds_dst_rows(buf.as_mut_ptr(), 0, 1, 0).len(), 0);
+    }
+}
