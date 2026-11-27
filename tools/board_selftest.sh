@@ -158,6 +158,9 @@ mkdir -p "$S/img"
 mkimg "$S/img/pi4.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
 mkimg "$S/img/pi5.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot'
 mkimg "$S/img/pi5-glmark2.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after boot glmark2: upstream'
+mkimg "$S/img/pi5-288.bin" $((288 * 1024 * 1024)) 'board: PM watchdog resets the SoC ~50 s after boot glmark2: upstream'
+mkimg "$S/img/pi5-deqp-288.bin" $((288 * 1024 * 1024)) 'board: PM watchdog resets the SoC ~50 s after boot deqp: summary v3d_deqp: build'
+mkimg "$S/img/pi5-289.bin" $((289 * 1024 * 1024)) 'board: PM watchdog resets the SoC ~50 s after boot'
 mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
@@ -682,6 +685,14 @@ check "pi5 run of a glmark2 image: waits <= 720 s for the end, then 480 s more" 
     eval 'grep -q "<= 720 s; then 5 s more" <<<"$out" && grep -q "(<= 480 s more)" <<<"$out"'
 check "pi5 run of a glmark2 image: the end regex has the score line and the gl_test end; an ordinary image's has no glmark2" \
     eval 'grep -q "glmark2: score \[0-9\]+: )" <<<"$out" && grep -q "v3d_gl_test RECORD end" <<<"$out" && ! dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1 | grep -q "glmark2: score"'
+# the load window: 288 MiB from 0x200000 (the glmark2 and dEQP tree images)
+out=$(dry pi5 run "$S/img/pi5-288.bin" "$S/logs" 2>&1); rc=$?
+check "pi5 run of a 288 MiB glmark2 image: rc 0 (it fits the load window)" eval '[ "$rc" = 0 ] && ! grep -q "does not fit" <<<"$out"'
+out=$(dry pi5 run "$S/img/pi5-deqp-288.bin" "$S/logs" 2>&1); rc=$?
+check "pi5 run of a 288 MiB dEQP image: rc 0, the end regex has the dEQP summary and build ends" \
+    eval '[ "$rc" = 0 ] && grep -q "deqp: summary: |v3d_deqp: build \[^ \]+ (DONE|INCOMPLETE|STOPPED)" <<<"$out"'
+out=$(dry pi5 run "$S/img/pi5-289.bin" "$S/logs" 2>&1); rc=$?
+check "pi5 run of a 289 MiB image: refused (does not fit the 288 MiB window)" eval '[ "$rc" != 0 ] && grep -q "does not fit" <<<"$out"'
 out=$(RUN_BOUND=500 RETURN_BOUND=600 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
 check "pi5 run: RUN_BOUND and RETURN_BOUND override the defaults" eval 'grep -q "<= 500 s; then" <<<"$out" && grep -q "(<= 600 s more)" <<<"$out"'
 out=$(BOARD_HDMI_TIMINGS=1920x720 dry pi5 run "$S/img/pi5.bin" "$S/logs" 2>&1)
@@ -1894,6 +1905,18 @@ pi4|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong)|rc=4 verdict=no_end_line boot
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
 
+echo "== 3i2. Pi 5 dEQP tree image: DONE is done, INCOMPLETE and STOPPED are failed (the 288 MiB window is checked in the pi5 run section)"
+# the dEQP verdict of a pi5 tree image: DONE is done, INCOMPLETE and STOPPED are failed, no end line is no_end_line
+for e in DONE INCOMPLETE STOPPED NONE; do
+    d="$S/pi5/deqp$e/20261127-1200-deqp$e-0123abcd"
+    mkrun "$d" board=pi5 boot=tryboot "name=deqp$e" probe=0 back=1 t_reboot=100 t_back=370
+    printf '12:00:00 v3d_deqp: build abc\n12:00:09 deqp: done: 10 passed, 0 failed, 0 not supported, 0 warnings, complete=1\n' > "$d/console.txt"
+    [ "$e" = NONE ] || printf '12:00:10 v3d_deqp: build abc %s: 10 cases, P 10 F 0 R 0 N 0 other 0\n' "$e" >> "$d/console.txt"
+done
+check "pi5 dEQP image ending DONE: verdict=done, result legacy:v3d_deqp_DONE" says pi5 "$S/pi5/deqpDONE/20261127-1200-deqpDONE-0123abcd" "verdict=done .*result=legacy:v3d_deqp_DONE"
+check "pi5 dEQP image ending INCOMPLETE: verdict=failed, named" says pi5 "$S/pi5/deqpINCOMPLETE/20261127-1200-deqpINCOMPLETE-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_INCOMPLETE"
+check "pi5 dEQP image ending STOPPED: verdict=failed, named" says pi5 "$S/pi5/deqpSTOPPED/20261127-1200-deqpSTOPPED-0123abcd" "verdict=failed .*result=legacy:v3d_deqp_STOPPED"
+check "pi5 dEQP console with no end line: no_end_line" says pi5 "$S/pi5/deqpNONE/20261127-1200-deqpNONE-0123abcd" "verdict=no_end_line"
 echo "== 3i. Pi 5 gl_test image: the record's end, the per-case verdicts, the scrub (board71's six cases 5 58 59 66 67 102)"
 # a synthetic list run in the shape of the Pi 4's (tools/testdata/pi4-tryboot-GT21-*:
 # "gl_test: start (case=-1 ...)", one "gl_test: case N name: PASS|FAIL" per case,
