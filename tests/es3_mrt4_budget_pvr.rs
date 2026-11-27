@@ -23,39 +23,13 @@
 //! GL_EXT_color_buffer_float, plan #360). `register_layout` is the arbiter:
 //! every OVER row it refuses by name, every fitting one it places.
 //!
-//! Today the GL core has no budget in glCheckFramebufferStatus
-//! (src/gl/framebuffer.rs answers UNSUPPORTED only for pitch and
-//! depth-stencil planes), so an over-budget frame is complete. The draw then
-//! answers one of four ways, and the pinned `today` table holds all of
-//! them:
-//!
-//! - an RGBA8-class frame, and RGBA16F x4, is drawn short: the back end
-//!   keeps four attachments under the stand-in (item pvr-backend, plan #368;
-//!   three before it) and stops emitting where the next target would pass
-//!   register 3 (only the last attachment of three is emitted from a tile
-//!   buffer) — GL_NO_ERROR, a short kick;
-//! - RGBA16F beside RGBA8 is refused by name: the RGBA16F key's program
-//!   lays every output out as RGBA16F's (issue #313's per-target build), so
-//!   the back end does not store the RGBA8 targets from it —
-//!   GL_INVALID_OPERATION, no kick;
-//! - an integer frame (the 16-dword RGBA32UI x4 layout, RGBA32UI beside
-//!   RGBA8) never reaches the back end: the online compiler has no variant
-//!   for it (`mrt_layout` refuses the four-RGBA32UI walk), so the GL core
-//!   drops the draw as a missing variant — counted, logged, no GL error, no
-//!   kick;
-//! - an RGBA32F attachment is not renderable at all (plan #360):
-//!   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT and GL_INVALID_FRAMEBUFFER_-
-//!   OPERATION for draw and clear.
-//!
-//! A clear of a fitting float frame reaches every target today (its frame
-//! runs the back end's own program and emits all attachments on their
-//! budget registers); a GL program's draw reaches both of RGBA16F x2 and is
-//! refused for RGBA16F + RGBA8 x2 (second family above).
-//! The `#[ignore = "defect: ..."]` tests hold the recommendation: over-budget
-//! combinations answer UNSUPPORTED, and the fitting combinations draw and
-//! clear every target. No out-of-range register is written: the emitted
-//! sources of every over-budget kick are checked to land inside registers
-//! 0-3, and no kick names a target the budget leaves no room for.
+//! glCheckFramebufferStatus holds that budget (src/gl/framebuffer.rs,
+//! `pvr_output_regs_fit`, compiled for gpu-powervr only): an over-budget
+//! frame answers GL_FRAMEBUFFER_UNSUPPORTED, and a draw or a clear to it is
+//! GL_INVALID_FRAMEBUFFER_OPERATION with no kick. An RGBA32F attachment is
+//! not renderable at all (plan #360): GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT.
+//! The fitting combinations are complete and draw or clear every target.
+//! The `#[ignore = "defect: ..."]` tests hold what is still missing.
 //!
 //! The GL calls run against the REAL PowerVR back end on the host platform
 //! of tests/es3_mrt4_formats_pvr.rs (cut from it): GPU memory is host
@@ -864,71 +838,34 @@ fn cleared(target: usize, class: Class) -> Obs {
 
 /* ---- the over-budget table ------------------------------------------------------ */
 
-/// Today's answer to an over-budget combination.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Today {
-    /// Complete; the draw kicks, its targets are emitted at these output
-    /// registers (`source_pos`; each as the next `mrt_index`), and the rest
-    /// of the frame is dropped: the back end stops emitting where the next
-    /// target would pass register 3 (the glog_once line naming it
-    /// fires once for the process, so it is not asserted per row).
-    Emitted(&'static [u32]),
-    /// Complete, but the draw is refused before the back end sees it: the
-    /// online compiler has no fragment variant for a multi-output program
-    /// of the frame's class (an integer variant, or the 16-dword
-    /// four-RGBA32UI layout `mrt_layout` refuses). A
-    /// missing variant is counted (yakogl_draws_refused), logged, and
-    /// raises no GL error (src/gl/draw.rs). No kick, so nothing out of
-    /// range: attachment 0 of the frame decides, hence the RGBA8-class
-    /// rows above kick short while these disappear.
-    NoVariant,
-    /// Complete, attachment 0 is RGBA16F and another attachment RGBA8: the
-    /// GL core keys the draw with attachment 0's class, the online compiler
-    /// lays every output out as RGBA16F's (one target of that class each,
-    /// `chain::build_fragment_with`), and the back end refuses the draw by
-    /// name rather than store the RGBA8 targets from registers holding
-    /// halves (`GL_INVALID_OPERATION`, no kick; the glog_once line fires
-    /// once for the process, so it is not asserted per row). A mix of float
-    /// classes has no key of its own yet.
-    MixRefused,
-    /// The RGBA32F storage is refused (`GL_INVALID_ENUM`), the framebuffer
-    /// is `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` and the draw is
-    /// `GL_INVALID_FRAMEBUFFER_OPERATION` (plan #360: not colour-renderable
-    /// without GL_EXT_color_buffer_float).
-    NotRenderable,
-}
-
-/// A four-target combination over the budget, and today's answer to it:
-/// the twelve RGBA8 + RGBA16F orders of six and eight registers, the
-/// RGBA32UI combinations (a target of four registers), and the RGBA32F ones.
-/// `Emitted` lists the `source_pos` of the targets the back end emits today;
-/// every row passes register 3 by its fourth target at the latest, so the
-/// lists are the same with the back end's four-target clamp (item
-/// pvr-backend) as they were with the three-target one before it.
+/// A four-target combination over the budget: the twelve RGBA8 + RGBA16F
+/// orders of six and eight registers, the RGBA32UI combinations (a target of
+/// four registers), and the RGBA32F ones.
 struct Over {
     label: &'static str,
     fmts: [GLenum; 4],
-    today: Today,
+    /// False where the GL core cannot make the format renderable at all
+    /// (RGBA32F, plan #360): its frame is INCOMPLETE_ATTACHMENT before the
+    /// budget is asked.
+    renderable: bool,
 }
 
-use Today::*;
-
 const OVER: [Over; 15] = [
-    Over { label: "RGBA8 x3 + RGBA16F", fmts: [A8, A8, A8, F16], today: Emitted(&[0, 1, 2]) },
-    Over { label: "RGBA8 x2 + RGBA16F + RGBA8", fmts: [A8, A8, F16, A8], today: Emitted(&[0, 1, 2]) },
-    Over { label: "RGBA8 + RGBA16F + RGBA8 x2", fmts: [A8, F16, A8, A8], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA16F + RGBA8 x3", fmts: [F16, A8, A8, A8], today: MixRefused },
-    Over { label: "RGBA8 x2 + RGBA16F x2", fmts: [A8, A8, F16, F16], today: Emitted(&[0, 1, 2]) },
-    Over { label: "RGBA16F + RGBA8 + RGBA16F + RGBA8", fmts: [F16, A8, F16, A8], today: MixRefused },
-    Over { label: "RGBA16F x2 + RGBA8 x2", fmts: [F16, F16, A8, A8], today: MixRefused },
-    Over { label: "RGBA8 + RGBA16F x3", fmts: [A8, F16, F16, F16], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA16F + RGBA8 x2 + RGBA16F", fmts: [F16, A8, A8, F16], today: MixRefused },
-    Over { label: "RGBA16F x3 + RGBA8", fmts: [F16, F16, F16, A8], today: MixRefused },
-    Over { label: "RGBA16F x4", fmts: [F16, F16, F16, F16], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA32UI x4", fmts: [U4, U4, U4, U4], today: NoVariant },
-    Over { label: "RGBA32UI + RGBA8 x3", fmts: [U4, A8, A8, A8], today: NoVariant },
-    Over { label: "RGBA8 x3 + RGBA32F", fmts: [A8, A8, A8, F4], today: NotRenderable },
-    Over { label: "RGBA32F + RGBA8 x3", fmts: [F4, A8, A8, A8], today: NotRenderable },
+    Over { label: "RGBA8 x3 + RGBA16F", fmts: [A8, A8, A8, F16], renderable: true },
+    Over { label: "RGBA8 x2 + RGBA16F + RGBA8", fmts: [A8, A8, F16, A8], renderable: true },
+    Over { label: "RGBA8 + RGBA16F + RGBA8 x2", fmts: [A8, F16, A8, A8], renderable: true },
+    Over { label: "RGBA16F + RGBA8 x3", fmts: [F16, A8, A8, A8], renderable: true },
+    Over { label: "RGBA8 x2 + RGBA16F x2", fmts: [A8, A8, F16, F16], renderable: true },
+    Over { label: "RGBA16F + RGBA8 + RGBA16F + RGBA8", fmts: [F16, A8, F16, A8], renderable: true },
+    Over { label: "RGBA16F x2 + RGBA8 x2", fmts: [F16, F16, A8, A8], renderable: true },
+    Over { label: "RGBA8 + RGBA16F x3", fmts: [A8, F16, F16, F16], renderable: true },
+    Over { label: "RGBA16F + RGBA8 x2 + RGBA16F", fmts: [F16, A8, A8, F16], renderable: true },
+    Over { label: "RGBA16F x3 + RGBA8", fmts: [F16, F16, F16, A8], renderable: true },
+    Over { label: "RGBA16F x4", fmts: [F16, F16, F16, F16], renderable: true },
+    Over { label: "RGBA32UI x4", fmts: [U4, U4, U4, U4], renderable: true },
+    Over { label: "RGBA32UI + RGBA8 x3", fmts: [U4, A8, A8, A8], renderable: true },
+    Over { label: "RGBA8 x3 + RGBA32F", fmts: [A8, A8, A8, F4], renderable: false },
+    Over { label: "RGBA32F + RGBA8 x3", fmts: [F4, A8, A8, A8], renderable: false },
 ];
 
 /// The four-target combinations the budget leaves room for.
@@ -976,91 +913,6 @@ fn the_standin_offers_four_targets_and_the_table_matches_the_layout_rule() {
         assert_eq!(l.tile_buffers, 0, "{}", row.label);
         let pos: Vec<u32> = (0..row.fmts.len()).map(|i| u32::from(l.place[i].source_pos())).collect();
         assert_eq!(pos, row.regs, "{}", row.label);
-    }
-}
-
-/// An over-budget frame's `glCheckFramebufferStatus` today: no row answers
-/// `GL_FRAMEBUFFER_UNSUPPORTED` — the combinations draw (COMPLETE) or fail
-/// for another reason (RGBA32F not renderable).
-#[test]
-fn over_budget_framebuffer_statuses_today() {
-    let _g = rig();
-    for row in OVER {
-        let f = Fbo::new(&row.fmts);
-        match row.today {
-            NotRenderable => {
-                assert_eq!(f.build_err, GL_INVALID_ENUM, "{}: storage", row.label);
-                assert_eq!(f.status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{}", row.label);
-            }
-            _ => {
-                assert_eq!(f.build_err, GL_NO_ERROR, "{}: building", row.label);
-                assert_eq!(f.status, GL_FRAMEBUFFER_COMPLETE, "{}", row.label);
-            }
-        }
-    }
-}
-
-/// The draw of every over-budget combination today: no panic and no
-/// out-of-range register anywhere.
-///
-/// - `Emitted`: GL_NO_ERROR, one kick whose PBE states sit exactly at the
-///   listed registers, each numbered by emission.
-/// - `MixRefused`: GL_INVALID_OPERATION, no kick (refused by name).
-/// - `NoVariant`: no kick and no GL error (the missing variant is refused
-///   and counted, src/gl/draw.rs; the refusal's log line is a glog_once for
-///   the process, so it is not asserted here).
-/// - `NotRenderable`: GL_INVALID_FRAMEBUFFER_OPERATION, no kick.
-#[test]
-fn over_budget_draws_today() {
-    let _g = rig();
-    for row in OVER {
-        let _f = Fbo::new(&row.fmts);
-        let obs = drawn(4, class_of(&row.fmts));
-        match row.today {
-            Emitted(pos) => {
-                assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
-                let (num_rt, emits) = obs.one(row.label);
-                assert_eq!(num_rt as usize, pos.len(), "{}: kick num_rt: {obs:?}", row.label);
-                assert_eq!(emits, want_emits(&row.fmts, pos), "{}: PBE states: {obs:?}", row.label);
-            }
-            NoVariant => {
-                assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
-                assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: no kick: {obs:?}", row.label);
-            }
-            MixRefused => {
-                assert_eq!(obs.err, GL_INVALID_OPERATION, "{}: {:?}", row.label, obs.log);
-                assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: no kick: {obs:?}", row.label);
-            }
-            NotRenderable => {
-                assert_eq!(obs.err, GL_INVALID_FRAMEBUFFER_OPERATION, "{}: {:?}", row.label, obs.log);
-                assert!(obs.kicks.is_empty(), "{}: no kick: {obs:?}", row.label);
-            }
-        }
-    }
-}
-
-/// No over-budget kick writes past the fourth output register: the emitted
-/// sources of every row occupy disjoint, in-range spans (an RGBA16F source
-/// covers registers `source_pos` and `source_pos + 1`), so no PBE store can
-/// read a fifth one.
-#[test]
-fn over_budget_emits_stay_within_four_output_registers() {
-    let _g = rig();
-    for row in OVER {
-        let Today::Emitted(pos) = row.today else { continue };
-        let f = Fbo::new(&row.fmts);
-        assert_eq!(f.status, GL_FRAMEBUFFER_COMPLETE, "{}", row.label);
-        let obs = drawn(4, class_of(&row.fmts));
-        let (_, emits) = obs.one(row.label);
-        let mut used = [false; 4];
-        for (i, e) in emits.iter().enumerate() {
-            assert_eq!(e.source_pos, pos[i], "{}: source of target {i}", row.label);
-            for r in e.source_pos..e.source_pos + regs_of(row.fmts[i]) {
-                assert!(r < 4, "{}: target {i} reads register {r}", row.label);
-                assert!(!used[r as usize], "{}: register {r} used twice", row.label);
-                used[r as usize] = true;
-            }
-        }
     }
 }
 
@@ -1135,22 +987,29 @@ fn rgba32f_alone_is_not_renderable_today() {
 
 /* ---- defects: what the handoff recommends ------------------------------------------- */
 
-/// The recommendation of pvr-budget-note (issue #6237, docs/notes/
-/// mrt4-v3d-pvr.md section 2.3): GL_FRAMEBUFFER_UNSUPPORTED is the GL answer
-/// for an over-budget layout, and a draw to such a frame is refused as an
-/// incomplete framebuffer. Spilling the targets past the budget to tile
-/// buffers (eot3_tb, eot4_tb, eot4_tb2, eot4_tb3 of mrt_layout) is the
-/// back-end goal that will replace UNSUPPORTED layout by layout.
+/// pvr-budget-fb (plan #368; docs/notes/mrt4-v3d-pvr.md section 2.3):
+/// GL_FRAMEBUFFER_UNSUPPORTED is the GL answer for an over-budget layout
+/// (`register_layout` refuses it), and a draw or clear to such a frame is
+/// refused as an incomplete framebuffer with no kick. Spilling the targets
+/// past the budget to tile buffers (eot3_tb, eot4_tb, eot4_tb2, eot4_tb3 of
+/// mrt_layout) is the back-end goal that will replace UNSUPPORTED layout by
+/// layout. The RGBA32F rows are not renderable at all (plan #360) and stay
+/// INCOMPLETE_ATTACHMENT until then.
 #[test]
-#[ignore = "defect: plan #368 pvr-budget4: glCheckFramebufferStatus has no output-register budget (src/gl/framebuffer.rs answers UNSUPPORTED for pitch and depth-stencil planes only) and the back end draws over-budget layouts short. The fix is the budget check the note recommends (GL core completeness plus a PowerVR answer) naming GL_FRAMEBUFFER_UNSUPPORTED; the spill programs of pvr-pack replace it per layout once pvr-backend wires them"]
 fn over_budget_combinations_answer_framebuffer_unsupported() {
     let _g = rig();
     for row in OVER {
         let f = Fbo::new(&row.fmts);
-        assert_eq!(f.status, GL_FRAMEBUFFER_UNSUPPORTED, "{}", row.label);
+        let want = if row.renderable { GL_FRAMEBUFFER_UNSUPPORTED } else { GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT };
+        assert_eq!(f.status, want, "{}", row.label);
         let obs = drawn(4, class_of(&row.fmts));
         assert_eq!(obs.err, GL_INVALID_FRAMEBUFFER_OPERATION, "{}: {:?}", row.label, obs.log);
-        assert!(obs.kicks.is_empty(), "{}: {obs:?}", row.label);
+        assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: {obs:?}", row.label);
+        for k in 0..4 {
+            let c = cleared(k, class_of(&row.fmts));
+            assert_eq!(c.err, GL_INVALID_FRAMEBUFFER_OPERATION, "{}: clear {k}: {:?}", row.label, c.log);
+            assert!(c.kicks.is_empty(), "{}: clear {k}: {c:?}", row.label);
+        }
     }
 }
 

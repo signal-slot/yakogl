@@ -582,7 +582,16 @@ const ATT: [GLenum; 4] = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_A
 /// An FBO with a renderbuffer of each of `formats` at COLOR_ATTACHMENT0..,
 /// every one a draw buffer, bound for drawing.
 fn fbo(formats: &[GLenum]) -> GLuint {
+    let (fbo, status) = fbo_status(formats);
+    assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+    fbo
+}
+
+/// [`fbo`] that returns `glCheckFramebufferStatus` instead of asserting it
+/// (an over-budget layout is GL_FRAMEBUFFER_UNSUPPORTED).
+fn fbo_status(formats: &[GLenum]) -> (GLuint, GLenum) {
     let mut fbo = 0;
+    let status;
     // SAFETY: plain GL calls; room for the names.
     unsafe {
         glGenFramebuffers(1, &mut fbo);
@@ -595,10 +604,10 @@ fn fbo(formats: &[GLenum]) -> GLuint {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, ATT[i], GL_RENDERBUFFER, rb);
         }
         glDrawBuffers(formats.len() as GLsizei, ATT.as_ptr());
-        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{:?}", logs());
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
     }
-    fbo
+    (fbo, status)
 }
 
 /// What one piece of GL work handed the hardware.
@@ -842,9 +851,11 @@ fn the_partial_render_carries_the_frames_pairs() {
 /* ---- 64-bit targets: register pairs --------------------------------------------- */
 
 /// An RGBA16F target takes two output registers starting at an even one,
-/// exactly where `mrt_layout::register_layout` places it; a layout that runs
-/// past register 3 stops emitting at the target `register_layout` refuses.
-/// Cleared frames (the back end's own programs, no shader variant needed).
+/// exactly where `mrt_layout::register_layout` places it. A layout that runs
+/// past register 3 (`register_layout` answers `OutputRegs`) is
+/// GL_FRAMEBUFFER_UNSUPPORTED, and a clear of it is refused as an incomplete
+/// framebuffer with no kick (plan #368 pvr-budget-fb). Cleared frames (the
+/// back end's own programs, no shader variant needed).
 #[test]
 fn sixty_four_bit_targets_take_the_register_layouts_pairs() {
     let _g = rig(4);
@@ -856,23 +867,33 @@ fn sixty_four_bit_targets_take_the_register_layouts_pairs() {
         &[GL_RGBA8, GL_RGBA16F],
         &[GL_RGBA16F, GL_RGBA8, GL_RGBA8, GL_RGBA8],
     ] {
-        fbo(formats);
-        let f = clear_all();
-        assert_eq!(f.kicks.len(), 1, "{formats:x?}: {:?}", logs());
+        let (_, status) = fbo_status(formats);
         let d: Vec<u8> = formats.iter().map(|&x| dwords(x)).collect();
-        let (pairs, words) = &f.eot[0];
-        assert_eq!(*pairs, 4, "{formats:x?}");
-        let (n, want): (usize, Vec<(u32, u32)>) = match register_layout(&d) {
-            Ok(l) => (d.len(), (0..d.len()).map(|i| (u32::from(l.place[i].source_pos()), i as u32)).collect()),
-            Err(yakogl::pvr::mrt_layout::LayoutError::OutputRegs { target, .. }) => {
-                let target = target as usize;
-                let l = register_layout(&d[..target]).expect("the prefix fits");
-                (target, (0..target).map(|i| (u32::from(l.place[i].source_pos()), i as u32)).collect())
+        let layout = match register_layout(&d) {
+            Ok(l) => l,
+            Err(yakogl::pvr::mrt_layout::LayoutError::OutputRegs { .. }) => {
+                assert_eq!(status, GL_FRAMEBUFFER_UNSUPPORTED, "{formats:x?}: over budget");
+                let f = frame_of(|| {
+                    // SAFETY: plain GL calls.
+                    unsafe {
+                        glClearColor(C[0], C[1], C[2], C[3]);
+                        glClear(GL_COLOR_BUFFER_BIT);
+                    }
+                    assert_eq!(error(), GL_INVALID_FRAMEBUFFER_OPERATION, "{formats:x?}: {:?}", logs());
+                });
+                assert!(f.kicks.is_empty() && f.eot.is_empty(), "{formats:x?}: refused, no kick");
+                continue;
             }
             Err(e) => panic!("{formats:x?}: {e:?}"),
         };
-        assert_eq!(f.kicks[0].frag.num_rt as usize, n, "{formats:x?}: emitted targets");
-        assert_eq!(emits(words, n), want, "{formats:x?}: source_pos per register_layout");
+        assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{formats:x?}");
+        let f = clear_all();
+        assert_eq!(f.kicks.len(), 1, "{formats:x?}: {:?}", logs());
+        let (pairs, words) = &f.eot[0];
+        assert_eq!(*pairs, 4, "{formats:x?}");
+        let want: Vec<(u32, u32)> = (0..d.len()).map(|i| (u32::from(layout.place[i].source_pos()), i as u32)).collect();
+        assert_eq!(f.kicks[0].frag.num_rt as usize, d.len(), "{formats:x?}: emitted targets");
+        assert_eq!(emits(words, d.len()), want, "{formats:x?}: source_pos per register_layout");
     }
 }
 
