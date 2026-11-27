@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """imx8mp-gm-perf.py - glmark2 PERF page words to ms a frame and KiB of CPU passes.
 
-  python3 -I tools/cts/imx8mp-gm-perf.py [--scene NAME] W0 W1 W2 [W3]
+  python3 -I tools/cts/imx8mp-gm-perf.py [--board x2|verdin] [--scene NAME] W0 W1 W2 [W3]
   python3 -I tools/cts/imx8mp-gm-perf.py < console.log
 
 Page layout: driver/samples/zephyr/glmark2/src/gm_perf_page.h lines 8-12 (the
@@ -13,6 +13,13 @@ gc-slow-shadow-refract.md lines 224-233 (selectors 0x1000..0x1004, saturation
 at 0xffff) and 469-472 (what a session records). Console line
 (main.cpp:1075):  glmark2-perf: <scene>: page <n>: <w0> <w1> <w2> <w3>
 On the Armadillo-X2 only w0..w2 are stored, so w3 may be left out.
+
+X2 mode (--board x2, or a console line with only w0 w1 w2): decodes what w0..w2
+hold (page 0 v0 and v1 so ms a frame, v2, v3; page 4 v0..v3 so KiB of CPU
+passes) and prints the cells that need w3 (page 0 v4 and v5, and any v4/v5)
+as "not in an X2 record"; each scene line says "measured on the Armadillo-X2".
+--board verdin forces the full four-word reading.  Three positional words with
+no --board keep the old reading (w3 = 0, v4/v5 left out without a note).
 
 Page 0 (us per frame): v0 frames in the 10 s scene, v1 frame, v2 gl, v3 swap,
 v4 show, v5 frame to frame.  ms a frame = 10000 / v0.  Page 4: v0 GPU mipmap
@@ -67,7 +74,7 @@ def us(name, x):
     return "%s us: %d saturated=no" % (name, x)
 
 
-def decode(ws):
+def decode(ws, x2=False):
     page, v = values(ws)
     out = []
     if page == 0:
@@ -80,9 +87,13 @@ def decode(ws):
             out.append("ms a frame: %.3f" % (10000 / v[0]))
             out.append("frames: %d saturated=no" % v[0])
         names = [("frame", 1), ("gl", 2), ("swap", 3)]
-        if ws[3] != 0:  # w3 is not stored on the X2
-            names += [("show", 4), ("frame-to-frame", 5)]
-        out += [us(n, v[i]) for n, i in names]
+        if x2:  # w3 is not stored on the X2
+            out += [us(n, v[i]) for n, i in names]
+            out += ["%s us: not in an X2 record" % n for n in ("show", "frame-to-frame")]
+        else:
+            if ws[3] != 0:
+                names += [("show", 4), ("frame-to-frame", 5)]
+            out += [us(n, v[i]) for n, i in names]
     elif page == 4:
         if v[:4] == [SAT] * 4:
             out.append("KiB of CPU passes: not available (v0..v3 all 0xffff: no counters)")
@@ -96,6 +107,8 @@ def decode(ws):
             else:
                 out.append("KiB of CPU passes: %d saturated=no" % v[3])
     else:
+        if x2:
+            v = [str(x) for x in v[:4]] + ["not in an X2 record"] * 2
         out.append("v0..v5 = %s (not decoded)" % " ".join(map(str, v)))
     return page, out
 
@@ -105,6 +118,12 @@ def main(argv):
     if args[:1] in (["-h"], ["--help"]):
         sys.stdout.write(__doc__)
         return 0
+    board = None
+    if args[:1] == ["--board"]:
+        if len(args) < 2 or args[1] not in ("x2", "verdin"):
+            sys.stderr.write("usage: --board x2|verdin [--scene NAME] W0 W1 W2 [W3]\n")
+            return 2
+        board, args = args[1], args[2:]
     if args[:1] == ["--scene"]:
         if len(args) < 2:
             sys.stderr.write("usage: --scene NAME W0 W1 W2 [W3]\n")
@@ -113,7 +132,7 @@ def main(argv):
     recs = []
     try:
         if args:
-            recs.append((scene, parse_words(args), None))
+            recs.append((scene, parse_words(args), None, board == "x2"))
         else:
             for n, line in enumerate(sys.stdin, 1):
                 if "glmark2-perf:" not in line:
@@ -121,20 +140,22 @@ def main(argv):
                 m = LINE.search(line)
                 if not m:
                     raise Bad("line %d: malformed glmark2-perf line: %r" % (n, line.strip()))
-                recs.append((m.group("scene"), parse_words(m.group("w").split()), int(m.group("page"))))
+                toks = m.group("w").split()
+                x2 = board == "x2" or (board is None and len(toks) == 3)
+                recs.append((m.group("scene"), parse_words(toks), int(m.group("page")), x2))
             if not recs:
                 raise Bad("no glmark2-perf: line on stdin")
         res = []
-        for sc, ws, claimed in recs:
-            p, out = decode(ws)
+        for sc, ws, claimed, x2 in recs:
+            p, out = decode(ws, x2)
             if claimed is not None and claimed != p:
                 raise Bad("scene %s: console says page %d, w0 says page %d" % (sc, claimed, p))
-            res.append((sc, p, out))
+            res.append((sc, p, out, x2))
     except Bad as e:
         sys.stderr.write("imx8mp-gm-perf: %s\n" % e)
         return 1
-    for sc, p, out in res:
-        print("scene: %s page %d" % (sc, p))
+    for sc, p, out, x2 in res:
+        print("scene: %s page %d%s" % (sc, p, " (measured on the Armadillo-X2)" if x2 else ""))
         for o in out:
             print("  " + o)
     return 0
