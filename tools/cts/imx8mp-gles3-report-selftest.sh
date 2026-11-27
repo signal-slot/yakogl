@@ -495,6 +495,40 @@ PY
 python3 "$REPORT" --date 2026-11-10 "$w0" "$w1" "$wd/$(basename "${S[2]}")" 2>&1 | grep -q '1 shortfall entry no README line names (3)'
 expect "a shortfall no README line names still counts" $?
 
+echo "== a refused X2 jump and a ping-less return (made-up data)"
+rf="$work/refused"; mkdir "$rf"
+for i in 0 1 2; do cp -r "${S[$i]}" "$rf/"; done
+r1="$rf/$(basename "${S[1]}")"; r2="$rf/$(basename "${S[2]}")"
+python3 - "$r1" "$r2" <<'PY'
+import sys
+d1, d2 = sys.argv[1:3]
+# slice 1: entry 46 was refused (no record, no t_reboot/back/rc_cycle); its meta.txt carries the cause
+t = open(d1 + '/README.md').read().replace('board.sh imx8mp e46 rc=0 verdict=done resets=absent', 'board.sh x2 e46 rc=3 verdict=refused')
+open(d1 + '/README.md', 'w').write(t)
+rows = [l for l in open(d1 + '/results.tsv').read().split('\n') if l.split('\t')[0] != '46']
+open(d1 + '/results.tsv', 'w').write('\n'.join(rows))
+open(d1 + '/meta.txt', 'w').write('jump=refused (exit 3)\nrefused_rc=3\nrefused=kexec_zephyr refused (exit 3): made-up loader line\n')
+# slice 2: a return without ping: lost=, back=1 and a timeline with 'ping n/a'
+open(d2 + '/README.md', 'a').write('\nlost=120 back=1\ntimeline: t0 reboot, ping n/a, ssh up at 95 s\n')
+PY
+python3 "$REPORT" --date 2026-11-10 "$r1" "$(dirname "$r1")/$(basename "${S[0]}")" "$r2" > "$rf.out" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && grep -q PARTIAL "$rf.out"; }; expect "refused row: exit 1, PARTIAL (no record for the entry)" $?
+grep -q 'refused, not a reset or hang and not counted: e46 (kexec_zephyr refused (exit 3): made-up loader line)' "$rf.out"
+expect "refused row: e46 named with its cause" $?
+grep -q 'reset verdicts NOT CLEAN\|reset verdicts not clean' "$rf.out"; [ $? = 1 ]; expect "refused row: not a reset verdict problem" $?
+grep -q 'resets or hangs counted' "$rf.out"; [ $? = 1 ]; expect "refused row: not counted as a reset or hang" $?
+grep -q 'refused kexec jump, with its cause for the close: e46' "$rf.out"; expect "refused row: listed under Remains" $?
+mkdir "$rf/ok"; for i in 0 1 2; do cp -r "${S[$i]}" "$rf/ok/"; done
+python3 - "$rf/ok/$(basename "${S[2]}")" <<'PY'
+import sys
+open(sys.argv[1] + '/README.md', 'a').write('\nlost=120 back=1\ntimeline: t0 reboot, ping n/a, ssh up at 95 s\n')
+PY
+python3 "$REPORT" --date 2026-11-10 "$rf"/ok/*-imx8mp-gles3-* > "$rf/ok.out" 2>&1; rc=$?
+expect "ping-less return: complete run exits 0" "$rc"
+python3 "$REPORT" --date 2026-11-10 "${S[@]}" 2>&1 | sed -n '1,/^--- anchors/p' > "$rf/base.out"
+sed -n '1,/^--- anchors/p' "$rf/ok.out" | sed "s#$rf/ok#$work#g" > "$rf/ok2.out"
+cmp -s "$rf/base.out" "$rf/ok2.out"; expect "ping-less return: an ordinary return, the drafts are unchanged" $?
+
 python3 "$REPORT" --help > /dev/null; expect "--help works" $?
 
 if [ "$fails" = 0 ]; then echo "report selftest: OK"; exit 0; fi

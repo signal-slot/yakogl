@@ -193,6 +193,36 @@ def fault_events(dirs, rows):
     return resets, hangs, short, sorted(set(short) - named)
 
 
+REFUSED_RX = re.compile(r'\bboard\.sh\s+\S+\s+[A-Za-z_-]*(\d+)\s+rc=(\S+)\s+verdict=refused\b')
+
+
+def refused_rows(dirs):
+    """{entry: (slice, cause)} of the entries a board.sh x2 kexec jump refused (README / INDEX verdict line
+    `... rc=3 verdict=refused`; the cause from a `refused=` line of a README or meta.txt, else None). A refusal is
+    not a WDOG1 reset or a hang: the jump never ran, the entry has no record and is no pass."""
+    out = {}
+    for d in dirs:
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        cause, found = None, []
+        for name in names:
+            low = name.lower()
+            if not (low.startswith('readme') or name.upper().startswith('INDEX') or low == 'meta.txt'):
+                continue
+            for l in open(os.path.join(d, name), errors='replace').read().splitlines():
+                m = REFUSED_RX.search(l)
+                if m:
+                    found.append(int(m.group(1)))
+                m = re.match(r'\s*refused=(.+)$', l)
+                if m and cause is None:
+                    cause = m.group(1).strip()
+        for e in found:
+            out.setdefault(e, (os.path.basename(os.path.normpath(d)), cause))
+    return out
+
+
 def mod_span(entries):
     return load_merge().span(entries).replace(',', ', ')
 
@@ -325,7 +355,8 @@ def main():
     shown = sorted(args.dirs, key=slice_order)   # display only: merge keeps the order given (the first real row of an entry claims it)
     dirs_txt = ', '.join('`%s/`' % rel(d) for d in shown)
     partial = '' if ok else 'PARTIAL: '
-    bad_verdict = any('verdict' in p for p in problems)
+    refused = refused_rows(args.dirs)
+    bad_verdict = any('verdict' in p and 'verdict=refused' not in p for p in problems)
     ev_resets, ev_hangs, ev_short, ev_unnamed = fault_events(args.dirs, rows)
     n_res, n_hang = len(ev_resets), len(ev_hangs) + len(ev_unnamed)
     n_ev = n_res + n_hang
@@ -344,6 +375,9 @@ def main():
                      'is `verdict=done`' % (n_ev, ', '.join(ev_parts), mod_span(ev_short) if ev_short else 'none'))
     else:
         reset_txt = '0 resets (every entry run is `verdict=done`, `resets=absent`)'
+    if refused and not bad_verdict:
+        reset_txt += '; refused, not a reset or hang and not counted: %s' % '; '.join(
+            'e%d%s' % (e, ' (%s)' % c if c else '') for e, (_, c) in sorted(refused.items()))
     ev_roadmap = '%d resets or hangs' % n_ev if n_ev else '0 resets'
     ev_ja = 'リセットまたはハング %d 件' % n_ev if n_ev else 'リセット 0'
     five = tuple(n(x) for x in (npass, nfail, nns, nother, nnone))
@@ -453,6 +487,9 @@ def main():
     if miss[0]:
         left.append('entries %s (%s mustpass cases) have no record' % (miss[2], n(miss[3])))
     left += [p for p in problems if not p.startswith('no record:')]
+    if refused:
+        left.append('refused kexec jump%s, with its cause for the close: %s' % (
+            '' if len(refused) == 1 else 's', ', '.join('e%d' % e for e in sorted(refused))))
     left.append('triage of the not-pass groups into issues (`docs/es3/imx8mp-gles3-notpass.tsv`)')
     print('- Remains: %s.' % '; '.join(left))
 
