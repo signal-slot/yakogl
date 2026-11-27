@@ -68,7 +68,7 @@ the rows out locally too, counted as "clippy rows left to the nightly".
   `tests/reference/*.rs`, `tests/fixtures/`) are regenerated in the same
   commit as the change that moves them; the gate compares the bytes.
 - Open work, known defects and board to-dos are GitHub issues, never a
-  file in the tree (`docs/HANDOFF.md` was retired on 2026-10-19). A result
+  file in the tree (the old hand-off file was retired on 2026-10-19). A result
   that finishes, changes or finds one updates the issue: a comment with the
   commit and the record, closed when done, a new issue for a new item.
 - Board results replace their row in `tools/cts/RESULTS.md` (current
