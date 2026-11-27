@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The 33 scenes' glmark2-picture lines the stub board.sh of x2-glmark2-pictures-selftest.sh
+# prints, line NN for scene NN (values: the imx8mp column of 445c5653, a fixture only).
+glmark2-picture: [build] use-vbo=false: 800x600; probes c a0a0a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 8225, crc16q d802; mean 12 12 12; black no
+glmark2-picture: [build] use-vbo=true: 800x600; probes c a0a4a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 9e96, crc16q c9d4; mean 12 12 12; black no
+glmark2-picture: [texture] texture-filter=nearest: 800x600; probes c 38383800, tl 181c1800, tr 00000000, bl 00040000, br 00000000; crc16 1651, crc16q 1926; mean 14 14 14; black no
+glmark2-picture: [texture] texture-filter=linear: 800x600; probes c 30343000, tl 181c1800, tr 00000000, bl 00040000, br 00000000; crc16 530a, crc16q a4b5; mean 14 14 14; black no
+glmark2-picture: [texture] texture-filter=mipmap: 800x600; probes c 30343000, tl 00000000, tr 00000000, bl 00040000, br 00000000; crc16 e4ab, crc16q b0af; mean 14 14 14; black no
+glmark2-picture: [shading] shading=gouraud: 800x600; probes c 0000c800, tl 00000000, tr 00000000, bl 00001000, br 00009000; crc16 6e66, crc16q 3ea0; mean 0 0 17; black no
+glmark2-picture: [shading] shading=blinn-phong-inf: 800x600; probes c 1818b800, tl 00000000, tr 00000000, bl 18182000, br 18188800; crc16 3298, crc16q 36bc; mean 5 5 18; black no
+glmark2-picture: [shading] shading=phong: 800x600; probes c 0004a000, tl 00000000, tr 00000000, bl 00048000, br 0004b800; crc16 66aa, crc16q 03ed; mean 1 1 28; black no
+glmark2-picture: [shading] shading=cel: 800x600; probes c 00980000, tl 00000000, tr 00000000, bl 00980000, br 00980000; crc16 591a, crc16q c6b5; mean 0 25 0; black no
+glmark2-picture: [bump] bump-render=high-poly: 800x600; probes c a0a0a000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 0be0, crc16q 9870; mean 15 15 15; black no
+glmark2-picture: [bump] bump-render=normals: 800x600; probes c a8a8a800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 f536, crc16q 26a2; mean 15 15 15; black no
+glmark2-picture: [bump] bump-render=height: 800x600; probes c 98989800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 852a, crc16q feb3; mean 15 15 15; black no
+glmark2-picture: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;: 800x600; probes c 00000000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 00e6, crc16q e900; mean 0 0 1; black no
+glmark2-picture: [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: 800x600; probes c f8fcf800, tl f8fcf800, tr f8fcf800, bl f8fcf800, br f8fcf800; crc16 4311, crc16q c3f1; mean 231 233 221; black no
+glmark2-picture: [pulsar] light=false:quads=5:texture=false: 800x600; probes c 70007000, tl 58041000, tr 00000000, bl 00000000, br 78184800; crc16 17e3, crc16q 0598; mean 47 31 44; black no
+glmark2-picture: [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: 800x600; probes c f8fcf800, tl 90909000, tr f8fcf800, bl f8fcf800, br f8fcf800; crc16 a3bc, crc16q db7b; mean 204 210 189; black no
+glmark2-picture: [desktop] effect=shadow:windows=4: 800x600; probes c f8fcf800, tl 90909000, tr 40444000, bl f8fcf800, br f8fcf800; crc16 ca64, crc16q d7fa; mean 197 203 182; black no
+glmark2-picture: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: 800x600; probes c f8fcf800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 c62e, crc16q 7761; mean 45 59 67; black no
+glmark2-picture: [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: 800x600; probes c b0d8f000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 82ba, crc16q 2353; mean 41 56 66; black no
+glmark2-picture: [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: 800x600; probes c f8fcf800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 5f2a, crc16q bf1f; mean 45 58 66; black no
+glmark2-picture: [ideas] speed=duration: 800x600; probes c 28203800, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 5133, crc16q e1db; mean 5 4 7; black no
+glmark2-picture: [jellyfish] <default>: 800x600; probes c 28284000, tl 508cf800, tr 508cf800, bl 3058c800, br 3058c800; crc16 fcdc, crc16q c437; mean 69 102 191; black no
+glmark2-picture: [terrain] <default>: 800x600; probes c 90982000, tl 50541000, tr 788c2000, bl 50601000, br 68882000; crc16 4924, crc16q 35f8; mean 119 129 45; black no
+glmark2-picture: [shadow] <default>: 800x600; probes c 686c6800, tl 00000000, tr 00000000, bl 484c4800, br 484c4800; crc16 97ca, crc16q b742; mean 34 34 34; black no
+glmark2-picture: [refract] <default>: 800x600; probes c 706cd000, tl 00000000, tr 00000000, bl 00000000, br 00000000; crc16 2201, crc16q daa0; mean 22 18 29; black no
+glmark2-picture: [conditionals] fragment-steps=0:vertex-steps=0: 800x600; probes c 00000000, tl 00000000, tr f8fcf800, bl f8fcf800, br f8f8f800; crc16 6ca6, crc16q e5cb; mean 56 56 56; black no
+glmark2-picture: [conditionals] fragment-steps=5:vertex-steps=0: 800x600; probes c 00000000, tl 00000000, tr c0c0c000, bl e8e8e800, br 40444000; crc16 0ca4, crc16q 366d; mean 49 49 49; black no
+glmark2-picture: [conditionals] fragment-steps=0:vertex-steps=5: 800x600; probes c 00000000, tl 00000000, tr f8fcf800, bl f8fcf800, br f8f8f800; crc16 6016, crc16q 7a96; mean 54 54 54; black no
+glmark2-picture: [function] fragment-complexity=low:fragment-steps=5: 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 f35e, crc16q 688d; mean 54 54 54; black no
+glmark2-picture: [function] fragment-complexity=medium:fragment-steps=5: 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 5c3d, crc16q 6ce0; mean 53 53 53; black no
+glmark2-picture: [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 e370, crc16q e1be; mean 54 54 54; black no
+glmark2-picture: [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 f3cf, crc16q e1be; mean 54 54 54; black no
+glmark2-picture: [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: 800x600; probes c 00000000, tl 00000000, tr 282c2800, bl 60606000, br 80848000; crc16 e370, crc16q 2cac; mean 54 54 54; black no
