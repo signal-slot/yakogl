@@ -2981,25 +2981,185 @@ fn an_instance_drawn_on_its_own_that_reads_gl_instance_id_starts_at_its_instance
     );
 }
 
-/// glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}) (review R-09): the GL
-/// core's list starts at attachment 1 (`out_shift` 1), and the program's
-/// output registers are read in target order from output 0. The draw is
-/// refused by name with -ENOTSUP (GL_INVALID_OPERATION), not drawn with
-/// output 0. Revert check: without the refusal the first draw goes in.
-#[test]
-fn a_draw_whose_draw_buffer_0_is_none_is_refused_by_name() {
-    let rig = Rig::new();
+/// A draw whose list starts past draw buffer 0: `shift` leading GL_NONE
+/// draw buffers (`targets[0].out_shift`), then RGBA8 targets at the 64x64
+/// addresses `gpus` (0: a GL_NONE slot), the first the rig's target.
+fn shifted_draw(rig: &Rig, shift: u8, gpus: &[u64]) -> GlesDraw {
     let mut d = rig.draw(3);
-    d.num_targets = 1;
-    d.targets[0] =
-        GlesDrawTarget { gpu: d.target_gpu, w: d.target_w, h: d.target_h, format: d.target_format, out_shift: 1 };
+    d.clear_rgba = [1.0, 0.5, 0.25, 1.0];
+    d.target_gpu = gpus[0];
+    d.num_targets = gpus.len() as u8;
+    for (i, &gpu) in gpus.iter().enumerate() {
+        d.targets[i] = if gpu == 0 {
+            GlesDrawTarget::ZERO
+        } else {
+            GlesDrawTarget { gpu, w: 64, h: 64, format: GLES_SURF_RGBA8888, out_shift: 0 }
+        };
+    }
+    d.targets[0].out_shift = shift;
+    d
+}
+
+/// The (source_pos, mrt_index) of the first `n` emits of the last
+/// end-of-tile program built.
+fn last_emit_sources(rig: &Rig, n: usize) -> Vec<(u32, u32)> {
+    let emits = rig.eot_emits();
+    let e = emits.last().expect("an end-of-tile program");
+    e.chunks(2).take(n).map(|p| ((p[1] >> 14) & 3, (p[1] >> 16) & 7)).collect()
+}
+
+/// glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}) (review R-09): the GL
+/// core's list starts at attachment 1 (`out_shift` 1), target 0 takes
+/// fragment output 1, which the program writes at register 1. The frame
+/// keeps the shift: the end-of-tile emit reads target 0 from register 1,
+/// and the background clear is the two-dword one with the clear colour at
+/// register 1 (register 0, the dropped draw buffer's, starts from 0).
+/// Revert check: with the refusal back the draw answers -ENOTSUP; with the
+/// walk from register 0 the emit's source_pos is 0.
+#[test]
+fn a_list_that_starts_at_attachment_1_is_emitted_from_register_1() {
+    let rig = Rig::new();
+    let a = HEAP_GENERAL_BASE + 0x2000_0000;
+    let d = shifted_draw(&rig, 1, &[a]);
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    let b = rig.b();
+    assert_eq!(frame_out_base(b), 1);
+    assert_eq!(attachment_out_reg(b, 0), Some(1));
+    assert_eq!(mrt_clear_dwords(b), 2, "the background clear writes registers 0 and 1");
+    let packed = pack_rgba8(&d.clear_rgba);
+    assert_eq!(mrt_clear_registers(b), [0, packed, 0, 0], "the colour at register 1");
+    let two = b.bg_kick2_off;
+    let (k, col, one) = background_clear(&rig);
+    assert_eq!(col, [0, packed, 0, 0]);
+    assert_eq!(k.frag.usc_clear_register, [0, packed, 0, 0]);
+    assert!(!one && (k.frag.pds_bgnd[0] & 0xffff_ffff) as u32 == two, "the two-dword kick program");
+    assert_eq!(k.frag.num_rt, 1, "one target stored");
+    let emits = rig.eot_emits();
+    let e = emits.last().expect("an end-of-tile program");
+    assert_eq!(e[..2], pbe_emit_words(a, GLES_SURF_RGBA8888, 1, 0), "target 0 from register 1");
+    assert!(!rig.logs().iter().any(|l| l.contains("refused")), "{:?}", rig.logs());
+}
+
+/// Shifted lists on a three-pair and a four-pair backend: target k is
+/// emitted from register shift + k (a GL_NONE slot inside the list keeps
+/// its register and is not stored), and the background clear writes the
+/// registers up to the last one. {NONE, ATT1, ATT2} is two targets from 1;
+/// at four draw targets {NONE, ATT1, NONE, ATT3} is targets 1 and 3, and
+/// {NONE, NONE, NONE, ATT3} one target from register 3, the four-dword
+/// background clear.
+#[test]
+fn shifted_lists_are_emitted_from_the_registers_of_their_outputs() {
+    let (a, b2, c) =
+        (HEAP_GENERAL_BASE + 0x2000_0000, HEAP_GENERAL_BASE + 0x2100_0000, HEAP_GENERAL_BASE + 0x2200_0000);
+    for four in [false, true] {
+        let rig = Rig::new();
+        if four {
+            rig.gl.backend_draws_targets(4);
+            restart_with_arenas(4, 1024, 768);
+        }
+        /* (shift, target addresses, (source_pos, mrt_index) each, background clear dwords) */
+        type List<'a> = (u8, &'a [u64], &'a [(u32, u32)], u32);
+        let lists: &[List] = if four {
+            &[(1, &[a, 0, c], &[(1, 0), (3, 1)], 4), (3, &[c], &[(3, 0)], 4), (2, &[a, b2], &[(2, 0), (3, 1)], 4)]
+        } else {
+            &[(1, &[a, b2], &[(1, 0), (2, 1)], 3), (2, &[a], &[(2, 0)], 3)]
+        };
+        for &(shift, gpus, sources, dwords) in lists {
+            let what = format!("four {four}, shift {shift}, {} slots", gpus.len());
+            let d = shifted_draw(&rig, shift, gpus);
+            assert_eq!(draw(&d), 0, "{what}: {:?}", rig.logs());
+            assert_eq!(mrt_clear_dwords(rig.b()), dwords, "{what}: the background clear's dwords");
+            assert_eq!(pvr_backend_flush(), 0);
+            let (k, _) = *rig.kicks().last().expect("a kick");
+            assert_eq!(k.frag.num_rt as usize, sources.len(), "{what}: the stored targets");
+            assert_eq!(last_emit_sources(&rig, sources.len()), sources, "{what}: (source_pos, mrt_index)");
+            let regs: Vec<u32> = (0..gpus.len()).filter_map(|k| draw_target_out_reg(&d, k)).collect();
+            assert_eq!(regs, sources.iter().map(|s| s.0).collect::<Vec<_>>(), "{what}: draw_target_out_reg");
+        }
+        assert!(!rig.logs().iter().any(|l| l.contains("refused")), "{:?}", rig.logs());
+    }
+}
+
+/// A shifted frame that keeps its colour loads attachment 0 into the
+/// register it is emitted from: the frame load's program with its output
+/// write moved to register `shift` ([`fbload_program_at`]). A draw into the
+/// same target with another shift is another frame (its outputs are in
+/// other registers).
+#[test]
+fn a_shifted_frame_loads_attachment_0_at_its_register_and_a_new_shift_is_a_new_frame() {
+    let rig = Rig::new();
+    let a = HEAP_GENERAL_BASE + 0x2000_0000;
+    let mut d = shifted_draw(&rig, 2, &[a]);
+    d.do_clear = false;
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    let b = rig.b();
+    assert!(b.frame_loads_color, "the frame keeps its colour");
+    let l = rig.fbload().loads[0];
+    assert_eq!(l.out_reg, 2, "the load writes register 2");
+    assert_eq!(l.fs_usc_gpu, b.fbload_fs_at[0][1].gpu, "the RGBA8 load moved to register 2");
+    assert_ne!(l.fs_usc_gpu, 0);
+    let n = rig.kicks().len();
+    let mut e = d;
+    e.targets[0].out_shift = 0;
+    assert_eq!(draw(&e), 0);
+    assert_eq!(rig.kicks().len(), n + 1, "the shift changed: the shifted frame was kicked");
+    assert_eq!(frame_out_base(rig.b()), 0);
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(last_emit_sources(&rig, 1), [(0, 0)], "unshifted: from register 0");
+}
+
+/// A scissored clear of a shifted list is attachment 0's clear quad, whose
+/// program writes the register the target is emitted from (the
+/// clear-attach program moved there, [`clear_program_at`]). The masked
+/// clear programs write register 0 and are not moved: a clear under a
+/// colour mask that keeps some channels is refused by name.
+#[test]
+fn a_scissored_clear_of_a_shifted_list_writes_its_register() {
+    let rig = Rig::new();
+    let a = HEAP_GENERAL_BASE + 0x2000_0000;
+    let mut d = shifted_draw(&rig, 1, &[a]);
+    d.index_count = 0;
+    d.clear_quad = true;
+    d.scissor = true;
+    d.scissor_rect = [0, 0, 16, 16];
+    forget_frame_programs();
+    assert_eq!(draw(&d), 0, "{:?}", rig.logs());
+    let moved = rig.b().clear_fs_at[0][0].gpu;
+    assert_ne!(moved, 0, "the one-dword clear program moved to register 1");
+    assert!(frame_programs().contains(&(heap_off_of(moved) as u64)), "the quad runs it: {:?}", frame_programs());
+    assert_eq!(pvr_backend_flush(), 0);
+    assert_eq!(last_emit_sources(&rig, 1), [(1, 0)]);
+    assert!(!rig.logs().iter().any(|l| l.contains("refused") || l.contains("not cleared")), "{:?}", rig.logs());
+
+    d.clear_color_mask = 0b0111;
     assert_eq!(draw(&d), -util::ENOTSUP);
-    assert_eq!(draw(&d), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l.contains("draw buffer 0 GL_NONE")), "{:?}", rig.logs());
+}
+
+/// A shifted list the register walk from `shift` does not hold is still
+/// refused by name with -ENOTSUP (GL_INVALID_OPERATION), once: a target
+/// that is not one 8-bit output register (RGBA16F: its program does not
+/// place output n at register n), a multisampled one, and a list past the
+/// pixel's four registers. Unshifted, the same draws go in.
+#[test]
+fn a_shifted_list_the_walk_does_not_hold_is_refused_by_name() {
+    let rig = Rig::new();
+    let a = HEAP_GENERAL_BASE + 0x2000_0000;
+    let mut f16 = shifted_draw(&rig, 1, &[a]);
+    f16.target_format = GLES_SURF_RGBA16F;
+    f16.targets[0].format = GLES_SURF_RGBA16F;
+    let mut ms = shifted_draw(&rig, 1, &[a]);
+    ms.samples = 4;
+    let past = shifted_draw(&rig, 3, &[a, a + 0x10_0000]);
+    for d in [f16, ms, past] {
+        assert!(!shifted_list_drawn(&d, rig.b().eot_pairs));
+        assert_eq!(draw(&d), -util::ENOTSUP);
+        assert_eq!(draw(&d), -util::ENOTSUP);
+    }
     let named = rig.logs().iter().filter(|l| l.contains("draw buffer 0 is GL_NONE")).count();
     assert_eq!(named, 1, "one line: {:?}", rig.logs());
-    /* no shift: drawn */
-    d.targets[0].out_shift = 0;
-    assert_eq!(draw(&d), 0);
+    f16.targets[0].out_shift = 0;
+    assert_eq!(draw(&f16), 0, "unshifted: drawn");
     assert_eq!(pvr_backend_flush(), 0);
 }
 

@@ -2198,7 +2198,7 @@ fn fragcoord_y_pair(d: &GlesDraw) -> [f32; 2] {
 /// ([`clear_by_target_quads`]).
 fn mrt_clear_dwords(b: &Backend) -> u32 {
     let fmt = |i: usize| if i != 0 { b.targets[i].format } else { b.target_format };
-    mrt_clear_regs(b.num_targets as usize, b.eot_pairs, fmt)
+    mrt_clear_regs(b.num_targets as usize, b.eot_pairs, frame_out_base(b), fmt)
 }
 
 /// [`mrt_clear_dwords`] for the frame a draw `d` would open: the same walk
@@ -2207,16 +2207,21 @@ fn mrt_clear_dwords(b: &Backend) -> u32 {
 fn mrt_clear_dwords_of(d: &GlesDraw, eot_pairs: u32) -> u32 {
     let n = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(eot_pairs as u8) as usize;
     let fmt = |i: usize| if i != 0 { d.targets[i].format } else { d.target_format };
-    mrt_clear_regs(n, eot_pairs, fmt)
+    mrt_clear_regs(n, eot_pairs, u32::from(d.targets[0].out_shift), fmt)
 }
 
 /// [`mrt_clear_dwords`]'s walk over `n` attachments of formats `fmt(i)` on
-/// an `eot_pairs`-pair backend.
-fn mrt_clear_regs(n: usize, eot_pairs: u32, fmt: impl Fn(usize) -> u8) -> u32 {
-    if !(2..=eot_pairs as usize).contains(&n) {
+/// an `eot_pairs`-pair backend, from output register `base` (the frame's
+/// [`frame_out_base`]). A list that starts past draw buffer 0 (`base` != 0)
+/// takes this clear for one attachment too: the one-dword background clear
+/// writes register 0, which its emit does not read; the registers below
+/// `base` start from 0 ([`mrt_clear_registers`]).
+fn mrt_clear_regs(n: usize, eot_pairs: u32, base: u32, fmt: impl Fn(usize) -> u8) -> u32 {
+    let least = if base != 0 { 1 } else { 2 };
+    if !(least..=eot_pairs as usize).contains(&n) {
         return 0;
     }
-    let mut out = 0u32;
+    let mut out = base;
     for i in 0..n {
         let f = fmt(i);
         if rt_class(f) != 0 {
@@ -2410,15 +2415,66 @@ fn pixel_output_bytes(words: &[u32]) -> Option<([usize; 4], usize)> {
     (off == end && n != 0).then_some((at, n))
 }
 
+/// The pixel output register the frame's attachment 0 starts the walk at:
+/// the draw buffers its list dropped (`targets[0].out_shift`,
+/// glDrawBuffers({GL_NONE, ATT1, ..})), one register each. The program
+/// writes fragment output n at register n when every output is one 8-bit
+/// register (`chain::build_fragment_with`'s several-outputs path, the only
+/// one a shifted list is drawn with, [`shifted_list_drawn`]), so target k,
+/// output k + shift, is at register k + shift. 0 for every other frame.
+fn frame_out_base(b: &Backend) -> u32 {
+    u32::from(b.targets[0].out_shift)
+}
+
+/// Whether a draw whose list starts past draw buffer 0 (`out_shift` != 0,
+/// review R-09) is drawn: every attachment it writes is one 8-bit output
+/// register (no integer, float-class, sRGB or RGB10_A2 one: their programs
+/// do not place output n at register n), one sample, the dropped draw
+/// buffers and the list within the pixel's four registers, and a background
+/// clear that writes the list's registers from the shift on
+/// ([`mrt_clear_regs`]: four registers only on a four-pair backend).
+pub fn shifted_list_drawn(d: &GlesDraw, eot_pairs: u32) -> bool {
+    let shift = u32::from(d.targets[0].out_shift);
+    let n = (d.num_targets as usize).clamp(1, d.targets.len());
+    let fmt = |i: usize| if i == 0 { (d.target_gpu, d.target_format) } else { (d.targets[i].gpu, d.targets[i].format) };
+    let one_register =
+        |f: u8| !gles_surf_is_integer(f) && !gles_surf_is_srgb(f) && rt_class(f) == 0 && surf_out_dwords(f) == 1;
+    d.samples <= 1
+        && d.target_gpu != 0
+        && shift + n as u32 <= PVR_BACKEND_MAX_OUT_REGS
+        && (0..n).all(|i| fmt(i).0 == 0 || one_register(fmt(i).1))
+        && mrt_clear_dwords_of(d, eot_pairs) != 0
+}
+
 /// The first pixel output register attachment `i` of the frame takes: the
-/// end-of-tile emit's walk ([`flush`]'s emit loop), each attachment after
-/// the one before, one of two or more dwords on an even register. None when
-/// it runs past the pixel's four registers (not emitted from them).
+/// end-of-tile emit's walk ([`flush`]'s emit loop), from the frame's
+/// [`frame_out_base`], each attachment after the one before, one of two or
+/// more dwords on an even register. None when it runs past the pixel's four
+/// registers (not emitted from them).
 fn attachment_out_reg(b: &Backend, i: usize) -> Option<u32> {
-    let mut out = 0u32;
+    let fmt = |j: usize| if j != 0 { b.targets[j].format } else { b.target_format };
+    out_reg_walk(frame_out_base(b), i, fmt)
+}
+
+/// [`attachment_out_reg`] for the frame draw `d` would open: the register
+/// the end-of-tile emit reads target `i` of `d` from, the walk starting at
+/// the register of output `targets[0].out_shift`. None for a target with no
+/// memory (a GL_NONE slot, not emitted) and one past the pixel's four
+/// registers.
+pub fn draw_target_out_reg(d: &GlesDraw, i: usize) -> Option<u32> {
+    let present = if i == 0 { d.target_gpu != 0 } else { d.targets.get(i)?.gpu != 0 };
+    if !present {
+        return None;
+    }
+    let fmt = |j: usize| if j != 0 { d.targets[j].format } else { d.target_format };
+    out_reg_walk(u32::from(d.targets[0].out_shift), i, fmt)
+}
+
+/// The register walk of [`attachment_out_reg`] from register `base`.
+fn out_reg_walk(base: u32, i: usize, fmt: impl Fn(usize) -> u8) -> Option<u32> {
+    let mut out = base;
     for j in 0..=i {
-        let fmt = if j != 0 { b.targets[j].format } else { b.target_format };
-        let regs = surf_out_dwords(fmt);
+        let regs = surf_out_dwords(fmt(j));
         let spos = if regs >= 2 && out & 1 != 0 { out + 1 } else { out };
         if spos + regs > PVR_BACKEND_MAX_OUT_REGS {
             return None;
@@ -4532,6 +4588,17 @@ fn record_frame_quad(
     if load_color && b.ms.holds(d) {
         ld.textures[0].base_gpu = b.ms.mem.gpu;
     }
+    /* a list that starts past draw buffer 0 ([`frame_out_base`]): the load
+     * writes the register attachment 0 is emitted from (8-bit only,
+     * [`shifted_list_drawn`], so the RGBA8 row) */
+    let base = frame_out_base(b);
+    if load_color && base != 0 {
+        let Some(gpu) = fbload_program_at(b, 0, base) else {
+            glog_once!("yakogl/pvr: frame load: colour attachment 0 is not restored (no output registers for it)");
+            return -1;
+        };
+        ld.fs_usc_gpu = gpu;
+    }
     ld.num_textures = 1;
     ld.viewport[2] = d.target_w as i32;
     ld.viewport[3] = d.target_h as i32;
@@ -4602,7 +4669,8 @@ fn record_frame_quad(
     if load_color {
         let ld = &fl.load_draw;
         let row = fbload_row(d.target_format);
-        fl.loads[0] = AttachmentLoad { row, fs_usc_gpu: ld.fs_usc_gpu, tex: ld.textures[0], out_reg: 0 };
+        fl.loads[0] =
+            AttachmentLoad { row, fs_usc_gpu: ld.fs_usc_gpu, tex: ld.textures[0], out_reg: frame_out_base(b) };
         if b.num_targets > 1 {
             return record_attachment_loads(p);
         }
@@ -4986,7 +5054,24 @@ fn record_clear_quad0(p: &mut Pvr, d: &GlesDraw, slot0: bool) -> i32 {
     let fl = &mut p.fbload;
     let dwords = surf_out_dwords(d.target_format);
     let masked = if gles_surf_is_integer(d.target_format) { None } else { clear_masked_index(class, mask) };
-    let (clear_gpu, clear_one) = clear_program(b, fl, dwords);
+    let (mut clear_gpu, clear_one) = clear_program(b, fl, dwords);
+    /* a list that starts past draw buffer 0 ([`frame_out_base`]): the clear
+     * writes the register attachment 0 is emitted from. The masked clear
+     * programs write pixel output 0 and are not moved: refused by name. */
+    let base = frame_out_base(b);
+    if color && base != 0 {
+        if masked.is_some() {
+            glog_once!(
+                "yakogl/pvr: clear refused: a colour mask that keeps some channels, draw buffer 0 GL_NONE (not built)"
+            );
+            return -util::ENOTSUP;
+        }
+        let Some(gpu) = clear_program_at(b, dwords, base) else {
+            glog_once!("yakogl/pvr: clear of colour attachment 0: no output registers for it, not cleared");
+            return -util::ENOTSUP;
+        };
+        clear_gpu = gpu;
+    }
     let clear_sh: *const ShcShader = match masked {
         Some(i) => &fl.clear_mask_sh[i],
         None => clear_one,
@@ -6202,8 +6287,11 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.target_alpha_bits = d.target_alpha_bits;
     b.target_flip_y = d.flip_y;
     b.num_targets = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(b.eot_pairs as u8);
+    /* the shift of a list that starts past draw buffer 0 is the frame's:
+     * every register walk of it starts there ([`frame_out_base`]) */
+    let shift = if d.num_targets != 0 { d.targets[0].out_shift } else { 0 };
     b.targets[0] =
-        GlesDrawTarget { gpu: d.target_gpu, w: d.target_w, h: d.target_h, format: d.target_format, out_shift: 0 };
+        GlesDrawTarget { gpu: d.target_gpu, w: d.target_w, h: d.target_h, format: d.target_format, out_shift: shift };
     for i in 1..b.num_targets as usize {
         b.targets[i] = d.targets[i];
     }
@@ -6848,6 +6936,10 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
         || b.target_pitch != crate::backend::draw_pitch(d)
         || b.samples != frame_samples(d.samples)
         || b.num_targets != dtargets.min(b.eot_pairs as u8)
+        /* a list that starts past draw buffer 0 reads its outputs from other
+         * registers: {NONE, ATT1} after a draw into attachment 1 alone is
+         * another frame */
+        || b.targets[0].out_shift != if d.num_targets != 0 { d.targets[0].out_shift } else { 0 }
         /* the other attachments too: a frame stores the slots it began with,
          * so a draw into (A, none, C) after one into (A, B, C) -- or into
          * (A, D, C) -- is another frame, or its output 1 would land in B */
@@ -6993,14 +7085,21 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     }
     /* Draw buffer 0 GL_NONE while a later one is written
      * (glDrawBuffers({GL_NONE, GL_COLOR_ATTACHMENT1}), ES 3.0 4.2.1): the
-     * list starts at attachment 1, but the program's output registers are
-     * laid out from output 0 and the emit reads them in target order, so
-     * the draw would store output 0. The remap is not built; refused by
-     * name, never drawn with the wrong output (review R-09). */
-    if d.targets[0].out_shift != 0 {
+     * list starts at attachment 1 (`out_shift` 1), and target k takes
+     * fragment output k + shift. The frame keeps the shift
+     * ([`frame_out_base`]) and every register walk of it -- the end-of-tile
+     * emit's source positions, the frame load, the clears -- starts at the
+     * register output `shift` is written to, so nothing is read from the
+     * registers of the dropped draw buffers (review R-09). Drawn where that
+     * register is `shift` ([`shifted_list_drawn`]), else refused by name,
+     * never drawn with the wrong output. */
+    if d.targets[0].out_shift != 0 && !shifted_list_drawn(d, p.b.eot_pairs) {
         if !p.b.warned_draw_buffer0 {
             p.b.warned_draw_buffer0 = true;
-            glog!("yakogl/pvr: draw refused: draw buffer 0 is GL_NONE while a later draw buffer is written");
+            glog!(
+                "yakogl/pvr: draw refused: draw buffer 0 is GL_NONE while a later draw buffer is written, \
+                 into a colour attachment that is not one 8-bit output register or at 4x (not built)"
+            );
         }
         return -util::ENOTSUP;
     }
@@ -9986,7 +10085,9 @@ fn flush(p: &mut Pvr) -> i32 {
          * stay zero. */
         let nrt_want = if b.num_targets != 0 { b.num_targets as u32 } else { 1 };
         let mut emit = [0u32; 2 * PVR_BACKEND_MAX_RT as usize];
-        let mut out_regs = 0u32;
+        /* a list that starts past draw buffer 0: from the register of its
+         * first output ([`frame_out_base`]) */
+        let mut out_regs = frame_out_base(b);
 
         for i in 0..nrt_want {
             let a = if i != 0 { b.targets[i as usize].gpu } else { da };
@@ -11309,8 +11410,8 @@ mod tests {
         assert!(unorm_halves(GLES_SURF_RGB10_A2) && unorm_halves(GLES_SURF_SRGB8_A8));
         assert!(!unorm_halves(GLES_SURF_RGBA16F) && !unorm_halves(GLES_SURF_RGB10_A2UI));
         assert!(clears_by_quad(GLES_SURF_RGB10_A2));
-        assert_eq!(mrt_clear_regs(2, 4, |_| GLES_SURF_RGB10_A2), 0);
-        assert_eq!(mrt_clear_regs(2, 4, |_| GLES_SURF_RGBA8888), 2);
+        assert_eq!(mrt_clear_regs(2, 4, 0, |_| GLES_SURF_RGB10_A2), 0);
+        assert_eq!(mrt_clear_regs(2, 4, 0, |_| GLES_SURF_RGBA8888), 2);
         assert_eq!(clear_mask_of(GLES_SURF_RGB10_A2, 0b0101), 0b0101);
         assert_eq!(clear_colour(GLES_SURF_RGB10_A2, &[1.5, 0.5, -1.0, f32::NAN]), [1.0, 0.5, 0.0, 0.0]);
         assert_eq!(gles_surf_texfmt(GLES_SURF_RGB10_A2), GLES_TEXFMT_RGB10A2, "the frame load decodes");

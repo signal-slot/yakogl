@@ -22,14 +22,18 @@
 //! | {NONE, ATT1, NONE, ATT3} | three slots from attachment 1, slot 1 gpu 0 | 1 |
 //! | only attachment 3 attached, {NONE, NONE, NONE, ATT3} | one | 3 |
 //!
-//! Known defect (the `#[ignore]`d test): the PowerVR back end refuses any draw
-//! with `out_shift` != 0 (`ENOTSUP`, "draw buffer 0 is GL_NONE while a later
-//! draw buffer is written", review R-09), so the first and third list draw
-//! nothing on the PowerVR, and the output-register placement for them would
-//! need a remap of fragment output `k + out_shift` to register 0. Only the
-//! list with attachment 0 written (the second) can be drawn. The register
-//! placements below are what `mrt_layout::layout` gives the written targets;
-//! `src/pvr/backend.rs` does not call it yet.
+//! The register placements of the list tests are what `mrt_layout::layout`
+//! gives the written targets, dense; `src/pvr/backend.rs` does not call it
+//! yet. What the back end does with the list the core hands it is the last
+//! test's: a list that starts past draw buffer 0 (`out_shift` != 0, review
+//! R-09) is drawn, target k emitted from the register fragment output
+//! k + `out_shift` is written to (`pvr::backend::draw_target_out_reg`,
+//! `shifted_list_drawn`); a GL_NONE slot inside the list keeps its register
+//! and is not stored. The PowerVR's own draw of those lists (emit source
+//! positions, background clear, frame load, clear quad) is pinned on the
+//! back end's host rig, `src/pvr/backend_tests.rs`
+//! (`shifted_lists_are_emitted_from_the_registers_of_their_outputs` and its
+//! neighbours).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_mrt4_gaps_pvr
@@ -53,6 +57,7 @@ use yakogl::gl::state::*;
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
+use yakogl::pvr::backend::{draw_target_out_reg, shifted_list_drawn};
 use yakogl::pvr::mrt_layout::{layout, Place};
 
 /* ---- a context on the host: the smallest OSAL and back end that make one -- */
@@ -78,7 +83,7 @@ unsafe extern "C" fn b_ok() -> i32 {
 }
 
 /// What the back end was handed by one draw or clear.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Seen {
     /// An application draw (vertices), not a clear alone.
     draws: bool,
@@ -87,6 +92,18 @@ struct Seen {
     /// `targets[..num_targets]`: (gpu, format).
     targets: Vec<(u64, u8)>,
     out_shift: u8,
+    /// The fields of the draw the PowerVR's target walk reads: `target_gpu`,
+    /// `target_format`, `num_targets`, `samples` and every target slot.
+    frame: (u64, u8, u8, u8, [GlesDrawTarget; GLES_MAX_TARGETS]),
+}
+
+impl Seen {
+    /// The draw's target fields as a `GlesDraw` (nothing else set).
+    fn draw(&self) -> GlesDraw {
+        let mut d = GlesDraw::ZERO;
+        (d.target_gpu, d.target_format, d.num_targets, d.samples, d.targets) = self.frame;
+        d
+    }
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -112,6 +129,7 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
         clear_target_mask: d.clear_target_mask,
         targets: d.targets[..n].iter().map(|t| (t.gpu, t.format)).collect(),
         out_shift: d.targets[0].out_shift,
+        frame: (d.target_gpu, d.target_format, d.num_targets, d.samples, d.targets),
     });
     0
 }
@@ -491,17 +509,45 @@ fn only_attachment_3_is_complete_and_is_the_frame_target() {
     release(fb, &rbs);
 }
 
-/* ---- the defect ---------------------------------------------------------- */
+/* ---- the PowerVR back end with these lists ------------------------------ */
 
-/// The PowerVR back end draws `out_shift` != 0 lists with the output
-/// remapped. Today `src/pvr/backend.rs` refuses them (`ENOTSUP`, review
-/// R-09), so {NONE, NONE, NONE, ATT3} and {NONE, ATT1, NONE, ATT3} draw
-/// nothing on the PowerVR. The draw itself needs the board's job memory, so
-/// this test fails until the refusal is gone.
+/// The PowerVR back end draws the lists the core hands it, `out_shift` != 0
+/// ones included (review R-09): each draw and clear passes the back end's
+/// test (`shifted_list_drawn`, four draw targets: a four-pair back end), and
+/// its targets are emitted from the registers their fragment outputs are
+/// written to (`draw_target_out_reg`): output k + `out_shift` at register
+/// k + `out_shift` for RGBA8, a GL_NONE slot inside the list not emitted.
+/// {NONE, NONE, NONE, ATT3}: attachment 3 from register 3; {NONE, ATT1,
+/// NONE, ATT3}: attachments 1 and 3 from registers 1 and 3; {ATT0, NONE,
+/// NONE, ATT3}: 0 and 3 (unshifted, the hole keeps its register).
 #[test]
-#[ignore = "defect: the PowerVR back end refuses a draw whose draw buffer 0 is GL_NONE (out_shift != 0, review R-09), so lists that start past attachment 0 draw nothing"]
 fn the_powervr_backend_draws_shifted_lists() {
-    panic!(
-        "src/pvr/backend.rs refuses a draw with out_shift != 0 (draw buffer 0 is GL_NONE while a later one is written)"
-    );
+    let _g = context();
+    let (fb, rbs) = framebuffer(&[0, 1, 2, 3]);
+    let all = addresses();
+    program();
+    type List = ([GLenum; 4], u8, &'static [(usize, usize, u32)]);
+    let lists: [List; 3] = [
+        ([GL_NONE, GL_NONE, GL_NONE, GL_COLOR_ATTACHMENT3], 3, &[(0, 3, 3)]),
+        ([GL_NONE, GL_COLOR_ATTACHMENT1, GL_NONE, GL_COLOR_ATTACHMENT3], 1, &[(0, 1, 1), (2, 3, 3)]),
+        ([GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_COLOR_ATTACHMENT3], 0, &[(0, 0, 0), (3, 3, 3)]),
+    ];
+    for (bufs, shift, placed) in lists {
+        draw_buffers(&bufs);
+        let what = format!("{bufs:x?}");
+        let d = draw();
+        let c = clear_buffer(3, YELLOW);
+        for (s, kind) in [(&d, "draw"), (&c, "clear")] {
+            assert_eq!(s.out_shift, shift, "{what} {kind}");
+            let g = s.draw();
+            assert!(shift == 0 || shifted_list_drawn(&g, 4), "{what} {kind}: the PowerVR draws it");
+            let regs: Vec<(usize, u64, u32)> = (0..s.targets.len())
+                .filter_map(|k| draw_target_out_reg(&g, k).map(|r| (k, s.targets[k].0, r)))
+                .collect();
+            let want: Vec<(usize, u64, u32)> = placed.iter().map(|&(k, att, r)| (k, all[att], r)).collect();
+            assert_eq!(regs, want, "{what} {kind}: (target, attachment, register)");
+        }
+        assert_eq!(read_pixel(GL_COLOR_ATTACHMENT3), [255, 255, 0, 255], "{what}");
+    }
+    release(fb, &rbs);
 }
