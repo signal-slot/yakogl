@@ -395,6 +395,8 @@ impl Rig {
         };
         gc_shutdown();
         assert_eq!(gc_init(), 0);
+        /* no CPU view of an attachment 1.. a failed test left behind */
+        test_views::clear();
         /* the clear tests below are about the quad; the resolve engine's
          * clear has its own (a_whole_colour_clear_is_a_resolve_engine_fill) */
         gc_debug_rs_clear(false);
@@ -5809,3 +5811,6 @@ mod tiled_rt_tests;
 
 #[path = "backend_tests_depth_clamp.rs"]
 mod depth_clamp_tests;
+
+#[path = "backend_tests_wide_mrt.rs"]
+mod wide_mrt_tests;
