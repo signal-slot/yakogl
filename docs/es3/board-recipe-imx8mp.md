@@ -675,13 +675,17 @@ Rules that hold for every step:
   until the console delivers bytes, what a clean row rests on is `rc=0 verdict=done`, `resets=absent`, a complete
   record with counts that fit the entry, and `meta.txt`'s boot boundaries (`uptime` below the time since the
   reboot, the board's uptime matching the last return).
-- **`RUN_BOUND=800` on every `tree` command.** On the imx8mp, `board.sh` defaults to `RUN_BOUND=600`
+- **`RUN_BOUND=800` on every `tree` command (Verdin `uboot-mmc` route only).** On the Verdin imx8mp, `board.sh` defaults to `RUN_BOUND=600`
   (`tools/board.sh`, the non-AM62P branch of the run: `RUN_BOUND=${RUN_BOUND:-600}`), which is the WDOG1 window
   itself, and it counts the bound from the reboot to the first ssh answer of a new boot (`el -gt RUN_BOUND` →
   rc 5). A row that ends by the watchdog comes back after 600 s plus the Linux boot, so with the default it
   would be judged rc 5 (`the board did not come back`, the chain stops) instead of a watchdog end that step 11
   can read. 800 is the AM62P dEQP rule (600 + 60 + boot). All three slices ran with it; no row came near
   either bound (longest `back_after` 338 s, e26).
+  **Not on the Armadillo-X2.** `board.sh x2` (`kexec-dev`) does not read `RUN_BOUND`: it waits at most 1500 s
+  for Linux after each jump (the literal in `kexec_wait_back`), whatever `RUN_BOUND` says; only the AM62P path
+  reads it. On x2 leave it unset. Its board lease is still on the eMMC (`/var/tmp`) and moves to `/tmp` once
+  x2-runfix lands.
 - **A dark console is "recoveries not observed", never `recoveries 0`.** The three slices ran with
   `BOARD_UART` set and the console delivered only NUL bytes (`\x00`, one per board reset) in every capture.
   The remaining sessions therefore run with `BOARD_UART` **unset** (step 2): `board.sh` then captures nothing
