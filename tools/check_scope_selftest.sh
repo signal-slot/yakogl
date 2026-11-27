@@ -171,7 +171,11 @@ want tools/hostharness/glmark2/run.sh tools
 want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
 want docs/standalone-boot.md docs
 want website/index.html docs
-want README.md docs
+# the four documents the one-commit rehearsal reads reach its row and no other tools row
+want README.md "docs onecommit"
+want ROADMAP.md "docs onecommit"
+want website/data.js "docs onecommit"
+want docs/release/checklist.md "docs onecommit"
 want docs/notes/x.md docs
 want docs/es2-cts-failures.md "docs ctsdoc"
 # the i.MX8MP glmark2 by-eye note reaches the verdict-table lint and nothing else
