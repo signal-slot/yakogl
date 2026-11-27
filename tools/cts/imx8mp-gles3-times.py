@@ -8,7 +8,11 @@
 SLICE_DIR holds the README.md of a slice (tools/cts/log/<date>-imx8mp-gles3-<slice>/). Its verdict lines
 `board.sh imx8mp e<NN> rc=.. verdict=.. ... back_after=<n>s uptime=<n>s` give the time: back_after is reboot
 to ssh, uptime is Linux's own boot inside it, so the measured wall time of the entry's run is back_after -
-uptime (back_after alone when the line has no uptime; 'none' when the line has no back_after, e.g. rc=5).
+uptime (back_after alone when the line has no uptime or is an x2 line; 'none' when the line has no back_after, e.g. rc=5).
+On the Armadillo-X2 (`board.sh x2 e<NN> ...`, slices written by imx8mp-gles3-slice.py: a crash-route kexec, then a wait
+of up to 1500 s for Linux) the line has back_after only, the seconds from the jump to ssh answering in the new
+Linux, and that is the time used (not U-Boot's; uptime is never subtracted on x2). A slice with x2 lines says so
+on a '# ' line under its name (in --tsv: a '# ' comment line before the slice's rows); Verdin output is unchanged.
 The failure-name page boots (e<NN>-p<page>) are not entries and are skipped. An entry twice in a README: the
 last line counts.
 
@@ -26,7 +30,9 @@ and a total of 0.
 import argparse, importlib.util, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LINE = re.compile(r'\bboard\.sh\s+\S+\s+e(\d+)\s+rc=(\S+)\s+verdict=(\S+)(.*)$')
+LINE = re.compile(r'\bboard\.sh\s+(\S+)\s+e(\d+)\s+rc=(\S+)\s+verdict=(\S+)(.*)$')
+X2_NOTE = ('board Armadillo-X2 (i.MX 8M Plus, GC7000UL), tools/board.sh x2 crash-route kexec: time = back_after, the Linux-back '
+           'time after the kexec jump (ping lost, ping back, ssh back; not U-Boot), uptime not subtracted')
 
 
 def load_sessions():
@@ -52,21 +58,26 @@ def estimates(S, a):
 
 
 def read_times(d):
-    """[(entry, seconds or None)] sorted by entry, one per entry (last line wins)"""
+    """([(entry, seconds or None)] sorted by entry, one per entry (last line wins), set of boards named)
+
+    Verdin (imx8mp): back_after - uptime. Armadillo-X2 (x2): back_after alone, the Linux-back time after the
+    kexec; an x2 line has no uptime, and one that had it would not be subtracted."""
     got = {}
+    boards = set()
     p = os.path.join(d, 'README.md')
     if not os.path.isfile(p):
-        return []
+        return [], boards
     for l in open(p, errors='replace'):
         m = LINE.search(l)
         if not m:
             continue
-        kv = dict(re.findall(r'\b(back_after|uptime)=(\d+)s', m.group(4)))
+        kv = dict(re.findall(r'\b(back_after|uptime)=(\d+)s', m.group(5)))
         t = None
         if 'back_after' in kv:
-            t = int(kv['back_after']) - int(kv.get('uptime', 0))
-        got[int(m.group(1))] = t
-    return sorted(got.items())
+            t = int(kv['back_after']) - (0 if m.group(1) == 'x2' else int(kv.get('uptime', 0)))
+        boards.add(m.group(1))
+        got[int(m.group(2))] = t
+    return sorted(got.items()), boards
 
 
 def fmt(x, f='%.1f'):
@@ -95,10 +106,15 @@ def main():
         out.write('%-6s %10s %10s %7s\n' % ('entry', 'measured_s', 'estimate_s', 'ratio'))
     for d in a.slices:
         name = os.path.basename(os.path.normpath(d))
-        rows = read_times(d)
+        rows, boards = read_times(d)
+        note = X2_NOTE if 'x2' in boards else None
         n = tm = te = 0
         if not a.tsv:
             out.write('# %s\n' % name)
+            if note:
+                out.write('# %s\n' % note)
+        elif note:
+            out.write('# %s: %s\n' % (name, note))
         for i, t in rows:
             e = est.get(i)
             r = t / e if t is not None and e else None
