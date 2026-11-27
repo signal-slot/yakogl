@@ -2285,6 +2285,24 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_sglr_shaders.rs)" 
 # report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_cube_rt.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_cube_rt
+# pvr_mip_three_levels: three mip levels a render: store words of terrain's chains (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_three_levels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_mip_three_levels
+# pvr_mip_formats: three levels a render on every dEQP mipmap.generate format (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_formats.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_mip_formats
+# pvr_mip_shapes: three levels a render on degenerate chain shapes (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_shapes.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_mip_shapes
+# pvr_mip_mixed_pitch: three levels a render at NPOT and padded-pitch sizes (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_mixed_pitch.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_mip_mixed_pitch
+# pvr_mip_ties: the pack tie rule in the three-levels mip chain (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_mip_ties.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_mip_ties
+# pvr_refract_lod: glmark2 refract's mip LOD and the three-levels knob (docs/notes/pvr-mip-three-levels.md).
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_refract_lod.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_refract_lod
 # The six ES 3.0 ETC2/EAC names the GL core decodes at upload (docs/notes/
 # etc2-eac.md): each name accepted by glCompressedTexImage* and stored as the
 # decoder's values in the class the design gives it, the compressed format
@@ -3761,6 +3779,9 @@ if command -v python3 >/dev/null 2>&1; then
   step "tools   deqp-uart-tally log verdicts" python3 tools/cts/deqp-uart-tally.py --self-test
   # deqp-precision-values.py: out-of-bound got/expected values of precision cases.
   step "tools   deqp-precision-values on synthetic logs" bash tools/cts/deqp-precision-values-selftest.sh
+  # mip3-ab-verdict.py, mip3-deqp-diff.py: the three-levels board A/B verdict and dEQP mipmap diff, synthetic records.
+  step "tools   mip3-ab-verdict on synthetic records" bash tools/cts/mip3-ab-verdict-selftest.sh
+  step "tools   mip3-deqp-diff on synthetic logs" bash tools/cts/mip3-deqp-diff-selftest.sh
   # The common set's tally: board.sh's verdict per row and what it does not
   # say (glmark2 score and scenes, slint probes, gl_test passed of run and the
   # failing cases), on synthetic runs through board.sh's own tally.
