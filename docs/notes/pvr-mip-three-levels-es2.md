@@ -35,7 +35,7 @@ the size of the threshold in LSBs below is marked unverified.
 3. **Verdict: default-on is safe for every ES 2.0 case and glmark2 scene
    this study could measure, on the evidence of the CTS source and the host
    error, with three things only a measurement closes** (the AM62P board run
-   of the 20 cases, the error at 512x512 and 1600x1200, and refract's
+   of the 20 cases, the error at 512x512 and 1600x1200 (now measured, see (c)), and refract's
    levels). dEQP's `generate` cases compare each stored level with the level
    above it in the *same* texture, not with a reference filter (part (a)),
    so a level that is 1-2 LSB from the iterated chain is judged against its
@@ -192,7 +192,7 @@ shader's `Q` on the board (README, "Not modelled"). Measured sizes:
 | glmark2 terrain per-frame chains (5 a frame) | 3+ of 800x600, 3+ of 256x256 | 0 on levels 1-2; 1 to 2 on the ALU levels | 8 on probes and mean | **yes**: the picture reads level 1-2 at weight 1, levels 1 at weight <= 1.9%; those levels are exactly the TPU levels | **safe** (render target) |
 | glmark2 terrain uploads (3 JPEG, specular) | 3+ of 512x512 | 1 LSB expected (POT, unmeasured at 512) | 8 | yes: <= 1 LSB through weight <= 1 | safe for the picture |
 | glmark2 `texture-filter=mipmap` (crate, 512x512) | 3+ | 1 LSB expected | 8 | yes, the picture reads some level at weight <= 1; a probe moves <= 1 | safe for the picture |
-| glmark2 refract (1600x1200) | 3+, NPOT odd steps | not measured (NPOT, like 800x600: 2) | 8 | probably (<= 2 against 8), **unmeasured**; the levels it reads are not studied | needs a measure and a read of its LOD before it is called safe |
+| glmark2 refract (1600x1200) | 3+, NPOT odd steps | **measured, host model, box taps** (seed 1, edges/noise images, `python3 -I tools/hostharness/mip-multilevel/compare.py --sizes 1600x1200,512x512 --quick`): 1 LSB on levels 3-5, 2 on levels 6-9, 3 on level 10 (1x1); the box taps keep the NPOT chain exact. 512x512: 1 LSB on levels 3-9, 0 on levels 1-2 (the iterated chain of today: 0 at 512x512) | 8 | yes on the error, at most 3 against 8 on any level; **the levels refract reads are still not studied** | error closed; needs a read of refract's LOD before it is called safe |
 
 **Default-on verdict: safe on the evidence read, three items open.**
 
@@ -210,10 +210,14 @@ shader's `Q` on the board (README, "Not modelled"). Measured sizes:
   level 1 with weight at most 1.9%. The uploads and the crate image read
   every level but at an error of 1 LSB against a tolerance of 8. Safe.
 - **Refract** (1600x1200, NPOT, odd steps at levels 5, 6, 8) is the one
-  case not covered: the error there is not measured and its sampled levels
-  are not studied. If the error there is within 2 (as 800x600) the
-  tolerance of 8 holds. Until measured, the verdict for refract is
-  "likely safe, unmeasured".
+  case whose sampled levels are not studied. Its error is now measured
+  (host model, `python3 -I tools/hostharness/mip-multilevel/compare.py --sizes 1600x1200,512x512 --quick`): at
+  1600x1200 at most 1 LSB on levels 3-5, 2 on levels 6-9 and 3 on level 10;
+  at 512x512 at most 1 LSB. A first host check of plan #420 reported 1 LSB
+  at 1600x1200 and 0 at 512x512; the rerun gives the higher figures
+  written here (1 LSB is the figure up to level 5, 0 is the iterated
+  chain of today at 512x512). All are within the tolerance of 8. The
+  verdict for refract is "likely safe, LOD unread".
 - **"Safe only for render targets" is not needed** by the source, and it
   would cost a gate the backend offer does not have today (the GL core has
   a render-into mark per slot, `pi4-target-mark-clear`; passing it to the
@@ -273,5 +277,8 @@ nothing (`tools/hostharness/glmark2/README.md`), so the host `host` column
   against level, not against a reference: its host test should compare
   each level of the new chain with the box of the stored level above,
   as `compareGenMipmapBilinear` does, in addition to the iterated chain.
-- Measure the box-tap error at 512x512 and 1600x1200
-  (`mip-multilevel/compare.py --sizes`), and read refract's LOD.
+- ~~Measure the box-tap error at 512x512 and 1600x1200~~ done, see the
+  refract row of (c): 1 LSB at 512x512, up to 3 at 1600x1200
+  (`tools/hostharness/mip-multilevel/compare.py --sizes 1600x1200,512x512
+  --quick`). **Still open:** read refract's LOD (which levels
+  `scene-refract.cpp` samples) and its sensitivity to three levels a render.
