@@ -656,3 +656,80 @@ vertex `ArithConstant` and `Arithmetic` families behind the vertex ones).
 - 2.1 V2 (UT 346/UP 99 "gate, not a pass count"): the gate landed (`5e1feec9`); the 389 iMX95 lines
   go to 0 at the next rerun, and 56 cases are VT1/VT2.
 - 3's "board rerun after Q12/Q36/Q45": add one after Train 3.
+
+### 5.5a Leftover steps of trains 1 and 2, and the order of train 4 (plan #387, item `leftover-schedule`; the section the item calls "5.5")
+
+Number: `5.5` above is already "Claims the new notes add"; this section is added after 5.7 and is
+named 5.5a so that no earlier heading moves. Docs only: no code, test or issue changes.
+
+**Sources.** The handoff of `arith-lower-2` (train 2) lists the steps its pull request merged without;
+its prototype diffs are gone, so the notes are the only description. Counts are the first-refusal
+counts of `mali-deqp-families.md` **section 19** (host-measure-3, the ranking after train 2 at
+`e9033663`; the item text says "section 18", which is the earlier ranking at `9ac31f30` and has no
+`Defect(LaneCycle)` row). "Forecast" is the step's own design number (sections 2.2-2.10 above), an
+upper bound. Sites are `file:function`; the line numbers in the notes are older than the tip.
+`cf-dead` is described as landed in train 2 in section 19 (row 22); the tip has no `cf_dead`/`cf-dead`
+in `src/` or `tests/` and the handoff lists it open: **treated as open**, to be confirmed by the
+first measure of train 4.
+
+#### The rows
+
+| Step | Refusal text and site it lifts | Notes | Mesa references (`tools/mali/testdata`, test) | Cases it blocks first (section 19) | Depends on |
+|---|---|---|---|---|---|
+| **T1** TEX_COORD cube sequence (`tc_cube_face` 86, `tc_cube_const` 10, `tc_cube_rnd_sub` 7) and the scalar-plus-constant 2D coordinate | `TexCoord`, `nir_fs.rs:walk_nodes` (the mediump implicit cube arm; predicate `cube_dir_measured`) | `mali-fmaloc-lowering.md` 3.1, 4 step 1/4/7; `mali-deqp-fmaloc.md`; schedule 2.10 T1 | `deqp_fmaloc_tc_cube_{face,const,rnd_sub}` (+ the other `deqp_fmaloc_*`), `tests/mali_deqp_fmaloc.rs` | `TexCoord` 200 (row 4, at the line); T1 forecast 104 | the design's step 4 wants the `uniform_api` recount first; shares `walk_nodes` with 3c's `varyload-lower-1` (rebase after it); feeds texmisc steps 3, 5 (no item) |
+| **Loop steps** A0 (`loop_plan.rs`, new), LS3 (fs kept loop, uniform/dynamic bound 128 NS), LS4 (Mesa deletes/unrolls 22), LS5 (`break`/`continue` 28), LS6 (nested/sequenced 24), LS2-fs (50), LS7 (index ladder, `discard`, `return`, struct 44), LS1 (vs unrolled 87), LS8 (vs kept, float counters, `LOOP_CAP` 32 + 97), LS9 (24), LS10 (36), LS11 (18), LS2-vs (44) | `LoopMediump` `nir_fs.rs:walk_kept_loop`; `GuardMediump` `nir_fs.rs:walk_if16`, `select_highp`; `LoopForm` `nir.rs:invert_guards`, `nir_fs.rs:walk_if_sides`; `LoopVertex` `nir.rs:vs_kept_begin`, `vs_side_at` | `mali-loops-lowering.md` 1-8 (design 4 fragment, 5 vertex, 9 measured sites), `mali-deqp-loops.md`, `-loops3.md`, `-loops4.md`, `-vsloop.md`, `-vsloop2.md`, `-vsmix.md`, `-idxloc.md`, `mali-indexed-locals.md`; schedule 2.9 | `deqp_loops_*`, `deqp_loops2_*`, `deqp_loops3_*` (A0's highp 40-pass pin, `vs_fn_after_seq`, `vs_fn_mixed`), `deqp_loops4_*` (S8 siblings), `deqp_vsloop_*`, `deqp_vsloop2_*`, `deqp_idxloc_*`; tests `mali_deqp_loops.rs`, `_loops2`, `_loops3`, `_loops4`, `_vsloop`, `_vsloop2`, `_idxloc`. Some of these pins moved at the tip (train 1's mediump kept loop, `411da278`); only the ones still `Err` in `LOWERED` tables are in this step's set | `LoopVertex` 194 (row 6, at the line; 169 NS), `LoopMediump` 53, `LoopForm` 21, `GuardMediump` 10 | A0 first; LS3 needs R1 (int counters, landed in train 1); LS8 needs V2 (landed) and A0's mask forms; the vs half needs the phi pairing (design 5); LS2-vs feeds **NF3** of train 3b (3b's NF3 waits for it); `IndexedLocal` follow-up (156 cases) has no item |
+| **cf-dead** (constant-condition and dead-side `if`s, before the walks) | `ControlFlow` `nir_fs.rs:walk` / `walk_if16`, `nir.rs:walk`; `DiscardForm` `nir_fs.rs:Fs::discard`, `nir.rs:walk` (`disc_basic_never`) | `mali-deqp-ctrlflow.md` 5 step 1; `mali-deqp-cfold2.md`; schedule 2.10 CT1 | `deqp_ctrlflow_{vs_nested,vs_nested_combined,vs_varying_one_side,vs_varying_else_side,vs_statement_side,fs_int_cond,fs_float_cond_colour_read,disc_basic_never}`, `tests/mali_deqp_ctrlflow.rs` | `ControlFlow` 102 (row 11, at the line) and `DiscardForm` 20; step forecast 45 | none; uses the one constant folder (`mesa_fold.rs`, libm-fold helper: merged, no caller yet); steps 3-5 of the note (`fs-select32`, `vs-nested-select`, `fs-mask-logic`) need intval's compares and have no item |
+| **reordered lanes** (the item and the handoff name it as cf-dead's companion) | **undescribed**: no note uses the words. Nearest text: swapped-order converts `mali-fclane-lowering.md` ("converted in swapped order", `conversion_order`), `swapped_compares` of `mali-deqp-compiled-audit.md`, `mali-deqp-fsunif.md` (`bi_opt_reorder_push` slots) | none under this name | none | not countable | `cfdead-refs` decides what it is before train 4 takes it; if it is not found, leave it out and name it |
+| **K2** (= constprod S2): a product of two negated literals; a literal times a product | `ArithConstant` `glsl.rs:neg_products`, `glsl.rs:reassociate_constant`, `nir_fs.rs:Fs::op` | `mali-constprod-lowering.md` S2, `mali-deqp-constprod.md`, schedule 2.7 K2 | `deqp_constprod_{neglit_pair_vs,neglit_pair_fs,chainlit_vs,chainlit_fs}`, `tests/mali_deqp_constprod.rs` | `ArithConstant` 350 (row 3, at the line); K2 forecast 124 | K1 (`litfirst`, `neg_products`; landed with train 1's constprod), K3 shares the same function (K3 has no item); **NF1 of 3b needs K2** |
+| **K4** (= constprod S4): built-ins of constants take the `alu_sized` route (`acos asin atan atan2 reflect refract mod`) | `ArithConstant` / `FusedMultiplyAdd` `nir.rs:vs_fmod`, `nir.rs:walk` (the `Ffma` arm), `nir_fs.rs:walk_nodes` | constprod S4, `mali-libm-fold.md`, `mali-deqp-fmaloc.md`; schedule 2.7 K4 | `deqp_constprod_fma_foldcall_{acos,atan,reflect,refract,mod}_vs` (+ the fs `foldcall_*`), `mali_deqp_constprod.rs` | `FusedMultiplyAdd` 116 (row 10, at the line); K4 forecast 48 | `mesa_fold.rs` helper (merged, no caller); K6 follows K4 |
+| **K4's rest** (K6 matrix product, K7 scalar `reflect/refract/distance/fract`, K3) | same sites | constprod S3, S6, S7; schedule 2.7 | `deqp_constprod_fma_{matmul_*,mulassign,geom_*,invariance}_vs`, `constchain_*`, `reassoc_mixed_vs` | K3 64, K6 41, K7 19 | K6 after K4; K7 after K5; schedule 4b had no item for them |
+| **K5** (= constprod S5): `acos/asin/atan/atan2` of a vertex value | `FusedMultiplyAdd` `nir.rs:walk` (`Ffma` arm), `builtin_call.rs` | constprod S5; schedule 2.3 A7 | `deqp_constprod_fma_{trig_acos,trig_atan2,random_trig}_vs`, `mali_deqp_constprod.rs` | forecast 47 (inside row 10) | **A7 first** (fixes the `ffma` chain order; A7 has no item): without A7, K5 is the last step or left out and named |
+| **fix C**: break the `lane_tree`/`vectorise` cycle (the guard landed: `Defect(LaneCycle)`) | `Defect(LaneCycle)` `nir_fs.rs:pair_node` (via `lane_tree`, `vectorise`) | `mali-deqp-defects.md` 3, 4, 4.1 | `deqp_defects_lanecycle_{fs,reduced}`, `tests/mali_deqp_defects.rs` (the Mesa words of the shape are still to draw/compare) | `Defect(LaneCycle)` 11 (row 30); no line crossing | edits `vectorise` like 3c's O5/O8, M2-4 and 4a: **after 3c**, before the pair-tree step |
+| **load_mat3** (and `load_vec3_cmp`): a conversion reads a load that was never emitted | `Defect(IrIndex)` `nir_fs.rs:index` from `src32`; the fix is a `load` call in `src32` | `mali-deqp-irindex.md` ("load_mat3 (18)", "load_vec3_cmp (24)"), `mali-deqp-irindex23.md` | `deqp_irindex_load_mat3` (+`irindex2`/`irindex3` pins), `tests/mali_deqp_irindex*.rs` | `Defect(IrIndex)` 46 (row 19, shared with `mat4_pair_unread`) | none; `load()` order must match `LD_VAR_BUF_IMM` order of the reference |
+| **mat4_pair_unread**: the mediump vectoriser pairs an unread lane | `Defect(IrIndex)` `nir_fs.rs:vectorise` (called from `lane_tree`), `index` | `mali-deqp-irindex.md`, `mali-deqp-irindex23.md` 5.2 | `deqp_irindex_mat4_pair_unread`, `tests/mali_deqp_irindex.rs` | `Defect(IrIndex)` 46 (10 cases of it) | the `pair_*_unread` fix (landed); with fix C and 4a's pair trees, the same function: one order, below |
+| **audit F1**: a compare of two fp32 varying lanes built at fp16 where Mesa compares at fp32 | no refusal; a wrong word: `nir_fs.rs:walk_nodes` mediump `Flt/Fle/Feq` arm, `bool_colour`, `convert_inputs16`, `Fs::discard` | `mali-deqp-compiled-audit.md` 4.3, 5; `mali-compare-forms.md`; schedule 4a ("ctrlflow-design + audit-ref") | `deqp_audit_f1_*` (9 files incl. `op_greaterthan_lowp_vec4_fs`, `op_equal_mediump_vec4_fs`, `swz_mediump_*`), `tests/mali_deqp_audit.rs` | not a first refusal; est. 228 cases compile and differ | none; the mask/compare lowerings (R1, F2C) pass the same arm |
+| **audit D1**: `b2i32` of a 16-bit mask widens the wrong half | no refusal; `nir_fs.rs:walk_nodes` `b2i32` arm | `mali-deqp-compiled-audit.md` 4.1, `mali-deqp-boolpix.md` (fixed at `d3876279`, #11306) | `deqp_audit_d1_conv_*` (5), `mali_deqp_audit.rs`; four of five byte-equal; the `bvec3_float_to_ivec4`/`bool_bool_to_ivec2` residue differs in form only (one pair narrowed and compared, ours one lane at a time) | est. 13 cases; 9 of 10 pairs of the issue byte-equal | nothing but the two-lane pair form (step 4a's mechanism): the residue goes with the pair trees |
+| **step 4a's pair trees** (arith step 4 `fs-pairs`: widen the `Prod` set of the pair builder; `min max clamp` of two lanes) | `FsOperandForm` `nir_fs.rs:vectorise`, `walk_nodes` | `mali-arith-lowering.md` step 4, `mali-deqp-arith.md` 4; `mali-opform-lowering.md` (O1-O8 take over the same mechanism, schedule 5.5 "opform O1-O3") | `deqp_arith_{op_binary_*,op_unary_*,op_common_{abs,mix},matrix_storeout_*,random_storeout_*,other_storeout_*}`, `tests/mali_deqp_arith.rs` | `FsOperandForm` 197 (row 5), `Arithmetic` 1,410 (row 1): 4a's own 110 | **3a landed O1-O3; 3c does O4-O8**: what is left of 4a after 3c is this row; fix C, the two `IrIndex` fixes and 4a's residue edit `vectorise` together |
+| **highp fragment shapes** | **no note names it as a step**. Parts in notes: constop S1 highp fragment variants (83) and S2a-S3 highp variants (`mali-deqp-constop.md`), constprod S1 "vertex and highp fragment" (landed as K1), arith 1b/3 highp transcendentals and rounding (`transc32`), `mali-deqp-uniarray.md` `uniform_load` of highp fs, `mali-deqp-colourpair.md` "no drawn reference for a highp fragment" (constant, lane) order, `mali-int-uniforms.md`, `mali-deqp-intval.md` | those, not one description | none under the name | not countable | `highpfs-refs` collects the shapes and decides the step before train 4 takes it; if it finds none, leave it out and name it |
+
+`T1` and `audit F1/D1` need no design item: their references are already drawn
+(`mali_deqp_fmaloc.rs`, `mali_deqp_audit.rs`), which is why only four design items exist.
+
+#### Train 4: fixed work order
+
+One pull request (the owner's train form: a commit per step, each step's byte-compare tests run after its
+commit, a step that fails left out and named). It starts after train 3c has merged (3b may merge before or
+after: the only link is NF3, below). Every commit regenerates what it moves in the same commit. The cut,
+if the pull request is too long, is after commit 7 (everything but K4/K5, T1 and the loops).
+
+| Commit | Step | Group (design item, "owner") | Byte-compare after the commit |
+|--:|---|---|---|
+| 1 | cf-dead | cf-dead and lanes (`cfdead-refs`) | `mali_deqp_ctrlflow`: the eight references above |
+| 2 | reordered lanes, if `cfdead-refs` describes it; otherwise left out and named | `cfdead-refs` | its references (none today) |
+| 3 | audit F1 (+ D1 residue only if it needs no pair tree) | none: references drawn | `mali_deqp_audit`: `deqp_audit_f1_*`, `deqp_audit_d1_*` |
+| 4 | load_mat3 | highp fs / defects (`highpfs-refs`) | `mali_deqp_irindex*` |
+| 5 | fix C | `highpfs-refs` (the Mesa words of `lanecycle`) | `mali_deqp_defects`: `lanecycle_*` |
+| 6 | mat4_pair_unread | `highpfs-refs` | `mali_deqp_irindex`: `mat4_pair_unread` |
+| 7 | step 4a's pair trees (the part O1-O8 did not take) and the D1 pair residue | `highpfs-refs` | `mali_deqp_arith`, `mali_deqp_opform` unchanged, `mali_deqp_audit` D1 residue |
+| 8 | highp fragment shapes (as `highpfs-refs` defines them) | `highpfs-refs` | its references |
+| 9 | K2 | K2/K4/K5/fix C (`kfold-refs`) | `mali_deqp_constprod`: `neglit_pair_*`, `chainlit_*` |
+| 10 | K4 | `kfold-refs` | `mali_deqp_constprod`: `foldcall_*` |
+| 11 | K5 (needs A7: if A7 has not landed, left out and named) | `kfold-refs` | `mali_deqp_constprod`: `fma_trig_*`, `fma_random_trig_vs` |
+| 12 | T1 | none: references drawn (`fmaloc-lower-1` of schedule 2.10) | `mali_deqp_fmaloc`: `tc_cube_*` |
+| 13 | A0, LS4, LS3 | loops (`loops2-refs`) | `mali_deqp_loops`, `_loops3`, `_idxloc` |
+| 14 | LS5, LS6, LS2-fs, LS7 | `loops2-refs` | `mali_deqp_loops2`, `_loops4`, `_idxloc` |
+| 15 | LS1, LS8, LS10, LS9, LS11, LS2-vs | `loops2-refs` | `mali_deqp_vsloop`, `_vsloop2`, `_loops*` |
+
+Why this order. cf-dead and F1 touch no function another step edits, so they go first and give the
+earliest wins; the three `nir_fs.rs` `vectorise`/`lane_tree` steps (load_mat3, fix C, mat4_pair_unread, then
+4a's residue) go in one run because they edit the same function and a later one rebases on the earlier
+one; K2, K4, K5 edit `glsl.rs`/`nir.rs`/`builtin_call.rs` and never `vectorise`; T1 edits
+`walk_nodes` and so follows `varyload-lower-1` of 3c; the loops are last because they are the
+largest, need A0 first and read R1/V2 (landed) and the folds of the K steps (idxloc: the 156 indexed-local
+cases wait on K2-K5). **NF3** (3b) needs K2 and LS2-vs: it becomes commit 16 of this train if 3b did
+not take it, else it stays with 3b's pull request. The four groups share no testdata prefix with each
+other, so the design items run in parallel and no commit's reference file is another's.
+
+What the order does not decide: whether loops stay in the same pull request as the rest (they are
+15-20 commits of their own; the owner's rule says as few as the dependencies allow, and nothing here
+forces a split except size); K5's A7; the two `undescribed` rows.
