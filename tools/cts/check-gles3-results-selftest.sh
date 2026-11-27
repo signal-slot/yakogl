@@ -80,6 +80,11 @@ out=$(python3 -I "$chk" --results "$tmp/g/ok.md" --tree "$tmp/tree.txt" \
   --mustpass "$tmp/mustpass.txt" --git --ref HEAD 2>&1) || rc=$?
 [ "$rc" = 1 ] && echo "$out" | grep -q 'not an ancestor' || fail "--git: unknown commit accepted: $out"
 
+# positional path and --images N override the tree's count.
+rc=0
+out=$(python3 -I "$chk" "$tmp/img.md" --tree "$tmp/tree.txt" --mustpass "$tmp/mustpass.txt" --images 46 2>&1) || rc=$?
+[ "$rc" = 0 ] || fail "--images 46 with positional path: exit $rc: $out"
+
 # today's RESULTS.md: while it holds the old record it must fail with both messages.
 if grep -q '31-image table' "$here/RESULTS.md"; then
   rc=0

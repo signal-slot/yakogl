@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Does the AM62P ES 3.0 whole-tree row of RESULTS.md say what a run must?
 
-  tools/cts/check-gles3-results.py [--results FILE] [--tree FILE]
+  tools/cts/check-gles3-results.py [RESULTS.md | --results FILE] [--images N] [--tree FILE]
       [--mustpass FILE] [--tsv FILE] [--git [--ref REF]]
 
 Reads the section "## ES 3.0: dEQP-GLES3 (stage 4)" of tools/cts/RESULTS.md,
@@ -92,7 +92,7 @@ def tsv_counts(text):
     return c
 
 
-def check(results, tree, mustpass, tsv=None, git_ref=None, root=None):
+def check(results, tree, mustpass, tsv=None, git_ref=None, root=None, images=None):
     """(problems, fatal)."""
     P = []
     sec = section(results)
@@ -112,7 +112,7 @@ def check(results, tree, mustpass, tsv=None, git_ref=None, root=None):
                            cwd=root, capture_output=True)
         if r.returncode != 0:
             P.append('build commit %s is not an ancestor of %s' % (m.group(1), git_ref))
-    want = tree_images(tree)
+    want = images if images is not None else tree_images(tree)
     nums = [int(x) for x in re.findall(r'\b(\d+)[ -]images?\b', btext)]
     if not nums:
         P.append('whole-tree row states no image count (expected %d images)' % want)
@@ -141,13 +141,18 @@ def check(results, tree, mustpass, tsv=None, git_ref=None, root=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('results_pos', nargs='?', metavar='RESULTS')
     ap.add_argument('--results', default=os.path.join(HERE, 'RESULTS.md'))
+    ap.add_argument('--images', type=int,
+                    help='expected image count (default: image rows of --tree)')
     ap.add_argument('--tree', default=os.path.join(HERE, 'am62p-gles3-tree.txt'))
     ap.add_argument('--mustpass', default=os.path.join(HERE, 'gles3-mustpass.txt'))
     ap.add_argument('--tsv')
     ap.add_argument('--git', action='store_true')
     ap.add_argument('--ref', default='origin/main')
     a = ap.parse_args()
+    if a.results_pos:
+        a.results = a.results_pos
     try:
         def rd(f):
             with open(f, encoding='utf-8') as fh:
@@ -158,7 +163,7 @@ def main():
         print('check-gles3-results: %s' % e)
         return 2
     probs, fatal = check(res, tree, mp, tsv, a.ref if a.git else None,
-                         os.path.dirname(os.path.abspath(a.results)))
+                         os.path.dirname(os.path.abspath(a.results)), a.images)
     for p in probs:
         print('check-gles3-results: %s' % p)
     return 2 if fatal else (1 if probs else 0)
