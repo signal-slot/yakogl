@@ -81,6 +81,10 @@ refuse "record sha8 upper case" --record records/imx8mp/20261124-1200-x-DEADBEEF
 refuse "record sha8 not hex" --record records/imx8mp/20261124-1200-x-deadbeeg/
 refuse "bad route" --route camera
 refuse "bad verdict" --verdict fine
+PICLINE='mean |diff| 1.20 0.80 0.90; 3.1% of pixels differ by more than 8'
+refuse "picdiff line in verdict" --verdict "right: $PICLINE"
+refuse "picdiff line in record" --record "records/imx8mp/20261124-1200-a|diff|-01234567/"
+refuse "picdiff line in route" --route "$PICLINE"
 refuse "verdict todo" --verdict "not yet looked at"
 refuse "dump with seen" --verdict "seen without a value"
 refuse "photograph with right" --route photograph

@@ -66,6 +66,13 @@ refuse "empty value" --scene $S --set verdict=
 refuse "value with <" --scene $S --set verdict='a<b'
 refuse "value with >" --scene $S --set verdict='a>b'
 refuse "value with |" --scene $S --set verdict='a|b'
+PICLINE='mean |diff| 1.20 0.80 0.90; 3.1% of pixels differ by more than 8 in any channel; bbox 0,0,10,10'
+refuse "real picdiff line with |diff|" --scene $S --set picdiff="$PICLINE"
+f --scene $S --set picdiff="$PICLINE" 2>&1 >/dev/null | grep -q "abs diff" \
+  && ok "refusal names the 'abs diff' wording" || bad "refusal lacks the hint"
+f --scene $S --set picdiff="${PICLINE//|diff|/abs diff}" >/dev/null 2>&1 \
+  && ok "picdiff line with |diff| spelled 'abs diff' is accepted" || bad "abs diff line refused"
+cp "$T/orig.md" "$T/n.md"
 refuse "value with newline" --scene $S --set verdict=$'a\nb'
 refuse "ipv4" --scene $S --set route="$v4"
 refuse "ipv4 outside the private ranges" --scene $S --set commit="$v4wide"
