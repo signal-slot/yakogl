@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! glmark2 terrain's shaders other than the noise shader, and the
-//! one-statement shaders that isolate the causes of their length, through the
+//! glmark2 terrain's eleven shaders (the ten draw, blur and overlay shaders and
+//! the noise shader), and the one-statement shaders that isolate the causes of their length, through the
 //! GC7000 online compiler: the instruction and temporary counts pinned
 //! (`docs/notes/gc-terrain-shaders-rest.md`, plan #328 item
-//! terrain-compiler-fix). Mesa etnaviv's `etna_shc` counts for the GC7000UL
+//! terrain-compiler-fix; the noise shader pinned by plan #421 item pin-noise).
+//! Mesa etnaviv's `etna_shc` counts for the GC7000UL
 //! are the comments; they are the target, not a pin. The pins include
 //! `gc-shadow-refract-shaders.md`'s "The patch" (a copy fold and a scalar lane
 //! merge, `src/shaderc/online/vivante/peephole.rs`) and the GC7000's
@@ -93,6 +94,12 @@ const GLMARK2: [(&str, u32, u32, u32); 10] = [
 /// before the unroll, 475 before the patch.
 const GLMARK2_TOTAL: u32 = 338;
 
+/// The noise height map, `terrain-noise.frag` (4 calls of `snoise`; glmark2's
+/// hash `terrain-1637be2eef2e8a5e`), as `ShaderSource` hands it over: instructions
+/// and temporaries. etna_shc 414. History: 840 in the note's first measure, 767
+/// modelled with the negate fold (rank 1's negate half, not landed), 556 at
+/// today's tree (the patch, the unroll and float constant folding).
+const NOISE: (u32, u32) = (556, 14);
 /// The ten texts from a glmark2 checkout, in [`GLMARK2`]'s order.
 fn glmark2_texts(root: &Path) -> Vec<String> {
     let rd = |n: &str| {
@@ -184,6 +191,17 @@ fn terrain_shaders_count() {
                 }
                 total += n;
             }
+            let nz = std::fs::read_to_string(Path::new(&root).join("data/shaders/terrain-noise.frag"))
+                .unwrap_or_else(|e| panic!("terrain-noise.frag in {}: {e}", Path::new(&root).display()));
+            let (nn, nt) = count(SHC_STAGE_FRAGMENT, &format!("{MACROS}{FPREC}{nz}"));
+            println!(
+                "gc7000 terrain-noise.frag: {nn} instructions, {nt} temps (pinned {}, {}; etna_shc 414)",
+                NOISE.0, NOISE.1
+            );
+            if (nn, nt) != NOISE {
+                wrong.push(format!("terrain-noise.frag: {nn} instructions {nt} temps, pinned {} {}", NOISE.0, NOISE.1));
+            }
+            println!("gc7000 terrain: {} instructions in the eleven (the ten {total} + noise {nn})", total + nn);
             println!("gc7000 terrain: {total} instructions in the ten (pinned {GLMARK2_TOTAL}; etna_shc 279)");
             if total != GLMARK2_TOTAL {
                 wrong.push(format!("total {total}, pinned {GLMARK2_TOTAL}"));
