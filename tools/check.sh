@@ -2070,6 +2070,22 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_rt_pvr.
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_rgba32f_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_rgba32f_pvr
+# Host tests of the three mip levels a render (`MIP_THREE_LEVELS_DEFAULT` in
+# src/pvr/backend.rs, docs/notes/pvr-mip-three-levels.md, #1199): the texels
+# whose byte the pack rounding tie decides (tests/pvr_mip_ties.rs), the store
+# words of a three-target render whose emits have different pitches and
+# maxclips (tests/pvr_mip_mixed_pitch.rs), and refract's mip LOD and its
+# sensitivity to the knob (tests/pvr_refract_lod.rs, whose full file needs the
+# online compiler; the plain build holds its parts 1 and 3). Each row names its
+# test's header feature set. The bulk `host-test,gpu-powervr` CONFIGS row runs
+# all five of the mip files with the rest of tests/; tests/pvr_mip_formats.rs
+# and tests/pvr_mip_shapes.rs carry no row of their own for that reason.
+step "test    host-test,gpu-powervr (tests/pvr_mip_ties.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test pvr_mip_ties
+step "test    host-test,gpu-powervr (tests/pvr_mip_mixed_pitch.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test pvr_mip_mixed_pitch
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_refract_lod.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_refract_lod
 scope v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)
@@ -3646,6 +3662,12 @@ if command -v python3 >/dev/null 2>&1; then
   # The .qpa rebuilt from a CONFIG_DEQP_ECHO_QPA console: a case whose end
   # or an image the bridge lost is named, never read as a picture.
   step "tools   qpa-from-uart rebuild verdicts" python3 tools/cts/qpa-from-uart.py --self-test
+  # The record readers of the three mip levels a render board A/B (arm 7,
+  # docs/notes/pvr-mip-three-levels.md, #1199): the arm A / arm E confirmation
+  # lines and the dEQP mipmap.2d per-case verdict diff, on the synthetic record
+  # pairs under tools/cts/testdata/. Host only, no board.
+  step "tools   mip3-ab-verdict-selftest.sh (the arm A / arm E confirmation on the synthetic record pairs)" no_board_env bash tools/cts/mip3-ab-verdict-selftest.sh
+  step "tools   mip3-deqp-diff-selftest.sh (the dEQP mipmap.2d verdict diff of two arms on synthetic lists)" no_board_env bash tools/cts/mip3-deqp-diff-selftest.sh
   # The AM62P netboot (docs/standalone-boot.md, "The TFTP runner"): the
   # one-shot TFTP server on loopback (a 16 MiB transfer with windows, lost
   # packets, block number wrap, one-shot rename, paths outside the root),
