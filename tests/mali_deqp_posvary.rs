@@ -14,7 +14,7 @@
 //! * `a varying lane left unwritten` (4 cases): a varying the vertex shader
 //!   declares and never writes.
 //!
-//! Eleven references are byte-equal ([`MATCHED`]): three `unwritten`, the
+//! Twelve references are byte-equal ([`MATCHED`]): four `unwritten`, the
 //! six `fract_*` (plan #387 item negzero-lower, steps P2 of
 //! `docs/notes/mali-posvary-lowering.md`) and the two `tex_uniform_w*`
 //! (step P4: a convergent lane in the interpolated vec4's free word). Every
@@ -41,7 +41,10 @@ const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a p
 /// The references the compiler matches byte for byte, without the
 /// `deqp_posvary_` prefix: a declared varying the vertex shader never
 /// writes is an undef the link takes into the fragment shader's loads
-/// (`link::VaryingConsts::push_undef`), no slot stored for it; `fract` of a
+/// (`link::VaryingConsts::push_undef`), no slot stored for it, and a
+/// fragment shader alone refused for control flow that compiles with its
+/// varyings unwritten leaves the refusal to the link (backend.rs
+/// `or_at_link`), which compiles it with the undef; `fract` of a
 /// local copy, fp32 then narrowed into the mediump colour (highp) or fp16
 /// throughout (mediump, lowp; nir.rs `vs_ffract16`); a uniform alpha beside
 /// texel lanes, interpolated in the vec4's free word (nir.rs `fill`).
@@ -49,6 +52,7 @@ const MATCHED: &[&str] = &[
     "unwritten_not_declared",
     "unwritten_declared_unused",
     "unwritten_negative_vs",
+    "unwritten_declared_dead_read",
     "fract_highp_vec2",
     "fract_highp_vec3",
     "fract_mediump_vec2",
@@ -82,11 +86,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("flat_lane_vec4_c30", NO_ATTR),
     /* a loop over uniform bounds and constant arrays (shape `loop_phi`) */
     ("loop_phi_array", NO_ATTR),
-    /* a declared varying the vertex shader does not write, read under a
-     * uniform `if` (shape `unwritten`): the program's fragment shader is
-     * Mesa's (the undef folds the select), but the fragment shader alone,
-     * which selects its colour under a boolean uniform, is refused */
-    ("unwritten_declared_dead_read", CONTROL_FLOW),
 ];
 
 macro_rules! refused_ref {
@@ -106,7 +105,6 @@ refused_ref! {
     flat_lane_vec4_v86, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
     flat_lane_vec4_c30, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
     loop_phi_array, "refused: a loop over uniform bounds stored in a varying (loop_phi)";
-    unwritten_declared_dead_read, "refused: the fragment shader alone selects its colour under a boolean uniform (control flow)";
 }
 
 /// A declared varying never written (shape `unwritten`) that the fragment
@@ -127,6 +125,27 @@ fn unwritten_declared_unused() {
 #[test]
 fn unwritten_negative_vs() {
     mali_ref::assert_matches("deqp_posvary_unwritten_negative_vs");
+}
+
+/// A declared varying never written, read by the fragment shader under a
+/// uniform `if`: the program's fragment shader takes the undef and the
+/// select folds to `vec4(1.0)`, Mesa's 7 words; the fragment shader alone,
+/// refused for control flow, is compiled with its varying unwritten and
+/// its refusal left to the link (backend.rs `or_at_link`).
+#[test]
+fn unwritten_declared_dead_read() {
+    mali_ref::assert_matches("deqp_posvary_unwritten_declared_dead_read");
+}
+
+/// The same fragment shader beside a vertex shader that writes `var`: the
+/// link has no undef to fold, so it refuses with the fragment shader's own
+/// refusal, which waited for it.
+#[test]
+fn unwritten_dead_read_written_refused_at_link() {
+    let r = mali_ref::Reference::load("deqp_posvary_unwritten_declared_dead_read");
+    let vs = r.vs.replace("gl_Position = dEQP_Position;", "gl_Position = dEQP_Position;\n    var = dEQP_Position.x;");
+    assert_ne!(vs, r.vs, "the reference's vertex shader changed");
+    mali_ref::assert_refused(&vs, &r.fs, CONTROL_FLOW);
 }
 
 macro_rules! matched_ref {

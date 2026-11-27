@@ -679,6 +679,13 @@ pub fn fs_constants(
     super::mali::fs_constants(vs_glsl, fs_glsl, scratch)
 }
 
+/// Every varying lane fragment shader `glsl` declares as an unwritten lane,
+/// `mali::fs_undef_inputs`.
+#[cfg(feature = "gpu-mali")]
+pub fn fs_undef_inputs(glsl: &[u8], scratch: &Arena<'_>) -> Result<Option<super::mali::link::FsConsts>, CompileError> {
+    super::mali::fs_undef_inputs(glsl, scratch)
+}
+
 /// A program's fragment shader compiled with its vertex shader's constant
 /// lanes folded into the reads ([`fs_constants`]), `mali::compile_fs_for_vs`.
 #[cfg(feature = "gpu-mali")]

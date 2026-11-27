@@ -120,6 +120,14 @@ struct Compiled {
     /// keep extent, tagged by [`codegen_priv`]; null for the other GPUs):
     /// [`backend_priv`].
     backend_priv: *const c_void,
+    /// The Mali: a fragment shader alone whose own compile was refused
+    /// with this, but which compiles with every varying lane it declares
+    /// unwritten ([`or_at_link`]): `shader` is that compile, which only
+    /// answers glCompileShader. Its refusal waits for the link, as Mesa
+    /// compiles a fragment shader only for its program; the link refuses
+    /// with it unless it compiles the program's fragment shader again
+    /// ([`link_by_sources`]). None for every other compile.
+    pending: Option<CompileError>,
 }
 
 /// The name pool of a record: the uniform rows whose name the 64-byte
@@ -364,7 +372,7 @@ fn publish(
     shader: ShcShader,
     kept: Kept,
 ) -> Result<&'static Compiled, usize> {
-    publish_as(txn, sha, stage, blend_key, source, map, Facts::plain(), shader, kept)
+    publish_as(txn, sha, stage, blend_key, source, map, Facts::plain(), shader, kept, None)
 }
 
 /// What a compile was asked for beyond its source, stage, blend key, zero
@@ -530,6 +538,7 @@ fn publish_as(
     facts: Facts<'_>,
     mut shader: ShcShader,
     kept: Kept,
+    pending: Option<CompileError>,
 ) -> Result<&'static Compiled, usize> {
     let keep = store::keep();
     /* The room the compile had, for a refusal: read while `txn` still holds
@@ -572,6 +581,7 @@ fn publish_as(
                 fs_reads,
                 consts: facts.consts,
                 backend_priv: shader.priv_,
+                pending,
             },
         )
         .map_err(|_| full())?;
@@ -794,6 +804,9 @@ struct Base {
     names: UniformNames,
     fs_reads: FsReads<'static>,
     consts: LinkConsts,
+    /// [`Compiled::pending`]; only the Mali's link reads it.
+    #[cfg_attr(not(feature = "gpu-mali"), allow(dead_code))]
+    pending: Option<CompileError>,
 }
 
 impl Base {
@@ -814,6 +827,8 @@ impl Base {
             /* the table has no program's vertex shader */
             fs_reads: FsReads::NONE,
             consts: LinkConsts::NONE,
+            /* the table holds no refusal */
+            pending: None,
         }
     }
 
@@ -831,6 +846,7 @@ impl Base {
             names: r.names,
             fs_reads: r.fs_reads,
             consts: r.consts,
+            pending: r.pending,
         }
     }
 }
@@ -1183,6 +1199,11 @@ fn compile_and_publish_keyed(
         crate::shaderc::set_compile_lod_key(facts.lod_key),
         crate::shaderc::set_compile_if_lowering(facts.if_lowering),
     );
+    /* the refusal a fragment shader alone leaves to the link (`or_at_link`) */
+    #[cfg(feature = "gpu-mali")]
+    let mut pending = None;
+    #[cfg(not(feature = "gpu-mali"))]
+    let pending = None;
     let built = store::with_scratch(|scratch| {
         let compiled = match map {
             /* only the Mali builds a vertex shader for a fragment shader's
@@ -1211,6 +1232,8 @@ fn compile_and_publish_keyed(
                 let plain = codegen::compile_linked_blocks(stage, glsl, blend_key, names, scratch, store::keep());
                 #[cfg(feature = "gpu-mali")]
                 let plain = or_without_consts(stage, glsl, plain, scratch);
+                #[cfg(feature = "gpu-mali")]
+                let plain = or_at_link(stage, glsl, blend_key, names, plain, &mut pending, scratch);
                 plain
             }
             Some(map) => codegen::compile_vs_mapped_blocks(glsl, map, scratch, store::keep()),
@@ -1227,7 +1250,7 @@ fn compile_and_publish_keyed(
         Some(Err(e)) => return Err(report(log, stage, e)),
         None => return Err(report(log, stage, CompileError::Reentered)),
     };
-    match publish_as(txn, sha, stage, blend_key, glsl, map, facts, shader, kept) {
+    match publish_as(txn, sha, stage, blend_key, glsl, map, facts, shader, kept, pending) {
         Ok(rec) => Ok(rec),
         Err(left) => Err(report(log, stage, CompileError::OutOfMemory { which: Which::Keep, left })),
     }
@@ -1269,6 +1292,52 @@ fn or_without_consts<'s>(
         Ok(c) if !c.as_slice().is_empty() => codegen::compile_vs_without_consts(glsl, c, scratch, store::keep()),
         Ok(_) => compiled,
         Err(e) => Err(e),
+    }
+}
+
+/// A fragment shader's own compile, `compiled`, on the Mali: refused by
+/// the code generator for control flow, it is compiled again with every
+/// varying lane it declares unwritten (`codegen::fs_undef_inputs`, the
+/// lanes a vertex shader that never writes them gives it). When that
+/// compiles, the refusal waits for the link (`*pending`,
+/// [`Compiled::pending`]) and that compile is the shader object's record,
+/// which only answers glCompileShader: Mesa compiles a fragment shader for
+/// its program alone, and a vertex shader that leaves a varying unwritten
+/// makes its loads undefs the program's compile folds away
+/// (nir_opt_varyings.c `remove_dead_varyings`, `nir_opt_undef`;
+/// deqp_varylink_unwritten: `if (u_false) gl_FragColor = vec4(var); else
+/// gl_FragColor = vec4(1.0);` is the constant). The link compiles the
+/// program's fragment shader with the vertex shader's lanes
+/// ([`link_by_sources`]), or refuses with the stored refusal. Every other
+/// refusal stands at glCompileShader, as before; so does one of a shader
+/// with a blend or varying-order key or a zero list, which the link asked
+/// for.
+#[cfg(feature = "gpu-mali")]
+fn or_at_link<'s>(
+    stage: u32,
+    glsl: &[u8],
+    blend_key: u32,
+    zero: &[&str],
+    compiled: Result<(ShcShader, codegen::Blocks<'s>), CompileError>,
+    pending: &mut Option<CompileError>,
+    scratch: &super::arena::Arena<'s>,
+) -> Result<(ShcShader, codegen::Blocks<'s>), CompileError> {
+    let waits = |e: &CompileError| {
+        *e == CompileError::BackEnd(codegen::BackEndError::Mali(super::mali::MaliError::ControlFlow))
+    };
+    let e = match compiled {
+        Err(e) if stage == SHC_STAGE_FRAGMENT && blend_key == 0 && zero.is_empty() && waits(&e) => e,
+        other => return other,
+    };
+    match codegen::fs_undef_inputs(glsl, scratch) {
+        Ok(Some(c)) => match codegen::compile_fs_for_vs(glsl, c, scratch, store::keep()) {
+            Ok(sb) => {
+                *pending = Some(e);
+                Ok(sb)
+            }
+            Err(_) => Err(e),
+        },
+        _ => Err(e),
     }
 }
 
@@ -1832,15 +1901,35 @@ fn link_by_sources(vs: &ShcShader, vr: &Base, fr: &Base, fs: &mut ShcShader, log
          * constant lanes are folded into the fragment shader, which then
          * reads the lanes left; the program's vertex shader was built for
          * that fragment shader's reads (`vs_for_fragment`). Not with a zero
-         * list: a vertex shader that leaves a varying unwritten is refused
-         * at its compile on this GPU. */
+         * list, with one exception: a fragment shader whose own refusal
+         * waited for the link (`or_at_link`) compiles only with the lanes,
+         * a varying the vertex shader declares and never writes among them
+         * as undef lanes (`VaryingConsts::push_undef`, Mesa's
+         * `remove_dead_varyings`), which then take the zero list's place
+         * (deqp_varylink_unwritten). */
         #[cfg(feature = "gpu-mali")]
-        let consts = if zero.n == 0 { link_consts_of(vsrc, fsrc) } else { None }.unwrap_or(LinkConsts::NONE);
+        let (zero, consts) = if zero.n == 0 {
+            (zero, link_consts_of(vsrc, fsrc).unwrap_or(LinkConsts::NONE))
+        } else if fr.pending.is_some() {
+            match link_consts_of(vsrc, fsrc) {
+                Some(c) if !c.is_none() => (ZeroList::EMPTY, c),
+                _ => (zero, LinkConsts::NONE),
+            }
+        } else {
+            (zero, LinkConsts::NONE)
+        };
         #[cfg(not(feature = "gpu-mali"))]
         let consts = LinkConsts::NONE;
         let rc = link_substituted(fr, &zero, affine, consts, fs, log);
         if rc != 0 {
             return rc;
+        }
+        /* a fragment shader alone whose refusal waited for the link
+         * (`or_at_link`) and that the link did not compile again: the
+         * record's code is not the program's */
+        #[cfg(feature = "gpu-mali")]
+        if let Some(e) = base_of(fs).and_then(|r| r.pending) {
+            return report(log, SHC_STAGE_FRAGMENT, e);
         }
         link_checked(vs, fs, log)
     }
@@ -2008,7 +2097,7 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
          * draw-time variant of this program (`v3d_f32_rt_variant`) is
          * compiled with the same one */
         let facts = Facts { lod_key: fr.lod_key, ..Facts::plain() };
-        match publish_as(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, facts, shader, kept) {
+        match publish_as(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, facts, shader, kept, None) {
             Ok(rec) => rec,
             Err(left) => {
                 return report(log, SHC_STAGE_FRAGMENT, CompileError::OutOfMemory { which: Which::Keep, left });
@@ -2194,6 +2283,9 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
             release(&linked);
             pr
         }
+        /* a refusal that waited for the link (`or_at_link`): the link
+         * refuses the program, so there is none to build for */
+        Some((None, fr)) if fr.pending.is_some() => return 1,
         /* no lane reaches `fs` (the vertex shader stores no constant lane,
          * or `fs` declares none of the varyings that hold one): its own
          * record is the program's, and the link still removes the varyings
@@ -3856,6 +3948,7 @@ void main (void)
                     fs_reads: FsReads::NONE,
                     consts: LinkConsts::NONE,
                     backend_priv: core::ptr::null(),
+                    pending: None,
                 },
             )
             .expect("the keep arena has room for one record");
