@@ -426,3 +426,51 @@ fn a_texel_centre_takes_the_first_tap_alone() {
         assert!(px.abs_diff(want) <= 1, "reference {reference}: {px}, wanted about {want}");
     }
 }
+
+/* ---- the sampler words of a depth-compare sampler, all six min filters ---- */
+
+/// Sampler meta dword 13 of a depth-compare sampler over six levels, for each
+/// of GL's six minification filters (mag NEAREST and LINEAR), as the public
+/// texture descriptor carries it: bit 0 compare per texel, bit 1 NEAREST
+/// mag, bit 2 NEAREST within the level, bit 3 the nearest level, bit 4 two
+/// levels, bits 8.. the last level. NEAREST_MIPMAP_NEAREST over a chain is the
+/// program's own level pick (`1|2|4|8`), not word 0, which would leave the
+/// level to the TPU's rounding (dEQP texture.shadow.*.nearest_mipmap_nearest).
+#[test]
+fn a_depth_compare_sampler_words_all_six_min_filters() {
+    use yakogl::backend::*;
+    use yakogl::pvr::backend::texture_descriptor;
+    let word = |linear: u8, min_linear: u8, mip: u8, levels: u8| {
+        let t = GlesTextureBind {
+            format: GLES_TEXFMT_R32F,
+            type_: GLES_TEXTYPE_2D,
+            base_gpu: 0x1_0000_0000,
+            width: 32,
+            height: 32,
+            stride_texels: 32,
+            bytes: 32 * 32 * 4 * 2,
+            linear_filter: linear,
+            min_linear,
+            mip_filter: mip,
+            mip_levels: levels,
+            compare_op: 1,
+            ..GlesTextureBind::ZERO
+        };
+        texture_descriptor(&t)[13]
+    };
+    let top = 5 << 8;
+    /* NEAREST / LINEAR: no mipmap filter, the chain is not walked */
+    assert_eq!(word(0, 0, 0, 6), 0, "NEAREST");
+    assert_eq!(word(1, 1, 0, 6), 1, "LINEAR");
+    /* the mipmap filters, NEAREST and LINEAR magnification */
+    assert_eq!(word(0, 0, 1, 6), 1 | 2 | 4 | 8 | top, "NEAREST_MIPMAP_NEAREST, mag NEAREST");
+    assert_eq!(word(1, 0, 1, 6), 1 | 4 | 8 | top, "NEAREST_MIPMAP_NEAREST, mag LINEAR");
+    assert_eq!(word(0, 1, 1, 6), 1 | 2 | 8 | top, "LINEAR_MIPMAP_NEAREST, mag NEAREST");
+    assert_eq!(word(1, 1, 1, 6), 1 | 8 | top, "LINEAR_MIPMAP_NEAREST");
+    assert_eq!(word(0, 0, 2, 6), 1 | 2 | 4 | 16 | top, "NEAREST_MIPMAP_LINEAR, mag NEAREST");
+    assert_eq!(word(1, 0, 2, 6), 1 | 4 | 16 | top, "NEAREST_MIPMAP_LINEAR");
+    assert_eq!(word(0, 1, 2, 6), 1 | 2 | 16 | top, "LINEAR_MIPMAP_LINEAR, mag NEAREST");
+    assert_eq!(word(1, 1, 2, 6), 1 | 16 | top, "LINEAR_MIPMAP_LINEAR");
+    /* a mipmap filter over one level walks no chain */
+    assert_eq!(word(0, 0, 1, 1), 0, "NEAREST_MIPMAP_NEAREST over one level");
+}
