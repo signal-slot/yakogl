@@ -358,10 +358,13 @@ line and `verdin_imx95: board: run over: PSCI SYSTEM_RESET`.
 
 The board files are the board layer's `app.conf` and `app.overlay` (as every
 example's), then `verdin_imx95.conf` here
-(`../common/verdin_imx95.cmake`). That file turns the X4 panel off
+(`../common/verdin_imx95.cmake`). That file turns the X12 panel off
 (`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=n`): the suite reads its pixels back and
 the image never brings the panel up unless asked
-(`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`, which also builds). It sets the
+(`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`: then `main_mali.c` runs the suite,
+shows one frame of colour bands on the X12 panel with `board_show()` (the
+board layer's `display up` line) and holds it `CONFIG_GL_TEST_PANEL_HOLD_S`
+(30) seconds; a panel failure fails the run). It sets the
 board layer's lifetime to 300 s and its alive window to 30 s, as the T6's
 image, and no hold.
 

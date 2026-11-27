@@ -11,9 +11,10 @@
  * compiler and its Mali backend, on the Zephyr OSAL src/osal/zephyr_mali.c
  * over our own kernel side (board::nanopc_t6_osal: Z1 to Z3, then CSG 0 /
  * CS 0, each kick one job on its ring). The suite renders into its own
- * surfaces and reads them back; neither image brings a display up (on the
- * Verdin iMX95 the X4 panel is CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY, off in
- * verdin_imx95.conf).
+ * surfaces and reads them back; neither image brings a display up by default
+ * (on the Verdin iMX95 the X12 panel is CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY,
+ * off in verdin_imx95.conf; with it on, the suite is followed by one frame on
+ * the panel and a hold, panel_show() below).
  *
  * What this file adds to the suite is the board's part only:
  *
@@ -39,6 +40,8 @@
 #include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <errno.h>
+#include <stdint.h>
 
 #include "osal_internal.h"     /* osal_mali_diag_print */
 #include "zephyr_mali_board.h" /* osal_zephyr_mali_board_feed */
@@ -53,6 +56,11 @@
 #elif defined(CONFIG_YAKOGL_BOARD_VERDIN_IMX95)
 #include <yakogl_board.h>
 #include <verdin_imx95.h>
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#include "verdin_imx95_display.h" /* VERDIN_IMX95_SCREEN_W/H */
+#endif
 #ifndef VI95_GL_TEST_BUILD
 #define VI95_GL_TEST_BUILD "unknown"
 #endif
@@ -120,6 +128,90 @@ static int run(void)
 	return gl_test_run(gl_case, 0, 0, 0, 0, 0);
 }
 
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+/*
+ * The suite's gl_test_run(panel != 0) is not used: it draws only the panel
+ * demo, at a fixed 1024x600 window of the AM62P's, and runs no case. The
+ * Verdin iMX95's frame is ours: a board window of the panel's size (the board
+ * layer's, so board_show() flips it in place), eglSwapBuffers on the context
+ * the suite left (the OSAL and the backend accept the repeat eglInitialize),
+ * then board_show(): "verdin_imx95: display up" and the X12 panel lit.
+ */
+static int panel_fail(const char *what)
+{
+	printk("gl_test: panel: %s failed (EGL 0x%x, GL 0x%x)\n", what, eglGetError(),
+	       glGetError());
+	return -EIO;
+}
+
+static int panel_show(void)
+{
+	static const EGLint single_buffer[] = { EGL_RENDER_BUFFER, EGL_SINGLE_BUFFER, EGL_NONE };
+	static const EGLint cfg_attribs[] = {
+		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
+		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_NONE,
+	};
+	static const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+	/* vertical bands: white, red, green, blue, yellow, cyan, magenta, grey */
+	static const float bands[8][3] = {
+		{ 1, 1, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 },
+		{ 1, 1, 0 }, { 0, 1, 1 }, { 1, 0, 1 }, { .4f, .4f, .4f },
+	};
+	static struct gles_native_window nw;
+	struct board_window win;
+	EGLDisplay dpy;
+	EGLSurface surf;
+	EGLContext ctx;
+	EGLConfig cfg;
+	EGLint n = 0;
+	int rc;
+
+	rc = board_window(VERDIN_IMX95_SCREEN_W, VERDIN_IMX95_SCREEN_H, &win);
+	if (rc) {
+		printk("gl_test: panel: board_window = %d\n", rc);
+		return rc;
+	}
+	nw = (struct gles_native_window){
+		.phys = win.phys, .width = win.w, .height = win.h,
+		.stride_bytes = win.stride, .format = win.format,
+	};
+	dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	if (!eglInitialize(dpy, NULL, NULL))
+		return panel_fail("eglInitialize");
+	if (!eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &n) || n != 1)
+		return panel_fail("eglChooseConfig");
+	surf = eglCreateWindowSurface(dpy, cfg, &nw, single_buffer);
+	if (surf == EGL_NO_SURFACE)
+		return panel_fail("eglCreateWindowSurface");
+	ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
+	if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx))
+		return panel_fail("eglCreateContext/eglMakeCurrent");
+	glViewport(0, 0, (GLsizei)win.w, (GLsizei)win.h);
+	glEnable(GL_SCISSOR_TEST);
+	for (unsigned i = 0; i < 8; i++) {
+		glScissor((GLint)(win.w / 8 * i), 0, (GLsizei)(win.w / 8), (GLsizei)win.h);
+		glClearColor(bands[i][0], bands[i][1], bands[i][2], 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
+	if (!eglSwapBuffers(dpy, surf) || glGetError() != GL_NO_ERROR)
+		return panel_fail("draw/eglSwapBuffers");
+	rc = board_show(&win);
+	if (rc) {
+		printk("gl_test: panel: board_show = %d\n", rc);
+		return rc;
+	}
+	printk("gl_test: panel: %ux%u frame shown, holding %d s\n", win.w, win.h,
+	       CONFIG_GL_TEST_PANEL_HOLD_S);
+	/* the board layer's alive mark and WDOG3 are fed in the slices */
+	for (int s = 0; s < CONFIG_GL_TEST_PANEL_HOLD_S; s++) {
+		osal_zephyr_mali_board_feed();
+		k_msleep(1000);
+	}
+	return 0;
+}
+#endif
+
 int main(void)
 {
 	int rc;
@@ -136,6 +228,19 @@ int main(void)
 #endif
 	osal_zephyr_mali_board_feed();
 	rc = run();
+#ifdef CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY
+	/* after the suite, whatever it found: the camera sees the panel, and a
+	 * panel failure fails a run that passed */
+	{
+		int prc = panel_show();
+
+		if (prc) {
+			printk("gl_test: panel FAILED (rc=%d)\n", prc);
+			if (rc == 0)
+				rc = prc;
+		}
+	}
+#endif
 	/* the OSAL's close record: kicks, carve-out pages, frees, restarts, the
 	 * tiler heap, and the sched refusal that stopped it, if one did */
 	osal_mali_diag_print();

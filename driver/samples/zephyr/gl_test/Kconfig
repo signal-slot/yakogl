@@ -597,6 +597,19 @@ config T6_GL_TEST_CASES
 	  (YAKOGL_GPU_MALI's help; board::nanopc_t6_osal, "Recovery").
 	  Empty: T6_GL_TEST_CASE.
 
+config GL_TEST_PANEL_HOLD_S
+	int "Verdin iMX95: seconds the panel's frame is held after the suite"
+	default 30
+	range 0 120
+	depends on YAKOGL_VERDIN_IMX95_DISPLAY
+	help
+	  With the X12 panel configured (-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y),
+	  src/main_mali.c runs the suite, then puts one frame of colour bands
+	  on the panel through board_show() and holds it this long (the
+	  watchdog is fed meanwhile) so a camera can see it, then
+	  board_finish(). It comes on top of the suite's time within
+	  YAKOGL_BOARD_LIFETIME_S (300 s in verdin_imx95.conf).
+
 endmenu
 
 rsource "../common/Kconfig"
