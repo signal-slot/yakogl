@@ -382,3 +382,23 @@ words).
 - No line of the 167 is expected to have changed between `b25997e4` and the tip
   (tri-fbo: every relevant PowerVR change was already in that build). board-a's
   rows 1-2 at `31cdaefc` are the next measurement.
+
+## 10. `fbo.multiview.samples_{1,2,4}` (3 NotSupported) -- not a defect
+
+The three cases are `MultiviewCase` of dEQP's `es3fMultiviewTests.cpp` (VK-GL-CTS
+main; this machine's cache has the data only, so the file was read from the
+upstream repository, not from the cache). `init()` throws `NotSupportedError`
+("Multiview is not supported", line 158) unless `GL_EXTENSIONS` holds
+`GL_OVR_multiview`. For `samples_2` and `samples_4` it also needs
+`GL_OVR_multiview_multisampled_render_to_texture`. The test then attaches a
+2D-array texture to a framebuffer with `glFramebufferTextureMultiviewOVR` and
+draws one pass into several layers with `gl_ViewID_OVR`.
+
+The AM62P line is the first check: the PowerVR build does not claim
+`GL_OVR_multiview` (`src/gl` has only the constant, no entry point, no extension
+string, and `src/pvr` has no multi-view or layered-render path). The extension is
+optional, not part of OpenGL ES 3.0, so NotSupported is the correct answer and
+no ES 3.0 requirement is missing. Cause class `NS-MULTIVIEW` in
+`tools/cts/am62p-notpass-causes.py`, state `known`; no issue is needed. Claiming
+the extension would be a feature (a layered colour target, a `gl_ViewID_OVR`
+shader input), not a fix, and stays outside stage 4.

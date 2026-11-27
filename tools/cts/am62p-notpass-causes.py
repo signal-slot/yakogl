@@ -165,6 +165,8 @@ RULES = [
      "docs/notes/es3-msaa-renderbuffers.md (d), row multisample.default_framebuffer", "no 4x EGL config on the dEQP image (\"No multisample buffers\")"),
     ("NS-DEPTH-STENCIL", {NS}, None, r"Separate depth and stencil", "open",
      "fbo-fix-designs.md 2, 7", "separate depth and stencil attachments"),
+    ("NS-MULTIVIEW", {NS}, r"^fbo\.multiview\.", None, "known",
+     "fbo-fix-designs.md 10", "GL_OVR_multiview is an optional extension, not claimed; not ES 3.0"),
     ("NS-PBO-FLOAT", {NS}, r"^pbo\.renderbuffer\.", None, "known",
      "backend-caps.md 4 (EXT_color_buffer_float)", "float renderbuffer targets"),
 ]
