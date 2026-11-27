@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The frag shader of dEQP-GLES2.functional.shaders.constant_expressions.builtin_functions.geometric.refract_vec4_fragment as dEQP-GLES2 writes it (VK-GL-CTS 93bca01, NOTICE 5), generated for plan #387 item kfold-refs from the templates of modules/gles2/functional/es2fShaderConstExprTests.cpp, modules/glshared/glsShaderConstExprTests.cpp and glsShaderLibraryCase.cpp; the same generator reproduces the .qpa-verbatim deqp_constprod_foldcall_* and deqp_cfold2_const_call_* pairs byte for byte.
