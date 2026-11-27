@@ -38,8 +38,23 @@
  * this check existed: the 2026-11-06 runs and the 2026-11-11 case 222 dtpu
  * run (docs/notes/gc-depth-sample.md, docs/notes/x2-glmark2-slow-scenes.md).
  * The first jump with this list has still to be watched on the X2's console.
- * (The two chip strings are those of the X2's /proc/interrupts; the Linux
- * sources were not at hand to check them in.) An interrupt behind irqsteer
+ *
+ * Measured on the Armadillo-X2 on 2026-11-27 (Linux 6.12.105, Armadillo Base
+ * OS 3.24, read only over ssh): /sys/kernel/irq/<n>/chip_name names exactly
+ * three chips, GICv3, gpio-mxc and irqsteer, and every row of
+ * /proc/interrupts with a handler is on one of them; this check, run alone
+ * from kexec_zephyr.c on the board (no jump), let the table through.
+ *
+ * pca9450-irq is let through, on purpose. On the X2 it is a handler name,
+ * not a chip: its row reads "gpio-mxc 3 Level pca9450-irq" and no
+ * /sys/kernel/irq entry names a pca9450 chip, so the check sees a gpio-mxc
+ * row. Unlike the RK806 above, the PMIC adds no regmap-irq chip: the
+ * hazard there was the bus lock of the interrupt's own chip, which the panic
+ * takes, and here that chip is gpio-mxc, whose lock is the kernel's no-op.
+ * The I2C reads of the PMIC happen only in the handler's thread, which does
+ * not run once the panic has interrupts off on one CPU. If a later kernel
+ * gives the PMIC a regmap-irq chip of its own, its row names that chip and
+ * is refused like any unlisted one. An interrupt behind irqsteer
  * whose own chip sleeps (a regmap-irq chip) shows that chip's name in its
  * row, not "irqsteer", and is refused as any unlisted chip.
  *
