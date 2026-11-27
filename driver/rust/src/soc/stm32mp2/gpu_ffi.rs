@@ -5,14 +5,14 @@
 //! and #1281. Declarations: driver/zephyr/lib/board/stm32mp2/include/
 //! stm32mp2_gpu.h.
 //!
-//! - [`yd_mp2_gpu_power_on`]: OP-TEE opened (capabilities, the data page
+//! - `yd_mp2_gpu_power_on`: OP-TEE opened (capabilities, the data page
 //!   registered, a session to the SCMI pseudo-TA, the channel), then
 //!   [`power::power_up`] (performance level, power domain 0, the RCC gate and
 //!   reset, idle), then the session closed.
-//! - [`yd_mp2_gpu_identify`]: [`hw::identify`] (the table-driven identity).
-//! - [`yd_mp2_gpu_intr_check`]: `HI_INTR_ENBL` written, read back, then 0
+//! - `yd_mp2_gpu_identify`: `hw::identify` (the table-driven identity).
+//! - `yd_mp2_gpu_intr_check`: `HI_INTR_ENBL` written, read back, then 0
 //!   written again (no interrupt handler is connected).
-//! - [`yd_mp2_gpu_reset_idle`]: the RCC reset asserted and released, then
+//! - `yd_mp2_gpu_reset_idle`: the RCC reset asserted and released, then
 //!   `HI_IDLE_STATE` read until idle, at most `idle_reads` times.
 //!
 //! Every SMC, every OP-TEE message frame and every SCMI request and reply is
@@ -24,7 +24,7 @@
 //!
 //! The generic functions (`*_with`) take the SMC conduit and the buses, so
 //! the host tests run them against fakes; the `extern "C"` functions give
-//! them [`HwSmc`] and [`Hw`].
+//! them `HwSmc` and `Hw`.
 
 use super::power::{self, Config, Level, Status, Step};
 use super::rcc::GpuRcc;

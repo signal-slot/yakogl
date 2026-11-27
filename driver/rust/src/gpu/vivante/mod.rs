@@ -35,7 +35,7 @@
 //! That struct stays C's; [`GcCore`] mirrors the part of it before the
 //! kernel objects (both sides pin the offsets: `gc_kernel_rust.c`'s
 //! `_Static_assert`s, the `const` asserts in [`crate::ffi`], and the host
-//! test against the C layout recorded in [`c_golden`]). Kernel objects (the
+//! test against the C layout recorded in `c_golden`). Kernel objects (the
 //! spinlock, the event semaphore, the submit mutex) stay in C: the shim
 //! takes the lock around the calls that need it.
 //!
