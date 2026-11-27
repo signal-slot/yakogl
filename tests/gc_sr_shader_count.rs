@@ -13,6 +13,12 @@
 //! `docs/notes/gc-terrain-shaders-rest.md` (plan #421 item cc-copies); the
 //! comments give the count before them.
 //!
+//! The four fragment programs are also held against W6's fallback rule,
+//! `yakogl::vivante::tiled_rt::long_program` at `LONG_PROGRAM_INSTRS` (64):
+//! the verdicts below come from the pins (always) and from the compiled
+//! `usc_dw` (with the corpus). At this tip none of the four is long; refract's
+//! 55 was 64, on the threshold, before rank 3.
+//!
 //! The glmark2 texts are GPL-3.0 and never committed: they are read from the
 //! host harness's corpus (`GLMARK2_CORPUS`, by default
 //! `build/glmark2-host/shaders`, which `tools/hostharness/glmark2/run.sh
@@ -28,9 +34,16 @@
 use core::ffi::c_char;
 use std::path::Path;
 use yakogl::shaderc::{ShcShader, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
+use yakogl::vivante::tiled_rt::{long_program, LONG_PROGRAM_INSTRS};
 
 /// Instructions and temporaries of one compile.
 fn count(stage: u32, src: &str) -> (u32, u32) {
+    let (usc_dw, t) = compile(stage, src);
+    (usc_dw / 4, t)
+}
+
+/// The shader code's dwords (`usc_dw`, four an instruction) and temporaries of one compile.
+fn compile(stage: u32, src: &str) -> (u32, u32) {
     yakogl::shaderc::online::backend::forget_compiled();
     let (mut sh, mut log) = (ShcShader::ZERO, [0 as c_char; 1024]);
     let text = format!("{src}\0");
@@ -39,7 +52,7 @@ fn count(stage: u32, src: &str) -> (u32, u32) {
     let rc = unsafe { f(stage, text.as_ptr() as *const c_char, &mut sh, log.as_mut_ptr(), log.len()) };
     let msg: String = log.iter().take_while(|c| **c != 0).map(|c| *c as u8 as char).collect();
     assert_eq!(rc, 0, "compile failed: {msg}");
-    (sh.usc_dw / 4, sh.temps.into())
+    (sh.usc_dw, sh.temps.into())
 }
 
 /// (text hash, stage, ours: instructions and temps, etna_shc's in the comment)
@@ -59,6 +72,35 @@ const GLMARK2: [(&str, &str, u32, u32); 8] = [
 /// 132 before rank 3 (a `mul` read once by an `add` is a `mad`), 123 before
 /// rank 2's rest (plan #421 item cc-copies).
 const GLMARK2_TOTAL: u32 = 119;
+
+/// (fragment text hash, the program, its instructions, `long_program`'s
+/// verdict at `LONG_PROGRAM_INSTRS`): the four fragment programs of `GLMARK2`
+/// and W6's fallback rule over them.
+const FRAGMENT_LONG: [(&str, &str, u32, bool); 4] = [
+    ("3fae89c9ab969ea3", "refract", 55, false), // 64 before rank 3, which was long
+    ("cf4bf899d84af04d", "ground", 12, false),
+    ("928e172a68b7f175", "depth", 2, false),
+    ("474800a67afed087", "horse", 1, false),
+];
+
+/// `FRAGMENT_LONG` agrees with the pins of `GLMARK2` and with `long_program`
+/// at `LONG_PROGRAM_INSTRS`; needs no corpus.
+fn pinned_fragments_against_long_program(wrong: &mut Vec<String>) {
+    assert_eq!(LONG_PROGRAM_INSTRS, 64, "the threshold this file's verdicts were written for");
+    for (hash, name, instrs, long) in FRAGMENT_LONG {
+        let pin = GLMARK2.iter().find(|p| p.0 == hash && p.1 == "frag").map(|p| p.2);
+        if pin != Some(instrs) {
+            wrong.push(format!("{name} fragment: FRAGMENT_LONG says {instrs} instructions, GLMARK2 pins {pin:?}"));
+        }
+        let got = long_program(instrs * 4, LONG_PROGRAM_INSTRS);
+        println!("gc7000 {name} fragment: {instrs} instructions, long_program at {LONG_PROGRAM_INSTRS}: {got}");
+        if got != long {
+            wrong.push(format!("{name} fragment: long_program({instrs} instructions) is {got}, pinned {long}"));
+        }
+    }
+    let refract = FRAGMENT_LONG.iter().find(|f| f.1 == "refract").expect("refract");
+    assert_eq!(refract.2, 55, "refract's fragment program at this tip");
+}
 
 const HEAD: &str = "precision mediump float;\nvarying vec4 a;\nvarying vec4 b;\n";
 
@@ -99,6 +141,7 @@ fn micro() -> Vec<(&'static str, u32, String, u32)> {
 #[test]
 fn shadow_and_refract_shaders_count() {
     let mut wrong = Vec::new();
+    pinned_fragments_against_long_program(&mut wrong);
     for (name, stage, src, want) in micro() {
         let (n, t) = count(stage, &src);
         println!("gc7000 micro {name}: {n} instructions, {t} temps (pinned {want})");
@@ -130,10 +173,18 @@ fn shadow_and_refract_shaders_count() {
                 .unwrap_or_else(|| panic!("{} has no *{suffix}", dir.display()));
             let src = std::fs::read_to_string(dir.join(f)).expect("a shader file");
             let stage = if ext == "vert" { SHC_STAGE_VERTEX } else { SHC_STAGE_FRAGMENT };
-            let (n, t) = count(stage, &src);
+            let (usc_dw, t) = compile(stage, &src);
+            let n = usc_dw / 4;
             println!("gc7000 {f}: {n} instructions, {t} temps (pinned {want_n}, {want_t})");
             if (n, t) != (want_n, want_t) {
                 wrong.push(format!("{f}: {n} instructions {t} temps, pinned {want_n} {want_t}"));
+            }
+            if let Some((_, name, _, long)) = FRAGMENT_LONG.iter().find(|l| l.0 == hash) {
+                let got = long_program(usc_dw, LONG_PROGRAM_INSTRS);
+                println!("gc7000 {name} fragment: usc_dw {usc_dw}, long_program at {LONG_PROGRAM_INSTRS}: {got}");
+                if got != *long {
+                    wrong.push(format!("{f}: long_program(usc_dw {usc_dw}) is {got}, pinned {long}"));
+                }
             }
             total += n;
         }

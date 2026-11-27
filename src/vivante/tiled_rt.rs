@@ -282,14 +282,32 @@ pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
 ///
 /// W6's fallback (`gc-tiled-wire.md`): if the RS resolve costs more than early
 /// depth saves, the W4 rule narrows to draws with a long fragment program.
-/// The figures (our GC7000 compiler, `tests/gc_terrain_shader_count.rs`
-/// `GLMARK2`; `gc-terrain-shaders.md`): `terrain.frag` 80 (148 in
-/// `gc-slow-host-counts.md`, before ranks T and 4a-4c), the blur passes
-/// `tilt_*.frag` 57 and `bloom_*.frag` 32, `normalmap.frag` 20,
-/// `luminance.frag` 7, `overlay.frag` 2. 64 lies between the terrain pass and
-/// the longest blur, so terrain's pass qualifies and the blits and overlays
-/// do not. The notes carry no instruction counts for the shadow and refract
-/// programs; this threshold is not derived from them.
+/// The threshold was set when the GC7000 compiler gave `terrain.frag` 80
+/// instructions (148 in `gc-slow-host-counts.md`, before ranks T and 4a-4c),
+/// the blur passes `tilt_*.frag` 57 and `bloom_*.frag` 32, `normalmap.frag`
+/// 20, `luminance.frag` 7 and `overlay.frag` 2: 64 lay between the terrain
+/// pass and the longest blur.
+///
+/// glmark2's fragment programs measured at f3f3dc52 (our GC7000 compiler;
+/// `tests/gc_terrain_shader_count.rs` and `tests/gc_sr_shader_count.rs` pin
+/// them, the latter with this verdict):
+///
+/// | scene   | fragment program  | instructions | at 64 |
+/// |---------|-------------------|--------------|-------|
+/// | terrain | `terrain.frag`    | 75           | long  |
+/// | terrain | `tilt_*.frag`     | 29           | short |
+/// | terrain | `normalmap.frag`  | 17           | short |
+/// | terrain | `bloom_*.frag`    | 16           | short |
+/// | terrain | `luminance.frag`  | 6            | short |
+/// | terrain | `overlay.frag`    | 2            | short |
+/// | refract | refract           | 55           | short |
+/// | shadow  | ground            | 12           | short |
+/// | shadow  | depth             | 2            | short |
+/// | shadow  | horse             | 1            | short |
+///
+/// Only terrain's pass qualifies. Refract's 55 (64 before rank 3, a `mul`
+/// read once by an `add` fused into a `mad`) is below the threshold; the
+/// threshold was not derived from the shadow or refract programs.
 pub const LONG_PROGRAM_INSTRS: u32 = 64;
 
 /// Whether a fragment program of `usc_dw` dwords of shader code (the shader
