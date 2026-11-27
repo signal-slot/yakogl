@@ -1093,6 +1093,8 @@ pub const CURRENT_INT: u8 = 1;
 /// ... by glVertexAttribI4ui[v].
 pub const CURRENT_UINT: u8 = 2;
 
+use super::draw_buffers_indexed::DrawBuffersIndexed;
+
 /* ---- the pool and the current context ------------------------------------ */
 
 static POOL: Global<[GlContext; MAX_CONTEXTS]> = Global::zeroed();
@@ -1107,6 +1109,17 @@ pub fn uniform_buffers(c: &GlContext) -> &'static mut [UboBinding; MAX_UNIFORM_B
     // SAFETY: single-threaded by contract; a context's slot index is below
     // MAX_CONTEXTS, and callers hold one reference at a time.
     unsafe { &mut UNIFORM_BUFFERS.get()[usize::from(c.index) % MAX_CONTEXTS] }
+}
+/// The per-draw-buffer blend and colour-mask state of each context slot
+/// (GL_EXT/OES_draw_buffers_indexed; the non-indexed calls set every buffer).
+/// Not read by draws yet. Kept here and not in `GlContext`, whose layout the C
+/// side shares (src/abi_layout.rs).
+static DRAW_BUFFERS_INDEXED: Global<[DrawBuffersIndexed; MAX_CONTEXTS]> = Global::zeroed();
+
+/// The indexed draw-buffer state of context `c`.
+pub fn dbi(c: &GlContext) -> &'static mut DrawBuffersIndexed {
+    // SAFETY: as `uniform_buffers`.
+    unsafe { &mut DRAW_BUFFERS_INDEXED.get()[usize::from(c.index) % MAX_CONTEXTS] }
 }
 static POOL_USED: Global<[bool; MAX_CONTEXTS]> = Global::zeroed();
 /// One share group per context slot: with no sharing every context has its
@@ -1998,6 +2011,7 @@ fn alloc_context(w: u32, h: u32, group: u8) -> Option<&'static mut GlContext> {
     /* the slot's binding points start unbound, whatever a context that had
      * the slot before left in them */
     *uniform_buffers(c) = [UboBinding::default(); MAX_UNIFORM_BUFFER_BINDINGS];
+    *dbi(c) = DrawBuffersIndexed::new();
     c.group = g;
     /* state kept per context slot outside GlContext (hints) */
     super::state::reset_context_hints(c.index);

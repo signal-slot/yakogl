@@ -14,6 +14,8 @@
 //! (so no Rust test can call them: the file pins their absence by reading the
 //! sources), and the indexed state queries `glGetIntegeri_v` of the blend and
 //! colour-mask pnames answer GL_INVALID_ENUM at index 0..3 and 4 alike.
+//! (Update: the entry points and the blend queries landed with dbi-entry,
+//! tests/es3_dbi_api.rs; the extension name is still not listed.)
 //! The stand-in does reach the core: GL_MAX_DRAW_BUFFERS is 4.
 //!
 //! The `#[ignore]`d tests are the expected behaviour once Draft 1 of
@@ -215,10 +217,10 @@ fn neither_indexed_extension_is_advertised() {
     assert!(!extensions().iter().any(|e| e.contains("draw_buffers_indexed")), "in the list: re-pin");
 }
 
-/// The entry points are missing from the GL core (the sources are read, since
-/// a call to a missing function cannot link). The plain ones stay.
+/// The entry points exist (tests/es3_dbi_api.rs calls them); the extension is
+/// still not advertised (the test above).
 #[test]
-fn the_per_target_entry_points_do_not_exist() {
+fn the_per_target_entry_points_exist() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gl");
     let mut text = String::new();
     for e in std::fs::read_dir(dir).unwrap() {
@@ -227,34 +229,20 @@ fn the_per_target_entry_points_do_not_exist() {
             text += &std::fs::read_to_string(p).unwrap();
         }
     }
-    for name in [
-        "glEnableiEXT",
-        "glDisableiEXT",
-        "glIsEnablediEXT",
-        "glBlendEquationiEXT",
-        "glBlendEquationSeparateiEXT",
-        "glBlendFunciEXT",
-        "glBlendFuncSeparateiEXT",
-        "glColorMaskiEXT",
-        "glEnableiOES",
-        "glColorMaskiOES",
-    ] {
-        assert!(!text.contains(name), "{name} exists now: call it from this file and re-pin");
-    }
-    for name in ["fn glEnable(", "fn glBlendFunc(", "fn glBlendEquation(", "fn glColorMask(", "fn glIsEnabled("] {
-        assert!(text.contains(name), "{name} is gone");
+    for name in ["glEnableiEXT", "glColorMaskiEXT", "glEnableiOES", "glColorMaskiOES", "glGetBooleani_v"] {
+        assert!(text.contains(&format!("fn {name}(")), "{name} is gone");
     }
 }
 
-/// The indexed blend queries are not indexed state: GL_INVALID_ENUM at index
-/// 0..3 and at 4, and nothing written.
+/// glGetIntegeri_v answers the six blend pnames (tests/es3_dbi_api.rs); GL_BLEND
+/// and GL_COLOR_WRITEMASK are not integer-indexed here (the latter yields four
+/// values: glGetBooleani_v answers it): GL_INVALID_ENUM, nothing written.
 #[test]
-fn the_indexed_blend_queries_are_invalid_enum_at_every_index() {
+fn glgetintegeri_v_still_refuses_blend_enable_and_the_colour_mask() {
     let _lib = context();
-    let extra = [("GL_COLOR_WRITEMASK", GL_COLOR_WRITEMASK), ("GL_BLEND", GL_BLEND)];
-    for (what, pname) in INDEXED_PNAMES.iter().chain(extra.iter()) {
+    for (what, pname) in [("GL_COLOR_WRITEMASK", GL_COLOR_WRITEMASK), ("GL_BLEND", GL_BLEND)] {
         for index in 0..=4 {
-            let (err, v) = integeri(*pname, index);
+            let (err, v) = integeri(pname, index);
             assert_eq!(err, GL_INVALID_ENUM, "glGetIntegeri_v({what}, {index})");
             assert_eq!(v, i32::MIN, "glGetIntegeri_v({what}, {index}) wrote despite the error");
         }
@@ -297,7 +285,6 @@ fn expected_the_extension_is_advertised() {
 /// Draft 1 (3): the indexed queries answer for 0..3 (blend defaults: ADD, ONE,
 /// ZERO) and give GL_INVALID_VALUE for index 4.
 #[test]
-#[ignore = "docs/notes/v3d-draw-buffers-indexed.md Draft 1: glGetIntegeri_v of blend state is GL_INVALID_ENUM"]
 fn expected_indexed_blend_queries_answer_at_three_and_refuse_four() {
     let _lib = context();
     let defaults = [GL_FUNC_ADD, GL_FUNC_ADD, GL_ONE, GL_ZERO, GL_ONE, GL_ZERO];

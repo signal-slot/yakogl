@@ -3263,6 +3263,23 @@ mod sym {
         pub fn glGetInteger64i_v();
         pub fn glGetInteger64v();
         pub fn glGetIntegeri_v();
+        pub fn glEnableiEXT();
+        pub fn glDisableiEXT();
+        pub fn glIsEnablediEXT();
+        pub fn glBlendEquationiEXT();
+        pub fn glBlendEquationSeparateiEXT();
+        pub fn glBlendFunciEXT();
+        pub fn glBlendFuncSeparateiEXT();
+        pub fn glColorMaskiEXT();
+        pub fn glEnableiOES();
+        pub fn glDisableiOES();
+        pub fn glIsEnablediOES();
+        pub fn glBlendEquationiOES();
+        pub fn glBlendEquationSeparateiOES();
+        pub fn glBlendFunciOES();
+        pub fn glBlendFuncSeparateiOES();
+        pub fn glColorMaskiOES();
+        pub fn glGetBooleani_v();
         pub fn glGetProgramBinary();
         pub fn glGetQueryObjectuiv();
         pub fn glGetQueryiv();
@@ -3386,6 +3403,23 @@ static PROCS: &[Proc] = &[
     gl!(glGetInteger64i_v),
     gl!(glGetInteger64v),
     gl!(glGetIntegeri_v),
+    gl!(glEnableiEXT),
+    gl!(glDisableiEXT),
+    gl!(glIsEnablediEXT),
+    gl!(glBlendEquationiEXT),
+    gl!(glBlendEquationSeparateiEXT),
+    gl!(glBlendFunciEXT),
+    gl!(glBlendFuncSeparateiEXT),
+    gl!(glColorMaskiEXT),
+    gl!(glEnableiOES),
+    gl!(glDisableiOES),
+    gl!(glIsEnablediOES),
+    gl!(glBlendEquationiOES),
+    gl!(glBlendEquationSeparateiOES),
+    gl!(glBlendFunciOES),
+    gl!(glBlendFuncSeparateiOES),
+    gl!(glColorMaskiOES),
+    gl!(glGetBooleani_v),
     gl!(glGetProgramBinary),
     gl!(glGetQueryObjectuiv),
     gl!(glGetQueryiv),
