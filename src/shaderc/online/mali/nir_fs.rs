@@ -724,8 +724,14 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
         let varying_lane = comps == 1
             && write_mask == 1
             && matches!(m.instrs.get(src.val.0 as usize), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. }));
-        let whole =
-            write_mask == (1u8 << comps) - 1 && ((0..comps).all(|c| src.swizzle[c] as usize == c) || varying_lane);
+        /* and a vector local assigned a varying's swizzle, the same rvalue
+         * (deqp_opform_mul_float_vec4's `in1 = v_in1.wzyx`, read by `in0 *
+         * in1` after `in0 = v_in0.z`: the product's tree loads v_in0 first,
+         * its conversion before v_in1's load) */
+        let varying_swizzle = comps > 1
+            && matches!(m.instrs.get(src.val.0 as usize), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. }));
+        let whole = write_mask == (1u8 << comps) - 1
+            && ((0..comps).all(|c| src.swizzle[c] as usize == c) || varying_lane || varying_swizzle);
         let texel = write_mask.count_ones() == 1
             && matches!(
                 m.instrs.get(src.val.0 as usize),
@@ -1102,6 +1108,10 @@ pub const ADMITTED: u128 = {
         | prod(Op, Output)
         | prod(Const, AddA)
         | prod(HalfSwapped, AddB)
+        /* a swapped pair second in a product, a `.h10` swizzle on the
+         * operand (deqp_opform_mul_float_vec4's `in0 * v_in1.wzyx`:
+         * `FMA.v2f16 r2, r0.h00, r2^.h10, 0x0.neg`) */
+        | prod(HalfSwapped, MulB)
         /* `-a2.yx` (fsneg_swapped, fstex_cubedir_negyx) */
         | prod(HalfSwapped, NegSrc)
         | prod(Half, NegSrc)
