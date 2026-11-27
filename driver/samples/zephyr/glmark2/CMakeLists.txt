@@ -36,6 +36,18 @@ endif()
 if(BOARD MATCHES "^nanopc_t6")
   set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/nanopc_t6/app.conf" ${EXTRA_CONF_FILE})
 endif()
+# The Verdin iMX95 takes its board layer's app.conf and app.overlay the same
+# way (the Mali back end, the LVDS panel's node, the console, the MMU's
+# tables). Zephyr merges boards/<board>.conf before every EXTRA_CONF_FILE, so
+# app.conf's carve-out (32 MiB and the windows) would win over glmark2's: the
+# board's .conf follows app.conf in the list too, and wins.
+if(BOARD MATCHES "^verdin_imx95(/|$)")
+  set(EXTRA_CONF_FILE
+    "${PVR_REPO}/zephyr/lib/board/verdin_imx95/app.conf"
+    "${CMAKE_CURRENT_SOURCE_DIR}/boards/verdin_imx95_mimx9596_a55.conf"
+    ${EXTRA_CONF_FILE})
+  list(APPEND EXTRA_DTC_OVERLAY_FILE "${PVR_REPO}/zephyr/lib/board/verdin_imx95/app.overlay")
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(glmark2_zephyr)
