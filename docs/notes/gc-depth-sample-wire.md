@@ -10,8 +10,8 @@ landed on main. glmark2
 D24S8 to R32F depth resolve (`docs/notes/gc-slow-shadow-refract.md`, cause 1;
 `docs/notes/gc-depth-resolve.md`). `docs/notes/gc-depth-sample.md` explains how
 the texture unit could sample the D24S8 surface itself, and its board case
-`dtpu` (gl_test case 222, run in the board session: the Verdin iMX8MP, or
-the Armadillo-X2 once its container is stopped) decides whether it can. This note writes out the code for each answer, so
+`dtpu` (gl_test case 222, run in the board session) decides whether it can.
+This note writes out the code for each answer, so
 depth-sample-gc can start as soon as the record arrives: the files, the
 functions, the words, and the host test that proves the path without a board.
 
@@ -20,6 +20,23 @@ Nothing here was built or run, and no board was used. Every `path:line` is at
 otherwise. `gc-depth-sample.md`'s own line numbers are at `98653bb5` and are
 not repeated here. Mesa citations use that note's letters (`F`, `D`, `X`, `N`,
 ...: Mesa 26.2.1 etnaviv, `$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`).
+
+## Where the verdict comes from: the Armadillo-X2
+
+The `dtpu` verdict is **measured on the Armadillo-X2 in place of the Verdin
+iMX8MP**. The Verdin is off the farm (since 2026-11-16, no return date), and
+the owner's rule of 2026-11-27 sends i.MX8MP / GC7000UL board work to the X2
+(targets `x2`, `x2-console`, `x2-display`). Every record of the session says
+so. The verdict carries over because both boards have the same i.MX8M Plus
+SoC and the same GC7000UL (revision 0x6204,
+`docs/notes/imx8mp-gc-bringup.md`); the wiring below depends only on what the
+TPU, the RS and the texture cache do with a D24S8 surface, which the GPU
+decides. The caveat is in `docs/notes/gc-customer-id.md`: no board's customer
+id was ever read, and that the X2's equals the Verdin's (0x11 against 0) is an
+assumption from the same SoC and GPU, not a record. The `dtpu` run does not
+need it. If the customer id is read later and differs, recheck the outcome
+on that board. A second board session (the (b) arms, knobs 3 and 4) is also
+on the X2. Where a section below says "board session", it means the X2's.
 
 ## The three outcomes, read from case `dtpu`
 
@@ -110,7 +127,12 @@ test knob are on main (mode 1's descriptor, the GC arm of
 `ds_cache::depth_view`, `ds_cache.rs:860`; the `GC_TEXFMT_DEPTH_VIEW` arm in
 `gc_texfmt`, `src/vivante/texture.rs:98`/`:178`). The tests
 `tests/gc_depth_sample.rs` and `tests/gc_depth_view_golden.rs` exist.
-Plan #417 implements the dtpu outcome for the files below. Owners today:
+Landed since this note was refreshed, and not yet used by the draw path:
+`src/vivante/depth_copy.rs`, (b).1's `CopyPool` (supertiled copy buffers kept
+by id and generation, stamped by `note_read`, freed by `gone` and `reap`
+once the last kick completed; commit `9046978f`), and
+`depth_sample::copy_rs_writes` (`src/vivante/depth_sample.rs:291`), which
+returns the (b).1 RS copy's register writes for host tests. Plan #417 implements the dtpu outcome for the files below. Owners today:
 
 | file | edit | owner now |
 |---|---|---|
@@ -478,7 +500,7 @@ Steps (a).1, (a).4, (a).5, (a).7 and (a).8 hold as written. These change:
 - **Board check (new, not in `dtpu`).** `dtpu` does not test D24X8 on a
   supertiled copy. Before (b).1 lands, the board must run one more arm:
   knob 3, "RS copy + D24X8 SUPER_TILED", checked as check 4 against P0. It goes in
-  case 222 of gl_test and runs in a second board session (the Verdin iMX8MP, or X2 once its container is stopped).
+  case 222 of gl_test and runs in a second board session (the Armadillo-X2, as for `dtpu`).
   If it fails, take (b).2.
 - **Cost.** One 7.68 MB read plus one 7.68 MB write by the RS a frame on the
   GPU, against the CPU's 5.76 M uncached loads. The RS rate on this part is
