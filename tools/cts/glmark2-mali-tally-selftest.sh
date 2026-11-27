@@ -17,6 +17,8 @@
 #                      store, GL error 0x505, the kernel's Out of memory (.kmsg) and
 #                      page allocation failure (.log) are oom; 0x506 stays gl-error;
 #                      a 'draw refused' line is fail with plan #309's note
+#   oom-lib/           two scenes: the library's own memory lines (eglSwapBuffers' window
+#                      buffer, the blend-key variant) are oom
 #   malformed-log/     a log whose result line names another scene
 #   malformed-status/  exit=x
 #   malformed-kmsg/    a .kmsg without mali-kmsg.py's line
@@ -127,6 +129,9 @@ for want in '^01 .* oom ' '^02 .* oom ' '^03 .* oom ' '^04 .* oom ' '^05 .* oom 
             '^06 .* gl-error ' '^07 .* fail '; do
   check "oom: /$want/" grep -Eq "$want" "$T/oom.table.expected"
 done
+check "oom-lib: table matches" same "$T/oom-lib.table.expected" table "$T/oom-lib"
+check "oom-lib: the window buffer and the blend variant lines are oom" \
+  grep -q 'not-run 31, oom 2;' "$T/oom-lib.table.expected"
 check "oom: the OSAL refusal, the missing sample store, GL 0x505 and both kernel lines are oom" \
   grep -q 'oom 5, gl-error 1, fail 1;' "$T/oom.table.expected"
 check "oom: the .kmsg line is the cause, its time stamp off" \

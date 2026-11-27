@@ -198,6 +198,10 @@ OWNER_309 = ("refused", "draw-refused", "draw-not-recorded")
 MALI_OOM_LINES = (
     ("osal-refused", re.compile(r"mali: the OSAL refused a buffer of \d+ bytes")),
     ("no-sample-store", re.compile(r"mali: no sample store of \d+ bytes")),
+    # the library's own lines outside src/mali: the window buffer of eglSwapBuffers (src/gl/egl.rs)
+    # and the blend-key variant (src/gl/draw.rs)
+    ("window-buffer", re.compile(r"eglSwapBuffers: no memory for the window's buffer")),
+    ("blend-variant", re.compile(r"yakogl: out of memory for the blend key")),
 )
 GL_OOM_RE = re.compile(r"GL error 0x0*505 in ", re.I)
 KERNEL_OOM_RE = re.compile(r"Out of memory:|page allocation failure")

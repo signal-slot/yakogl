@@ -46,10 +46,10 @@ PROGRAM=glmark2-es2-mali
 host=${BOARD_HOST-} build= stage=/root/yakogl-mali need_kb=1048576 dry=0
 while [ $# -gt 0 ]; do
   case $1 in
-    --host) host=${2:?}; shift 2 ;;
-    --build) build=${2:?}; shift 2 ;;
-    --stage) stage=${2:?}; shift 2 ;;
-    --need-kb) need_kb=${2:?}; shift 2 ;;
+    --host) host=${2:?needs a value}; shift 2 ;;
+    --build) build=${2:?needs a value}; shift 2 ;;
+    --stage) stage=${2:?needs a value}; shift 2 ;;
+    --need-kb) need_kb=${2:?needs a value}; shift 2 ;;
     --dry-run) dry=1; shift ;;
     -h|--help) sed -n '5,30p' "$0"; exit 0 ;;
     *) echo "$me: unknown argument: $1" >&2; exit 2 ;;
