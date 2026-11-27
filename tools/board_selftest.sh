@@ -38,12 +38,12 @@
 #      rows.md, the TALLY line and the diff against the old tree runner's.
 #      And a dEQP-GLES3 table image: records built from the known CRCs of
 #      two GLES3 cases come back with those names (no crc:<hex> left).
-#    - Pi 5: the synthetic gl_test console in tools/testdata
-#      (pi5-gltest-synthetic.console.txt) through the verdict reader
-#      tools/cts/pi5-gltest-verdicts.sh: its --selftest, the six case verdicts
-#      (59 and 67 refused by name) and its record end line against board.sh's
-#      pi5 end regex (row N8 of docs/notes/rpi5-gate-rows.md; board71 points
-#      it at the redacted board record).
+#    - Pi 5: the recorded gl_test console of board71's run in tools/testdata
+#      (pi5-gltest-85afd0cf.console.txt, a redacted excerpt) through the
+#      verdict reader tools/cts/pi5-gltest-verdicts.sh: its --selftest (on its
+#      synthetic fixture), the six case verdicts as the board gave them (all
+#      six FAIL: the product build records no draw) and its record end line
+#      against board.sh's pi5 end regex (row N8 of docs/notes/rpi5-gate-rows.md).
 # 4. The record's own status (no old runner read it): APP and PROBES records
 #    with a pass, a fail and an undefined status, and the gl_test set's CASE
 #    records (CASE_SET passed, failed and inconsistent; the earlier
@@ -1973,32 +1973,41 @@ check "pi5 gl_test record redacted: no host, UART path or address left, and the 
     eval '! grep -q "pi5-fake\|ttyFAKE5\|10\.20\.30\.40" "$d/console.txt" &&
           says pi5 "$d" "rc=0 verdict=done .*result=legacy:gl_test_record_end"'
 # the verdict reader of row N8 (tools/cts/pi5-gltest-verdicts.sh): called, its
-# parse not redone here. The console is the synthetic fixture; board71 points
-# $gt5v_console at its redacted record in tools/testdata (the same line forms),
-# and these checks then replay the real run against docs/notes/v3d71-gl-table.md
-# section 5. gt5_con prints no record lines, so it is no input for this reader.
+# parse not redone here. The console is the redacted excerpt of board71's run
+# (records/rpi5/20261127-1119-gltest71-85afd0cf, image built at 85afd0cf): the
+# build line, the one refusal, the six gl_test and record verdict lines and the
+# end line. That image's 7.1 table records nothing (table71::REF_NO_RECORDING,
+# logged once, before case 5, with the "yakogl/v3d71:" prefix the reader does
+# not read yet), so all six cases FAIL and the reader names six defects. The
+# checks pin that reading; when a later image records, its run replaces the
+# excerpt and these expectations (docs/notes/v3d71-gl-table.md section 5).
+# The --selftest keeps its synthetic fixture (tools/testdata/
+# pi5-gltest-synthetic.console.txt): the refusal-path proof of the reader.
+# gt5_con prints no record lines, so it is no input for this reader.
 V5VERDICT="$HERE/cts/pi5-gltest-verdicts.sh"
-gt5v_console="$TD/pi5-gltest-synthetic.console.txt"
+gt5v_console="$TD/pi5-gltest-85afd0cf.console.txt"
 gt5v_self=$("$V5VERDICT" --selftest 2>&1); gt5v_self_rc=$?
 gt5v_out=$("$V5VERDICT" "$gt5v_console" 2>"$S/pi5gt-verdicts.err"); gt5v_rc=$?
 gt5v_end=$(grep -a 'v3d_gl_test RECORD end' "$gt5v_console" | tail -1)
 gt5v_build=$(sed -n 's/^pi5-gltest-verdicts: build \([^:]*\): .*/\1/p' "$S/pi5gt-verdicts.err" | tail -1)
 check "pi5 verdict reader --selftest: the fixture accepted, the three mutants rejected (dropped case, unnamed FAIL, no record end)" \
     eval '[ "$gt5v_self_rc" = 0 ] && grep -q "fixture accepted, 3 mutants rejected" <<<"$gt5v_self" && ! grep -q "selftest: FAIL" <<<"$gt5v_self"'
-check "pi5 verdict reader on the synthetic console: exit 0, exactly six verdict lines, in the order 5 58 59 66 67 102" \
-    eval '[ "$gt5v_rc" = 0 ] && [ "$(grep -c . <<<"$gt5v_out")" = 6 ] &&
+check "pi5 verdict reader on the recorded console (85afd0cf): exit 1, exactly six verdict lines, in the order 5 58 59 66 67 102" \
+    eval '[ "$gt5v_rc" = 1 ] && [ "$(grep -c . <<<"$gt5v_out")" = 6 ] &&
           [ "$(cut -d" " -f4 <<<"$gt5v_out" | tr "\n" " ")" = "5 58 59 66 67 102 " ]'
-check "pi5 verdict reader: cases 5 58 66 102 PASS, 59 and 67 REFUSED with their read-lost refusal named, no unnamed FAIL, no MISSING" \
-    eval 'grep -qxF "pi5 gl_test: case 5 scissor: PASS" <<<"$gt5v_out" &&
-          grep -qxF "pi5 gl_test: case 58 clearscis: PASS" <<<"$gt5v_out" &&
-          grep -qxF "pi5 gl_test: case 66 clearvp: PASS" <<<"$gt5v_out" &&
-          grep -qxF "pi5 gl_test: case 102 maskclear: PASS" <<<"$gt5v_out" &&
-          grep -q "^pi5 gl_test: case 59 clearmask: REFUSED (the draw reads stencil " <<<"$gt5v_out" &&
-          grep -q "^pi5 gl_test: case 67 fbods: REFUSED (the draw reads depth " <<<"$gt5v_out" &&
-          ! grep -qE "FAIL \(unnamed\)|: MISSING" <<<"$gt5v_out"'
-check "pi5 verdict reader: the console's 'v3d_gl_test RECORD end' line is there and its build id is the one in the reader's summary line (4 PASS, 2 refused, 0 defects: exit 0 needs the end line)" \
-    eval '[ -n "$gt5v_end" ] && [ "$gt5v_rc" = 0 ] && [ -n "$gt5v_build" ] &&
-          grep -q "^pi5-gltest-verdicts: build $gt5v_build: 4 PASS, 2 refused by name, 0 SKIP, 0 defect(s)$" "$S/pi5gt-verdicts.err"'
+check "pi5 verdict reader on the recorded console: all six cases FAIL (unnamed) as the board gave them, no PASS, no MISSING; the one refusal is the 7.1 table's no-recording line" \
+    eval 'grep -qxF "pi5 gl_test: case 5 scissor: FAIL (unnamed)" <<<"$gt5v_out" &&
+          grep -qxF "pi5 gl_test: case 58 clearscis: FAIL (unnamed)" <<<"$gt5v_out" &&
+          grep -qxF "pi5 gl_test: case 59 clearmask: FAIL (unnamed)" <<<"$gt5v_out" &&
+          grep -qxF "pi5 gl_test: case 66 clearvp: FAIL (unnamed)" <<<"$gt5v_out" &&
+          grep -qxF "pi5 gl_test: case 67 fbods: FAIL (unnamed)" <<<"$gt5v_out" &&
+          grep -qxF "pi5 gl_test: case 102 maskclear: FAIL (unnamed)" <<<"$gt5v_out" &&
+          ! grep -qE ": PASS|: MISSING" <<<"$gt5v_out" &&
+          [ "$(grep -c "draw refused:" "$gt5v_console")" = 1 ] &&
+          grep -qF "yakogl/v3d71: draw refused: V3D 7.1: the table records no draw or clear in this build" "$gt5v_console"'
+check "pi5 verdict reader: the console's 'v3d_gl_test RECORD end' line is there and its build id (85afd0cf) is the one in the reader's summary line (0 PASS, 0 refused, 6 defects)" \
+    eval '[ -n "$gt5v_end" ] && [ "$gt5v_build" = 85afd0cf ] &&
+          grep -q "^pi5-gltest-verdicts: build $gt5v_build: 0 PASS, 0 refused by name, 0 SKIP, 6 defect(s)$" "$S/pi5gt-verdicts.err"'
 check "board.sh pi5 END_RE_DEFAULT matches the reader's end line, plain as end_seen reads it: exactly one console line matches it, and it is that end line with the build id the reader read" \
     eval 'gt5v_re=$(grep -aE "$END_RE" <(plain "$gt5v_console")) &&
           [ "$(grep -acE "$END_RE" <(plain "$gt5v_console"))" = 1 ] &&

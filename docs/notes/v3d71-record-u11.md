@@ -223,6 +223,20 @@ can exercise the flag and 0 is right for all six.
   readback — a difference with `disable_ez` set would be the flag's whole
   effect. Until then the table keeps 0, which is Mesa's value.
 
+**The board's answer (board71, 2026-11-27): not answered yet.** The first
+gl_test run on the Pi 5 (image built at 85afd0cf, record
+`records/rpi5/20261127-1119-gltest71-85afd0cf`, gitignored) submitted no
+GPU job, so case 5 never reached the record layout: the product build's 7.1
+table refuses every draw and clear by name before a job is built
+(`yakogl/v3d71: draw refused: V3D 7.1: the table records no draw or clear in
+this build (the 7.1 modules are host-test only)`, `table71::REF_NO_RECORDING`),
+case 5 failed on GL error 0x502 after its draw, and the OSAL line reads
+`jobs 0 submitted, 0 completed`. The D0 layout of items 1 to 3 is still
+supported only by the host pins (`tests/v3d71_case5_record.rs`) and by the
+`v3d_triangle` pass. The question stays open for the first run of an image
+whose 7.1 table records (the 7.1 modules built for the product, not only for
+`host-test`): case 5's job completing and its readback matching answer it.
+
 ## 6. Left open, for the planner
 
 - What the hardware does differently with the flag at 1 is documented nowhere
