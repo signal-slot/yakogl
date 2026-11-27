@@ -617,9 +617,10 @@ FrameGen0 starts), and what the code writes:
 | 5'' | FrameGen0 enabled, `PrimSyncStat` waited for (100 ms) | FGENABLE 1, FGCHSTAT 0x100 | `display::start` |
 | 6 | the backlight: TPM5's clock (154) enabled and read over SCMI; TPM5 channel 0 edge-aligned **low-true** (CnSC 0x24), 150 Hz, 119/255 (Linux: period 6,666,667 ns, duty 3,111,111 ns, polarity inverse, brightness 4 of 7); then GPIO5_IO04 high (RGPIO PSOR, then PDDR); the pads GPIO_IO06 (TPM5_CH0) and XSPI1_DATA4 (GPIO5_IO04) from the board devicetree | Linux's pwm | `board::verdin_imx95_lvds::backlight_on`, `ip::tpm_pwm` (`Pwm::low_true`) |
 
-Down: the enable low, the PWM stopped, TPM5's clock off; the LDB's PHYs
-and mapper off, every gate set (0x1E); the pixel link off, FrameGen0 off and
-waited for; LDBPLL and LDBPLL_VCO off, DISPLAY off.
+Down: the enable low, the PWM stopped, TPM5's clock off; the pixel link
+off, FrameGen0 off and waited for (the frame ends only on the LDB's clock);
+then the LDB's PHYs and mapper off, every gate set (0x1E); LDBPLL and
+LDBPLL_VCO off, DISPLAY off.
 
 **Where the sources disagree and what the code does** (the rule: the dump
 settles a value when it is a fact of this board's wiring or of what Linux

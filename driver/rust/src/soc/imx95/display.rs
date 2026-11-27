@@ -338,9 +338,7 @@ pub fn proof(m: &impl Mmio, b: &Bases, s: &Stream0, delay_us: &mut impl FnMut(u3
 }
 
 /// Stop stream 0 and power the display off (the DSI or LVDS side stopped
-/// first): pixel link off (when the route had it on), FrameGen0 off and
-/// read stopped, then [`display_power::power_off`] of the stream's pixel
-/// clock source.
+/// first): [`stop_stream`], then [`power_off`].
 pub fn stop<T: Transport>(
     t: &mut T,
     m: &impl Mmio,
@@ -348,12 +346,26 @@ pub fn stop<T: Transport>(
     s: &Stream0,
     delay_us: &mut impl FnMut(u32),
 ) -> Result<(), Error> {
+    stop_stream(m, b, s, delay_us)?;
+    power_off(t, s)
+}
+
+/// Stop stream 0: pixel link off (when the route had it on), FrameGen0 off
+/// and read stopped. The frame ends only while the pixel clock runs, so a
+/// board whose clock comes through the LDB calls this before gating it.
+pub fn stop_stream(m: &impl Mmio, b: &Bases, s: &Stream0, delay_us: &mut impl FnMut(u32)) -> Result<(), Error> {
     if s.prepared.route.pixel_link() {
         pixel_link_off(m, b);
     }
     dpu::stop(m, b.dpu);
     let budget = 2 * frame_us(&s.prepared.mode, s.prepared.pix_hz);
     dpu::wait_stopped(m, b.dpu, budget, delay_us).map_err(Error::NotStopped)?;
+    Ok(())
+}
+
+/// [`display_power::power_off`] of the stream's pixel clock source (after
+/// [`stop_stream`]).
+pub fn power_off<T: Transport>(t: &mut T, s: &Stream0) -> Result<(), Error> {
     display_power::power_off(t, s.prepared.source)?;
     Ok(())
 }

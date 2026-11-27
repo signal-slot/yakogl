@@ -224,7 +224,7 @@ fn the_steps_in_the_notes_order() {
 }
 
 #[test]
-fn down_turns_the_backlight_off_first_then_the_ldb_then_the_stream_and_power() {
+fn down_turns_the_backlight_off_then_the_pixel_link_and_framegen_then_the_ldb_then_the_power() {
     let r = rig();
     let mut sm = r.sm;
     let cfg = Config::verdin(FB);
@@ -239,10 +239,28 @@ fn down_turns_the_backlight_off_first_then_the_ldb_then_the_stream_and_power() {
     let fg_off = pos(log, &Ev::W(FGENABLE, 0));
     let pll_off = pos(log, &Ev::Scmi(scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET, vec![37, 0, 0]));
     let pd_off = pos(log, &Ev::Scmi(scmi::PROTO_POWER, scmi::POWER_STATE_SET, vec![0, 13, 0x4000_0000]));
-    assert!(en_off < tpm_off && tpm_off < phy_off && phy_off < pl_off && pl_off < fg_off);
-    assert!(fg_off < pll_off && pll_off < pd_off);
+    // FrameGen0 ends its frame on the LDB's clock: off and read stopped
+    // (nothing written between) before the LDB's clocks are gated
+    assert!(en_off < tpm_off && tpm_off < pl_off && pl_off < fg_off && fg_off < phy_off);
+    assert!(phy_off < pll_off && pll_off < pd_off);
     assert!(!sm.sm.borrow().on(13) && !sm.sm.borrow().enabled(38) && !sm.sm.borrow().enabled(154));
     assert!(r.m.display.refused().is_empty());
+}
+
+#[test]
+fn a_framegen_that_never_stops_still_gates_the_ldb_and_keeps_the_power() {
+    let mut r = rig();
+    let mut sm = r.sm;
+    let cfg = Config::verdin(FB);
+    let up = display_up(&mut sm, &r.m, &r.env, &cfg).unwrap();
+    r.m.display.faults.fg_stuck = true;
+    r.log.borrow_mut().clear();
+    let e = display_down(&mut sm, &r.m, &r.env, &cfg, &up.stream).unwrap_err();
+    assert!(matches!(e, Error::Display(display::Error::NotStopped(_))), "{e:?}");
+    let fg_off = pos(&r.log, &Ev::W(FGENABLE, 0));
+    let phy_off = pos(&r.log, &Ev::W(dm::LDB + 0x8, 0));
+    assert!(fg_off < phy_off);
+    assert!(sm.sm.borrow().on(13));
 }
 
 #[test]

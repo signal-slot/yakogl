@@ -13,7 +13,7 @@
 //!   serves only the waits and the log: the X12 path has no I2C and drives
 //!   its one GPIO (the backlight enable) as a register.
 //! - flip: `soc::imx95::display::flip`, as the X4 path's.
-//! - down: `display_down`: the backlight, the LDB, stream 0 and the power.
+//! - down: `display_down`: the backlight, stream 0 stopped (pixel link, FrameGen0), the LDB, the power.
 //!
 //! The state the C side keeps is [`YdImx95Lvds`]; `Stream0` is rebuilt
 //! from it for each call (the panel's mode, [`Route::Lvds`] with the pixel

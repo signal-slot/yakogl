@@ -213,7 +213,9 @@ pub fn display_down<T: Transport>(
     stream: &Stream0,
 ) -> Result<(), Error> {
     backlight_off(t, m, cfg)?;
-    ldb::down(m, cfg.ldb);
     let mut delay = |us: u32| env.busy_wait_us(us);
-    display::stop(t, m, &cfg.display, stream, &mut delay).map_err(Error::Display)
+    let stopped = display::stop_stream(m, &cfg.display, stream, &mut delay);
+    ldb::down(m, cfg.ldb);
+    stopped.map_err(Error::Display)?;
+    display::power_off(t, stream).map_err(Error::Display)
 }
