@@ -422,11 +422,16 @@ fneg(floor(x / y)), x)`, is built with the negation on `y`, as NIR's
 `op_common_mod_fs_mediump` (the three `*_fs_highp` division references were
 byte-equal before). Left refused:
 
-- `op_common_smoothstep_fs_mediump`: with the reciprocal of a computed lane
-  it compiles to Mesa's instructions with the varyings loaded in another
-  order (Mesa computes `x - e0` before `e1 - e0`; `builtin_call.rs` expands
-  `smoothstep` with the reciprocal first, and that file is every back
-  end's). So `frcp` of a computed lane stays `Arithmetic`.
+- `op_common_smoothstep_fs_mediump`: landed with train 2. With the
+  reciprocal of a computed lane it compiled to Mesa's instructions with the
+  varyings loaded in another order. `builtin_call.rs` already computes `x -
+  e0` first; what differed was the place of the loads: the front end reads
+  every argument before the body, while GLSL grafts `x` and `edge1` (read
+  once) into `(x - edge0) / (edge1 - edge0)` and keeps `edge0` (read
+  twice) as its parameter's temporary. `nir_fs.rs` `swapped_compares`
+  gives the quotient's two trees their places in that order, and the `Frcp`
+  arm takes `smoothstep`'s denominator. No shared front-end change. `frcp`
+  of any other computed lane stays `Arithmetic`.
 - `op_common_mod_fs_highp` (`FsVaryingLoad`), `op_common_smoothstep_fs_highp`
   (`ColourForm`): the highp island's `ffma`, not the division.
 - `other_frcp_fs_none`: its operand is `gl_FragCoord`'s lane.

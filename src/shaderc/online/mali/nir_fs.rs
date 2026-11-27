@@ -548,6 +548,22 @@ fn call_returns(m: &Module<'_>, n: usize, keys: &mut [u32]) {
     }
 }
 
+/// Whether `den` is the denominator of the front end's `smoothstep`: `e1 +
+/// fneg(e0)` of run-time operands (builtin_call.rs `"smoothstep"`).
+fn smoothstep_den(m: &Module<'_>, den: ir::ValueId) -> bool {
+    let Some(ir::Op::Alu(AluOp::Fadd, d)) = m.def(den) else { return false };
+    matches!(m.def(d[1].val), Some(ir::Op::Alu(AluOp::Fneg, _)))
+}
+
+/// Whether `num * rcp` is the front end's `smoothstep` quotient, `(x +
+/// fneg(e0)) * frcp(e1 + fneg(e0))` with the one `fneg(e0)` in both sums.
+fn smoothstep_quotient(m: &Module<'_>, num: ir::ValueId, rcp: ir::ValueId) -> bool {
+    let Some(ir::Op::Alu(AluOp::Frcp, r)) = m.def(rcp) else { return false };
+    let Some(ir::Op::Alu(AluOp::Fadd, a)) = m.def(num) else { return false };
+    let Some(ir::Op::Alu(AluOp::Fadd, d)) = m.def(r[0].val) else { return false };
+    smoothstep_den(m, r[0].val) && a[1].val == d[1].val
+}
+
 /// GLSL IR has no `>` or `<=`: ast_to_hir makes a scalar `a > b` and `a <=
 /// b` the `b < a` and `b >= a` of swapped operands (ast_to_hir.cpp:1574-1581),
 /// and glsl_to_nir visits a tree's operands in order, so `b`'s tree is
@@ -566,17 +582,29 @@ fn call_returns(m: &Module<'_>, n: usize, keys: &mut [u32]) {
 /// conversion after the `FMAX.v2f16`).
 fn swapped_compares(m: &Module<'_>, n: usize, grafted: &[Option<ir::ValueId>; MAX_LOCALS], keys: &mut [u32]) {
     for v in 0..n {
-        let ir::Op::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Ilt | AluOp::Ile | AluOp::Fmin), s) = m.instrs[v] else {
+        let ir::Op::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Ilt | AluOp::Ile | AluOp::Fmin | AluOp::Fmul), s) =
+            m.instrs[v]
+        else {
             continue;
         };
-        if keys[v] == u32::MAX || (op != AluOp::Fmin && m.comps_of(ir::ValueId(v as u32)) != 1) {
+        /* `smoothstep(e0, e1, x)`'s quotient: the built-in's `edge0` is read
+         * twice and stays its parameter's temporary, `x` and `edge1` are
+         * grafted into `(x - edge0) / (edge1 - edge0)`, so glsl_to_nir
+         * visits `x - edge0` whole before `edge1` (deqp_arith_op_common
+         * _smoothstep_fs_mediump: `in0`'s load, `in2`'s, the `FADD.v2f16`
+         * of `x - e0`, then `in1`'s load) */
+        let quotient = op == AluOp::Fmul && smoothstep_quotient(m, s[0].val, s[1].val);
+        if op == AluOp::Fmul && !quotient {
+            continue;
+        }
+        if keys[v] == u32::MAX || (!matches!(op, AluOp::Fmin | AluOp::Fmul) && m.comps_of(ir::ValueId(v as u32)) != 1) {
             continue;
         }
         if op == AluOp::Fmin && !matches!(m.instrs.get(s[0].val.0 as usize), Some(ir::Op::Alu(AluOp::Fmax, _))) {
             continue;
         }
         let (first, second) = match op {
-            AluOp::Flt | AluOp::Ilt | AluOp::Fmin => (s[0].val, s[1].val),
+            AluOp::Flt | AluOp::Ilt | AluOp::Fmin | AluOp::Fmul => (s[0].val, s[1].val),
             _ => (s[1].val, s[0].val),
         };
         /* each tree's instructions of the statement, a grafted local's read
@@ -7708,7 +7736,11 @@ fn walk_nodes(
                          * (deqp_arith_op_angle_tan_fs_mediump: `FRCP.f16 r0,
                          * r0^.h00` of the narrowed cosine) */
                         let tan = matches!(f.alu_of(x), Some((Alu::Fcos, _))) && raw_transc(f, x);
-                        if f.input_lane(x).is_none() && f.uniform_dword(x).is_none() && !tan {
+                        if f.input_lane(x).is_none()
+                            && f.uniform_dword(x).is_none()
+                            && !smoothstep_den(m, s[0].val)
+                            && !tan
+                        {
                             return Err(MaliError::Arithmetic);
                         }
                         *o = f.node(Alu::Frcp, [x, Val::Undef, Val::Undef], at)?;
