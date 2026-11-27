@@ -40,15 +40,15 @@
 //!   the held scissored clear (what the tree does), or frame 1 draws it and
 //!   writes the plane back, and frame 2 preloads it (what Mesa's batches do).
 //!   Either one passes.
-//! - ignored (`the_recreated_colour_is_cleared_with_alpha_1`, issue #11329):
-//!   before the quad, every pixel of the recreated colour must read
-//!   (0, 0, 1, 1). The format has no alpha, so it reads 1. The held
-//!   scissored stencil clear opens frame 2, so the tree preloads the new,
-//!   never written object (`Pre Frame 0` 2, Intersect; clear words 0) and
-//!   draws the colour clear as a quad. Since 0c3a7729 that quad's colour
-//!   mask is 0x7, so the GL core's RGBA8 storage keeps the alpha it had
-//!   before the clear (0 on the mock). Mesa opens the new batch with the
-//!   colour clear: no preload, the clear in the clear words.
+//! - `the_recreated_colour_is_cleared_with_alpha_1`: before the quad, every
+//!   pixel of the recreated colour must read alpha 1 (255), as dEQP's
+//!   expected image does: the format has no alpha. The held scissored stencil
+//!   clear opens frame 2, so the tree preloads the new, never written object
+//!   (`Pre Frame 0` 2, Intersect) and draws the colour clear as a quad of
+//!   mask 0x7. Since c4df367f the preload reads the alpha-less format with
+//!   `SWIZZLE_RGB1`, so the RGBA8 storage's alpha reads 1 and the RGB of the
+//!   clear (0, 0, 1) is written by the quad. Mesa's frame (no preload, the
+//!   clear in the clear words) gives the same pixels; either passes.
 //!
 //! The `depth_component16_stencil_index8` variants: in the ES 3.0 build the
 //! GL core reports the D16 + S8 pair `GL_FRAMEBUFFER_UNSUPPORTED` (as
@@ -78,6 +78,7 @@ use yakogl::gl::texture::*;
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::{glDisableVertexAttribArray, glEnableVertexAttribArray, glVertexAttribPointer};
 use yakogl::mali::cs::Instr;
+use yakogl::mali::frame::SWIZZLE_RGB1;
 use yakogl::mali::genxml::v10::*;
 use yakogl::osal::mali::{OsalMaliGpu, OsalMaliHeap, OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
@@ -205,6 +206,8 @@ struct FrameOut {
     /// The ZS/CRC extension, when the framebuffer has one.
     zs: Option<ZsCrcExtension>,
     rt: RgbRenderTarget,
+    /// The colour preload texture's swizzle, when the frame preloads colour.
+    preload_swizzle: Option<u32>,
 }
 
 /// The ZS/CRC extension's members of linear (not AFBC) depth/stencil planes.
@@ -266,7 +269,15 @@ fn frames(from: usize) -> Vec<FrameOut> {
                         &["Writeback Format"],
                     )
                     .unwrap();
-                    out.push(FrameOut { draws: core::mem::take(&mut draws), params, zs, rt });
+                    let preload_swizzle = (params.pre_frame_0 != PrePostFrameShaderMode::NEVER).then(|| {
+                        let dcd = mem(params.frame_shader_dcds, Draw::LENGTH);
+                        let dcd = Draw::unpack(&dcd[..].try_into().unwrap()).unwrap();
+                        let table = dcd.shader.resources & !63;
+                        let entry = mem(table + 3 * Resource::LENGTH as u64, Resource::LENGTH);
+                        let tex = Resource::unpack(&entry[..].try_into().unwrap()).unwrap().address;
+                        Texture::unpack(&mem(tex, Texture::LENGTH).try_into().unwrap()).unwrap().swizzle
+                    });
+                    out.push(FrameOut { draws: core::mem::take(&mut draws), params, zs, rt, preload_swizzle });
                 }
                 _ => {}
             }
@@ -590,8 +601,6 @@ fn the_colour_rebind_beside_a_stencil_buffer_keeps_its_frames() {
 }
 
 #[test]
-#[ignore = "issue #11329: frame 2 preloads the recreated colour (Pre Frame 0 = 2, Intersect) and draws the colour \
-            clear as a quad of colour mask 0x7, so the RGBA8 storage's alpha is never written 1"]
 fn the_recreated_colour_is_cleared_with_alpha_1() {
     let _one = setup();
     for (name, texture, depth16) in CASES {
@@ -599,27 +608,34 @@ fn the_recreated_colour_is_cleared_with_alpha_1() {
         let b = &f[1];
         /* glClear(GL_COLOR_BUFFER_BIT) of (0, 0, 1, 0) on a format without
          * alpha: every pixel of the new object reads (0, 0, 1, 1) before the
-         * quad. Mesa's batch for the new framebuffer state opens with that
-         * clear (pan_job.c: a batch per framebuffer state; panfrost_clear at
-         * draw_count 0 is a free clear): no colour preload, the clear in the
-         * render target's clear words, its R5G6B5 target stores no alpha. In
-         * the GL core's RGBA8 storage the same frame is the clear words
-         * 0xffff0000 (blue, alpha 1). A frame that preloads the new object
-         * instead must write the clear's alpha, a clear quad of mask 0xf. */
-        let cleared = b.params.pre_frame_0 == PrePostFrameShaderMode::NEVER && b.rt.clear.color_0 == 0xffff_0000;
-        let quads: Vec<u32> = b.draws[..b.draws.len() - 1]
+         * quad. Either the frame clears with the clear words (blue, alpha 1:
+         * 0xffff0000, Mesa's shape), or it preloads the new storage (which
+         * holds 0) with SWIZZLE_RGB1 (c4df367f) and the clear is a quad that
+         * writes RGB only, leaving the preloaded alpha 1. */
+        let clear_quads: Vec<u32> = b.draws[..b.draws.len() - 1]
             .iter()
             .filter(|d| !is_stencil_clear_to_1(d) && d.colour_mask != 0)
             .map(|d| d.colour_mask)
             .collect();
-        let quad_alpha = !quads.is_empty() && quads.iter().all(|m| m & 0x8 != 0);
-        assert!(
-            cleared || quad_alpha,
-            "{name}: frame 2 leaves the recreated colour's alpha unwritten: pre_frame_0 {:?}, clear words 0x{:08x}, \
-             colour clear quads of mask {:x?}",
-            b.params.pre_frame_0,
-            b.rt.clear.color_0,
-            quads
+        let (alpha, rgb) = if b.params.pre_frame_0 == PrePostFrameShaderMode::NEVER {
+            (b.rt.clear.color_0 >> 24, b.rt.clear.color_0 & 0x00ff_ffff)
+        } else {
+            let alpha = match b.preload_swizzle {
+                Some(s) if s == SWIZZLE_RGB1 => 255,
+                _ => 0,
+            };
+            /* a quad that writes alpha would store the clear's 0 */
+            let alpha = if clear_quads.iter().any(|m| m & 0x8 != 0) { 0 } else { alpha };
+            /* the clear's RGB (0, 0, 1) comes from a quad that writes it */
+            let rgb = if clear_quads.iter().any(|m| m & 0x7 == 0x7) { 0x00ff_0000 } else { 0 };
+            (alpha, rgb)
+        };
+        assert_eq!(
+            alpha, 255,
+            "{name}: frame 2's pixels read alpha {alpha}: pre_frame_0 {:?}, preload swizzle {:?}, clear words \
+             0x{:08x}, colour clear quads of mask {:x?}",
+            b.params.pre_frame_0, b.preload_swizzle, b.rt.clear.color_0, clear_quads
         );
+        assert_eq!(rgb, 0x00ff_0000, "{name}: frame 2's RGB before the quad is dEQP's (0, 0, 1)");
     }
 }
