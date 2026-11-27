@@ -176,7 +176,9 @@ finish() {
     python3 -I "$TALLY" "$out/run" > "$out/tally-table.txt" 2> "$out/tally-table.err"
     tally_rc=$?
     for m in results-row status-row picture-lines causes; do
-      python3 -I "$TALLY" "--$m" "$out/run" > "$out/tally-$m.txt" 2> "$out/tally-$m.err" || [ "$tally_rc" != 0 ] || tally_rc=$?
+      m_rc=0
+      python3 -I "$TALLY" "--$m" "$out/run" > "$out/tally-$m.txt" 2> "$out/tally-$m.err" || m_rc=$?
+      [ "$tally_rc" != 0 ] || tally_rc=$m_rc
     done
     for f in "$out"/tally-*.err; do [ -s "$f" ] || rm -f "$f"; done
     redact_out "$out"/tally-*.err
