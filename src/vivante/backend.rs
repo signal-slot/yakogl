@@ -4217,6 +4217,8 @@ pub extern "C" fn gc_attachment_gone(id: u32) {
     super::ds_cache::gone(id, kick_pending_retired);
     /* dtpu mode 3's copy of it, freed once no pending kick reads it */
     super::depth_sample::copy_gone(id);
+    /* a 4x colour attachment's kept samples */
+    super::msaa_fbo::gone(id);
 }
 
 /// Write the depth plane of GL object `id` into a depth texture's texels
