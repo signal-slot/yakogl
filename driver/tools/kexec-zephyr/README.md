@@ -133,6 +133,21 @@ check existed; the first jump with the list is to be watched on its console).
 Any other chip stays refused. `crash_irq_selftest.sh` tests both lists on the
 host.
 
+The X2's list is measured. On 2026-11-27 (Linux 6.12.105, read only over
+ssh), `/sys/kernel/irq/*/chip_name` on the X2 named three chips and no others:
+`GICv3`, `gpio-mxc` and `irqsteer`. The check, built from `kexec_zephyr.c` and
+run alone on the board with no jump, passed with "every row with a handler is
+on a measured chip". The PMIC's `pca9450-irq` is let through on purpose. It
+is the name of a handler on a `gpio-mxc` row, not a chip: the pca9450 driver
+requests a plain threaded interrupt and adds no regmap-irq chip. The RK806
+hazard was the sleeping bus lock of the interrupt's own chip. Here that chip
+is `gpio-mxc`, whose bus lock does nothing, and the PMIC's I2C reads run only
+in the handler's thread, which never runs once the panic has turned
+interrupts off on its one CPU. So nothing is unbound on the X2. The
+`rk805-pwrkey` step finds no such driver there and goes on. A kernel that
+gave the PMIC an interrupt chip of its own would show that chip's name in
+the row, and the check would refuse it.
+
 The display probe `t6_display` (step D2, `driver/docs/nanopc-t6-display.md`,
 section 2 route (a)) adopts the picture Linux leaves running, so it needs the
 crash route (`--crash`: `kexec --crash` into a `crashkernel=` reservation that
