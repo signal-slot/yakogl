@@ -673,7 +673,7 @@ agree with `layout.rs`. It does not show what the hardware does.
   refract: 0 bytes, 0 ms (their targets are textures). Source:
   `gc-slow-host-counts.md`, "Predicted effect of W7 to W9". No RS job count
   in any scene moves.
-- **Host-priced (commit d18a8132, plan #355 item w8w9-host-price).** Scratch
+- **Host-priced (commit 4a03e8bc, plan #355 item w8w9-host-price).** Scratch
   instrumentation (not committed) in the scene harness of
   `tests/gc_scene_kicks_tiled.rs` (`tests/common/gc_scenes.rs`, the stand-in
   OSAL, GPU model Done, frame 6) printed every RS fill of a frame: window
@@ -761,7 +761,7 @@ agree with `layout.rs`. It does not show what the hardware does.
   no depth-TS arm, so W9's own board check stays. As with W8, it saves bytes,
   not RS jobs: terrain's pass's depth fill, 1.92 MB, becomes a 7 680-byte TS
   fill in the same job (0.24 to 0.96 ms). Shadow and refract get 0 without W12.
-- **Host-priced (commit d18a8132, same run as W8's figures).** Depth fills
+- **Host-priced (commit 4a03e8bc, same run as W8's figures).** Depth fills
   (bits `0xeeee`: depth bytes only) a frame, window and padded surface size
   as the RS writes it:
 
