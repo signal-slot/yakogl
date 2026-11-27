@@ -1,0 +1,8 @@
+rc 1
+-- stdout
+-- stderr
+FAIL: scene started, no result line: [effect2d] kernel=0,1,0;1,-4,1;0,1,0;
+FAIL: no glmark2 score line
+FAIL: no ms a frame for terrain
+FAIL: no ms a frame for shadow
+FAIL: no ms a frame for refract

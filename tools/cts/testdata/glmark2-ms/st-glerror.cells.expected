@@ -1,0 +1,4 @@
+rc 0
+-- stdout
+terrain 37.00 ms (27 FPS), shadow 38.50 ms (25 FPS), refract 40.00 ms (25 FPS)
+-- stderr

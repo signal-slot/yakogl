@@ -1,0 +1,40 @@
+rc 0
+-- stdout
+| scene | FrameTime ms | FPS |
+|---|---:|---:|
+| [build] use-vbo=false | 4.00 | 250 |
+| [build] use-vbo=true | 5.50 | 181 |
+| [texture] texture-filter=nearest | 7.00 | 142 |
+| [texture] texture-filter=linear | 8.50 | 117 |
+| [texture] texture-filter=mipmap | 10.00 | 100 |
+| [shading] shading=gouraud | 11.50 | 86 |
+| [shading] shading=blinn-phong-inf | 13.00 | 76 |
+| [shading] shading=phong | 14.50 | 68 |
+| [shading] shading=cel | 16.00 | 62 |
+| [bump] bump-render=high-poly | 17.50 | 57 |
+| [bump] bump-render=normals | 19.00 | 52 |
+| [bump] bump-render=height | 20.50 | 48 |
+| [effect2d] kernel=0,1,0;1,-4,1;0,1,0; | 22.00 | 45 |
+| [effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; | 23.50 | 42 |
+| [pulsar] light=false:quads=5:texture=false | 25.00 | 40 |
+| [desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4 | 26.50 | 37 |
+| [desktop] effect=shadow:windows=4 | 28.00 | 35 |
+| [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map | 29.50 | 33 |
+| [buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata | 31.00 | 32 |
+| [buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map | 32.50 | 30 |
+| [ideas] speed=duration | 34.00 | 29 |
+| [jellyfish] <default> | 35.50 | 28 |
+| [terrain] <default> | 37.00 | 27 |
+| [shadow] <default> | 38.50 | 25 |
+| [refract] <default> | 40.00 | 25 |
+| [conditionals] fragment-steps=0:vertex-steps=0 | 41.50 | 24 |
+| [conditionals] fragment-steps=5:vertex-steps=0 | 43.00 | 23 |
+| [conditionals] fragment-steps=0:vertex-steps=5 | 44.50 | 22 |
+| [function] fragment-complexity=low:fragment-steps=5 | 46.00 | 21 |
+| [function] fragment-complexity=medium:fragment-steps=5 | 47.50 | 21 |
+| [loop] fragment-loop=false:fragment-steps=5:vertex-steps=5 | 49.00 | 20 |
+| [loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5 | 50.50 | 19 |
+| [loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5 | 52.00 | 19 |
+
+glmark2 Score: 300
+-- stderr
