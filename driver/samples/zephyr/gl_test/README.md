@@ -144,6 +144,10 @@ files are the board layer's `app.conf` (added by `CMakeLists.txt`) and
 and `boards/stm32mp257f_dk_stm32mp257fxx_a35.conf` for gl_test's own (the
 board layer on, the lifetime).
 
+The DK image's libyakogl is built with the crate feature `vivante-st`
+(`CMakeLists.txt` adds it to `YAKOGL_EXTRA_FEATURES` for this board only), so the
+active Vivante profile is the GCNanoUltra31_VIP2's; the i.MX8MP image keeps its own.
+
 ```sh
 # from the top of a west workspace made from yakogl's west.yml (../README.md)
 # the first board run: case 1 ("uniform") alone
