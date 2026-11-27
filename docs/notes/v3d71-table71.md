@@ -48,7 +48,7 @@ copies the 4.2 function's contract word for word, over the 7.1 job.
 | `samples_texel_copies` `:1687` | true `:7301` | False. The 7.1 table samples nothing yet. False makes the GL core wait as for a GPU reader, which is the safe answer |
 | `attachment_gone` `:1691` | `v3d_attachment_gone` `:5114` | Frees the D24S8 buffer kept for that `ds_id` (section 2.3). Case 67 deletes renderbuffers between frames |
 | `uniforms_host_only` `:1756` | true `:7312` | True. fill71 takes the blocks as `&[u32]` from `vs_uniform_cpu` and `fs_uniform_cpu` (section 2.2) |
-| `max_instance_divisor` `:1679`, `max_samples` `:1781`, `linear_row_align` `:1748` | 0xffff, 0, 0 | 1 (backend71 refuses instancing, `REF_INSTANCED` `backend71.rs:666`), 0, 0 |
+| `max_instance_divisor` `:1679`, `max_samples` `:1781`, `linear_row_align` `:1748` | 0xffff, 0, 0 | 0xffff, as 4.2 (backend71 draws instanced arrays in one draw, `VERTEX_ARRAY_INSTANCED_PRIMS` or `INDEXED_INSTANCED_PRIM_LIST`; `REF_INSTANCED` is gone), 0, 0 |
 | `depth_resolve`, `stencil_resolve`, `ds_write`, `query_*`, `generate_mipmap`, `return_mipmap_chain` | `Some(..)` `:7303-7316` | `None` in the first cut. The GL core then refuses by name what needs them, or does it on the CPU (`generate_mipmap` `None` = 0, `:1723`). None of the six cases reaches them |
 
 ## 2. GlesDraw and the GL core's clears onto `fill71::Op`, `Framebuffer`, `History`

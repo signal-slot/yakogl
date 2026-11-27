@@ -238,6 +238,10 @@ pub struct Draw71<'a> {
     pub fs: ffi71::V3dFsProg,
     pub vs: ffi71::V3dVsProg,
     pub cs: ffi71::V3dVsProg,
+    /// The number of instances: 0 or 1 is one (`VERTEX_ARRAY_PRIMS`), more
+    /// is Mesa's `VERTEX_ARRAY_INSTANCED_PRIMS` with this count (v3d_job71's
+    /// `instances`); the arrays' divisors are their `attrs` records'.
+    pub instances: u32,
     /// The programs' uniform lists, `(contents, data)` in stream order.
     pub fs_uniforms: &'a [ffi71::V3dUniform],
     pub vs_uniforms: &'a [ffi71::V3dUniform],
@@ -554,7 +558,7 @@ impl Builder71 for CBuilder71<'_> {
                 vs_tmu: core::ptr::null(),
                 num_vs_tmu: 0,
                 vs_writes_psiz: false,
-                instances: 0,
+                instances: d.instances,
             };
             let mut lo = ffi71::V3dJob71DrawLayout::ZERO;
             // SAFETY: as above; `draw` and what it points to live past the call.
@@ -692,14 +696,13 @@ pub fn assemble(
 /// The refusals of the fill71 path that this module names itself (module
 /// `backend71`): what fill71 can describe but [`Draw71`] (and so the
 /// [`Builder71`] calls) does not carry yet.
-pub const FILLED_REFUSALS: [&str; 4] = [REF_INDEX_TYPE, REF_INSTANCED, REF_PSIZ, REF_TARGET];
+pub const FILLED_REFUSALS: [&str; 3] = [REF_INDEX_TYPE, REF_PSIZ, REF_TARGET];
 
 /// An indexed draw of 8-bit or 32-bit indices. The GL core widens both to
 /// u16 before the back end (src/gl/draw.rs `draw_elements`), so only a
 /// GlesDraw that bypasses it reaches this.
 pub const REF_INDEX_TYPE: &str =
     "an indexed draw of 8-bit or 32-bit indices: the 7.1 table assembles 16-bit indices only";
-const REF_INSTANCED: &str = "an instanced draw (more than one instance): the 7.1 table assembles one instance per draw";
 const REF_PSIZ: &str = "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records";
 const REF_TARGET: &str = "fill71's target descriptor is not the framebuffer's (size or render target count)";
 
@@ -707,9 +710,6 @@ const REF_TARGET: &str = "fill71's target descriptor is not the framebuffer's (s
 pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
     if fd.indexed && fd.index_type != ffi71::V3D_INDEX_TYPE_16 {
         return Err(own(REF_INDEX_TYPE));
-    }
-    if fd.instances > 1 {
-        return Err(own(REF_INSTANCED));
     }
     if fd.vs_writes_psiz {
         return Err(own(REF_PSIZ));
@@ -719,6 +719,7 @@ pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
         fs: fd.fs,
         vs: fd.vs,
         cs: fd.cs,
+        instances: fd.instances,
         fs_uniforms: &fd.fs_uniforms,
         vs_uniforms: &fd.vs_uniforms,
         cs_uniforms: &fd.cs_uniforms,
