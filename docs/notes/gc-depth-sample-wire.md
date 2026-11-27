@@ -64,6 +64,26 @@ Check 3 is the reference (today's path). If check 3 fails, the record is
 not a verdict: the case or the board is wrong. Rerun the session; this note
 does not apply until check 3 passes.
 
+### The X2 verdict: (a) plus the texture-cache flush, mode 4
+
+Case 222 `dtpu` ran **measured on the Armadillo-X2 in place of the Verdin
+iMX8MP** (record: `records/imx8mp/—`, commit —). Check 3 passed, so the
+record is a verdict. The code is **3**, and **check 7 failed**: with no wait
+and no flush between the depth pass and the sampling draw, the first stale
+texel is at index 32. Check 4 first failed at index 1 with P1 `0xfffeff81`,
+which is inside the code-3 precision bound.
+
+That selects the row "(a) with a stale cache", not plain (a): the TPU does
+sample the D24S8 surface as D24X8, but the texture cache serves old texels
+unless it is flushed first (check 7). Plain (a) would read stale depth, so
+the product code is (a) plus the flush of "(a).9", the dtpu knob's
+**mode 4** (`DEPTH_TPU_D24X8_FLUSH`, `src/vivante/depth_sample.rs`). Item
+wire-verdict makes mode 4 the product default (`DEPTH_TPU_DEFAULT`).
+Exact-depth readers and non-linear (super-tiled) planes stay on the CPU
+resolve. For what the code-3 precision costs glmark2's shadow and refract,
+see the subsection "(a) Code 3 (check 4 fails, 5 passes)" below. Records
+and commits of the after measurement: —.
+
 ## What holds for every outcome
 
 ### Today's path, call by call
