@@ -10,12 +10,14 @@
 //! they split the time between a post and a fence that the host's reads
 //! cannot (docs/notes/pvr-fence-wait.md, docs/notes/am62p-slow-terrain.md).
 //!
-//! This module is the host-testable half only: a pure decoder over a byte
-//! slice ([`Reader`]) and a per-kick summary ([`summarize`]). Nothing here
-//! turns HWPerf on in the firmware or reads its buffer; that is the firmware
-//! init and the drain of the note's section (d), a later item. There is no
-//! allocator: the reader borrows the slice and the summary writes into a slice
-//! the caller gives.
+//! A pure decoder over a byte slice ([`Reader`]), a per-kick summary
+//! ([`summarize`]) and the drain of the firmware's buffer ([`drain`],
+//! [`drain_log`], `yd_pvr_hwperf_drain`). The firmware init turns HWPerf on
+//! with `fwinit::FWINIT_HWPERF` (Kconfig `CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF`,
+//! off by default): the buffer, its size and [`PROBE_FILTER`]. Without it the
+//! drain finds a size of 0 and reads nothing. There is no allocator: the
+//! reader borrows the slice and the summary writes into a slice the caller
+//! gives.
 //!
 //! Layout. Every number here comes from the vendored DDK 25.2 headers
 //! (`third_party/ti-img-rogue-ddk-25.2`, `UPSTREAM`: rogueddk 25.2@6850647),
@@ -29,6 +31,13 @@
 //! not in the headers (the note's (b), "[knowledge]"); the reader keeps the
 //! stamp as it is, in ticks, and [`ticks_to_ns`] converts a difference at a
 //! given core clock.
+
+use super::fwif::{
+    rd32, FW_CONFIG_HEAP_ALLOC_GRANULARITY, FW_HEAP_SIZE, HWPERFDATA_DROP_COUNT, HWPERFDATA_SIZE,
+    HWPERFDATA_SIZE_FIELD, HWPERFDATA_WIDX, HWPERFDATA_WRAP_COUNT, OSINIT_HWPERF_DATA, OSINIT_HWPERF_RUNTIME_CFG,
+    RUNTIME_HWPERFCFG_BUF,
+};
+use super::km::YdPvrKm;
 
 /// Signatures of a valid packet, `ui32Sig`: 'HWP2', 'HWPA', 'HWPB', 'HWPC'
 /// (`rgx_hwperf_common.h:270`, `:274`, `:278`, `:282`;
@@ -122,6 +131,35 @@ pub mod ev {
 pub const fn mask_value(ty: u32) -> u64 {
     1u64 << (ty & (ev::MAX_TYPE - 1))
 }
+
+/// Every type from `first` to `last` (the DDK's `MASK_RANGE_IMPL`,
+/// `rogue/rgx_hwperf.h:381-386`).
+const fn mask_range(first: u32, last: u32) -> u64 {
+    ((1u64 << (last - first + 1)) - 1) << first
+}
+
+/// The event filter the firmware init writes with `FWINIT_HWPERF`
+/// (docs/notes/pvr-hwperf.md (b)): every HW kick and finish
+/// (`RGX_HWPERF_EVENT_MASK_HW_KICKFINISH`, the periodic counter event left
+/// out), the firmware's background, IRQ and debug tasks (`_FW_SED`), the
+/// UFO checks and updates (`_FW_UFO`), the context stores (`_FW_CSW`), the
+/// power and clock changes (`_ALL_PWR`) and `FWACT`. Pinned to that
+/// expression of the DDK's masks (`fwif::HWPERF_PROBE_FILTER`).
+pub const PROBE_FILTER: u64 = ((mask_range(ev::HW_PMOOM_TAPAUSE, ev::HW_PMOOM_TARESUME)
+    | mask_range(ev::HW_TDMKICK, ev::HW_NULLKICK))
+    & !mask_value(HW_PERIODIC))
+    | mask_range(ev::FW_BGSTART, ev::FW_DBGEND)
+    | mask_value(ev::UFO)
+    | mask_value(ev::CSW_START)
+    | mask_value(ev::CSW_FINISHED)
+    | mask_value(ev::CLKS_CHG)
+    | mask_value(ev::GPU_STATE_CHG)
+    | mask_value(ev::PWR_CHG)
+    | mask_value(ev::FWACT);
+
+/// `RGX_HWPERF_HW_PERIODIC` (`rgx_hwperf_common.h:114-115`), the 1 ms
+/// counter event, left out of [`PROBE_FILTER`].
+const HW_PERIODIC: u32 = 0x12;
 
 /// Data masters (`RGX_HWPERF_DM`, `rogue/rgx_hwperf.h:156-163`): the `eDM`
 /// of a FW or UFO packet.
@@ -467,6 +505,23 @@ impl Lane {
     fn idx(self) -> usize {
         self as usize
     }
+
+    /// Every lane, in [`Summary::gpu_ticks`]'s order.
+    pub const ALL: [Lane; LANES] =
+        [Lane::Ta, Lane::ThreeD, Lane::ThreeDSpm, Lane::ThreeDTq, Lane::Cdm, Lane::Tla, Lane::Tdm];
+
+    /// The lane's name in the drain's record line ([`drain`]).
+    pub fn name(self) -> &'static str {
+        match self {
+            Lane::Ta => "ta",
+            Lane::ThreeD => "3d",
+            Lane::ThreeDSpm => "3dspm",
+            Lane::ThreeDTq => "3dtq",
+            Lane::Cdm => "cdm",
+            Lane::Tla => "tla",
+            Lane::Tdm => "tdm",
+        }
+    }
 }
 
 /// One task on the GPU: its start and finish stamps and what the firmware
@@ -526,6 +581,10 @@ pub struct Summary {
     /// them, and how many those were.
     pub kick_to_start_ticks: u64,
     pub kick_to_start_n: u32,
+    /// Per [`Lane`]: the tasks, and the kick-to-start ticks and their count.
+    pub lane_tasks: [u32; LANES],
+    pub lane_kick_to_start_ticks: [u64; LANES],
+    pub lane_kick_to_start_n: [u32; LANES],
     /// Ticks from the first to the last packet's stamp.
     pub span_ticks: u64,
     /// The error that stopped the reader, if one did.
@@ -622,9 +681,12 @@ pub fn summarize(buf: &[u8], out: &mut [Task]) -> (Summary, usize) {
                     prev_finish[lane.idx()] = Some(p.hdr.ts);
                     s.tasks += 1;
                     s.gpu_ticks[lane.idx()] += t.gpu_ticks();
+                    s.lane_tasks[lane.idx()] += 1;
                     if let Some(k) = t.kick_to_start_ticks() {
                         s.kick_to_start_ticks += k;
                         s.kick_to_start_n += 1;
+                        s.lane_kick_to_start_ticks[lane.idx()] += k;
+                        s.lane_kick_to_start_n[lane.idx()] += 1;
                     }
                     match out.get_mut(n) {
                         Some(slot) => {
@@ -654,6 +716,174 @@ pub fn ticks_to_ns(ticks: u64, core_hz: u64) -> u64 {
         return 0;
     }
     ((ticks as u128 * CLOCKS_PER_TICK as u128 * 1_000_000_000) / core_hz as u128) as u64
+}
+
+// ---- the drain (docs/notes/pvr-hwperf.md (c)) ---------------------------------
+
+/// What [`drain`] read: the summary of the stretch and the firmware's words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Drained {
+    pub summary: Summary,
+    /// Where the stretch began (the caller's `from`) and the firmware's
+    /// `ui32HWPerfWIdx`, `ui32HWPerfWrapCount`, `ui32HWPerfSize` and
+    /// `ui32HWPerfDropCount` as read.
+    pub from: u32,
+    pub widx: u32,
+    pub wrap: u32,
+    pub size: u32,
+    pub fw_drops: u32,
+}
+
+/// Firmware-heap offset of a firmware address (either data window,
+/// `YdPvrKm::heap_fwaddr`: the window's base ORed with the offset).
+fn fw_heap_off(fwaddr: u32) -> u32 {
+    fwaddr & (FW_HEAP_SIZE - 1)
+}
+
+fn add(a: &mut Summary, b: &Summary) {
+    a.packets += b.packets;
+    a.dropped += b.dropped;
+    a.other += b.other;
+    a.tasks += b.tasks;
+    a.tasks_lost += b.tasks_lost;
+    a.unmatched_finish += b.unmatched_finish;
+    a.open_at_end += b.open_at_end;
+    a.open_overflow += b.open_overflow;
+    for i in 0..LANES {
+        a.gpu_ticks[i] += b.gpu_ticks[i];
+        a.lane_tasks[i] += b.lane_tasks[i];
+        a.lane_kick_to_start_ticks[i] += b.lane_kick_to_start_ticks[i];
+        a.lane_kick_to_start_n[i] += b.lane_kick_to_start_n[i];
+    }
+    a.kick_to_start_ticks += b.kick_to_start_ticks;
+    a.kick_to_start_n += b.kick_to_start_n;
+    a.span_ticks += b.span_ticks;
+    a.error = a.error.or(b.error);
+}
+
+/// Read the packets the firmware wrote since byte `from` of its HWPerf
+/// buffer and summarise them ([`summarize`], tasks into `out`). The buffer
+/// and its control are found the way the firmware finds them, through the OS
+/// init's `sHwPerfData` and `sHwPerfRuntimeCfg.sHWPerfBuf`, so the context
+/// needs no field of its own. `None` when the firmware init did not set
+/// HWPerf up (`FWINIT_HWPERF` clear: a size of 0).
+///
+/// Read only: `ui32HWPerfRIdx` is never written. It shares a cache line with
+/// the firmware's `WIdx`, and our view is cacheable: a flush after a write
+/// would put back a stale `WIdx` (docs/notes/pvr-hwperf.md (c), the FWCCB's
+/// lesson at `ccb.rs:329-333`). With `RIdx` left at 0 the firmware fills the
+/// buffer once and then counts what it cannot place in `fw_drops`; the
+/// caller keeps `widx` as the next `from`, so each call covers one stretch
+/// (a scene). A stretch past a wrap mark is summarised as its two ranges,
+/// added: a task cut by the wrap counts as open in one and unmatched in the
+/// other, and the ordinal gap across it is not counted.
+pub fn drain(k: &YdPvrKm, from: u32, out: &mut [Task]) -> Option<Drained> {
+    let osi = k.heap_cpu(k.fw_config_off + FW_CONFIG_HEAP_ALLOC_GRANULARITY);
+    // SAFETY: the OS init's slot of the config region (built by fwinit).
+    let (hp_fa, rc_fa) = unsafe { (rd32(osi, OSINIT_HWPERF_DATA), rd32(osi, OSINIT_HWPERF_RUNTIME_CFG)) };
+    if hp_fa == 0 || rc_fa == 0 {
+        return None;
+    }
+    let hp = k.heap_cpu(fw_heap_off(hp_fa));
+    // The firmware writes the indices and the drop count in memory.
+    k.invd(hp, HWPERFDATA_SIZE);
+    let rc = k.heap_cpu(fw_heap_off(rc_fa));
+    // SAFETY: the HWPerf data (40 bytes) and runtime configuration fwinit
+    // allocated.
+    let (size, widx, wrap, fw_drops, buf_fa) = unsafe {
+        (
+            rd32(hp, HWPERFDATA_SIZE_FIELD),
+            rd32(hp, HWPERFDATA_WIDX),
+            rd32(hp, HWPERFDATA_WRAP_COUNT),
+            rd32(hp, HWPERFDATA_DROP_COUNT),
+            rd32(rc, RUNTIME_HWPERFCFG_BUF),
+        )
+    };
+    if size == 0 || buf_fa == 0 {
+        return None;
+    }
+    let buf = k.heap_cpu(fw_heap_off(buf_fa));
+    let (from_c, widx_c) = (from.min(size), widx.min(size));
+    let wrap_end = if wrap > from_c && wrap <= size { wrap } else { size };
+    let ranges = if widx_c >= from_c { [(from_c, widx_c), (0, 0)] } else { [(from_c, wrap_end), (0, widx_c)] };
+    let mut summary = Summary::default();
+    let mut n = 0usize;
+    for (a, b) in ranges {
+        if b <= a {
+            continue;
+        }
+        let p = buf.wrapping_add(a as usize);
+        let len = (b - a) as usize;
+        k.invd(p, len);
+        // SAFETY: inside the buffer of `size` bytes fwinit allocated.
+        let bytes = unsafe { core::slice::from_raw_parts(p as *const u8, len) };
+        let (s, m) = summarize(bytes, out.get_mut(n..).unwrap_or(&mut []));
+        n += m;
+        add(&mut summary, &s);
+    }
+    Some(Drained { summary, from, widx, wrap, size, fw_drops })
+}
+
+/// [`drain`] and its record lines in the driver's log: one totals line, then
+/// one line per lane (TA and 3D always, the others when they ran), each
+/// field `name=value`, ticks raw and in ns at `core_hz` ([`ticks_to_ns`]).
+/// Returns the write index reached (the next `from`), or -ENODEV.
+pub fn drain_log(k: &YdPvrKm, from: u32, core_hz: u32) -> i32 {
+    let Some(d) = drain(k, from, &mut []) else {
+        crate::km_log!(k, Wrn, "pvr-hwperf: off (no buffer; CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF)");
+        return -crate::errno::ENODEV;
+    };
+    let s = &d.summary;
+    let hz = u64::from(core_hz);
+    crate::km_log!(
+        k,
+        Inf,
+        "pvr-hwperf: from={} widx={} wrap={} size={} fw_drops={} packets={} dropped={} other={} tasks={} \
+         unmatched={} open={} overflow={} span_ticks={} span_ns={} err={:?}",
+        d.from,
+        d.widx,
+        d.wrap,
+        d.size,
+        d.fw_drops,
+        s.packets,
+        s.dropped,
+        s.other,
+        s.tasks,
+        s.unmatched_finish,
+        s.open_at_end,
+        s.open_overflow,
+        s.span_ticks,
+        ticks_to_ns(s.span_ticks, hz),
+        s.error
+    );
+    for lane in Lane::ALL {
+        let i = lane.idx();
+        if s.lane_tasks[i] == 0 && !matches!(lane, Lane::Ta | Lane::ThreeD) {
+            continue;
+        }
+        crate::km_log!(
+            k,
+            Inf,
+            "pvr-hwperf lane={} tasks={} gpu_ticks={} gpu_ns={} k2s_n={} k2s_ticks={} k2s_ns={}",
+            lane.name(),
+            s.lane_tasks[i],
+            s.gpu_ticks[i],
+            ticks_to_ns(s.gpu_ticks[i], hz),
+            s.lane_kick_to_start_n[i],
+            s.lane_kick_to_start_ticks[i],
+            ticks_to_ns(s.lane_kick_to_start_ticks[i], hz)
+        );
+    }
+    d.widx.min(i32::MAX as u32) as i32
+}
+
+/// # Safety
+/// `k` is the C driver's `struct yd_pvr_km` (see [`super::km::km`]), the
+/// firmware structures built.
+#[no_mangle]
+pub unsafe extern "C" fn yd_pvr_hwperf_drain(k: *mut YdPvrKm, from: u32, core_clock_hz: u32) -> i32 {
+    // SAFETY: the caller's contract.
+    drain_log(unsafe { super::km::km(k) }, from, core_clock_hz)
 }
 
 #[cfg(test)]

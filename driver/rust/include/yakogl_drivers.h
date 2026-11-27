@@ -1828,6 +1828,10 @@ struct yd_pvr_km {
 /* = gpu::pvr::fwinit::FWINIT_PARTIAL_RENDER: the partial-render knob is on;
  * unmask the firmware's SPM and MAIN debug trace groups. */
 #define YD_PVR_FWINIT_PARTIAL_RENDER (1u << 2)
+/* = gpu::pvr::fwinit::FWINIT_HWPERF: the firmware's HWPerf event stream into
+ * a buffer of hwperf_buf_size bytes (CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF; an
+ * instrument, docs/notes/pvr-hwperf.md). */
+#define YD_PVR_FWINIT_HWPERF (1u << 3)
 struct yd_pvr_fwinit {
 	uint32_t pm_latency_ms;         /* RGXFWIF_RUNTIME_CFG.ui32ActivePMLatencyms */
 	uint32_t core_clock_hz;         /* the core (and SOC) clock the firmware is told */
@@ -1836,6 +1840,8 @@ struct yd_pvr_fwinit {
 	uint32_t ccb_ctl_size;
 	uint32_t tracebuf_size;
 	uint32_t gpu_util_size;
+	/* with YD_PVR_FWINIT_HWPERF: the HWPerf buffer's bytes (0: 1 MiB) */
+	uint32_t hwperf_buf_size;
 };
 
 /* struct pvr_gpu_bo (driver/src/pvr_types.h), the same layout. */
@@ -1916,6 +1922,13 @@ uint32_t yd_pvr_fl_audit(const struct yd_pvr_km *km);
  * bFirmwareStarted (0, -ETIMEDOUT after 5 s with the trace and assert dumped). */
 void yd_pvr_fwinit_build(struct yd_pvr_km *km, const struct yd_pvr_fwinit *cfg);
 int yd_pvr_fw_wait_started(struct yd_pvr_km *km);
+
+/* gpu::pvr::hwperf: summarise the HWPerf packets the firmware wrote from byte
+ * `from` of its buffer to its write index, as record lines in the driver's
+ * log ("pvr-hwperf: ..." and one "pvr-hwperf lane=..." per lane). Read only
+ * (RIdx is never written). Returns the write index reached (the next call's
+ * `from`), or -ENODEV when the firmware init did not set HWPerf up. */
+int yd_pvr_hwperf_drain(struct yd_pvr_km *km, uint32_t from, uint32_t core_clock_hz);
 
 /* ---- the render service's firmware side (gpu::pvr::render) ------------- *
  * The render context, the render-target datasets, the client CCBs, the
@@ -2862,7 +2875,7 @@ _Static_assert(offsetof(struct yd_pvr_km, pool_top_above) ==
 _Static_assert(sizeof(struct yd_pvr_km) ==
 		       680 + 64 * YD_PVR_FL_MAX + 16 + 4 * YD_PVR_FL_GROWS_MAX * YD_PVR_FL_MAX + 4 * YD_PVR_FL_MAX + 104,
 	       "struct yd_pvr_km");
-_Static_assert(sizeof(struct yd_pvr_fwinit) == 24, "struct yd_pvr_fwinit");
+_Static_assert(sizeof(struct yd_pvr_fwinit) == 28, "struct yd_pvr_fwinit");
 _Static_assert(sizeof(struct yd_pvr_hwrt) == 176, "struct yd_pvr_hwrt");
 _Static_assert(offsetof(struct yd_pvr_hwrt, tpc) == 32, "yd_pvr_hwrt.tpc");
 _Static_assert(offsetof(struct yd_pvr_hwrt, mlist) == 128, "yd_pvr_hwrt.mlist");

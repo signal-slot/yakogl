@@ -81,6 +81,11 @@ uint32_t  pvr_fwccb_ctl_off(void); /* FW-heap offsets of the FWCCB control and r
 uint32_t  pvr_fwccb_cmds_off(void);
 /* ActivePMLatency written at firmware boot (ms, default PVR_FW_PM_LATENCY_MS = 5; pvr_fw_boot.c). */
 extern uint32_t pvr_fw_pm_latency_ms;
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+/* The firmware's HWPerf record lines since the previous call (pvr_fw_boot.c;
+ * docs/notes/pvr-hwperf.md): the buffer's write index or -ENODEV. */
+int pvr_fw_hwperf_drain(void);
+#endif
 /* Print-only: where KCCB slot `slot` and the KCCB write offset live (heap
  * offset, firmware address, physical address, 64-byte line numbers), the
  * read/write offsets, and the slot's command type and MMUCACHE value as the

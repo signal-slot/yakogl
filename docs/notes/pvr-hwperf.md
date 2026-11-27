@@ -346,3 +346,42 @@ kicks is wrong.
 ## Not done here
 
 No code, no board run (contract of item pvr-hwperf-study, plan #329).
+
+## The enable (item pvr-hwperf-enable, plan #329)
+
+The enable half of (d) is in, off by default, route 1; no board run yet.
+
+- `CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF` (bool, default n) and
+  `CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB` (default **1024**, range
+  64-2048; not the DDK's 2048: only 4 MiB of the main region is backed,
+  `PVR_FW_HEAP_MAIN_PHYS`, and the init already uses 0xd8d28 of it). A
+  buffer that does not fit is refused at boot ("HWPerf stays off").
+- No `pvr-hwperf` cargo feature: the Rust side acts on the run-time flag
+  `fwinit::FWINIT_HWPERF` that `pvr_fw_boot.c` sets under the Kconfig, so
+  the host tests need no feature set and the gate no new row.
+- `fwinit::build` with the flag: `INICFG_HWPERF_EN`, the size and
+  `hwperf::PROBE_FILTER` (0x0303_0708_0FFB_FFFE, pinned to the DDK mask
+  expression of (b)) in the HWPerf data, the buffer (page aligned, the
+  last object) in the runtime HWPerf configuration. The new offsets are
+  `fwif.rs` pins.
+- The drain: `hwperf::drain(k, from, out)` finds the buffer through the OS
+  init, reads `[from, WIdx)` (two ranges past a wrap mark), never writes
+  `RIdx`. `pvr_fw_hwperf_drain()` (C, under the Kconfig) prints the
+  record lines and keeps `WIdx` as the next `from`, so a call before a
+  scene and one after it give that scene's figures:
+
+```
+pvr-hwperf: from=<b> widx=<b> wrap=<b> size=<b> fw_drops=<n> packets=<n> dropped=<n> other=<n> tasks=<n> unmatched=<n> open=<n> overflow=<n> span_ticks=<t> span_ns=<ns> err=None
+pvr-hwperf lane=ta tasks=<n> gpu_ticks=<t> gpu_ns=<ns> k2s_n=<n> k2s_ticks=<t> k2s_ns=<ns>
+pvr-hwperf lane=3d tasks=<n> gpu_ticks=<t> gpu_ns=<ns> k2s_n=<n> k2s_ticks=<t> k2s_ns=<ns>
+```
+
+  `k2s` is kick to start: from the last `FW_BGSTART` before the task's
+  start. The ns assume raw `CR_TIMER` stamps at 800 MHz, which the first
+  board run checks (clock, above); the ticks are printed raw for that.
+- Host tests (`driver/rust/src/gpu/pvr/fwinit.rs`): with the flag clear
+  the whole carveout hashes as before the change; with it, exactly five
+  words change; the drain over a hand-written buffer.
+
+Left: a caller (gl_test case 216 or the glmark2 sample), the
+`ui32ExtJobRef` write in `render.rs`, and the board run.

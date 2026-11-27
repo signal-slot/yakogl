@@ -208,6 +208,33 @@ config YAKOGL_DRV_GPU_PVR_KICK_TIMES
 	  poll of the fence wait; off for applications
 	  (docs/notes/pvr-fence-wait.md).
 
+config YAKOGL_DRV_GPU_PVR_HWPERF
+	bool "The firmware's HWPerf events into a buffer the host reads (instrument)"
+	help
+	  The firmware init sets RGXFWIF_INICFG_HWPERF_EN, a buffer of
+	  YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB in the firmware heap and an event
+	  filter of every HW kick and finish, the firmware's background and
+	  IRQ tasks, the UFO checks and updates, the context stores and the
+	  power changes (gpu::pvr::hwperf::PROBE_FILTER). The firmware then
+	  stamps each with its own timer, which splits the time between a
+	  post and a fence that the host's reads cannot (#1199). Read with
+	  pvr_fw_hwperf_drain(): one "pvr-hwperf:" totals line and one
+	  "pvr-hwperf lane=..." line per lane (tasks, GPU time, kick to
+	  start) for the packets since the previous call. The buffer is read,
+	  never freed: once full, the firmware drops packets (fw_drops=).
+	  Off for applications (docs/notes/pvr-hwperf.md).
+
+config YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB
+	int "HWPerf buffer size (KiB)"
+	depends on YAKOGL_DRV_GPU_PVR_HWPERF
+	default 1024
+	range 64 2048
+	help
+	  The HWPerf buffer in the firmware heap's 4 MiB backed main region
+	  (PVR_FW_HEAP_MAIN_PHYS). gl_test case 216's 20 frames need about
+	  0.6 MB; the DDK's 2048 leaves about 1 MiB of the region. A buffer
+	  that does not fit is refused at boot ("HWPerf stays off").
+
 config YAKOGL_DRV_GPU_PVR_SELFTEST
 	bool "Run the driver's self-test render at boot"
 	help

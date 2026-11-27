@@ -196,6 +196,26 @@ pins! {
     INICFG_OS_CTXSWITCH_GEOM_EN: u32 = 0x2 => "RGXFWIF_INICFG_OS_CTXSWITCH_GEOM_EN";
     INICFG_OS_CTXSWITCH_3D_EN: u32 = 0x4 => "RGXFWIF_INICFG_OS_CTXSWITCH_3D_EN";
     INICFG_OS_CTXSWITCH_CDM_EN: u32 = 0x8 => "RGXFWIF_INICFG_OS_CTXSWITCH_CDM_EN";
+
+    // ---- HWPerf (the fwinit flag FWINIT_HWPERF; docs/notes/pvr-hwperf.md (a))
+    /// The global HWPerf enable of `RGXFWIF_SYSDATA.ui32ConfigFlags`.
+    INICFG_HWPERF_EN: u32 = 0x4 => "RGXFWIF_INICFG_HWPERF_EN";
+    /// `RGXFWIF_HWPERFDATA`: the read and write indices and the wrap mark
+    /// (one 12-byte struct, one cache line), the buffer size, the drop
+    /// count, the event filter.
+    HWPERFDATA_RIDX: usize = 0 => "offsetof(RGXFWIF_HWPERFDATA, sHWPerfCtrl.ui32HWPerfRIdx)";
+    HWPERFDATA_WIDX: usize = 4 => "offsetof(RGXFWIF_HWPERFDATA, sHWPerfCtrl.ui32HWPerfWIdx)";
+    HWPERFDATA_WRAP_COUNT: usize = 8 => "offsetof(RGXFWIF_HWPERFDATA, sHWPerfCtrl.ui32HWPerfWrapCount)";
+    HWPERFDATA_SIZE_FIELD: usize = 12 => "offsetof(RGXFWIF_HWPERFDATA, ui32HWPerfSize)";
+    HWPERFDATA_DROP_COUNT: usize = 16 => "offsetof(RGXFWIF_HWPERFDATA, ui32HWPerfDropCount)";
+    HWPERFDATA_FILTER: usize = 32 => "offsetof(RGXFWIF_HWPERFDATA, ui64HWPerfFilter)";
+    /// `RGXFWIF_RUNTIME_HWPERFCFG.sHWPerfBuf`, a 32-bit firmware address.
+    RUNTIME_HWPERFCFG_BUF: usize = 0 => "offsetof(RGXFWIF_RUNTIME_HWPERFCFG, sHWPerfBuf)";
+    RUNTIME_HWPERFCFG_BUF_SIZE: usize = 4 => "sizeof(PRGXFWIF_HWPERFBUF)";
+    /// The probe's event filter ([`super::hwperf::PROBE_FILTER`]) against
+    /// the DDK's own masks (`rogue/rgx_hwperf.h:408-447`).
+    HWPERF_PROBE_FILTER: u64 = super::hwperf::PROBE_FILTER
+        => "RGX_HWPERF_EVENT_MASK_HW_KICKFINISH | RGX_HWPERF_EVENT_MASK_FW_SED | RGX_HWPERF_EVENT_MASK_FW_UFO | RGX_HWPERF_EVENT_MASK_FW_CSW | RGX_HWPERF_EVENT_MASK_ALL_PWR | RGX_HWPERF_EVENT_MASK_VALUE(RGX_HWPERF_FWACT)";
     SYSDATA_CONFIG_FLAGS: usize = 0 => "offsetof(RGXFWIF_SYSDATA, ui32ConfigFlags)";
     OSDATA_FW_OS_CONFIG_FLAGS: usize = 0 => "offsetof(RGXFWIF_OSDATA, ui32FwOsConfigFlags)";
     OSDATA_POWER_SYNC: usize = 568 => "offsetof(RGXFWIF_OSDATA, sPowerSync)";
