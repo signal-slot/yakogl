@@ -13,8 +13,8 @@
 //! cube cases pin width and height. The vertex stage's units (`vs_tmu`) come
 //! from the same `texture_units` fill as the fragment stage's (`tmu`), so
 //! they hold the base level's sizes at BASE_LEVEL 1 too (the draw fills
-//! `GlesTextureBind::base_level`; the TMU state's Base Level stays 0 until
-//! item basefix).
+//! `GlesTextureBind::base_level`; the TMU state's Base Level follows it too
+//! since item basefix).
 //! tests/es3_texsize_base_level_vs_v3d.rs pins vertex `textureSize`,
 //! the fragment 3D and 2D-array grads are pinned by a sibling item's test.
 //!

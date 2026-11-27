@@ -5,15 +5,15 @@
 //! 2D-array 8x8x5 texture.
 //!
 //! The TMU reads the texture shader state record the back end builds
-//! (`texture::state`, src/v3d/texture.rs): its Base Level and Max Level
+//! (`texture::state_at`, src/v3d/texture.rs): its Base Level and Max Level
 //! fields choose which mip levels the TMU may sample. Mesa's V3D driver
 //! programs Base Level from the GL base level (`first_level`) and Max Level
 //! from the last level, clamped (v3dx_state.c, `v3d_setup_texture_shader_state`).
-//! Today `texture::state` builds every record with base_level 0 and
-//! max_level = levels - 1 and `GlesTextureBind` has no base-level field, so
-//! the TMU samples from level 0 whatever GL_TEXTURE_BASE_LEVEL says: the
-//! BASE_LEVEL 1 tests pin that (`_flip_when_the_base_level_is_applied`), the
-//! BASE_LEVEL 0 controls hold before and after. The fake job builder only
+//! The back end builds the record with base_level =
+//! `GlesTextureBind::base_level` (clamped to the last level) and max_level =
+//! levels - 1 (item basefix), so the TMU samples from the GL base level: the
+//! BASE_LEVEL 1 tests check that, the BASE_LEVEL 0 controls hold too. The
+//! fake job builder only
 //! records the draw's sampler bindings, so the test reads the two fields
 //! from the 24-byte record (byte 15: base_level bits 7:4, max_level 3:0)
 //! in the fake GPU memory.
@@ -627,30 +627,27 @@ fn a_2d_array_at_base_level_0_samples_levels_0_to_3() {
     assert_eq!(unit0_levels(Kind::Array, 0), (0, 3));
 }
 
-/* ---- BASE_LEVEL 1: today's record, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's record ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU
-/// record still has Base Level 0 (Max Level 3): the TMU samples level 0, not
-/// the GL base level. Mesa programs Base Level = the GL base level.
-/// After the fix the record is (1, 3).
+/// With GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU record has Base Level 1
+/// (Max Level 3): the TMU samples from the GL base level, as Mesa programs
+/// Base Level = the GL base level.
 #[test]
-fn a_2d_texture_at_base_level_1_still_samples_from_level_0_flip_when_the_base_level_is_applied() {
+fn a_2d_texture_at_base_level_1_samples_from_level_1() {
     let _g = rig();
-    assert_eq!(unit0_levels(Kind::Tex2d, 1), (0, 3));
+    assert_eq!(unit0_levels(Kind::Tex2d, 1), (1, 3));
 }
 
-/// Pins today's behaviour: the 3D texture at BASE_LEVEL 1 has TMU Base Level
-/// 0 (Max Level 3). After the fix the record is (1, 3).
+/// The 3D texture at BASE_LEVEL 1 has TMU Base Level 1 (Max Level 3).
 #[test]
-fn a_3d_texture_at_base_level_1_still_samples_from_level_0_flip_when_the_base_level_is_applied() {
+fn a_3d_texture_at_base_level_1_samples_from_level_1() {
     let _g = rig();
-    assert_eq!(unit0_levels(Kind::Tex3d, 1), (0, 3));
+    assert_eq!(unit0_levels(Kind::Tex3d, 1), (1, 3));
 }
 
-/// Pins today's behaviour: the 2D array at BASE_LEVEL 1 has TMU Base Level 0
-/// (Max Level 3). After the fix the record is (1, 3).
+/// The 2D array at BASE_LEVEL 1 has TMU Base Level 1 (Max Level 3).
 #[test]
-fn a_2d_array_at_base_level_1_still_samples_from_level_0_flip_when_the_base_level_is_applied() {
+fn a_2d_array_at_base_level_1_samples_from_level_1() {
     let _g = rig();
-    assert_eq!(unit0_levels(Kind::Array, 1), (0, 3));
+    assert_eq!(unit0_levels(Kind::Array, 1), (1, 3));
 }

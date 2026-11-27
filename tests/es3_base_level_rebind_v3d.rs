@@ -17,35 +17,33 @@
 //! - the words 44-47 read `V3dJobTmu`'s `width`/`height`/`depth`/
 //!   `array_size`, which `texture_units` (src/v3d/backend.rs) fills at that
 //!   base level, so draw 2 hands the level-1 words;
-//! - `texture::state` (src/v3d/texture.rs) packs the 24-byte texture state
-//!   record with `base_level: 0` and `max_level = levels - 1` whatever GL
-//!   says (Mesa's v3dx_state.c programs Base Level from the GL base level);
-//! - and the key a kept texture copy lives under, `TexKey`
-//!   (src/v3d/backend.rs:189: base_gpu, width, height, levels, bgra,
-//!   format, content_gen, layers, type_, depth_id), has no base level, so
-//!   draw 2 of an immutable texture (one stamp, laid out once) hits draw
-//!   1's key exactly and reuses its tiled copy. A stale cache therefore
-//!   passes every existing base-level pin: each of them sets the base
-//!   level once before its single draw. This file draws, changes only the
-//!   base level, and draws again.
+//! - `texture::state_at` (src/v3d/texture.rs) packs the 24-byte texture
+//!   state record with `base_level` = that base level (clamped to the last
+//!   level) and `max_level = levels - 1`, as Mesa's v3dx_state.c programs
+//!   Base Level from the GL base level (item basefix);
+//! - and the key a job's packed record is found again under, `TexKey`
+//!   (src/v3d/backend.rs), carries the base level, so draw 2 of an
+//!   immutable texture (one stamp, laid out once) packs its own record
+//!   instead of reusing draw 1's. The kept tiled copy is keyed without it
+//!   (`TexKey::image`): the texels are the same at every base level. A
+//!   stale record cache would pass every single-draw base-level test: each
+//!   of them sets the base level once before its single draw. This file
+//!   draws, changes only the base level, and draws again.
 //!
 //! What the harness sees: each draw's `V3dJobTmu` records as the fake job
 //! builder gets them, and byte 15 of each draw's 24-byte packed texture
 //! state record in the fake GPU memory (Base Level bits 7:4, Max Level
 //! bits 3:0), read as tests/es3_sample_base_level_v3d.rs reads it. So the
-//! TMU state's base level IS observable here, and today it is 0 in all
-//! three draws.
+//! TMU state's base level IS observable here: 0, 1, 0 in the three draws.
 //!
 //! Draw 2 hands the level-1 words (8, 8, 1, 1), (8, 8, 4, 1) and
 //! (8, 8, 1, 5) (a 2D array's layer count is never minified; dEQP
 //! es3fShaderTextureFunctionTests.cpp:1408-1411 and :1511, Mesa's
 //! v3d_uniforms.c `u_minify(first_level)`); those asserts were pinned at
-//! level 0 until item basefield flipped them. The asserts named
-//! `..._flip_when_the_base_level_is_applied` pin the BASE_LEVEL 1 draw's
-//! record base level 0; their doc comments give the post-fix values. After
-//! basefix — which applies the base level to `texture::state` and adds it to
-//! `TexKey` so a kept copy follows the base level — draw 2 has a record with
-//! base_level 1; draws 1 and 3 are the level-0 values today and after.
+//! level 0 until item basefield flipped them. Draw 2's record has
+//! base_level 1 (pinned at 0 until item basefix applied the base level to
+//! the record and added it to `TexKey`); draws 1 and 3 have the level-0
+//! values.
 //!
 //! The textures are `glTexStorage` 16x16 (3D 8 deep, halved per level; 2D
 //! array 5 layers, the same at every level) with 5 levels, every level
@@ -706,7 +704,7 @@ fn rebind(kind: Kind) -> [Seen; 3] {
 
 /// Control: the 16x16 `sampler2D` drawn at BASE_LEVEL 0 hands (16, 16, 1, 1)
 /// both before the BASE_LEVEL 1 draw and after it is drawn, and the two
-/// BASE_LEVEL 0 draws hand identical words. Holds today and after basefix.
+/// BASE_LEVEL 0 draws hand identical words.
 #[test]
 fn the_two_2d_draws_at_base_level_0_around_the_base_level_change_hand_identical_level_0_words() {
     let _g = rig();
@@ -716,8 +714,7 @@ fn the_two_2d_draws_at_base_level_0_around_the_base_level_change_hand_identical_
 }
 
 /// Control: the 16x16x8 `sampler3D` at BASE_LEVEL 0: (16, 16, 8, 1) before
-/// the BASE_LEVEL 1 draw, and the same again after it. Holds today and
-/// after basefix.
+/// the BASE_LEVEL 1 draw, and the same again after it.
 #[test]
 fn the_two_3d_draws_at_base_level_0_around_the_base_level_change_hand_identical_level_0_words() {
     let _g = rig();
@@ -727,8 +724,7 @@ fn the_two_3d_draws_at_base_level_0_around_the_base_level_change_hand_identical_
 }
 
 /// Control: the 16x16x5-layer `sampler2DArray` at BASE_LEVEL 0: (16, 16, 1,
-/// 5) before the BASE_LEVEL 1 draw, and the same again after it. Holds
-/// today and after basefix.
+/// 5) before the BASE_LEVEL 1 draw, and the same again after it.
 #[test]
 fn the_two_2d_array_draws_at_base_level_0_around_the_base_level_change_hand_identical_level_0_words() {
     let _g = rig();
@@ -772,11 +768,11 @@ fn the_2d_array_draw_at_base_level_1_between_the_draws_hands_the_level_1_words()
     assert_eq!(seen[1].words, (8, 8, 1, 5));
 }
 
-/* ---- the TMU record: today's base level 0, pinned ---- */
+/* ---- the TMU record's base level ---- */
 
 /// Control: the BASE_LEVEL 0 draws of the `sampler2D` read a texture state
 /// record at Base Level 0, Max Level 4 (the whole chain), the first and the
-/// third draw alike. Holds today and after basefix.
+/// third draw alike.
 #[test]
 fn the_two_2d_draws_at_base_level_0_around_the_base_level_change_read_the_tmu_record_at_base_level_0() {
     let _g = rig();
@@ -786,7 +782,7 @@ fn the_two_2d_draws_at_base_level_0_around_the_base_level_change_read_the_tmu_re
 }
 
 /// Control: the `sampler3D` BASE_LEVEL 0 draws read Base Level 0, Max Level
-/// 4, alike. Holds today and after basefix.
+/// 4, alike.
 #[test]
 fn the_two_3d_draws_at_base_level_0_around_the_base_level_change_read_the_tmu_record_at_base_level_0() {
     let _g = rig();
@@ -796,7 +792,7 @@ fn the_two_3d_draws_at_base_level_0_around_the_base_level_change_read_the_tmu_re
 }
 
 /// Control: the `sampler2DArray` BASE_LEVEL 0 draws read Base Level 0, Max
-/// Level 4, alike. Holds today and after basefix.
+/// Level 4, alike.
 #[test]
 fn the_two_2d_array_draws_at_base_level_0_around_the_base_level_change_read_the_tmu_record_at_base_level_0() {
     let _g = rig();
@@ -805,39 +801,29 @@ fn the_two_2d_array_draws_at_base_level_0_around_the_base_level_change_read_the_
     assert_eq!(seen[2].levels, seen[0].levels);
 }
 
-/// Pins today's behaviour: the `sampler2D` drawn between them, at BASE_LEVEL
-/// 1, still reads a record at Base Level 0 — `texture::state` hardcodes it,
-/// and the draw hands a bind whose base_level is 0 (src/gl/draw.rs:3611).
-/// After the base level is applied the record is **(1, 4)** (Mesa's
-/// v3dx_state.c programs Base Level from the GL base level; TexKey then
-/// keeps the base level too, so the draw packs its own record instead of
-/// reusing the earlier draw's). Flip the assert to (1, MAX_LEVEL) then.
+/// The `sampler2D` drawn between them, at BASE_LEVEL 1, reads a record at
+/// **(1, 4)**: Mesa's v3dx_state.c programs Base Level from the GL base
+/// level, and `TexKey` keeps the base level, so the draw packs its own
+/// record instead of reusing the earlier draw's.
 #[test]
-fn the_2d_draw_at_base_level_1_between_the_draws_still_reads_the_tmu_record_at_base_level_0_flip_when_the_base_level_is_applied(
-) {
+fn the_2d_draw_at_base_level_1_between_the_draws_reads_the_tmu_record_at_base_level_1() {
     let _g = rig();
     let seen = rebind(Kind::Tex2d);
-    assert_eq!(seen[1].levels, (0, MAX_LEVEL));
+    assert_eq!(seen[1].levels, (1, MAX_LEVEL));
 }
 
-/// Pins today's behaviour: the `sampler3D` at BASE_LEVEL 1 between the
-/// draws reads Base Level 0 too. After the base level is applied the record
-/// is **(1, 4)**. Flip the assert to (1, MAX_LEVEL) then.
+/// The `sampler3D` at BASE_LEVEL 1 between the draws reads **(1, 4)**.
 #[test]
-fn the_3d_draw_at_base_level_1_between_the_draws_still_reads_the_tmu_record_at_base_level_0_flip_when_the_base_level_is_applied(
-) {
+fn the_3d_draw_at_base_level_1_between_the_draws_reads_the_tmu_record_at_base_level_1() {
     let _g = rig();
     let seen = rebind(Kind::Tex3d);
-    assert_eq!(seen[1].levels, (0, MAX_LEVEL));
+    assert_eq!(seen[1].levels, (1, MAX_LEVEL));
 }
 
-/// Pins today's behaviour: the `sampler2DArray` at BASE_LEVEL 1 between the
-/// draws reads Base Level 0 too. After the base level is applied the record
-/// is **(1, 4)**. Flip the assert to (1, MAX_LEVEL) then.
+/// The `sampler2DArray` at BASE_LEVEL 1 between the draws reads **(1, 4)**.
 #[test]
-fn the_2d_array_draw_at_base_level_1_between_the_draws_still_reads_the_tmu_record_at_base_level_0_flip_when_the_base_level_is_applied(
-) {
+fn the_2d_array_draw_at_base_level_1_between_the_draws_reads_the_tmu_record_at_base_level_1() {
     let _g = rig();
     let seen = rebind(Kind::Array);
-    assert_eq!(seen[1].levels, (0, MAX_LEVEL));
+    assert_eq!(seen[1].levels, (1, MAX_LEVEL));
 }

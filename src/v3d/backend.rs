@@ -208,6 +208,11 @@ struct TexKey {
     /// `depth_sample`) is another record than the same texels read from a
     /// copy: never 0 for such a binding, 0 for every kept copy.
     depth_id: u32,
+    /// `GlesTextureBind::base_level`: the TMU record's Base Level
+    /// (`texture::state_at`), so a draw at another GL_TEXTURE_BASE_LEVEL of
+    /// the same storage packs its own record. The texels do not depend on
+    /// it: a kept copy is keyed by [`TexKey::image`], which leaves it 0.
+    base_level: u8,
 }
 
 impl TexKey {
@@ -222,6 +227,7 @@ impl TexKey {
         layers: 0,
         type_: 0,
         depth_id: 0,
+        base_level: 0,
     };
 
     fn of(b: &GlesTextureBind) -> TexKey {
@@ -236,7 +242,14 @@ impl TexKey {
             layers: texture::layers(b),
             type_: b.type_,
             depth_id: b.depth_id,
+            base_level: b.base_level,
         }
+    }
+
+    /// The key of the tiled image alone (a kept copy, `tiled_copy`): the
+    /// record's base level is not part of the texels.
+    fn image(self) -> TexKey {
+        TexKey { base_level: 0, ..self }
     }
 }
 
@@ -4526,10 +4539,17 @@ fn tex_state_for(g: &mut V3dState, b: &GlesTextureBind, ret32: bool) -> Result<u
             }
         }
     };
+    /* the TMU's Base Level is the GL base level clamped to the last level
+     * sampled, Max Level that last level (v3dx_state.c,
+     * v3d_setup_texture_shader_state); texture_units' size words start at
+     * the GL base level too, which differs only for an image laid out with
+     * fewer levels (no mipmap filter: level 0 alone,
+     * docs/notes/v3d-texture-size-words.md (e)) */
+    let first_level = u32::from(b.base_level).min(max_level);
     let mut st = if from_depth_buffer {
         texture::depth_buffer_state(b, &layout, image_gpu)
     } else {
-        texture::state(b, &layout, image_gpu)
+        texture::state_at(b, &layout, image_gpu, first_level)
     };
     /* an image laid out with more levels than the draw samples (a chain
      * made for a mipmap filter, sampled without one): the levels below the
@@ -4662,7 +4682,7 @@ fn depth_sample(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout, 
 /// `texture::image_offset` (`texture::tile`), in `texture::image_bytes`
 /// bytes, which the canary after it and the arena's size check measure.
 fn copy_image_for(g: &mut V3dState, b: &GlesTextureBind) -> Result<(V3dTexLayout, u32), Attempt> {
-    let key = TexKey::of(b);
+    let key = TexKey::of(b).image();
     /* the copy is tiled from the storage: a render target whose jobs stored
      * only its render image has level 0 written back first (a mip filter
      * sampled without the TFU's chain, a moved stamp) */
@@ -5027,7 +5047,7 @@ pub unsafe extern "C" fn v3d_texture_uploaded(
             // stride shorter than a row.
             || unsafe { v3d_tex_store_box(image, &layout, 0, 0, 0, w, h, src, stride) }
     };
-    let key = TexKey::of(b);
+    let key = TexKey::of(b).image();
     let kept = tiled_copy(g, key, layout.size as usize, texture::gl_bytes(b) as u64, TILE_AT_UPLOAD, fill);
     tfu_count(g, tfu, layout.size as usize);
     if kept.is_ok() {
@@ -5065,7 +5085,7 @@ fn drop_stale_copies(g: &mut V3dState, d: &GlesDraw) {
     let fs = &d.textures[..(d.num_textures as usize).min(GLES_MAX_TEX_BINDS)];
     let vs = &d.vs_textures[..(d.num_vs_textures as usize).min(GLES_MAX_VS_TEX_BINDS)];
     for b in fs.iter().chain(vs).filter(|b| b.content_gen != 0) {
-        let key = TexKey::of(b);
+        let key = TexKey::of(b).image();
         for i in 0..TILED_ENTRIES {
             let t = &g.tiled[i];
             if t.live() && t.key.base_gpu == b.base_gpu && t.key != key {
@@ -5990,6 +6010,9 @@ fn texture_units(
             black_state(g, b.type_ == GLES_TEXTYPE_CUBE)
         };
         let sampler = sampler_for(g, b)?;
+        /* the GL base level, which the GL core already clamped to the
+         * texture's last level (draw::bind_base_level); an incomplete or
+         * stand-in unit keeps 1, 1, 1, 1 */
         let (width, height, depth, array_size) = texture::size_words(b, u32::from(b.base_level));
         out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler, width, height, depth, array_size };
         n += 1;

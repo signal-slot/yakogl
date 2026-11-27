@@ -13,10 +13,9 @@
 //! `u_minify(first_level)` for width, height and depth, the layer count as
 //! is; tests/es3_texsize_base_level_v3d.rs checks the same for
 //! `textureSize`). The gradient scaling follows the words. The TMU state's
-//! Base Level is still 0 until item basefix sets it, so until then the
-//! explicit lod is relative to level 0 while the gradients are scaled by the
-//! base level's size; item gradbase found that once both follow the base
-//! level the TMU adds it once.
+//! Base Level follows the base level too (item basefix, `texture::state_at`),
+//! so the explicit lod, scaled by the base level's size, is relative to the
+//! base level and the TMU adds it once (item gradbase).
 //!
 //! The BASE_LEVEL 0 controls assert the level-0 sizes; the BASE_LEVEL 1
 //! tests assert the base level's (pinned at level 0 until item basefield

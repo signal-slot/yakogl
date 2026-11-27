@@ -140,12 +140,13 @@ pub fn level_depth(depth: u32, level: u32) -> u32 {
 /// level is the caller's job; this saturates whatever it is given, so a
 /// level past the chain still gives 1 for the three minified words.
 ///
-/// Not called yet: `texture_units` (src/v3d/backend.rs) computes the four
-/// words inline at level 0; basefix (plan #382) replaces those lines with
-/// a call here at the binding's first level, the plan's rules
-/// (docs/notes/v3d-texture-size-words.md, (b) and (e),
-/// tests/es3_texsize_lod_v3d.rs). With `first_level` 0 this is exactly
-/// what `texture_units` computes today, pinned below for 2D, cube, 3D, 2D
+/// `texture_units` (src/v3d/backend.rs) calls it for every unit of every
+/// stage (fragment, vertex, and the compute stage sharing the vertex table)
+/// at the binding's GL_TEXTURE_BASE_LEVEL (`GlesTextureBind::base_level`)
+/// clamped to its last level, the level the TMU record starts at
+/// ([`state_at`]; docs/notes/v3d-texture-size-words.md, (b) and (e),
+/// tests/es3_texsize_lod_v3d.rs). With `first_level` 0 it gives level 0's
+/// words, pinned below for 2D, cube, 3D, 2D
 /// array and incomplete binds. The words' depth is `u_minify` of the real
 /// depth, not [`level_depth`]'s slice count: from level 1 that is Mesa's
 /// power-of-two padding (a depth of 6 allocates 4 slices at level 1 where
@@ -764,8 +765,10 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
 /// (`v3d_setup_texture_shader_state` sets base_level from the view's first
 /// level, v3dx_state.c), clamped to the state's last level: a first level
 /// past the last stored one reads the last. Everything else, `max_level`
-/// included, is [`state`]'s. Not wired yet: the caller must pair it with the
-/// base-relative size words of [`size_words`] in the same change.
+/// included, is [`state`]'s. `tex_state_for` (src/v3d/backend.rs) calls it
+/// with the binding's base level, paired with the base-relative size words
+/// of [`size_words`]; a textureGrad or textureLod lod is then relative to
+/// this level in the TMU, as in Mesa, so nothing applies the base twice.
 pub fn state_at(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32, first_level: u32) -> V3dTexState {
     let s = state(b, layout, image_gpu);
     V3dTexState { base_level: first_level.min(s.max_level), ..s }

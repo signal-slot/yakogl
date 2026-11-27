@@ -7,16 +7,16 @@
 //!
 //! GLES 3.0 §3.8.10 / GLSL ES 3.00 §8.8: the lod of texelFetch is relative
 //! to the base level, so the level read is base + lod (here 1 + 1 = 2).
-//! Today the TMU texture state record ignores the base level: it has Base
-//! Level 0 (src/v3d/texture.rs `state`). The unit's size words (`V3dJobTmu`
-//! width, height, depth, array_size = words 44-47) already follow it: the
+//! The TMU texture state record has Base Level = the base level
+//! (src/v3d/texture.rs `state_at`, item basefix). The unit's size words
+//! (`V3dJobTmu` width, height, depth, array_size = words 44-47) follow it too: the
 //! draw fills `GlesTextureBind::base_level` (item basefield) and
 //! `texture_units` takes the words at that level. The test reads both, as tests/es3_sample_base_level_v3d.rs
 //! (record bytes in the fake GPU memory, byte 15: base_level bits 7:4,
 //! max_level 3:0) and tests/es3_texsize_base_level_v3d.rs (size words) do.
 //!
 //! What can and cannot be observed host-side:
-//! - Observed and pinned: the state's Base Level / Max Level and the four
+//! - Observed and checked: the state's Base Level / Max Level and the four
 //!   size words of the unit. The job builder is handed the same
 //!   `V3dJobTmu` for a texelFetch as for `texture()`; the draw carries no
 //!   texel-fetch parameter word of its own that this test can see (the lod
@@ -650,42 +650,39 @@ fn an_integer_2d_texel_fetch_at_base_level_0_reads_the_level_0_state() {
     assert_eq!(unit0(Kind::Int2d, 0), ((0, 3), (8, 8, 1, 1)));
 }
 
-/* ---- BASE_LEVEL 1: today's state, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's state ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU
-/// state has Base Level 0 (Max Level 3). The size words already are the base
-/// level's (4, 4, 1, 1): the draw fills `GlesTextureBind::base_level` and
-/// v3d_uniforms.c writes the size of that level. Mesa's v3dx_state.c
-/// programs Base Level = the GL first level: after the fix the state is
-/// (1, 3), the words stay (4, 4, 1, 1).
+/// With GL_TEXTURE_BASE_LEVEL 1 the 2D texture's TMU state is (1, 3): Mesa's
+/// v3dx_state.c programs Base Level = the GL first level. The size words are
+/// the base level's (4, 4, 1, 1): v3d_uniforms.c writes the size of that
+/// level.
 #[test]
-fn a_2d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_2d_texel_fetch_at_base_level_1_hands_the_base_level_state() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Tex2d, 1), ((0, 3), (4, 4, 1, 1)));
+    assert_eq!(unit0(Kind::Tex2d, 1), ((1, 3), (4, 4, 1, 1)));
 }
 
-/// Pins today's behaviour: the 3D texture at BASE_LEVEL 1 has state (0, 3)
-/// and the base level's words (4, 4, 2, 1) (the depth word 46 is the base
-/// level's depth, v3d_uniforms.c). After the fix: state (1, 3).
+/// The 3D texture at BASE_LEVEL 1 has state (1, 3) and the base level's
+/// words (4, 4, 2, 1) (the depth word 46 is the base level's depth,
+/// v3d_uniforms.c).
 #[test]
-fn a_3d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_3d_texel_fetch_at_base_level_1_hands_the_base_level_state() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Tex3d, 1), ((0, 3), (4, 4, 2, 1)));
+    assert_eq!(unit0(Kind::Tex3d, 1), ((1, 3), (4, 4, 2, 1)));
 }
 
-/// Pins today's behaviour: the 2D array at BASE_LEVEL 1 has state (0, 3)
-/// and the base level's words (4, 4, 1, 5) (the layer count is not
-/// minified). After the fix: state (1, 3).
+/// The 2D array at BASE_LEVEL 1 has state (1, 3) and the base level's words
+/// (4, 4, 1, 5) (the layer count is not minified).
 #[test]
-fn a_2d_array_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn a_2d_array_texel_fetch_at_base_level_1_hands_the_base_level_state() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Array, 1), ((0, 3), (4, 4, 1, 5)));
+    assert_eq!(unit0(Kind::Array, 1), ((1, 3), (4, 4, 1, 5)));
 }
 
-/// Pins today's behaviour: the isampler2D at BASE_LEVEL 1 has state (0, 3)
-/// and the base level's words (4, 4, 1, 1). After the fix: state (1, 3).
+/// The isampler2D at BASE_LEVEL 1 has state (1, 3) and the base level's
+/// words (4, 4, 1, 1).
 #[test]
-fn an_integer_2d_texel_fetch_at_base_level_1_hands_the_level_0_state_flip_when_the_base_level_is_applied() {
+fn an_integer_2d_texel_fetch_at_base_level_1_hands_the_base_level_state() {
     let _g = rig();
-    assert_eq!(unit0(Kind::Int2d, 1), ((0, 3), (4, 4, 1, 1)));
+    assert_eq!(unit0(Kind::Int2d, 1), ((1, 3), (4, 4, 1, 1)));
 }

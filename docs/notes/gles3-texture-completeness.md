@@ -90,8 +90,12 @@ and `get_texture_format`/`st_finalize_texture`) then makes the sampler view
 with `u.tex.first_level = BaseLevel` and `u.tex.last_level = min(_MaxLevel,
 storage last level)` (also clamped by the resource's `last_level`). The
 V3D driver's `v3dx_state.c` turns that pair into the TMU's base level and
-max level, and `v3d_uniforms.c` writes words 44-47 from `first_level`
-(`docs/notes/v3d-texture-size-words.md` (e) and `basefix`).
+max level, and `v3d_uniforms.c` writes words 44-47 from `first_level`. Our
+V3D back end does the same since `basefix`: `texture::state_at` at the
+binding's base level (clamped to the last level of the image it samples)
+and `texture::size_words` at that level, words 44-46 minified and 47 whole
+(`docs/notes/v3d-texture-size-words.md` (e), which also names the limit
+left: a non-mipmapped draw samples a copy of level 0 alone).
 
 ## For the implementation
 
@@ -99,6 +103,10 @@ max level, and `v3d_uniforms.c` writes words 44-47 from `first_level`
   clamp of rule 4) and test bits `B..B+n` of `level_defined`, `level_bad`
   and `level_faces`, instead of `0..n`.
 * The same B and q go to the backend (`GlesTextureBind::base_level`,
-  `basefield`), which is what the TMU base level and the size words need.
-* Pins that flip with it are the `GL_TEXTURE_BASE_LEVEL` pins in `tests/`
-  (`flipmap`, `flipmap2` list them).
+  `basefield`), which is what the TMU base level and the size words need;
+  the V3D back end applies both (`basefix`).
+* The base-level pins in `tests/` (`flipmap`, `flipmap2` list them) are
+  flipped. The ones left are glGenerateMipmap's
+  (`tests/es3_genmip_base_level_v3d.rs`,
+  `_flip_when_generate_mipmap_follows_the_base_level`): the GL core still
+  derives the chain from level 0.

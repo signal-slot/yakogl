@@ -33,8 +33,10 @@ the array size"). The interpreter run `texture_size_of_a_volume_and_an_array`
 
 `textureGrad` emits the same words for another reason (`grad_lod`,
 `prepare.rs:970-975`): the TMU has no gradient operand, so each gradient
-lane is scaled by the level-0 size on its axis, a 3D sampler's third axis
-being word 46. A 2D array's layer count is not a gradient axis: word 47
+lane is scaled by the size on its axis, a 3D sampler's third axis being
+word 46. Those are the base level's sizes ((e)), so the lod the shader
+computes is relative to the base level, as the TMU's Base Level is ((e)):
+the base level is added once, by the TMU. A 2D array's layer count is not a gradient axis: word 47
 comes only from `textureSize`.
 
 ## (b) How the back end fills the table
@@ -43,14 +45,18 @@ comes only from `textureSize`.
 binding: the two record addresses plus `width`, `height`, `depth`,
 `array_size` — the values the four words read, 0 meaning "not given", such
 a word refused (field doc `:255-262`). `texture_units`
-(`src/v3d/backend.rs:5914-6017`) fills one entry per binding and per
-stand-in:
+(`src/v3d/backend.rs`) fills one entry per binding and per stand-in, for
+every stage: the fragment table (`tmu`) and the vertex table (`vs_tmu`),
+which a compute dispatch shares; the GL core fills both stages' bindings
+from one loop. The four values come from `texture::size_words(b,
+b.base_level)` (src/v3d/texture.rs):
 
 - a complete texture: `b.width`, `b.height` and `max(b.layers, 1)`, the GL
-  core's level-0 numbers of the stack (`src/gl/draw.rs:4686-4719`; the V3D
-  takes them unwrapped, `native_layered_textures`). `depth` is the layer
-  count for a `GLES_TEXTYPE_3D`, `array_size` for a `GLES_TEXTYPE_2D_ARRAY`,
-  each 1 for any other type (`:5957-5960`);
+  core's level-0 numbers of the stack (`src/gl/draw.rs`; the V3D takes them
+  unwrapped, `native_layered_textures`), minified to the binding's base
+  level ((e)). `depth` is the 3D texture's depth minified the same way,
+  `array_size` the layer count of a `GLES_TEXTYPE_2D_ARRAY`, never
+  minified, each 1 for any other type;
 - an incomplete texture: 1 / 1 / 1 / 1 with the black stand-in record, GL
   ES 2.0 3.7.10 (`:5944-5955`, `:5957-5958`);
 - a stand-in (black) unit — one the stream names with a P0/P1 or size word
@@ -113,15 +119,35 @@ and so do the sampled-and-queried and sampling-only units
 consistent draw never meets the 16-bit key; its predicate-level pin and
 RGBA8 control are there too.
 
-## (e) The level-0 limit
+## (e) The base level
 
-The words carry level 0: `texture_units` copies `b.width`, `b.height` and
-`b.layers`, the texture object's base image, and the GL core applies
-`GL_TEXTURE_BASE_LEVEL` nowhere in the draw — its completeness rule says so
-outright (`mip_levels_needed`, `src/gl/draw.rs:3438-3444`). Mesa's
-`get_texture_size` instead minifies width, height and depth by the sampler
-view's base level `u.tex.first_level` (`v3d_uniforms.c:63-72` (tree)); only
-the array size stays unminified (`:73-79`). So at `GL_TEXTURE_BASE_LEVEL`
-above 0 our words give level 0's numbers where Mesa's give the base
-level's. Whether any draw is wrong for it, and which dEQP-GLES3 cases reach
-it, is being looked into separately; it is not decided here.
+The words and the TMU record both start at `GL_TEXTURE_BASE_LEVEL`, as
+Mesa's do. The GL core hands the effective base level in
+`GlesTextureBind::base_level` (`draw::bind_base_level`: an immutable
+texture's clamped to its last level, a mutable texture's 0 when the level
+is not defined), and completeness and the required levels start there
+(`mip_levels_needed`, `docs/notes/gles3-texture-completeness.md`).
+
+- Words 44-46: `size_words` minifies width, height and a 3D depth by that
+  level, `max(x >> base, 1)`, as Mesa's `get_texture_size` minifies by the
+  sampler view's `u.tex.first_level` (`v3d_uniforms.c:63-72` (tree)).
+  Word 47, the layer count, is never minified (`:73-79`). An incomplete
+  texture and a stand-in unit keep 1, 1, 1, 1.
+- The TMU record: `tex_state_for` builds it with `texture::state_at` at
+  `min(base, max_level)`, `max_level` being the last level of the image
+  the draw samples, and keeps Max Level at that last level: Mesa's
+  `v3d_setup_texture_shader_state` programs Base Level = `first_level`,
+  Max Level = `last_level`, both absolute (v3dx_state.c (tree)).
+  `TexKey`, the key a job finds a packed record again under, carries the
+  base level, so a draw at another base level of the same storage packs
+  its own record; a kept tiled copy is keyed without it (`TexKey::image`),
+  the texels being the same.
+- A `textureLod`, `texelFetch` or `textureGrad` lod is relative to the
+  TMU's Base Level, which the shader never adds: the base level is applied
+  once.
+
+The limit left: without a mipmap min filter the back end lays out and
+copies level 0 only (`texture::levels_sampled`), so the record's base
+level clamps to 0 and a non-mipmapped draw at `GL_TEXTURE_BASE_LEVEL` > 0
+samples level 0 while its size words are the base level's. GL samples the
+base level there. The base-level tests use mipmapped filters.

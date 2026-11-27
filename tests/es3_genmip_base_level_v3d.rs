@@ -23,7 +23,9 @@
 //! glGenerateMipmap: it reads level 0 and rewrites levels 1.. (the base level
 //! 1 included), raising no error. The spec's result at BASE_LEVEL 1 is level 1
 //! kept (100) and levels 2, 3 made from it (100, 100): the tests that differ
-//! are named `_flip_when_the_base_level_is_applied`. BASE_LEVEL 0 and level 0
+//! are named `_flip_when_generate_mipmap_follows_the_base_level` (a GL-core
+//! glGenerateMipmap fix, src/gl; the V3D back end's base level, item
+//! basefix, does not change them). BASE_LEVEL 0 and level 0
 //! staying untouched match the spec and are plain regression tests. Today's
 //! behaviour does NOT match section 3.8.9 for a base level above 0.
 //!
@@ -545,7 +547,7 @@ fn a_2d_texture_at_base_level_1_raises_no_error_and_keeps_level_0() {
 /// levels 2 and 3 have level 0's red (40). Spec (3.8.9): they derive from the
 /// base level, level 1 (red 100). After the fix: 100, 100.
 #[test]
-fn a_2d_texture_at_base_level_1_makes_levels_2_and_3_from_level_0_flip_when_the_base_level_is_applied() {
+fn a_2d_texture_at_base_level_1_makes_levels_2_and_3_from_level_0_flip_when_generate_mipmap_follows_the_base_level() {
     let _g = rig();
     let (_, reds) = generate(GL_TEXTURE_2D, 1);
     assert_eq!(&reds[2..], &[40, 40]);
@@ -555,7 +557,7 @@ fn a_2d_texture_at_base_level_1_makes_levels_2_and_3_from_level_0_flip_when_the_
 /// overwritten (red 100 becomes level 0's 40). Spec: the base level is
 /// untouched, red 100. After the fix: 100.
 #[test]
-fn a_2d_texture_at_base_level_1_overwrites_the_base_level_flip_when_the_base_level_is_applied() {
+fn a_2d_texture_at_base_level_1_overwrites_the_base_level_flip_when_generate_mipmap_follows_the_base_level() {
     let _g = rig();
     let (_, reds) = generate(GL_TEXTURE_2D, 1);
     assert_eq!(reds[1], 40);
@@ -575,7 +577,7 @@ fn a_3d_texture_at_base_level_1_raises_no_error_and_keeps_level_0() {
 /// (levels 1, 2, 3 all red 40). Spec: level 1 untouched (100), levels 2 and 3
 /// from it (100, 100). After the fix: [40, 100, 100, 100].
 #[test]
-fn a_3d_texture_at_base_level_1_generates_from_level_0_flip_when_the_base_level_is_applied() {
+fn a_3d_texture_at_base_level_1_generates_from_level_0_flip_when_generate_mipmap_follows_the_base_level() {
     let _g = rig();
     let (_, reds) = generate(GL_TEXTURE_3D, 1);
     assert_eq!(reds, [40, 40, 40, 40]);
