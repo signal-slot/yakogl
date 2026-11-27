@@ -856,7 +856,9 @@ fn resolve_row(src: &[u8], out: &mut [f32]) {
 /// stride in bytes and its rows. `None` unless the plane is Live here (not a
 /// clear value, parked or undefined) and single-sampled (`resolve_depth`'s
 /// `mine`). `kick` != 0 is a draw that samples it: the surface is not given
-/// away until that kick completed. No wait and no CPU access.
+/// away until that kick completed. No wait and no CPU access. A surface
+/// that is not `Linear` (super-tiled with `gc_tiled_rt`) is refused: the
+/// view is described linear.
 pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
     let mine = |k: Option<PlaneKey>| k.is_some_and(|k| k.id == id && k.scale == 1 && k.plane == DEPTH as u8);
     let e = cache()
@@ -864,6 +866,9 @@ pub fn depth_view(id: u32, guard: usize, kick: u32) -> Option<(u64, u32, u32)> {
         .iter_mut()
         .flatten()
         .find(|e| id != 0 && mine(e.key.plane(DEPTH)) && e.planes[DEPTH].is_live())?;
+    if e.layout != Layout::Linear {
+        return None;
+    }
     if kick != 0 {
         e.used_by = kick;
     }
