@@ -1273,12 +1273,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec4 p; varying vec4 v; void main(){ v = p; }", MaliError::NoPosition),
         (VS, "attribute vec4 p; void main(){ gl_Position = p; gl_PointSize = 2.3; }", MaliError::Fp16Inexact),
         (VS, "attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v.xy = p.xy; }", MaliError::VaryingForm),
-        /* a lane of uniforms alone (convergent) before lanes of an
-         * attribute (interpolated): Mesa's link moves it after them
-         * (`fs_assign_slot_groups`), which the per-varying layout cannot
-         * hold (nir.rs `fill`); after them (`vec4(c, u, 1.0)`) it fills the
-         * interpolated vec4, deqp_posvary_tex_uniform_w */
-        (VS, "attribute vec4 p; attribute vec2 c; uniform float u; varying vec4 v; void main(){ gl_Position = p; v = vec4(u, c, 1.0); }", MaliError::VaryingNotFromAttribute),
+        /* a phi of uniforms alone (a run-time loop over a uniform bound):
+         * Mesa interpolates the sum (deqp_varylink2_loop_uniform,
+         * deqp_posvary_loop_phi_array: no `FMA x, 0, x`), not lowered */
+        (VS, "attribute vec4 p; uniform int n; varying vec4 v; void main(){ gl_Position = p; float s = 0.0; for (int i = 0; i < n; i++) s += 1.0; v = vec4(s, 0.0, 0.0, 1.0); }", MaliError::VaryingNotFromAttribute),
         /* equal lanes of a join (a phi), which the link keeps apart; equal
          * lanes of one value (`v = p.xx`) the shader alone leaves out, as
          * its constant lanes (gm2_arithconst_3) */
@@ -7016,12 +7014,11 @@ fn a_varying_lane_of_uniforms_alone_is_loaded_flat() {
     assert!((0..4).all(|c| consts.flat(0, c) && consts.get(0, c).is_none()), "{consts:?}");
     let alone = compile_alone(SHC_STAGE_FRAGMENT, fs).expect("compiles alone");
     assert!(text(trim(&alone.code)[0]).contains(".src_f32."));
-    /* a convergent lane before an interpolated one: the link would move
-     * it after (nir.rs `fill`), refused in the vertex shader; after it
-     * (`vec2(p.x, u)`) it is interpolated in the free word,
-     * deqp_posvary_tex_uniform_w */
+    /* a convergent lane before an interpolated one: the link moves it
+     * after (nir.rs `fill`; deqp_posvary_flat_lane_vec4_v86), and the
+     * vertex shader alone compiles */
     let mixed = "attribute vec4 p; uniform float u; varying vec2 v; void main(){ gl_Position = p; v = vec2(u, p.x); }";
-    assert_eq!(gap(SHC_STAGE_VERTEX, mixed), MaliError::VaryingNotFromAttribute);
+    assert!(compile_alone(SHC_STAGE_VERTEX, mixed).is_ok());
 }
 
 /// Case 78 (matvary): `v_m = mat2(a_color)`, the colour reads `v_m[0].x`
@@ -10653,28 +10650,27 @@ fn a_program_s_vertex_shader_stores_only_what_its_fragment_shader_reads_as_mesa_
 
 /// A vertex shader alone is built without a lane equal to an earlier one
 /// and without its constant lanes: the link's fragment shader reads
-/// neither (`nir::build`). When what is left is refused, that refusal is
-/// the shader's, the form in the way once the lanes are not. In
-/// `d = vec4(1.0, n, m, m)` the lanes `d.z` and `d.w` are equal; without
-/// `d.w` and the constant `d.x`, the lane `d.y` is a uniform alone (the
-/// shape of dEQP `random.basic_expression.combined.86`). `vec4(m, m, n, e)`
-/// is the same with no constant lane (with `n` last, `vec4(m, m, e, n)`, the
-/// uniform lane fills the interpolated vec4's free word, nir.rs `fill`, and
-/// the shader compiles). The code generator ([`gap`]) and the program's
-/// vertex step both name the uniform lane.
+/// neither (`nir::build`). In `d = vec4(1.0, n, m, m)` the lanes `d.z` and
+/// `d.w` are equal; without `d.w` and the constant `d.x`, the lane `d.y` is
+/// a uniform alone (the shape of dEQP `random.basic_expression.combined.86`),
+/// laid out after the interpolated `m` (nir.rs `fill`,
+/// deqp_posvary_flat_lane_vec4_v86), so the vertex shader compiles.
+/// `vec4(m, m, n, e)` is the same with no constant lane. The program's
+/// fragment shader, compiled with the moved lane, reads its colour in an
+/// order no reference draws: those refusals are the program's.
 #[test]
 fn a_vertex_shader_refused_without_its_equal_lanes_reports_that_refusal() {
     let fs = "precision mediump float; varying mediump vec4 d; void main() { gl_FragColor = d; }";
-    for body in ["d = vec4(1.0, n, m, m);", "d = vec4(m, m, n, e);"] {
+    for (body, want) in
+        [("d = vec4(1.0, n, m, m);", MaliError::FsVaryingLoad), ("d = vec4(m, m, n, e);", MaliError::ColourForm)]
+    {
         let vs = format!(
             "attribute vec4 p; attribute float m; attribute float e; uniform mediump float n; \
              varying mediump vec4 d; void main() {{ gl_Position = p; {body} }}"
         );
-        assert_eq!(gap(SHC_STAGE_VERTEX, &vs), MaliError::VaryingNotFromAttribute, "{body}: the code generator");
+        assert!(compile_alone(SHC_STAGE_VERTEX, &vs).is_ok(), "{body}: the code generator");
         match link_records(&vs, fs) {
-            Err(r) => {
-                assert!(r.step == RouteStep::Vertex && r.is(MaliError::VaryingNotFromAttribute), "{body}: {r:?}")
-            }
+            Err(r) => assert!(r.step == RouteStep::VsLinked && r.is(want), "{body}: {r:?}"),
             Ok(_) => panic!("{body}: the program links"),
         }
     }
