@@ -126,6 +126,14 @@ jobs:
     timeout-minutes: 300
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # One locale for every row, whatever the runner's service sets. A runner
+      # whose LC_ALL or LANG names a locale it has not installed (ja_JP.UTF-8,
+      # 2026-11-27) made five tools/ self-tests fail on a "setlocale: cannot
+      # change locale" warning in their output, so every pull request that
+      # reached the tools scope went red there and green on another runner.
+      # The full run of docs/release/checklist.md line 12 at 4f34ffb8 ran
+      # under LC_ALL=C. Python's C locale still reads files as UTF-8 (PEP 538).
+      LC_ALL: C
       # Rows at once (tools/check.sh --jobs). Measured on 8 cores (runner A's
       # count) on fc1bb2a6, every row, empty cache: 1174 s with 1, 877 s
       # with 2, 547-593 s with 4 (docs/ci.md, section 1). A test row already
