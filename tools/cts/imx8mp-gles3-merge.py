@@ -16,6 +16,10 @@ of the other (8 characters at least).
 An Armadillo-X2 tree (`tools/board.sh x2 tree`, three-word records) writes '-' in begun (w3 is not stored) and in
 noresult: '-' is unknown, not zero. Its begun is derived as passed+failed+notsup+other (+noresult when a number);
 nothing is derived for w3. A row with '-' in passed..other, or in every field, is a no-record entry.
+Every mode names the board when an input is an Armadillo-X2 slice (board.sh x2 verdict lines in its README, else
+three-word rows, else a README line naming the Armadillo-X2; board_of): all X2, the line `measured on the
+Armadillo-X2 (i.MX 8M Plus, GC7000UL)` (--notpass: as a `# ` comment after the first; --check: before the
+`checked ...` line; --totals: last); mixed, `boards: <dir>: <board>; ...`. A Verdin-only merge prints no such line.
 
 The table (tools/cts/imx8mp-gles3-tree.txt) and the mustpass list give each entry's cases, matched as
 tools/cts/check-imx8mp-gles3-tree.py does (dEQP's filter: comma-separated patterns, '*' = any run, whole name).
@@ -79,6 +83,54 @@ def find_commit(d):
                 return m.group(1).lower()
     m = re.search(r'-([0-9a-f]{8,40})$', os.path.basename(os.path.normpath(d)))
     return m.group(1) if m else None
+
+
+X2_NAME = 'Armadillo-X2'
+X2_LONG = 'Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
+
+
+def board_of(d):
+    """'x2' or 'verdin': the board a slice was measured on. First from the records: a README's
+    `board.sh <board> e<NN> rc=..` lines (x2 for the Armadillo-X2), else results.tsv rows with '-' in begun
+    (a three-word record, which only `board.sh x2 tree` writes); then a README line containing
+    'Armadillo-X2'. Anything else is the Verdin."""
+    if not os.path.isdir(d):
+        return 'verdin'
+    boards, dash, rows, readmes = set(), 0, 0, []
+    for name in sorted(os.listdir(d)):
+        path = os.path.join(d, name)
+        if name.lower().startswith('readme'):
+            txt = open(path, errors='replace').read()
+            readmes.append(txt)
+            boards.update(m.group(1).lower() for m in re.finditer(
+                r'\bboard\.sh\s+(\S+)\s+[A-Za-z_-]*\d+\s+rc=', txt))
+        elif name == 'results.tsv':
+            for l in open(path, errors='replace'):
+                f = l.rstrip('\n').split('\t')
+                if l.startswith('#') or len(f) < 8 or all(x == '-' for x in f[2:8]):
+                    continue
+                rows += 1
+                dash += f[2] == '-'
+    if 'x2' in boards:
+        return 'x2'
+    if rows and dash == rows:
+        return 'x2'
+    if boards:
+        return 'verdin'
+    if any(X2_NAME in t for t in readmes):
+        return 'x2'
+    return 'verdin'
+
+
+def board_label(dirs):
+    """The line that names the board the inputs were measured on, or None when no input is an Armadillo-X2
+    slice (a Verdin-only merge prints exactly what it printed before). Directories by their last component."""
+    boards = [(os.path.basename(os.path.normpath(d)), board_of(d)) for d in dirs]
+    if not any(b == 'x2' for _, b in boards):
+        return None
+    if all(b == 'x2' for _, b in boards):
+        return 'measured on the %s' % X2_LONG
+    return 'boards: %s' % '; '.join('%s: %s' % (n, X2_LONG if b == 'x2' else 'Verdin iMX8M Plus') for n, b in boards)
 
 
 def same_commit(a, b):
@@ -362,6 +414,9 @@ def do_notpass(m, out, skip_noresult=False):
     commits = sorted({c for _, c in m.commits if c})
     out.write('# i.MX8MP dEQP-GLES3 at %s: every case that is not Pass, per entry of tools/cts/imx8mp-gles3-tree.txt\n'
               % (' and '.join(commits) or 'an unnamed commit'))
+    label = board_label([d for d, _ in m.commits])
+    if label:
+        out.write('# %s\n' % label)
     out.write('# rows: e<i>:<status> <case>, in entry then mustpass order (NoResult = the entry has no usable record; '
               'a record names only the failing cases, so n.s./other/none cases show in the unresolved counts)\n')
     run = [i for i in sorted(m.rec) if m.counts(i) is not None]
@@ -421,6 +476,9 @@ def do_totals(m, out):
     missing = [i for i in range(len(m.table)) if m.counts(i) is None]
     out.write('no record: %d of %d entries (%s), %d mustpass cases\n' % (
         len(missing), len(m.table), span(missing), sum(len(m.per[i]) for i in missing)))
+    label = board_label([d for d, _ in m.commits])
+    if label:
+        out.write('%s\n' % label)
 
 
 def run(argv, out=None):
@@ -451,6 +509,9 @@ def run(argv, out=None):
                 len(missing), len(table), span(missing), sum(len(m.per[i]) for i in missing)))
         for p in m.problems:
             print('FAIL:', p)
+        label = board_label([d for d, _ in m.commits])
+        if label:
+            print(label)
         print('checked %d inputs, %d entries with a record: %s' % (len(a.dirs), len(m.rec), 'FAILED' if m.problems else 'OK'))
         for w in shortfalls:
             print(w, file=sys.stderr)
@@ -690,6 +751,31 @@ def selftest():
         rc, out, _ = call(*base_args, '--check', '--partial', A, XF)
         expect('x2: a Verdin slice and an x2 slice of other entries merge', rc == 0)
         expect('x2: no w3 value is printed', 'w3' not in out and '00000000' not in out)
+        # the board label: all X2 -> 'measured on the Armadillo-X2 (...)'; mixed -> per slice; Verdin only -> none
+        xl = 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
+        rc, out, _ = call(*base_args, '--check', '--partial', XP, XF)
+        ls = out.splitlines()
+        expect('x2 label: --check names the X2 just before the checked line', len(ls) >= 2 and ls[-2] == xl
+               and ls[-1].startswith('checked 2 inputs'))
+        rc, out, _ = call(*base_args, '--notpass', XP, XF)
+        ls = out.splitlines()
+        expect('x2 label: --notpass has "# measured on the Armadillo-X2 (...)" as its second header line',
+               len(ls) >= 2 and ls[0].startswith('# i.MX8MP dEQP-GLES3 at ') and ls[1] == '# ' + xl)
+        rc, out, _ = call(*base_args, '--totals', XP, XF)
+        expect('x2 label: --totals ends with the X2 line', out.splitlines()[-1] == xl)
+        rc, out, _ = call(*base_args, '--notpass', A, XF)
+        expect('x2 label: a mixed merge names each slice\'s board, no blanket X2 claim',
+               '# boards: a: Verdin iMX8M Plus; x2-fail: Armadillo-X2 (i.MX 8M Plus, GC7000UL)' in out.splitlines()
+               and xl not in out)
+        XR = slice_('x2-readme', c1, [(0, entries[0], 4, 4, 0, 0, 0, 0, '-')], lines=False)
+        with open(os.path.join(XR, 'README.md'), 'a') as f:
+            f.write('Run 2026-11-28, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)\n')
+        expect('x2 label: a README naming the Armadillo-X2 alone makes an X2 slice', board_of(XR) == 'x2')
+        expect('x2 label: three-word rows alone make an X2 slice', board_of(XN) == 'verdin' and board_of(XP) == 'x2')
+        for mode in ('--check', '--notpass', '--totals'):
+            rc, out, _ = call(*base_args, mode, *(['--partial'] if mode == '--check' else []), A, B)
+            expect('x2 label: a Verdin-only %s names no board' % mode,
+                   'Armadillo' not in out and 'measured on' not in out and 'boards:' not in out)
         # shortfall warning: stderr only; stdout and exit status unchanged
         rc, out, err = call(*base_args, '--check', '--partial', A, B)
         expect('shortfall: entry 2 began 3 of 5 warns on stderr',

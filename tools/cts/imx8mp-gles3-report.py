@@ -25,6 +25,10 @@ After the drafts a block "anchors" names, for RESULTS.md, STATUS.md and ROADMAP.
 this checkout), the current text each draft replaces, found by matching in the file, with its line number
 for reference. --apply R rewrites exactly those texts in R. It writes nothing and exits 1 when an anchor is
 missing or matches more than once (or when the drafts are PARTIAL).
+
+The board: when every slice is an Armadillo-X2 slice (merge's board_of), each of the four drafts says "measured on
+the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" (STATUS.md: "Armadillo-X2（i.MX 8M Plus、GC7000UL）で"); a mix of X2 and
+Verdin slices names both, and the RESULTS.md and #24 drafts list each slice's board. Verdin only: as before.
 """
 import argparse
 import datetime
@@ -62,17 +66,12 @@ def commit_of(d):
     return m.group(1) if m else None
 
 
-X2_NAME = 'Armadillo-X2'
 X2_LONG = 'Armadillo-X2 (i.MX 8M Plus, GC7000UL)'
 
 
 def board_of(d):
-    """'x2' or 'verdin': the board a slice was measured on. First from the records: a README's
-    `board.sh <board> e<NN> rc=..` lines (x2 for the Armadillo-X2), else results.tsv rows with '-' in begun
-    (a three-word record, which only `board.sh x2 tree` writes); then a README line containing
-    'Armadillo-X2'. Anything else is the Verdin."""
-    if not os.path.isdir(d):
-        return 'verdin'
+    """'x2' or 'verdin': the board a slice was measured on (imx8mp-gles3-merge.py's board_of)."""
+    return load_merge().board_of(d)
     boards, dash, rows, readmes = set(), 0, 0, []
     for name in sorted(os.listdir(d)):
         path = os.path.join(d, name)
@@ -113,10 +112,16 @@ def expand(c):
     return c
 
 
+_MERGE_MOD = []
+
+
 def load_merge():
+    if _MERGE_MOD:
+        return _MERGE_MOD[0]
     spec = importlib.util.spec_from_file_location('imx8mp_gles3_merge', MERGE)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    _MERGE_MOD.append(mod)
     return mod
 
 
@@ -294,6 +299,15 @@ def main():
                  '0 resets (every entry run is `verdict=done`, `resets=absent`)')
     five = tuple(n(x) for x in (npass, nfail, nns, nother, nnone))
 
+    # The board each slice was measured on. Verdin only: every draft is as before. All Armadillo-X2: each draft
+    # says so (owner, 2026-11-27: the Verdin is off the farm, the X2 has the same i.MX 8M Plus and GC7000UL).
+    boards = {d: board_of(d) for d in args.dirs}
+    all_x2 = bool(boards) and set(boards.values()) == {'x2'}
+    mixed = not all_x2 and 'x2' in boards.values()
+    board_en = (', measured on the %s' % X2_LONG if all_x2 else
+                ', measured on the Verdin iMX8M Plus and the Armadillo-X2' if mixed else '')
+    board_ja = (' Armadillo-X2（i.MX 8M Plus、GC7000UL）で' if all_x2 else
+                ' Verdin iMX8M Plus と Armadillo-X2 で' if mixed else '')
     print('=== imx8mp-gles3-report: i.MX8MP dEQP-GLES3 drafts (%s) ===' % args.date)
     if not ok:
         reason = 'merge --check failed (exit %d)' % rc_c if rc_c else 'the merge totals are inconsistent'
@@ -309,8 +323,8 @@ def main():
     # Layout of the section's board paragraphs (AM62P, Pi 4): bold board name, the commit short and full,
     # the table and recipe, the date, then the five-column table and "- " bullets wrapped at 80 columns.
     results_txt = wrap('%s**i.MX8MP, whole tree** on %s; `tools/cts/imx8mp-gles3-tree.txt`, %d entries; '
-                       'recipe `docs/es3/board-recipe-imx8mp.md`), %s: %s, %s mustpass cases (each counted '
-                       'once, %s begun):' % (partial, results_commit, n_entries, args.date, entries_txt,
+                       'recipe `docs/es3/board-recipe-imx8mp.md`)%s, %s: %s, %s mustpass cases (each counted '
+                       'once, %s begun):' % (partial, results_commit, n_entries, board_en, args.date, entries_txt,
                                              n(mp), n(begun)))
     results_txt += '\n\n| Pass | Fail | NotSupported | Other | No result |\n|---:|---:|---:|---:|---:|\n'
     results_txt += '| %s | %s | %s | %s | %s |\n' % five
@@ -321,6 +335,9 @@ def main():
                        'cases (cases a wildcard selects outside the mustpass list, cases begun twice) are '
                        'not counted, so the five numbers sum to %s.' % (n(out_of_list), n(mp)))
     bullets.append('Records: %s; %s.' % (dirs_txt, reset_txt))
+    if mixed:
+        bullets.append('Boards: %s.' % '; '.join('`%s/`: %s' % (rel(d), X2_LONG if boards[d] == 'x2' else 'Verdin iMX8M Plus')
+                                               for d in shown))
     bullets.append('Every case that is not Pass: `docs/es3/imx8mp-gles3-notpass.tsv`.')
     bullets += ['PARTIAL, not final: %s.' % p for p in problems]
     results_txt += '\n' + '\n'.join(wrap('- ' + b, indent='  ') for b in bullets)
@@ -335,9 +352,9 @@ def main():
     else:
         scope = '全ツリー（%d エントリ、tools/cts/imx8mp-gles3-tree.txt）' % n_entries
         part_ja = '' if ok else '（途中、記録が不完全）'
-    status_txt = ('i.MX8MP は%sを %s（%s）で実行し%s、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / '
+    status_txt = ('i.MX8MP は%s%sを %s（%s）で実行し%s、必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / '
                   '結果なし %s、%s（記録は %s。合格でない一覧は docs/es3/imx8mp-gles3-notpass.tsv）。' % (
-                      scope, short_ja, args.date, part_ja, n(mp), *five,
+                      board_ja, scope, short_ja, args.date, part_ja, n(mp), *five,
                       'リセットの確認が未完' if bad_verdict else 'リセット 0', '、'.join(rel(d) for d in shown)))
     next_txt = STATUS_NEXT_DONE if ok else STATUS_NEXT
     print(status_txt)
@@ -351,9 +368,9 @@ def main():
             run_n, n_entries, miss[2])
     else:
         scope = 'the whole tree (%d entries, `tools/cts/imx8mp-gles3-tree.txt`)' % n_entries
-    roadmap_txt = wrap('- i.MX8MP: %s%s at %s (%s): %s cases, %s pass / %s fail / %s NotSupported / %s other / '
+    roadmap_txt = wrap('- i.MX8MP: %s%s%s at %s (%s): %s cases, %s pass / %s fail / %s NotSupported / %s other / '
                        '%s without a result, %s (#24).' % (
-                           partial, scope, short_txt, args.date, n(mp), *five,
+                           partial, scope, board_en, short_txt, args.date, n(mp), *five,
                            'reset verdicts not clean' if bad_verdict else '0 resets'), width=78, indent='  ')
     print(roadmap_txt)
     print()
@@ -361,10 +378,9 @@ def main():
     print('%s**i.MX8MP dEQP-GLES3, %s**' % (partial, args.date))
     print()
     print('- Commit: %s.' % full_txt)
-    boards = {d: board_of(d) for d in args.dirs}
-    if boards and set(boards.values()) == {'x2'}:
+    if all_x2:
         print('- Board: measured on the %s.' % X2_LONG)
-    elif 'x2' in boards.values():
+    elif mixed:
         print('- Boards: %s.' % '; '.join('`%s/`: %s' % (rel(d), X2_LONG if boards[d] == 'x2' else 'Verdin iMX8M Plus')
                                         for d in shown))
     print('- Entries: %s.' % entries_txt)

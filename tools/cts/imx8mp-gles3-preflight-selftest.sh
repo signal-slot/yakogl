@@ -140,12 +140,14 @@ x2run "$W/x" "" "" --board x2 --commit "$SHA"
 expect "x2: all good without BOARD_UART and BOARD_HOST" 0 "preflight: all ok"
 for p in "note BOARD_UART is unset: the X2 console is optional" "ok   x2 tool driver/tools/kexec-zephyr/kexec_zephyr is built" \
 	"ok   x2 tool driver/tools/kexec-zephyr/snvs_lpgpr is built" "ok   table image exists (es3-01234567)" \
-	"carries 'gc_wdog_arm: armed'" "note the board not checked: BOARD_HOST is unset"; do
+	"carries 'gc_wdog_arm: armed'" "note the board not checked: BOARD_HOST is unset" \
+	"info board x2: measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL; tools/board.sh x2, crash-route kexec)"; do
 	grep -qF "$p" "$W/log" || { echo "  FAIL x2 line missing: $p"; fails=$((fails + 1)); }
 done
 grep -q '/boot medium not checked' "$W/log" && { echo "  FAIL x2 ran the Verdin /boot guard"; fails=$((fails + 1)); }
 X2ENV=IMX8MP_BOARD=x2 x2run "$W/x" "$SECRET" "" --commit "$SHA"
 expect "x2: IMX8MP_BOARD=x2 is --board x2, BOARD_UART set" 0 "ok   BOARD_UART is set"
+grep -q 'measured on the Armadillo-X2' "$W/log" || { echo "  FAIL IMX8MP_BOARD=x2: no X2 board line"; fails=$((fails + 1)); }
 grep -q "carries 'gc_wdog_arm" "$W/log" || { echo "  FAIL IMX8MP_BOARD=x2 did not pick the x2 mode"; fails=$((fails + 1)); }
 mkx2 "$W/x1"; rm "$W/x1/kz/snvs_lpgpr"
 x2run "$W/x1" "" "" --board x2 --commit "$SHA"

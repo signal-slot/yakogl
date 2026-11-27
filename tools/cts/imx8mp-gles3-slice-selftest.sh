@@ -136,6 +136,23 @@ pre=$tmp/ws"/out"
 { for i in 1 2 3; do echo "  ok   check $i ($pre/es3-9bc82915/zephyr/zephyr.bin)"; done; echo "preflight: all ok"; } > "$tmp/pre.txt"
 run --commit $full --rows 17-34 --date 2026-11-15 --lines "$tmp/stdout.txt" --results "$slice/results.tsv" \
 	--records "$tmp/a/runs" > "$tmp/plain.md" 2>&1
+# the X2 campaign's slice name 2026-11-imx8mp-gles3-x2-<hash8>-rowsAA-BB is taken from --out; another --out is not
+h8=${full:0:8}
+for nm in 2026-11-imx8mp-gles3-x2-$h8-rows53-54 2026-11-28-imx8mp-gles3-$h8-rows53-54; do
+	run --commit $full --rows 53-54 --date 2026-11-28 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+		--out "$tmp/n/$nm" > "$tmp/n.log" 2>&1 || bad "x2 name $nm: refused: $(cat "$tmp/n.log")"
+	grep -qF "\`$nm\`, rows 53-54 of" "$tmp/n/$nm/README.md" && grep -q '^commit '$full'$' "$tmp/n/$nm/README.md" \
+		&& ok "x2: --out $nm names the slice and the README keeps the commit" || bad "x2: slice name $nm"
+done
+for nm in 2026-11-imx8mp-gles3-x2-$h8-rows53-55 2026-11-imx8mp-gles3-x2-0123abcd-rows53-54 scratch; do
+	run --commit $full --rows 53-54 --date 2026-11-28 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+		--out "$tmp/n/$nm" > "$tmp/n.log" 2>&1
+	grep -qF '`2026-11-28-imx8mp-gles3-'$h8'-rows53-54`' "$tmp/n/$nm/README.md" \
+		&& ok "x2: --out $nm (other rows, commit or form) is not taken as the name" || bad "x2: slice name for --out $nm"
+done
+run --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --out "$tmp/n/2026-11-imx8mp-gles3-x2-$h8-rows58-58" > "$tmp/n.log" 2>&1
+grep -qF '`2026-11-15-imx8mp-gles3-'$h8'-rows58-58`' "$tmp/n/2026-11-imx8mp-gles3-x2-$h8-rows58-58/README.md" \
+	&& ok "Verdin: the slice name never comes from --out" || bad "Verdin: slice name taken from --out"
 cmp -s "$tmp/plain.md" "$tmp/a/slice/README.md" && ok "default output unchanged without the new options" \
 	|| bad "default output differs"
 grep -q '^## What ran\|^## Console' "$tmp/plain.md" && bad "default output has the new sections" || ok "default has no new sections"
@@ -168,8 +185,8 @@ run --commit $full --rows 53-54 --date 2026-11-16 --lines "$slice/x2-lines.txt" 
 	|| bad "x2 rows53-54 refused: $(cat "$tmp/x.log")"
 cp "$slice/x2-results.tsv" "$tmp/x/slice/results.tsv"
 x=$tmp/x/slice/README.md
-grep -q 'measured on the Armadillo-X2 (tools/board.sh x2, crash-route kexec)' "$x" \
-	&& ok "x2: the README says measured on the Armadillo-X2" || bad "x2: no measured-on line"
+grep -qF 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL) with tools/board.sh x2 (crash-route kexec)' "$x" \
+	&& ok "x2: the README says measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)" || bad "x2: no measured-on line"
 grep -q "owner's decision of 2026-11-27" "$x" && ok "x2: the owner's decision named" || bad "x2: no owner's decision"
 grep -q 'Toradex Verdin iMX8M Plus (GC7000UL): the slice' "$x" && bad "x2: the Verdin sentence was written" \
 	|| ok "x2: no Verdin run sentence"
@@ -209,11 +226,28 @@ grep -qF "$pre2" "$y" && bad "x2: a path was copied" || ok "x2: no path copied"
 grep -q '^Run 2026-11-16, 01:00-01:15 UTC' "$y" && ok "x2: without --run-date the Run line takes --date" || bad "x2: Run line"
 run --commit $full --rows 53-54 --date 2026-11-16 --run-date 2026-11-28 --lines "$slice/x2-lines.txt" --window 01:00/01:15 \
 	--results "$slice/x2-results.tsv" > "$tmp/z.md" 2> "$tmp/z.log"
-grep -q '^Run 2026-11-28 on the Armadillo-X2' "$tmp/z.md" && grep -q '^Run 2026-11-28, 01:00-01:15 UTC' "$tmp/z.md" \
+grep -q '^Run 2026-11-28, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)' "$tmp/z.md" && grep -q '^Run 2026-11-28, 01:00-01:15 UTC' "$tmp/z.md" \
 	&& grep -q '`2026-11-16-imx8mp-gles3-9bc82915-rows53-54`' "$tmp/z.md" \
 	&& ok "x2: --run-date in the Run lines, --date in the slice name" || bad "x2: --run-date: $(cat "$tmp/z.log")"
 refuse "bad run date" 2 --commit $full --rows 58 --date 2026-11-15 --run-date 28-11-2026 --lines "$tmp/one.txt"
 refuse "lines of both boards" 2 --commit $full --rows 53-58 --date 2026-11-16 --lines "$tmp/mixed.txt"
+# the X2 campaign's slice name 2026-11-imx8mp-gles3-x2-<hash8>-rowsAA-BB is taken from --out; another --out is not
+h8=${full:0:8}
+for nm in 2026-11-imx8mp-gles3-x2-$h8-rows53-54 2026-11-28-imx8mp-gles3-$h8-rows53-54; do
+	run --commit $full --rows 53-54 --date 2026-11-28 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+		--out "$tmp/n/$nm" > "$tmp/n.log" 2>&1 || bad "x2 name $nm: refused: $(cat "$tmp/n.log")"
+	grep -qF "\`$nm\`, rows 53-54 of" "$tmp/n/$nm/README.md" && grep -q '^commit '$full'$' "$tmp/n/$nm/README.md" \
+		&& ok "x2: --out $nm names the slice and the README keeps the commit" || bad "x2: slice name $nm"
+done
+for nm in 2026-11-imx8mp-gles3-x2-$h8-rows53-55 2026-11-imx8mp-gles3-x2-0123abcd-rows53-54 scratch; do
+	run --commit $full --rows 53-54 --date 2026-11-28 --lines "$slice/x2-lines.txt" --results "$slice/x2-results.tsv" \
+		--out "$tmp/n/$nm" > "$tmp/n.log" 2>&1
+	grep -qF '`2026-11-28-imx8mp-gles3-'$h8'-rows53-54`' "$tmp/n/$nm/README.md" \
+		&& ok "x2: --out $nm (other rows, commit or form) is not taken as the name" || bad "x2: slice name for --out $nm"
+done
+run --commit $full --rows 58 --date 2026-11-15 --lines "$tmp/one.txt" --out "$tmp/n/2026-11-imx8mp-gles3-x2-$h8-rows58-58" > "$tmp/n.log" 2>&1
+grep -qF '`2026-11-15-imx8mp-gles3-'$h8'-rows58-58`' "$tmp/n/2026-11-imx8mp-gles3-x2-$h8-rows58-58/README.md" \
+	&& ok "Verdin: the slice name never comes from --out" || bad "Verdin: slice name taken from --out"
 cmp -s "$tmp/plain.md" "$tmp/a/slice/README.md" && ok "Verdin README unchanged by the X2 support" || bad "Verdin README changed"
 
 echo "slice-selftest: $nok ok, $nfail failed"
