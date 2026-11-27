@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image S03a5b: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt S03a5b.console.txt
+S03a5b.console.txt: deqp: done: 104 passed, 18 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 122 cases begun, 122 with a result, 0 without
+mustpass cases with a result: 122 (of 122 seen)
+group                                       pass   fail    n/s  other
+shaders                                      104     18      0      0
+TOTAL                                        104     18      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  S03a5b: deqp: summary 122 cases begun, 122 with a result; deqp: done 104 passed, 18 failed, 0 not supported, 0 warnings; 625b9f5c DONE: 122 cases, P 104 F 18 R 0 N 0 other 0; 122 result lines seen
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.highp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.lowp_vertex.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_fragment.mat4x3
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x2
+Fail dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.mediump_vertex.mat4x3
