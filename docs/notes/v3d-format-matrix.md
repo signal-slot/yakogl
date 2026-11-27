@@ -91,7 +91,7 @@ format can be a colour attachment (`attachment_storage`,
 | SRGB8 | SRGB8_A8, alpha 255 (`texture.rs:5751`) | n/a (not renderable: `framebuffer.rs:505-507` refuses `t.format == GL_RGB` of the class; no RB name) | n/a: incomplete |
 | RGB10_A2 | RGB10A2 (`es3_formats.rs:121-129`) | RGB10_A2 (`framebuffer.rs:729`) | drawn (`framebuffer.rs:425-426`, `:535`); `tests/es3_formats_v3d.rs:1334` |
 | RGB10_A2UI | RGB10A2UI (`es3_formats.rs:130-138`) | RGB10_A2UI (`framebuffer.rs:659`) | drawn (`framebuffer.rs:439`) |
-| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:426`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1125`); beside another target each RT takes its own mask (`per_target_masks`, `src/gl/draw.rs:2747`), refused by name only under GL_BLEND beside a non-integer target; G2, G3, `tests/es3_v3d_fbo_int_rg.rs` |
+| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:427`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1128`); beside another target the texture is the store's wide surface at attachment 1.. too (`fb_target_n` `:1400`, `tests/es3_v3d_int_rg_mrt_format.rs`) and each RT takes its own mask (`per_target_masks`, `src/gl/draw.rs:2782`), refused by name only under GL_BLEND beside a non-integer target; G2, G3, `tests/es3_v3d_fbo_int_rg.rs` |
 | RGBA8I, RGBA8UI | RGBA8I / RGBA8UI | own surface | drawn (`framebuffer.rs:433-434`) |
 | R16I, R16UI, RG16I, RG16UI | RGBA16I / RGBA16UI | own surface | drawn as the store's wide surface RGBA16I / RGBA16UI, as `R8I .. RG8UI` above; G2 |
 | RGBA16I, RGBA16UI | RGBA16I / RGBA16UI | own surface | drawn (`framebuffer.rs:435-436`) |
@@ -318,13 +318,20 @@ same samples through `XYZW`.
   the fill at `:3413-3418` over `read_int_row` `:3614`). The RGB integer
   textures (no ES 3.0 render surface) stay incomplete. Host verdicts
   only: no picture is compared.
+  - *Targets past 0.* `fb_target_n` (`framebuffer.rs:1400`) names the
+    same wide surface as `fb_target_format_n` (`:1085`) for such a texture
+    at attachment 1.., so the RT's format, bpp class and tile size are the
+    store's, not the narrow format's (pinned by
+    `tests/es3_v3d_int_rg_mrt_format.rs`, attachment 0 and 1, a 2D
+    texture, an array layer and level 1). A renderbuffer keeps its own
+    narrow surface.
   - *Beside other colour targets (G3).* Drawn with a colour mask per
     render target since plan #383 item `v3d-per-rt-mask` (commits
     `0ebbd507`, the job state, and `d319c89c`, the GL core and the job
     builder, "v3d: a colour write mask per render target, so a wide r/rg
     integer texture draws beside other targets"; the same change is
     `48f6017c` on this branch). `per_target_masks`
-    (`src/gl/draw.rs:2747`, called at `:5150` where `PER_TARGET_MASK`
+    (`src/gl/draw.rs:2782`, called at `:5285` where `PER_TARGET_MASK`
     `:2723` holds for `gpu-v3d` only) gives each written target
     glColorMask limited to its own channels and, where they differ, sets
     `GlesDraw::per_target_mask` and `target_color_mask`; `job_state`
@@ -426,7 +433,7 @@ same samples through `XYZW`.
   per-RT masks only limit it to each target's channels. What remains
   open is one BLEND_ENABLES (mask 0xf) and one BLEND_CFG (RT 0's state)
   for all RTs (`v3d_job.c:696-707`), and with them the one refusal left:
-  `per_target_masks` (`src/gl/draw.rs:2747`) answers GL_INVALID_OPERATION,
+  `per_target_masks` (`src/gl/draw.rs:2782`) answers GL_INVALID_OPERATION,
   naming the masks, for uneven masks under glEnable(GL_BLEND) with both
   integer and non-integer targets (pinned in
   `tests/es3_v3d_int_rg_mrt_mask.rs`).
