@@ -1215,6 +1215,54 @@ pub fn fb_target_is_integer(c: &GlContext) -> bool {
     gles_surf_is_integer(fb_target_format(c))
 }
 
+/// The channels (bit 0 R .. bit 3 A) that the fixed-point or float colour
+/// image at `gpu` lacks, when `gpu` is a colour attachment of the bound
+/// framebuffer object (the address a draw is handed for it,
+/// `GlesDraw::target_gpu` and `GlesDrawTarget::gpu`): 0xe for GL_R8, 0xc for
+/// GL_RG8 and GL_RG16F, 0x8 for GL_RGB8. 0 for an image with all four, an
+/// integer image (its channels are a write mask, [`fb_target_channel_mask_n`]),
+/// the default framebuffer and an address that is no attachment of the bound
+/// framebuffer.
+///
+/// An R or RG image is kept in a store with more channels (RGBA8888 texels,
+/// four halves). ES 3.0 4.3.2 reads the absent ones as 0, 0, 1, and
+/// [`read_pixels`] forces them, but a texture is also sampled from its store.
+/// A back end whose pixel store can write constants asks this for the lanes
+/// to write 0 and 1 into (the PowerVR's PBE swizzle, `pvr::backend`
+/// `frame_begin_with`). It is asked by address, not through `GlesDraw`,
+/// because the draw carries the surface class of the store only.
+pub fn fb_absent_channels_at(c: &GlContext, gpu: u64) -> u8 {
+    if gpu == 0 || c.bound_framebuffer == 0 {
+        return 0;
+    }
+    let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) else { return 0 };
+    for n in 0..CAP_COLOR_ATTACHMENTS as u8 {
+        let Some(a) = color_attachment(fb, n) else { continue };
+        let Some(st) = attachment_storage(c, a) else { continue };
+        let Some(loc) = st.mem else { continue };
+        if mem_at(c, loc).gpu.wrapping_add(st.offset as u64) != gpu {
+            continue;
+        }
+        let bits = match a.type_ {
+            GL_RENDERBUFFER => c.renderbuffer_ref(a.name).map(|rb| renderbuffer_bits(rb.internalformat)),
+            GL_TEXTURE => c.texture_ref(a.name).map(texture_bits),
+            _ => None,
+        };
+        let Some(bits) = bits else { return 0 };
+        if !matches!(bits.component_type, GL_UNSIGNED_NORMALIZED | GL_FLOAT) || bits.rgba == [0; 4] {
+            return 0;
+        }
+        return bits.rgba.iter().enumerate().fold(0, |m, (k, &b)| if b == 0 { m | 1 << k } else { m });
+    }
+    0
+}
+
+/// [`fb_absent_channels_at`] of the current context, for a back end inside a
+/// draw (as `gl_fb_target_n`): 0 without a context.
+pub fn bound_target_absent_channels(gpu: u64) -> u8 {
+    context::current().map_or(0, |c| fb_absent_channels_at(c, gpu))
+}
+
 /// The internal format of the image the bound framebuffer's draw buffer `i`
 /// writes: `None` for a draw buffer that is GL_NONE or has no image. The
 /// default framebuffer's one draw buffer is fixed point (GL_RGBA8).

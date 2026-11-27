@@ -2076,6 +2076,11 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_rt_pvr.
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_rgba32f_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_rgba32f_pvr
+# The PowerVR's R, RG and RGB colour targets kept in a four-lane store (#313,
+# dEQP-GLES3 fbo family F5): the PBE swizzle writes 0, 0, 1 into the lanes
+# of the channels the format lacks. Compiles to nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_fbo_channels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_fbo_channels
 scope v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)

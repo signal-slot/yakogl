@@ -921,7 +921,7 @@ pub const REFUSE_RGB10A2_MRT: &str =
 /// the clear quad and any draw -- where a write mask would have needed a
 /// fragment shader variant per shader (glColorMask is lowered into the shader
 /// on this GPU) and would have left the alpha already in memory alone.
-fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
+fn pbe_swizzle(fmt: u8, alpha_one: bool, absent: u8) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
     let mut swiz = if fmt == GLES_SURF_XRGB8888 || fmt == GLES_SURF_RGB565 {
         [
             csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2,
@@ -941,7 +941,35 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
     if alpha_one && !gles_surf_is_integer(fmt) {
         swiz[3] = csb::ROGUE_PBESTATE_SWIZ_ONE;
     }
+    /* A store with four lanes behind a format with fewer (GL_R8 and GL_RG8
+     * in RGBA8888 texels, GL_RG16F in four halves): the lanes of the
+     * channels the format lacks take the PBE's constants, 0 for green and
+     * blue and 1 for alpha, whichever lane the format's order put them in.
+     * A texture is sampled from this store and a blit copies it, so what is
+     * stored has to be what ES 3.0 4.3.2 says the image reads. */
+    if absent & 0xf != 0 && pbe_four_lanes(fmt) {
+        for s in swiz.iter_mut() {
+            let ch = *s;
+            if ch <= csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3 && absent & (1u8 << ch) != 0 {
+                *s = if ch == csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3 {
+                    csb::ROGUE_PBESTATE_SWIZ_ONE
+                } else {
+                    csb::ROGUE_PBESTATE_SWIZ_ZERO
+                };
+            }
+        }
+    }
     swiz
+}
+
+/// The surfaces whose pixel has a lane for each of R, G, B and A and holds a
+/// fixed-point or float colour: the ones an R, RG or RGB format of fewer
+/// channels is kept in (`gl::framebuffer` `renderbuffer_surf_format`), so
+/// the ones [`pbe_swizzle`] gives constants for absent channels. A
+/// one-channel surface (R16F, R32F) has no such lane and an integer surface
+/// stores the channels it has under a write mask.
+fn pbe_four_lanes(fmt: u8) -> bool {
+    matches!(fmt, GLES_SURF_RGBA8888 | GLES_SURF_XRGB8888 | GLES_SURF_SRGB8_A8 | GLES_SURF_RGBA16F)
 }
 
 /// The PBE register words (CR_PBE_WORD0/1 of an attachment) for a `tw` x
@@ -966,7 +994,26 @@ pub fn pbe_reg_words(
     downscale: bool,
     twiddle: bool,
 ) -> [u64; 2] {
-    let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one);
+    pbe_reg_words_absent(fmt, alpha_one, 0, tw, th, pitch, downscale, twiddle)
+}
+
+/// [`pbe_reg_words`] for an attachment whose GL format lacks the channels
+/// `absent` (bit 0 R .. bit 3 A, `gl::framebuffer::fb_absent_channels_at`):
+/// in a four-lane store their lanes are written 0 (green, blue) and 1
+/// (alpha) instead of the fragment's ([`pbe_swizzle`]). 0 is
+/// [`pbe_reg_words`].
+#[allow(clippy::too_many_arguments)]
+pub fn pbe_reg_words_absent(
+    fmt: u8,
+    alpha_one: bool,
+    absent: u8,
+    tw: u32,
+    th: u32,
+    pitch: u32,
+    downscale: bool,
+    twiddle: bool,
+) -> [u64; 2] {
+    let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one, absent);
     let w0 = csb_pack!(
         ROGUE_PBESTATE_REG_WORD0_pack,
         2,
@@ -1883,6 +1930,11 @@ struct Backend {
     target_alpha_bits: u8,
     /// The frame's target orientation (for a synthesised object).
     target_flip_y: bool,
+    /// Per attachment slot of the frame: the channels (bit 0 R .. bit 3 A)
+    /// its GL format lacks in a store that has them
+    /// (`gl::framebuffer::bound_target_absent_channels`, taken when the
+    /// frame opens); the PBE writes 0, 0, 1 there ([`pbe_swizzle`]).
+    target_absent: [u8; PVR_BACKEND_MAX_RT as usize],
     /// Colour attachments beyond the first (a G-buffer pass writes three):
     /// `[0]` mirrors `target_gpu`/`w`/`h`/`format`, and `num_targets` 0 means
     /// one.
@@ -6326,6 +6378,21 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.frame_open = true;
     b.ndraws = 0;
     b.vis_frame = 0;
+    /* The channels each attachment's GL format lacks, for the PBE's swizzle
+     * at the kick. The draw carries the store's surface class only
+     * (RGBA8888 for GL_R8), so the GL core is asked by the image's address:
+     * the frame opens inside the draw or clear that names it, with its
+     * framebuffer bound. A frame the back end opens for an image of its own
+     * (a mip level, a blit's target that is not bound) matches no
+     * attachment and stores every lane, as before. */
+    for (i, a) in b.target_absent.iter_mut().enumerate() {
+        let gpu = match i {
+            0 => d.target_gpu,
+            _ if i < d.num_targets as usize && i < d.targets.len() => d.targets[i].gpu,
+            _ => 0,
+        };
+        *a = crate::gl::framebuffer::bound_target_absent_channels(gpu);
+    }
     b.target_gpu = d.target_gpu;
     b.target_w = d.target_w;
     b.target_h = d.target_h;
@@ -10592,7 +10659,8 @@ fn flush(p: &mut Pvr) -> i32 {
         let [w0, w1] = if slot == 0 && b.target_gpu == 0 {
             [0, 0]
         } else {
-            pbe_reg_words(fmt, rt == 0 && b.target_alpha_bits == 0, tw, th, pitch, b.samples > 1, twiddle)
+            let alpha_one = rt == 0 && b.target_alpha_bits == 0;
+            pbe_reg_words_absent(fmt, alpha_one, b.target_absent[slot], tw, th, pitch, b.samples > 1, twiddle)
         };
         b.kick.frag.pbe_word[rt][0] = w0;
         b.kick.frag.pbe_word[rt][1] = w1;
