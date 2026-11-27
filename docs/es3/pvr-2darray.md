@@ -477,22 +477,32 @@ GL core and back end:
   moves and `src/abi_layout.rs` does not change. `draw.rs:3445` already guards
   with `type_ == CUBE`.
 - `src/shaderc/mod.rs:116-141`: a switch `pvr_native_array` (`pvr_set_native_array`,
-  `native_array_enabled`) beside the cube's, **default OFF first**, flipped
-  after the board run; and `src/shaderc/precompiled.rs:149-160`
+  `native_array_enabled`) beside the cube's, default OFF at first. It is
+  **default ON** since `PVR_NATIVE_ARRAY_DEFAULT = 1` (2026-11-26), after the
+  compile cache key came to cover the switch (`tests/pvr_native_switch_cache.rs`)
+  and `guard_sample` (`select.rs`) came to keep a sample's SampleAddr group
+  with it; the stacked arm stays reachable with `pvr_set_native_array(0)` (the
+  host tests' off arms, the board's `CONFIG_DEQP_PVR_NATIVE_ARRAY=0`). And
+  `src/shaderc/precompiled.rs:149-160`
   `switches_at_boot` must include it, or a table made under another value would
   answer.
 
 ## 9. ES 2.0 and table boundary: what stays byte-identical
 
 With the switch OFF (the first landing), nothing outside the new files and the
-guarded arms moves. With it ON, only ES 3.0 programs that sample a 2D array move.
+guarded arms moves. With it ON (the default now), only ES 3.0 programs that
+sample a 2D array move. Measured when the default flipped: `precompile_counts.txt`
+`powervr es2=0` kept its rows and lost code bytes (`app=all` 2,757,160 ->
+2,749,192, `app=gl_test_es100` 1,615,072 -> 1,608,040); every `es2=1` line,
+`precompile_refused_powervr*.txt`, `online_refused_powervr*.txt` and
+`src/pvr/internal.rs` stayed byte-identical.
 
 | Artifact | Why unchanged | How the gate shows it |
 |---|---|---|
 | ES 2.0 programs and every GPU's `report-es2` build | ES 2.0 has no `sampler2DArray`; the new arms match `TexDim::D2Array` only; `draw.rs` branch needs `type_ == 2D_ARRAY` and the record flag | `check.sh` `report-es2` configs; `tests/fixtures/online_refused_powervr_es2.txt` and `precompile_counts.txt` lines `es2=1` identical |
 | `src/pvr/internal.rs`, `src/vivante/internal.rs` | the internal programs (`quad`, `fbload*`, `clear*`) sample no array (`internal.rs:12-40`) | `check.sh:1213` `--internal --verify src/pvr/internal.rs` |
-| the precompiled table rows (pco / glsl2usc) | they keep sampling the stacked image: their record's `native_cube` is 0 (never 2), so `draw.rs` keeps the stacked bind; `pvr_layers_` is still filled | `precompiled.rs:615` compares the flag byte; the reproduction rows of `check.sh` |
-| `precompile_counts.txt` `powervr es2=0` | OFF: identical. ON: rows of our compiler that sample an array change code size: re-pin with a reason (`PRECOMPILE_PIN_WRITE=1`) | `tools/precompile --pin` |
+| the precompiled table rows (pco / glsl2usc) | they keep sampling the stacked image: their record's `native_cube` is 0 (never 2), so `draw.rs` keeps the stacked bind; `pvr_layers_` is still filled. Rows our compiler makes (`yakogl-precompile`) carry the switch's boot value: native (bit 1) since the default is ON | `precompiled.rs:615` compares the flag byte; the reproduction rows of `check.sh` |
+| `precompile_counts.txt` `powervr es2=0` | OFF: identical. ON: rows of our compiler that sample an array change code size: re-pinned with the default flip (rows unchanged, 7,968 code bytes fewer in `app=all`) | `tools/precompile --pin` |
 | GC7000 / V3D | no change in `src/vivante`, `src/v3d`; the `layered` branch of `draw.rs:3372-3388` is untouched | their unit tests |
 | `tests/fixtures/online_refused_powervr.txt` (ES 3.0) | ON: sources refused over array offsets / shadow forms now compile: the diff is expected and reviewed | fixture diff |
 

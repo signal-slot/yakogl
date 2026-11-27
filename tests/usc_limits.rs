@@ -2582,15 +2582,19 @@ fn what_the_usc_path_asks_of_the_machine_over_every_source_it_accepts() {
     let _scratch = scratch_lock();
     /* pco's programs take the TPU's implicit level: compared with them, ours
      * must too (`pvr_proj_lod` 0), and the switch goes back to its default
-     * under the same lock, even when the survey panics */
+     * under the same lock, even when the survey panics. The survey's machine
+     * models a 2D array as the stacked image (pvr_arr, `TexWord` 0-3), so
+     * `pvr_native_array` is off for it too, whatever the default. */
     struct Lod;
     impl Drop for Lod {
         fn drop(&mut self) {
             yakogl::shaderc::pvr_set_proj_lod(yakogl::shaderc::PVR_PROJ_LOD_DEFAULT);
+            yakogl::shaderc::pvr_set_native_array(yakogl::shaderc::PVR_NATIVE_ARRAY_DEFAULT);
         }
     }
     let _lod = Lod;
     yakogl::shaderc::pvr_set_proj_lod(0);
+    yakogl::shaderc::pvr_set_native_array(0);
     let mut peak = Peak::default();
     let (mut total, mut ok) = (0usize, 0usize);
     let mut refused: BTreeMap<String, Vec<&str>> = BTreeMap::new();
@@ -5832,8 +5836,10 @@ fn stacked_against_ir(sampler: &str, src: &str, inputs: &[&InputFn<'_>]) -> Vec<
 }
 
 /// [`stacked_against_ir`], compiled with the native cube (`pvr_native_cube`)
-/// and the in-shader projective divide (`pvr_proj_divide`) on or off. The switch is process-wide: set under the compile lock and
-/// cleared by a guard, even when the comparison panics.
+/// and the in-shader projective divide (`pvr_proj_divide`) on or off, and
+/// always with the stacked 2D array (`pvr_native_array` 0: the model reads a
+/// 2D array as the stacked image). The switches are process-wide: set under
+/// the compile lock and put back by a guard, even when the comparison panics.
 #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
 fn stacked_against_ir_with(
     sampler: &str,
@@ -5848,11 +5854,13 @@ fn stacked_against_ir_with(
         fn drop(&mut self) {
             yakogl::shaderc::pvr_set_native_cube(yakogl::shaderc::PVR_NATIVE_CUBE_DEFAULT);
             yakogl::shaderc::pvr_set_proj_divide(0);
+            yakogl::shaderc::pvr_set_native_array(yakogl::shaderc::PVR_NATIVE_ARRAY_DEFAULT);
         }
     }
     let _off = Off;
     yakogl::shaderc::pvr_set_native_cube(i32::from(native));
     yakogl::shaderc::pvr_set_proj_divide(i32::from(proj_divide));
+    yakogl::shaderc::pvr_set_native_array(0);
     store::with_scratch(|a| {
         let _keep = store::begin_keep().expect("keep");
         let text = a.alloc_str(src).unwrap();

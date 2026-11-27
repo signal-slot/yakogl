@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The PowerVR's native 2D array: a twiddled, layer-major copy of a 2D array
 //! texture that the TPU samples one layer at a time by texture address
-//! override (`smp` `tao`), behind `pvr_native_array` (default OFF).
+//! override (`smp` `tao`), behind `pvr_native_array` (default ON;
+//! `pvr_set_native_array(0)` keeps the stacked image).
 //!
 //! YakoGL stores a 2D array LINEAR and level-major -- level i holds the N
 //! layers at that level's size, stacked -- and the PowerVR's stacked path

@@ -203,8 +203,9 @@ copies only the held levels (`chain_levels`, `:245-255`). The src/gl fix is
 cube's copy", on an unmerged branch (third attempt; not an ancestor of the
 tip), with host test `tests/pvr_npot_cube.rs` (on that branch; not in this
 tree). Its message notes that the online compile cache key
-(`switches_now`, `src/shaderc/online/backend.rs:287`, which holds only
-`pvr_native_3d` and `pvr_native_array`) leaves out `pvr_native_cube`.
+(`switches_now`, `src/shaderc/online/backend.rs:289`) left out
+`pvr_native_cube`; it holds it as bit 2 since the 2D-array default flip
+(`tests/pvr_native_switch_cache.rs` checks the cube too).
 
 **K4.** The same rule for NPOT 2D arrays: only a decoded ETC2 array gets a
 packed chain (`stacked_decoded_array`, `src/gl/texture.rs:1318`); other NPOT
