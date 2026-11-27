@@ -34,6 +34,9 @@ pub mod mesa_internal;
 pub mod csbgen;
 /// Test knobs that belong to no one backend table (`test-knobs` only).
 pub mod debug;
+/// Depth and stencil a blit wrote into an object no frame has drawn into
+/// yet, kept until its first frame loads them.
+pub mod ds_stage;
 pub mod ffi;
 /// Where up to four colour targets go: output registers or tile buffers, and
 /// the end-of-tile program that emits them (RC14, pure, not wired in yet).

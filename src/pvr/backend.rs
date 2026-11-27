@@ -267,7 +267,7 @@ pub const FS_TEMPS_MIN_CAP: u32 = PVR_PDS_DOUTU_MAX_TEMPS;
 /* ---- this GPU's device-VA heap configuration (pvr_rogue_heap_config.h;
  * mirrors the driver's src/pvr_internal.h). The OSAL bump-allocates inside
  * these. ---- */
-const HEAP_GENERAL_BASE: u64 = 0x80_0000_0000;
+pub(crate) const HEAP_GENERAL_BASE: u64 = 0x80_0000_0000;
 const HEAP_PDS_BASE: u64 = 0xDA_0000_0000;
 const HEAP_USC_BASE: u64 = 0xE0_0000_0000;
 const HEAP_WINDOW: u64 = 0x4000_0000;
@@ -1907,6 +1907,10 @@ struct Backend {
     /// What `ds_make_room` took back from `ds_parked` for the frame it admits:
     /// `frame_begin` starts the new buffers from these clear values.
     ds_restore: [Plane; 2],
+    /// Planes `pvr_backend_ds_write` wrote into objects no buffer held yet
+    /// (a blit into a depth/stencil renderbuffer never drawn into): the
+    /// object's first frame starts from them ([`ds_seed_staged`]).
+    ds_stage: super::ds_stage::DsStage,
     /// The frame's whole clears of the depth and the stencil (Undefined:
     /// none), and whether a draw of the frame wrote them: what the kick
     /// leaves in the frame's buffers (`ds_settle`).
@@ -4170,6 +4174,7 @@ pub extern "C" fn pvr_backend_shutdown() {
         osal::gpu_free(&mut s.mem);
         *s = DsBuf::ZERO;
     }
+    b.ds_stage.clear();
     osal::gpu_free(&mut b.ms.mem);
     b.ms = MsStore::ZERO;
     for m in b.pr.mems() {
@@ -5575,6 +5580,103 @@ fn ds_seed_depth(b: &mut Backend, d: &GlesDraw, (ds, _): (DsStore, DsStore)) -> 
     0
 }
 
+/// Before the frame `d` opens begins: the planes a blit wrote into its depth
+/// or stencil object while no buffer held it (`ds_stage`, from
+/// [`pvr_backend_ds_write`]) go into the buffer the frame got, `zs`, which
+/// then loads them as it would a stored kick's.
+///
+/// The words are the layout [`pvr_backend_ds_write`] writes. A plane not
+/// staged keeps what the buffer holds when a kick stored it (`valid`), else
+/// what a new frame would initialise it to (its parked clear value, else
+/// depth 1.0 and stencil 0). The buffer then counts as stored, and the
+/// staged planes as contents GL keeps, owned by their object.
+///
+/// A staged plane the buffer cannot take is dropped, named once in the log:
+/// a stencil kept apart ([`split_zs_on`], the ISP's separate-stencil layout,
+/// which `ds_write` does not write either), a multisampled buffer (a blit's
+/// destination is single-sampled), or a buffer with no CPU view. So is one
+/// when the frame has no buffer at all (`ds_refuse_lost` then refuses a draw
+/// that tests it).
+fn ds_seed_staged(b: &mut Backend, d: &GlesDraw, (ds, _): (DsStore, DsStore)) {
+    let (depth_key, stencil_key) = zs_keys(d, split_zs_on());
+    if stencil_key.is_some() && b.ds_stage.has(d.stencil_id, STENCIL) {
+        glog_once!(
+            "yakogl/pvr: the stencil a blit wrote into object 0x{:x} is lost: its buffer is kept apart",
+            d.stencil_id
+        );
+    }
+    /* the object of each plane the frame's buffer keeps, if it has one staged */
+    let ids = match ds.buf() {
+        Some(i) => {
+            let kept = b.ds[i].kept_planes();
+            let on = [d.depth_id, if stencil_key.is_some() { 0 } else { d.stencil_id }];
+            [DEPTH, STENCIL].map(|pl| if kept.contains(&pl) && b.ds_stage.has(on[pl], pl) { on[pl] } else { 0 })
+        }
+        None => [0; 2],
+    };
+    if let (Some(i), true) = (ds.buf(), ids != [0; 2]) {
+        ds_seed_staged_into(b, i, ids);
+        ds_lost_lift(b, depth_key, ids[DEPTH] != 0, ids[STENCIL] != 0);
+    }
+    /* what the buffer did not take is dropped: the objects' planes are its
+     * now (or lost, said above) */
+    for id in [d.depth_id, d.stencil_id] {
+        b.ds_stage.forget(id);
+    }
+}
+
+/// [`ds_seed_staged`]'s copy: plane `pl` of `ids[pl]` (0: none) into buffer
+/// `i`. A buffer that takes no CPU write loses them, said once.
+fn ds_seed_staged_into(b: &mut Backend, i: usize, ids: [u32; 2]) {
+    let s = &b.ds[i];
+    let aw = s.w.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
+    let rows = s.h.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
+    if s.samples > 1 || s.mem.cpu.is_null() || aw.saturating_mul(rows).saturating_mul(4) > s.mem.size {
+        glog_once!(
+            "yakogl/pvr: the depth/stencil a blit wrote into object 0x{:x} is lost: its buffer takes no CPU \
+             write ({} samples)",
+            ids[DEPTH] | ids[STENCIL],
+            s.samples
+        );
+        return;
+    }
+    let (cpu, valid, sw, sh) = (s.mem.cpu, s.valid, s.w, s.h);
+    // SAFETY: a live, CPU-mapped allocation of at least aw * rows words
+    // (checked above); no kick uses it (the GL core waited for every kick
+    // that used the object before its blit, and the frame this draw opens
+    // is not begun).
+    let words = unsafe {
+        osal::cache_invd(cpu, aw * rows * 4);
+        core::slice::from_raw_parts_mut(cpu as *mut u32, aw * rows)
+    };
+    if !valid {
+        let depth = b.ds_restore[DEPTH].cleared_value().map_or(1.0, f32::from_bits);
+        let stencil = b.ds_restore[STENCIL].cleared_value().unwrap_or(0) & 0xff;
+        words.fill(ds_retention::depth_unorm24(depth) | stencil << 24);
+    }
+    for (pl, &id) in ids.iter().enumerate() {
+        /* one object on both points: both planes in one go */
+        if id == 0 || (pl == STENCIL && ids[DEPTH] == id) {
+            continue;
+        }
+        let Some(mut st) = b.ds_stage.take(id) else { continue };
+        st.planes = [DEPTH, STENCIL].map(|q| st.planes[q] && ids[q] == id);
+        super::ds_stage::seed(&st, words, aw, sw, sh);
+        super::ds_stage::release(&mut st);
+    }
+    // SAFETY: the words just written, inside the allocation.
+    unsafe { osal::cache_flush(cpu, aw * rows * 4) };
+    let s = &mut b.ds[i];
+    s.valid = true;
+    for (pl, &id) in ids.iter().enumerate() {
+        if id != 0 {
+            (s.planes[pl], s.owners[pl]) = (Plane::LIVE, id);
+            /* not initialised to a parked clear value: it holds the blit's */
+            b.ds_restore[pl] = Plane::UNDEFINED;
+        }
+    }
+}
+
 /// The packed D24S8 words of buffer `s` the resolves read, and where pixel
 /// (x, y)'s first sample is among them: `(words, at)` with `at(x, y)` the
 /// word index. One sample a pixel: row-linear at the ZLS-tile-aligned width.
@@ -5869,6 +5971,7 @@ pub extern "C" fn pvr_backend_attachment_gone(id: u32) {
         return;
     }
     p.b.ds_parked.forget(id);
+    p.b.ds_stage.forget(id);
     let [depth_id, _, stencil_id, _] = p.b.frame_zs;
     if p.b.frame_open && p.b.frame_ds.buf().is_some() && (depth_id == id || stencil_id == id) {
         let rc = flush(p);
@@ -6046,7 +6149,12 @@ pub unsafe extern "C" fn pvr_backend_depth_resolve(id: u32, dst: *mut f32, w: u3
     let Some(s) = held.filter(|_| plane.is_live()) else {
         /* a clear value parked when its buffer went to another target */
         let parked = b.ds_parked.iter().find(|e| e.owners[DEPTH] == id).and_then(|e| e.planes[DEPTH].cleared_value());
-        return parked.map_or(1, |v| fill(f32::from_bits(v)));
+        if let Some(v) = parked {
+            return fill(f32::from_bits(v));
+        }
+        /* a plane a blit wrote before any frame drew into the object */
+        // SAFETY: the caller's contract.
+        return if unsafe { b.ds_stage.read(id, DEPTH, dst as *mut c_void, w, h, pitch) } { 0 } else { 1 };
     };
     if !s.valid || s.mem.cpu.is_null() {
         return 1;
@@ -6112,7 +6220,12 @@ pub unsafe extern "C" fn pvr_backend_stencil_resolve(id: u32, dst: *mut u8, w: u
         return fill(v);
     }
     let Some(s) = held.filter(|_| plane.is_live()) else {
-        return ds_parked_clear(b, STENCIL, id).map_or(1, fill);
+        if let Some(v) = ds_parked_clear(b, STENCIL, id) {
+            return fill(v);
+        }
+        /* a plane a blit wrote before any frame drew into the object */
+        // SAFETY: the caller's contract.
+        return if unsafe { b.ds_stage.read(id, STENCIL, dst as *mut c_void, w, h, pitch) } { 0 } else { 1 };
     };
     if s.id.kind == DS_STENCIL {
         return -crate::util::ENOTSUP;
@@ -6148,8 +6261,12 @@ pub unsafe extern "C" fn pvr_backend_stencil_resolve(id: u32, dst: *mut u8, w: u
 /// that is no longer the whole plane must not be parked). A buffer no kick
 /// has stored into yet is first filled with what a frame would initialise it
 /// to (a plane's clear value, else depth 1.0 and stencil 0), so the pixels
-/// outside the rectangle are defined. 1 when nothing is held for the plane
-/// (nothing written); -EBUSY when the open frame draws into it; -ENOMEM when
+/// outside the rectangle are defined. An object no buffer holds yet (no
+/// frame has drawn into it, as the fresh destination of dEQP's
+/// `fbo.msaa` resolve blit) has the rectangle staged ([`super::ds_stage`]):
+/// the resolves read it, and the object's first frame starts from it
+/// ([`ds_seed_staged`]). 1 when nothing is held for the plane and no
+/// staging entry is left (nothing written); -EBUSY when the open frame draws into it; -ENOMEM when
 /// only a parked clear value remains (no buffer to write into); -ENOTSUP for
 /// a stencil kept apart or a multisampled buffer; -EINVAL for a rectangle
 /// outside the buffer. An empty rectangle (`w` or `h` 0) is a probe: every
@@ -6184,7 +6301,16 @@ pub unsafe extern "C" fn pvr_backend_ds_write(
         return -crate::util::EBUSY;
     }
     let Some(i) = ds_plane_buf(b, pl, id) else {
-        return if ds_parked_clear(b, pl, id).is_some() { -crate::util::ENOMEM } else { 1 };
+        if ds_parked_clear(b, pl, id).is_some() {
+            return -crate::util::ENOMEM;
+        }
+        /* no frame has drawn into the object yet: the plane is staged, and
+         * its first frame starts from it ([`ds_seed_staged`]) */
+        if !b.ds_stage.can_stage(id) {
+            return 1;
+        }
+        // SAFETY: the caller's contract.
+        return unsafe { b.ds_stage.write(id, pl, src, x, y, w, h, pitch) };
     };
     let s = &mut b.ds[i];
     if s.id.kind == DS_STENCIL || s.samples > 1 || s.mem.cpu.is_null() {
@@ -7349,7 +7475,8 @@ fn draw_one(p: &mut Pvr, d: &GlesDraw) -> i32 {
     let any_clear = !d.clear_quad && (d.do_clear || d.do_clear_depth || d.do_clear_stencil);
     /* depth texels the CPU wrote go into the buffer before a frame loads
      * it: such a draw always opens a frame of its own */
-    let seeds = !d.depth_texels.is_null() && d.ds_persist;
+    let staged = d.ds_persist && (p.b.ds_stage.holds(d.depth_id) || p.b.ds_stage.holds(d.stencil_id));
+    let seeds = (!d.depth_texels.is_null() || staged) && d.ds_persist;
     let ends = |b: &Backend| b.frame_open && (seeds || frame_ends_here(b, d, any_clear));
 
     /* a frame this draw opens needs its depth/stencil buffers: made room
@@ -7370,6 +7497,9 @@ fn draw_one(p: &mut Pvr, d: &GlesDraw) -> i32 {
      * texels it starts from, and the refusal of a draw that uses one it
      * cannot keep, before the frame takes anything from the draw */
     let zs = if p.b.frame_open { (p.b.frame_ds, p.b.frame_s) } else { ds_resolve(&mut p.b, d) };
+    if staged {
+        ds_seed_staged(&mut p.b, d, zs);
+    }
     if seeds {
         let rc = ds_seed_depth(&mut p.b, d, zs);
         if rc != 0 {
