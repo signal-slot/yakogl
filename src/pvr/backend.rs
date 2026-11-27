@@ -2634,9 +2634,28 @@ pub fn clear_masked_program(class: u32, mask: u8) -> Option<&'static ShcShader> 
 /* + the id DOUTWs of pvr_pds_render_vertex_program_ids, + the base
  * instance's constant (up to 2 data dwords with the bank's padding) and its
  * ADD32 (1 code dword) of pvr_pds_render_vertex_program_ids_base: 16 streams
- * with both ids and a base take 21 code dwords */
+ * with both ids and a base take 21 code dwords (the generator's
+ * PVR_PDS_VERTEX_MAX_DATA_DW and PVR_PDS_VERTEX_MAX_CODE_DW), + the
+ * instance divides of every stream (VDIVIDE_CODE_DWORDS) */
 const VDATA_DWORDS: usize = 8 * PVR_PDS_VERTEX_MAX_STREAMS as usize + 8 + 2;
-const VCODE_DWORDS: usize = PVR_PDS_VERTEX_MAX_STREAMS as usize + 4 + 1;
+const VCODE_DWORDS: usize = PVR_PDS_VERTEX_MAX_STREAMS as usize + 4 + 1 + VDIVIDE_CODE_DWORDS;
+/* Mesa's instance divide (pvr_pds.c pvr_pds_vertex_shader, the multiplier
+ * and shift of pvr_pipeline_pds.c:846-864): at most two LIMM, the MAD and two
+ * SFTLP64 per stream (PVR_PDS_VERTEX_DIVIDE_CODE_DW; a power of two is one
+ * SFTLP32), for each of the streams under the feature pvr-instance-divisor.
+ * Without it no stream has a divisor (stream_divisor) and none is added. */
+#[cfg(feature = "pvr-instance-divisor")]
+const VDIVIDE_CODE_DWORDS: usize = PDS_DIVIDE_CODE_DWORDS as usize * PVR_PDS_VERTEX_MAX_STREAMS as usize;
+#[cfg(not(feature = "pvr-instance-divisor"))]
+const VDIVIDE_CODE_DWORDS: usize = 0;
+/// The code dwords of Mesa's instance divide of one stream at most
+/// (driver/src/pvr_pds_render_gen.h PVR_PDS_VERTEX_DIVIDE_CODE_DW).
+pub const PDS_DIVIDE_CODE_DWORDS: u32 = 5;
+/// Mesa's PDS temp block (pvr_pds.c PVR_PDS_TEMPS_BLOCK_SIZE; the
+/// generator's PVR_PDS_VERTEX_MAX_TEMPS): a vertex program needing more is
+/// refused by the generator and drawn instance by instance here
+/// ([`draw_instances_flattened`]).
+pub const PDS_VERTEX_MAX_TEMPS: u32 = 32;
 /* iterators: W, the point coordinate, then the varyings */
 /* Iterators: the varyings plus Z, W and the point coordinate. */
 const CDATA_DWORDS: usize = 2 * (PVR_PDS_COEFF_MAX_VARYINGS as usize + 3) + 2;
@@ -7774,11 +7793,126 @@ fn attribs_advance_instances(dd: &mut GlesDraw, first: u32) {
     }
 }
 
+/// The PDS temps the vertex program takes for streams of these divisors, in
+/// stream order (0 or 1: no divide), counted the way Mesa's
+/// pvr_pds_get_temps() allocates them in pvr_pds_vertex_shader(): IR0 and
+/// IR1, then two temps on a 64-bit boundary for a multiply (a divisor that
+/// is not a power of two), one for a shift (a power of two). The generator
+/// refuses a program above [`PDS_VERTEX_MAX_TEMPS`] (Mesa only asserts it):
+/// 15 streams of odd divisors take 32, 16 take 34.
+pub fn pds_vertex_temps(divisors: impl IntoIterator<Item = u32>) -> u32 {
+    divisors.into_iter().fold(2, |next, d| match d {
+        0 | 1 => next,
+        d if d.is_power_of_two() => next + 1,
+        _ => ((next + 1) & !1) + 2,
+    })
+}
+
+/// Whether the vertex program of `d` could need more than Mesa's PDS temps:
+/// the count of its attributes as streams in vi register order, the order
+/// the vertex fetch builds them in. Coalescing only removes streams, and
+/// removing one never raises the count (each allocation is monotone in
+/// where it starts), so this bounds the program's real need. Public for the
+/// host tests (tests/es3_pvr_divisor_pds_many.rs).
+#[cfg(feature = "pvr-instance-divisor")]
+pub fn instance_divides_overrun_temps(d: &GlesDraw) -> bool {
+    let n = d.num_attribs as usize;
+    if n > PVR_PDS_VERTEX_MAX_STREAMS as usize {
+        return false; /* refused by the vertex fetch */
+    }
+    let mut order = [0u8; PVR_PDS_VERTEX_MAX_STREAMS as usize];
+    for (i, o) in order[..n].iter_mut().enumerate() {
+        *o = i as u8;
+    }
+    for i in 1..n {
+        /* the vertex fetch's insertion sort by vi_reg */
+        let k = order[i];
+        let mut j = i;
+
+        while j > 0 && d.attribs[order[j - 1] as usize].vi_reg > d.attribs[k as usize].vi_reg {
+            order[j] = order[j - 1];
+            j -= 1;
+        }
+        order[j] = k;
+    }
+    pds_vertex_temps(order[..n].iter().map(|&o| stream_divisor(&d.attribs[o as usize]))) > PDS_VERTEX_MAX_TEMPS
+}
+
+/// Turn every per-instance attribute of `dd` into a constant one (per vertex,
+/// stride 0) holding its element for `instance`: instance / divisor, the
+/// element the PDS would have fetched. The offsets are checked as in
+/// [`attribs_advance_instances`]. Public for the host tests.
+#[cfg(feature = "pvr-instance-divisor")]
+pub fn attribs_flatten_instance(dd: &mut GlesDraw, instance: u32) {
+    for a in dd.attribs[..dd.num_attribs as usize].iter_mut() {
+        if a.per_instance == 0 {
+            continue;
+        }
+        let elem = instance / u32::from(a.divisor.max(1));
+        match elem.checked_mul(a.stride) {
+            None => {
+                a.cpu_bytes = 0;
+                a.offset = u32::MAX;
+            }
+            Some(skip) if !a.cpu.is_null() => {
+                if skip as usize > a.cpu_bytes as usize {
+                    a.cpu_bytes = 0;
+                } else {
+                    // SAFETY: `skip <= cpu_bytes`: inside the staged copy (or
+                    // one past its end, which `cpu_bytes = 0` makes unread).
+                    a.cpu = unsafe { (a.cpu as *const u8).add(skip as usize) } as *const c_void;
+                    /* one element is read: copy no more into the arena */
+                    a.cpu_bytes = (a.cpu_bytes - skip).min(a.components as u32 * 4);
+                }
+            }
+            Some(skip) => a.offset = a.offset.saturating_add(skip),
+        }
+        a.per_instance = 0;
+        a.divisor = 0;
+        a.stride = 0;
+    }
+}
+
+/// A draw whose instance divides need more PDS temps than Mesa's block holds
+/// ([`instance_divides_overrun_temps`]: 16 streams of odd divisors, or 16
+/// with a mix that pads to more than 32), drawn instance by instance with its
+/// per-instance attributes as constants, as the GL core draws divisors above
+/// `max_instance_divisor` (src/gl/draw.rs draw_instanced): no stream divides,
+/// gl_InstanceID is the draw's base plus the instance (GlesDraw::instance_id,
+/// fix P1). The clear goes with the first instance only.
+#[cfg(feature = "pvr-instance-divisor")]
+fn draw_instances_flattened(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    let inst = if d.instance_count != 0 { d.instance_count } else { 1 };
+
+    for i in 0..inst {
+        let mut dd = *d;
+
+        if i > 0 {
+            dd.do_clear = false;
+            dd.do_clear_depth = false;
+            dd.do_clear_stencil = false;
+        }
+        dd.instance_count = 1;
+        let instance = d.instance_id.wrapping_add(i);
+        dd.instance_id = instance;
+        attribs_flatten_instance(&mut dd, instance);
+        let rc = draw_sized(p, &dd);
+        if rc != 0 {
+            return rc;
+        }
+    }
+    0
+}
+
 /// Record the draw, splitting the frame when it alone would tile more than a
 /// kick's parameter buffer holds. An instanced draw splits by instances; a
 /// single non-instanced draw that big goes through whole (nothing here can
 /// slice an index list without breaking strips and fans).
 fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    #[cfg(feature = "pvr-instance-divisor")]
+    if instance_divides_overrun_temps(d) {
+        return draw_instances_flattened(p, d);
+    }
     let budget = if p.b.opt(PVR_BACKEND_OPT_PRIM_BUDGET) != 0 {
         p.b.opt(PVR_BACKEND_OPT_PRIM_BUDGET)
     } else {
@@ -8685,6 +8819,15 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
         for &o in &order[..attribs.len()] {
             nstreams = add_stream(&mut s.streams, nstreams, &attribs[o as usize], abase[o as usize], coalesce);
         }
+    }
+    /* draw_sized drew a draw above Mesa's PDS temps instance by instance;
+     * should one still reach here, it is refused, never generated */
+    if cfg!(feature = "pvr-instance-divisor")
+        && pds_vertex_temps(s.streams[..nstreams].iter().map(|st| if st.per_instance != 0 { st.divisor } else { 0 }))
+            > PDS_VERTEX_MAX_TEMPS
+    {
+        glog_once!("yakogl/pvr: draw refused: {} stream divides need more than the PDS temps", nstreams);
+        return -EINVAL;
     }
     /* gl_VertexID / gl_InstanceID (ES 3.0): the vertex fetch writes IR0/IR1
      * into the vtxin registers the compiler reads them from. gl_InstanceID

@@ -56,6 +56,25 @@ _Static_assert(PVR_PDS_DOUTU_MAX_TEMPS ==
  * pvr_pds_clear_vertex_shader_program_init_base() for the clear rect),
  * gl_VertexID / gl_InstanceID through iterate_vtx_id / iterate_instance_id.
  * ========================================================================= */
+/* The PDS temps pvr_pds_vertex_shader() takes for `program`, counted the
+ * way its pvr_pds_get_temps() allocates them (pvr_pds.c): IR0 and IR1, then
+ * each stream in order, two temps on a 64-bit boundary for a multiply, one
+ * for a shift. The other allocations there (iterate_remap_id, current
+ * state, a base_instance or draw_indirect add, the DDMADT emulation) are
+ * never set up by this file. */
+static uint32_t vertex_temps(const struct pvr_pds_vertex_shader_program *program)
+{
+   uint32_t next = 2; /* IR0, IR1 */
+
+   for (uint32_t s = 0; s < program->num_streams; s++) {
+      if (program->streams[s].multiplier)
+         next = ((next + 1u) & ~1u) + 2u;
+      else if (program->streams[s].shift)
+         next += 1u;
+   }
+   return next;
+}
+
 static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
                           const struct pvr_pds_render_stream *streams, uint32_t num_streams,
                           int has_slc_mcu_cache_controls, uint32_t vertex_id_reg,
@@ -63,7 +82,7 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
                           uint32_t *code_out, struct pvr_pds_render_vertex_info *info,
                           uint32_t fixed_vtxin_dw)
 {
-   uint32_t vtxin_dw = 0;
+   uint32_t vtxin_dw = 0, divided = 0;
    const struct pvr_device_info *dev_info = pvr_mesa_dev_info(has_slc_mcu_cache_controls);
    /* PVR_PDS_ID_BASE_TO_STREAMS: the base goes to the instance number even
     * when gl_InstanceID is not written (P3). Without it, exactly the old
@@ -94,6 +113,7 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
       if (st->per_instance != 0 && st->divisor > 1) {
          const uint32_t d = st->divisor;
 
+         divided++;
          if ((d & (d - 1)) == 0) {
             program.streams[s].shift = (uint32_t)__builtin_ctz(d);
          } else {
@@ -136,8 +156,15 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
       program.instance_id_modifier = instance_id_base;
    }
 
+   /* Mesa's temp allocator only asserts its block: count before it runs. */
+   if (vertex_temps(&program) > PVR_PDS_VERTEX_MAX_TEMPS)
+      return -1;
    pvr_pds_vertex_shader(&program, NULL, PDS_GENERATE_SIZES, dev_info);
    if (program.data_size + program.code_size > PDS_STAGING_DW)
+      return -1;
+   /* The caller's buffers (pvr_pds_render_gen.h): never written past. */
+   if (program.data_size > PVR_PDS_VERTEX_MAX_DATA_DW ||
+       program.code_size > PVR_PDS_VERTEX_MAX_CODE_DW + PVR_PDS_VERTEX_DIVIDE_CODE_DW * divided)
       return -1;
    memset(staging, 0, sizeof(staging));
    pvr_pds_vertex_shader(&program, staging, PDS_GENERATE_DATA_SEGMENT, dev_info);
