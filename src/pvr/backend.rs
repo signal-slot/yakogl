@@ -966,6 +966,24 @@ pub fn pbe_reg_words(
     downscale: bool,
     twiddle: bool,
 ) -> [u64; 2] {
+    pbe_reg_words_gamma(fmt, gles_surf_is_srgb(fmt), alpha_one, tw, th, pitch, downscale, twiddle)
+}
+
+/// [`pbe_reg_words`] with REG_WORD0 `gamma` given rather than taken from the
+/// format: an SRGB8_ALPHA8 attachment beside one of another format is drawn
+/// as an RGBA8 one ([`srgb_beside_other_as_rgba8`]) whose PBE state still
+/// encodes on store, per render target as Mesa's pvr_arch_pbe_pack_state
+/// sets `reg.gamma` per attachment (pvr_arch_job_common.c:163-171).
+pub fn pbe_reg_words_gamma(
+    fmt: u8,
+    gamma: bool,
+    alpha_one: bool,
+    tw: u32,
+    th: u32,
+    pitch: u32,
+    downscale: bool,
+    twiddle: bool,
+) -> [u64; 2] {
     let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one);
     let w0 = csb_pack!(
         ROGUE_PBESTATE_REG_WORD0_pack,
@@ -983,7 +1001,7 @@ pub fn pbe_reg_words(
             swiz_chan1,
             swiz_chan2,
             swiz_chan3,
-            gamma: gles_surf_is_srgb(fmt),
+            gamma,
             ..Default::default()
         }
     );
@@ -1817,6 +1835,14 @@ struct Backend {
     /// reset as `mip_clip` is.
     mip_pitch: [u32; PVR_BACKEND_MAX_RT as usize],
     frame_pitch: [u32; PVR_BACKEND_MAX_RT as usize],
+    /// The attachment slots (bit i: slot i) of the draw being recorded, and
+    /// of the open frame, that are SRGB8_ALPHA8 attachments beside one of
+    /// another format, drawn as RGBA8 ([`srgb_beside_other_as_rgba8`]): their
+    /// PBE state sets `gamma` ([`pbe_reg_words_gamma`]) and their frame load
+    /// decodes. Set per draw in `pvr_backend_draw`, taken by `frame_begin_with`
+    /// and compared by `frame_ends_here`.
+    draw_gamma: u8,
+    frame_gamma: u8,
     /// fbload FS variants that pack what they read for a float target
     /// (index = gles_surf_rt_class - 1: RGBA16F, R16F, R32F).
     fbload_fs_rt: [OsalGpuMem; 3],
@@ -4650,6 +4676,38 @@ fn clear_program(b: &Backend, fl: &FbLoad, dwords: u32) -> (u64, *const ShcShade
     }
 }
 
+/// A draw into SRGB8_ALPHA8 attachments beside attachments of another
+/// format as this back end draws it: every attachment of the list as the
+/// non-sRGB ones are (the program writes each output in draw buffer 0's
+/// class, one output register for an RGBA8 one), the sRGB attachments as
+/// RGBA8 whose PBE state sets `gamma`: the PBE encodes their red, green and
+/// blue on store, per render target as Mesa sets `reg.gamma` per attachment
+/// (pvr_arch_job_common.c:163-171), from the linear bytes the program wrote
+/// (an 8-per-channel source, where Mesa's halves would take two registers and
+/// a program of the sRGB class). Their frame load decodes (the texture's
+/// TPU gamma) to the linear bytes the RGBA8 load program packs, and their
+/// clear colour is the linear one the RGBA8 attachments take: the PBE
+/// encodes it with the rest. The second value is the slots (bit i: slot i,
+/// 0 the frame's own `target_format`) that store with gamma.
+fn srgb_beside_other_as_rgba8(d: &GlesDraw) -> (GlesDraw, u8) {
+    let mut e = *d;
+    let mut gamma = 0u8;
+    let n = (e.num_targets as usize).min(e.targets.len());
+    for (i, t) in e.targets[..n].iter_mut().enumerate() {
+        if gles_surf_is_srgb(t.format) {
+            t.format = GLES_SURF_RGBA8888;
+            if t.gpu != 0 {
+                gamma |= 1 << i;
+            }
+        }
+    }
+    if gles_surf_is_srgb(e.target_format) {
+        e.target_format = GLES_SURF_RGBA8888;
+        gamma |= 1;
+    }
+    (e, gamma)
+}
+
 /// A draw into several sRGB attachments as this back end draws it: into
 /// RGBA8 attachments whose bytes are already encoded. The fragment shader
 /// encodes its outputs ([`shaderc::SHC_BLEND_KEY_SRGB_ENCODED`]: one output
@@ -4757,7 +4815,14 @@ fn record_frame_quad(
     ld.textures[0].wrap_s = GLES_WRAP_CLAMP_TO_EDGE;
     ld.textures[0].wrap_t = GLES_WRAP_CLAMP_TO_EDGE;
     ld.textures[0].mip_levels = 1;
-    ld.textures[0].format = if int { int_load_texfmt(d.target_format) } else { gles_surf_texfmt(d.target_format) };
+    ld.textures[0].format = if int {
+        int_load_texfmt(d.target_format)
+    } else if b.frame_gamma & 1 != 0 {
+        /* an sRGB attachment 0 drawn as RGBA8 ([`srgb_beside_other_as_rgba8`]) */
+        GLES_TEXFMT_SRGB8_A8
+    } else {
+        gles_surf_texfmt(d.target_format)
+    };
     ld.textures[0].bgra = if d.target_format == GLES_SURF_XRGB8888 { 1 } else { 0 };
     /* A multisampled frame going on from the kick before: the samples that
      * kick stored, not the resolved colour -- the store bound as the target's
@@ -4908,7 +4973,15 @@ fn record_attachment_loads(p: &mut Pvr) -> i32 {
         ld.textures[0].height = t.h;
         /* the emit's pitch for an attachment past the first */
         ld.textures[0].stride_texels = t.w.wrapping_add(1) & !1;
-        ld.textures[0].format = if int { int_load_texfmt(t.format) } else { gles_surf_texfmt(t.format) };
+        ld.textures[0].format = if int {
+            int_load_texfmt(t.format)
+        } else if b.frame_gamma & (1 << i) != 0 {
+            /* stored by the PBE's gamma: decoded by the TPU's, as the
+             * RGBA8 load program packs linear bytes ([`srgb_beside_other_as_rgba8`]) */
+            GLES_TEXFMT_SRGB8_A8
+        } else {
+            gles_surf_texfmt(t.format)
+        };
         ld.textures[0].bgra = if t.format == GLES_SURF_XRGB8888 { 1 } else { 0 };
         ld.color_write = true;
         ld.depth_test = false;
@@ -6584,6 +6657,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.mip_pitch = [0; PVR_BACKEND_MAX_RT as usize];
     b.target_pitch = crate::backend::draw_pitch(d);
     b.target_format = d.target_format;
+    b.frame_gamma = b.draw_gamma;
     b.target_alpha_bits = d.target_alpha_bits;
     b.target_flip_y = d.flip_y;
     b.num_targets = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(b.eot_pairs as u8);
@@ -7254,6 +7328,10 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
             let (x, y) = (&b.targets[i], &d.targets[i]);
             (x.gpu, x.w, x.h, x.format) != (y.gpu, y.w, y.h, y.format)
         })
+        /* an sRGB attachment drawn as RGBA8 beside another format stores
+         * with the PBE's gamma ([`srgb_beside_other_as_rgba8`]): a frame
+         * of other slots is another frame */
+        || b.frame_gamma != b.draw_gamma
         || b.frame_ds_persist != d.ds_persist
         || (d.ds_persist && b.frame_ds_id != d.ds_id)
         /* apart, a respecified object (same names, a new stamp) is another
@@ -7486,19 +7564,44 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
         glog_once!("{}", REFUSE_RGB10A2_MRT);
         return -util::ENOTSUP;
     }
-    /* Several sRGB attachments are drawn as RGBA8 ones whose bytes are
-     * already encoded ([`srgb_targets_as_rgba8`]): an sRGB attachment beside
-     * one of another format is refused by name (the variant is keyed for one
-     * class), and so is a program that does not encode -- the one-target
+    /* An sRGB attachment beside one of another format is drawn as RGBA8
+     * whose PBE state encodes it ([`srgb_beside_other_as_rgba8`]). Several
+     * sRGB attachments alone are drawn as RGBA8 ones whose bytes are
+     * already encoded ([`srgb_targets_as_rgba8`]): a program that does not
+     * encode is refused by name there -- the one-target
      * sRGB variant of a blend or a colour mask writes halves, which the RGBA8
      * attachments would take for bytes. The back end's own programs (the
      * frame's load and clear) are RGBA8's then. */
     let several_srgb;
-    let d = if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_srgb(t.format)) {
-        if d.targets[..ntargets].iter().any(|t| t.gpu != 0 && !gles_surf_is_srgb(t.format)) {
-            glog_once!("yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside one of another format");
+    p.b.draw_gamma = 0;
+    let d = if ntargets > 1
+        && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_srgb(t.format))
+        && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && !gles_surf_is_srgb(t.format))
+    {
+        /* An sRGB attachment beside one of another format: drawn as RGBA8
+         * whose PBE state encodes on store, per render target
+         * ([`srgb_beside_other_as_rgba8`]). The program writes every output
+         * as the class of draw buffer 0; one of the sRGB class (the
+         * encoding variant, which encodes every output, or the one-target
+         * sRGB key's halves) would store the other attachments wrong. */
+        let key = if d.index_count != 0 && !d.clear_quad {
+            // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
+            unsafe { d.fs.as_ref() }.map(|fs| fs.blend_key)
+        } else {
+            None
+        };
+        if key.is_some_and(|k| shaderc::shc_blend_key_class(k) == shaderc::SHC_RT_SRGB) {
+            glog_once!(
+                "yakogl/pvr: draw refused: an SRGB8_ALPHA8 draw buffer 0 beside an attachment of another format \
+                 (its program encodes every output)"
+            );
             return -util::ENOTSUP;
         }
+        let (e, gamma) = srgb_beside_other_as_rgba8(d);
+        p.b.draw_gamma = gamma;
+        several_srgb = e;
+        &several_srgb
+    } else if ntargets > 1 && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_srgb(t.format)) {
         /* the program of a draw that runs one (a clear runs the back end's) */
         let key = if d.index_count != 0 && !d.clear_quad {
             // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
@@ -10851,7 +10954,8 @@ fn flush(p: &mut Pvr) -> i32 {
         let [w0, w1] = if slot == 0 && b.target_gpu == 0 {
             [0, 0]
         } else {
-            pbe_reg_words(fmt, rt == 0 && b.target_alpha_bits == 0, tw, th, pitch, b.samples > 1, twiddle)
+            let gamma = gles_surf_is_srgb(fmt) || b.frame_gamma & (1 << slot) != 0;
+            pbe_reg_words_gamma(fmt, gamma, rt == 0 && b.target_alpha_bits == 0, tw, th, pitch, b.samples > 1, twiddle)
         };
         b.kick.frag.pbe_word[rt][0] = w0;
         b.kick.frag.pbe_word[rt][1] = w1;
