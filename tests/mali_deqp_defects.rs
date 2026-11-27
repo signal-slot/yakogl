@@ -48,13 +48,13 @@ const LOG: usize = 4096;
 const GL_FLOAT: u16 = 0x1406;
 
 #[test]
-#[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (Encode)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn defects_encode_max_cond_float() {
     assert_matches_bound("deqp_defects_encode_max_cond_float");
 }
 
 #[test]
-#[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (Encode)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn defects_encode_reduced() {
     assert_matches_bound("deqp_defects_encode_reduced");
 }
@@ -73,12 +73,16 @@ fn defects_lanecycle_reduced() {
     mali_ref::assert_matches("deqp_defects_lanecycle_reduced");
 }
 
-const ENCODE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (Encode)";
+/// The `encode` pairs compiled without their bindings: the vertex shader's
+/// code waits for the link's locations (#11388; it was `Defect(Encode)`).
+const ENCODE: &str = "a vertex shader whose active attributes take more than 16 locations, without the link's \
+                      locations (glBindAttribLocation), is not lowered yet";
 const LANECYCLE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)";
 
 /// Every ignored reference and the refusal its program's compile gives now
-/// (the `encode` ones: the vertex shader's glCompileShader, no bindings
-/// yet; the `lanecycle` ones: the fragment shader's).
+/// (the `encode` ones: the program's vertex shader with no bindings; with
+/// their bindings they compile and differ, see their tests; the
+/// `lanecycle` ones: the fragment shader's).
 const PINNED: &[(&str, &str)] = &[
     ("deqp_defects_encode_max_cond_float", ENCODE),
     ("deqp_defects_encode_reduced", ENCODE),

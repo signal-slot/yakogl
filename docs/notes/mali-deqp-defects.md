@@ -77,6 +77,10 @@ differ.
 
 ## 2. Defect `encode`: an attribute record past `LD_ATTR_IMM`'s 16
 
+Fixed by #11388 (options A and B of the table in this note):
+`docs/notes/mali-attribute-records.md`, "Two attributes bound to one
+location". The text below is the state before it.
+
 ### 2.1 Shape
 
 The shaders come from `generateVertexShaderTemplate` in

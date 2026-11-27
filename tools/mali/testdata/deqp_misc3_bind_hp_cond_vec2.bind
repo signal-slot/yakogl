@@ -1,0 +1,3 @@
+# glBindAttribLocation of the draw, as dEQP's cond_vec2 binds (glsAttributeLocationTests.cpp)
+a_0 1
+a_1 1
