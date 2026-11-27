@@ -1,0 +1,49 @@
+run1 = tools/cts/log/2026-11-pr-regress/glmark2-off.log
+run2 = tools/cts/log/2026-11-pr-regress/glmark2-on.log
+
+== gl_test cases
+(no gl_test case lines)
+cases differing: 0 of 0
+
+== resets
+run1: GPU recoveries 0 (HWR counter 0), reset lines 0, render: stopped 0
+run2: GPU recoveries 0 (HWR counter 0), reset lines 0, render: stopped 0
+
+== glmark2
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: run1=61 run2=61
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: run1=85 run2=85
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: run1=69 run2=69
+[build] use-vbo=false:I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000: run1=168 run2=168
+[build] use-vbo=true:I: eglSwapBuffers: the display held every window buffer; the swap waited for one to be free: run1=903 run2=887  DIFFERS
+[bump] bump-render=height: run1=710 run2=703  DIFFERS
+[bump] bump-render=high-poly: run1=335 run2=336  DIFFERS
+[bump] bump-render=normals: run1=858 run2=848  DIFFERS
+[conditionals] fragment-steps=0:vertex-steps=0: run1=1097 run2=1092  DIFFERS
+[conditionals] fragment-steps=0:vertex-steps=5: run1=1090 run2=1077  DIFFERS
+[conditionals] fragment-steps=5:vertex-steps=0: run1=544 run2=541  DIFFERS
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4:I: render: hc dwords: 00000000 0257031f 00000088 00000000 00000088 00000000 00000000 00002000 00025031 0000008c 00000000 00380000 00280000 00000000 00000000 00000000: run1=47 run2=47
+[desktop] effect=shadow:windows=4: run1=148 run2=147  DIFFERS
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: run1=173 run2=172  DIFFERS
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: run1=112 run2=112
+[function] fragment-complexity=low:fragment-steps=5: run1=796 run2=792  DIFFERS
+[function] fragment-complexity=medium:fragment-steps=5: run1=555 run2=552  DIFFERS
+[ideas] speed=duration: run1=170 run2=170
+[jellyfish] <default>: run1=159 run2=159
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: run1=731 run2=724  DIFFERS
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: run1=732 run2=723  DIFFERS
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: run1=220 run2=219  DIFFERS
+[pulsar] light=false:quads=5:texture=false: run1=975 run2=965  DIFFERS
+[refract] <default>: run1=29 run2=29
+[shading] shading=blinn-phong-inf:I: yakogl: program 2 has no uniform 'ModelViewMatrix': run1=621 run2=616  DIFFERS
+[shading] shading=cel: run1=417 run2=415  DIFFERS
+[shading] shading=gouraud:I: yakogl: program 2 has no uniform 'ModelViewMatrix': run1=766 run2=756  DIFFERS
+[shading] shading=phong: run1=490 run2=485  DIFFERS
+[shadow] <default>:I: render: hc dwords: 00000000 04af063f 00000088 00000000 00000088 00000000 00000000 00008000 0004b063 00000208 00000000 00680000 00500000 00000000 00000000 00000000: run1=95 run2=95
+[terrain] <default>:W: render: fence 109533 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=frame set last_posted=109536: run1=missing run2=13  DIFFERS
+[terrain] <default>:W: render: fence 110427 (frame fence) not moved at 20 ms, re-posted 1 kick(s) (1 so far) site=frame set last_posted=110430: run1=13 run2=missing  DIFFERS
+[texture] texture-filter=linear: run1=1035 run2=1027  DIFFERS
+[texture] texture-filter=mipmap: run1=920 run2=915  DIFFERS
+[texture] texture-filter=nearest: run1=1050 run2=1043  DIFFERS
+glmark2 score: run1=489 run2=485  DIFFERS
+glmark2 differences: 25
+pr-regress: DIFFERENT (0 cases, 0 resets)
