@@ -256,7 +256,7 @@ path_scopes() {
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-uboot.sh | tools/board_stm32mp2_uboot_selftest.sh | tools/board_rfc2217_selftest.sh | tools/uart_rfc2217_selftest.sh | tools/uart_rfc2217.py | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }
@@ -4358,6 +4358,51 @@ mp2_qemu_row() {
 }
 scope tools
 step "tools   uboot-mp2 qemu: DK one-shot scripts in U-Boot v2023.10 (skip is a gap)" mp2_qemu_row
+# tools/board-stm32mp2-uboot.sh, the DK's typed U-Boot one-shot runner
+# (uboot-mmc and uboot-tftp, docs/notes/stm32mp257f-dk-uboot-boot.md), without
+# a board: every verb under --dry-run with ssh, scp, curl, stty, flock and sudo
+# stubbed (the stored environment read with dd of the u-boot-env partition
+# through tools/uboot_env.py, as on the board), the refusals, the text of the
+# typed lines, and runs on a fake board and a fake console: a run that comes
+# back (its record through tools/mp2_uboot_record_check.py), the TFTP route,
+# a console refusal and a reboot that did not happen, a board that never comes
+# back, runs cut off by TERM and by SIGKILL, the watchdog route, and the live
+# refusals (a bad CRC, a pending one-shot, /boot on the eMMC, a dead TFTP
+# server). 129 checks, pinned in the script. Wall clock about 2 min 40 s: the
+# hang case sleeps 30 s and the lock and reboot polls wait for real.
+scope tools
+step "tools   board-stm32mp2-uboot.sh dry-run matrix, fake-board runs and refusals" tools/board_stm32mp2_uboot_selftest.sh
+# tools/mp2_uboot_record_check.py checks what a DK U-Boot run left behind (the
+# verdict line, the console phases, the environment records before and after,
+# the /boot records, the dd'd u-boot-env copies, the redaction) and
+# tools/mp2_uboot_note_check.py the note's "## Board run" section the same
+# way; each --self-test runs its own checks on synthetic input (57; 19 cases).
+scope tools
+step "tools   mp2_uboot_record_check.py --self-test (a DK U-Boot run record's evidence)" python3 -I tools/mp2_uboot_record_check.py --self-test
+scope tools
+step "tools   mp2_uboot_note_check.py --self-test (the note's Board run section)" python3 -I tools/mp2_uboot_note_check.py --self-test
+# tools/probes/stm32mp257f_dk/env_read, the read-only collector of the DK's
+# U-Boot environment (dd of the u-boot-env partition read with
+# tools/uboot_env.py; the board's fw_printenv is broken, #1281) and /boot,
+# without a board: a fake ssh answers collect.sh from a fixture and logs every
+# command it is sent (none may write), and summarize.py runs on identical,
+# changed and corrupt-CRC cases, on the board's real numbering and on a
+# renumbered card. 66 ok, about 5 s. Its row is of the samples scope, like
+# every path under tools/probes/.
+scope samples
+step "tools   env_read selftest.sh: the DK's environment and /boot collector (fake board)" bash tools/probes/stm32mp257f_dk/env_read/selftest.sh
+# tools/cts/mp2-p9-diff.py diffs a DK dEQP-GLES2 case list against the i.MX8MP
+# baseline (P9, docs/notes/stm32mp257f-dk-p9.md); its selftest runs it on
+# synthetic baselines, results.tsv files and UART logs: every class, both
+# input forms, the exit codes, and the real i.MX8MP baseline against itself.
+# 28 ok, under 1 s.
+scope tools
+step "tools   cts mp2_p9_diff_selftest.sh (the DK dEQP-GLES2 diff against the i.MX8MP baseline)" bash tools/cts/mp2_p9_diff_selftest.sh
+# tools/cts/mp2-gltest-diff.py diffs a DK gl_test log against the i.MX8MP
+# baseline; its selftest runs it on synthetic logs: every class, both input
+# forms, the exit codes, and the real baseline files. 30 ok, under 1 s.
+scope tools
+step "tools   cts mp2_gltest_diff_selftest.sh (the DK gl_test diff against the i.MX8MP baseline)" tools/cts/mp2_gltest_diff_selftest.sh
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
 # board_lock.sh), without a board: a second taker refuses at once and names
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0

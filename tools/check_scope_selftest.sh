@@ -147,6 +147,7 @@ want driver/soc/brcm/bcm2710/soc_irq.c drivers
 want driver/patches/zephyr-rpi_zero_2w/0001-bcm2710-cpus-no-cpu-release-addr.patch drivers
 want driver/UPSTREAM.zephyr-rpi_zero_2w drivers
 want tools/probes/stm32mp257f_dk/mp2_hello/src/main.c samples
+want tools/probes/stm32mp257f_dk/env_read/selftest.sh samples
 want tools/vivante/gate_st.sh vivante
 want tools/vivante/gate_st_selftest.sh vivante
 want tools/host-replay/common.sh samples
@@ -158,6 +159,8 @@ want tools/check_selftests_selftest.sh tools
 want tools/board.sh tools
 want tools/board-stm32mp2.sh tools
 want tools/board_stm32mp2_selftest.sh tools
+want tools/board-stm32mp2-uboot.sh tools
+want tools/board_stm32mp2_uboot_selftest.sh tools
 want tools/board-stm32mp2-standalone.sh tools
 want tools/board_stm32mp2_standalone_selftest.sh tools
 want tools/uboot_env.py tools
@@ -166,6 +169,10 @@ want tools/uboot_env_mp2_selftest.py tools
 want driver/tools/uboot-mp2/selftest.sh tools
 want driver/tools/uboot-mp2/oneshot_selftest.sh tools
 want driver/tools/uboot-mp2/qemu/run.sh tools
+want tools/mp2_uboot_record_check.py tools
+want tools/mp2_uboot_note_check.py tools
+want tools/cts/mp2_p9_diff_selftest.sh tools
+want tools/cts/mp2_gltest_diff_selftest.sh tools
 want tools/env/build-gate-image.sh tools
 want tools/hostharness/glmark2/run.sh tools
 want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
@@ -301,6 +308,22 @@ expect "stm32mp257f_dk without ZEPHYR_WS: the zephyr images gap" "^gap   zephyr 
 checks=$((checks + 1))
 ! printf '%s\n' "$out" | grep -qE '^(plan|ok) +zephyr  stm32mp257f_dk' ||
   { echo "FAIL stm32mp257f_dk without ZEPHYR_WS: an image row is planned"; fails=$((fails + 1)); }
+# the DK's U-Boot one-shot host tools: a change of each plans the row that
+# runs its self-test, and only that scope's rows
+out=$(plan tools/board-stm32mp2-uboot.sh)
+expect "board-stm32mp2-uboot.sh: its self-test row" '^plan  tools   board-stm32mp2-uboot\.sh dry-run matrix' "$out"
+expect "board-stm32mp2-uboot.sh: the tools scope only" '^check.sh: .*\(--changed HEAD, scopes: tools \)' "$out"
+out=$(plan tools/mp2_uboot_record_check.py)
+expect "mp2_uboot_record_check.py: its self-test row" '^plan  tools   mp2_uboot_record_check\.py --self-test ' "$out"
+out=$(plan tools/mp2_uboot_note_check.py)
+expect "mp2_uboot_note_check.py: its self-test row" '^plan  tools   mp2_uboot_note_check\.py --self-test ' "$out"
+out=$(plan tools/cts/mp2_p9_diff_selftest.sh)
+expect "mp2_p9_diff_selftest.sh: its row" '^plan  tools   cts mp2_p9_diff_selftest\.sh ' "$out"
+out=$(plan tools/cts/mp2-gltest-diff.py)
+expect "mp2-gltest-diff.py: its self-test row" '^plan  tools   cts mp2_gltest_diff_selftest\.sh ' "$out"
+out=$(plan tools/probes/stm32mp257f_dk/env_read/selftest.sh)
+expect "env_read selftest.sh: its row" '^plan  tools   env_read selftest\.sh: ' "$out"
+expect "env_read selftest.sh: the samples scope only" '^check.sh: .*\(--changed HEAD, scopes: samples \)' "$out"
 # its GPU row's host check: the gate_st.sh self-test (no Mesa tree), planned
 # on a change of the script; the script's hwdb and golden checks need
 # MESA_ETNA_TREE, which no runner's layout has, so they are no rows
