@@ -33,7 +33,6 @@ CHUNK_COLS = "row label cases status seconds kmsg resets ssh_after boot_same exi
 # The board profiles of tools/mali/panthor/board-profile.sh: name, and what runs.
 BOARDS = {
     "nanopc-t6": ("NanoPC-T6", "Mali-G610 over panthor, the board's own Armbian"),
-    "verdin-imx95": ("Verdin iMX95", "Mali-G310 over panthor, the board's own Linux"),
     # A Zephyr image per row, loaded and started by hand from the module's
     # U-Boot; no kernel, no panthor, no kmsg, no ssh during a row.
     "verdin-imx95-zephyr": ("Verdin iMX95", "Mali-G310 under Zephyr, started from U-Boot"),
@@ -121,7 +120,9 @@ def build(d):
     refusals = None
     if os.path.exists(os.path.join(d, "refusals.tsv")):
         refusals = tsv(read(os.path.join(d, "refusals.tsv")), ["case", "refusal"])
-    zephyr = meta.get("board") == ZEPHYR
+    # Every iMX95 slice is a Zephyr U-Boot slice: board=verdin-imx95,
+    # verdin_imx95 or verdin-imx95-zephyr alike.
+    zephyr = meta.get("board", "").replace("_", "-") in ("verdin-imx95", ZEPHYR)
     rows = None
     if zephyr and os.path.exists(os.path.join(d, "rows.tsv")):
         rows = rows_tsv(read(os.path.join(d, "rows.tsv")))
@@ -137,7 +138,7 @@ def build(d):
     commit = g("commit")
     # The board: a slice of a board other than the NanoPC-T6 names it in a
     # board= line (mali-deqp-run.sh, the board profile's MALI_BOARD).
-    board = BOARDS.get(meta.get("board", "nanopc-t6"), (meta.get("board"), "Mali over panthor, the board's own Linux"))
+    board = BOARDS.get(ZEPHYR if zephyr else meta.get("board", "nanopc-t6"), (meta.get("board"), "Mali over panthor, the board's own Linux"))
     st = collections.Counter(r["status"] for r in results)
     lost = collections.Counter(r["detail"] or "-" for r in results if r["status"] == "Lost")
     ch = collections.Counter(c["status"] for c in chunks)
@@ -222,9 +223,13 @@ def build(d):
             "## How the slice was produced",
             "",
             "From the images of commit `%s`, one per `# image` row of `%s`, built with "
-            "`tools/cts/imx95-deqp-images.sh`. Each image was staged on the module's "
-            "root file system, loaded at the module's U-Boot prompt over the serial "
-            "console and entered there; the boot partitions were not written. "
+            "`tools/cts/imx95-deqp-images.sh`. Each image was staged as a file on the "
+            "module's eMMC root file system (or its FAT boot-files partition), loaded "
+            "at the module's own U-Boot prompt (`ext4load` or `fatload` to `0xd0000000`, "
+            "md5 compared with the host's) and entered with `dcache off; icache flush; "
+            "go 0xd0000000`; the rows were read on the UART_3 console, and the board "
+            "came back by itself (PSCI reset or the watchdog). The boot partitions and "
+            "the boot command were not written (`tools/cts/README.md` section 5). "
             "The slice holds no host name, address, user name, MAC address or serial; "
             "the raw console captures stay out of git." % (commit[:8], g("tree")),
         ]

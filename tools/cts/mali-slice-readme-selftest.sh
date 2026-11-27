@@ -64,19 +64,20 @@ for what in "ip:results.tsv:dEQP-GLES2.x.y\tFail\tconnect to $ip" \
     [ -e "$work/r/README.md" ] && bad "$tag: --write wrote a README" || ok "$tag: --write wrote nothing"
 done
 
-# A slice of another board (a board= line in meta.txt, mali-deqp-run.sh on
-# MALI_BOARD=verdin-imx95) names that board and the command that made it;
-# everything else is the clean slice's README.
-rm -rf "$work/v"; mkdir -p "$work/v"; cp -r "$DATA/clean" "$work/v/clean"
-sed -i 's/^rows=.*/&\nboard=verdin-imx95/' "$work/v/clean/meta.txt"
-got=$(python3 -I "$TOOL" "$work/v/clean" 2>&1)
-if grep -q '^# Verdin iMX95 dEQP-GLES2 ' <<<"$got" && grep -q 'of the Verdin iMX95 (Mali-G310 over panthor' <<<"$got" &&
-   grep -q '^MALI_BOARD=verdin-imx95 BOARD_HOST=<board> tools/cts/mali-deqp-run.sh' <<<"$got" &&
-   ! grep -q 'NanoPC-T6\|Mali-G610\|nanopc-t6' <<<"$got"; then ok "board=verdin-imx95: the README names the Verdin iMX95 only"
-else bad "board=verdin-imx95: the README does not name the board"; fi
-want=$(sed -e 's/NanoPC-T6/Verdin iMX95/g' -e 's/Mali-G610 over panthor, the board.s own Armbian/Mali-G310 over panthor, the board'"'"'s own Linux/' \
-  -e 's/^BOARD_HOST=<board>/MALI_BOARD=verdin-imx95 BOARD_HOST=<board>/' -e 's/target:nanopc-t6/target:verdin-imx95/' "$DATA/clean.expected")
-if [ "$got" = "$want" ]; then ok "board=verdin-imx95: no other line differs from clean.expected"; else bad "board=verdin-imx95: other lines differ"; fi
+# A slice of the Verdin iMX95 is a Zephyr U-Boot slice whichever way its
+# meta.txt spells the board: verdin-imx95, verdin_imx95 (the committed slices)
+# or verdin-imx95-zephyr. It gets the same README, and never the panthor or
+# own-Linux wording of the T6's route.
+for spell in verdin-imx95 verdin_imx95; do
+    rm -rf "$work/v"; mkdir "$work/v"; cp -r "$DATA/zephyr" "$work/v/zephyr"
+    sed -i "s/^board=.*/board=$spell/" "$work/v/zephyr/meta.txt"
+    got=$(python3 -I "$TOOL" "$work/v/zephyr" 2>&1)
+    if [ "$got" = "$(cat "$DATA/zephyr.expected")" ] &&
+       grep -q 'ext4load. or .fatload.' <<<"$got" && grep -q 'dcache off; icache flush; go 0xd0000000' <<<"$got" &&
+       grep -q 'UART_3 console' <<<"$got" && ! grep -qi 'panthor\|own Linux\|NanoPC\|Mali-G610\|mali-deqp-run' <<<"$got"
+    then ok "board=$spell: the README names the Zephyr U-Boot route"
+    else bad "board=$spell: the README does not name the Zephyr U-Boot route"; fi
+done
 
 # The Zephyr Verdin iMX95 slice (board=verdin-imx95-zephyr, no kmsg/, rows.tsv)
 # never claims Linux, panthor, kmsg, ssh or a boot_id, and shows the rows.
