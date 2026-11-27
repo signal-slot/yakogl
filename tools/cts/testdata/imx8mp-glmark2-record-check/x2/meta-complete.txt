@@ -1,0 +1,8 @@
+commit=0123456789abcdef0123456789abcdef01234567
+image_sha256=abababababababababababababababababababababababababababababababab
+board=x2
+board_measured=Armadillo-X2 (i.MX 8M Plus, GC7000UL), stands in for the Verdin iMX8MP
+route=kvm-screenshot
+apps_stopped=app-one app-two
+undo=podman start app-one
+undo=podman start app-two

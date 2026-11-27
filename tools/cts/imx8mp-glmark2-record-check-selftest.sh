@@ -109,4 +109,15 @@ sfresh; mkdir "$R/photos"; mv "$R/gm05-texture-mipmap.png" "$R/photos/05-texture
 expect "--scene: photograph route passes" 0 'complete \(0 problems\)$' --scene 5 "$R"
 fresh; expect "default mode on a whole-session record still complete" 0 'complete \(0 problems\)$' "$R"
 sfresh; expect "default mode on a per-scene record still fails" 1 'incomplete' "$R"
+
+# X2 records (board=x2, board_measured=, KVM screenshots, undo= lines):
+# the meta.txt fixtures are under testdata/imx8mp-glmark2-record-check/x2/
+X2=$here/testdata/imx8mp-glmark2-record-check/x2
+x2meta() { fresh; sed "s/@IP@/192${D}0${D}2${D}7/" "$X2/$1" > "$R/meta.txt"; }
+x2meta meta-complete.txt; expect "x2: complete record (board=x2, board_measured, undo=) passes" 0 'complete \(0 problems\)$' "$R"
+x2meta meta-no-board-measured.txt; expect "x2: board=x2 without board_measured is refused" 1 '^x2: .*board_measured' "$R"
+x2meta meta-leaky-ip.txt; expect "x2: meta leaking an IP is refused" 1 'redaction: meta.txt:[0-9]+: ipv4' "$R"
+x2meta meta-complete.txt; echo "undo=ssh root${A}board podman start x" >> "$R/meta.txt"; expect "x2: a login in an undo= line is refused" 1 'redaction: meta.txt:[0-9]+: login' "$R"
+x2meta meta-complete.txt; echo "undo=cd /ho${M}me/x" >> "$R/meta.txt"; expect "x2: a home path in an undo= line is refused" 1 'redaction: meta.txt:[0-9]+: home-path' "$R"
+fresh; expect "non-x2 record needs no board_measured" 0 'complete \(0 problems\)$' "$R"
 exit $fail
