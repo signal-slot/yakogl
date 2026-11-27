@@ -427,12 +427,36 @@ static int pvr_fw_build_structs(void)
 #ifdef PVR_CTXSWITCH_OFF
 			 | YD_PVR_FWINIT_CTXSWITCH_OFF
 #endif
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+			 | YD_PVR_FWINIT_HWPERF
+#endif
 		,
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+		.hwperf_buf_size = CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF_BUF_KB * 1024u,
+#endif
 	};
 
 	yd_pvr_fwinit_build(&g_km, &cfg);
 	return 0;
 }
+
+#ifdef CONFIG_YAKOGL_DRV_GPU_PVR_HWPERF
+/* The firmware's HWPerf stream (gpu::pvr::hwperf, docs/notes/pvr-hwperf.md):
+ * the record lines of the packets written since the previous call. Call it
+ * once before a scene (that stretch is the boot and the warm-up) and once at
+ * its end. Returns the buffer's write index or -ENODEV. */
+static uint32_t g_hwperf_from;
+
+int pvr_fw_hwperf_drain(void)
+{
+	int w = yd_pvr_hwperf_drain(&g_km, g_hwperf_from, PVR_CORE_CLOCK_HZ);
+
+	if (w >= 0) {
+		g_hwperf_from = (uint32_t)w;
+	}
+	return w;
+}
+#endif
 
 /* ---- firmware start / stop (the DDK's rgxstartstop.c) ------------------ */
 /* Start the firmware: the DDK's RGXStart (reset, SLC, ECC safety events, the
