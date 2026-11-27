@@ -12083,8 +12083,10 @@ mod tests {
     /// compare per texel, bits 1 and 2 a NEAREST magnification and
     /// minification filter, bit 3 the nearest level, bit 4 two levels
     /// blended, bits 8..11 the last level. Bit 0 alone is LINEAR/LINEAR over
-    /// one level; NEAREST both ways and NEAREST_MIPMAP_NEAREST give 0 (the
-    /// filtered depth's compare is exact). A compare-less sampler gets the
+    /// one level; NEAREST both ways over a chain that is not walked gives 0
+    /// (the filtered depth's compare is exact), while NEAREST_MIPMAP_NEAREST
+    /// over a chain gives `1|2|4|8|5<<8` (the program picks the level, see
+    /// docs/notes/pvr-pcf.md). A compare-less sampler gets the
     /// word too: the shader's final select on bit 4 of word 0 wins.
     #[test]
     fn the_shadow_filter_is_sampler_meta_word_1() {
