@@ -26,6 +26,11 @@ Checks (one output line per problem, never the matched text of a redaction hit):
   sha8        the name's sha8 equals the first 8 digits of the meta.txt
               image_sha256=<64 hex> line tools/board.sh writes (mget: the last
               line wins); a record without that line is a problem
+  x2          meta.txt with board=x2 (or x2-console, x2-display) also says
+              board_measured=Armadillo-X2... (tools/board.sh writes it: the X2
+              stands in for the Verdin iMX8MP). The photographs may then be HDMI
+              KVM screenshots (route=...); they are PNGs like camera photos.
+              apps_stopped=/undo= lines are text files like the rest: redacted.
   redaction   no text file holds an IPv4 address (dotted quads, version strings
               included, as imx8mp-gles3-redact.py), /home/, /Users/, /dev/tty,
               a user@host, or the host name in $HOSTNAME (if set, 3+ characters)
@@ -296,6 +301,16 @@ def check(rd, scene=None):
         probs.append("sha8: no 64-hex image_sha256= line in meta.txt (tools/board.sh writes it)")
     elif sha8 and img[:8] != sha8:
         probs.append("sha8: the name's sha8 is not the first 8 digits of meta.txt image_sha256")
+
+    # x2: a record measured on the Armadillo-X2 says so (farm rule of 2026-11-27)
+    if mt in texts:
+        kv = {}
+        for line in texts[mt].splitlines():
+            k, _, v = line.partition("=")
+            kv[k.strip()] = v.strip()  # the last line wins, as board.sh mget
+        if re.fullmatch(r"x2(-console|-display)?", kv.get("board", "")) \
+                and "Armadillo-X2" not in kv.get("board_measured", ""):
+            probs.append("x2: meta.txt has board=%s but no board_measured=Armadillo-X2..." % kv["board"])
 
     # redaction (file, line and pattern name only)
     host = os.environ.get("HOSTNAME") or ""
