@@ -933,6 +933,17 @@ else
 	fails=$((fails + 1))
 fi
 
+# CNTFRQ_EL0 0 stop: the glue's refusal line is a FAIL naming it
+runs=$((runs + 1))
+out=$(T6_ROUTE=uboot bash "$V" t6_gpu "$D/t6_gpu-uboot-cntfrq-zero-stop.uart" 2>&1) && rc=0 || rc=$?
+if [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -q '^differs .*refused the CNTFRQ_EL0 0 time base' &&
+	[[ $(printf '%s\n' "$out" | tail -n 1) == 'VERDICT t6_gpu FAIL ('* ]]; then
+	echo "ok   t6_gpu-uboot-cntfrq-zero-stop: FAIL naming the CNTFRQ_EL0 0 refusal"
+else
+	echo "FAIL t6_gpu-uboot-cntfrq-zero-stop: rc $rc"
+	fails=$((fails + 1))
+fi
+
 if [ "$fails" -eq 0 ]; then
 	echo "t6-verdict-test: $runs ok"
 	exit 0
