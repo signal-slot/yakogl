@@ -1194,6 +1194,29 @@ __attribute__((constructor)) static void tiled_rt_init(void)
 	fprintf(stderr, "gm2: gc_tiled_rt on\n");
 }
 
+/* YAKOGL_GC_DEPTH_TPU=0|1 (run.sh builds with test-knobs): the Vivante knob
+ * gc_debug_set_depth_tpu is set in a constructor, before the first GL call.
+ * Weak, and refused when absent, as the tiled_rt knob above. */
+extern int gc_debug_set_depth_tpu(int mode) __attribute__((weak));
+
+__attribute__((constructor)) static void depth_tpu_init(void)
+{
+	const char *e = getenv("YAKOGL_GC_DEPTH_TPU");
+
+	if (!e || !*e)
+		return;
+	if (strcmp(e, "0") != 0 && strcmp(e, "1") != 0) {
+		fprintf(stderr, "gm2: YAKOGL_GC_DEPTH_TPU must be 0 or 1, not '%s'\n", e);
+		exit(3);
+	}
+	if (!gc_debug_set_depth_tpu) {
+		fprintf(stderr, "gm2: YAKOGL_GC_DEPTH_TPU=%s but the library has no gc_debug_set_depth_tpu\n", e);
+		exit(3);
+	}
+	gc_debug_set_depth_tpu(e[0] - '0');
+	fprintf(stderr, "gm2: gc_depth_tpu %s\n", e);
+}
+
 #if defined(GM2_MALI)
 #include <signal.h>
 

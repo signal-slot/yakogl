@@ -45,6 +45,13 @@
 #                    ("gm2: gc_tiled_rt on" in each log). vivante only; use
 #                    a work directory of its own (the feature set differs).
 #                    Unset: build and run are as without this line.
+#   YAKOGL_GC_DEPTH_TPU=0|1  sets the Vivante knob gc_debug_set_depth_tpu
+#                    (src/vivante/depth_sample.rs) before the first GL call:
+#                    0 the CPU depth resolve, 1 the texture unit samples the
+#                    D24S8 surface as D24X8 ("gm2: gc_depth_tpu N" in each
+#                    log). Built with test-knobs like YAKOGL_GC_TILED_RT;
+#                    vivante only; use a work directory of its own. Host
+#                    figures, not the board's. Unset: as without this line.
 #   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
 #                    one not set is taken from the Pi 4's glmark2 image,
 #                    driver/samples/zephyr/glmark2/boards/rpi_4b.conf (its
@@ -96,10 +103,14 @@ else
   esac
 fi
 TEST_KNOBS=OFF
-if [ "${YAKOGL_GC_TILED_RT:-0}" = 1 ]; then
+case "${YAKOGL_GC_DEPTH_TPU-}" in
+  "" | 0 | 1) ;;
+  *) die "YAKOGL_GC_DEPTH_TPU must be 0 or 1 (or unset), not '${YAKOGL_GC_DEPTH_TPU}'" ;;
+esac
+if [ "${YAKOGL_GC_TILED_RT:-0}" = 1 ] || [ -n "${YAKOGL_GC_DEPTH_TPU-}" ]; then
   TEST_KNOBS=ON
   for g in "${GPUS[@]}"; do
-    [ "$g" = vivante ] || die "YAKOGL_GC_TILED_RT=1 is the Vivante's knob: run it with the gpu vivante only"
+    [ "$g" = vivante ] || die "YAKOGL_GC_TILED_RT and YAKOGL_GC_DEPTH_TPU are the Vivante's knobs: run them with the gpu vivante only"
   done
 fi
 for g in "${GPUS[@]}"; do
