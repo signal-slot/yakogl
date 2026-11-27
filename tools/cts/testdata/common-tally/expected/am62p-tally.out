@@ -1,0 +1,12 @@
+rc 0
+common-tally: am62p, 1 rows from --row
+GM glmark2 rc=0 verdict=done result=record:GLMARK2 record=594b120e,0000002a,01210000,03200258; resets (console count) 0; image=0000000000000000 build=build,53e28ab5
+    glmark2 score 42; scenes ran 33, failed 0, unsupported 0; status 1 (pass)
+    glmark2 cell failed; scenes in the console 4, clean 4, with known-bad lines 0 (no glmark2-mem lines: a line goes to the next scene's result)
+    glmark2 pictures against column am62p: 4 scenes, match 2, mismatch 1, black 1
+    scene [build] use-vbo=false: picture match (crc16 8225, reference dfec)
+    scene [build] use-vbo=true: picture match (crc16 9e96, reference 332b)
+    scene [texture] texture-filter=nearest: picture mismatch (probe c 383838 vs 2b2d2d (off 13))
+    scene [texture] texture-filter=linear: picture black (all black, the reference is not)
+    run testdata/common-tally/am62p/20261127-1200-glmark2-53e28ab5
+common-tally: rows 1, with a run 1, without 0; verdict done 1, other 0

@@ -1,0 +1,8 @@
+board=pi4
+boot=tryboot
+name=glmark2
+probe=0
+image=zephyr.bin
+image_sha256=00000000000000000000000000000000000000000000000000000000000000pi4a
+image_build=build 53e28ab5
+back=1
