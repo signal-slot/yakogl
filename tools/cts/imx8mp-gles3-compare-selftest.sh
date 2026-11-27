@@ -131,6 +131,54 @@ done
 python3 -I "$cmp" "$tmp/board.txt" "$tmp/board.txt" --tsv >"$tmp/self.tsv"
 [ "$(cut -f1 "$tmp/self.tsv" | sort -u)" = host-predicted ] || fail "self compare"
 
+# Armadillo-X2 slices: merge.py --notpass of three-word records ('-' in begun and noresult) names the board;
+# compare.py shows the line under its heading and at the top of --tsv, and reads the rows as before.
+MP=$here/imx8mp-gles3-merge.py
+mkdir "$tmp/x2" "$tmp/x2/s"
+X=dEQP-GLES3.functional
+printf '%s\n' "$X.transform_feedback.*" "$X.state_query.*,$X.fbo.*" >"$tmp/x2/table.txt"
+printf '%s\n' "$X.transform_feedback.a" "$X.transform_feedback.b" "$X.state_query.b" "$X.fbo.blit.c" >"$tmp/x2/must.txt"
+c40=0123456789abcdef0123456789abcdef01234567
+{
+  printf '# synthetic\n\norigin/main %s\n' "$c40"
+  printf 'Run 2026-11-28, measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)\n'
+  printf 'board.sh x2 e00 rc=0 verdict=done boot=kexec-dev D boot_verdict=complete result=record:R resets=absent record=x,y,z back_after=40s\n'
+  printf 'board.sh x2 e01 rc=0 verdict=done boot=kexec-dev D boot_verdict=complete result=record:R resets=absent record=x,y,z back_after=40s\n'
+} >"$tmp/x2/s/README.md"
+printf '0\t%s\t-\t1\t1\t0\t0\t-\t%s\n' "$X.transform_feedback.*" "$X.transform_feedback.b" >"$tmp/x2/s/results.tsv"
+printf '1\t%s\t-\t1\t0\t1\t1\t-\t-\n' "$X.state_query.*,$X.fbo.*" >>"$tmp/x2/s/results.tsv"
+printf '%s\tNotSupported\n%s\tQualityWarning\n' "$X.state_query.b" "$X.fbo.blit.c" >"$tmp/x2/s/cases.tsv"
+mv "$tmp/x2/s" "$tmp/x2/2026-11-imx8mp-gles3-x2-01234567-rows01-02"
+python3 -I "$MP" --table "$tmp/x2/table.txt" --mustpass "$tmp/x2/must.txt" --notpass "$tmp/x2"/2026-11-*/ >"$tmp/x2.np" 2>"$tmp/x2.err" \
+  || fail "x2: merge.py --notpass failed: $(cat "$tmp/x2.err")"
+grep -qx '# measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)' "$tmp/x2.np" || fail "x2: merge does not name the board"
+grep -q 'e0:Fail' "$tmp/x2.np" || fail "x2: no Fail row"
+python3 -I "$cmp" "$tmp/x2.np" "$tmp/host.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" >"$tmp/x2.md" || fail "x2: compare"
+sed -n 1,3p "$tmp/x2.md" | grep -qx 'measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)' || fail "x2: markdown names no board"
+grep -q '^# i.MX8MP board vs HOST-ONLY GC7000UL$' "$tmp/x2.md" || fail "x2: heading"
+python3 -I "$cmp" "$tmp/x2.np" "$tmp/host.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --tsv >"$tmp/x2.tsv"
+[ "$(sed -n 1p "$tmp/x2.tsv")" = '# measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)' ] || fail "x2: tsv header"
+grep -qx "host-predicted${t}tf${t}e0${t}Fail${t}$X.transform_feedback.b" "$tmp/x2.tsv" && fail "x2: b is not on the host list, must be board-only"
+grep -qx "board-only${t}tf${t}e0${t}Fail${t}$X.transform_feedback.b" "$tmp/x2.tsv" || fail "x2: board-only Fail row"
+grep -qx "host-predicted${t}sq${t}e1${t}NotSupported${t}$X.state_query.b" "$tmp/x2.tsv" || fail "x2: NotSupported row"
+# the Verdin-only output has no board line and no Verdin column
+if grep -qi 'armadillo' "$tmp/o.md" "$tmp/o.tsv"; then fail "Verdin-only output names the X2"; fi
+if grep -q 'verdin' "$tmp/o.md"; then fail "Verdin column without --verdin"; fi
+# --verdin: the X2 board against the Verdin slices, a column used only then
+printf 'e1:Fail %s\ne1:Fail %s\n' "$X.transform_feedback.a" "$X.state_query.b" >"$tmp/verdin.np"
+python3 -I "$cmp" "$tmp/x2.np" "$tmp/host.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --verdin "$tmp/verdin.np" >"$tmp/xv.md" \
+  || fail "x2: --verdin"
+grep -q '^| cause | .* | verdin | x2-only | board total |$' "$tmp/xv.md" || fail "x2: --verdin columns"
+grep -q '^| tf | 0 | 0 | 1 | 2 | 1 | 1 | 1 |$' "$tmp/xv.md" || fail "x2: --verdin tf row ($(grep '^| tf' "$tmp/xv.md"))"
+grep -q '^| sq | 1 | 0 | 0 | 0 | 1 | 0 | 1 |$' "$tmp/xv.md" || fail "x2: --verdin sq row ($(grep '^| sq' "$tmp/xv.md"))"
+python3 -I "$cmp" "$tmp/x2.np" "$tmp/host.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --verdin "$tmp/verdin.np" --tsv >"$tmp/xv.tsv"
+grep -qx "board-only${t}tf${t}e0${t}Fail${t}$X.transform_feedback.b${t}x2-only" "$tmp/xv.tsv" || fail "x2: --verdin tsv x2-only"
+grep -qx "host-predicted${t}sq${t}e1${t}NotSupported${t}$X.state_query.b${t}verdin-other" "$tmp/xv.tsv" || fail "x2: --verdin tsv verdin-other"
+# a Verdin board list with --verdin: no board line, column present
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/host.tsv" --verdin "$tmp/verdin.np" >"$tmp/vv.md"
+grep -qi 'armadillo' "$tmp/vv.md" && fail "Verdin board with --verdin names the X2"
+grep -q '| verdin |' "$tmp/vv.md" || fail "Verdin board with --verdin: no column"
+
 # real files: a list against itself
 am="$root/docs/es3/am62p-gles3-notpass.tsv"
 n=$(grep -vc -e '^#' -e '^[[:space:]]*$' "$am")

@@ -5,7 +5,7 @@
 
   imx8mp-gles3-compare.py BOARD_NOTPASS HOST_NOTPASS
       [--causes tools/cts/imx8mp-gles3-causes.tsv] [--table tools/cts/imx8mp-gles3-tree.txt]
-      [--examples N] [--tsv] [--gpu NAME]
+      [--examples N] [--tsv] [--gpu NAME] [--verdin VERDIN_NOTPASS]
 
 Inputs: "<outcome>\\t<case>[\\t<message>]" (docs/es3/am62p-gles3-notpass.tsv), the case-first
 "[<gpu>\\t]<case>\\t<outcome>[\\t...]" (docs/es3/host-gc-gles3-5454be1b/host-gc-gles3-notpass.tsv;
@@ -26,6 +26,16 @@ the first table entry (counting non-comment lines from 0) with a matching glob, 
 --gpu NAME keeps, of a host list with a gpu column (docs/es3/host-gles3-notpass.tsv), only the rows
 whose first field is NAME (powervr, v3d, vivante); without it such a list warns on stderr and every
 gpu's row counts. Lists without a gpu column are unaffected.
+
+Board name: when BOARD_NOTPASS is `imx8mp-gles3-merge.py --notpass` output of Armadillo-X2 slices it carries the
+comment `# measured on the Armadillo-X2 (i.MX 8M Plus, GC7000UL)` (or `# boards: ...` when slices of both boards
+were merged); that line is shown under the markdown heading and as the first line of --tsv. A list without it
+is the Verdin's and prints as before. The X2's begun counts are '-' in its records; this tool reads only the
+not-pass rows, so they change nothing here.
+
+--verdin FILE (the earlier Verdin 9bc82915 slices' --notpass list, any layout above) adds, only when given, the
+columns 'verdin' (Verdin not-pass cases of the cause) and 'x2 not on verdin' (board cases the Verdin list lacks)
+to the markdown table, and a trailing 'verdin-same|verdin-other|x2-only' field to each --tsv row.
 
 Default output is markdown (summary table, examples per cause and verdict); --tsv prints
 "verdict\\tcause\\teNN\\toutcome\\tcase" per board case.
@@ -58,6 +68,19 @@ def parse_tab_row(path, n, line):
         return None
     sys.exit(f"{path}:{n}: neither '<outcome>\\t{CASE_PREFIX}...' nor "
              f"'[<gpu>\\t]{CASE_PREFIX}...\\t<outcome>' (outcome a dEQP status word): {line[:100]}")
+
+
+BOARD_RE = re.compile(r"^#\s*((?:measured on the|boards:).*Armadillo-X2.*)$")
+
+
+def board_line(path):
+    """The '# measured on the Armadillo-X2 ...' (or '# boards: ...') comment of a merge.py --notpass list, else None."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            m = BOARD_RE.match(raw.rstrip("\n"))
+            if m:
+                return m.group(1).strip()
+    return None
 
 
 def parse_notpass(path, gpu=None, warn=False):
@@ -143,6 +166,7 @@ def main():
     ap.add_argument("--table")
     ap.add_argument("--examples", type=int, default=3)
     ap.add_argument("--tsv", action="store_true")
+    ap.add_argument("--verdin", help="the Verdin slices' not-pass list: adds a per-cause Verdin column")
     ap.add_argument("--gpu", help="keep only host rows of this gpu when the host list has a gpu column")
     a = ap.parse_args()
 
@@ -150,6 +174,12 @@ def main():
     host = {}
     for out, case, _ in parse_notpass(a.host, a.gpu, warn=True):
         host.setdefault(case, out)
+    bl = board_line(a.board)
+    verdin = None
+    if a.verdin:
+        verdin = {}
+        for out, case, _ in parse_notpass(a.verdin):
+            verdin.setdefault(case, out)
     rules, titles = parse_causes(a.causes) if a.causes else ([], {})
     ents = parse_table(a.table) if a.table else None
 
@@ -165,19 +195,36 @@ def main():
         seen.add(case)
         counts[c][v] += 1
         ex[(c, v)].append(f"{case} ({out}, {es})")
-        lines.append(f"{v}\t{c}\t{es}\t{out}\t{case}")
+        line = f"{v}\t{c}\t{es}\t{out}\t{case}"
+        if verdin is not None:
+            vo = verdin.get(case)
+            vv = "x2-only" if vo is None else ("verdin-same" if verdict(out, vo) == "host-predicted" else "verdin-other")
+            line += "\t" + vv
+            if vv == "x2-only":
+                counts[c]["x2-only"] += 1
+        lines.append(line)
     for case in host:
         if case not in seen:
             counts[find_cause(rules, case)]["host-only"] += 1
 
+    if verdin is not None:
+        for case in verdin:
+            counts[find_cause(rules, case)]["verdin"] += 1
     if a.tsv:
+        if bl:
+            print("# " + bl)
         print("\n".join(lines))
         return
     order = list(titles) + ["unclassified"]
     order += sorted(c for c in counts if c not in order)
-    cols = VERDICTS + ("host-only",)
+    cols = VERDICTS + ("host-only",) + (("verdin", "x2-only") if verdin is not None else ())
     tot = collections.Counter()
     print("# i.MX8MP board vs HOST-ONLY GC7000UL\n")
+    if bl:
+        print(bl + "\n")
+    if verdin is not None:
+        print(f"Verdin not-pass cases: {len(verdin)} (columns 'verdin': per cause; 'x2-only': board cases the "
+              "Verdin list lacks)\n")
     print(f"Board not-pass cases: {len(board)}; host not-pass cases: {len(host)}\n")
     print("| cause | " + " | ".join(cols) + " | board total |")
     print("|---|" + "---:|" * (len(cols) + 1))
