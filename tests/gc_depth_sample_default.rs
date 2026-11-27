@@ -59,8 +59,10 @@ const MAX_D: f64 = 16_777_215.0;
 
 /// gpu address -> (cpu address, size) of every allocation of the run.
 static ALLOCS: Mutex<BTreeMap<u64, (usize, usize)>> = Mutex::new(BTreeMap::new());
-/// The floats of the last `depth_resolve` of the texture: (w, h, pitch, data).
-static RESOLVED: Mutex<Option<(u32, u32, u32, Vec<f32>)>> = Mutex::new(None);
+/// One recorded resolve: (w, h, pitch, data).
+type Resolved = (u32, u32, u32, Vec<f32>);
+/// The floats of the last `depth_resolve` of the texture.
+static RESOLVED: Mutex<Option<Resolved>> = Mutex::new(None);
 /// What the frames found wrong, and the texels they compared.
 static PROBLEMS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static COMPARED: Mutex<usize> = Mutex::new(0);
