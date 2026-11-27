@@ -34,6 +34,34 @@ awk -F'\t' 'NF != 5 { exit 1 }' "$w/out.tsv" || fail "tsv columns"
 awk -F'\t' '$2 == "e00" && $3 == 26 && $4 + 0 > 0 && $5 + 0 > 0 { ok = 1 } END { exit !ok }' "$w/out.tsv" || fail "e00 estimate and ratio"
 awk -F'\t' '$2 == "e02" && $3 == "none" && $5 == "-" { ok = 1 } END { exit !ok }' "$w/out.tsv" || fail "e02 none row"
 
+# Armadillo-X2 slice: board.sh x2 lines (back_after only, the Linux-back time after the kexec; an uptime on an x2
+# line is not subtracted), a page line, an entry without a time; the board and the time used are named
+x=$w/2026-11-imx8mp-gles3-x2-0123abcd-rows01-03
+mkdir "$x"
+cat > "$x/README.md" <<'EOT'
+board.sh x2 e00 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent record=594b0800,000002bb,00000000 back_after=41s (kexec-dev: a development run, never a row)
+board.sh x2 e00-p0 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP_FAILS resets=absent back_after=37s (kexec-dev)
+board.sh x2 e01 rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=record:DEQP resets=absent back_after=300s uptime=250s (kexec-dev)
+board.sh x2 e02 rc=5 verdict=lost boot=kexec-dev DEV boot_verdict=none result=none resets=absent
+EOT
+python3 -I "$t" "$x" > "$w/x.txt" 2> "$w/xerr.txt" || fail "x2 text run"
+[ ! -s "$w/xerr.txt" ] || fail "x2 warnings: $(cat "$w/xerr.txt")"
+grep -q '^# .*Armadillo-X2.*back_after.*after the kexec.*not U-Boot' "$w/x.txt" || fail "x2 board and time not named"
+grep -q '^e00 .* 41 ' "$w/x.txt" || fail "x2 e00 is back_after = 41"
+grep -q '^e01 .* 300 ' "$w/x.txt" || fail "x2 e01: uptime not subtracted"
+grep -q '^e02 .* none ' "$w/x.txt" || fail "x2 e02 has no time"
+if grep -q 'e00-' "$w/x.txt"; then fail "x2 page boot listed"; fi
+grep -q 'total  2 of 3 entries timed: measured 341 s' "$w/x.txt" || fail "x2 slice total"
+python3 -I "$t" --tsv "$x" > "$w/x.tsv" || fail "x2 tsv run"
+grep -q '^# .*Armadillo-X2' "$w/x.tsv" || fail "x2 tsv board comment"
+grep -v '^#' "$w/x.tsv" | awk -F'\t' 'NF != 5 { exit 1 }' || fail "x2 tsv columns"
+awk -F'\t' '$2 == "e00" && $3 == 41 { ok = 1 } END { exit !ok }' "$w/x.tsv" || fail "x2 tsv e00"
+# the Verdin output names no board
+if grep -q 'Armadillo' "$w/out.txt" "$w/out.tsv"; then fail "Verdin output names the X2"; fi
+# a Verdin and an X2 slice together: each slice has its own rule
+python3 -I "$t" --tsv "$s" "$x" > "$w/both.tsv" || fail "both run"
+awk -F'\t' '$1 ~ /test-rows01/ && $2 == "e00" && $3 == 26 { a = 1 } $1 ~ /x2-/ && $2 == "e01" && $3 == 300 { b = 1 } END { exit !(a && b) }' "$w/both.tsv" || fail "both: Verdin 26 and X2 300"
+
 # the Pi 4 log has no board.sh imx8mp lines: no entries, a zero total, exit 0
 python3 -I "$t" --tsv "$here/log/2026-10-31-pi4-gles3-a" > "$w/pi4.tsv" || fail "pi4 run"
 [ "$(wc -l < "$w/pi4.tsv")" -eq 2 ] || fail "pi4: header and total only"
