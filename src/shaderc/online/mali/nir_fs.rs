@@ -12291,6 +12291,25 @@ fn cube_rows(p: &mut Prog<'_>, rows: &mut u128, d: [Src; 3]) -> Result<[Src; 2],
     Ok([r(Alu::BitfieldSelect, &[Src::of(Idx::Const(nir::CUBE_S_MASK)), s, face])?, t])
 }
 
+/// Node `x` is the sum of a word of the fp16 uniform block and a lane alone
+/// (or that lane negated), or a sum of two such sums: a column of `matrix
+/// uniform + float`, and the columns' reduction ([`select`]'s gate).
+fn uniform_lane_sum(pr: &Pairs, x: u8, depth: u8) -> bool {
+    let lane = |y: u8| match pr.nodes[y as usize] {
+        P::Leaf(Leaf::Splat { .. }) => true,
+        P::Op(Alu::Fneg, [z, ..]) => matches!(pr.nodes[z as usize], P::Leaf(Leaf::Splat { .. })),
+        _ => false,
+    };
+    match pr.nodes[x as usize] {
+        P::Op(Alu::Fadd, [a, b, _]) if matches!(pr.nodes[a as usize], P::Leaf(Leaf::Uniform { .. })) => lane(b),
+        P::Op(Alu::Fadd, [a, b, _]) if depth < 8 => {
+            uniform_lane_sum(pr, a, depth + 1) && uniform_lane_sum(pr, b, depth + 1)
+        }
+        P::Leaf(Leaf::Part { x, .. }) if depth < 8 => uniform_lane_sum(pr, x, depth + 1),
+        _ => false,
+    }
+}
+
 /// `bifrost_nir_lower_algebraic_late` (bifrost_nir_algebraic.py:31) after
 /// the fusion: a product with 2.0 in both halves is `fadd(a, a)`.
 fn late_rules(pr: &mut Pairs, roots: [u8; 2]) {
@@ -12449,6 +12468,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let uniform = |x: u8| matches!(pr.nodes[x as usize], P::Leaf(Leaf::Uniform { .. }));
     let two = pr.nodes[..pr.n].iter().any(|n| matches!(*n, P::Leaf(Leaf::Pack { x, y }) if uniform(x) && uniform(y)));
     let admitted = if two { admitted | prod(Form::Mk, Place::MulB) } else { admitted };
+    /* a matrix uniform plus or minus a lane alone, its columns summed: each
+     * column word's sum with the lane (the lane negated for a difference, a
+     * source modifier), then the sums of those sums, an operation second
+     * (deqp_opform_matadd_uniform: `FADD.v2f16 r2, u3.w0, r0.h00`,
+     * `FADD.v2f16 r3, u2.w0, r0.h00`, `FADD.v2f16 r2, r3^, r2^`;
+     * deqp_opform_matsub_uniform's `r0.neg.h00`). A constant matrix's
+     * sums are drawn otherwise (deqp_arith_matrix_storeout_fs_mediump) */
+    let sums = |n: &P| matches!(*n, P::Op(Alu::Fadd, [_, y, _]) if pr.form(y) == Form::Op);
+    let column_sums = pr.nodes[..pr.n].iter().any(sums)
+        && pr.nodes[..pr.n].iter().filter(|n| sums(n)).all(|n| match *n {
+            P::Op(_, [x, y, _]) => uniform_lane_sum(&pr, x, 0) && uniform_lane_sum(&pr, y, 0),
+            P::Leaf(_) => false,
+        });
+    let admitted =
+        if column_sums { admitted | prod(Form::Op, Place::AddB) | prod(Form::Splat, Place::NegSrc) } else { admitted };
     if f.prods & !admitted != 0 || roots.iter().any(|&r| splat(r)) {
         return Err(MaliError::FsOperandForm);
     }

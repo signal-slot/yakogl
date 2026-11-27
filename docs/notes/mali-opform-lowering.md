@@ -319,3 +319,31 @@ compiles a directory of pairs. To redo it on a later tip:
    group's parameters, as in section 2.
 
 A board rerun's console logs give the case list again.
+
+## 9. Landed (plan #387, item `mali-train-3a`)
+
+Re-probed at `5fd5bf43` with the recipe of section 8. The sites are now:
+the gate `nir_fs.rs:12417` (27 references of `tools/mali/testdata`),
+`:10671` (X2, the `:10373` site), `:10947` (MM, `:10649`), `:11844` (BM,
+`:11494`) and `:11471` (IF, `:11124`). The references' productions are
+section 3's.
+
+With the gate switched off (a throw-away copy), the gate's references do
+this: byte-equal are `deqp_opform_{matadd_uniform,matsub_uniform}`,
+`deqp_unitype_fsmat3_mediump` and `deqp_intrnd_dead_cond_fs`; every arith
+`op_binary_*`, `op_unary_incdec`, `op_common_{abs,mix}`,
+`op_geometric_{cross,reflect}_fs_mediump`, `matrix_storeout_fs_mediump`,
+`deqp_opform_{matmul_const,matneg_mat3,rnd_constneg85}` and
+`deqp_posvary_flat_sep_kau_bs26` compiles with other words than Mesa's;
+`op_unary_unary_minus_fs_mediump` and `random_storeoutput_fs_mediump` stop
+at "a fragment varying load or conversion"; `rnd_splat18` at
+`Defect(Operand)`.
+
+- **O2, the uniform matrix only** (class OB, with NS). The gate admits
+  `Op@AddB` and `Splat@NegSrc` when every sum whose second operand is an
+  operation is a sum of column sums: a word of the fp16 uniform block plus
+  a lane alone (or that lane negated), or a sum of two of those
+  (`uniform_lane_sum`). Byte-equal: `deqp_opform_matadd_uniform`,
+  `deqp_opform_matsub_uniform`, `deqp_unitype_fsmat3_mediump`.
+  A constant matrix's sums (arith `matrix_storeout_fs_mediump`, the same
+  production) are drawn otherwise by Mesa and stay refused.

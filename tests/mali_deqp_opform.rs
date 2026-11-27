@@ -26,7 +26,11 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_opform_` prefix.
-const LOWERED: &[&str] = &[];
+/// `matadd_uniform` and `matsub_uniform` since plan #387 mali-train-3a
+/// (opform O2, class OB with NS): the column sums of a matrix uniform plus
+/// or minus a lane alone are admitted (nir_fs.rs `select`'s gate,
+/// `uniform_lane_sum`).
+const LOWERED: &[&str] = &["matadd_uniform", "matsub_uniform"];
 
 /// The references that compile with other words than Mesa's (hazards).
 const DIFFERS: &[&str] = &[];
@@ -35,10 +39,8 @@ const DIFFERS: &[&str] = &[];
 const REFUSED: &[(&str, &str)] = &[
     ("clamp_vec3_float", TEXT_OPERAND),
     ("conv_vec3", TEXT_OPERAND),
-    ("matadd_uniform", TEXT_OPERAND),
     ("matmul_const", TEXT_OPERAND),
     ("matneg_mat3", TEXT_OPERAND),
-    ("matsub_uniform", TEXT_OPERAND),
     ("min_vec3", TEXT_OPERAND),
     ("mul_float_vec4", TEXT_OPERAND),
     ("ret_dynamic", TEXT_OPERAND),
@@ -85,7 +87,6 @@ fn conv_vec3() {
 /// `u_in0 + v_coords` of a `uniform mediump mat3`: an operation's result
 /// second in a sum (class OB).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn matadd_uniform() {
     mali_ref::assert_matches("deqp_opform_matadd_uniform");
 }
@@ -109,7 +110,6 @@ fn matneg_mat3() {
 /// `u_in0 - v_coords` of a `uniform mediump mat3`: a negated splat and an
 /// operation second in a sum (class OB with NS).
 #[test]
-#[ignore = "refused; pinned by refusals_pinned"]
 fn matsub_uniform() {
     mali_ref::assert_matches("deqp_opform_matsub_uniform");
 }
