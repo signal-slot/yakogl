@@ -454,6 +454,11 @@ pub struct GicActiveReset {
     /// The INTIDs still Active when the `ISACTIVER` words are read again
     /// after the clear: 0 unless the clear did not take.
     pub still_active: u32,
+    /// The redistributor matched but ChildrenAsleep stayed set after the
+    /// wake ([`GicrWake::TimedOut`]): `rdist.rd_base` is `None`, and
+    /// `rdist.frames` reads were made, the last one this redistributor's
+    /// (frame `frames - 1`).
+    pub wake_timed_out: bool,
 }
 
 /// What [`gic_active_reset_woken`] did with `GICR_WAKER` before the SGI
@@ -565,6 +570,7 @@ pub fn gic_active_reset_woken<M: crate::mmio::Mmio>(
         (woke.gicr_waker, woke.wake) = gicr_wake(m, rd);
         if woke.wake == GicrWake::TimedOut {
             out.rdist.rd_base = None;
+            out.wake_timed_out = true;
         }
     }
     out.spi_words = gicd_spi_words(out.gicd_typer);
@@ -1386,7 +1392,13 @@ mod tests {
     /// (`gic_active_report`), the same format strings, for the host to pin.
     fn gic_line(r: &GicActiveReset) -> String {
         let rec = crate::ffi::YdGicActiveReset::from_reset(*r, GICR.base);
-        let mut s = if rec.flags & crate::ffi::YD_GIC_RDIST_FOUND != 0 {
+        let mut s = if rec.flags & crate::ffi::YD_GIC_RDIST_WAKE_TIMEOUT != 0 {
+            format!(
+                "t6: GIC active state: GICD_TYPER 0x{:08x}, gic: redistributor at frame {} did not wake (ChildrenAsleep still set): SGIs and PPIs not scanned, ",
+                rec.gicd_typer,
+                rec.frames - 1
+            )
+        } else if rec.flags & crate::ffi::YD_GIC_RDIST_FOUND != 0 {
             format!(
                 "t6: GIC active state: GICD_TYPER 0x{:08x} GICR_TYPER 0x{:016x} GICR_ISACTIVER0 0x{:08x} as found, ",
                 rec.gicd_typer, rec.gicr_typer, rec.isactiver0
@@ -1494,7 +1506,11 @@ mod tests {
         want.extend((1..=15).map(|w| (GICD + GICD_ICACTIVER + 4 * w, !0)));
         assert_eq!(*gic.writes.borrow(), want);
         assert_eq!((got.active, got.intids[0], got.still_active, got.words_cleared), (1, 71, 0, 15));
-        assert!(gic_line(&got).contains("no redistributor with affinity 0x00000000 in 1 frame(s)"));
+        assert!(got.wake_timed_out);
+        assert_eq!(
+            gic_line(&got),
+            "t6: GIC active state: GICD_TYPER 0x0000000f, gic: redistributor at frame 0 did not wake (ChildrenAsleep still set): SGIs and PPIs not scanned, 1 INTID(s) active (INTIDs 71), 15 word(s) written ICACTIVER, 0 still active"
+        );
     }
 
     /// ChildrenAsleep set with ProcessorSleep already clear (a wake under
