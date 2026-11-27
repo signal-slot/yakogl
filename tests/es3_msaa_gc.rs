@@ -359,6 +359,8 @@ struct Seen {
     targets: Vec<(u64, u8)>,
     /// `GlesDraw::target_w`, `target_h`.
     size: (u32, u32),
+    /// `GlesDraw::target_id`, `target_gen`.
+    ident: (u32, u32),
 }
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
@@ -373,6 +375,7 @@ unsafe extern "C" fn rec_draw(d: *const GlesDraw) -> i32 {
         samples: g.samples,
         targets: g.targets[..n].iter().map(|t| (t.gpu, t.format)).collect(),
         size: (g.target_w, g.target_h),
+        ident: (g.target_id, g.target_gen),
     });
     gc_draw(d)
 }
@@ -1083,6 +1086,66 @@ fn no_stale_samples_after_a_same_size_respecification() {
         expect_layers([Layer::Broadcast { src: old }, left_half_edge(RED8)]);
         let s = draw_left_of(HALF_EDGE_X, 0.5, RED);
         assert_eq!(s.targets[0].0, old, "the new renderbuffer at the old address");
+        assert_eq!(ms_draws_since(d).len(), 2, "a reload, not the deleted one's samples");
+        let fbo2 = Fbo { fb: fbo.fb, colour: rb, depth: None };
+        let (e, _dst) = resolve_blit(&fbo2, GL_COLOR_BUFFER_BIT);
+        assert_eq!(e, GL_NO_ERROR);
+        assert_eq!(pixel(13), [0, 0, 0, 0], "no blue from the deleted renderbuffer");
+    });
+}
+
+/// The slot is keyed on `(target_id, target_gen)`: respecifying the
+/// renderbuffer bumps the generation and drops the samples, deleting it frees
+/// the slot, and a new renderbuffer at the same address loads nothing stale.
+#[cfg(feature = "msaa-fbo")]
+#[test]
+fn slots_follow_the_attachment_identity() {
+    on_gc7000(|| {
+        let fbo = framebuffer(4, None).expect("4 samples are legal storage");
+        expect_layers([all(BLACK8), all(RED8)]);
+        clear(BLACK);
+        let s = draw(RED);
+        let (id, gen) = s.ident;
+        assert_ne!(id, 0, "a renderbuffer has an identity");
+        let (_, kept_gen, loadable) = yakogl::vivante::msaa_fbo::kept_id(id).expect("a slot keyed on the id");
+        assert_eq!(kept_gen, gen);
+        assert!(loadable);
+        let slots = yakogl::vivante::msaa_fbo::slots();
+
+        /* respecified: the generation moves, the samples are dropped */
+        // SAFETY: a renderbuffer this test made.
+        unsafe {
+            glBindRenderbuffer(GL_RENDERBUFFER, fbo.colour);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, SIZE as GLsizei, SIZE as GLsizei);
+        }
+        assert_eq!(err(), GL_NO_ERROR);
+        assert!(yakogl::vivante::msaa_fbo::kept_id(id).is_none(), "the samples went with the old generation");
+        assert_eq!(yakogl::vivante::msaa_fbo::slots(), slots - 1);
+        expect_layers([Layer::Broadcast { src: s.targets[0].0 }, left_half_edge(BLUE8)]);
+        let s2 = draw_left_of(HALF_EDGE_X, 0.5, BLUE);
+        assert_eq!(s2.ident.0, id, "the same renderbuffer");
+        assert!(s2.ident.1 > gen, "the generation moved: {} then {}", gen, s2.ident.1);
+        let (_, kept_gen, _) = yakogl::vivante::msaa_fbo::kept_id(id).expect("a new slot");
+        assert_eq!(kept_gen, s2.ident.1);
+
+        /* deleted: the slot is freed */
+        // SAFETY: names this test made.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo.fb);
+            glDeleteRenderbuffers(1, &fbo.colour);
+        }
+        assert!(yakogl::vivante::msaa_fbo::kept_id(id).is_none(), "deleted: the slot is freed");
+        assert_eq!(yakogl::vivante::msaa_fbo::slots(), slots - 1);
+
+        /* a new renderbuffer, perhaps at the same address: another id, no stale samples */
+        let (e, rb) = storage(4, GL_RGBA8);
+        assert_eq!(e, GL_NO_ERROR);
+        // SAFETY: a renderbuffer this test made.
+        unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb) };
+        let d = ms_draws();
+        expect_layers([Layer::Broadcast { src: s.targets[0].0 }, left_half_edge(RED8)]);
+        let s3 = draw_left_of(HALF_EDGE_X, 0.5, RED);
+        assert_ne!(s3.ident.0, id, "a new renderbuffer is a new identity");
         assert_eq!(ms_draws_since(d).len(), 2, "a reload, not the deleted one's samples");
         let fbo2 = Fbo { fb: fbo.fb, colour: rb, depth: None };
         let (e, _dst) = resolve_blit(&fbo2, GL_COLOR_BUFFER_BIT);

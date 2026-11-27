@@ -10,11 +10,13 @@
 //! with `samples > 1` that is not mirrored (`flip_y` false: a framebuffer
 //! object, never the window), in a `msaa-fbo` build ([`ON`]).
 //!
-//! **Keying.** A slot is keyed on the draw's colour target address,
-//! `GlesDraw::target_gpu`, at generation 0, as the merged PowerVR back end
-//! keys its sample store (`src/pvr/backend.rs` `MsStore`): `GlesDraw` has no
-//! colour attachment identity yet (`target_id` / `target_gen`, note (b)5, are
-//! another item's). The store's size check (`SampleSize`: extent and bytes a
+//! **Keying.** A slot is keyed on the colour attachment's identity,
+//! `GlesDraw::target_id` at generation `target_gen` (note (b)5): the GL core
+//! bumps the generation when the renderbuffer is specified again, and
+//! `attachment_gone` ([`gone`]) frees the slot when it is deleted or
+//! respecified. A draw with `target_id` 0 keeps no samples. The slot also
+//! records the target address (`Scratch::target`) for [`stored`],
+//! [`touched`] and the [`released`] backstop. The store's size check (`SampleSize`: extent and bytes a
 //! pixel) runs on every lookup, and the stored surface format is checked
 //! here: a slot whose target was specified again with another extent or
 //! format is freed and allocated afresh. A same-size respecification keeps
@@ -54,6 +56,8 @@ pub const ON: bool = cfg!(feature = "msaa-fbo");
 pub struct Scratch {
     pub mem: OsalGpuMem,
     pub format: u8,
+    /// The colour target's GPU address (for `stored`, `touched`, `released`).
+    pub target: u64,
 }
 
 static STORE: Global<MsaaStore<Scratch>> = Global::new(MsaaStore::new());
@@ -94,13 +98,13 @@ pub fn unsupported(gl: &GlesDraw, hw_targets: usize) -> Option<&'static str> {
 
 /// The scratch of the 4x target of `gl`, made now when there is none, and
 /// whether it holds the samples of the jobs before (`needs_load`). Keyed on
-/// `target_gpu` at generation 0 (module doc); a slot of another surface
+/// `target_id` at generation `target_gen` (module doc); a slot of another surface
 /// format is freed first, one of another extent or pixel size by the store
 /// itself. `None` when there is no memory for it: the caller draws into a
 /// scratch of this job only (`SampleLoad::Broadcast` with no slot).
 pub(super) fn slot(gl: &GlesDraw, heap: u64) -> Option<(u64, bool)> {
     let st = store();
-    let key = gl.target_gpu;
+    let key = u64::from(gl.target_id);
     if st.get(key).is_some_and(|s| s.handle.format != gl.target_format) {
         st.gone(key, free);
     }
@@ -109,23 +113,28 @@ pub(super) fn slot(gl: &GlesDraw, heap: u64) -> Option<(u64, bool)> {
     let size = hw::sample_size(w, h, bpp);
     let s = st.get_or_alloc(
         key,
-        0,
+        gl.target_gen,
         size,
         /* the padded supertiled surface, not the packed bytes asked for */
         |_packed| {
             let mut mem = OsalGpuMem::ZERO;
             (osal::gpu_alloc(heap, hw::scratch_bytes(w, h, bpp) as usize, OSAL_MEM_DATA, &mut mem) == 0)
-                .then_some(Scratch { mem, format })
+                .then_some(Scratch { mem, format, target: gl.target_gpu })
         },
         free,
     )?;
     Some((s.handle.mem.gpu, s.needs_load()))
 }
 
+/// The id of the slot whose target is at `target_gpu`.
+fn id_at(target_gpu: u64) -> Option<u64> {
+    store().iter().find(|s| s.handle.target == target_gpu).map(|s| s.id)
+}
+
 /// The job that drew into the 4x target at `target_gpu` was submitted with
 /// its RS resolve: its scratch holds every sample of everything drawn so far.
 pub(super) fn stored(target_gpu: u64) {
-    if let Some(s) = store().get(target_gpu) {
+    if let Some(s) = id_at(target_gpu).and_then(|id| store().get(id)) {
         s.mark_stored();
     }
 }
@@ -133,20 +142,26 @@ pub(super) fn stored(target_gpu: u64) {
 /// A draw wrote the surface at `target_gpu` without its samples (drawn
 /// single-sampled): the kept samples no longer match the resolved image.
 pub(super) fn touched(target_gpu: u64) {
-    if let Some(s) = store().get(target_gpu) {
+    if let Some(s) = id_at(target_gpu).and_then(|id| store().get(id)) {
         s.mark_cleared();
     }
 }
 
+/// The colour attachment `id` is gone (`YakoglBackend::attachment_gone`:
+/// deleted or specified again): its slot is freed.
+pub(super) fn gone(id: u32) {
+    store().gone(u64::from(id), free);
+}
+
 /// The GL core drops the storage `[base, base + bytes)`
 /// (`YakoglBackend::texture_released`): the slot of a target in it is freed,
-/// so storage made again at the same address starts with no samples.
+/// a backstop for `attachment_gone`.
 pub(super) fn released(base: u64, bytes: u64) {
     let end = base.saturating_add(bytes);
     let mut gone = [0u64; MSAA_SLOTS];
     let mut n = 0;
     for s in store().iter() {
-        if (base..end).contains(&s.id) && n < gone.len() {
+        if (base..end).contains(&s.handle.target) && n < gone.len() {
             gone[n] = s.id;
             n += 1;
         }
@@ -165,7 +180,14 @@ pub(super) fn release_all() {
 /// address and whether a job would draw on from its samples. A read-only
 /// probe for the host tests (tests/es3_msaa_gc.rs).
 pub fn kept(target_gpu: u64) -> Option<(u64, bool)> {
-    store().get(target_gpu).map(|s| (s.handle.mem.gpu, s.needs_load()))
+    let id = id_at(target_gpu)?;
+    store().get(id).map(|s| (s.handle.mem.gpu, s.needs_load()))
+}
+
+/// The same probe by attachment identity: the slot of `target_id` and its
+/// generation (the host tests).
+pub fn kept_id(target_id: u32) -> Option<(u64, u32, bool)> {
+    store().get(u64::from(target_id)).map(|s| (s.handle.mem.gpu, s.gen, s.needs_load()))
 }
 
 /// Slots in use (the host tests).
