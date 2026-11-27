@@ -6,7 +6,8 @@
 # (no status in any source). Written by gles3-notpass.py --splice; the build and
 # the run date per row range of tools/cts/am62p-gles3-tree.txt (counted from 0):
 # rows 0-10: build b25997e4, run 2026-11-22
-# rows 11-45: build ad2b5ed, run 2026-10-13/14
+# rows 11-21: build b25997e4, run 2026-11-27
+# rows 22-45: build ad2b5ed, run 2026-10-13/14
 NotSupported	dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_advanced_blend_eq	Extension GL_KHR_blend_equation_advanced not supported at es3fDrawBuffersIndexedTests.cpp:1245
 NotSupported	dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_blend_eq	Extension GL_KHR_blend_equation_advanced not supported at es3fDrawBuffersIndexedTests.cpp:1245
 NotSupported	dEQP-GLES3.functional.draw_buffers_indexed.overwrite_common.common_advanced_blend_eq_buffer_separate_blend_eq	Extension GL_KHR_blend_equation_advanced not supported at es3fDrawBuffersIndexedTests.cpp:1245
@@ -1012,32 +1013,6 @@ Fail	dEQP-GLES3.functional.shaders.fragdepth.write.dynamic_conditional_write	Fai
 Fail	dEQP-GLES3.functional.shaders.fragdepth.write.uniform_conditional_write	Fail
 Fail	dEQP-GLES3.functional.shaders.fragdepth.write.uniform_loop_write	Fail
 Fail	dEQP-GLES3.functional.shaders.fragdepth.write.write_in_function	Fail
-Fail	dEQP-GLES3.functional.shaders.metamorphic.bubblesort_flag.variant_1	Nondeterministic rendering
-Fail	dEQP-GLES3.functional.shaders.metamorphic.bubblesort_flag.variant_2	Nondeterministic rendering
-Fail	dEQP-GLES3.functional.shaders.precision.int.highp_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.highp_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.highp_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.highp_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.lowp_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.lowp_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.lowp_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.lowp_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.mediump_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.mediump_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.mediump_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.int.mediump_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:514
-Fail	dEQP-GLES3.functional.shaders.precision.uint.highp_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.highp_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.highp_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.highp_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.lowp_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.lowp_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.lowp_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.lowp_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.mediump_add_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.mediump_div_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.mediump_mul_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
-Fail	dEQP-GLES3.functional.shaders.precision.uint.mediump_sub_fragment	Runtime check failed: 'm_program->isOk()' at es3fShaderPrecisionTests.cpp:709
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.interp_storage	Image comparison failed
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.interp_storage_precision	Image comparison failed
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.invariant_interp_storage	Image comparison failed
@@ -1045,49 +1020,20 @@ Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.invariant
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.invariant_storage	Image comparison failed
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.invariant_storage_precision	Image comparison failed
 Fail	dEQP-GLES3.functional.shaders.qualification_order.variables.valid.storage_precision	Image comparison failed
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.isampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.sampler3d_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.sampler3d_float_vertex	Fail
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetch.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2darray_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2darray_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2darray_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler2darray_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isamplercube_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isamplercube_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texelfetchoffset.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.isampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler2darray_bias_fixed_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler2darray_bias_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler2darray_fixed_fragment	Fail
@@ -1101,80 +1047,48 @@ Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler3d_fixed_fra
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler3d_fixed_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler3d_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.sampler3d_float_vertex	Fail
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usamplercube_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usamplercube_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.samplercube_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.samplercube_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.samplercube_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.samplercube_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usamplercube_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.isamplercube_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.isamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texture.usampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darray_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darray_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2darray_fixed_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2darray_fixed_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2darray_float_fragment	Fail
@@ -1183,127 +1097,79 @@ Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler3d_fixed_
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler3d_fixed_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler3d_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler3d_float_vertex	Fail
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.usamplercube_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelod.usamplercube_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_bias_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_bias_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2dshadow_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_bias_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_bias_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2darray_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.usampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.isampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_bias_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_bias_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler2darray_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_bias_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_bias_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler2darray_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureoffset.usampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.isampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_bias_fixed_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_bias_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_fixed_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_fixed_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.sampler3d_float_vertex	Fail
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler2d_vec3_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler2d_vec3_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler2d_vec4_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler2d_vec4_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec3_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec3_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec3_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec3_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec4_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec4_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec4_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2d_vec4_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler2d_vec3_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler2d_vec3_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler2d_vec4_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler2d_vec4_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler2d_vec3_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler2d_vec3_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler2d_vec4_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler2d_vec4_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec3_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec3_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec3_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec3_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec4_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec4_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec4_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2d_vec4_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler2d_vec3_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler2d_vec3_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler2d_vec4_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler2d_vec4_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_bias_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureproj.usampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler3d_fixed_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler3d_fixed_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler3d_float_fragment	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler3d_float_vertex	Fail
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.isampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_fixed_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_float_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.usampler3d_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.isampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler2dshadow_bias_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler2dshadow_fragment	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler2dshadow_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler3d_fixed_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler3d_float_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
-Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.usampler3d_vertex	Failed to compile shader program at glsShaderRenderCase.cpp:447
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.isampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_fixed_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler3d_float_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.usampler3d_fragment	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.isampler3d_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler3d_fixed_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.sampler3d_float_vertex	Fail
+Fail	dEQP-GLES3.functional.shaders.texture_functions.textureprojoffset.usampler3d_vertex	Fail
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment	Got unexpected texture size
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex	Got unexpected texture size
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment	Got unexpected texture size
@@ -1342,8 +1208,6 @@ Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_frag
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex	Got unexpected texture size
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment	Got unexpected texture size
 Fail	dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex	Got unexpected texture size
-Fail	dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_fragment	expected shaders to compile and link properly, but failed to link.
-Fail	dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_vertex	expected shaders to compile and link properly, but failed to link.
 NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getinteger64i_v	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
 NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_equation_advanced_getintegeri_v	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
 NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_equation_getinteger64i_v	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
@@ -1353,31 +1217,13 @@ NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_func_getintegeri_v	
 NotSupported	dEQP-GLES3.functional.state_query.indexed.blend_isenabledi	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
 NotSupported	dEQP-GLES3.functional.state_query.indexed.color_mask_getinteger64i_v	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
 NotSupported	dEQP-GLES3.functional.state_query.indexed.color_mask_getintegeri_v	Extension GL_EXT_draw_buffers_indexed not supported. at es3fIndexedStateQueryTests.cpp:530
-Fail	dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getinteger	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers.compressed_texture_formats_getinteger64	Got invalid integer value
 Fail	dEQP-GLES3.functional.state_query.integers.max_color_attachments_getfloat	Got invalid float value
 Fail	dEQP-GLES3.functional.state_query.integers.max_color_attachments_getinteger64	Got invalid integer value
 Fail	dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getfloat	Got invalid float value
 Fail	dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getinteger64	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers.max_fragment_input_components_getinteger64	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers.max_samples_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers.max_samples_getinteger64	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers.max_varying_components_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers.max_varying_components_getinteger64	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers.max_varying_vectors_getinteger64	Got invalid integer value
 Fail	dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getfloat	Got invalid float value
 Fail	dEQP-GLES3.functional.state_query.integers.max_vertex_output_components_getinteger64	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_combined_fragment_uniform_components_getinteger	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_combined_vertex_uniform_components_getinteger	Got invalid integer value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getfloat	Got invalid float value
-Fail	dEQP-GLES3.functional.state_query.integers64.max_uniform_block_size_getinteger	Got invalid integer value
 Fail	dEQP-GLES3.functional.state_query.rbo.renderbuffer_component_size_color	got invalid value
-Fail	dEQP-GLES3.functional.state_query.shader.program_binary	got invalid value
 NotSupported	dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10	ASTC not supported
 NotSupported	dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x10_srgb	ASTC not supported
 NotSupported	dEQP-GLES3.functional.texture.compressed.astc.block_size_remainder.10x5	ASTC not supported
