@@ -810,6 +810,37 @@ fn build_fragment_with<'a>(
         }
         (t, _) => (t, blend_key),
     };
+    /* Several colour outputs under one integer layout's key (no colour
+     * mask) whose packed dwords pass the pixel's four output registers
+     * (three RG32UI or RGBA16I attachments, dEQP's
+     * `fragment_out.array.{int,uint}`): every attachment is of that layout,
+     * so the draw is the per-target list [Int(rt); n], laid out as a mixed
+     * key's ([`target_layout`]: three RG32UI at r0-1, r2-3 and tile buffer
+     * 0), which is where the end-of-tile emit reads each attachment from.
+     * Outputs that fit the registers stay [`pack_int_output`]'s, so their
+     * programs are unchanged; so do a masked key's, a list [`target_layout`]
+     * has no end-of-tile program for and one of more than the three draw
+     * buffers a mixed key carries (a fourth is RC14's), which it refuses by
+     * name. */
+    let mut int_list = [TargetPack::Class(crate::shaderc::SHC_RT_RGBA8); MAX_PACK_TARGETS];
+    let (targets, blend_key) = match (targets, crate::shaderc::ShcIntRt::of_key(blend_key)) {
+        (None, Some(rt)) if blend_key == crate::shaderc::shc_blend_key_int_rt(rt) => {
+            let n = sel.outputs.len();
+            let consecutive =
+                (0..n).all(|loc| sel.outputs.iter().any(|(slot, _)| *slot == ir::IoSlot::FragColor(loc as u8)));
+            let most = crate::target_key::SHC_MIXED_MAX_TARGETS;
+            let spills = n > 1 && n <= most && consecutive && n as u32 * rt.dwords() > 4 && {
+                int_list[..n].fill(TargetPack::Int(rt));
+                target_layout(&int_list[..n]).is_some()
+            };
+            if spills {
+                (Some(&int_list[..n]), 0)
+            } else {
+                (None, blend_key)
+            }
+        }
+        (t, _) => (t, blend_key),
+    };
     /* Attachments of different classes: each integer target's output packed
      * here, the float and normalised ones at the tail; a written depth is
      * clamped below and fed back before the writes, as for one target. A
@@ -2452,6 +2483,12 @@ fn compile_fragment_with<'a>(
          * compiled per target (no blend decoded): the record keeps its key,
          * as a mixed key's does */
         if blend.is_none() && replace_class(blend_key).is_some() {
+            sh.blend_key = blend_key;
+        }
+        /* several outputs of one integer layout past the four registers,
+         * compiled per target with the last ones spilled: the record keeps
+         * the layout's key, as the packed variant's does */
+        if int_dwords.is_none() && tile_buffers.is_some() && crate::shaderc::ShcIntRt::of_key(blend_key).is_some() {
             sh.blend_key = blend_key;
         }
         /* spilled targets: the stores read their buffers' addresses from

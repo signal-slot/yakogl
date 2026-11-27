@@ -83,6 +83,91 @@ pub const fn shc_target_key_dwords(t: u32) -> Option<u32> {
     Some(if t == shc_blend_key_rt(SHC_RT_F16X4) { 2 } else { 1 })
 }
 
+/// Whether an end-of-tile program was captured for `targets` colour targets
+/// whose last `spilled` come back from tile buffers (the `(targets,
+/// spilled)` arms of src/pvr/mrt_layout.rs `program_for`, for the up to
+/// [`SHC_MIXED_MAX_TARGETS`] targets a mixed key carries): every list that
+/// fits the registers, and three targets with the last one spilled
+/// (`eot3_tb`). Two targets with the second spilled and three with the last
+/// two have none.
+pub const fn shc_spill_has_program(targets: usize, spilled: u8) -> bool {
+    matches!((targets, spilled), (1..=SHC_MIXED_MAX_TARGETS, 0) | (3, 1))
+}
+
+/// [`shc_mixed_out_layout`] with the spill of src/pvr/mrt_layout.rs
+/// `layout`: the first pixel output register of each target that fits (0
+/// for a spilled one), the registers those span, and how many targets are
+/// spilled -- the first that does not fit the four registers and every one
+/// after it, the k-th of them stored to tile buffer k and emitted from its
+/// dword 0. `None` for a list [`shc_mixed_out_layout`] refuses for another
+/// reason than the registers (empty, too long, a key that is not valid) and
+/// for a spill no end-of-tile program was captured for
+/// ([`shc_spill_has_program`]). Where [`shc_mixed_out_layout`] is `Some`,
+/// this is the same starts and span with no target spilled.
+pub const fn shc_mixed_out_places(targets: &[u32]) -> Option<([u8; SHC_MIXED_MAX_TARGETS], u8, u8)> {
+    if targets.is_empty() || targets.len() > SHC_MIXED_MAX_TARGETS {
+        return None;
+    }
+    let mut start = [0u8; SHC_MIXED_MAX_TARGETS];
+    let mut next = 0u32;
+    let mut spilled = 0u8;
+    let mut i = 0;
+    while i < targets.len() {
+        let d = match shc_target_key_dwords(targets[i]) {
+            Some(d) => d,
+            None => return None,
+        };
+        let s = if d >= 2 { (next + 1) & !1 } else { next };
+        if spilled == 0 && s + d <= MAX_OUT_REGS {
+            start[i] = s as u8;
+            next = s + d;
+        } else {
+            spilled += 1;
+        }
+        i += 1;
+    }
+    if !shc_spill_has_program(targets.len(), spilled) {
+        return None;
+    }
+    Some((start, next as u8, spilled))
+}
+
+/// The mixed key of a list that is a mix with an integer target (some
+/// target integer, not every target the same key) and whose targets pass
+/// the pixel's four output registers with a spill an end-of-tile program
+/// emits ([`shc_mixed_out_places`]): the slot codes of
+/// [`shc_blend_key_mixed`], which keys every other mix. `None` for any
+/// other list.
+const fn mixed_key_spilled(targets: &[u32]) -> Option<u32> {
+    match shc_mixed_out_places(targets) {
+        Some((_, _, spilled)) if spilled != 0 => {}
+        _ => return None,
+    }
+    let mut key = SHC_BLEND_KEY_MIXED_TAG;
+    let mut any_int = false;
+    let mut all_same = true;
+    let mut i = 0;
+    while i < targets.len() {
+        let code = match slot_code(targets[i]) {
+            Some(c) => c,
+            None => return None,
+        };
+        if ShcIntRt::of_key(targets[i]).is_some() {
+            any_int = true;
+        }
+        if targets[i] != targets[0] {
+            all_same = false;
+        }
+        key |= code << (10 + 5 * i);
+        i += 1;
+    }
+    if any_int && !all_same {
+        Some(key)
+    } else {
+        None
+    }
+}
+
 /// The first pixel output register of each target and the registers the
 /// outputs span (section 3), or `None` when they pass the pixel's four
 /// registers, `targets` is empty or longer than SHC_MIXED_MAX_TARGETS, or a
@@ -116,6 +201,10 @@ pub const fn shc_mixed_out_layout(targets: &[u32]) -> Option<([u8; SHC_MIXED_MAX
 /// The mixed key of draw buffers 0.. (one per-target key each, dense), or
 /// `None` when the list is not a mix (section 2.2, conditions 2-5).
 pub const fn shc_blend_key_mixed(targets: &[u32]) -> Option<u32> {
+    /* past the four registers, the last target spilled to a tile buffer */
+    if let Some(key) = mixed_key_spilled(targets) {
+        return Some(key);
+    }
     if targets.len() < 2 || targets.len() > SHC_MIXED_MAX_TARGETS {
         return None;
     }
@@ -669,5 +758,60 @@ mod tests {
         assert!(r(0, [u8c, u32c, f, h]));
         // Invalid arguments.
         assert_eq!(shc_blend_key_needs_multi(0, [0x04, 0, 0, 0]), None);
+    }
+
+    /// The places with the spill: what `shc_mixed_out_layout` gives where
+    /// the list fits the registers, the last of three in tile buffer 0 where
+    /// it does not (`eot3_tb`), and `None` for the two spills no end-of-tile
+    /// program emits.
+    #[test]
+    fn places_spill_the_last_of_three() {
+        let p = shc_mixed_out_places;
+        let u = tk(GLES_SURF_R32UI);
+        let rg = tk(GLES_SURF_RG32UI);
+        let u4 = tk(GLES_SURF_RGBA32UI);
+        assert_eq!(p(&[RGBA8, u]), Some(([0, 1, 0], 2, 0)));
+        assert_eq!(p(&[F16X4, u, RGBA8]), Some(([0, 2, 3], 4, 0)));
+        // three two-dword targets: r0-1, r2-3, tile buffer 0
+        assert_eq!(p(&[rg, rg, rg]), Some(([0, 2, 0], 4, 1)));
+        assert_eq!(p(&[F16X4; 3]), Some(([0, 2, 0], 4, 1)));
+        // dEQP fragment_out.random seed 9: R32I, R16I, RGBA32UI
+        assert_eq!(p(&[tk(GLES_SURF_R32I), tk(GLES_SURF_R16I), u4]), Some(([0, 1, 0], 2, 1)));
+        // RGBA8, RG32UI, R32UI: register 1 is not back-filled
+        assert_eq!(p(&[RGBA8, rg, u]), Some(([0, 2, 0], 4, 1)));
+        // no program: two targets with the second spilled, three with two
+        assert_eq!(p(&[RGBA8, u4]), None);
+        assert_eq!(p(&[u4, u4]), None);
+        assert_eq!(p(&[u4, u, u]), None);
+        assert_eq!(p(&[u, u4, u]), None, "the target after a spilled one spills too");
+        assert_eq!(p(&[]), None);
+        assert_eq!(p(&[RGBA8; 4]), None);
+        assert_eq!(p(&[1]), None);
+        assert!(shc_spill_has_program(3, 0) && shc_spill_has_program(3, 1));
+        assert!(!shc_spill_has_program(2, 1) && !shc_spill_has_program(3, 2) && !shc_spill_has_program(4, 0));
+    }
+
+    /// A mix with an integer target whose last of three targets spills has
+    /// its mixed key, which decodes to the list; one layout everywhere and a
+    /// list with no integer target keep having none.
+    #[test]
+    fn spilled_mixes_have_keys() {
+        let u = tk(GLES_SURF_R32UI);
+        let rg = tk(GLES_SURF_RG32UI);
+        let u4 = tk(GLES_SURF_RGBA32UI);
+        for t in [[tk(GLES_SURF_R32I), tk(GLES_SURF_R16I), u4], [RGBA8, rg, u], [rg, F16X4, rg], [F16X4, F16X4, u]] {
+            let k = shc_blend_key_mixed(&t).unwrap_or_else(|| panic!("{t:x?}: a key"));
+            assert_eq!(shc_blend_key_mixed_targets(k), Some((t, 3)), "{t:x?}");
+            assert_eq!(shc_mixed_out_layout(&t), None, "{t:x?}: past the registers");
+        }
+        let code = |t| slot_code(t).unwrap();
+        let seed9 = [tk(GLES_SURF_R32I), tk(GLES_SURF_R16I), u4];
+        assert_eq!(
+            shc_blend_key_mixed(&seed9),
+            Some(SHC_BLEND_KEY_MIXED_TAG | code(seed9[0]) << 10 | code(seed9[1]) << 15 | code(seed9[2]) << 20)
+        );
+        assert_eq!(shc_blend_key_mixed(&[rg, rg, rg]), None, "one layout everywhere");
+        assert_eq!(shc_blend_key_mixed(&[F16X4, F16X4, RGBA8]), None, "no integer target");
+        assert_eq!(shc_blend_key_mixed(&[u4, u, RGBA8]), None, "two would spill");
     }
 }

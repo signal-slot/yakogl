@@ -4,8 +4,9 @@
 //! registers or a tile buffer, and which captured end-of-tile program emits
 //! that layout (RC14 step 2's shared rule, docs/es3-cts-failures.md). The
 //! compiler places a fragment shader's colour outputs by it, and the back end
-//! picks its PBE source positions and its end-of-tile program by it. Pure;
-//! nothing here is wired into a draw yet.
+//! picks its PBE source positions and its end-of-tile program by it. Pure.
+//! `backend.rs` reads it where it accepts a draw into several attachments of
+//! one integer layout (`int_targets_drawn`).
 //!
 //! The rule ("layout B"), over the targets the end-of-tile program emits, in
 //! emit order:

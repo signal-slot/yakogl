@@ -109,6 +109,24 @@ fn model_layout(t: &[Class]) -> Option<(Vec<u8>, u8)> {
     Some((start, next))
 }
 
+/// The targets a list spills when it passes the four registers and an
+/// end-of-tile program emits that spill (src/pvr/mrt_layout.rs: the first
+/// target that does not fit and every one after it; captured for three
+/// targets with the last one spilled, `eot3_tb`), else `None`.
+fn model_spill(t: &[Class]) -> Option<u8> {
+    let (mut next, mut spilled) = (0u8, 0u8);
+    for &c in t {
+        let d = dwords(c);
+        let s = if d >= 2 { (next + 1) & !1 } else { next };
+        if spilled == 0 && s + d <= 4 {
+            next = s + d;
+        } else {
+            spilled += 1;
+        }
+    }
+    matches!((t.len(), spilled), (3, 1)).then_some(spilled)
+}
+
 /// Section 2.2's mixed key, or `None` when the list is not a mix
 /// (conditions 3-5 of the note).
 fn encode(t: &[Class]) -> Option<u32> {
@@ -118,7 +136,10 @@ fn encode(t: &[Class]) -> Option<u32> {
     if t.iter().all(|&c| c == t[0]) {
         return None; // one layout everywhere keeps today's key (2.4)
     }
-    model_layout(t)?;
+    /* in the registers, or an integer mix whose last target spills */
+    if model_layout(t).is_none() && !(model_spill(t).is_some() && t.iter().any(|&c| is_int(c))) {
+        return None;
+    }
     let mut key = 1u32 << 25;
     for (i, &c) in t.iter().enumerate() {
         key |= slot_code(c) << (10 + 5 * i);
@@ -338,6 +359,14 @@ fn production_agrees_with_the_model_for_every_list() {
                 assert_eq!(n, span, "{t:?}");
             }
             None => assert_eq!(shc_mixed_out_layout(&k), None, "{t:?}"),
+        }
+        /* the places with the spill: the register layout where there is
+         * one, else the model's spill, else none */
+        let places = shc_mixed_out_places(&k);
+        match (shc_mixed_out_layout(&k), model_spill(&t)) {
+            (Some((s, n)), _) => assert_eq!(places, Some((s, n, 0)), "{t:?}"),
+            (None, Some(spilled)) => assert_eq!(places.map(|p| p.2), Some(spilled), "{t:?}"),
+            (None, None) => assert_eq!(places, None, "{t:?}"),
         }
         let want = encode(&t);
         assert_eq!(shc_blend_key_mixed(&k), want, "{t:?}");

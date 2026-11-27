@@ -294,8 +294,23 @@ fn past_four_registers_is_refused_by_name() {
     assert_eq!(gl_list.map(|l| l.1), Some(2));
     assert_eq!(gl_mixed, None);
     assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
-    // three RGBA16F: two registers each
-    let f = [GL_RGBA16F, GL_RGBA16F, GL_RGBA16F];
+    // RGBA32UI first of three: the two after it would both spill, which no
+    // end-of-tile program emits
+    let f = [GL_RGBA32UI, GL_R32UI, GL_RGBA8];
     assert_eq!(gl_side(&f).1, None);
     assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
+}
+
+/// Three targets whose last one does not fit the four registers spills it
+/// to tile buffer 0 (`eot3_tb`): an integer mix has the same key on both
+/// sides (the shape of dEQP fragment_out.random seed 9: one register, one
+/// register, four), and three RGBA16F, one class everywhere, have their keys
+/// and no mixed key on either.
+#[test]
+fn the_last_of_three_spilled_agrees() {
+    agree(&[GL_R32I, GL_R32UI, GL_RGBA32UI]);
+    agree(&[GL_RGBA8, GL_RG32UI, GL_R32UI]);
+    let f = [GL_RGBA16F, GL_RGBA16F, GL_RGBA16F];
+    assert_eq!(gl_side(&f).1, None);
+    assert_eq!(pvr_keys::draw_mixed_key(&draw_of(&f)), Err(pvr_keys::REFUSE_NOT_A_MIX));
 }

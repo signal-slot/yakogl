@@ -7034,16 +7034,22 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 ///   dword count (`chain::pack_int_output`), which is where the end-of-tile
 ///   emit reads attachment `n` from when every attachment takes `d`
 ///   registers: dEQP's shader executor (modf's `out0` and `out1`). Past the
-///   pixel's four output registers (two RGBA32UI) it is refused by name.
+///   pixel's four output registers the program is the per-target one
+///   (`chain::build_fragment_with`) that stores the last attachment to tile
+///   buffer 0, drawn where an end-of-tile program emits that layout
+///   ([`super::mrt_layout::layout`]: three RG32UI or RGBA16I, `eot3_tb`),
+///   and refused by name where none does (two RGBA32UI).
 /// - A mix (integer beside float, or integer layouts that differ, dense, at
 ///   most `SHC_MIXED_MAX_TARGETS`, no sRGB): `fs` is the variant of the
 ///   draw's mixed key ([`super::target_keys::draw_mixed_key`]) writing the
 ///   registers the layout spans. The compiler puts target `i` at
-///   `shc_mixed_out_layout`'s start `i` (each after the one before, one of
+///   `shc_mixed_out_places`'s start `i` (each after the one before, one of
 ///   two or more dwords on an even register), the walk the end-of-tile emit
-///   and the frame load make ([`attachment_out_reg`]). The key carries no
-///   blend and no colour mask, so a draw with either is refused by name, as
-///   is a layout past the four registers (RGBA8 beside RGBA32UI).
+///   and the frame load make ([`attachment_out_reg`]), and stores the last
+///   of three to tile buffer 0 when it does not fit (R32I, R16I, RGBA32UI:
+///   `eot3_tb`). The key carries no blend and no colour mask, so a draw with
+///   either is refused by name, as is a layout past the four registers with
+///   no end-of-tile program for its spill (RGBA8 beside RGBA32UI).
 pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'static str> {
     use super::target_keys::*;
     let n = (d.num_targets as usize).min(d.targets.len());
@@ -7056,14 +7062,19 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
                 return Err(REFUSE_NOT_A_MIX);
             }
             let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
-            let dwords = n as u32 * rt.dwords();
-            if dwords > PVR_BACKEND_MAX_OUT_REGS {
-                return Err(REFUSE_ONE_LAYOUT_PAST_FOUR);
-            }
+            /* in the registers (`n * d` dwords), or the last attachment in
+             * tile buffer 0 where an end-of-tile program emits that layout */
+            let per = [rt.dwords() as u8; super::mrt_layout::MAX_TARGETS];
+            let lay = match super::mrt_layout::layout(&per[..n.min(per.len())]) {
+                Ok(lay) if lay.tile_buffers <= 1 => lay,
+                _ => return Err(REFUSE_ONE_LAYOUT_PAST_FOUR),
+            };
             let ok = d.target_gpu != 0
                 && d.targets[1..n].iter().all(|t| t.gpu != 0)
                 && fs.is_some_and(|fs| {
-                    fs.blend_key == shaderc::shc_blend_key_int_rt(rt) && u32::from(fs.num_outputs) == dwords
+                    fs.blend_key == shaderc::shc_blend_key_int_rt(rt)
+                        && fs.num_outputs == lay.output_regs
+                        && fs.num_tile_buffers == lay.tile_buffers
                 });
             return if ok { Ok(()) } else { Err(REFUSE_NOT_A_MIX) };
         }
@@ -7073,7 +7084,7 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
         return Err(REFUSE_MIX_CLEAR_MASK);
     }
     let (keys, k) = draw_target_keys(d)?;
-    let Some((_, span)) = crate::target_key::shc_mixed_out_layout(&keys[..k]) else {
+    let Some((_, span, spilled)) = crate::target_key::shc_mixed_out_places(&keys[..k]) else {
         return Err(REFUSE_FOUR_REGISTERS);
     };
     /* `d.blend` is attachment 0's (ES 3.0 4.1.8: off for an integer one),
@@ -7093,7 +7104,7 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
     if d.color_write && d.color_mask & 0xf != 0xf {
         return Err(REFUSE_MIX_MASK);
     }
-    if fs.is_some_and(|fs| fs.blend_key == key && fs.num_outputs == span) {
+    if fs.is_some_and(|fs| fs.blend_key == key && fs.num_outputs == span && fs.num_tile_buffers == spilled) {
         Ok(())
     } else {
         Err(REFUSE_NOT_A_MIX)
