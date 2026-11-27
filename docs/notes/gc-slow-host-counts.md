@@ -632,7 +632,7 @@ spread is the prediction; a gain of up to 2 ms would be early depth on a draw
 the host does not show; a slowdown of 0.2 to 1 ms (800x600) or 1 to 4 ms
 (1600x1200) a job is an RS tile-in or copy back the host harness does not have.
 
-### Where W8 and W9 pay off (`gc-tiled-wire.md`, commit `d18a8132`)
+### Where W8 and W9 pay off (`gc-tiled-wire.md`, commit `4a03e8bc`)
 
 `gc-tiled-wire.md` W8 and W9 ("Host-priced", item w8w9-host-price) count the
 fills as the RS writes them, padded. **Terrain is the only scene where W8 and
