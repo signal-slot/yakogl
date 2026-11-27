@@ -1,0 +1,1044 @@
+dcache off; icache flush; go 0xd0000000
+## Starting application at 0xD0000000 ...
+sample: build tree=e63ab28e table=6c5b8a70
+verdin_imx95: WDOG3 armed: CS 0x00002900 -> 0x000035e3 (was stopped), TOVAL 0x400 -> 0x1d4c, timeout 60000 ms, polls 0/200360 in 28850 us; fed until 600 s of uptime
+board: watchdog armed
+verdin_imx95: record sink: BBM GPR4..7 over SCMI (nothing yet)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+verdin_imx95: CSF firmware 282624 bytes embedded, built from a file with sha256 a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b (mkmalifw.sh's digest, not computed at run time)
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+vi95_deqp: build e63ab28e
+deqp: case filter 'dEQP-GLES2.functional.shaders.indexing.tmp_array.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+verdin_imx95: GPU on over SCMI: level 2 (800000 kHz), gate 800000000 Hz; timer 24000000 Hz
+osal(mali): ready: gpu_id 0xac740001, heap ctx 0x800000015000, 5 of 5 chunk(s) of 0x200000, carve-out 74336 KiB at 0x4000000000 (8800 KiB of it the board window), csg ack 27 us
+mali: gpu_id 0xac740001 (G310v2, core_features 0x1), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+mali arena 'context': high-water 832 of 4096 bytes
+mali shaderc table 'IR values': high-water 2 of 2048
+mali shaderc table 'NIR instructions': high-water 23 of 1536
+mali shaderc table 'BIR instructions': high-water 57 of 1536
+mali shaderc table 'BIR values': high-water 33 of 1536
+mali shaderc table 'FAU words': high-water 11 of 128
+mali shaderc table 'immediates': high-water 5 of 64
+mali shaderc table 'uniform rows': high-water 1 of 256
+mali shaderc table 'fragment pair nodes': high-water 2 of 255
+mali: clear program built: 256 + 128 bytes of code
+mali: colour preload program built: 128 bytes of code
+mali: depth preload program built: 128 bytes of code
+mali: stencil preload program built: 128 bytes of code
+mali: depth/stencil preload program built: 128 bytes of code
+mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_loop_read_fragment'..
+mali shaderc table 'IR values': high-water 407 of 2048
+mali shaderc table 'locals': high-water 44 of 256
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1361 
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_loop_read_vertex'..
+mali shaderc table 'IR values': high-water 409 of 2048
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 1480 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_fragment'..
+mali shaderc table 'IR values': high-water 762 of 2048
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1425 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_vertex'..
+mali shaderc table 'IR values': high-water 764 of 2048
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1544 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_loop_read_fragment'..
+yakogl: program 2 has no uniform 'u_arr'
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+yakogl: program 2 has no uniform 'uv4_two'
+yakogl: program 2 has no uniform 'uv4_black'
+yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: program 2 has no uniform 'uv4_white'
+mali arena 'desc': high-water 1072 of 1048576 bytes
+mali arena 'data': high-water 592 of 262144 bytes
+mali arena 'code': high-water 384 of 131072 bytes
+mali arena 'spds': high-water 64 of 32768 bytes
+mali arena 'cs': high-water 424 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 1445 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_read_fragment'..
+yakogl: program 2 has no uniform 'u_arr'
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+yakogl: program 2 has no uniform 'uv4_two'
+yakogl: program 2 has no uniform 'uv4_black'
+yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: program 2 has no uniform 'uv4_white'
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_read_vertex'..
+yakogl: program 2 has no uniform 'u_arr'
+yakogl: program 2 has no uniform 'ub_true'
+yakogl: program 2 has no uniform 'ub_false'
+yakogl: program 2 has no uniform 'ub4_true'
+yakogl: program 2 has no uniform 'ub4_false'
+yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: program 2 has no uniform 'ui_zero'
+yakogl: program 2 has no uniform 'ui_one'
+yakogl: program 2 has no uniform 'ui_two'
+yakogl: program 2 has no uniform 'ui_three'
+yakogl: program 2 has no uniform 'ui_four'
+yakogl: program 2 has no uniform 'ui_five'
+yakogl: program 2 has no uniform 'ui_six'
+yakogl: program 2 has no uniform 'ui_seven'
+yakogl: program 2 has no uniform 'ui_eight'
+yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: program 2 has no uniform 'ui2_one'
+yakogl: program 2 has no uniform 'ui2_two'
+yakogl: program 2 has no uniform 'ui2_four'
+yakogl: program 2 has no uniform 'ui2_five'
+yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: program 2 has no uniform 'ui3_one'
+yakogl: program 2 has no uniform 'ui3_two'
+yakogl: program 2 has no uniform 'ui3_four'
+yakogl: program 2 has no uniform 'ui3_five'
+yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: program 2 has no uniform 'ui4_one'
+yakogl: program 2 has no uniform 'ui4_two'
+yakogl: program 2 has no uniform 'ui4_four'
+yakogl: program 2 has no uniform 'ui4_five'
+yakogl: program 2 has no uniform 'uf_zero'
+yakogl: program 2 has no uniform 'uf_one'
+yakogl: program 2 has no uniform 'uf_two'
+yakogl: program 2 has no uniform 'uf_three'
+yakogl: program 2 has no uniform 'uf_four'
+yakogl: program 2 has no uniform 'uf_five'
+yakogl: program 2 has no uniform 'uf_six'
+yakogl: program 2 has no uniform 'uf_seven'
+yakogl: program 2 has no uniform 'uf_eight'
+yakogl: program 2 has no uniform 'uf_half'
+yakogl: program 2 has no uniform 'uf_third'
+yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: program 2 has no uniform 'uv2_half'
+yakogl: program 2 has no uniform 'uv2_one'
+yakogl: program 2 has no uniform 'uv2_two'
+yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: program 2 has no uniform 'uv3_half'
+yakogl: program 2 has no uniform 'uv3_one'
+yakogl: program 2 has no uniform 'uv3_two'
+yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: program 2 has no uniform 'uv4_half'
+yakogl: program 2 has no uniform 'uv4_one'
+mali arena 'data': high-water 239952 of 262144 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_loop_read_fragment'..
+mali shaderc table 'NIR instructions': high-water 32 of 1536
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 402 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 490 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 495 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 583 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_loop_read_fragment'..
+mali shaderc table 'fragment pair nodes': high-water 13 of 255
+mali arena 'desc': high-water 1136 of 1048576 bytes
+mali arena 'code': high-water 640 of 131072 bytes
+mali arena 'spds': high-water 96 of 32768 bytes
+mali arena 'cs': high-water 432 of 393216 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 484 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 505 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_loop_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 505 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 593 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 514 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 602 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 470 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 558 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 491 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 579 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_dynamic_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 396 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 484 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 460 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 548 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 449 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 470 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_loop_write_static_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 422 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_loop_read_vertex'..
+mali shaderc table 'NIR instructions': high-water 52 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 486 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 574 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 475 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_read_vertex'..
+mali shaderc table 'FAU words': high-water 12 of 128
+mali arena 'data': a chunk of 262144 bytes for a block of 138384
+mali arena 'data': high-water 378336 of 524288 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.float_static_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1337 
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_loop_read_vertex'..
+mali shaderc table 'NIR instructions': high-water 122 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1401 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_vertex'..
+mali shaderc table 'IR values': high-water 765 of 2048
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1520 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 1421 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_read_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_const_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 391 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 479 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 484 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 572 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_loop_read_fragment'..
+mali shaderc table 'fragment pair nodes': high-water 14 of 255
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 473 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 494 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_loop_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 491 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 579 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 500 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 588 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 456 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 544 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 477 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 565 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_dynamic_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 385 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 473 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 449 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 537 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 438 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 459 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_loop_write_static_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 408 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 472 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 560 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 461 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_read_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec2_static_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1352 
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_loop_read_vertex'..
+mali shaderc table 'NIR instructions': high-water 130 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1416 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1535 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 1436 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_read_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 386 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 474 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 479 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 567 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_loop_read_fragment'..
+mali shaderc table 'fragment pair nodes': high-water 28 of 255
+mali arena 'code': high-water 768 of 131072 bytes
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 468 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 489 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_loop_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 486 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 574 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 495 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 583 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 451 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 539 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 472 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 560 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_dynamic_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 380 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 468 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 444 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 532 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 433 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 454 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_loop_write_static_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 403 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 467 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 555 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 456 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_read_vertex'..
+mali shaderc table 'BIR instructions': high-water 60 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_static_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 1367 
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_loop_read_vertex'..
+mali shaderc table 'NIR instructions': high-water 138 of 1536
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 1431 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1550 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 1451 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_read_vertex'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_static_read_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 381 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 469 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 474 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 562 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 463 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 484 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_loop_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 481 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 569 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 490 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 578 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 446 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 534 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 467 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 555 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_dynamic_write_static_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 375 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 463 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 439 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 527 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 428 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 449 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_loop_write_static_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_loop_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 398 b
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_loop_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_loop_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_read_fragment'..
+glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 462 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_read_fragment
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 550 bytes]
+deqp: NotSupported dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_dynamic_read_vertex
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_loop_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_loop_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_loop_read_vertex'..
+glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 451 bytes]
+deqp: Fail dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_loop_read_vertex
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_read_fragment'..
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_read_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_read_vertex'..
+mali shaderc table 'BIR instructions': high-water 63 of 1536
+mali shaderc table 'BIR values': high-water 36 of 1536
+deqp: Pass dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_static_write_static_read_vertex
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        40/160 (25.0%)
+  Failed:        16/160 (10.0%)
+  Not supported: 104/160 (65.0%)
+  Warnings:      0/160 (0.0%)
+  Waived:        0/160 (0.0%)
+deqp: done: 40 passed, 16 failed, 104 not supported, 0 warnings, complete=1
+deqp: summary: 160 cases begun, 160 with a result, 0 without
+osal(mali): kicks 41, completed 41; pages 1095 (high-water 1165) of 18584; frees held 0, refused 0; stopped by sched refusal 0 (0x0)
+osal(mali): restarts 0 (last by sched refusal 0, 0x0); tiler OOMs 0 grown, 0 with no chunk; heap 5 of 5 chunk(s); group running, memory not kept; CS stops refused 0
+deqp: FAILED (rc=-1)
+shaderc: keep high-water 16128 of 1048576 bytes (4480 held now)
+yakogl: draws refused 0
+deqp: FAIL rc=-1
+yk-record: 594b0201 00000002 00000000 00000000
+board: holding 0 s, then the reset
+verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9141 ms
+�\x00

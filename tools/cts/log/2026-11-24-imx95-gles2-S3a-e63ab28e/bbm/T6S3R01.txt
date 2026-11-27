@@ -1,0 +1,3 @@
+# T6S3R01: tools/imx95_bbm_record.sh read on the module after the row (stdout, stderr, exit code)
+imx95_bbm_record: no SCMI raw interface (no /sys/kernel/debug/scmi/*/raw/message): this kernel lacks CONFIG_ARM_SCMI_RAW_MODE_SUPPORT(_COEX), or debugfs is not mounted; the record cannot be read from Linux
+exit 3

@@ -1,0 +1,16 @@
+row	label	cases	status	seconds	lifetime_s	bbm	exit_line
+1	T6S3R01	96	done	6	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 6093 ms
+2	T6S3R02	160	done	9	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9141 ms
+3	T6S3R03	32	done	3	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 2957 ms
+4	T6S3R04	64	done	5	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 4788 ms
+5	T6S3R05	216	done	13	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 12988 ms
+6	T6S3R06	1	done	0	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 414 ms
+7	T6S3R07	68	done	5	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 4630 ms
+8	T6S3R08	208	done	11	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 10741 ms
+9	T6S3R09	70	done	5	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 4729 ms
+10	T6S3R10	70	done	5	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 4839 ms
+11	T6S3R11	270	done	16	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 15658 ms
+12	T6S3R12	324	done	18	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 18087 ms
+13	T6S3R13	144	done	9	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 9006 ms
+14	T6S3R14	200	done	36	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 35998 ms
+15	T6S3R15	300	done	15	600	not-read	verdin_imx95: board: run over: PSCI SYSTEM_RESET at 14685 ms
