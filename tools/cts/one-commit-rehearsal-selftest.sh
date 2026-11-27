@@ -5,7 +5,8 @@
 #   tools/cts/one-commit-rehearsal-selftest.sh
 #
 # Rehearses the one-commit glmark2 docs edit (#1196) on synthetic records:
-# copies the six real doc files to a temporary tree, builds three synthetic
+# copies the six real doc files and tools/website-check.sh (one-commit-docs.py
+# edits its registry too) to a temporary tree, builds three synthetic
 # common records (am62p, pi4, imx8mp) at HEAD's sha8 with common-row.py's
 # synth(), runs one-commit-docs.py --root on the copy, then
 # readme-glmark2-check.py (--ref HEAD --scenes terrain,shadow,refract
@@ -17,7 +18,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-FILES="README.md tools/cts/RESULTS.md tools/cts/STATUS.md website/data.js docs/release/checklist.md ROADMAP.md"
+FILES="README.md tools/cts/RESULTS.md tools/cts/STATUS.md website/data.js docs/release/checklist.md ROADMAP.md tools/website-check.sh"
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/one-commit-rehearsal.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
@@ -25,7 +26,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 SHA8=$(git -C "$REPO" rev-parse --short=8 HEAD)
 
-# (1) the six real files, copied
+# (1) the seven real files, copied
 TREE=$TMP/tree
 for f in $FILES; do
     mkdir -p "$TREE/$(dirname "$f")"
