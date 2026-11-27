@@ -121,6 +121,9 @@ want tests/mali_deqp_colourpair.rs "mali treekey"
 # plan #402's additions to the same row
 want tests/mali_deqp_vsconst.rs "mali treekey"
 want tests/mali_deqp_mixprec3.rs "mali treekey"
+# the rest of the plan-377 files and the glmark2 corpus table
+want tests/mali_deqp_vsuarr.rs "mali treekey"
+want tests/mali_glmark2_corpus.rs "mali treekey"
 want tests/mali_ref_selftest.rs "mali treekey"
 want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
@@ -271,6 +274,10 @@ expect "mali: no V3D row" '^skip  clippy  host-test,gpu-v3d,shaderc-online,no-sh
 out=$(plan tests/mali_deqp_intval.rs)
 expect "mali: the deqp byte-compare row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
 expect "mali: a deqp test change, the mali rows and the tree key row only" '^check.sh: .*\(--changed HEAD, scopes: mali treekey \)' "$out"
+out=$(plan tests/mali_deqp_vsuarr.rs)
+expect "mali: a later deqp test reaches its own row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(every other tests/mali_deqp_' "$out"
+out=$(plan tests/mali_glmark2_corpus.rs)
+expect "mali: the glmark2 corpus table reaches the same row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(every other tests/mali_deqp_.*mali_glmark2_corpus' "$out"
 out=$(plan tests/mali_deqp_vsconst.rs)
 expect "mali: the plan-402 deqp test reaches the same row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
 out=$(plan tools/mali/testdata/deqp_mixprec3_hp_vec3_fn.expect.json)
@@ -554,11 +561,11 @@ expect "local: the tree key row" "$treekey" "$out"
 expect "local: no report-es2 pair" '^skip  test    host-test,gpu-powervr,shaderc-online,report-es2$' "$out"
 expect "local: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$out"
-# the local set is small, about twenty rows (20 with the gl_test.c arm with
+# the local set is small, about thirty rows (30 with the gl_test.c arm with
 # the test knobs); the bound says --local trimmed the plan, not the exact count.
 # One gap: its shaderc-online rows compile tests/es3_shaderc_corpus.rs, and the
 # plans here run without the dEQP corpus (DEQP_GLES3_TEST_DIR unset above).
-expect "local: the summary says so" '^check.sh: (9|[12][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
+expect "local: the summary says so" '^check.sh: (9|[123][0-9]) ok, 0 failed, 1 gap\(s\).*skipped \(--local HEAD, scopes: all\)' "$out"
 expect "local: the corpus gap" '^gap   es3_shaderc_corpus: no dEQP GLES3 corpus at' "$out"
 out=$(local_plan src/v3d/job.rs)
 expect "local on a V3D change: the whole V3D scope" '^plan  zephyr  rpi4 ' "$out"

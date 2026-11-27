@@ -2763,6 +2763,38 @@ step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uni
     --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
     --test mali_deqp_vsconst --test mali_deqp_mixprec3 \
     --test mali_ref_selftest
+# The rest of plan #377's dEQP files (one per family step or spike), same
+# conventions and feature set as the row above; and tests/mali_glmark2_corpus.rs,
+# plan #367's glmark2 verdict table against the checked-in fixture.
+step "test    $MALI_CONFIG (every other tests/mali_deqp_*.rs, mali_glmark2_corpus.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_deqp_arith --test mali_deqp_audit --test mali_deqp_boolpix \
+    --test mali_deqp_cfold2 --test mali_deqp_constprod \
+    --test mali_deqp_constrnd --test mali_deqp_ctrlflow \
+    --test mali_deqp_defects --test mali_deqp_fclane \
+    --test mali_deqp_fclane2 --test mali_deqp_fmaloc \
+    --test mali_deqp_fsint --test mali_deqp_fsint2 --test mali_deqp_fsunif \
+    --test mali_deqp_fsunif2 --test mali_deqp_fsunif3 \
+    --test mali_deqp_gaps --test mali_deqp_highpfs --test mali_deqp_idxloc \
+    --test mali_deqp_intrnd --test mali_deqp_intval3 \
+    --test mali_deqp_intval4 --test mali_deqp_intval5 \
+    --test mali_deqp_irindex --test mali_deqp_irindex2 \
+    --test mali_deqp_irindex3 --test mali_deqp_kfold \
+    --test mali_deqp_loops2 --test mali_deqp_loops3 \
+    --test mali_deqp_loops4 --test mali_deqp_misc2 --test mali_deqp_misc3 \
+    --test mali_deqp_missing --test mali_deqp_mixcol \
+    --test mali_deqp_mixprec2 --test mali_deqp_mixprec4 \
+    --test mali_deqp_negzero --test mali_deqp_nonfin \
+    --test mali_deqp_opform --test mali_deqp_posvary \
+    --test mali_deqp_structmember --test mali_deqp_t3gap \
+    --test mali_deqp_texmisc --test mali_deqp_unif2 \
+    --test mali_deqp_unifmp --test mali_deqp_varylink2 \
+    --test mali_deqp_varyload --test mali_deqp_vs16ref \
+    --test mali_deqp_vsloop --test mali_deqp_vsloop2 \
+    --test mali_deqp_vsmix --test mali_deqp_vsuarr \
+    --test mali_deqp_vsuniarr --test mali_deqp_vsuniarr2 \
+    --test mali_deqp_vsunif \
+    --test mali_glmark2_corpus
 # The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
 # tests/mali_corpus_diff.rs, checks itself on committed references; then the
 # tool's self-test without Mesa or the CTS: the pairing of single shaders and
