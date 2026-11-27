@@ -619,11 +619,14 @@ full walk build the pinned binary and export it first: `tools/cts/deps-env.sh
 repository's `build/`): `ok disk <GB> free`, or a line naming the need. A full
 gate needs about 220 GB free without pruning (walk-fit, disk-map);
 `YAKOGL_GATE_MIN_FREE_GB` overrides that. A shortfall is `warn`, and `missing`
-(exit status 1) when the threshold is set explicitly or `GATE_FULL_RUN=1`.
+(exit status 1) when `YAKOGL_GATE_MIN_FREE_GB` is set or `GATE_FULL_RUN=1`.
 
-The 220 GB default is the unpruned figure; `setup-gate-host.sh --check` does
-not know about `YAKOGL_CHECK_PRUNE`, so for a pruned run lower the threshold
-with `YAKOGL_GATE_MIN_FREE_GB` (3.7). What a pruned run needs is not measured.
+With `YAKOGL_CHECK_PRUNE=1` the default is `YAKOGL_GATE_MIN_FREE_GB_PRUNED`
+(default 50 GB). A pruned full walk peaked at about 37 GB of disk use,
+measured by walk-final on `84841e6d` (629 ok, 0 failed, 0 gap(s), with
+`CARGO_INCREMENTAL=0`); the 50 GB default adds a 13 GB margin. An explicit
+`YAKOGL_GATE_MIN_FREE_GB` overrides both defaults, and picking the pruned
+default is not an explicit setting, so its shortfall stays `warn`.
 
 Run the check in the shell that starts the gate, after the exports the full
 gate is started with: `export $(tools/cts/deps-env.sh --present);
