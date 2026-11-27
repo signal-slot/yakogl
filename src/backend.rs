@@ -2058,13 +2058,16 @@ pub fn narrow_la_texels() -> bool {
 /// `id` holds stored depth of that size, single-sampled. The PowerVR's
 /// (`pvr_depth_sampled`): yes when the buffer owned by `id` holds depth a
 /// submitted kick stored, single-sampled, at that size; the TPU reads the
-/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The GC7000
-/// and the Mali keep the CPU resolve (their texture units are not known to
-/// read their depth layouts, `gl::texture::resolve_depth`); the GC7000's
-/// answer is yes only while gl_test's `dtpu` experiment sets its test knob
-/// (`vivante::depth_sample`, docs/notes/gc-depth-sample.md): modes 1 and 2
-/// sample the surface in place, mode 3 an RS copy of it the backend records
-/// before the draw (outcome (b).1; yes only when that copy can be made).
+/// ISP's packed D24S8 as X8U24 (docs/notes/pvr-depth-sample.md). The Mali
+/// keeps the CPU resolve (its texture unit is not known to read its depth
+/// layout, `gl::texture::resolve_depth`). The GC7000 answers yes for a Live,
+/// row-linear depth plane that covers the texture
+/// (`vivante::depth_sample::gc_depth_sampled`): its product default, dtpu
+/// mode 4, samples the surface in place as D24X8 behind a texture-cache
+/// flush (gl_test `dtpu` verdict code 3 with check 7 failing, measured on the
+/// Armadillo-X2; docs/notes/gc-depth-sample-wire.md). Its test knob also
+/// selects mode 0 (the CPU resolve), modes 1 and 2 (in place, no flush) and
+/// mode 3 (an RS copy the backend records before the draw, outcome (b).1).
 /// Not an entry of
 /// the table: the backends with an answer are named here, as
 /// `DEPTH_ONLY_TARGETS` and `narrow_la_texels` name theirs, and the host

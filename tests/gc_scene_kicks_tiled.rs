@@ -20,17 +20,22 @@
 //! * draws with early depth: draw commands issued with EARLY_Z in
 //!   PE_DEPTH_CONFIG.
 //!
-//! A frame, the most over frames 3..=6, at the commit that wrote this file
-//! (`Lag`; `Done` differs only in the waits, which the tests pin too):
+//! A frame, the most over frames 3..=6, under the depth-sample product
+//! default (dtpu mode 4, `DEPTH_TPU_D24X8_FLUSH`: shadow and refract sample
+//! their depth texture from the depth surface, no CPU depth resolve; the CPU
+//! resolve's counts of mode 0 were 1 wait outside the swap, none in it, and
+//! 1 resolve for each) (`Lag`; `Done` differs only in the waits, which the
+//! tests pin too):
 //!
 //! ```text
 //!                          terrain         shadow          refract
 //!                          off     on      off     on      off     on
 //! kicks                    11      11      2       2       3       3
-//! waits outside the swap   11      11      1       1       1       1      (Lag; 0 in Done)
+//! waits outside the swap   11      11      0       0       2       2      (Lag; 0 in Done)
+//! waits in the swap        0       0       1       1       1       1      (Lag; 0 in Done)
 //! finish() outside swap    0       0       0       0       0       0
 //! CPU tiled copies         0       0       0       0       0       0      (Done: terrain 0)
-//! CPU depth resolves       0       0       1       1       1       1
+//! CPU depth resolves       0       0       0       0       0       0
 //! RS tile-in               2       3       0       0       0       0
 //! RS copy back             0       2       0       0       0       0
 //! RS other                 9       9       3       3       4       4
@@ -90,6 +95,12 @@ const OFF_REFRACT_DONE: Counts =
 
 const fn c(kicks: u32, waits_other: u32, tiled_copies: u32, resolves: u32) -> Counts {
     Counts { kicks, waits_other, finishes_other: 0, tiled_copies, resolves, waits_swap: 0 }
+}
+
+/// [`c`] with the swap's own waits: under the depth-sample default (dtpu
+/// mode 4) no CPU resolve waits for the depth pass, so the swap does.
+const fn cs(kicks: u32, waits_other: u32, tiled_copies: u32, resolves: u32, waits_swap: u32) -> Counts {
+    Counts { kicks, waits_other, finishes_other: 0, tiled_copies, resolves, waits_swap }
 }
 
 const fn s(
@@ -185,9 +196,10 @@ fn terrain_with_gc_tiled_rt_on_beside_off() {
 
 /// shadow. Knob off, `gc_scene_kicks.rs`'s frame: 2 kicks (the canvas clear
 /// and the 1600x1200 depth pass in one stream, then the window's ground and
-/// lit horse at the swap; the ceiling is 3), 1 wait (the depth resolve's
-/// `wait_kick`, `Lag`), 1 CPU depth resolve (depth-sample-gc takes it to 0);
-/// 3 draws, 3 RS fills.
+/// lit horse at the swap; the ceiling is 3); under the dtpu default (mode 4)
+/// no CPU depth resolve and so no wait outside the swap (the CPU resolve of
+/// mode 0 had 1, its `wait_kick`), and the swap's own wait in `Lag`; 3
+/// draws, 3 RS fills.
 /// Knob on: every count the same and no draw takes a shadow or early depth.
 /// The depth pass renders into a depth texture, and the window's draws
 /// into the window: `tiled_rt::spec_of` refuses a target whose depth is a
@@ -200,16 +212,17 @@ fn shadow_with_gc_tiled_rt_on_beside_off() {
         name: "shadow",
         run: shadow,
         ceilings: (OFF_SHADOW_LAG, OFF_SHADOW_DONE),
-        off: (c(2, 1, 0, 1), c(2, 0, 0, 1), s(0, 0, 3, 3, 0, 0)),
-        on: (c(2, 1, 0, 1), c(2, 0, 0, 1), s(0, 0, 3, 3, 0, 0)),
+        off: (cs(2, 0, 0, 0, 1), cs(2, 0, 0, 0, 0), s(0, 0, 3, 3, 0, 0)),
+        on: (cs(2, 0, 0, 0, 1), cs(2, 0, 0, 0, 0), s(0, 0, 3, 3, 0, 0)),
     });
 }
 
 /// refract. Knob off, `gc_scene_kicks.rs`'s frame: 3 kicks (the canvas clear
 /// with the 1600x1200 pass, the 11-level chain in a stream of its own, the
-/// window's bunny at the swap; the ceiling is 4), 1 wait outside the swap
-/// (`Lag`: the depth resolve's `wait_kick`), 1 CPU depth resolve; 12 draws, 4
-/// RS fills.
+/// window's bunny at the swap; the ceiling is 4); under the dtpu default
+/// (mode 4) no CPU depth resolve, 2 waits outside the swap and the swap's own
+/// in `Lag` (mode 0's CPU resolve had 1 outside, its `wait_kick`, and none in
+/// the swap); 12 draws, 4 RS fills.
 /// Knob on: every count the same and no draw takes a shadow or early depth,
 /// for shadow's reason: the 1600x1200 pass has a depth texture, the bunny
 /// draws into the window.
@@ -219,7 +232,7 @@ fn refract_with_gc_tiled_rt_on_beside_off() {
         name: "refract",
         run: refract,
         ceilings: (OFF_REFRACT_LAG, OFF_REFRACT_DONE),
-        off: (c(3, 1, 0, 1), c(3, 0, 0, 1), s(0, 0, 4, 12, 0, 0)),
-        on: (c(3, 1, 0, 1), c(3, 0, 0, 1), s(0, 0, 4, 12, 0, 0)),
+        off: (cs(3, 2, 0, 0, 1), cs(3, 0, 0, 0, 0), s(0, 0, 4, 12, 0, 0)),
+        on: (cs(3, 2, 0, 0, 1), cs(3, 0, 0, 0, 0), s(0, 0, 4, 12, 0, 0)),
     });
 }
