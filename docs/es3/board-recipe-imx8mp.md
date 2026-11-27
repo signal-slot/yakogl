@@ -1137,6 +1137,67 @@ Rules that hold for every step:
 `tools/cts/cts-selftest.sh` runs the selftests of the merge, pipeline, gen, wrap, triage, preflight, report and
 sessions tools (its rows 32-39), each as `bash <selftest>` with `TMPDIR` set.
 
+### Rerunning a hung entry with the QPA echo, and what the runner does on each event
+
+**The echo image (single-row reruns of entries that hung only).** The campaign image at `05769bf2` is built
+without `CONFIG_DEQP_ECHO_QPA`, so its console carries no `qpa:` lines and the scan cannot name the case a hung
+entry stopped in. The option is `config DEQP_ECHO_QPA` in `driver/samples/zephyr/deqp/Kconfig` (`default n`;
+used by `driver/samples/zephyr/deqp/src/deqp_log.c` and `main.cpp`), and `tools/cts/imx8mp-deqp-build.sh` has no
+variable for it. Its third argument is a Kconfig fragment passed as `-DEXTRA_CONF_FILE=<fragment>`, which Zephyr
+reads after `prj.conf`, so the commit does not move. The `--table` form writes its own fragment and takes no
+second one; so write the fragment yourself, outside the tree, with the same table line the `--table` form
+writes plus the option:
+
+```sh
+# in the worktree of 05769bf2 (git worktree add --detach "$TMPDIR/yakogl-05769bf2" 05769bf2), as in step 1 of the build
+cd "$TMPDIR/yakogl-05769bf2"
+FRAG=$TMPDIR/es3-05769bf2-echo.conf                     # outside the tree, never committed
+{ printf 'CONFIG_DEQP_CASE_TABLE="%s"\n' "$(grep -vE '^[[:space:]]*(#|$)' tools/cts/imx8mp-gles3-tree.txt | paste -sd';' -)"
+  echo 'CONFIG_DEQP_ECHO_QPA=y'; } > "$FRAG"
+cmp <(head -1 "$FRAG") "$IMX8MP_OUT/x2/es3-05769bf2.table.conf"   # the table line is the campaign's, byte for byte
+IMX8MP_BOARD=x2 DEQP_MODULE=gles3 tools/cts/imx8mp-deqp-build.sh es3-05769bf2-echo 'dEQP-GLES3.info.*' "$FRAG"
+```
+
+The name `es3-05769bf2-echo` keeps it apart from `es3-05769bf2` (the build writes
+`$IMX8MP_OUT/x2/es3-05769bf2-echo/`; the stock image is not overwritten). `IMX8MP_BOARD=x2` makes the build add
+`CONFIG_GC_BOARD_WDOG_SELF_ARM=y`, so `board.sh x2` still finds `gc_wdog_arm: armed`; `IMX8MP_CONSOLE=1` is
+refused for the X2. Check `zephyr/.config` for `CONFIG_DEQP_ECHO_QPA=y` and for both `REPORT_ES2` switches
+`is not set` (the build's `check-deqp-images` line). The table is unchanged, so entry numbers and selectors are
+the stock image's. The echo costs seconds per image at the console's baud rate (the Kconfig help says "for a
+short case filter only"), which is why the image is **only** for rerunning the one entry that hung, as
+`TREE_ROWS=<NN>` with `TREE_IMAGE=$IMX8MP_OUT/x2/es3-05769bf2-echo/zephyr/zephyr.bin`, with the console
+captured (`BOARD_UART`, or the console resource read as in "Armadillo-X2 campaign"); `tools/cts/qpa-from-uart.py`
+rebuilds a `.qpa` from such a capture. It never runs a slice's full rows: the campaign's recorded rows stay
+from the stock `05769bf2` image, and a rerun's verdict line is not merged in place of a row. The record of a
+rerun says it used the echo image: its name, its sha256, the fragment's two lines and that the build was from
+`05769bf2`. The echo image may time differently (slower), so its run time does not stand in for the stock row's.
+
+**What the runner does on each event** (`tools/cts/imx8mp-gles3-board.sh tree`, which runs the entries one at a
+time, over `tools/board.sh x2 tree`; `board.sh` itself is not changed). Return codes are `board.sh`'s: 0 done,
+3 refused before the reboot, 4 the verdict is not `done`, 5 the board did not come back.
+
+| Event | What it looks like | What the runner does | Verdict in the record |
+| --- | --- | --- | --- |
+| Hang of the GPU or the image | no end line; nothing ends the entry until the image's WDOG1 (600 s, `gc_wdog_arm: armed`) fires | nothing of its own: the hang is bounded by WDOG1, not by the runner. After the jump `board.sh x2` waits at most **1500 s** (`kexec_wait_back`: ping lost, ping back, ssh back) for Linux, which is the per-row bound; 600 s of WDOG1 is inside it | the reset board returns and the record is read: a record from before the reset gives `done`, `failed` or `died_after=<stage>`; none gives `no_record`. A hang that dEQP's GC recovery survives counts in `resets=` and reads `done_with_resets` |
+| Abort (image faults) | `ZEPHYR FATAL ERROR` on a console, or the record ends early | the same bound; the image stops, WDOG1 is not fed, and the board resets inside 600 s | `died_after=<stage>`, `no_record` or `bad_record` (rc 4), as the record says; a console run reads `fatal` |
+| Vivante back-end refusal (`NotSupported`) | a case result, not a runner event: the image carries on | nothing: it is counted in the record (`unsupported=`) | `done` with the NotSupported count in the tally; not a stop |
+| WDOG1 reset | the board reboots in the middle of the entry (600 s without a feed) | the same wait for Linux; the entry's record is read after the return | `back_after` near 600 s plus boot; whether the entry then reads `done_with_resets` (the image counted the reset) or `died_after`/`no_record` (it did not) depends on the record, and either way the runner stops at once (below) |
+
+The runner stops the chain at the first entry that failed to run: `board.sh` exits non-zero, or the verdict
+line says `not_back`, `refused` or one containing `reset` (`done_with_resets`). It prints
+`imx8mp-gles3-board: STOP e<NN> rc=<rc> verdict=<v>` and exits with that code; other verdicts (`failed`,
+`done_stopped`, `died_after=...`, `no_record`) are results and the chain goes on. So an entry that ends in a
+WDOG1 reset and reads `done_with_resets` ends that session; the next session starts at the next entry
+(`TREE_ROWS=<NN+1>-...`) and the entry's row is the verdict line as it is, never rerun for a better one
+(the rerun rule of step 11). A refusal (rc 3, before the reboot, nothing changed on the board) is retried by
+`board.sh` `TREE_RETRIES` times, `TREE_RETRY_S` seconds apart. The code's default for the X2 is **0** retries
+(`TREE_RETRIES_DEFAULT`; 60 for the Verdin), so a session that wants retries sets `TREE_RETRIES=10
+TREE_RETRY_S=30` itself: ten tries, 300 s in all, then `refused; the chain stops` (exit 3, verdict `refused`).
+The retry covers each name page's boot the same way. A board that did not come back inside the 1500 s (rc 5,
+`not_back`, or `no_jump` when the jump itself failed) is never retried: the chain stops at once, no further
+jump is made, and the session is reported as **needing a person**, as in "Armadillo-X2 campaign", step 6. A hang
+that does come back through WDOG1 is not that case.
+
 ## Running a GLES3 slice on the Armadillo-X2
 
 The campaign commit and slice names of this section are superseded by "Armadillo-X2 campaign" below (commit
