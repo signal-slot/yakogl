@@ -342,6 +342,9 @@ def go_block(img, verdict):
 GIC_RX = re.compile(r"^t6: GIC active state: (.*)$", re.M)
 FEED_RX = re.compile(r"^yakogl-wdt: nanopc_t6 first feed at (-?\d+) ms\s*$", re.M)
 UART2_RX = re.compile(r"^# (UART2.*)$", re.M)
+BANNER_FRQ_RX = re.compile(r"^T6:A EL2 .* CNTFRQ_EL0 (\d+)\s*$", re.M)
+FRQ0_RX = re.compile(r"^t6: CNTFRQ_EL0 0(?![0-9A-Za-z])", re.M)
+GIC_TIMEOUT_RX = re.compile(r"gic: redistributor at frame (\d+) did not wake \(ChildrenAsleep still set\)")
 
 
 def uart2_block(reads_text):
@@ -355,13 +358,26 @@ def uart2_block(reads_text):
 def tail_block(reads_text, img):
     L = ["", "UART2 at the prompt (prompt reads)"]
     L += uart2_block(reads_text)
+    L.append("CNTFRQ_EL0 at entry (image)")
+    b, z = BANNER_FRQ_RX.search(img), FRQ0_RX.search(img)
+    if b is not None:
+        hz = int(b.group(1))
+        L.append("  cntfrq: %d at entry%s" % (hz, " (image refused)" if hz == 0 and z else ""))
+    elif z is not None:
+        L.append("  cntfrq: 0 at entry (image refused)")
+    else:
+        L.append("  cntfrq: %s (no T6:A banner value and no 'CNTFRQ_EL0 0' stop)" % NR)
     L.append("GIC redistributor wake and active reset (image)")
     g = GIC_RX.search(img)
     if g is None:
         L.append("  GIC active state line: %s" % NR)
     else:
         L.append("  GIC active state: " + g.group(1).rstrip())
-        if "no redistributor with affinity" in g.group(1):
+        t = GIC_TIMEOUT_RX.search(g.group(1))
+        if t:
+            L.append("  redistributor at frame %s did not wake (ChildrenAsleep still set): wake timeout, not "
+                     "'no redistributor matched'; SGIs and PPIs were not scanned" % t.group(1))
+        elif "no redistributor with affinity" in g.group(1):
             L.append("  no redistributor matched: the wake timed out or the affinity has no frame; "
                      "SGIs and PPIs were not scanned")
         else:
