@@ -6,7 +6,7 @@
 #
 # Host-only: tools/cts/glmark2-photo-probes.py on synthetic panel screenshots
 # generated under $TMPDIR: a 1280x800 panel with the 800x600 window at (0,0)
-# and known probe colours, shown upright and turned 90/180/270 degrees, scaled
+# and known probe colours (plus x2-kvm: 1920x1080 whole frames, window shifted, junk outside), shown upright and turned 90/180/270 degrees, scaled
 # to 1280x720 and 800x500, all black, with a colour cast, and bad inputs.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -127,8 +127,66 @@ cmp "$T/k.png" "[test] scene=dark" >"$T/o"; rc=$?
 cmp "$T/cast.png" "[test] scene=ref" --tolerance 5 >"$T/o"; rc=$?
 [ $rc -eq 1 ] && ok "--tolerance 5 turns the cast into far" || bad "tolerance rc=$rc"
 
-# bad input: exit 2
 bad2() { "$@" >/dev/null 2>&1; [ $? -eq 2 ] && ok "exit 2: $NAME" || bad "exit 2: $NAME"; }
+
+# x2-kvm: a 1920x1080 whole-frame capture, the window at (0,0), black elsewhere
+cat > "$T/genx.py" <<'PY'
+import struct, sys, zlib
+# genx.py <out> <w> <h> <window dx> <junk 0|1: grey patch outside the window>
+out, W, H, dx, junk = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == "1"
+FW, FH = 1920, 1080
+COL = {"c": (200, 160, 40), "tl": (24, 28, 24), "tr": (30, 80, 220),
+       "bl": (220, 30, 30), "br": (40, 200, 90)}
+POS = {"c": (400, 300), "tl": (200, 150), "tr": (600, 150), "bl": (200, 450), "br": (600, 450)}
+def frame(x, y):
+    wx = x - dx
+    if 0 <= wx < 800 and y < 600:
+        for k, (px, py) in POS.items():
+            if abs(wx - px) <= 20 and abs(y - py) <= 20:
+                return COL[k]
+        return (60, 70, 80)
+    if junk and 1200 <= x < 1500 and 300 <= y < 700:
+        return (90, 90, 90)
+    return (0, 0, 0)
+rows = b"".join(b"\0" + bytes(v for x in range(W) for v in frame(x * FW // W, y * FH // H))
+                for y in range(H))
+def chunk(t, b):
+    return struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+with open(out, "wb") as f:
+    f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+PY
+genx() { python3 -I "$T/genx.py" "$@"; }
+X="--frame x2-kvm"
+genx "$T/x.png" 1920 1080 0 0
+check_probes "x2-kvm 1920x1080" "$T/x.png" $X
+genx "$T/xs.png" 960 540 0 0
+check_probes "x2-kvm scaled to 960x540" "$T/xs.png" $X
+python3 -I "$PROBES" "$T/x.png" $X | grep -q "black no" && ok "x2-kvm: black no" || bad "x2-kvm: black no"
+python3 -I "$PROBES" "$T/x.png" $X --compare "$T/pictures.txt" imx8mp "[test] scene=ref" >/dev/null \
+    && ok "x2-kvm compare: exit 0" || bad "x2-kvm compare"
+# window shifted right by 100: the crop alone would read wrong probes, the outside check refuses
+genx "$T/xshift.png" 1920 1080 100 0
+python3 -I "$PROBES" "$T/xshift.png" $X >"$T/o" 2>"$T/e"; rc=$?
+[ $rc -eq 2 ] && grep -q "framing wrong" "$T/e" && [ ! -s "$T/o" ] \
+    && ok "x2-kvm shifted window: exit 2, framing wrong, no probes" || bad "x2-kvm shifted rc=$rc"
+# window shifted by 40: still caught (the window's right edge shows 40 px of picture outside)
+genx "$T/xshift2.png" 1920 1080 40 0
+python3 -I "$PROBES" "$T/xshift2.png" $X >/dev/null 2>&1; rc=$?
+[ $rc -eq 2 ] && ok "x2-kvm window 40 px off: exit 2" || bad "x2-kvm 40 px shift rc=$rc"
+# non-black outside the window
+genx "$T/xjunk.png" 1920 1080 0 1
+python3 -I "$PROBES" "$T/xjunk.png" $X >"$T/o" 2>"$T/e"; rc=$?
+[ $rc -eq 2 ] && grep -q "not black" "$T/e" && ok "x2-kvm non-black outside: exit 2" || bad "x2-kvm junk rc=$rc"
+# a window flag follows the frame: right with the shifted window given
+python3 -I "$PROBES" "$T/xshift.png" $X --window 100,0,800,600 >/dev/null 2>&1; rc=$?
+[ $rc -eq 0 ] && ok "x2-kvm --window 100,0,800,600 on the shifted capture: exit 0" || bad "x2-kvm --window rc=$rc"
+NAME="x2-kvm window outside frame"; bad2 python3 -I "$PROBES" "$T/x.png" $X --window 1500,0,800,600
+NAME="unknown frame"; bad2 python3 -I "$PROBES" "$T/x.png" --frame nosuch
+# the default framing keeps its limits: 1920-wide windows do not fit the panel
+NAME="default frame window outside panel"; bad2 python3 -I "$PROBES" "$T/a.png" --window 1000,0,800,600
+
+# bad input: exit 2
 NAME="missing file"; bad2 python3 -I "$PROBES" "$T/none.png"
 printf 'not a png' > "$T/junk.png"
 NAME="not a PNG"; bad2 python3 -I "$PROBES" "$T/junk.png"
