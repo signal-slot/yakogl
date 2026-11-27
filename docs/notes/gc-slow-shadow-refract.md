@@ -454,23 +454,34 @@ status` read `containers 1`: `slint-launcher` still runs, so `board.sh x2 run`
 would refuse the jump and none was made. Details: `x2-glmark2-slow-scenes.md`,
 "Session A: stop, 2026-11-25".
 
-## Verdin iMX8MP: glmark2 shadow, refract and terrain, before and after [plan #417]
+## glmark2 shadow, refract and terrain, before and after, measured on the Armadillo-X2 in place of the Verdin iMX8MP [plan #417]
 
-The board sessions now run on the Verdin iMX8MP, through connected's leases
-(the X2 sections above are kept for the X2). The table is **empty**: no Verdin
-figure exists yet; every cell is a placeholder until a session fills it.
+The Verdin iMX8MP is away (off the farm since 2026-11-16, no return date). The
+owner's rule of 2026-11-27 moves the i.MX8MP / GC7000UL board work to the
+Armadillo-X2 (same i.MX 8M Plus SoC and GC7000UL GPU), recorded rows included,
+so every figure below is **measured on the Armadillo-X2 in place of the Verdin
+iMX8MP** and each record says so. The table is **empty**: no X2 figure exists
+yet; every cell is a placeholder until a session fills it. The X2 cannot run
+until its podman container is stopped for the run; that step is in
+`docs/notes/x2-glmark2-slow-scenes.md` (last section; read only here).
 
 ### What each session records
 
 - the origin/main commit the image was built from (8 hex digits at least);
-- the image sha256 of the glmark2 image;
-- the record directory, `records/imx8mp/<YYYYMMDD-HHMM>-<name>-<sha8>/`
-  (gitignored, redacted);
+- the image sha256 of the glmark2 image, built for the X2 with
+  `IMX8MP_BOARD=x2` (armadillo_x2/mimx8ml8/a53; the Verdin build is the
+  default and is not used);
+- the record directory, `records/x2/<YYYYMMDD-HHMM>-<name>-<sha8>/`
+  (gitignored, redacted; no board address or UART path in it or here);
 - PERF page 0 v0, the frames in the 10 s scene, and the ms a frame,
   10 000 / v0 (page 0 v0 saturates at 65,535, so a value there is a bound);
 - PERF page 4 v3, the KiB of CPU passes a frame (the CPU depth resolve's
   bytes; cause 1);
-- for each scene, shadow, refract and terrain, one session per row.
+- the pages are read at selectors `SEL=0x1000`, `0x1001`, `0x1003` and
+  `0x1004` (page 4 is `0x1004`); the X2 stores w0..w2, so v0..v3 come from
+  these pages;
+- for each scene, shadow, refract and terrain, one session per row; terrain is
+  the control (expected unchanged by the depth-sample default).
 
 ### Expected effect
 
@@ -486,10 +497,13 @@ figure exists yet; every cell is a placeholder until a session fills it.
   is expected unchanged (`gc-slow-terrain.md`). If the verdict is (c), the CPU
   fixes stay and there is no "after" beyond them.
 
-### Table (empty)
+### Table (empty; measured on the Armadillo-X2)
 
-| scene | before: commit | before: image sha256 | before: record | before: page 0 v0 | before: page 4 v3 KiB | before: ms a frame | after: commit | after: image sha256 | after: record | after: page 0 v0 | after: page 4 v3 KiB | after: ms a frame |
-|---|---|---|---|---:|---:|---:|---|---|---|---:|---:|---:|
-| shadow | — | — | — | — | — | — | — | — | — | — | — | — |
-| refract | — | — | — | — | — | — | — | — | — | — | — | — |
-| terrain | — | — | — | — | — | — | — | — | — | — | — | — |
+| scene | when | origin/main commit | image sha256 | records/x2/ directory | page 0 v0 | page 4 v3 KiB | ms a frame |
+|---|---|---|---|---|---:|---:|---:|
+| shadow | before | — | — | records/x2/— | — | — | — |
+| shadow | after | — | — | records/x2/— | — | — | — |
+| refract | before | — | — | records/x2/— | — | — | — |
+| refract | after | — | — | records/x2/— | — | — | — |
+| terrain (control) | before | — | — | records/x2/— | — | — | — |
+| terrain (control) | after | — | — | records/x2/— | — | — | — |
