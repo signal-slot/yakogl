@@ -34,16 +34,36 @@ stages them under `$NETBOOT_TFTP_ROOT/yakogl/` for `tools/tftp_oneshot.py`
 (proven first with `tools/uboot-netboot-lib.sh`'s `nb_tftp_canary`). `run`
 refuses an image of 255 MiB or more on the host before anything is staged,
 an image without the `gc_wdog_arm: armed` marker (unless
-`MP2_NO_WATCHDOG=1`), a bad CRC in `fw_printenv`, a `scriptaddr` unset or in
+`MP2_NO_WATCHDOG=1`), a bad CRC in the stored environment, a `scriptaddr` unset or in
 the go window, a standalone default (`tools/mp2s_guard.py --for oneshot`),
 a `/boot` that is not on an SD disk and files of an earlier run. It records
-`fw_printenv` and the sha256 of every stock `/boot` file before and after,
+the environment and the sha256 of every stock `/boot` file before and after,
 prints the UNDO before each change, and ends in one verdict line
 (`uboot-mp2-oneshot stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=<b> row
 ...`). A board that does not come back is `verdict=not_back`, rc 7, NEEDS A
 PERSON, and is never retried; what a cut-off run leaves is recorded beside
 the board lock and `disarm` removes it. It never writes the environment or
 `bootcmd`.
+
+**How the environment is read.** Linux's `fw_printenv` does not run on the DK
+as shipped (no `/etc/fw_env.config`), so the runner `tools/board-stm32mp2-uboot.sh`
+(the one `tools/board.sh stm32mp257f-dk` dispatches to) does not use it. It
+reads the `u-boot-env` partition (512 KiB) of the card with `dd` over ssh,
+both copies (0x7e000 and 0x7c000, 0x2000 each; each is a CRC32, a flag byte,
+then the strings), and parses the copy on the host with `tools/uboot_env.py`
+(`check`, then `print` of the active copy). A bad CRC on either copy refuses
+the run. The read is made before the run and again after the board's reboot,
+on the partition resolved again by the device rule below. The two printed
+variable lists are sorted and diffed (expected empty), and the sha256 of the
+two raw copies is compared before and after (expected equal: it also covers
+the flag bytes and the blank second copy that a text diff does not see). The
+raw copies are not kept in the run directory; only their sha256 are. The
+description is in section 1 and sections 7 and 8 of
+`docs/notes/stm32mp257f-dk-uboot-boot.md`. `fw_printenv` is at most a
+secondary record: `tools/probes/stm32mp257f_dk/env_read/collect.sh` keeps its
+output when it runs, and tolerates its failure; nothing decides on it. (The
+header of `oneshot.sh` in this directory still names `fw_printenv` for its own
+read; that is the older runner, not the one `board.sh` uses.)
 
 **Which device is the card.** The card is the disk `/boot` is mounted from,
 and only if `/sys/block/<disk>/device/type` says `SD` (the eMMC says `MMC`);
