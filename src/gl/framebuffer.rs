@@ -183,7 +183,7 @@ pub fn draw_buffer(c: &GlContext, i: usize) -> GLenum {
     }
     /* an object with no state of its own yet answers the initial mapping */
     let fb = c.framebuffer_ref(c.bound_framebuffer).filter(|fb| fb.num_draw_buf != 0);
-    let Some(fb) = fb else { return GL_COLOR_ATTACHMENT0 + i as GLenum };
+    let Some(fb) = fb else { return if i == 0 { GL_COLOR_ATTACHMENT0 } else { GL_NONE } };
     match fb.draw_buf.get(i) {
         Some(&b) if b >= 0 => GL_COLOR_ATTACHMENT0 + b as GLenum,
         _ => GL_NONE,
