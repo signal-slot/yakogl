@@ -1117,4 +1117,474 @@ mod tests {
         let p = with_end(&[Instr71::Alu(a)], true);
         assert_eq!(registers_fit_threads71(&p, 4), Ok(()), "a small immediate is no register");
     }
+    /* ---- one pass and one refusal per rule ---- */
+
+    fn alus(v: &[Alu71]) -> Vec<Instr71> {
+        v.iter().map(|a| Instr71::Alu(*a)).collect()
+    }
+
+    /// The reserved magic addresses are exactly Mesa's list (:104-115); every
+    /// other one of 0..64 that has no other rule against a lone write passes.
+    #[test]
+    fn reserved_magic_addresses() {
+        const RULE: &str = "write to a reserved magic waddr";
+        for w in 0u8..64 {
+            let reserved = w <= 4 || w == 10 || w == 14 || w == 15 || (19..=31).contains(&w) || w >= 47;
+            let got = body_rule(&[add(AddOp71::Mov, w, true)]);
+            if reserved {
+                assert_eq!(got, Err(RULE), "waddr {w}");
+            } else {
+                assert_eq!(got, Ok(()), "waddr {w}");
+            }
+            /* the mul unit's write is checked too */
+            let got = body_rule(&[mul(MulOp71::Mov, w, true)]);
+            assert_eq!(got.is_err(), reserved, "mul waddr {w}");
+        }
+        /* a register-file write of the same number is no magic write */
+        assert_eq!(body_rule(&[add(AddOp71::Mov, 3, false)]), Ok(()));
+    }
+
+    /// A branch needs three clear instructions behind a UNIFA write, and a
+    /// signal's magic write counts as one.
+    #[test]
+    fn unifa_write_before_a_branch() {
+        const RULE: &str = "branch within three instructions of a UNIFA write (qpu_schedule.c, ours)";
+        let i = Instr71::Alu;
+        let gap = |n: usize| {
+            let mut b = std::vec![i(add(AddOp71::Mov, 9, true))];
+            b.extend((0..n).map(|_| i(nop())));
+            b.extend([branch(), i(nop()), i(nop()), i(nop())]);
+            rule(&with_end(&b, true), true)
+        };
+        assert_eq!(gap(2), Err(RULE));
+        assert_eq!(gap(3), Ok(()));
+        let mut sigw = ldtmu(9);
+        sigw.sig_magic = true;
+        let mut b = alus(&[sigw]);
+        b.extend([branch(), i(nop()), i(nop()), i(nop())]);
+        assert_eq!(rule(&with_end(&b, true), true), Err(RULE), "UNIFA written by a signal");
+    }
+
+    /// LDUNIFA (and LDUNIFARF) wait three instructions behind a UNIFA write.
+    #[test]
+    fn ldunifa_after_unifa_write() {
+        const RULE: &str = "LDUNIFA within three instructions of a UNIFA write (qpu_schedule.c, ours)";
+        let unifa = add(AddOp71::Mov, 9, true);
+        let at = |gap: usize, l: Alu71| {
+            let mut b = std::vec![unifa];
+            b.extend((0..gap).map(|_| nop()));
+            b.push(l);
+            body_rule(&b)
+        };
+        let mut rf = nop();
+        rf.sig.ldunifarf = true;
+        rf.sig_addr = 12;
+        for (name, l) in [("ldunifa", ldunifa()), ("ldunifarf", rf)] {
+            assert_eq!(at(2, l), Err(RULE), "{name}");
+            assert_eq!(at(3, l), Ok(()), "{name}");
+        }
+    }
+
+    /// LDUNIF/LDUNIFA right after an LDVARY is refused, one instruction
+    /// later is fine; so is another LDVARY, and an rf0 write one later.
+    #[test]
+    fn ldvary_followers() {
+        const LDUNIF: &str = "LDUNIF after a LDVARY";
+        const RF0: &str = "rf0 written right after a LDVARY (qpu_schedule.c, ours)";
+        assert_eq!(body_rule(&[ldvary(10), ldunifa()]), Err(LDUNIF), "LDUNIFA too");
+        assert_eq!(body_rule(&[ldvary(10), nop(), ldunif()]), Ok(()));
+        assert_eq!(body_rule(&[ldvary(10), nop(), ldunifa()]), Ok(()));
+        assert_eq!(body_rule(&[ldvary(10), mul(MulOp71::Mov, 0, false)]), Err(RF0), "mul write of rf0");
+        assert_eq!(body_rule(&[ldvary(10), ldtmu(0)]), Err(RF0), "signal write of rf0");
+        assert_eq!(body_rule(&[ldvary(10), add(AddOp71::Mov, 1, false)]), Ok(()), "rf1 is not rf0");
+        assert_eq!(body_rule(&[ldvary(10), nop(), add(AddOp71::Mov, 0, false)]), Ok(()), "a cycle later");
+        /* a read of rf0 right after is no rule (Mesa's own code does it) */
+        let mut rd = add(AddOp71::Mov, 10, false);
+        rd.add.a.raddr = 0;
+        assert_eq!(body_rule(&[ldvary(10), rd]), Ok(()));
+    }
+
+    /// Two words from the uniform stream in one instruction, by each pair of
+    /// sources; one each is fine.
+    #[test]
+    fn two_uniform_sources() {
+        const RULE: &str = "two uniforms in one instruction (qpu_schedule.c, ours)";
+        /* LDUNIF and LDUNIFRF are one count: no encoding carries both */
+        let mut a = add(AddOp71::Mov, 8, true); /* TLBU loads a uniform */
+        a.mul = mul(MulOp71::Mov, 13, true).mul; /* and so does TMUAU */
+        assert_eq!(body_rule(&[a]), Err(RULE), "TLBU with TMUAU");
+        let mut a = ldunif();
+        a.add = add(AddOp71::Mov, 8, true).add;
+        assert_eq!(body_rule(&[a]), Err(RULE), "LDUNIF with a TLBU write");
+        let mut a = nop();
+        a.sig.ldunifrf = true;
+        a.sig_addr = 10;
+        assert_eq!(body_rule(&[a]), Ok(()), "LDUNIFRF alone");
+        assert_eq!(body_rule(&[add(AddOp71::Mov, 8, true)]), Ok(()), "a TLBU write alone");
+    }
+
+    /// The small-immediate rules: each flag needs its unit, and one flag at
+    /// most; the lone flags with their unit pass.
+    #[test]
+    fn small_immediates() {
+        use MulOp71 as M;
+        let mut a = mul(M::Mov, 10, false);
+        a.sig.small_imm_a = true;
+        assert_eq!(body_rule(&[a]), Err("small imm a/b used but no ADD inst"), "a with a mul only");
+        let mut a = mul(M::Mov, 10, false);
+        a.sig.small_imm_b = true;
+        assert_eq!(body_rule(&[a]), Err("small imm a/b used but no ADD inst"), "b with a mul only");
+        let mut a = add(AddOp71::Mov, 10, false);
+        a.sig.small_imm_c = true;
+        assert_eq!(body_rule(&[a]), Err("small imm c/d used but no MUL inst"), "c with an add only");
+        let mut a = add(AddOp71::Mov, 10, false);
+        a.sig.small_imm_d = true;
+        assert_eq!(body_rule(&[a]), Err("small imm c/d used but no MUL inst"), "d with an add only");
+        for pick in 0..4 {
+            let mut a = add(AddOp71::Add, 10, false);
+            a.mul = mul(M::Mov, 11, false).mul;
+            match pick {
+                0 => a.sig.small_imm_a = true,
+                1 => a.sig.small_imm_b = true,
+                2 => a.sig.small_imm_c = true,
+                _ => a.sig.small_imm_d = true,
+            }
+            assert_eq!(body_rule(&[a]), Ok(()), "one flag ({pick}) with both units");
+        }
+        let mut a = add(AddOp71::Add, 10, false);
+        a.sig.small_imm_a = true;
+        a.sig.small_imm_b = true;
+        assert_eq!(body_rule(&[a]), Err("only one small immediate can be enabled per instruction"), "a and b");
+        let mut a = add(AddOp71::Add, 10, false);
+        a.mul = mul(M::Mov, 11, false).mul;
+        a.sig.small_imm_c = true;
+        a.sig.small_imm_d = true;
+        assert_eq!(body_rule(&[a]), Err("only one small immediate can be enabled per instruction"), "c and d");
+    }
+
+    /// The rtop hazard needs a MULTOP outside a branch delay slot, a THRSW
+    /// two slots before the UMUL24, and no UMUL24 in between.
+    #[test]
+    fn rtop_hazard() {
+        const RULE: &str = "UMUL24 reads rtop from MULTOP but it got cleared by a previous THRSW";
+        let i = Instr71::Alu;
+        let multop = || i(mul(MulOp71::Multop, 6, true));
+        let umul = || i(mul(MulOp71::Umul24, 10, false));
+        /* MULTOP before the THRSW, UMUL24 in its third slot */
+        let p = with_end(&[multop(), i(thrsw()), i(nop()), i(nop()), umul()], false);
+        assert_eq!(rule(&p, false), Err(RULE));
+        /* MULTOP after the slot that clears rtop */
+        let p = with_end(&[i(thrsw()), i(nop()), i(nop()), multop(), umul()], false);
+        assert_eq!(rule(&p, false), Ok(()));
+        /* a UMUL24 in between consumes it */
+        let p = with_end(&[multop(), umul(), i(thrsw()), i(nop()), i(nop()), umul()], false);
+        assert_eq!(rule(&p, false), Ok(()));
+        /* a MULTOP in a branch delay slot does not arm it */
+        let p = with_end(&[branch(), multop(), i(nop()), i(nop()), i(thrsw()), i(nop()), i(nop()), umul()], true);
+        assert_eq!(rule(&p, true), Ok(()));
+        /* no THRSW at all */
+        assert_eq!(body_rule(&[mul(MulOp71::Multop, 6, true), mul(MulOp71::Umul24, 10, false)]), Ok(()));
+    }
+
+    /// A branch two slots into a THRSW is refused, three slots on it is not;
+    /// a THRSW right after a branch's slots is fine.
+    #[test]
+    fn branch_and_thrsw_distances() {
+        let i = Instr71::Alu;
+        for at in [1, 2] {
+            let mut b = std::vec![i(thrsw())];
+            b.extend((1..at).map(|_| i(nop())));
+            b.extend([branch(), i(nop()), i(nop()), i(nop())]);
+            assert_eq!(rule(&with_end(&b, false), false), Err("branch in a THRSW delay slot."), "slot {at}");
+        }
+        let b = [i(thrsw()), i(nop()), i(nop()), branch(), i(nop()), i(nop()), i(nop())];
+        assert_eq!(rule(&with_end(&b, false), false), Ok(()), "a branch after the slots");
+        let b = [branch(), i(nop()), i(nop()), i(nop()), i(thrsw()), i(nop()), i(nop()), i(nop())];
+        assert_eq!(rule(&with_end(&b, false), false), Ok(()), "a THRSW after the branch's slots");
+    }
+
+    /// The pairing and end rules in their passing shapes and the one program
+    /// that has a first THRSW but no end.
+    #[test]
+    fn thread_switch_pairing() {
+        let i = Instr71::Alu;
+        /* one THRSW, which is the last one, in a program that starts in
+         * its last section */
+        assert_eq!(rule(&[i(thrsw()), i(nop()), i(nop())], true), Ok(()));
+        /* the same program with no pair and not single-segment: no end */
+        let e = verify71(&[i(thrsw()), i(nop()), i(nop())], false).unwrap_err();
+        assert_eq!((e.ip, e.rule), (2, "No program-end THRSW found"));
+        /* two sections, each THRSW three apart */
+        let p = [thrsw(), nop(), nop(), nop(), thrsw(), thrsw(), nop(), nop(), nop(), thrsw(), nop(), nop()].map(i);
+        assert_eq!(rule(&p, false), Ok(()));
+        /* three THRSW in a row: the second pair is refused */
+        let p = [thrsw(), thrsw(), thrsw(), nop(), nop()].map(i);
+        assert_eq!(rule(&p, true), Err("Two last-THRSW signals"));
+        /* an empty program has no end */
+        assert_eq!(verify71(&[], true).unwrap_err().rule, "No program-end THRSW found");
+        /* the end error names the last instruction */
+        let e = verify71(&[i(nop()), i(nop()), i(nop())], true).unwrap_err();
+        assert_eq!(e.ip, 2);
+    }
+
+    /// The same sources in different instructions, and the combinations
+    /// Mesa's scheduler keeps apart.
+    #[test]
+    fn peripheral_combinations() {
+        use AddOp71 as A;
+        use MulOp71 as M;
+        const ONE: &str = "Only one of [TMU, SFU, TSY, TLB read, VPM] allowed";
+        const COMPAT: &str = "more than one peripheral access (qpu_compatible_peripheral_access, ours)";
+        /* TMU write with a TMU read (LDTMU), TMU write with a TMU wait */
+        let mut a = add(A::Mov, 11, true);
+        a.sig.ldtmu = true;
+        a.sig_addr = 12;
+        assert_eq!(body_rule(&[a]), Ok(()), "TMU write with LDTMU");
+        assert!(peripherals_compatible71(&a));
+        let mut a = add(A::Tmuwt, 10, false);
+        a.mul = mul(M::Mov, 11, true).mul;
+        assert!(peripherals_compatible71(&a), "TMUWT with a TMU write");
+        /* TMU write and TSY write, in either unit */
+        let mut a = add(A::Mov, 11, true);
+        a.mul = mul(M::Mov, 16, true).mul;
+        assert_eq!(body_rule(&[a]), Err(ONE));
+        /* TSY, TLB read: Mesa's validator counts a load signal */
+        let mut a = add(A::Mov, 16, true);
+        a.sig.ldtlb = true;
+        a.sig_addr = 10;
+        assert_eq!(body_rule(&[a]), Err(ONE));
+        /* two TLB writes, one per unit */
+        let mut a = add(A::Mov, 7, true);
+        a.mul = mul(M::Mov, 8, true).mul;
+        assert_eq!(body_rule(&[a]), Err(ONE));
+        /* WRTMUC with a TMU write: fine, but not with TMUC */
+        let mut a = mul(M::Mov, 11, true);
+        a.sig.wrtmuc = true;
+        assert!(peripherals_compatible71(&a));
+        let mut a = mul(M::Mov, WADDR_TMUC, true);
+        a.sig.wrtmuc = true;
+        assert!(!peripherals_compatible71(&a), "WRTMUC with a TMUC write");
+        assert_eq!(body_rule(&[a]), Err(COMPAT));
+        /* WRTMUC with an SFU operation */
+        let mut a = add(A::Recip, 10, false);
+        a.sig.wrtmuc = true;
+        assert_eq!(body_rule(&[a]), Err(COMPAT));
+        /* an SFU operation with an LDTMU: one restricted access only */
+        let mut a = add(A::Recip, 10, false);
+        a.sig.ldtmu = true;
+        a.sig_addr = 11;
+        assert_eq!(body_rule(&[a]), Ok(()));
+        /* a lone VPMSETUP reads and writes the VPM */
+        assert!(!peripherals_compatible71(&add(A::Vpmsetup, 10, false)));
+        assert!(peripherals_compatible71(&add(A::Stvpmv, 10, false)), "a VPM write alone");
+        assert!(peripherals_compatible71(&add(A::Vpmwt, 10, false)), "a VPM wait alone");
+        /* a VPM write with an SFU operation in the other unit's sense */
+        let mut a = add(A::Stvpmv, 10, false);
+        a.mul = mul(M::Mov, 11, true).mul;
+        assert!(!peripherals_compatible71(&a), "VPM write with a TMU write");
+        /* a TLB write with a TLB read signal: two TLB accesses */
+        let mut a = add(A::Mov, 7, true);
+        a.sig.ldtlb = true;
+        a.sig_addr = 10;
+        assert!(!peripherals_compatible71(&a));
+        /* a TLB write with an LDTMU is one restricted access */
+        let mut a = add(A::Mov, 7, true);
+        a.sig.ldtmu = true;
+        a.sig_addr = 10;
+        assert!(peripherals_compatible71(&a));
+        assert!(peripherals_compatible71(&nop()));
+    }
+
+    /// The thread end's register-file rules, slot by slot, for both units
+    /// and the signal, and the slots they do not apply to.
+    #[test]
+    fn thread_end_register_writes() {
+        use AddOp71 as A;
+        use MulOp71 as M;
+        const RF23: &str = "RF2-3 write after THREND";
+        /* rf0 and rf1 writes in the two slots, rf2/rf3 in the slot after them */
+        assert_eq!(end_rule([thrsw(), add(A::Mov, 0, false), mul(M::Mov, 1, false)]), Ok(()));
+        let p: Vec<Instr71> =
+            alus(&[nop(), nop(), thrsw(), nop(), nop(), add(A::Mov, 2, false), mul(M::Mov, 3, false)]);
+        assert_eq!(rule(&p, true), Ok(()), "slot 3 is past the rule");
+        /* both units, both registers, both slots */
+        for rf in [2, 3] {
+            for slot in [1, 2] {
+                let mut t = [thrsw(), nop(), nop()];
+                t[slot] = add(A::Mov, rf, false);
+                assert_eq!(end_rule(t), Err(RF23), "add rf{rf} slot {slot}");
+                let mut t = [thrsw(), nop(), nop()];
+                t[slot] = mul(M::Mov, rf, false);
+                assert_eq!(end_rule(t), Err(RF23), "mul rf{rf} slot {slot}");
+                let mut t = [thrsw(), nop(), nop()];
+                t[slot] = ldtmu(rf);
+                assert_eq!(end_rule(t), Err(RF23), "signal rf{rf} slot {slot}");
+            }
+        }
+        /* a magic write of the same number is no register */
+        assert_eq!(end_rule([thrsw(), add(A::Mov, 5, true), nop()]), Ok(()));
+        /* a TMU read at the thread end writing rf10 is fine */
+        assert_eq!(end_rule([thrsw(), ldtmu(10), nop()]), Ok(()));
+        /* an operation without a destination writes no register */
+        let mut st = add(A::Stvpmv, 3, false);
+        st.add.waddr = 3;
+        assert_eq!(end_rule([thrsw(), st, nop()]), Ok(()), "STVPM's index is no register");
+        /* in a first section's slots, before the end, nothing is refused */
+        let p = with_end(&[Instr71::Alu(thrsw()), Instr71::Alu(add(A::Mov, 3, false)), Instr71::Alu(nop())], false);
+        assert_eq!(rule(&p, false), Ok(()));
+    }
+
+    /// The thread end's other rules, at each slot.
+    #[test]
+    fn thread_end_reads_and_signals() {
+        use AddOp71 as A;
+        use MulOp71 as M;
+        const LDV: &str = "LDVARY in a thread-end slot (qpu_schedule.c, ours)";
+        const UNI: &str = "uniform read in a thread-end delay slot (qpu_schedule.c, ours)";
+        const RD: &str = "RF2-3 read after THREND (qpu_schedule.c, ours)";
+        let mut t = ldvary(10);
+        t.sig.thrsw = true;
+        assert_eq!(end_rule([t, nop(), nop()]), Err(LDV), "in the THRSW itself");
+        assert_eq!(end_rule([thrsw(), nop(), ldvary(10)]), Err("LDVARY in 2nd THRSW delay slot"));
+        /* a uniform in the THRSW instruction is allowed, in the slots not */
+        let mut t = thrsw();
+        t.sig.ldunif = true;
+        assert_eq!(end_rule([t, nop(), nop()]), Ok(()));
+        assert_eq!(end_rule([thrsw(), ldunif(), nop()]), Err(UNI));
+        let tlbu = add(A::Mov, 8, true);
+        assert_eq!(end_rule([thrsw(), tlbu, nop()]), Err(UNI), "a magic write that loads one");
+        /* rf2/rf3 reads, by operand and by unit; a small immediate is no read */
+        for (rf, slot) in [(2, 0), (3, 1), (2, 2)] {
+            let mut r = add(A::Mov, 5, true);
+            r.add.a.raddr = rf;
+            let mut t = [thrsw(), nop(), nop()];
+            t[slot] = r;
+            if slot == 0 {
+                t[0].sig.thrsw = true;
+            }
+            assert_eq!(end_rule(t), Err(RD), "add a, rf{rf} slot {slot}");
+        }
+        let mut r = mul(M::Add, 5, true);
+        r.mul.b.raddr = 3;
+        assert_eq!(end_rule([thrsw(), r, nop()]), Err(RD), "mul operand d");
+        let mut r = add(A::Add, 5, true);
+        r.add.b.raddr = 2;
+        assert_eq!(end_rule([thrsw(), nop(), r]), Err(RD), "add operand b");
+        let mut r = add(A::Mov, 5, true);
+        r.add.a.raddr = 2;
+        r.sig.small_imm_a = true;
+        assert_eq!(end_rule([thrsw(), r, nop()]), Ok(()), "a small immediate with a register's number");
+        let mut r = add(A::Mov, 5, true);
+        r.add.a.raddr = 4;
+        assert_eq!(end_rule([thrsw(), r, nop()]), Ok(()), "rf4");
+        /* an operand the operation does not read is no read */
+        let mut r = add(A::Mov, 5, true);
+        r.add.b.raddr = 2;
+        assert_eq!(end_rule([thrsw(), r, nop()]), Ok(()), "MOV's second operand");
+        /* past the slots everything is allowed */
+        let mut r = add(A::Mov, 5, true);
+        r.add.a.raddr = 2;
+        let p = alus(&[nop(), nop(), thrsw(), nop(), nop(), r, ldunif()]);
+        assert_eq!(rule(&p, true), Ok(()), "slot 3");
+    }
+
+    /// rf0 at a thread switch: a signal's register write in the last slot
+    /// is refused only when rf0's last write was an implicit one that
+    /// landed with another signal's register write.
+    #[test]
+    fn rf0_flops_at_the_thread_switch() {
+        const RULE: &str = "a signal's RF write in the last THRSW delay slot with rf0 undefined (qpu_schedule.c, ours)";
+        let i = Instr71::Alu;
+        let mut both = ldunif();
+        both.sig.ldtmu = true;
+        both.sig_addr = 11;
+        let sect = |slot1: Alu71, slot2: Alu71| rule(&with_end(&[i(thrsw()), i(slot1), i(slot2)], false), false);
+        /* an LDUNIF with an LDTMU, then another LDTMU in the last slot */
+        assert_eq!(sect(both, ldtmu(12)), Err(RULE));
+        /* no signal write in the last slot */
+        assert_eq!(sect(both, nop()), Ok(()));
+        /* the signal write without the conflict before it */
+        assert_eq!(sect(nop(), ldtmu(12)), Ok(()));
+        assert_eq!(sect(ldunif(), ldtmu(12)), Ok(()), "an implicit write alone");
+        /* an explicit rf0 write after the conflict clears it */
+        assert_eq!(sect(both, add(AddOp71::Mov, 0, false)), Ok(()));
+        /* an LDVARY in slot 1 lands its rf0 write in slot 2 */
+        assert_eq!(sect(ldvary(10), ldtmu(11)), Err(RULE));
+        assert_eq!(sect(ldvary(10), nop()), Ok(()));
+        /* the conflict is forgotten past the slots */
+        let p = with_end(&[i(thrsw()), i(both), i(nop()), i(nop()), i(ldtmu(12))], false);
+        assert_eq!(rule(&p, false), Ok(()));
+    }
+
+    /// Register limits by thread count, by each place a register appears.
+    #[test]
+    fn register_limits_by_thread_count() {
+        use AddOp71 as A;
+        use MulOp71 as M;
+        const RULE: &str = "a register-file register past what a thread has at this thread count";
+        let fit = |a: Alu71, t| registers_fit_threads71(&with_end(&[Instr71::Alu(a)], true), t).map_err(|e| e.rule);
+        /* the boundaries */
+        assert_eq!(fit(add(A::Mov, 31, false), 4), Ok(()));
+        assert_eq!(fit(add(A::Mov, 32, false), 4), Err(RULE));
+        assert_eq!(fit(add(A::Mov, 63, false), 2), Ok(()));
+        assert_eq!(fit(add(A::Mov, 63, false), 1), Ok(()));
+        /* each unit and the signal */
+        assert_eq!(fit(mul(M::Mov, 40, false), 4), Err(RULE));
+        assert_eq!(fit(mul(M::Mov, 40, false), 2), Ok(()));
+        assert_eq!(fit(ldtmu(40), 4), Err(RULE));
+        assert_eq!(fit(ldtmu(40), 2), Ok(()));
+        /* a magic write of 40 is no register */
+        assert_eq!(fit(add(A::Mov, 40, true), 4), Ok(()));
+        /* each operand */
+        let mut a = mul(M::Add, 10, false);
+        a.mul.a.raddr = 33;
+        assert_eq!(fit(a, 4), Err(RULE), "operand c");
+        let mut a = mul(M::Add, 10, false);
+        a.mul.b.raddr = 33;
+        assert_eq!(fit(a, 4), Err(RULE), "operand d");
+        let mut a = add(A::Add, 10, false);
+        a.add.b.raddr = 33;
+        assert_eq!(fit(a, 4), Err(RULE), "operand b");
+        assert_eq!(fit(a, 1), Ok(()));
+        /* an operand the operation does not read */
+        let mut a = add(A::Mov, 10, false);
+        a.add.b.raddr = 33;
+        assert_eq!(fit(a, 4), Ok(()));
+        /* a thread count the V3D does not run */
+        for t in [0, 3, 5, 8] {
+            let e = registers_fit_threads71(&with_end(&[], true), t).unwrap_err();
+            assert_eq!(e.rule, "a thread count the V3D does not run (not 1, 2 or 4)", "{t} threads");
+        }
+        /* the error names the instruction */
+        let p = with_end(&[Instr71::Alu(nop()), Instr71::Alu(add(A::Mov, 32, false))], true);
+        assert_eq!(registers_fit_threads71(&p, 4).unwrap_err().ip, 1);
+    }
+
+    /// A branch reads its register only for a register-file target, in the
+    /// instruction or the uniform stream.
+    #[test]
+    fn branch_register_limits() {
+        let at = |f: &dyn Fn(&mut Branch), t| {
+            let Instr71::Branch(mut b) = branch() else { unreachable!() };
+            b.raddr_a = 40;
+            f(&mut b);
+            registers_fit_threads71(&[Instr71::Branch(b)], t).is_ok()
+        };
+        assert!(!at(&|b| b.bdi = BranchDest::Regfile, 4));
+        assert!(at(&|b| b.bdi = BranchDest::Regfile, 2));
+        assert!(!at(
+            &|b| {
+                b.ub = true;
+                b.bdu = BranchDest::Regfile;
+            },
+            4
+        ));
+        assert!(at(&|_| {}, 4), "a relative branch reads no register");
+        assert!(at(
+            &|b| {
+                b.bdu = BranchDest::Regfile; /* meaningless without ub */
+            },
+            4
+        ));
+    }
 }
