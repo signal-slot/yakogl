@@ -54,7 +54,8 @@
 #   BOARD_UART    the X2's console, as board.sh reads it (required: the record
 #                 carries the console log and the per-scene figures from it)
 #   X2_TOOLS      the directory of kexec_zephyr and snvs_lpgpr (board.sh's;
-#                 default the worktree's driver/tools/kexec-zephyr)
+#                 default the worktree's driver/tools/kexec-zephyr; set, both are
+#                 copied there, for a board.sh that reads only its checkout)
 #   WEST_VENV     as the other cts scripts
 #   X2C_MAIN_REF  the ref the commit must be on (default origin/main)
 #   X2C_REPO      the checkout (default this script's)
@@ -173,6 +174,7 @@ EOF
     printf '#!/bin/bash\necho stub-modules\n' > "$S/modules.sh"
     chmod +x "$S/board.sh" "$S/west" "$S/modules.sh"
     mkdir -p "$T/ws/zephyr" "$T/gm/src"
+    echo loader > "$T/kexec_zephyr"; echo record > "$T/snvs_lpgpr"
     local -a E=(env STUB_LOG="$T/log" X2C_REPO="$R" X2C_WORK="$T/work" X2C_RECORDS="$T/records"
         X2C_WEST="$S/west" X2C_MODULES_SH="$S/modules.sh" X2C_BOARD_SH="$S/board.sh" X2_TOOLS="$T"
         ZEPHYR_WS="$T/ws" GLMARK2_SRC="$T/gm" BOARD_HOST=user@host.invalid BOARD_UART=uart.invalid:1)
@@ -215,6 +217,7 @@ EOF
     grep -q '^\[build\]' "$rec/ms-per-scene.tsv" && grep -q 20.00 "$rec/ms-per-scene.tsv" && ok "ms-per-scene.tsv has the scene's ms/frame" || bad "ms table: $(cat "$rec/ms-per-scene.tsv" 2> /dev/null)"
     ! grep -rqE '192\.0\.2|ttyUSB' "$rec" && ok "console redacted" || bad "console not redacted"
     grep -q "x2 tree" "$T/log" && grep -q "armadillo_x2/mimx8ml8/a53" "$T/log" && ok "board.sh x2 tree, west for the X2 board" || bad "commands: $(cat "$T/log")"
+    cmp -s "$T/kexec_zephyr" "$T/work/tree-$s8/driver/tools/kexec-zephyr/kexec_zephyr" && ok "X2_TOOLS' loader is copied into the worktree board.sh reads" || bad "X2_TOOLS not copied"
     grep -q "ping-seen # x2-common ping shim: ssh stands in for ping ssh-to=user@host.invalid" "$T/log" && ok "an unpingable board host: board.sh's return check pings through the ssh shim" || bad "ping shim: $(grep ping-seen "$T/log")"
     ! grep -qE '/boot|fsbla|fip-|metadata|mmcblk|modprobe|insmod|tailscale|sshd' "$T/log" && ok "no boot, eMMC, module, tailscale or sshd command" || bad "forbidden command in log"
     out=$("${E[@]}" bash "$HERE/x2-common.sh" --commit "$sha" 2>&1); rc=$?
@@ -296,6 +299,12 @@ build GT gl_test
 # board.sh of the commit's own worktree; no stale selector, no tree diff, no
 # watchdog override leaks in from the caller
 TOOLS=${X2_TOOLS:-$WT/driver/tools/kexec-zephyr}
+# a board.sh older than X2_TOOLS (dfabc888's) takes the two tools from its own
+# checkout only: copy them there (untracked; the images are already built)
+if [ "$TOOLS" != "$WT/driver/tools/kexec-zephyr" ]; then
+    mkdir -p "$WT/driver/tools/kexec-zephyr" && cp "$TOOLS/kexec_zephyr" "$TOOLS/snvs_lpgpr" "$WT/driver/tools/kexec-zephyr/" ||
+        die "cannot copy kexec_zephyr and snvs_lpgpr from X2_TOOLS into $WT"
+fi
 mkdir -p "$RECS/imx8mp" || die "cannot create $RECS/imx8mp"
 ping_shim "$WORK/ping-shim"
 echo "x2-common: board.sh x2 tree common-tree.txt $REC"
