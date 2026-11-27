@@ -29,9 +29,18 @@
 //! that generator and the two functions above on the host (deRandom,
 //! deInt32Hash and the generator unchanged) and printing what `iterate`
 //! would hand to GL; the tables below are that output. The other row-8 cases
-//! of the board slices (`basic_expression.vertex.{53,85,90,95}`,
-//! `scalar_conversion.vertex.53`, `texture.vertex.19`) are the generator
-//! cases of item `inval-generator`.
+//! of the board slices (`shaders.random.basic_expression.vertex.{53,85,90,95}`,
+//! `scalar_conversion.vertex.53`, `texture.vertex.19`; item
+//! `inval-generator`) are ported the same way from
+//! `modules/gles2/functional/es2fRandomShaderTests.cpp` (the group's
+//! `ProgramParameters`, seed = the case number, vertex-only) and
+//! `modules/glshared/glsRandomShaderCase.cpp` (`init`, `iterate`): the same
+//! generator built on the host printed each case's two shaders, its inputs'
+//! value ranges, its uniform values (`computeUnifiedUniforms`,
+//! `computeUniformValues`) and its viewport; `vertex.96`'s shader as that
+//! build printed it equals the text above, a check of the build. The 256x256
+//! target is assumed as for the interaction cases (only the viewport origin
+//! depends on it).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_draw_inval_rest
@@ -615,4 +624,501 @@ fn interaction_basic_shader_11() {
 #[test]
 fn interaction_basic_shader_66() {
     interaction("interaction.basic_shader.66", INTERACTION_66_FS, [76, 37], &INTERACTION_66);
+}
+
+/* ---- the generator cases: shaders.random.*.vertex.* -------------------- */
+
+/// One `rsg::ShaderInput` of a vertex shader: its name, its component count
+/// and its value range (lanes past `n` unused).
+struct Input {
+    name: &'static str,
+    n: usize,
+    min: [f32; 4],
+    max: [f32; 4],
+}
+
+/// One uniform and the value `computeUniformValues` gave it.
+enum Uniform {
+    Float(&'static str, &'static [f32]),
+    Sampler2D(&'static str, GLint),
+}
+
+/// The fragment shader the generator writes for a vertex-only case
+/// (`fragmentParameters.randomize` false).
+const FS_GENERATOR: &str = concat!(
+    "precision mediump float;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_FragColor = v_color;\n",
+    "}\n",
+);
+
+/// `RandomShaderCase::init` and `iterate` (modules/glshared/glsRandomShaderCase.cpp)
+/// for one vertex case, as plain GL calls: the 256x256 RGBA8 framebuffer
+/// object of the board run's target (as `interaction`), the program, the
+/// 2x2 vertices of the 1x1 grid (`dEQP_Position` the corners, every other
+/// input `min + (xd + yd) / 2 * (max - min)` per lane,
+/// `getVertexInterpolationCoords`), the uniforms, a 64x64 RGBA texture for a
+/// `sampler2D` (`fillWithComponentGradients` of (-1,-1,-1,2)..(1,1,1,0),
+/// clamp to edge, linear), the 64x64 viewport at `origin` (`rnd.getInt(0,
+/// 256 - 64)` twice, `de::Random(seed)`), six `u16` indices by
+/// `glDrawElements` and the `glReadPixels` of the viewport. The draw must
+/// return `GL_NO_ERROR` (dEQP's `GLU_CHECK_MSG("Draw")`), be unrefused and
+/// leave no refusal line.
+fn random_case(label: &str, vs: &str, inputs: &[Input], uniforms: &[Uniform], origin: [i32; 2]) {
+    let _g = context();
+    let (v, f) = (compile(GL_VERTEX_SHADER, vs), compile(GL_FRAGMENT_SHADER, FS_GENERATOR));
+    // The vertex arrays, built before any GL call as `init` does.
+    let arrays: Vec<Vec<f32>> = inputs
+        .iter()
+        .map(|i| {
+            let mut a = Vec::with_capacity(4 * i.n);
+            for vtx in 0..4 {
+                let (xf, yf) = ((vtx % 2) as f32, (vtx / 2) as f32);
+                if i.name == "dEQP_Position" {
+                    a.extend_from_slice(&[-1.0 + xf * 2.0, 1.0 - yf * 2.0, 0.0, 1.0]);
+                    continue;
+                }
+                for c in 0..i.n {
+                    let xd = if c % 4 < 2 { xf } else { 1.0 - xf };
+                    let yd = if c % 2 == 0 { yf } else { 1.0 - yf };
+                    a.push(i.min[c] + (xd + yd) / 2.0 * (i.max[c] - i.min[c]));
+                }
+            }
+            a
+        })
+        .collect();
+    // SAFETY: plain GL calls; every client array outlives its draw.
+    unsafe {
+        let mut old: GLint = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &mut old);
+        let (mut fb, mut rb) = (0, 0);
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glGenRenderbuffers(1, &mut rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, INTERACTION_TARGET, INTERACTION_TARGET);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{label}: the framebuffer");
+        let mut textures = Vec::new();
+        for u in uniforms {
+            if let Uniform::Sampler2D(_, unit) = u {
+                let mut texels = vec![0u8; 64 * 64 * 4];
+                for y in 0..64 {
+                    for x in 0..64 {
+                        let (s, t) = ((x as f32 + 0.5) / 64.0, (y as f32 + 0.5) / 64.0);
+                        let c = [(s + t) * 0.5, (s + 1.0 - t) * 0.5, (1.0 - s + t) * 0.5, (2.0 - s - t) * 0.5];
+                        let (lo, hi) = ([-1.0f32, -1.0, -1.0, 2.0], [1.0f32, 1.0, 1.0, 0.0]);
+                        for k in 0..4 {
+                            let val = (lo[k] + c[k] * (hi[k] - lo[k])).clamp(0.0, 1.0);
+                            texels[(y * 64 + x) * 4 + k] = (val * 255.0 + 0.5) as u8;
+                        }
+                    }
+                }
+                let mut tex = 0;
+                yakogl::gl::texture::glGenTextures(1, &mut tex);
+                yakogl::gl::texture::glActiveTexture(GL_TEXTURE0 + *unit as GLenum);
+                yakogl::gl::texture::glBindTexture(GL_TEXTURE_2D, tex);
+                yakogl::gl::texture::glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_RGBA as GLint,
+                    64,
+                    64,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    texels.as_ptr() as *const c_void,
+                );
+                for (pname, param) in [
+                    (GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE),
+                    (GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE),
+                    (GL_TEXTURE_MIN_FILTER, GL_LINEAR),
+                    (GL_TEXTURE_MAG_FILTER, GL_LINEAR),
+                ] {
+                    yakogl::gl::texture::glTexParameteri(GL_TEXTURE_2D, pname, param as GLint);
+                }
+                textures.push(tex);
+            }
+        }
+        let p = glCreateProgram();
+        glAttachShader(p, v);
+        glAttachShader(p, f);
+        glLinkProgram(p);
+        let mut ok: GLint = 0;
+        glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+        assert_eq!(ok, 1, "{label}: the program does not link");
+        glUseProgram(p);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        let mut failures = Vec::new();
+        let mut locs = Vec::new();
+        for (i, a) in inputs.iter().zip(&arrays) {
+            let name = CString::new(i.name).unwrap();
+            let l = glGetAttribLocation(p, name.as_ptr());
+            if l >= 0 {
+                glVertexAttribPointer(l as GLuint, i.n as GLint, GL_FLOAT, 0, 0, a.as_ptr() as *const c_void);
+                glEnableVertexAttribArray(l as GLuint);
+                locs.push(l as GLuint);
+            }
+        }
+        let e = glGetError();
+        if e != GL_NO_ERROR {
+            failures.push(format!("{label}: after attribute setup: glGetError 0x{e:x}"));
+        }
+        for u in uniforms {
+            let (name, l) = match u {
+                Uniform::Float(n, _) | Uniform::Sampler2D(n, _) => {
+                    let c = CString::new(*n).unwrap();
+                    (*n, glGetUniformLocation(p, c.as_ptr()))
+                }
+            };
+            if l < 0 {
+                continue;
+            }
+            match u {
+                Uniform::Float(_, v) => match v.len() {
+                    1 => glUniform1fv(l, 1, v.as_ptr()),
+                    2 => glUniform2fv(l, 1, v.as_ptr()),
+                    3 => glUniform3fv(l, 1, v.as_ptr()),
+                    4 => glUniform4fv(l, 1, v.as_ptr()),
+                    n => panic!("{label}: uniform {name} has {n} lanes"),
+                },
+                Uniform::Sampler2D(_, unit) => glUniform1iv(l, 1, unit),
+            }
+        }
+        let e = glGetError();
+        if e != GL_NO_ERROR {
+            failures.push(format!("{label}: after uniform setup: glGetError 0x{e:x}"));
+        }
+        glViewport(origin[0], origin[1], 64, 64);
+        LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        let before = backend::draws_refused();
+        let indices: [u16; 6] = [0, 2, 1, 1, 2, 3];
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices.as_ptr() as *const c_void);
+        glFlush();
+        let e = glGetError();
+        let refused = backend::draws_refused() - before;
+        let log = LOG.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let refusals: Vec<_> = log.iter().filter(|l| l.contains("refus")).collect();
+        if e != GL_NO_ERROR || refused != 0 || !refusals.is_empty() {
+            failures
+                .push(format!("{label}: the draw: glGetError 0x{e:x}, {refused} refused, refusal lines {refusals:?}"));
+        }
+        let mut pixels = vec![0u8; 64 * 64 * 4];
+        glReadPixels(origin[0], origin[1], 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, pixels.as_mut_ptr() as *mut c_void);
+        let e = glGetError();
+        if e != GL_NO_ERROR {
+            failures.push(format!("{label}: glReadPixels: glGetError 0x{e:x}"));
+        }
+        for l in locs {
+            glDisableVertexAttribArray(l);
+        }
+        yakogl::gl::texture::glActiveTexture(GL_TEXTURE0);
+        glViewport(0, 0, 8, 8);
+        glBindFramebuffer(GL_FRAMEBUFFER, old as GLuint);
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+}
+
+/// `shaders.random.basic_expression.vertex.53`'s vertex shader, as the generator wrote it.
+const BASIC_EXPRESSION_VERTEX_53_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "attribute vec4 g;\n",
+    "const vec4 f = vec4(-1.0, 13.5, 9.0, 6.25) + vec4(7.5, -5.5, -1.0, -3.5) + vec4(-7.5, -16.0, -7.0, -4.0) * vec4(1.0, 0.5, 1.0, 0.75);\n",
+    "attribute vec4 a;\n",
+    "attribute vec4 b;\n",
+    "float c = float(float(5.125)) * (float(-0.75));\n",
+    "const float d = (0.3) * -1.0;\n",
+    "float e = float(-30.55) + float(3.75) + float(float(7.0));\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\tv_color = g * (f);\n",
+    "\tc = c;\n",
+    "\tv_color = vec4(e, 1.15, d, c) - b - v_color;\n",
+    "\tv_color = a;\n",
+    "\tv_color = v_color;\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const BASIC_EXPRESSION_VERTEX_53_INPUTS: &[Input] = &[
+    Input { name: "b", n: 4, min: [-16.0, -8.5, 1.5, -1.5], max: [-5.0, 2.5, 5.5, 8.0] },
+    Input { name: "a", n: 4, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 1.0, 1.0, 1.0] },
+    Input { name: "g", n: 4, min: [6.125, -13.0, -10.125, 11.625], max: [8.125, 4.75, -2.625, 12.125] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(53)`).
+const BASIC_EXPRESSION_VERTEX_53_UNIFORMS: &[Uniform] = &[];
+
+/// `shaders.random.basic_expression.vertex.85`'s vertex shader, as the generator wrote it.
+const BASIC_EXPRESSION_VERTEX_85_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "attribute vec4 b;\n",
+    "attribute vec4 c;\n",
+    "attribute float d;\n",
+    "attribute float e;\n",
+    "const float f = 3.0;\n",
+    "attribute float g;\n",
+    "float h = float(f) * f - f * float(f);\n",
+    "attribute float i;\n",
+    "attribute float j;\n",
+    "uniform mediump float k;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\th = -2.4 + i;\n",
+    "\tv_color = (vec4(-19.1, k, j, i) - vec4(h, 2.25, g, d));\n",
+    "\tv_color = c + (vec4(e, 1.5, f, -5.5));\n",
+    "\tvec4 a = vec4(d, e, d, 8.0) * c * (c);\n",
+    "\ta = b;\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const BASIC_EXPRESSION_VERTEX_85_INPUTS: &[Input] = &[
+    Input { name: "j", n: 1, min: [15.300001, 0.0, 0.0, 0.0], max: [16.800001, 0.0, 0.0, 0.0] },
+    Input { name: "i", n: 1, min: [-2.5, 0.0, 0.0, 0.0], max: [-2.1000004, 0.0, 0.0, 0.0] },
+    Input { name: "g", n: 1, min: [1.0, 0.0, 0.0, 0.0], max: [2.0, 0.0, 0.0, 0.0] },
+    Input { name: "e", n: 1, min: [7.5, 0.0, 0.0, 0.0], max: [8.5, 0.0, 0.0, 0.0] },
+    Input { name: "d", n: 1, min: [-2.3000002, 0.0, 0.0, 0.0], max: [2.5, 0.0, 0.0, 0.0] },
+    Input { name: "c", n: 4, min: [-7.5, -1.5, -3.0, 5.5], max: [-7.5, -0.5, -2.0, 6.5] },
+    Input { name: "b", n: 4, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 1.0, 1.0, 1.0] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(85)`).
+const BASIC_EXPRESSION_VERTEX_85_UNIFORMS: &[Uniform] = &[Uniform::Float("k", &[-4.5249996])];
+
+/// `shaders.random.basic_expression.vertex.90`'s vertex shader, as the generator wrote it.
+const BASIC_EXPRESSION_VERTEX_90_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "uniform mediump float a;\n",
+    "attribute float b;\n",
+    "uniform mediump vec3 c;\n",
+    "attribute float e;\n",
+    "attribute float f;\n",
+    "attribute float g;\n",
+    "attribute vec4 h;\n",
+    "attribute vec4 i;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\tv_color = vec4(1.75, -3.0, -0.25, -1.5) * vec4(-2.0, f, 1.0, -1.0) + (vec4(2.0, 3.5, -0.0, -1.0));\n",
+    "\tv_color = (v_color);\n",
+    "\tv_color = vec4(-11.0, -5.75, 3.5, -1.5) + vec4(7.75, 8.5, 4.0, -2.5) + vec4(-3.25, -2.0, 25.0, g) * v_color;\n",
+    "\tv_color = i * v_color;\n",
+    "\tv_color = i;\n",
+    "\tv_color = h;\n",
+    "\tv_color = (v_color);\n",
+    "\tvec4 d = v_color + vec4(g, a, f, e) * v_color;\n",
+    "\td = vec4(1.0, float(0.0), float(e), float(-0.25)) * vec4(f, float(f), e, a);\n",
+    "\t(c) - vec3(float(3.75) * -1.5, b + 5.0, float(a));\n",
+    "\tv_color = v_color;\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const BASIC_EXPRESSION_VERTEX_90_INPUTS: &[Input] = &[
+    Input { name: "i", n: 4, min: [4.0, -14.7, -5.75, 6.25], max: [6.0, -11.599999, 1.5, 13.400001] },
+    Input { name: "h", n: 4, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 1.0, 1.0, 1.0] },
+    Input { name: "g", n: 1, min: [9.0, 0.0, 0.0, 0.0], max: [9.0, 0.0, 0.0, 0.0] },
+    Input { name: "f", n: 1, min: [0.75, 0.0, 0.0, 0.0], max: [0.75, 0.0, 0.0, 0.0] },
+    Input { name: "e", n: 1, min: [-0.5, 0.0, 0.0, 0.0], max: [-0.5, 0.0, 0.0, 0.0] },
+    Input { name: "b", n: 1, min: [-9.5, 0.0, 0.0, 0.0], max: [-8.5, 0.0, 0.0, 0.0] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(90)`).
+const BASIC_EXPRESSION_VERTEX_90_UNIFORMS: &[Uniform] =
+    &[Uniform::Float("c", &[-11.85, 4.9750004, -10.799999]), Uniform::Float("a", &[-2.375])];
+
+/// `shaders.random.basic_expression.vertex.95`'s vertex shader, as the generator wrote it.
+const BASIC_EXPRESSION_VERTEX_95_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "const float j = float(-6.75) * 0.5 * float(float(-2.0));\n",
+    "const float i = float(float(-3.25)) - -2.25;\n",
+    "attribute vec4 b;\n",
+    "attribute float c;\n",
+    "attribute float d;\n",
+    "attribute float e;\n",
+    "attribute float f;\n",
+    "attribute float g;\n",
+    "attribute vec4 h;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\tv_color = vec4(j, g, e, -1.75) - (vec4(6.5, 5.75, -8.25, i));\n",
+    "\tv_color = (v_color);\n",
+    "\tv_color = v_color;\n",
+    "\tv_color = v_color * h;\n",
+    "\tvec4 a = vec4(g, -0.5, f, e) * v_color * (vec4(-9.0, d, d, c));\n",
+    "\ta = b;\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const BASIC_EXPRESSION_VERTEX_95_INPUTS: &[Input] = &[
+    Input { name: "h", n: 4, min: [0.5, -0.5, -0.75, -1.25], max: [2.5, -0.0, -0.0, -0.25] },
+    Input { name: "g", n: 1, min: [4.0, 0.0, 0.0, 0.0], max: [5.0, 0.0, 0.0, 0.0] },
+    Input { name: "f", n: 1, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 0.0, 0.0, 0.0] },
+    Input { name: "e", n: 1, min: [-9.25, 0.0, 0.0, 0.0], max: [-8.25, 0.0, 0.0, 0.0] },
+    Input { name: "d", n: 1, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 0.0, 0.0, 0.0] },
+    Input { name: "c", n: 1, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 0.0, 0.0, 0.0] },
+    Input { name: "b", n: 4, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 1.0, 1.0, 1.0] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(95)`).
+const BASIC_EXPRESSION_VERTEX_95_UNIFORMS: &[Uniform] = &[];
+
+/// `shaders.random.scalar_conversion.vertex.53`'s vertex shader, as the generator wrote it.
+const SCALAR_CONVERSION_VERTEX_53_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "attribute vec4 e;\n",
+    "attribute vec4 a;\n",
+    "attribute vec4 b;\n",
+    "const float c = float(float(0.3) * float(-1.0));\n",
+    "uniform mediump float d;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\tv_color = (e);\n",
+    "\t5;\n",
+    "\tv_color = vec4(d, -7.6, c, -2) - b - v_color;\n",
+    "\tv_color = a;\n",
+    "\tv_color = v_color;\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const SCALAR_CONVERSION_VERTEX_53_INPUTS: &[Input] = &[
+    Input { name: "b", n: 4, min: [-16.0, -8.5, 1.5, -1.5], max: [-5.0, 2.5, 5.5, 8.0] },
+    Input { name: "a", n: 4, min: [0.0, 0.0, 0.0, 0.0], max: [1.0, 1.0, 1.0, 1.0] },
+    Input { name: "e", n: 4, min: [-8.4, -3.7000008, -10.2, -15.300001], max: [-5.5, 2.0, -2.5, -2.5] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(53)`).
+const SCALAR_CONVERSION_VERTEX_53_UNIFORMS: &[Uniform] = &[Uniform::Float("d", &[-12.299999])];
+
+/// `shaders.random.texture.vertex.19`'s vertex shader, as the generator wrote it.
+const TEXTURE_VERTEX_19_VS: &str = concat!(
+    "attribute vec4 dEQP_Position;\n",
+    "const float f = float(float(-3.125) * float(-2.0));\n",
+    "attribute float e;\n",
+    "float d = 3.25;\n",
+    "uniform sampler2D a;\n",
+    "attribute vec3 b;\n",
+    "attribute vec4 c;\n",
+    "varying mediump vec4 v_color;\n",
+    "\n",
+    "void main()\n",
+    "{\n",
+    "\tgl_Position = dEQP_Position;\n",
+    "\tv_color = vec4(f * float(e), e, float(d) - float(d), float(int(6)));\n",
+    "\tb;\n",
+    "\tv_color = v_color;\n",
+    "\tv_color = (c) + v_color.arbg;\n",
+    "\tv_color = texture2DProj(a, b);\n",
+    "}\n",
+);
+/// Its inputs in `Shader::getInputs` order.
+const TEXTURE_VERTEX_19_INPUTS: &[Input] = &[
+    Input { name: "c", n: 4, min: [-16.1, 8.0, 2.9000006, 2.0], max: [-13.1, 17.5, 3.4000006, 6.0] },
+    Input { name: "b", n: 3, min: [0.0, 0.0, 0.25, 0.0], max: [1.0, 1.0, 4.0, 0.0] },
+    Input { name: "e", n: 1, min: [-0.5, 0.0, 0.0, 0.0], max: [-0.5, 0.0, 0.0, 0.0] },
+    Input { name: "dEQP_Position", n: 4, min: [-1.0, -1.0, 0.0, 1.0], max: [1.0, 1.0, 0.0, 1.0] },
+];
+/// Its uniforms and their values (`computeUniformValues`, `de::Random(19)`).
+const TEXTURE_VERTEX_19_UNIFORMS: &[Uniform] = &[Uniform::Sampler2D("a", 0)];
+
+/// `shaders.random.basic_expression.vertex.53`: four vec4 inputs, `a` and
+/// `g` read, `b` only into a dead store. `GL_INVALID_OPERATION` at the draw
+/// on the board (glsRandomShaderCase.cpp:611) before `attrgap-fix`; draws at
+/// the tip.
+#[test]
+fn random_basic_expression_vertex_53() {
+    random_case(
+        "random.basic_expression.vertex.53",
+        BASIC_EXPRESSION_VERTEX_53_VS,
+        BASIC_EXPRESSION_VERTEX_53_INPUTS,
+        BASIC_EXPRESSION_VERTEX_53_UNIFORMS,
+        [33, 97],
+    );
+}
+
+/// `shaders.random.basic_expression.vertex.85`: seven inputs and a float
+/// uniform, `b` only into a dead local. Was `GL_INVALID_OPERATION` at the
+/// draw; draws at the tip.
+#[test]
+fn random_basic_expression_vertex_85() {
+    random_case(
+        "random.basic_expression.vertex.85",
+        BASIC_EXPRESSION_VERTEX_85_VS,
+        BASIC_EXPRESSION_VERTEX_85_INPUTS,
+        BASIC_EXPRESSION_VERTEX_85_UNIFORMS,
+        [149, 51],
+    );
+}
+
+/// `shaders.random.basic_expression.vertex.90`: six inputs, two uniforms,
+/// `b` and `c` only in an expression statement. Was `GL_INVALID_OPERATION`
+/// at the draw; draws at the tip.
+#[test]
+fn random_basic_expression_vertex_90() {
+    random_case(
+        "random.basic_expression.vertex.90",
+        BASIC_EXPRESSION_VERTEX_90_VS,
+        BASIC_EXPRESSION_VERTEX_90_INPUTS,
+        BASIC_EXPRESSION_VERTEX_90_UNIFORMS,
+        [14, 54],
+    );
+}
+
+/// `shaders.random.basic_expression.vertex.95`: seven inputs, `b`, `c`, `d`
+/// and `f` only into a dead local. Was `GL_INVALID_OPERATION` at the draw;
+/// draws at the tip.
+#[test]
+fn random_basic_expression_vertex_95() {
+    random_case(
+        "random.basic_expression.vertex.95",
+        BASIC_EXPRESSION_VERTEX_95_VS,
+        BASIC_EXPRESSION_VERTEX_95_INPUTS,
+        BASIC_EXPRESSION_VERTEX_95_UNIFORMS,
+        [10, 36],
+    );
+}
+
+/// `shaders.random.scalar_conversion.vertex.53`: three vec4 inputs, `b` and
+/// `e` only into values overwritten later, a float uniform. Was
+/// `GL_INVALID_OPERATION` at the draw; draws at the tip.
+#[test]
+fn random_scalar_conversion_vertex_53() {
+    random_case(
+        "random.scalar_conversion.vertex.53",
+        SCALAR_CONVERSION_VERTEX_53_VS,
+        SCALAR_CONVERSION_VERTEX_53_INPUTS,
+        SCALAR_CONVERSION_VERTEX_53_UNIFORMS,
+        [33, 97],
+    );
+}
+
+/// `shaders.random.texture.vertex.19`: a `texture2DProj` vertex look-up on
+/// unit 0 (the 64x64 gradient texture), `c` and `e` only into values
+/// overwritten later. Was `GL_INVALID_OPERATION` at the draw; draws at the
+/// tip.
+#[test]
+fn random_texture_vertex_19() {
+    random_case(
+        "random.texture.vertex.19",
+        TEXTURE_VERTEX_19_VS,
+        TEXTURE_VERTEX_19_INPUTS,
+        TEXTURE_VERTEX_19_UNIFORMS,
+        [61, 22],
+    );
 }
