@@ -1,0 +1,14 @@
+00:01:10 gl_test: kickpair: one: 100 reps, 3.00 ms a rep, 1.00 kicks a rep, reposts 0
+00:01:12 gl_test: kickpair: two: 100 reps, 4.15 ms a rep, 2.00 kicks a rep, reposts 0
+00:02:30 gl_test: mipchains: 20 frames, 24.50 ms a frame (0.96 Mpx a frame, 20.8 Mpx/s)
+00:02:30 gl_test:   per frame: TA busy 2000 us, 3D busy 5000 us, TA|3D 7750 us, wall 40000 us
+00:02:30 gl_test:   per frame: 21.00 kicks (420 over 20 frames)
+00:02:30 gl_test: mipchains: reposts 0 over 20 frames
+00:02:31 gl_test: case 216 mipchains: PASS
+00:09:01 [terrain] <default>: FPS: 12 FrameTime: 57.40 ms
+00:09:01 glmark2-counters: [terrain] <default>: frames 100 kicks 2850 waits 100 draws 900 tiles 9000 reposts 0 wait_timeouts 0
+00:09:20 [refract] <default>: FPS: 28 FrameTime: 28.20 ms
+00:09:20 glmark2-counters: [refract] <default>: frames 100 kicks 900 waits 100 draws 500 tiles 9000 reposts 0 wait_timeouts 0
+00:09:30 glmark2: score 41: 33 scenes ran, 0 failed, 0 unsupported
+00:09:31 glmark2 Score: 41
+glmark2 pictures against column am62p: 33 scenes, match 28, mismatch 5
