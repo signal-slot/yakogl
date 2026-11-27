@@ -95,3 +95,59 @@ fn mesa_v71_vectors_fields() {
     assert_eq!((a.add.op, a.mul.op), (AddOp71::SetnnmodeUu, MulOp71::V8dot));
     assert_eq!((a.mul.waddr, a.mul.a.raddr, a.mul.b.raddr), (12, 1, 2));
 }
+
+/// Pure helpers: `text_of` and the in-memory vector table.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_of_matches_the_table_row() {
+        let i = decode71(MESA_V71[0].0).unwrap();
+        assert_eq!(text_of(&i), MESA_V71[0].1);
+    }
+
+    #[test]
+    fn text_of_is_stable_across_calls() {
+        let i = decode71(MESA_V71[4].0).unwrap();
+        assert_eq!(text_of(&i), text_of(&i));
+    }
+
+    #[test]
+    fn text_of_differs_between_different_rows() {
+        let a = text_of(&decode71(MESA_V71[0].0).unwrap());
+        let b = text_of(&decode71(MESA_V71[1].0).unwrap());
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn text_of_is_non_empty_single_line() {
+        for &(w, _) in MESA_V71 {
+            let t = text_of(&decode71(w).unwrap());
+            assert!(!t.is_empty());
+            assert!(!t.contains('\n'), "{t:?}");
+        }
+    }
+
+    #[test]
+    fn table_words_are_unique() {
+        for (n, &(w, _)) in MESA_V71.iter().enumerate() {
+            assert!(MESA_V71[n + 1..].iter().all(|&(v, _)| v != w), "{w:#x} repeated");
+        }
+    }
+
+    #[test]
+    fn table_texts_have_add_and_mul_halves() {
+        for &(_, t) in MESA_V71 {
+            let halves: Vec<&str> = t.split(" ; ").collect();
+            assert_eq!(halves.len(), 2, "{t:?}");
+        }
+    }
+
+    #[test]
+    fn mismatching_text_is_detected_by_comparison() {
+        let got = text_of(&decode71(MESA_V71[2].0).unwrap());
+        assert_ne!(got, MESA_V71[3].1);
+        assert_ne!(got, "");
+    }
+}
