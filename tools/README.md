@@ -348,11 +348,13 @@ options may be abbreviated.
 
 | Var | Default | Meaning |
 |---|---|---|
-| `PCO_SHC` | `../scratchpad/.../pco_shc` (relative to the repository) | pco_shc binary |
+| `PCO_SHC` | the first existing of a short built-in list of candidate paths, the first being `../scratchpad/mesa-build/mesa-26.2.1/build/src/imagination/vulkan/pco_shc` (relative to the repository) | pco_shc binary |
 | `GLSLANG` | `glslangValidator` (PATH) | GLSL→SPIR-V compiler |
 | `GLSL2USC_CACHE` | unset | directory caching the compiler's output, keyed by the compiled text, stage, variant, the pco_shc binary (size, mtime) and the `PCO_DEBUG` it runs under (`--pco-debug`'s or the environment's; only when set). Writes are not atomic: an interrupted run leaves zero-length entries the next run serves as shaders with no code — delete the directory after a kill |
 | `GLSL2USC_KEEP` | unset | keep the temporary directories; if it names a directory, the rewritten GLSL (`.es100to450.glsl`) and the metadata (`.meta.txt`) are written there |
 | `GLSL2USC_UNROLL` | unset | unroll `for` loops over uniform arrays (the old text; a different table key) |
+| `GLSL2USC_OPT` | unset | run glslang's SPIR-V optimiser before pco_shc (unset, empty and `0` are off) |
+| `GLSL2USC_NEW_REFERENCE` | unset | allow `glsl2usc` to write a table whose content id differs from the committed reference (any value but empty and `0`) |
 | `YAKOGL_TOOLS` | unset | `glsl2usc.sh`: a prebuilt `yakogl-tools` instead of `cargo run` |
 | `GLSL2USC_OUT` | unset | `glsl2usc.sh`: write the table here and stop, leaving `src/` alone (the reproduction `tools/check.sh` compares with the committed table) |
 
